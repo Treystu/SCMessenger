@@ -6,6 +6,8 @@ import com.scmessenger.android.transport.ble.*
 import timber.log.Timber
 import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.*
+import uniffi.api.BleAdjustment
+import uniffi.api.AdjustmentProfile
 
 /**
  * Orchestrates all local transports for SCMessenger.
@@ -461,6 +463,22 @@ class TransportManager(
         scope.cancel()
 
         Timber.i("TransportManager cleaned up")
+    }
+
+    /**
+     * Apply BLE scan settings from AutoAdjust profile.
+     */
+    fun applyScanSettings(scanIntervalMs: UInt) {
+        Timber.d("Applying BLE scan settings: interval=${scanIntervalMs}ms")
+        bleScanner?.applyScanSettings(scanIntervalMs)
+    }
+
+    /**
+     * Apply BLE advertise settings from AutoAdjust profile.
+     */
+    fun applyAdvertiseSettings(intervalMs: UInt, txPowerDbm: Byte) {
+        Timber.d("Applying BLE advertise settings: interval=${intervalMs}ms, txPower=${txPowerDbm}dBm")
+        bleAdvertiser?.applyAdvertiseSettings(intervalMs, txPowerDbm)
     }
 
     /**

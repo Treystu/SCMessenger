@@ -8,9 +8,11 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CameraAlt
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.Sensors
@@ -49,7 +51,8 @@ import java.util.*
 fun ContactsScreen(
     viewModel: ContactsViewModel = hiltViewModel(),
     onNavigateToChat: (String) -> Unit,
-    onNavigateToAddContact: () -> Unit = {}
+    onNavigateToAddContact: () -> Unit = {},
+    onNavigateToContactDetail: ((String) -> Unit)? = null
 ) {
     val contacts by viewModel.filteredContacts.collectAsState()
     val nearbyPeers by viewModel.nearbyPeers.collectAsState()
@@ -85,7 +88,14 @@ fun ContactsScreen(
                     .fillMaxWidth()
                     .padding(16.dp),
                 placeholder = { Text("Search contacts...") },
-                singleLine = true
+                singleLine = true,
+                trailingIcon = {
+                    if (searchQuery.isNotBlank()) {
+                        IconButton(onClick = { viewModel.clearSearch() }) {
+                            Icon(Icons.Default.Close, contentDescription = "Clear search")
+                        }
+                    }
+                }
             )
 
             // Error snackbar
@@ -217,6 +227,9 @@ fun ContactsScreen(
                         ContactItem(
                             contact = contact,
                             onClick = { onNavigateToChat(contact.peerId) },
+                            onDetails = {
+                                onNavigateToContactDetail?.invoke(contact.peerId)
+                            },
                             onDelete = { viewModel.removeContact(contact.peerId) },
                             onEditNickname = { nickname ->
                                 viewModel.setLocalNickname(contact.peerId, nickname.ifBlank { null })
@@ -272,11 +285,13 @@ fun ContactsScreen(
 fun ContactItem(
     contact: uniffi.api.Contact,
     onClick: () -> Unit,
+    onDetails: () -> Unit,
     onDelete: () -> Unit,
     onEditNickname: (String) -> Unit = {}
 ) {
     var showDeleteDialog by remember { mutableStateOf(false) }
     var showEditNicknameDialog by remember { mutableStateOf(false) }
+    var showDetails by remember { mutableStateOf(false) }
 
     val dismissState = rememberSwipeToDismissBoxState()
 
@@ -345,17 +360,78 @@ fun ContactItem(
                     }
                 }
 
-                IconButton(onClick = { showEditNicknameDialog = true }) {
-                    Icon(
-                        imageVector = Icons.Default.Edit,
-                        contentDescription = "Edit Nickname",
-                        tint = MaterialTheme.colorScheme.primary
-                    )
+                Row {
+                    IconButton(onClick = { showDetails = true }) {
+                        Icon(
+                            imageVector = Icons.Default.Info,
+                            contentDescription = "View Details",
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
+
+                    IconButton(onClick = { showEditNicknameDialog = true }) {
+                        Icon(
+                            imageVector = Icons.Default.Edit,
+                            contentDescription = "Edit Nickname",
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
                 }
             }
         }
         }
     )
+
+    // Contact details dialog
+    if (showDetails) {
+        AlertDialog(
+            onDismissRequest = { showDetails = false },
+            title = { Text("Contact Details") },
+            text = {
+                Column {
+                    Text(
+                        text = "Peer ID: ${contact.peerId}",
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "Public Key: ${contact.publicKey.take(32)}...",
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    contact.nickname?.let {
+                        Text(
+                            text = "Nickname: $it",
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    }
+                    contact.lastSeen?.let {
+                        Text(
+                            text = "Last Seen: ${formatTimestamp(it)}",
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showDetails = false
+                        onDetails()
+                    }
+                ) {
+                    Text("View Full Details")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDetails = false }) {
+                    Text("Close")
+                }
+            }
+        )
+    }
 
     // Edit nickname dialog
     if (showEditNicknameDialog) {

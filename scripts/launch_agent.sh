@@ -245,6 +245,7 @@ start_agent() {
     # The prompt includes /loop 5m for persistent autonomous operation.
     # This keeps the process alive instead of one-shot exit.
     # Separate stderr to avoid Windows STATUS_BREAKPOINT (0x80000003) corrupting the log.
+    export CARGO_INCREMENTAL=0
     echo "$AGENT_PROMPT" | ollama launch claude --model "$AGENT_MODEL" \
         -- --dangerously-skip-permissions \
         >> "$AGENT_LOG" 2>"$AGENT_STDERR" &
@@ -321,7 +322,9 @@ restart_agent() {
     if [ -f "$AGENT_PID" ]; then
         local old_pid=$(cat "$AGENT_PID")
         if process_alive "$old_pid"; then
-            powershell.exe -NoProfile -Command "Stop-Process -Id $old_pid -Force" 2>/dev/null || true
+            # Aggressive dual-kill: POSIX signal + Windows taskkill
+            kill -9 $old_pid 2>/dev/null || true
+            taskkill //F //T //PID $old_pid 2>/dev/null || true
         fi
     fi
 
@@ -341,7 +344,9 @@ stop_agent() {
     if [ -f "$AGENT_PID" ]; then
         local agent_pid=$(cat "$AGENT_PID")
         if process_alive "$agent_pid"; then
-            powershell.exe -NoProfile -Command "Stop-Process -Id $agent_pid -Force" 2>/dev/null || true
+            # Aggressive dual-kill: POSIX signal + Windows taskkill
+            kill -9 $agent_pid 2>/dev/null || true
+            taskkill //F //T //PID $agent_pid 2>/dev/null || true
             log "INFO" "Agent stopped successfully"
         else
             log "WARN" "Agent process not running"

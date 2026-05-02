@@ -1417,17 +1417,6 @@ impl RelayRegistry {
         Ok(Some(trimmed))
     }
 
-    #[cfg(test)]
-    fn force_state_for_test(
-        &self,
-        identity_id: &str,
-        state: RegistrationState,
-        updated_at_ms: u64,
-    ) -> Result<(), String> {
-        let identity_id = normalize_identity_id(identity_id)?;
-        self.persist_state(identity_id, None, state, "test_override", updated_at_ms)
-    }
-
     fn record_exists(&self, identity_id: &str) -> Result<bool, String> {
         Ok(self
             .backend

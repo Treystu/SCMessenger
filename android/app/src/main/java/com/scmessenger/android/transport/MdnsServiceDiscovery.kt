@@ -4,6 +4,8 @@ import android.content.Context
 import android.net.nsd.NsdManager
 import android.net.nsd.NsdServiceInfo
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import timber.log.Timber
 
 /**
@@ -35,6 +37,9 @@ class MdnsServiceDiscovery(
     private val serviceType = "_p2p._udp."
     private val serviceName = "SCMessenger"
     private val servicePort = 9001 // Must match the actual libp2p swarm listen port (startSwarm /ip4/0.0.0.0/tcp/9001)
+
+    // Handler for retrying operations
+    private val handler = Handler(Looper.getMainLooper())
 
     /**
      * Start mDNS service discovery and advertisement.
@@ -176,6 +181,15 @@ class MdnsServiceDiscovery(
 
             override fun onStopDiscoveryFailed(serviceType: String, errorCode: Int) {
                 Timber.e("mDNS discovery failed to stop: $errorCode")
+                // Reset discovering state so we can retry
+                isDiscovering = false
+                // Schedule a retry to restart discovery
+                handler.postDelayed({
+                    if (isRunning && !isDiscovering) {
+                        Timber.d("Retrying mDNS discovery after stop failure")
+                        startDiscovery()
+                    }
+                }, 1000) // 1 second delay before retry
             }
         }
 

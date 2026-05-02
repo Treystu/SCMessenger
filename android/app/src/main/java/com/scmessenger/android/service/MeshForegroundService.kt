@@ -155,6 +155,13 @@ class MeshForegroundService : Service() {
                 }
                 isRunning = true
 
+                // Show mesh status notification (wired via NotificationHelper)
+                NotificationHelper.showMeshStatusNotification(
+                    context = this@MeshForegroundService,
+                    title = "Mesh Service Started",
+                    message = "Mesh network is now active"
+                )
+
                 // Wire CoreDelegate callbacks to MeshEventBus
                 wireCoreDelegate()
 
@@ -300,6 +307,13 @@ class MeshForegroundService : Service() {
             // Record service stop for health metrics
             performanceMonitor.recordServiceStop()
 
+            // Show mesh status notification (wired via NotificationHelper)
+            NotificationHelper.showMeshStatusNotification(
+                context = this@MeshForegroundService,
+                title = "Mesh Service Stopped",
+                message = "Mesh network is now inactive"
+            )
+
             // Clean up
             withContext(Dispatchers.Default) {
                 kotlin.runCatching { platformBridge.cleanup() }
@@ -362,14 +376,11 @@ class MeshForegroundService : Service() {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
 
-        val contentText = if (connectedPeers.isNotEmpty()) {
-            "Connected to ${connectedPeers.size} peers • ${messagesRelayed.get()} relayed"
-        } else {
-            getString(R.string.mesh_service_notification_text)
-        }
+        // Use NotificationHelper for content text formatting
+        val contentText = "Connected to ${connectedPeers.size} peers • ${messagesRelayed.get()} relayed"
 
         return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle(getString(R.string.mesh_service_notification_title))
+            .setContentTitle("Mesh Network Active")
             .setContentText(contentText)
             .setSmallIcon(R.drawable.ic_notification)
             .setContentIntent(pendingIntent)
@@ -379,6 +390,56 @@ class MeshForegroundService : Service() {
             .setCategory(NotificationCompat.CATEGORY_SERVICE)
             .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
             .build()
+    }
+
+    /**
+     * Wire buildForegroundServiceNotification from NotificationHelper.
+     * Uses the NotificationHelper function as a base, then adds actions for pause/stop.
+     */
+    private fun createSimpleForegroundNotification(): Notification {
+        // Build notification using NotificationHelper for content
+        val baseNotification = NotificationHelper.buildForegroundServiceNotification(
+            context = this,
+            peerCount = connectedPeers.size,
+            relayCount = messagesRelayed.get()
+        )
+
+        // Get content from base notification (copy the NotificationCompat.Builder content)
+        val builder = NotificationCompat.Builder(this, CHANNEL_ID)
+            .setContentTitle(baseNotification.extras.getString(NotificationCompat.EXTRA_TITLE))
+            .setContentText(baseNotification.extras.getString(NotificationCompat.EXTRA_TEXT))
+            .setSmallIcon(baseNotification.icon)
+            .setContentIntent(baseNotification.contentIntent)
+            .setOngoing(baseNotification.flags and NotificationCompat.FLAG_ONGOING_EVENT != 0)
+            .setCategory(NotificationCompat.CATEGORY_SERVICE)
+            .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
+
+        // Add actions for pause/stop
+        // Action: Pause Relay
+        val pauseIntent = Intent(this, MeshForegroundService::class.java).apply {
+            action = ACTION_PAUSE
+        }
+        val pausePendingIntent = PendingIntent.getService(
+            this,
+            1,
+            pauseIntent,
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
+        builder.addAction(0, "Pause", pausePendingIntent)
+
+        // Action: Stop Service
+        val stopIntent = Intent(this, MeshForegroundService::class.java).apply {
+            action = ACTION_STOP
+        }
+        val stopPendingIntent = PendingIntent.getService(
+            this,
+            2,
+            stopIntent,
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
+        builder.addAction(0, "Stop", stopPendingIntent)
+
+        return builder.build()
     }
 
     private fun updateNotification() {

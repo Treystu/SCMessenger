@@ -35,4 +35,8 @@ bash .claude/orchestrator_manager.sh pool launch rust-coder HANDOFF/todo/task_an
 - ALSO launch built-in Agent sub-agents for parallel local work on the same model
 - Verify after each agent completes: `cargo check --workspace`, `cargo clippy`, `cargo fmt`
 
+> **TASK DELEGATION RULE:** Every time you generate a `BATCH_` markdown file for a worker, you MUST append this exact phrase to their instructions: "CRITICAL: You are forbidden from considering a task 'complete' until you execute the `mv` or `Rename-Item` command to move the task markdown file from `todo/` (or `IN_PROGRESS/`) to `done/`. If you do not move the file, the Orchestrator assumes you failed."
+
+> **ORCHESTRATION BEHAVIOR:** Once you have launched the worker agents to fill the slots (2/2), you MUST exit the active session immediately. Do not launch monitors. Do not use `sleep` or wait for them to finish. The system cron (`/loop 30m`) will wake you up automatically to check on them later. Fire and forget.
+
 ## Arguments: $ARGUMENTS

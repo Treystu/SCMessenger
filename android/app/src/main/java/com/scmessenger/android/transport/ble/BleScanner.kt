@@ -147,52 +147,10 @@ class BleScanner(
             Timber.e("BLE Scan failed with error code: $errorCode")
             scanFailures.incrementAndGet()
             isScanning = false
-            
-            // Retry logic for scan failures
-            // Error code 1 = SCAN_FAILED_ALREADY_STARTED (common on Android 12+)
-            // Error code 2 = SCAN_FAILED_APPLICATION_REGISTRATION_FAILED
-            // Error code 3 = SCAN_FAILED_INTERNAL_ERROR
-            // Error code 4 = SCAN_FAILED_FEATURE_UNSUPPORTED
-            when (errorCode) {
-                1 -> {
-                    // SCAN_FAILED_ALREADY_STARTED - stop and retry with backoff
-                    val retryDelay = backoffStrategy.nextDelay()
-                    Timber.w("BLE scan already started, stopping and retrying in ${retryDelay}ms")
-                    handler.postDelayed({
-                        if (!isScanning) {
-                            try {
-                                scanner?.stopScan(this)
-                            } catch (_: SecurityException) {
-                                Timber.w("SecurityException stopping BLE scan (missing BLUETOOTH_SCAN permission)")
-                            } catch (_: Exception) {}
-                            scope.launch { startScanning() }
-                        }
-                    }, retryDelay)
-                }
-                2, 3 -> {
-                    // Internal/registration errors - retry with exponential backoff
-                    val retryDelay = backoffStrategy.nextDelay()
-                    Timber.w("BLE scan failed with error $errorCode, retrying in ${retryDelay}ms")
-                    handler.postDelayed({
-                        if (!isScanning) {
-                            scope.launch { startScanning() }
-                        }
-                    }, retryDelay)
-                }
-                4 -> {
-                    // Feature unsupported - don't retry
-                    Timber.e("BLE scanning not supported on this device")
-                }
-                else -> {
-                    // Unknown error - retry with backoff
-                    val retryDelay = backoffStrategy.nextDelay()
-                    Timber.w("BLE scan failed with unknown error $errorCode, retrying in ${retryDelay}ms")
-                    handler.postDelayed({
-                        if (!isScanning) {
-                            scope.launch { startScanning() }
-                        }
-                    }, retryDelay)
-                }
+
+            // Wire handleScanFailure for comprehensive failure handling
+            scope.launch {
+                handleScanFailure(Exception("Scan failed with error code: $errorCode"))
             }
         }
     }

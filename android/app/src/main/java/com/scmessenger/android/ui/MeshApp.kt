@@ -23,10 +23,15 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.scmessenger.android.ui.contacts.AddContactScreen
+import com.scmessenger.android.ui.contacts.ContactDetailScreen
+import com.scmessenger.android.ui.dashboard.PeerListScreen
+import com.scmessenger.android.ui.dashboard.TopologyScreen
 import com.scmessenger.android.ui.identity.IdentityScreen
 import com.scmessenger.android.ui.screens.*
 import com.scmessenger.android.ui.viewmodels.MainViewModel
 import com.scmessenger.android.ui.viewmodels.DeepLinkData
+import com.scmessenger.android.ui.settings.MeshSettingsScreen
+import com.scmessenger.android.ui.settings.PowerSettingsScreen
 
 /**
  * Root composable for the SCMessenger app.
@@ -141,6 +146,23 @@ fun MeshNavHost(
                     },
                     onNavigateToAddContact = {
                         navController.navigate(Screen.AddContact.route)
+                    },
+                    onNavigateToContactDetail = { contactId ->
+                        navController.navigate("contact/$contactId")
+                    }
+                )
+            }
+
+            composable(
+                route = "contact/{contactId}",
+                arguments = listOf(androidx.navigation.navArgument("contactId") { type = androidx.navigation.NavType.StringType })
+            ) { backStackEntry ->
+                val contactId = backStackEntry.arguments?.getString("contactId") ?: return@composable
+                ContactDetailScreen(
+                    contactId = contactId,
+                    onNavigateBack = { navController.popBackStack() },
+                    onNavigateToChat = { peerId ->
+                        navController.navigate("chat/$peerId")
                     }
                 )
             }
@@ -159,7 +181,30 @@ fun MeshNavHost(
         }
 
         composable(Screen.Dashboard.route) {
-            DashboardScreen()
+            DashboardScreen(
+                onNavigateToPeerList = {
+                    navController.navigate("peer_list")
+                },
+                onNavigateToTopology = {
+                    navController.navigate("topology")
+                }
+            )
+        }
+
+        composable(
+            route = "peer_list"
+        ) {
+            PeerListScreen(
+                onNavigateBack = { navController.popBackStack() }
+            )
+        }
+
+        composable(
+            route = "topology"
+        ) {
+            TopologyScreen(
+                onNavigateBack = { navController.popBackStack() }
+            )
         }
 
         composable(Screen.Settings.route) {
@@ -173,9 +218,31 @@ fun MeshNavHost(
                     },
                     onNavigateToBlockedPeers = {
                         navController.navigate(Screen.BlockedPeers.route)
+                    },
+                    onNavigateToMeshSettings = {
+                        navController.navigate("mesh_settings")
+                    },
+                    onNavigateToPowerSettings = {
+                        navController.navigate("power_settings")
                     }
                 )
             }
+        }
+
+        composable(
+            route = "mesh_settings"
+        ) {
+            MeshSettingsScreen(
+                onNavigateBack = { navController.popBackStack() }
+            )
+        }
+
+        composable(
+            route = "power_settings"
+        ) {
+            PowerSettingsScreen(
+                onNavigateBack = { navController.popBackStack() }
+            )
         }
 
         composable(Screen.Identity.route) {

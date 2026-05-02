@@ -3,6 +3,13 @@
 //! Holds identity, outbox, inbox, contact manager, history manager, storage
 //! manager, log manager, blocked manager, relay registry, and audit log.
 //! All state is behind `Arc<RwLock<…>>` (parking_lot).
+//!
+//! # Lint Configuration
+//!
+//! This file intentionally uses empty lines after doc comments for readability.
+//! The `empty_line_after_outer_attr` check is disabled for this file.
+
+#![allow(clippy::empty_line_after_outer_attr)]
 
 use parking_lot::RwLock;
 use std::sync::Arc;
@@ -1809,6 +1816,21 @@ impl IronCore {
     }
     pub fn list_notification_endpoints(&self) -> Vec<crate::NotificationEndpoint> {
         self.notification_endpoint_registry.read().list_endpoints()
+    }
+    pub fn clear_all_request_notifications(&self) -> usize {
+        self.notification_endpoint_registry
+            .read()
+            .clear_all_request_notifications()
+    }
+    pub fn clear_message_notifications(&self, device_id: &str) -> usize {
+        self.notification_endpoint_registry
+            .read()
+            .clear_message_notifications(device_id)
+    }
+    pub fn close_all_notifications(&self) -> usize {
+        self.notification_endpoint_registry
+            .read()
+            .close_all_notifications()
     }
     pub fn transport_manager_handle(&self) -> Arc<RwLock<TransportManager>> {
         self.transport_manager.clone()

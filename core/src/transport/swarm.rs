@@ -662,7 +662,6 @@ fn dispatch_ranked_route(
 }
 
 /// Convert libp2p Kademlia protocol mode to routing transport type
-#[allow(dead_code)]
 fn transport_type_to_routing_transport(_mode: kad::Mode) -> RoutingTransportType {
     // For now, default to TCP as that's what most peers use
     // In a full implementation, we'd inspect the actual connection transports
@@ -2952,9 +2951,13 @@ pub async fn start_swarm_with_config(
                                 let _peer_hint: [u8; 4] = blake3::hash(&peer_id_bytes).as_bytes()[0..4]
                                     .try_into()
                                     .expect("blake3 hash should be at least 4 bytes");
+                                // When identity protocol confirms a peer, use the Kademlia server
+                                // mode as the transport type basis since identity requires a
+                                // server-capable connection.
+                                let transport_type = transport_type_to_routing_transport(kad::Mode::Server);
                                 routing_engine.base_engine_mut().local_cell_mut().peer_seen(
                                     peer_id_bytes,
-                                    RoutingTransportType::TCP,
+                                    transport_type,
                                 );
                                 // Update routing engine with peer hints from identify info
                                 // (peers announce what hints they can reach)

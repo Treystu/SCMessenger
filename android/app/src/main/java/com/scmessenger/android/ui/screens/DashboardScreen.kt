@@ -7,12 +7,14 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Bluetooth
 import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.NetworkWifi
 import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Router
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
@@ -25,16 +27,23 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.navigation.NavHostController
+import com.scmessenger.android.ui.dashboard.PeerListScreen
+import com.scmessenger.android.ui.dashboard.TopologyScreen
 import com.scmessenger.android.ui.viewmodels.MeshServiceViewModel
 import com.scmessenger.android.ui.viewmodels.DashboardViewModel
 import com.scmessenger.android.ui.viewmodels.SettingsViewModel
+import com.scmessenger.android.ui.settings.MeshSettingsScreen
+import com.scmessenger.android.ui.settings.PowerSettingsScreen
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DashboardScreen(
     serviceViewModel: MeshServiceViewModel = hiltViewModel(),
     dashboardViewModel: DashboardViewModel = hiltViewModel(),
-    settingsViewModel: SettingsViewModel = hiltViewModel()
+    settingsViewModel: SettingsViewModel = hiltViewModel(),
+    onNavigateToPeerList: () -> Unit = {},
+    onNavigateToTopology: () -> Unit = {}
 ) {
     val serviceState by serviceViewModel.serviceState.collectAsState()
     val isRunning by serviceViewModel.isRunning.collectAsState()
@@ -153,6 +162,26 @@ fun DashboardScreen(
                         color = MaterialTheme.colorScheme.surfaceVariant
                     )
                 }
+            }
+
+            // Navigation to detailed views
+            item {
+                Spacer(modifier = Modifier.height(16.dp))
+            }
+            item {
+                DashboardToPeerListNavigation(
+                    onNavigateToPeerList = { onNavigateToPeerList() },
+                    modifier = Modifier.padding(horizontal = 16.dp)
+                )
+            }
+            item {
+                DashboardToTopologyNavigation(
+                    onNavigateToTopology = { onNavigateToTopology() },
+                    modifier = Modifier.padding(horizontal = 16.dp)
+                )
+            }
+            item {
+                Spacer(modifier = Modifier.height(16.dp))
             }
         }
     }
@@ -372,4 +401,66 @@ private fun formatDuration(seconds: ULong): String {
     val hours = secs / 3600
     val minutes = (secs % 3600) / 60
     return "${hours}h ${minutes}m"
+}
+
+/**
+ * Navigation helper to navigate to PeerListScreen.
+ */
+@Composable
+fun DashboardToPeerListNavigation(
+    onNavigateToPeerList: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Card(modifier = modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text(
+                text = "Connected Peers",
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.padding(bottom = 8.dp)
+            )
+            Text(
+                text = "View detailed list of all connected peers",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(bottom = 12.dp)
+            )
+            Button(
+                onClick = onNavigateToPeerList,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("View Peers")
+            }
+        }
+    }
+}
+
+/**
+ * Navigation helper to navigate to TopologyScreen.
+ */
+@Composable
+fun DashboardToTopologyNavigation(
+    onNavigateToTopology: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Card(modifier = modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text(
+                text = "Mesh Topology",
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.padding(bottom = 8.dp)
+            )
+            Text(
+                text = "Visualize network connections and routes",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(bottom = 12.dp)
+            )
+            Button(
+                onClick = onNavigateToTopology,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("View Topology")
+            }
+        }
+    }
 }

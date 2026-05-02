@@ -3,7 +3,9 @@
 pub mod abstraction;
 pub mod behaviour;
 pub mod bootstrap;
+pub mod capability;
 pub mod circuit_breaker;
+pub mod diagnostics;
 pub mod health;
 pub mod internet;
 pub mod manager;
@@ -27,8 +29,12 @@ pub use behaviour::{
     SharedPeerEntry,
 };
 pub use bootstrap::{BootstrapConfig, BootstrapManager, BootstrapState};
+pub use capability::can_forward_for_wasm;
 pub use circuit_breaker::{
     CircuitBreakerConfig, CircuitBreakerManager, CircuitBreakerStats, CircuitState,
+};
+pub use diagnostics::{
+    get_network_diagnostics_report, NetworkDiagnosticsReport, PeerConnectionSummary,
 };
 pub use health::{
     ConnectionState, ConnectionStats, GlobalTransportMetrics, TransportHealthMonitor,

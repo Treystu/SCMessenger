@@ -128,6 +128,9 @@ clean_stale_pids() {
             # Check if the process is still alive
             if ! process_alive "$pid"; then
                 echo "Cleaning stale agent: $id (PID $pid no longer exists)"
+                # Aggressive dual-kill: POSIX signal + Windows taskkill (belt-and-suspenders)
+                kill -9 $pid 2>/dev/null || true
+                taskkill //F //T //PID $pid 2>/dev/null || true
                 rm -rf "$dir"
             fi
         fi
@@ -353,6 +356,7 @@ EOF
         fi
 
         echo "Launching CLI agent: $agent_id with model $model"
+        export CARGO_INCREMENTAL=0
         if ! ./scripts/launch_agent.sh "$model" "$agent_id" "$task_file" start 2>/dev/null; then
             if [ -n "$fallback_model" ]; then
                 echo "Primary model $model unavailable, falling back to $fallback_model"
@@ -543,7 +547,9 @@ pool_launch_clean() {
         echo "HYGIENE: Untracked claude.exe processes: $untracked"
         for pid in $untracked; do
             echo "HYGIENE: Terminating stale claude.exe PID $pid"
-            powershell.exe -NoProfile -Command "Stop-Process -Id $pid -Force" 2>/dev/null || true
+            # Aggressive dual-kill: POSIX signal + Windows taskkill
+            kill -9 $pid 2>/dev/null || true
+            taskkill //F //T //PID $pid 2>/dev/null || true
         done
     else
         echo "HYGIENE: No untracked claude.exe processes"
@@ -773,6 +779,7 @@ case "$1" in
         model="${2:-qwen3-coder-next:cloud}"
         id="${3:-agent_$(date +%s)}"
         echo "Launching sub-agent [$id] with model [$model]..."
+        export CARGO_INCREMENTAL=0
         ./scripts/launch_agent.sh "$model" "$id" start
         ;;
     "stop")

@@ -1,0 +1,46 @@
+# Configuration for cargo-deny
+# This file controls the behavior of the cargo-deny tool for supply chain audits
+
+# Specifies the list of allowed licenses
+[licenses]
+# Allow common permissive open source licenses
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "BSD-3-Clause",
+    "ISC",
+    "Unicode-3.0",
+    "MPL-2.0",
+    "OpenSSL",
+]
+
+# Handle exceptions for specific crates that may have different licenses
+exceptions = [
+    { allow = ["Unicode-DFS-2016"], name = "unicode-ident" },
+]
+
+# Configure confidence threshold for license detection
+confidence-threshold = 0.8
+
+# Ban specific crates or versions
+[bans]
+# Multiple versions of the same crate are generally fine
+multiple-versions = "warn"
+# Warn about wildcard dependencies
+wildcards = "warn"
+
+# Configure advisories checking
+[advisories]
+# GitHub Personal Access Token for accessing private advisories (optional)
+# github-token = "some_token"
+# Database path for storing advisory information
+db-path = "~/.cargo/advisory-db"
+# URL to the advisory database
+db-urls = ["https://github.com/RustSec/advisory-db"]
+
+# Configure sources for crate origins
+[sources]
+# Allow crates from crates.io (default registry)
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+# Allow specific git repositories if needed
+# allow-git = ["https://github.com/some-org/some-repo"]

@@ -13,6 +13,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.scmessenger.android.ui.components.ErrorBanner
+import com.scmessenger.android.ui.components.ErrorState
+import com.scmessenger.android.ui.components.IdenticonFromHex
+import com.scmessenger.android.ui.components.InfoBanner
+import com.scmessenger.android.ui.components.LabeledCopyableText
+import com.scmessenger.android.ui.components.TruncatedCopyableText
+import com.scmessenger.android.ui.components.WarningBanner
 import com.scmessenger.android.ui.viewmodels.SettingsViewModel
 
 /**
@@ -65,6 +71,23 @@ fun PowerSettingsScreen(
             error?.let {
                 ErrorBanner(
                     message = it,
+                    onDismiss = { viewModel.clearError() }
+                )
+            }
+
+            // Info banner about AutoAdjust
+            if (autoAdjustEnabled) {
+                InfoBanner(
+                    message = "AutoAdjust is active - settings will be automatically optimized based on battery and network conditions",
+                    onDismiss = {}
+                )
+            }
+
+            // Error state for persistent errors
+            val currentError = error
+            if (currentError != null && currentError.isNotEmpty()) {
+                ErrorState(
+                    error = currentError,
                     onDismiss = { viewModel.clearError() }
                 )
             }
@@ -152,6 +175,64 @@ fun PowerSettingsScreen(
                 }
             }
 
+            // Component Examples (for demonstration)
+            if (autoAdjustEnabled) {
+                SettingsSection(title = "Component Examples") {
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 8.dp)
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            Text(
+                                text = "Identicon Example",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            IdenticonFromHex(
+                                hexString = "0123456789abcdef0123456789abcdef",
+                                size = 48.dp,
+                                modifier = Modifier.align(Alignment.CenterHorizontally)
+                            )
+                            Text(
+                                text = "IdenticonFromHex(0123456789abcdef...)",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.align(Alignment.CenterHorizontally)
+                            )
+                        }
+                    }
+
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 8.dp)
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            LabeledCopyableText(
+                                label = "BLE Scan Interval",
+                                text = "${bleScanInterval}ms",
+                                monospace = true
+                            )
+                        }
+                    }
+
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 8.dp)
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            TruncatedCopyableText(
+                                text = "0123456789abcdef0123456789abcdef",
+                                label = "Identity Hash",
+                                maxLength = 16
+                            )
+                        }
+                    }
+                }
+            }
+
             // Battery Settings
             settings?.let { currentSettings ->
                 SettingsSection(title = "Battery Management") {
@@ -162,7 +243,7 @@ fun PowerSettingsScreen(
                         valueRange = 0f..50f,
                         steps = 49,
                         onValueChange = {
-                            viewModel.updateSettings(currentSettings.copy(batteryFloor = it.toInt().toUByte()))
+                            viewModel.updateBatteryFloor(it.toInt().toUByte())
                         },
                         valueLabel = "${currentSettings.batteryFloor}%"
                     )

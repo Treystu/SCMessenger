@@ -166,8 +166,11 @@ impl SpamDetectionEngine {
             total_contacts = contacts.len();
 
             if total_contacts >= self.config.min_contacts_for_detection {
+                let blocked_set = bm.blocked_only_peer_ids().unwrap_or_default();
                 for contact in &contacts {
-                    if let Ok(true) = bm.is_blocked(&contact.peer_id, None) {
+                    if blocked_set.contains(&contact.peer_id) {
+                        blocked_by_count += 1;
+                    } else if let Ok(true) = bm.is_blocked(&contact.peer_id, None) {
                         blocked_by_count += 1;
                     }
                 }

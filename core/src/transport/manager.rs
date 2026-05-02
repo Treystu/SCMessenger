@@ -6,6 +6,7 @@
 use crate::transport::abstraction::{
     TransportCapabilities, TransportError, TransportEvent, TransportType,
 };
+use crate::transport::health::TransportHealthMonitor;
 use parking_lot::RwLock;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
@@ -206,6 +207,9 @@ pub struct TransportManager {
 
     /// Peers awaiting reconnection with backoff state
     reconnection_queue: Arc<RwLock<HashMap<[u8; 32], ReconnectionState>>>,
+
+    /// Optional health monitor for stale connection cleanup
+    health_monitor: Option<Arc<TransportHealthMonitor>>,
 }
 
 impl TransportManager {
@@ -218,7 +222,13 @@ impl TransportManager {
             peer_last_seen: Arc::new(RwLock::new(HashMap::new())),
             target_peers: Arc::new(RwLock::new(HashMap::new())),
             reconnection_queue: Arc::new(RwLock::new(HashMap::new())),
+            health_monitor: None,
         }
+    }
+
+    /// Set the transport health monitor for stale connection cleanup.
+    pub fn set_health_monitor(&mut self, monitor: Arc<TransportHealthMonitor>) {
+        self.health_monitor = Some(monitor);
     }
 
     /// Register a transport with capabilities
@@ -566,6 +576,11 @@ impl TransportManager {
                 true
             }
         });
+
+        // Clean up stale connection stats from the health monitor
+        if let Some(ref monitor) = self.health_monitor {
+            monitor.cleanup_stale_connections(3600);
+        }
     }
 }
 

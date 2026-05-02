@@ -114,15 +114,13 @@ impl IdentityKeys {
         // fails (handles libp2p version API skew where try_from_bytes may move).
         let pub_bytes = self.signing_key.verifying_key().to_bytes();
         match libp2p::identity::ed25519::PublicKey::try_from_bytes(&pub_bytes) {
-            Ok(libp2p_pub) => {
-                return Ok(libp2p::identity::PublicKey::from(libp2p_pub)
-                    .to_peer_id()
-                    .to_string());
-            }
+            Ok(libp2p_pub) => Ok(libp2p::identity::PublicKey::from(libp2p_pub)
+                .to_peer_id()
+                .to_string()),
             Err(_) => {
                 // Fallback: derive via full keypair → public → PeerId.
                 let kp = self.to_libp2p_keypair()?;
-                return Ok(kp.public().to_peer_id().to_string());
+                Ok(kp.public().to_peer_id().to_string())
             }
         }
     }

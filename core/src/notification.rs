@@ -360,6 +360,62 @@ impl NotificationEndpointRegistry {
         endpoint.last_seen_ts = now_ms();
         Ok(())
     }
+
+    /// Clear all request-type notification endpoints.
+    ///
+    /// Removes all endpoints that are registered for direct message request
+    /// notifications (as opposed to regular DM notifications). This is the
+    /// core parity of the Android `NotificationHelper.clearAllRequestNotifications()`
+    /// method, which clears system notification IDs for request-type notifications.
+    ///
+    /// Returns the number of endpoints cleared.
+    pub fn clear_all_request_notifications(&self) -> usize {
+        let mut endpoints = self.endpoints.lock();
+        let request_endpoints: Vec<String> = endpoints
+            .iter()
+            .filter(|(_, e)| e.capabilities.dm_request && !e.capabilities.dm)
+            .map(|(id, _)| id.clone())
+            .collect();
+        let count = request_endpoints.len();
+        for id in request_endpoints {
+            endpoints.remove(&id);
+        }
+        count
+    }
+
+    /// Clear message notification endpoints for a specific device.
+    ///
+    /// Removes all endpoints associated with the given device_id.
+    /// This is the core parity of the Android `NotificationHelper.clearMessageNotifications()`
+    /// method, which clears system notification IDs for a specific peer.
+    ///
+    /// Returns the number of endpoints cleared.
+    pub fn clear_message_notifications(&self, device_id: &str) -> usize {
+        let mut endpoints = self.endpoints.lock();
+        let matching: Vec<String> = endpoints
+            .iter()
+            .filter(|(_, e)| e.device_id == device_id)
+            .map(|(id, _)| id.clone())
+            .collect();
+        let count = matching.len();
+        for id in matching {
+            endpoints.remove(&id);
+        }
+        count
+    }
+
+    /// Close all notifications by clearing the entire endpoint registry.
+    ///
+    /// This is the core parity of the WASM `NotificationManager.close_all_notifications()`
+    /// method, which dismisses all active browser notifications.
+    ///
+    /// Returns the number of endpoints cleared.
+    pub fn close_all_notifications(&self) -> usize {
+        let mut endpoints = self.endpoints.lock();
+        let count = endpoints.len();
+        endpoints.clear();
+        count
+    }
 }
 
 impl Default for NotificationEndpointRegistry {
@@ -483,5 +539,122 @@ mod tests {
         let allowed = classify_notification(message, ui_state, allowed_settings);
         assert_eq!(allowed.kind, NotificationKind::DirectMessage);
         assert!(allowed.should_alert);
+    }
+
+    #[test]
+    fn clear_all_request_notifications_removes_request_only_endpoints() {
+        let registry = NotificationEndpointRegistry::new();
+        let req_cap = NotificationEndpointCapabilities {
+            dm: false,
+            dm_request: true,
+        };
+        let dm_cap = NotificationEndpointCapabilities {
+            dm: true,
+            dm_request: false,
+        };
+        let both_cap = NotificationEndpointCapabilities {
+            dm: true,
+            dm_request: true,
+        };
+
+        registry
+            .register_endpoint(
+                NotificationPlatform::Android,
+                "token-req".to_string(),
+                req_cap,
+                "device-1".to_string(),
+            )
+            .unwrap();
+        registry
+            .register_endpoint(
+                NotificationPlatform::Android,
+                "token-dm".to_string(),
+                dm_cap,
+                "device-2".to_string(),
+            )
+            .unwrap();
+        registry
+            .register_endpoint(
+                NotificationPlatform::Web,
+                "token-both".to_string(),
+                both_cap,
+                "device-3".to_string(),
+            )
+            .unwrap();
+
+        assert_eq!(registry.list_endpoints().len(), 3);
+        let cleared = registry.clear_all_request_notifications();
+        assert_eq!(cleared, 1);
+        assert_eq!(registry.list_endpoints().len(), 2);
+    }
+
+    #[test]
+    fn clear_message_notifications_clears_by_device_id() {
+        let registry = NotificationEndpointRegistry::new();
+        let cap = NotificationEndpointCapabilities {
+            dm: true,
+            dm_request: true,
+        };
+
+        registry
+            .register_endpoint(
+                NotificationPlatform::Android,
+                "token-a".to_string(),
+                cap.clone(),
+                "device-alpha".to_string(),
+            )
+            .unwrap();
+        registry
+            .register_endpoint(
+                NotificationPlatform::Web,
+                "token-b".to_string(),
+                cap.clone(),
+                "device-beta".to_string(),
+            )
+            .unwrap();
+        registry
+            .register_endpoint(
+                NotificationPlatform::Ios,
+                "token-c".to_string(),
+                cap,
+                "device-alpha".to_string(),
+            )
+            .unwrap();
+
+        assert_eq!(registry.list_endpoints().len(), 3);
+        let cleared = registry.clear_message_notifications("device-alpha");
+        assert_eq!(cleared, 2);
+        assert_eq!(registry.list_endpoints().len(), 1);
+    }
+
+    #[test]
+    fn close_all_notifications_clears_entire_registry() {
+        let registry = NotificationEndpointRegistry::new();
+        let cap = NotificationEndpointCapabilities {
+            dm: true,
+            dm_request: true,
+        };
+
+        registry
+            .register_endpoint(
+                NotificationPlatform::Android,
+                "token-1".to_string(),
+                cap.clone(),
+                "device-1".to_string(),
+            )
+            .unwrap();
+        registry
+            .register_endpoint(
+                NotificationPlatform::Ios,
+                "token-2".to_string(),
+                cap,
+                "device-2".to_string(),
+            )
+            .unwrap();
+
+        assert_eq!(registry.list_endpoints().len(), 2);
+        let cleared = registry.close_all_notifications();
+        assert_eq!(cleared, 2);
+        assert!(registry.list_endpoints().is_empty());
     }
 }

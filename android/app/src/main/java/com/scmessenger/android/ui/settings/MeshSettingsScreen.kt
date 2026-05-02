@@ -13,6 +13,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.scmessenger.android.ui.components.ErrorBanner
+import com.scmessenger.android.ui.components.WarningBanner
 import com.scmessenger.android.ui.viewmodels.SettingsViewModel
 
 /**
@@ -68,6 +69,15 @@ fun MeshSettingsScreen(
             }
 
             settings?.let { currentSettings ->
+                // Warning banner about relay mode
+                if (!currentSettings.relayEnabled) {
+                    WarningBanner(
+                        message = "Mesh relay is disabled - you will not be able to send or receive messages through the mesh network",
+                        onDismiss = {}
+                    )
+                }
+
+                // Relay Settings
 
                 // Relay Settings
                 SettingsSection(title = "Network Participation") {
@@ -123,7 +133,7 @@ fun MeshSettingsScreen(
                             valueRange = 0f..50f,
                             steps = 49,
                             onValueChange = {
-                                viewModel.updateSettings(currentSettings.copy(batteryFloor = it.toInt().toUByte()))
+                                viewModel.updateBatteryFloor(it.toInt().toUByte())
                             },
                             valueLabel = "${currentSettings.batteryFloor}%",
                             enabled = !isSaving
@@ -184,17 +194,15 @@ fun MeshSettingsScreen(
                         enabled = !isSaving
                     )
                 }
-
-
-            } ?: Box(
-                modifier = Modifier.fillMaxWidth().height(200.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                CircularProgressIndicator()
             }
-
-            Spacer(modifier = Modifier.height(16.dp))
+        } ?: Box(
+            modifier = Modifier.fillMaxWidth().height(200.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            CircularProgressIndicator()
         }
+
+        Spacer(modifier = Modifier.height(16.dp))
     }
 }
 

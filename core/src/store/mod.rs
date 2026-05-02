@@ -3,6 +3,7 @@
 pub mod backend;
 pub mod blocked;
 pub mod contacts;
+pub mod dedup;
 pub mod history;
 pub mod inbox;
 pub mod logs;
@@ -15,6 +16,7 @@ pub mod tracing_init;
 pub use backend::StorageBackend;
 // Note: BlockedIdentity/BlockedManager exported through blocked_bridge for UniFFI
 pub use contacts::{Contact, ContactManager};
+pub use dedup::{DedupAggregateStats, DedupStats, DedupStatsTracker};
 pub use history::{HistoryManager, HistoryStats, MessageDirection, MessageRecord};
 pub use inbox::{Inbox, ReceivedMessage};
 pub use outbox::{Outbox, QueuedMessage};

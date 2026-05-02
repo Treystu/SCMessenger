@@ -23,6 +23,8 @@ import com.scmessenger.android.R
 import com.scmessenger.android.ui.viewmodels.MeshServiceViewModel
 import com.scmessenger.android.ui.viewmodels.SettingsViewModel
 import com.scmessenger.android.data.PreferencesRepository
+import com.scmessenger.android.ui.settings.MeshSettingsScreen
+import com.scmessenger.android.ui.settings.PowerSettingsScreen
 
 /**
  * Settings screen with mesh configuration and app preferences.
@@ -33,7 +35,9 @@ fun SettingsScreen(
     serviceViewModel: MeshServiceViewModel = hiltViewModel(),
     onNavigateToIdentity: () -> Unit = {},
     onNavigateToDiagnostics: () -> Unit = {},
-    onNavigateToBlockedPeers: () -> Unit = {}
+    onNavigateToBlockedPeers: () -> Unit = {},
+    onNavigateToMeshSettings: () -> Unit = {},
+    onNavigateToPowerSettings: () -> Unit = {}
 ) {
     val meshSettings by settingsViewModel.settings.collectAsState()
     val identityInfo by settingsViewModel.identityInfo.collectAsState()
@@ -179,6 +183,20 @@ fun SettingsScreen(
         // Advanced / Diagnostics Section
         AdvancedSettingsSection(
             onNavigateToDiagnostics = onNavigateToDiagnostics
+        )
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        // Mesh Settings Navigation
+        SettingsToMeshSettingsNavigation(
+            onNavigateToMeshSettings = onNavigateToMeshSettings
+        )
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        // Power Settings Navigation
+        SettingsToPowerSettingsNavigation(
+            onNavigateToPowerSettings = onNavigateToPowerSettings
         )
 
         Spacer(modifier = Modifier.height(24.dp))
@@ -893,6 +911,68 @@ fun AdvancedSettingsSection(
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Text("Diagnostics & Logs")
+            }
+        }
+    }
+}
+
+/**
+ * Navigation helper to navigate to MeshSettingsScreen.
+ */
+@Composable
+fun SettingsToMeshSettingsNavigation(
+    onNavigateToMeshSettings: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Card(modifier = modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text(
+                text = "Mesh Settings",
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.padding(bottom = 8.dp)
+            )
+            Text(
+                text = "Configure relay, transport, and discovery settings",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(bottom = 12.dp)
+            )
+            Button(
+                onClick = onNavigateToMeshSettings,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Configure Mesh")
+            }
+        }
+    }
+}
+
+/**
+ * Navigation helper to navigate to PowerSettingsScreen.
+ */
+@Composable
+fun SettingsToPowerSettingsNavigation(
+    onNavigateToPowerSettings: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Card(modifier = modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text(
+                text = "Power Settings",
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.padding(bottom = 8.dp)
+            )
+            Text(
+                text = "AutoAdjust engine and battery management",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(bottom = 12.dp)
+            )
+            Button(
+                onClick = onNavigateToPowerSettings,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Configure Power")
             }
         }
     }

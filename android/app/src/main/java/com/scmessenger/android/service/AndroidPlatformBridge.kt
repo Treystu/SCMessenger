@@ -15,6 +15,7 @@ import com.scmessenger.android.data.MeshRepository
 import com.scmessenger.android.transport.ble.BleAdvertiser
 import com.scmessenger.android.transport.ble.BleGattClient
 import com.scmessenger.android.transport.ble.BleGattServer
+import com.scmessenger.android.transport.ble.BleScanner
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -56,8 +57,12 @@ class AndroidPlatformBridge @Inject constructor(
 
     // BLE components for data forwarding
     @Volatile private var bleAdvertiser: BleAdvertiser? = null
+    @Volatile private var bleScanner: BleScanner? = null
     @Volatile private var bleGattClient: BleGattClient? = null
     @Volatile private var bleGattServer: BleGattServer? = null
+
+    // Transport manager reference (set by MeshRepository)
+    @Volatile private var transportManager: com.scmessenger.android.transport.TransportManager? = null
 
     // Current state
     @Volatile private var currentBatteryPct: UByte = 100u
@@ -86,13 +91,23 @@ class AndroidPlatformBridge @Inject constructor(
      */
     fun setBleComponents(
         advertiser: BleAdvertiser?,
+        scanner: BleScanner?,
         gattClient: BleGattClient?,
         gattServer: BleGattServer?
     ) {
         this.bleAdvertiser = advertiser
+        this.bleScanner = scanner
         this.bleGattClient = gattClient
         this.bleGattServer = gattServer
         Timber.d("BLE components set for data forwarding")
+    }
+
+    /**
+     * Set TransportManager for BLE adjustment application.
+     */
+    fun setTransportManager(transportManager: com.scmessenger.android.transport.TransportManager) {
+        this.transportManager = transportManager
+        Timber.d("TransportManager set for BLE adjustments")
     }
 
     /**
@@ -391,8 +406,41 @@ class AndroidPlatformBridge @Inject constructor(
         Timber.d("Applying relay adjustments: maxPerHour=${relayAdjustment.maxPerHour}, priority=${relayAdjustment.priorityThreshold}, maxPayload=${relayAdjustment.maxPayloadBytes}")
         meshRepository.setRelayBudget(relayAdjustment.maxPerHour)
 
-        // Note: Actual application would update BLE scanner/advertiser settings
-        // and mesh service relay configuration
+        // Apply BLE settings to scanner and advertiser
+        applyBleSettings(bleAdjustment)
+    }
+
+    /**
+     * Apply BLE adjustment settings to scanner and advertiser.
+     */
+    private fun applyBleSettings(bleAdjustment: uniffi.api.BleAdjustment) {
+        val transportManager = transportManager
+        if (transportManager == null) {
+            Timber.d("TransportManager not available, trying direct BLE components")
+        } else {
+            try {
+                // Apply scan settings via TransportManager
+                transportManager.applyScanSettings(bleAdjustment.scanIntervalMs)
+                Timber.d("Applied BLE scan settings via TransportManager: ${bleAdjustment.scanIntervalMs}ms")
+            } catch (e: Exception) {
+                Timber.e(e, "Failed to apply BLE scan settings via TransportManager")
+            }
+
+            try {
+                // Apply advertise settings via TransportManager
+                transportManager.applyAdvertiseSettings(
+                    bleAdjustment.advertiseIntervalMs,
+                    bleAdjustment.txPowerDbm
+                )
+                Timber.d("Applied BLE advertise settings via TransportManager: ${bleAdjustment.advertiseIntervalMs}ms, ${bleAdjustment.txPowerDbm}dBm")
+            } catch (e: Exception) {
+                Timber.e(e, "Failed to apply BLE advertise settings via TransportManager")
+            }
+        }
+
+        // Fallback: Apply directly to BLE components if TransportManager is not available
+        bleAdvertiser?.applyAdvertiseSettings(bleAdjustment.advertiseIntervalMs, bleAdjustment.txPowerDbm)
+        bleScanner?.applyScanSettings(bleAdjustment.scanIntervalMs)
     }
 
     // ========================================================================

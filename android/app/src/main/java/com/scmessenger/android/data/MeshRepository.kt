@@ -3022,6 +3022,10 @@ open class MeshRepository(private val context: Context) {
 
     fun setPlatformBridge(bridge: uniffi.api.PlatformBridge) {
         meshService?.setPlatformBridge(bridge)
+        // Wire TransportManager to AndroidPlatformBridge for BLE adjustment application
+        if (bridge is com.scmessenger.android.service.AndroidPlatformBridge) {
+            transportManager?.let { bridge.setTransportManager(it) }
+        }
     }
 
     /**

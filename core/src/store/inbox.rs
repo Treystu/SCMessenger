@@ -16,7 +16,7 @@ const SEEN_IDS_KEY: &[u8] = b"inbox_seen_ids";
 const MESSAGES_PREFIX: &[u8] = b"inbox_msg_";
 
 /// A received message record
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, uniffi::Record)]
 pub struct ReceivedMessage {
     /// Message ID
     pub message_id: String,
@@ -262,6 +262,40 @@ impl Inbox {
         }
     }
 
+    /// Total message count as u32 (mobile API parity with `getInboxCount`)
+    pub fn get_inbox_count(&self) -> u32 {
+        self.total_count() as u32
+    }
+
+    /// Drain all received messages, returning them and clearing internal storage.
+    /// Preserves dedup IDs so duplicate detection continues to work after draining.
+    /// This is the core parity of the WASM `drainReceivedMessages` method.
+    pub fn drain_received_messages(&mut self) -> Vec<ReceivedMessage> {
+        match &mut self.backend {
+            InboxBackend::Memory {
+                messages, total, ..
+            } => {
+                let drained: Vec<ReceivedMessage> =
+                    messages.values().flat_map(|v| v.clone()).collect();
+                messages.clear();
+                *total = 0;
+                drained
+            }
+            InboxBackend::Persistent(db) => {
+                let results = db.scan_prefix(MESSAGES_PREFIX).unwrap_or_default();
+                let mut drained = Vec::with_capacity(results.len());
+                for (key, value) in &results {
+                    if let Ok(msg) = bincode::deserialize::<ReceivedMessage>(value) {
+                        drained.push(msg);
+                    }
+                    let _ = db.remove(key);
+                }
+                let _ = db.flush();
+                drained
+            }
+        }
+    }
+
     /// Clear all messages (but keep dedup IDs)
     pub fn clear_messages(&mut self) {
         match &mut self.backend {
@@ -414,5 +448,45 @@ mod tests {
             let all = inbox.all_messages();
             assert_eq!(all.len(), 2);
         }
+    }
+
+    #[test]
+    fn test_drain_received_messages() {
+        let mut inbox = Inbox::new();
+        inbox.receive(make_received("msg1", "alice", "hello"));
+        inbox.receive(make_received("msg2", "bob", "world"));
+
+        let drained = inbox.drain_received_messages();
+        assert_eq!(drained.len(), 2);
+        assert!(drained.iter().any(|m| m.message_id == "msg1"));
+        assert!(drained.iter().any(|m| m.message_id == "msg2"));
+
+        // Inbox should be empty after draining
+        assert_eq!(inbox.total_count(), 0);
+        assert_eq!(inbox.get_inbox_count(), 0);
+
+        // Dedup IDs should still be tracked
+        assert!(inbox.is_duplicate("msg1"));
+        assert!(inbox.is_duplicate("msg2"));
+
+        // Subsequent drain returns empty
+        let drained_again = inbox.drain_received_messages();
+        assert!(drained_again.is_empty());
+    }
+
+    #[test]
+    fn test_get_inbox_count() {
+        let mut inbox = Inbox::new();
+        assert_eq!(inbox.get_inbox_count(), 0);
+
+        inbox.receive(make_received("msg1", "alice", "hello"));
+        assert_eq!(inbox.get_inbox_count(), 1);
+
+        inbox.receive(make_received("msg2", "bob", "world"));
+        assert_eq!(inbox.get_inbox_count(), 2);
+
+        // Duplicate should not increase count
+        assert!(!inbox.receive(make_received("msg1", "alice", "duplicate")));
+        assert_eq!(inbox.get_inbox_count(), 2);
     }
 }

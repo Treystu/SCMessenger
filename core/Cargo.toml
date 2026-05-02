@@ -91,7 +91,7 @@ libp2p = { workspace = true, features = [
 ] }
 ureq = "2"
 libc = "0.2"
-tokio-tungstenite = { workspace = true, default-features = false, features = ["connect", "handshake", "rustls-tls-webpki-roots"] }
+tokio-tungstenite = { workspace = true, features = ["handshake", "rustls-tls-webpki-roots"] }
 
 [dev-dependencies]
 mockall = { workspace = true }

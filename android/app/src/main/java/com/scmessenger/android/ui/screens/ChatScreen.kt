@@ -26,6 +26,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.scmessenger.android.utils.toEpochMillis
 import com.scmessenger.android.ui.viewmodels.ConversationsViewModel
 import com.scmessenger.android.ui.viewmodels.ContactsViewModel
+import com.scmessenger.android.ui.chat.MessageInput
 import kotlinx.coroutines.launch
 import timber.log.Timber
 import java.text.SimpleDateFormat
@@ -268,76 +269,49 @@ fun ChatScreen(
                         }
                     }
                 } else {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        OutlinedTextField(
-                            value = inputText,
-                            onValueChange = { inputText = it },
-                            modifier = Modifier.weight(1f),
-                            placeholder = { Text("Type a message...") },
-                            shape = RoundedCornerShape(24.dp),
-                            maxLines = 4,
-                            enabled = !isBlocked
-                        )
+                    MessageInput(
+                        value = inputText,
+                        onValueChange = { inputText = it },
+                        onSend = {
+                            if (isBlocked) {
+                                Timber.w("SEND_BUTTON_CLICKED: Peer is blocked, ignoring click")
+                                return@MessageInput
+                            }
 
-                        Spacer(modifier = Modifier.width(8.dp))
+                            val messageToSend = inputText.trim()
+                            if (messageToSend.isEmpty()) {
+                                Timber.w("SEND: Attempted to send empty message")
+                                return@MessageInput
+                            }
 
-                        // AND-SEND-BTN-001: Use FloatingActionButton for reliable click handling
-                        FloatingActionButton(
-                            onClick = {
-                                if (isBlocked) {
-                                    Timber.w("SEND_BUTTON_CLICKED: Peer is blocked, ignoring click")
-                                    return@FloatingActionButton
-                                }
+                            Timber.d("SEND: Processing message send, contentLength=${messageToSend.length}")
 
-                                // Defensive logging to catch UI thread issues
-                                Timber.d("SEND_BUTTON_CLICKED: Button handler invoked")
-                                Timber.d("SEND_BUTTON_CLICKED: inputText.length=${inputText.length}, isNotBlank=${inputText.isNotBlank()}")
+                            // Clear input immediately for instant feedback
+                            val originalInput = inputText
+                            inputText = ""
+                            Timber.d("SEND: Input cleared immediately for instant feedback")
 
-                                val messageToSend = inputText.trim()
-                                if (messageToSend.isEmpty()) {
-                                    Timber.w("SEND: Attempted to send empty message")
-                                    return@FloatingActionButton
-                                }
-
-                                Timber.d("SEND: Processing message send, contentLength=${messageToSend.length}")
-
-                                // Clear input immediately for instant feedback
-                                val originalInput = inputText
-                                inputText = ""
-                                Timber.d("SEND: Input cleared immediately for instant feedback")
-
-                                coroutineScope.launch {
-                                    try {
-                                        Timber.d("SEND: Launching sendMessage coroutine")
-                                        val success = viewModel.sendMessage(conversationId, messageToSend)
-                                        Timber.d("SEND: Message sent, success=$success")
-                                        if (success) {
-                                            // Scroll to bottom to show new message
-                                            if (chatMessages.isNotEmpty()) {
-                                                listState.animateScrollToItem(chatMessages.size)
-                                            }
+                            coroutineScope.launch {
+                                try {
+                                    Timber.d("SEND: Launching sendMessage coroutine")
+                                    val success = viewModel.sendMessage(conversationId, messageToSend)
+                                    Timber.d("SEND: Message sent, success=$success")
+                                    if (success) {
+                                        // Scroll to bottom to show new message
+                                        if (chatMessages.isNotEmpty()) {
+                                            listState.animateScrollToItem(chatMessages.size)
                                         }
-                                    } catch (e: Exception) {
-                                        Timber.e(e, "SEND: Failed to send message")
-                                        // Restore input if send failed
-                                        inputText = originalInput
                                     }
+                                } catch (e: Exception) {
+                                    Timber.e(e, "SEND: Failed to send message")
+                                    // Restore input if send failed
+                                    inputText = originalInput
                                 }
-                            },
-                            modifier = Modifier.size(48.dp),
-                            containerColor = if (inputText.isNotBlank() && !isBlocked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
-                            contentColor = if (inputText.isNotBlank() && !isBlocked) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
-                        ) {
-                            Icon(
-                                imageVector = Icons.AutoMirrored.Filled.Send,
-                                contentDescription = "Send message",
-                                modifier = Modifier.size(24.dp)
-                            )
-                        }
-                    }
+                            }
+                        },
+                        enabled = !isBlocked,
+                        modifier = Modifier.fillMaxWidth()
+                    )
                 }
             }
         }
