@@ -9,7 +9,25 @@ You are the SCMessenger Swarm Orchestrator. Use this command to delegate work to
 3. **Activate orchestrator**: Run `bash .claude/orchestrator_manager.sh activate` if not already active
 4. **Launch agent**: Run `bash .claude/orchestrator_manager.sh pool launch <agent_name>` to spawn an ollama cloud agent
 5. **Monitor**: Use `bash .claude/orchestrator_manager.sh pool status` to track progress
-6. **Also use built-in Agent tool** for parallel local sub-agents on the same model as the orchestrator
+6. **Native `<Agent>` tool:** ONLY permitted in TIER 1 (Vanguard Mode). In TIER 2–4, use `pool launch` via bash script exclusively — the Agent tool clones your model and burns quota at full rate.
+
+# 🛑 CRITICAL SYSTEM OVERRIDE: DYNAMIC QUOTA GOVERNOR 🛑
+You are operating under rolling API limits. Your goal is to hit exactly 99.9% of the 7-day window by the end of the week, without ever triggering a 429 crash on the 5-hour window.
+
+**Step 1: Just-In-Time (JIT) Polling**
+At the start of EVERY loop, BEFORE spawning sub-agents, you must synchronously run the scraper:
+`powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./OllamaQuotaScraper.ps1`
+Wait for it to complete, then read `.claude/API_QUOTA_STATE.md`.
+
+**Step 2: Dynamic Task Routing (The Stamina Bar)**
+Evaluate the telemetry and route tasks based on these strict tiers:
+
+* **TIER 1 (Vanguard Mode):** [5-Hour < 50% AND 7-Day behind pace]. MAXIMUM PARALLELISM. You may freely use the native `<Agent>` tool to spawn parallel clones of yourself for massive, context-heavy tasks. You may also use the bash script for external heavyweight models.
+* **TIER 2 (Cruise Control):** [5-Hour between 50% - 75%]. Normal operations. **DO NOT use the native `<Agent>` tool.** It burns too much quota. You MUST use the bash script to spawn standard, targeted cloud coders from the routing table.
+* **TIER 3 (Cloud Conservation):** [5-Hour between 75% - 92%]. API limits approaching. **DO NOT use the native `<Agent>` tool.** You MUST use the bash script to step down to lower-tier/faster cloud models for smaller tasks (isolated bug fixes, straightforward refactors).
+* **TIER 4 (Local Scavenger/Balancer):** [5-Hour > 92%]. Cloud exhausted. **DO NOT use the native `<Agent>` tool.** You MUST use the bash script to route ONLY perfectly scoped, single-file micro-tasks (linting, documentation, simple unit tests) exclusively to the local `qwen2.5-coder:7b` model.
+
+*Acknowledge:* Output a "Dynamic Pacing Assessment" detailing your current Tier and what size tasks you are actively routing based on the telemetry.
 
 ## Agent Routing Table
 
@@ -32,7 +50,7 @@ bash .claude/orchestrator_manager.sh pool launch rust-coder HANDOFF/todo/task_an
 ## Parallel Strategy
 
 - Launch up to 2 ollama cloud agents via `pool launch`
-- ALSO launch built-in Agent sub-agents for parallel local work on the same model
+- **⚠️ Native `<Agent>` tool economics:** The native Agent tool spawns a clone of your current model (e.g., `glm-5.1:cloud`), NOT a cheap local model. It burns quota at the same rate as your own session. Only use `<Agent>` in TIER 1 (Vanguard Mode). In TIER 2–4, use the bash script exclusively.
 - Verify after each agent completes: `cargo check --workspace`, `cargo clippy`, `cargo fmt`
 
 > **TASK DELEGATION RULE:** Every time you generate a `BATCH_` markdown file for a worker, you MUST append this exact phrase to their instructions: "CRITICAL: You are forbidden from considering a task 'complete' until you execute the `mv` or `Rename-Item` command to move the task markdown file from `todo/` (or `IN_PROGRESS/`) to `done/`. If you do not move the file, the Orchestrator assumes you failed."

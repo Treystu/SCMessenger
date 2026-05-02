@@ -330,7 +330,7 @@ open class MeshRepository(private val context: Context) {
     // during concurrent peer identification callbacks (AND-CONTACT-DUP-001)
     private val contactUpsertMutex = kotlinx.coroutines.sync.Mutex()
     private val receiptAwaitSeconds: Long = 8L
-    private val pendingOutboxMaxAttempts: Int = 720
+    private val pendingOutboxMaxAttempts: Int = 12
     private val pendingOutboxMaxAgeSeconds: Long = 7L * 24L * 60L * 60L
     private val historySyncSentPeers = java.util.concurrent.ConcurrentHashMap<String, Long>()
     private val HISTORY_SYNC_COOLDOWN_MS = 60_000L
@@ -3824,6 +3824,11 @@ open class MeshRepository(private val context: Context) {
                     recipientPublicKey = finalPublicKey
                 )
 
+                // AND-NO-ROUTE-001: Emit "connecting" status when no route candidates yet
+                if (routePeerCandidates.isEmpty()) {
+                    Timber.i("No route candidates for $normalizedPeerId yet - message will be queued for route discovery")
+                }
+
                 if (isKnownRelay(normalizedPeerId) || isBootstrapRelayPeer(normalizedPeerId)) {
                     throw IllegalStateException("Refusing to use headless relay identity as a chat recipient: $normalizedPeerId")
                 }
@@ -3901,6 +3906,8 @@ open class MeshRepository(private val context: Context) {
 
                 if (delivery.acked) {
                     promotePendingOutboundForPeer(peerId = normalizedPeerId, excludingMessageId = realMessageId)
+                    // AND-NO-ROUTE-001: Persist last-known-good route in contact notes for future fallback
+                    storeLastKnownRoutePeerId(normalizedPeerId, selectedRoutePeerId)
                 }
 
                 val receiptAwaitSeconds = 30L
@@ -5004,6 +5011,10 @@ open class MeshRepository(private val context: Context) {
         recipientIdentityId: String? = null,
         intendedDeviceId: String? = null
     ): DeliveryAttemptResult {
+        // AND-DELIVERY-001: Resolve nullable traceMessageId to a non-null value early,
+        // so all internal logDeliveryAttempt calls use a real message ID and never emit msg=unknown.
+        val traceMessageId = traceMessageId?.takeIf { it.isNotBlank() }
+            ?: "unassigned_${System.currentTimeMillis()}_${attemptContext}"
         val strictBleOnly = strictBleOnlyOverride ?: strictBleOnlyValidation
         val routePeerFallback = routePeerCandidates.firstOrNull() ?: "unknown_route_${System.currentTimeMillis()}"
         if (strictBleOnly) {
@@ -5482,19 +5493,19 @@ open class MeshRepository(private val context: Context) {
                 append("ctx=$attemptContext ")
                 append("route_fallback=$wifiPeerId ")
                 append("ble_only=${localAcked} ")
-                
+
                 // Analyze why candidates might be empty (using available parameters)
                 val discoveryCount = discoverRoutePeersForPublicKey(recipientIdentityId).size
                 val candidatesCount = routePeerCandidates.size
                 val listenersCount = listeners.size
-                
+
                 append("discovery=$discoveryCount ")
                 append("input_candidates=$candidatesCount ")
                 append("listeners=$listenersCount ")
                 append("recipient_id=${recipientIdentityId?.take(8) ?: "null"}")
                 append("intended_device=${intendedDeviceId?.take(8) ?: "null"}")
             }
-            
+
             logDeliveryAttempt(
                 messageId = traceMessageId,
                 medium = "core",
@@ -5503,6 +5514,14 @@ open class MeshRepository(private val context: Context) {
                 detail = "reason=no_route_candidates $diagnosticDetails",
                 callerContext = "attemptDirectSwarmDelivery"
             )
+            // AND-NO-ROUTE-001: Emit user-visible "connecting" status during route discovery
+            if (!traceMessageId.isNullOrBlank()) {
+                logDeliveryState(
+                    messageId = traceMessageId,
+                    state = "connecting",
+                    detail = "route_discovery_in_progress ctx=$attemptContext"
+                )
+            }
             // No core routes - don't mark as delivered even if BLE succeeded
             return DeliveryAttemptResult(acked = false, routePeerId = wifiPeerId)
         }
@@ -5762,14 +5781,14 @@ open class MeshRepository(private val context: Context) {
                 }
 
                 if (delivery.acked) {
-                    // Adaptive post-ACK receipt wait: grows with attempt count to prevent
-                    // re-delivering the same message every 8 seconds indefinitely when
-                    // receipt delivery is slow or broken.
+                    // AND-NO-ROUTE-001: Persist last-known-good route in contact notes for future fallback
+                    storeLastKnownRoutePeerId(item.peerId, selectedRoutePeerId)
+                    // AND-DELIVERY-001: Adaptive post-ACK receipt wait scales with attempt count.
+                    // With max 12 attempts, use exponential backoff capped at 2 min.
                     val adaptiveReceiptWait = when {
                         item.attemptCount <= 3 -> receiptAwaitSeconds        // 8s for first few
-                        item.attemptCount <= 10 -> 30L                       // 30s for moderate retries
-                        item.attemptCount <= 30 -> 60L                       // 60s for persistent retries
-                        else -> 120L                                         // 2 min for very old messages
+                        item.attemptCount <= 8 -> 30L                       // 30s for moderate retries
+                        else -> 120L                                         // 2 min for final attempts
                     }
                     iterator.set(
                         item.copy(
@@ -6477,6 +6496,25 @@ open class MeshRepository(private val context: Context) {
     }
 
     /**
+     * AND-NO-ROUTE-001: Persist last-known-good routePeerId in contact notes so that
+     * future deliveries can fall back to it when fresh discovery returns empty.
+     */
+    private fun storeLastKnownRoutePeerId(peerId: String, routePeerId: String?) {
+        if (routePeerId.isNullOrBlank()) return
+        if (!PeerIdValidator.isLibp2pPeerId(routePeerId)) return
+        try {
+            val contact = contactManager?.get(peerId) ?: return
+            val updatedNotes = appendRoutingHint(contact.notes, "last_known_route", routePeerId)
+            if (updatedNotes != contact.notes) {
+                contactManager?.add(contact.copy(notes = updatedNotes))
+                Timber.d("Stored last-known route for $peerId: $routePeerId")
+            }
+        } catch (e: Exception) {
+            Timber.w(e, "Failed to store last-known route for $peerId")
+        }
+    }
+
+    /**
      * Merge routing notes from two contacts, preserving all unique hints.
      * Used during ID coalescence to avoid losing routing information.
      */
@@ -6904,6 +6942,21 @@ open class MeshRepository(private val context: Context) {
         return out.distinct()
     }
 
+    /**
+     * AND-NO-ROUTE-001: Extract the last-known-good route peer ID stored in contact notes.
+     * This is used as a fallback when fresh discovery returns no candidates.
+     */
+    private fun parseLastKnownRoute(notes: String?): String? {
+        if (notes.isNullOrBlank()) return null
+        for (component in notes.split(';', '\n')) {
+            val kv = component.trim()
+            if (!kv.startsWith("last_known_route:")) continue
+            val value = kv.removePrefix("last_known_route:").trim()
+            if (value.isNotEmpty()) return value
+        }
+        return null
+    }
+
     private fun buildRoutePeerCandidates(
         peerId: String,
         cachedRoutePeerId: String?,
@@ -6911,14 +6964,46 @@ open class MeshRepository(private val context: Context) {
         recipientPublicKey: String? = null
     ): List<String> {
         val candidates = mutableListOf<String>()
-        candidates.addAll(discoverRoutePeersForPublicKey(recipientPublicKey))
+
+        // Diagnostic tracking: why each source contributed or failed
+        val diagSources = mutableListOf<String>()
+
+        val discovered = discoverRoutePeersForPublicKey(recipientPublicKey)
+        if (discovered.isEmpty()) {
+            diagSources.add("discovery=empty")
+        } else {
+            diagSources.add("discovery=${discovered.size}")
+        }
+        candidates.addAll(discovered)
+
         val notedPeerIds = parseAllRoutingPeerIds(notes)
+        if (notedPeerIds.isEmpty()) {
+            diagSources.add("notes_routing_hints=empty")
+        } else {
+            diagSources.add("notes_routing_hints=${notedPeerIds.size}")
+        }
         val newestHint = notedPeerIds.lastOrNull()
         if (!newestHint.isNullOrBlank()) candidates.add(newestHint)
         for (hint in notedPeerIds.asReversed()) candidates.add(hint)
-        cachedRoutePeerId?.trim()?.takeIf { it.isNotEmpty() }?.let { candidates.add(it) }
-        if (PeerIdValidator.isLibp2pPeerId(peerId)) candidates.add(peerId)
-        return candidates
+
+        val trimmedCached = cachedRoutePeerId?.trim()?.takeIf { it.isNotEmpty() }
+        if (trimmedCached == null) {
+            diagSources.add("cached_route_peer_id=null")
+        } else if (!PeerIdValidator.isLibp2pPeerId(trimmedCached)) {
+            diagSources.add("cached_route_peer_id=invalid_format")
+        } else {
+            diagSources.add("cached_route_peer_id=valid")
+        }
+        trimmedCached?.let { candidates.add(it) }
+
+        if (PeerIdValidator.isLibp2pPeerId(peerId)) {
+            diagSources.add("peer_id=valid")
+            candidates.add(peerId)
+        } else {
+            diagSources.add("peer_id=invalid_format")
+        }
+
+        val filtered = candidates
             .map { it.trim() }
             .filter { candidate ->
                 candidate.isNotEmpty() &&
@@ -6926,6 +7011,20 @@ open class MeshRepository(private val context: Context) {
                     routeCandidateMatchesRecipient(candidate, recipientPublicKey)
             }
             .distinct()
+
+        if (filtered.isEmpty()) {
+            // AND-NO-ROUTE-001: Fallback to last-known-good route stored in contact notes
+            val lastKnownRoute = parseLastKnownRoute(notes)
+            if (lastKnownRoute != null && PeerIdValidator.isLibp2pPeerId(lastKnownRoute)) {
+                Timber.w("buildRoutePeerCandidates: falling back to last_known_route=$lastKnownRoute for peerId=${peerId.take(12)}")
+                return listOf(lastKnownRoute)
+            }
+            Timber.w("buildRoutePeerCandidates: no valid candidates after filtering [${diagSources.joinToString(", ")}] peerId=${peerId.take(12)} recipientKey=${recipientPublicKey?.take(8) ?: "null"} notesLen=${notes?.length ?: 0}")
+        } else {
+            Timber.d("buildRoutePeerCandidates: ${filtered.size} candidates [${diagSources.joinToString(", ")}]")
+        }
+
+        return filtered
     }
 
     private fun discoverRoutePeersForPublicKey(recipientPublicKey: String?): List<String> {
@@ -7973,17 +8072,16 @@ open class MeshRepository(private val context: Context) {
     ) {
         val msg = messageId?.takeIf { it.isNotBlank() }
         if (msg == null) {
+            // AND-DELIVERY-001: Guard against null/blank messageId — log diagnostic warning only,
+            // do not emit the main delivery_attempt line with msg=unknown as it pollutes log analysis.
             val contextInfo = callerContext?.takeIf { it.isNotBlank() } ?: "unknown_caller"
             Timber.w("delivery_attempt msg=unknown (messageId was null or blank) medium=%s phase=%s outcome=%s detail=%s caller=%s",
                 medium, phase, outcome, detail, contextInfo)
-            // AND-DELIVERY-001: Add stack trace for debugging message ID loss (non-blocking warning only)
-            if (medium != "receipt" && phase != "rx") {  // Skip for expected receipt cases
-                Timber.w("Stack trace for msg=unknown (non-blocking warning)")
-            }
+            return
         }
         Timber.i(
             "delivery_attempt msg=%s medium=%s phase=%s outcome=%s detail=%s",
-            msg ?: "unknown",
+            msg,
             medium,
             phase,
             outcome,
