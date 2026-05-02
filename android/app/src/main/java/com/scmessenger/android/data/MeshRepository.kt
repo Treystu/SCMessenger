@@ -2029,6 +2029,14 @@ open class MeshRepository(private val context: Context) {
                 } catch (e: Exception) {
                     Timber.w(e, "Swarm transport failed to initialize; core service remains active")
                 }
+
+                // Start all transports via TransportManager
+                try {
+                    transportManager?.startAll()
+                } catch (e: Exception) {
+                    Timber.w(e, "TransportManager startAll failed; continuing with individual transports")
+                }
+
                 ensurePendingOutboxRetryLoop()
                 ensureCoverTrafficLoop()
                 flushPendingOutbox("service_started")

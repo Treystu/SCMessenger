@@ -134,6 +134,9 @@ class MeshForegroundService : Service() {
             // Initialize platform bridge to monitor system state
             platformBridge.initialize()
 
+            // Acquire WakeLock for BLE scan windows
+            acquireWakeLock()
+
             // Create mesh service configuration
             val config = uniffi.api.MeshServiceConfig(
                 discoveryIntervalMs = 30000u,  // 30 seconds

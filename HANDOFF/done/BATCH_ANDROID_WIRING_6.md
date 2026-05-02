@@ -1,4 +1,4 @@
-# BATCH: Android Service + Transport + System (Priority 6)
+# BATCH: Android Foreground Service + BLE Transport Wiring (Priority 6)
 
 Complete all tasks below. Process sequentially. After each task, run `./gradlew :app:compileDebugKotlin --quiet` to verify. If a task cannot complete due to missing dependencies, document blockers and move on.
 
@@ -8,44 +8,44 @@ CRITICAL: You are forbidden from considering a task 'complete' until you execute
 - File: `HANDOFF/todo/task_wire_acquireWakeLock.md`
 - Target: `android/app/src/main/java/com/scmessenger/android/service/MeshForegroundService.kt`
 
-## Task 2: applyAdvertiseSettings
+## Task 2: buildForegroundServiceNotification
+- File: `HANDOFF/todo/task_wire_buildForegroundServiceNotification.md`
+- Target: `android/app/src/main/java/com/scmessenger/android/service/MeshForegroundService.kt`
+
+## Task 3: applyAdvertiseSettings
 - File: `HANDOFF/todo/task_wire_applyAdvertiseSettings.md`
 - Target: `android/app/src/main/java/com/scmessenger/android/transport/BleTransportManager.kt`
 
-## Task 3: applyScanSettings
+## Task 4: applyScanSettings
 - File: `HANDOFF/todo/task_wire_applyScanSettings.md`
 - Target: `android/app/src/main/java/com/scmessenger/android/transport/BleTransportManager.kt`
 
-## Task 4: handleScanFailure
+## Task 5: handleScanFailure
 - File: `HANDOFF/todo/task_wire_handleScanFailure.md`
 - Target: `android/app/src/main/java/com/scmessenger/android/transport/BleTransportManager.kt`
 
-## Task 5: onStartSuccess
+## Task 6: onStartSuccess
 - File: `HANDOFF/todo/task_wire_onStartSuccess.md`
 - Target: `android/app/src/main/java/com/scmessenger/android/transport/BleTransportManager.kt`
 
-## Task 6: onStopDiscoveryFailed
+## Task 7: onStopDiscoveryFailed
 - File: `HANDOFF/todo/task_wire_onStopDiscoveryFailed.md`
 - Target: `android/app/src/main/java/com/scmessenger/android/transport/BleTransportManager.kt`
 
-## Task 7: startAll
+## Task 8: startAll
 - File: `HANDOFF/todo/task_wire_startAll.md`
 - Target: `android/app/src/main/java/com/scmessenger/android/transport/TransportManager.kt`
 
-## Task 8: is_ble_available
+## Task 9: is_ble_available
 - File: `HANDOFF/todo/task_wire_is_ble_available.md`
 - Target: `android/app/src/main/java/com/scmessenger/android/transport/BleTransportManager.kt`
 
-## Task 9: try_enable_bluetooth
+## Task 10: try_enable_bluetooth
 - File: `HANDOFF/todo/task_wire_try_enable_bluetooth.md`
 - Target: `android/app/src/main/java/com/scmessenger/android/transport/BleTransportManager.kt`
 
-## Task 10: sendBlePacket
+## Task 11: sendBlePacket
 - File: `HANDOFF/todo/task_wire_sendBlePacket.md`
-- Target: `android/app/src/main/java/com/scmessenger/android/transport/BleTransportManager.kt`
-
-## Task 11: scan_for_advertisements
-- File: `HANDOFF/todo/task_wire_scan_for_advertisements.md`
 - Target: `android/app/src/main/java/com/scmessenger/android/transport/BleTransportManager.kt`
 
 ## Task 12: updateBatteryFloor
