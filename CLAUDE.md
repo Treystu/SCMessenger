@@ -151,6 +151,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/docs_sync_check.ps1
 ## Windows-Specific Notes
 
 - Incremental compilation is disabled (`.cargo/config.toml`: `incremental = false`) to prevent rlib metadata and paging file errors during integration test builds.
+- **Runtime rule:** Before running `cargo check` or `cargo build`, you MUST set `export CARGO_INCREMENTAL=0` in your terminal. This prevents `.rlib` file-lock corruption during concurrent Rust builds on Windows.
 - Shell scripts in `scripts/` require Git Bash or WSL. PowerShell equivalents exist for key scripts (`.ps1`).
 - The `if-watch` crate is patched to an Android-compatible stub (`patch/if-watch-full/`) because the native version requires system APIs not available on Android.
 - CI runs on ubuntu-latest and macos-latest only. Windows builds are local-only; verify with `cargo build --workspace` and `cargo test --workspace`.
@@ -163,6 +164,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/docs_sync_check.ps1
 2. **Doc sync**: Run `scripts/docs_sync_check.sh` (or `.ps1`). Resolve failures before finalizing.
 3. **Canonical doc updates**: If a run changes behavior, scope, risk posture, scripts, tests, or verification workflow, update the canonical docs in the same run.
 4. **Final summary rule**: State which docs were updated, or why no doc updates were needed, and report build verification status for edited targets.
+5. **Git checkpoint**: After completing work, run `git add -A` followed by `git commit -m "swarm: completed [Task Name]"`. Do not push to remote; commit locally to prevent data loss.
 
 ### File Storage
 
@@ -196,7 +198,36 @@ Do not treat mixed or historical docs as execution truth unless canonical docs e
 
 ## Agent Swarm Integration
 
-The ollama-based agent swarm is configured in `ORCHESTRATOR_DIRECTIVE.md` (the former CLAUDE.md content). Models are routed through ngrok to cloud providers; append `:cloud` to any model name from the roster below. The pool is defined in `.claude/agent_pool.json` with a 2-slot concurrency limit. Use `bash .claude/orchestrator_manager.sh` for lifecycle management. On Windows, use `'C:\Program Files\Git\bin\bash.exe'` if not inside Claude's bash emulator. **Never** use `Stop-Process`, `taskkill`, or `kill` directly — always go through the manager script.
+The ollama-based agent swarm is configured in `ORCHESTRATOR_DIRECTIVE.md` (the former CLAUDE.md content). Models are routed through ngrok to cloud providers; append `:cloud` to any model name from the roster below. The pool is defined in `.claude/agent_pool.json` with a 2-slot concurrency limit. Use `bash .claude/orchestrator_manager.sh` for lifecycle management. On Windows, use `'C:\Program Files\Git\bin\bash.exe'` if not inside Claude's bash emulator.
+
+### Swarm Identity & Roles
+
+Identify your role based on your initial prompt:
+- **Orchestrator:** Read tracking files, write task batches to `HANDOFF/todo/`, and launch workers via `.claude/orchestrator_manager.sh pool launch <agent_name> <task_file>`.
+- **Worker (Implementer):** Read `BATCH_...md` files, write code, run compilers, verify fixes, and move completed task files to `HANDOFF/done/`.
+
+### State-Machine & Commit Schedule (CRITICAL)
+
+Workers MUST follow this exact lifecycle for every task. Failure breaks swarm accounting.
+
+1. **Claim:** Read the task from `HANDOFF/todo/` or `HANDOFF/IN_PROGRESS/`.
+2. **Execute:** Write the code and run the compile gates (`cargo check --workspace` or `./gradlew`).
+3. **Move:** You are FORBIDDEN from considering a task complete until you move the task markdown file from `todo/` (or `IN_PROGRESS/`) to `HANDOFF/done/`.
+4. **Checkpoint:** Immediately after moving the file to `done/`, run `git add -A` followed by `git commit -m "swarm: completed [Task Name]"`. Do not push to remote.
+
+### Orchestrator Fire-and-Forget Protocol
+
+If you are the Orchestrator: Once you have delegated tasks and launched the worker agents (2/2 slots filled), you MUST exit the active session immediately. Do not launch monitors. Do not use `sleep` or wait for them to finish. The system cron (`/loop 30m`) will wake you up automatically to check on them later.
+
+### Process Management on Windows
+
+If you need to kill a zombie swarm agent, standard Linux `kill` will fail to clear the process tree on Windows. Use the dual-kill method:
+```bash
+kill -9 <PID> 2>/dev/null
+ taskkill //F //T //PID <PID> 2>/dev/null
+```
+
+**Never** use `Stop-Process`, `taskkill`, or `kill` directly from the orchestrator — always go through `.claude/orchestrator_manager.sh pool stop <agent_id>`.
 
 ### Available Cloud Models (`:cloud` suffix)
 
@@ -289,6 +320,7 @@ The agent implements a five-stage compaction cascade when context nears capacity
 - **Limit tool output with bounded operations** — use `head`, `tail`, bounded `sed`, or `grep` with context flags instead of dumping full files.
 - **Prefer shell search tools** (grep, ripgrep, `git log`/`git diff`) over sequential file reading — a single `grep` call is 10x more context-efficient than "read file A, now read file B."
 - **Keep prompt instructions dense** — every word consumes token budget that could go toward code understanding.
+- **Context bloat protection** — NEVER run raw `git diff` on the entire workspace. Use `git diff --stat` or `git diff --name-only`. If you need to see code changes, only `git diff` the specific file you are working on.
 
 ### Multi-Model Routing Strategy
 
@@ -304,6 +336,13 @@ Route work to the appropriate ollama cloud model tier based on task complexity. 
 | Quick fix, lint, CI | `gemini-3-flash-preview:cloud` | `deepseek-v4-flash:cloud` |
 | Tests, docs, bindings | `gemma4:31b:cloud` | `devstral-2:123b:cloud` |
 | Pipeline coordination | `mistral-large-3:675b:cloud` | `cogito-2.1:671b:cloud` |
+
+### Context Bloat Protection
+
+To prevent memory crashes during long swarm sessions:
+- NEVER run raw `git diff` on the entire workspace. Use `git diff --stat` or `git diff --name-only`.
+- If you need to see code changes, only `git diff` the specific file you are working on.
+- Prefer `grep` over sequential file reading for large codebases.
 
 ### Escalation Policy
 
