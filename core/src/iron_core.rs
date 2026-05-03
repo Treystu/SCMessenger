@@ -34,11 +34,10 @@ use crate::store::backend::MemoryStorage;
 use crate::store::backend::SledStorage;
 use crate::store::blocked::BlockedManager as CoreBlockedManager;
 use crate::store::logs::LogManager;
-use crate::store::relay_custody::RelayRegistry;
 use crate::store::{
     ContactManager as CoreContactManager, HistoryManager as CoreHistoryManager, Inbox,
-    MessageDirection, MessageRecord, Outbox, QueuedMessage, ReceivedMessage, StorageBackend,
-    StorageManager,
+    MessageDirection, MessageRecord, Outbox, QueuedMessage, ReceivedMessage,
+    RelayCustodyStore, RelayRegistry, StorageBackend, StorageManager,
 };
 use crate::transport::behaviour::RegistrationRequest;
 use crate::transport::manager::TransportManager;
@@ -120,7 +119,7 @@ pub struct IronCore {
     pub(crate) log_manager: Arc<LogManager>,
     pub(crate) blocked_manager: Arc<RwLock<CoreBlockedManager>>,
     pub(crate) audit_log: Arc<RwLock<AuditLogType>>,
-    pub(crate) relay_registry: Arc<RwLock<RelayRegistry>>,
+    pub(crate) relay_custody_store: Arc<RwLock<RelayCustodyStore>>,
 
     /// Protocol event delegate (set by MeshService or platform bridge).
     pub delegate: Arc<RwLock<Option<Box<dyn CoreDelegate>>>>,
@@ -242,7 +241,7 @@ impl IronCore {
             log_manager: log_mgr,
             blocked_manager: Arc::new(RwLock::new(blocked_manager)),
             audit_log: Arc::new(RwLock::new(AuditLogType::new())),
-            relay_registry: Arc::new(RwLock::new(RelayRegistry::new(backend.clone()))),
+            relay_custody_store: Arc::new(RwLock::new(RelayCustodyStore::persistent(backend.clone()))),
             delegate: Arc::new(RwLock::new(None)),
             consent: Arc::new(RwLock::new(ConsentState::NotGranted)),
             drift_active: Arc::new(RwLock::new(false)),
@@ -318,7 +317,7 @@ impl IronCore {
             log_manager: log_mgr,
             blocked_manager: Arc::new(RwLock::new(blocked_manager)),
             audit_log: Arc::new(RwLock::new(AuditLogType::new())),
-            relay_registry: Arc::new(RwLock::new(RelayRegistry::new(backend.clone()))),
+            relay_custody_store: Arc::new(RwLock::new(RelayCustodyStore::persistent(backend.clone()))),
             delegate: Arc::new(RwLock::new(None)),
             consent: Arc::new(RwLock::new(ConsentState::NotGranted)),
             drift_active: Arc::new(RwLock::new(false)),
@@ -392,7 +391,7 @@ impl IronCore {
             log_manager: log_mgr,
             blocked_manager: Arc::new(RwLock::new(blocked_manager)),
             audit_log: Arc::new(RwLock::new(AuditLogType::new())),
-            relay_registry: Arc::new(RwLock::new(RelayRegistry::new(backend.clone()))),
+            relay_custody_store: Arc::new(RwLock::new(RelayCustodyStore::persistent(backend.clone()))),
             delegate: Arc::new(RwLock::new(None)),
             consent: Arc::new(RwLock::new(ConsentState::NotGranted)),
             drift_active: Arc::new(RwLock::new(false)),
@@ -662,11 +661,15 @@ impl IronCore {
     }
 
     /// Get the current registration state for an identity.
-    pub fn get_registration_state(&self, _identity_id: String) -> crate::RegistrationStateInfo {
+    pub fn get_registration_state(&self, identity_id: String) -> crate::RegistrationStateInfo {
+        let info = self
+            .relay_custody_store
+            .read()
+            .get_registration_state_info(&identity_id);
         crate::RegistrationStateInfo {
-            state: "unknown".to_string(),
-            device_id: None,
-            seniority_timestamp: None,
+            state: info.state,
+            device_id: info.device_id,
+            seniority_timestamp: info.seniority_timestamp,
         }
     }
 
@@ -1268,7 +1271,7 @@ impl IronCore {
 
     /// Return the count of relay custody entries currently being tracked.
     pub fn custody_audit_count(&self) -> u32 {
-        self.relay_registry.read().len() as u32
+        self.relay_custody_store.read().audit_count() as u32
     }
 
     /// Get registration state info for a specific identity from custody records.
@@ -1276,18 +1279,24 @@ impl IronCore {
         &self,
         identity_id: String,
     ) -> crate::RegistrationStateInfo {
-        let _ = identity_id;
+        let info = self
+            .relay_custody_store
+            .read()
+            .get_registration_state_info(&identity_id);
         crate::RegistrationStateInfo {
-            state: "unknown".to_string(),
-            device_id: None,
-            seniority_timestamp: None,
+            state: info.state,
+            device_id: info.device_id,
+            seniority_timestamp: info.seniority_timestamp,
         }
     }
 
     /// Return registration state transitions for an identity from custody logs.
     pub fn custody_registration_transitions(&self, identity_id: String) -> String {
-        let _ = identity_id;
-        "[]".to_string()
+        let transitions = self
+            .relay_custody_store
+            .read()
+            .registration_transitions_for_identity(&identity_id);
+        serde_json::to_string(&transitions).unwrap_or_else(|_| "[]".to_string())
     }
 
     // -----------------------------------------------------------------------

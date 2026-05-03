@@ -53,8 +53,38 @@ bash .claude/orchestrator_manager.sh pool launch rust-coder HANDOFF/todo/task_an
 - **⚠️ Native `<Agent>` tool economics:** The native Agent tool spawns a clone of your current model (e.g., `glm-5.1:cloud`), NOT a cheap local model. It burns quota at the same rate as your own session. Only use `<Agent>` in TIER 1 (Vanguard Mode). In TIER 2–4, use the bash script exclusively.
 - Verify after each agent completes: `cargo check --workspace`, `cargo clippy`, `cargo fmt`
 
+## Operational Hygiene
+
+These rules apply on EVERY orchestration cycle, without exception:
+
+### Stale Worker Cleanup
+- **BEFORE launching any new agent**, run `bash .claude/orchestrator_manager.sh pool status` and stop all agents with `STALE` status using `pool stop <agent_id>`.
+- Stale agents consume slot tracking and create confusion about available capacity. Clean them first, then launch fresh.
+- Command: `bash .claude/orchestrator_manager.sh pool stop <agent_id>` for each stale entry.
+
+### Git Checkpoint Discipline
+- **After each agent completes a task** (confirmed by task file moving to `done/`), run `git add -A && git commit -m "swarm: completed <TASK_NAME>"`.
+- **Before exiting any cycle**, check `git diff --stat`. If there are uncommitted changes from agent work, commit them. Never leave agent output uncommitted.
+- **Never push to remote** unless explicitly asked by the human operator.
+
+### HANDOFF Queue Hygiene
+- Verify that completed task files landed in `HANDOFF/done/`. If a task file is still in `todo/` or `IN_PROGRESS/` after an agent exits, investigate before re-launching.
+- Remove stale batch files that reference completed or abandoned work.
+- If an agent produced zero code changes, move its task file back to `todo/` for re-attempt, not to `done/`.
+
+### Build Verification After Agent Work
+- After committing agent changes, run the appropriate build gate:
+  - Rust changes: `cargo check --workspace`
+  - Android changes: `cd android && ./gradlew assembleDebug -x lint --quiet`
+  - Both: run both commands
+- Record build pass/fail in the commit message.
+
+### Monitor-Aware Scheduling
+- When launching agents, arm a `Monitor` on their log files (`.claude/agents/<agent_id>/agent.log`) watching for completion signals (`completed`, `done`, `BUILD SUCCESS`, `BUILD FAIL`, `ERROR`, `FATAL`). This wakes the loop immediately on agent completion rather than waiting for the cron interval.
+- The 15-minute cron (`/loop 15m`) is a fallback heartbeat, not the primary wake signal.
+
 > **TASK DELEGATION RULE:** Every time you generate a `BATCH_` markdown file for a worker, you MUST append this exact phrase to their instructions: "CRITICAL: You are forbidden from considering a task 'complete' until you execute the `mv` or `Rename-Item` command to move the task markdown file from `todo/` (or `IN_PROGRESS/`) to `done/`. If you do not move the file, the Orchestrator assumes you failed."
 
-> **ORCHESTRATION BEHAVIOR:** Once you have launched the worker agents to fill the slots (2/2), you MUST exit the active session immediately. Do not launch monitors. Do not use `sleep` or wait for them to finish. The system cron (`/loop 30m`) will wake you up automatically to check on them later. Fire and forget.
+> **ORCHESTRATION BEHAVIOR:** Once you have launched the worker agents to fill the slots (2/2), commit any pending changes, arm monitors on agent logs, and exit. Do not use `sleep` or wait for agents to finish. The monitor and cron will wake you on completion or timeout. Fire and forget.
 
 ## Arguments: $ARGUMENTS

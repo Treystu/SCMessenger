@@ -1696,6 +1696,31 @@ impl HistoryManager {
         Ok(count)
     }
 
+    /// Hide all stored messages for a given peer (called on block).
+    pub fn hide_messages_for_peer(&self, peer_id: &str) -> Result<u32, crate::IronCoreError> {
+        let db = self.db.lock();
+        let mut to_update: Vec<(Vec<u8>, MessageRecord)> = Vec::new();
+
+        for item in db.iter() {
+            let (key, value) = item.map_err(|_| crate::IronCoreError::StorageError)?;
+            let record: MessageRecord =
+                serde_json::from_slice(&value).map_err(|_| crate::IronCoreError::Internal)?;
+            if !record.hidden && record.peer_id.eq_ignore_ascii_case(peer_id) {
+                to_update.push((key.to_vec(), record));
+            }
+        }
+
+        let count = to_update.len() as u32;
+        for (key, mut record) in to_update {
+            record.hidden = true;
+            let updated =
+                serde_json::to_vec(&record).map_err(|_| crate::IronCoreError::Internal)?;
+            db.insert(key, updated)
+                .map_err(|_| crate::IronCoreError::StorageError)?;
+        }
+        Ok(count)
+    }
+
     pub fn mark_delivered(&self, id: String) -> Result<(), crate::IronCoreError> {
         if let Some(mut record) = self.get(id.clone())? {
             record.delivered = true;

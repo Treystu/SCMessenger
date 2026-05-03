@@ -1912,6 +1912,7 @@ pub async fn start_swarm_with_config(
                     // Bootstrap reconnection: re-dial bootstrap nodes periodically
                     // This handles network changes, dropped connections, and roaming
                     _ = bootstrap_reconnect_interval.tick() => {
+                        tracing::info!("📊 Relay custody audit log count: {}", relay_custody_store.audit_count());
                         if !bootstrap_addrs_clone.is_empty() {
                             let connected_peers: HashSet<PeerId> = swarm.connected_peers().cloned().collect();
                             for addr in &bootstrap_addrs_clone {

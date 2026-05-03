@@ -545,6 +545,7 @@ fn export_diagnostics(
         "external_addrs": external_addrs,
         "inbox_count": core.inbox_count(),
         "outbox_count": core.outbox_count(),
+        "custody_audit_count": core.custody_audit_count(),
         "drift": {
             "state": core.drift_network_state(),
             "store_size": core.drift_store_size(),

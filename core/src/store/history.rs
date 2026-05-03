@@ -215,6 +215,30 @@ impl HistoryManager {
         Ok(count)
     }
 
+    /// Hide all stored messages for a given peer (called on block).
+    pub fn hide_messages_for_peer(&self, peer_id: &str) -> Result<u32, IronCoreError> {
+        let all = self
+            .backend
+            .scan_prefix(b"msg_")
+            .map_err(|_| IronCoreError::StorageError)?;
+
+        let mut count = 0u32;
+        for (_, value) in all {
+            let mut record: MessageRecord =
+                serde_json::from_slice(&value).map_err(|_| IronCoreError::Internal)?;
+            if !record.hidden && record.peer_id.eq_ignore_ascii_case(peer_id) {
+                record.hidden = true;
+                let key = format!("msg_{}", record.id);
+                let updated = serde_json::to_vec(&record).map_err(|_| IronCoreError::Internal)?;
+                self.backend
+                    .put(key.as_bytes(), &updated)
+                    .map_err(|_| IronCoreError::StorageError)?;
+                count += 1;
+            }
+        }
+        Ok(count)
+    }
+
     pub fn search(&self, query: String, limit: u32) -> Result<Vec<MessageRecord>, IronCoreError> {
         let query_lower = query.to_lowercase();
         let mut records = Vec::new();
