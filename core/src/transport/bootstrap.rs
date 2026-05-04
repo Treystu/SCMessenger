@@ -12,7 +12,7 @@
 
 use crate::transport::circuit_breaker::{CircuitBreakerConfig, CircuitBreakerManager};
 use crate::transport::internet::{InternetRelay, InternetTransportError};
-use crate::transport::relay_health::{RelayDiscovery, RelayFallback};
+use crate::transport::relay_health::{RelayDiscovery, RelayFallback, RelayMetrics};
 use crate::transport::swarm::SwarmHandle;
 use libp2p::{Multiaddr, PeerId};
 use std::collections::VecDeque;
@@ -476,6 +476,29 @@ impl BootstrapManager {
     /// Get a reference to the circuit breaker manager
     pub fn circuit_breaker(&self) -> &CircuitBreakerManager {
         &self.circuit_breaker
+    }
+
+    /// Get healthy relays from the circuit breaker.
+    /// Returns addresses of relays whose circuit breaker state is Closed,
+    /// meaning they are currently healthy and available for connections.
+    pub fn get_healthy_relays(&self) -> Vec<String> {
+        self.circuit_breaker.get_healthy_relays()
+    }
+
+    /// Get all relay statistics from the relay discovery system.
+    /// Returns statistics for all known relays, including health metrics.
+    pub fn get_all_relay_stats(&self) -> Vec<(PeerId, RelayMetrics)> {
+        self.relay_discovery
+            .get_all_metrics()
+            .into_iter()
+            .map(|(peer_id, metrics)| (*peer_id, metrics.clone()))
+            .collect()
+    }
+
+    /// Get fallback relay addresses for connectivity when primary relays fail.
+    /// These are pre-configured addresses that serve as last-resort bootstrap targets.
+    pub fn get_fallback_relay_addresses(&self) -> Vec<Multiaddr> {
+        self.relay_discovery.get_fallback_relays().to_vec()
     }
 
     /// Reset all circuit breakers (e.g., on network type change)

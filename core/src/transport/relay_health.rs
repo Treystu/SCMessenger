@@ -175,6 +175,12 @@ impl RelayDiscovery {
             .count()
     }
 
+    /// Get all relay metrics (for diagnostics).
+    /// Returns a list of (peer_id, metrics) pairs for all known relays.
+    pub fn get_all_metrics(&self) -> Vec<(&PeerId, &RelayMetrics)> {
+        self.relay_metrics.iter().collect()
+    }
+
     /// Remove stale relay entries
     pub fn cleanup_stale_relays(&mut self, max_age_hours: u64) {
         let now_ms = SystemTime::now()

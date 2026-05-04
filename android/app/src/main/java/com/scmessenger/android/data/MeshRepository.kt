@@ -5956,7 +5956,7 @@ open class MeshRepository(private val context: Context) {
      * ANR FIX (P0_ANDROID_017): Load pending outbox asynchronously to avoid Main thread I/O.
      * Uses cached results when available to prevent repeated file reads during diagnostics export.
      */
-    suspend fun loadPendingOutboxAsync(): List<PendingOutboundEnvelope> = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+    internal suspend fun loadPendingOutboxAsync(): List<PendingOutboundEnvelope> = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
         // Return cached result if fresh enough
         if (cachedPendingOutbox.isNotEmpty() && System.currentTimeMillis() - pendingOutboxCacheTimeMs < pendingOutboxCacheTtlMs) {
             return@withContext cachedPendingOutbox

@@ -447,6 +447,54 @@ impl WifiAwareTransport {
             .insert(peer.peer_id.to_string(), peer);
     }
 
+    /// Add a discovered peer from a platform callback.
+    /// This is the production wiring for peer discovery events — called
+    /// when the platform bridge fires a service discovery event.
+    /// Converts the raw callback data into a `DiscoveredPeer` and registers it.
+    pub fn add_discovered_peer(&self, peer_id_str: String, service_info: Vec<u8>, rssi: i32) {
+        let peer_id: PeerId = match peer_id_str.parse() {
+            Ok(id) => id,
+            Err(_) => {
+                warn!("Failed to parse discovered peer ID: {}", peer_id_str);
+                return;
+            }
+        };
+        let peer = DiscoveredPeer {
+            peer_id,
+            service_info,
+            rssi,
+        };
+        self.register_peer(peer);
+        info!("Discovered WiFi Aware peer: {} (RSSI: {})", peer_id, rssi);
+    }
+
+    /// Wire the platform bridge discovery callback to automatically register
+    /// discovered peers. Call this after `initialize()` to start receiving
+    /// discovery events.
+    pub fn wire_discovery_callback(&self) {
+        let discovered_peers = self.discovered_peers.clone();
+        self.bridge.set_on_service_discovered(Box::new(
+            move |peer_id_str: String, service_info: Vec<u8>, rssi: i32| {
+                let peer_id: PeerId = match peer_id_str.parse() {
+                    Ok(id) => id,
+                    Err(_) => {
+                        warn!("Failed to parse discovered peer ID in callback");
+                        return;
+                    }
+                };
+                let peer = DiscoveredPeer {
+                    peer_id,
+                    service_info,
+                    rssi,
+                };
+                discovered_peers
+                    .write()
+                    .insert(peer_id.to_string(), peer);
+                info!("Auto-discovered WiFi Aware peer: {} (RSSI: {})", peer_id, rssi);
+            },
+        ));
+    }
+
     /// Shutdown WiFi Aware transport
     pub async fn shutdown(&self) -> Result<(), WifiAwareError> {
         // Close all data paths

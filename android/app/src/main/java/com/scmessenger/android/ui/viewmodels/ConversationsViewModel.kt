@@ -348,8 +348,6 @@ class ConversationsViewModel @Inject constructor(
             }
         }
     }
-        }
-    }
 
     /**
      * Search messages.
