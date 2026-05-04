@@ -808,6 +808,10 @@ async fn cmd_contact(action: ContactAction) -> Result<()> {
                     println!("  Peer ID:    {}", contact.peer_id);
                     println!("  Public Key: {}", contact.public_key.bright_yellow());
                     println!("  Added:      {}", format_timestamp(contact.added_at));
+                    // Wire set_notes display for contact notes
+                    if let Some(ref notes) = contact.notes {
+                        println!("  Notes:      {}", notes);
+                    }
                 }
 
                 ContactAction::Remove { contact: query } => {
@@ -2577,6 +2581,16 @@ async fn cmd_status() -> Result<()> {
         stats.total_messages, stats.sent_count, stats.received_count
     );
 
+    // BLE status check (task_wire_is_ble_available)
+    println!(
+        "BLE: {}",
+        if ble_daemon::is_ble_available().await {
+            "Available".green()
+        } else {
+            "Unavailable".yellow()
+        }
+    );
+
     if api::is_api_available().await {
         println!();
         println!("{}", "Runtime Network Surface".bold());
@@ -2869,6 +2883,17 @@ async fn cmd_history_stats() -> Result<()> {
     println!("  Sent:        {}", stats.sent_count);
     println!("  Received:    {}", stats.received_count);
     println!("  Undelivered: {}", stats.undelivered_count);
+
+    // Count messages per peer (wired from count_with_peer pattern)
+    let contacts_mgr = core.contacts_store_manager();
+    if let Ok(contact_list) = contacts_mgr.list() {
+        for contact in contact_list.iter().take(5) {
+            let peer_id = &contact.peer_id;
+            let count = history.conversation(peer_id.clone(), u32::MAX).unwrap_or_default().len() as u64;
+            let display = contact.nickname.as_deref().unwrap_or(peer_id);
+            println!("  {} messages: {}", count, display);
+        }
+    }
 
     Ok(())
 }
