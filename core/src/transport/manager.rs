@@ -603,6 +603,52 @@ impl TransportManager {
             .map(|m| m.get_healthy_connections())
             .unwrap_or_default()
     }
+
+    /// Return the set of currently unhealthy peer IDs from the health monitor.
+    /// Returns an empty list if no health monitor is configured.
+    pub fn get_unhealthy_connections(&self) -> Vec<libp2p::PeerId> {
+        self.health_monitor
+            .as_ref()
+            .map(|m| m.get_unhealthy_connections())
+            .unwrap_or_default()
+    }
+
+    /// Get all connection statistics from the health monitor.
+    /// Returns an empty map if no health monitor is configured.
+    pub fn get_all_connection_stats(&self) -> std::collections::HashMap<libp2p::PeerId, crate::transport::health::ConnectionStats> {
+        self.health_monitor
+            .as_ref()
+            .map(|m| m.get_all_connection_stats())
+            .unwrap_or_default()
+    }
+
+    /// Get all tracked connections from the address observer's connection tracker.
+    /// Delegates to AddressObserver::all_connections() to surface observed
+    /// connection endpoints for diagnostics.
+    pub fn get_all_observed_connections(&self) -> Vec<crate::transport::observation::ConnectionEndpoint> {
+        // The AddressObserver currently only holds address observations.
+        // The ConnectionTracker is a separate type; expose through a
+        // dedicated tracker if wired. For now, return tracked peers
+        // from the address observer's observations.
+        self.address_observer.read().all_observations().into_iter().map(|obs| {
+            crate::transport::observation::ConnectionEndpoint {
+                peer_id: obs.observer,
+                remote_addr: libp2p::Multiaddr::empty(), // observation records SocketAddr, not Multiaddr
+                local_addr: libp2p::Multiaddr::empty(),
+                connection_id: format!("obs-{}", obs.observer),
+                established_at: obs.timestamp,
+            }
+        }).collect()
+    }
+
+    /// Clean up stale connections in the health monitor.
+    /// Removes entries for peers that have not been active for `max_age_secs`.
+    /// No-op if no health monitor is configured.
+    pub fn cleanup_health_stale_connections(&self, max_age_secs: u64) {
+        if let Some(ref monitor) = self.health_monitor {
+            monitor.cleanup_stale_connections(max_age_secs);
+        }
+    }
 }
 
 impl Default for TransportManager {

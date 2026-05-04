@@ -75,6 +75,42 @@ pub fn get_network_diagnostics_report(
     }
 }
 
+/// Extended network diagnostics that includes healthy and unhealthy connection lists.
+///
+/// Builds on the base `get_network_diagnostics_report` by also surfacing
+/// which peers are considered healthy vs. unhealthy based on the
+/// `TransportHealthMonitor`'s quality metrics.
+pub fn get_extended_network_diagnostics(
+    monitor: &TransportHealthMonitor,
+) -> ExtendedNetworkDiagnostics {
+    let base = get_network_diagnostics_report(monitor);
+    let healthy_peers = monitor.get_healthy_connections();
+    let unhealthy_peers = monitor.get_unhealthy_connections();
+
+    ExtendedNetworkDiagnostics {
+        base,
+        healthy_peer_count: healthy_peers.len(),
+        unhealthy_peer_count: unhealthy_peers.len(),
+        healthy_peer_ids: healthy_peers.iter().map(|p| p.to_string()).collect(),
+        unhealthy_peer_ids: unhealthy_peers.iter().map(|p| p.to_string()).collect(),
+    }
+}
+
+/// Extended diagnostics report that includes healthy/unhealthy connection breakdowns.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ExtendedNetworkDiagnostics {
+    /// Base network diagnostics report
+    pub base: NetworkDiagnosticsReport,
+    /// Number of currently healthy connections
+    pub healthy_peer_count: usize,
+    /// Number of currently unhealthy connections
+    pub unhealthy_peer_count: usize,
+    /// List of healthy peer IDs
+    pub healthy_peer_ids: Vec<String>,
+    /// List of unhealthy peer IDs
+    pub unhealthy_peer_ids: Vec<String>,
+}
+
 fn compute_avg_latency(peers: &std::collections::HashMap<PeerId, ConnectionStats>) -> u64 {
     let latencies: Vec<u64> = peers
         .values()

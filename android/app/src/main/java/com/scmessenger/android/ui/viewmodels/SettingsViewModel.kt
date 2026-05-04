@@ -583,12 +583,10 @@ class SettingsViewModel @Inject constructor(
 
     /**
      * ANR FIX (P0_ANDROID_017): Export diagnostics asynchronously.
-     * Original exportDiagnostics() was blocking on file I/O and Rust FFI calls.
+     * Uses the repository's async variant to avoid blocking on file I/O and Rust FFI calls.
      */
     suspend fun exportDiagnostics(): String {
-        return kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-            meshRepository.exportDiagnostics()
-        }
+        return meshRepository.exportDiagnosticsAsync()
     }
 
     fun getDiagnosticsLogPath(): String {
@@ -673,6 +671,63 @@ class SettingsViewModel @Inject constructor(
      */
     fun getContactCount(): UInt {
         return meshRepository.getContactCount()
+    }
+
+    /**
+     * Get blocked peer count for info display.
+     */
+    fun getBlockedCount(): UInt {
+        return meshRepository.getBlockedCount()
+    }
+
+    /**
+     * Get inbox message count for badge display.
+     */
+    fun getInboxCount(): UInt {
+        return meshRepository.getInboxCount()
+    }
+
+    /**
+     * Get bootstrap nodes for settings display.
+     */
+    fun getBootstrapNodesForSettings(): List<String> {
+        return MeshRepository.getBootstrapNodesForSettings()
+    }
+
+    /**
+     * Get transport health summary for diagnostics.
+     */
+    fun getTransportHealthSummary(): Map<String, com.scmessenger.android.transport.TransportHealthMonitor.TransportHealth> {
+        return meshRepository.getTransportHealthSummary()
+    }
+
+    /**
+     * Get network diagnostics snapshot for settings display.
+     */
+    fun getNetworkDiagnosticsSnapshot(): com.scmessenger.android.transport.NetworkDiagnostics {
+        return meshRepository.getNetworkDiagnosticsSnapshot()
+    }
+
+    /**
+     * Get network failure summary for settings display.
+     */
+    fun getNetworkFailureSummary(): com.scmessenger.android.utils.NetworkFailureMetrics.Summary {
+        return meshRepository.getNetworkFailureSummary()
+    }
+
+    /**
+     * Reset service runtime stats for a fresh diagnostics window.
+     */
+    fun resetServiceStats() {
+        meshRepository.resetServiceStats()
+    }
+
+    /**
+     * Test connectivity to ledger relay nodes.
+     * Returns true if at least one relay is reachable.
+     */
+    fun testLedgerRelayConnectivity(): Boolean {
+        return meshRepository.testLedgerRelayConnectivity()
     }
 
     /**

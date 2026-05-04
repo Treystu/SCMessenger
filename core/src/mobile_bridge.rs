@@ -1060,6 +1060,74 @@ impl MeshService {
         self.core.lock().clone()
     }
 
+    // Group 1: IronCore entrypoints (methods not in #[uniffi::export] block)
+    // -----------------------------------------------------------------------
+
+    /// Prepare a message with onion routing layers.
+    /// Wraps the envelope in multiple layers of encryption for anonymous delivery.
+    pub fn prepare_onion_message(
+        &self,
+        envelope_data: Vec<u8>,
+        relay_public_keys_json: String,
+    ) -> Result<Vec<u8>, crate::IronCoreError> {
+        let core = self.get_core().ok_or(crate::IronCoreError::NotInitialized)?;
+        core.prepare_onion_message(envelope_data, relay_public_keys_json)
+    }
+
+    /// Peel one layer of an onion-routed envelope (relay-side operation).
+    /// Decodes the next hop and removes one encryption layer.
+    pub fn peel_onion_layer(
+        &self,
+        onion_data: Vec<u8>,
+        relay_secret_key: Vec<u8>,
+    ) -> Result<crate::PeelResult, crate::IronCoreError> {
+        let core = self.get_core().ok_or(crate::IronCoreError::NotInitialized)?;
+        core.peel_onion_layer(onion_data, relay_secret_key)
+    }
+
+    /// Return a random available port for temporary listeners.
+    pub fn random_port(&self) -> u16 {
+        let core = self.get_core().unwrap_or_else(|| {
+            // Fallback: create a temporary core just for this operation
+            std::sync::Arc::new(crate::IronCore::new())
+        });
+        core.random_port()
+    }
+
+    /// Return the number of active ratchet sessions.
+    pub fn ratchet_session_count(&self) -> u32 {
+        let core = self.get_core().unwrap_or_else(|| {
+            // Fallback: create a temporary core just for this operation
+            std::sync::Arc::new(crate::IronCore::new())
+        });
+        core.ratchet_session_count()
+    }
+
+    /// Check if a ratchet session exists for the given peer.
+    pub fn ratchet_has_session(&self, peer_id: String) -> bool {
+        let core = self.get_core().unwrap_or_else(|| {
+            // Fallback: create a temporary core just for this operation
+            std::sync::Arc::new(crate::IronCore::new())
+        });
+        core.ratchet_has_session(peer_id)
+    }
+
+    /// Force-reset the ratchet session for a peer (re-key).
+    pub fn ratchet_reset_session(&self, peer_id: String) {
+        if let Some(core) = self.get_core() {
+            core.ratchet_reset_session(peer_id);
+        }
+    }
+
+    /// Advance the routing engine by one tick. Returns state snapshot as JSON.
+    pub fn routing_tick(&self) -> String {
+        let core = self.get_core().unwrap_or_else(|| {
+            // Fallback: create a temporary core just for this operation
+            std::sync::Arc::new(crate::IronCore::new())
+        });
+        core.routing_tick()
+    }
+
     /// Check if service is running
     pub fn is_running(&self) -> bool {
         *self.state.lock() == ServiceState::Running

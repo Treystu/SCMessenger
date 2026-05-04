@@ -624,6 +624,16 @@ open class MeshRepository(private val context: Context) {
     // ========================================
 
     /**
+     * Mark a message as corrupted in the tracking cache.
+     * Called when message processing encounters unrecoverable errors.
+     */
+    fun markMessageCorrupted(messageId: String) {
+        val tracking = messageTrackingCache[messageId] ?: return
+        tracking.markCorrupted()
+        Timber.w("Message $messageId marked as corrupted")
+    }
+
+    /**
      * Get or create message tracking for a message ID.
      * This function gracefully handles missing tracking entries by creating new ones.
      */
@@ -669,7 +679,7 @@ open class MeshRepository(private val context: Context) {
     /**
      * Safely increment the attempt count for a message with proper synchronization.
      */
-    private suspend fun incrementAttemptCount(messageId: String) {
+    suspend fun incrementAttemptCount(messageId: String) {
         retryLock.withLock {
             val tracking = getMessageIdTracking(messageId)
             tracking.recordFailure(null)
@@ -679,7 +689,7 @@ open class MeshRepository(private val context: Context) {
     /**
      * Get the next retry delay for a message based on exponential backoff.
      */
-    private fun getRetryDelay(attemptCount: Int): Long {
+    fun getRetryDelay(attemptCount: Int): Long {
         return when (attemptCount) {
             0 -> 1000L
             1 -> 2000L
@@ -693,7 +703,7 @@ open class MeshRepository(private val context: Context) {
     /**
      * Check if a message should be retried based on attempt count.
      */
-    private fun shouldRetryMessage(messageId: String): Boolean {
+    fun shouldRetryMessage(messageId: String): Boolean {
         val tracking = getMessageIdTracking(messageId)
         return tracking.attemptCount < MAX_RETRY_ATTEMPTS
     }
@@ -701,7 +711,7 @@ open class MeshRepository(private val context: Context) {
     /**
      * Log message delivery attempt for monitoring and debugging.
      */
-    private fun logMessageDeliveryAttempt(messageId: String, attempt: Int, outcome: String) {
+    fun logMessageDeliveryAttempt(messageId: String, attempt: Int, outcome: String) {
         Timber.d("Message delivery: id=$messageId, attempt=$attempt, outcome=$outcome")
     }
 
@@ -1106,7 +1116,7 @@ open class MeshRepository(private val context: Context) {
     // ========================================================================
 
     // ANR FIX: Add network connectivity test to diagnose ledger relay failures
-    private fun testLedgerRelayConnectivity(): Boolean {
+    fun testLedgerRelayConnectivity(): Boolean {
         return try {
             // Test connectivity to addresses from ledger instead of static bootstrap
             val ledgerAddresses = ledgerManager?.getPreferredRelays(3u) ?: emptyList()
@@ -5913,7 +5923,7 @@ open class MeshRepository(private val context: Context) {
      * ANR FIX (P0_ANDROID_017): Load pending outbox asynchronously to avoid Main thread I/O.
      * Uses cached results when available to prevent repeated file reads during diagnostics export.
      */
-    private suspend fun loadPendingOutboxAsync(): List<PendingOutboundEnvelope> = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+    suspend fun loadPendingOutboxAsync(): List<PendingOutboundEnvelope> = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
         // Return cached result if fresh enough
         if (cachedPendingOutbox.isNotEmpty() && System.currentTimeMillis() - pendingOutboxCacheTimeMs < pendingOutboxCacheTtlMs) {
             return@withContext cachedPendingOutbox
@@ -7456,7 +7466,7 @@ open class MeshRepository(private val context: Context) {
     }
 
     /** @deprecated Use the suspend version with circuit breaker support */
-    private fun primeRelayBootstrapConnectionsLegacy() {
+    fun primeRelayBootstrapConnectionsLegacy() {
         val bridge = swarmBridge ?: return
         val nowMs = System.currentTimeMillis()
         if (nowMs - lastRelayBootstrapDialMs < 10_000L) return

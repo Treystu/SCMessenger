@@ -71,7 +71,17 @@
         "core/src/routing/",
         "core/src/relay/",
         "core/src/abuse/",
-        "core/src/notification/"
+        "core/src/notification/",
+        "core/src/iron_core.rs",
+        "core/src/lib.rs",
+        "core/src/mobile_bridge.rs",
+        "core/src/contacts_bridge.rs",
+        "core/src/blocked_bridge.rs",
+        "core/src/crypto/",
+        "core/src/dspy/",
+        "core/src/wasm_support/",
+        "core/src/privacy/",
+        "core/src/mobile/"
       ],
       "max_per_type": 1
     },
@@ -97,7 +107,11 @@
         "core/src/api.udl",
         "core/src/mobile_bridge.rs",
         "core/src/contacts_bridge.rs",
-        "core/src/blocked_bridge.rs"
+        "core/src/blocked_bridge.rs",
+        "core/src/lib.rs",
+        "android/app/src/",
+        "android/app/build.gradle",
+        "android/app/build.gradle.kts"
       ],
       "max_per_type": 2
     },
@@ -132,7 +146,11 @@
       "file_domains": [
         "core/tests/",
         "android/app/src/",
-        "android/app/build.gradle"
+        "android/app/build.gradle",
+        "android/app/build.gradle.kts",
+        "android/app/src/main/java/",
+        "android/app/src/test/",
+        "android/app/src/androidTest/"
       ],
       "max_per_type": 1
     },
