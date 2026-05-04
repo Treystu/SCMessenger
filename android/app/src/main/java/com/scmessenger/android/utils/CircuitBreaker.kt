@@ -179,6 +179,32 @@ class CircuitBreaker @Inject constructor(
         return entries[relayAddress]?.lastFailureReason
     }
 
+    /**
+     * Get the last failure entry for a relay.
+     * Returns a summary of failure state: reason, failure count, and circuit state.
+     */
+    fun getLastFailure(relayAddress: String): LastFailureSummary? {
+        val entry = entries[relayAddress] ?: return null
+        return LastFailureSummary(
+            relayAddress = relayAddress,
+            failureCount = entry.failureCount,
+            lastFailureReason = entry.lastFailureReason,
+            circuitState = entry.state,
+            openedAtMs = entry.openedAtMs,
+            lastSuccessAtMs = entry.lastSuccessAtMs
+        )
+    }
+
+    /** Summary of the last failure for a relay */
+    data class LastFailureSummary(
+        val relayAddress: String,
+        val failureCount: Int,
+        val lastFailureReason: String?,
+        val circuitState: CircuitState,
+        val openedAtMs: Long,
+        val lastSuccessAtMs: Long
+    )
+
     /** Reset circuit breaker for a specific relay */
     fun reset(relayAddress: String) {
         entries.remove(relayAddress)

@@ -660,6 +660,33 @@ impl TransportManager {
             monitor.cleanup_stale_connections(max_age_secs);
         }
     }
+
+    /// Disable a transport type at runtime.
+    /// Marks the transport as not running and removes all peers associated
+    /// with it from the connected set. The transport will not be selected
+    /// for new connections until it is re-registered via `register_transport`.
+    pub fn disable_transport(&mut self, transport_type: &str) {
+        let tt = match transport_type.to_lowercase().as_str() {
+            "ble" => TransportType::BLE,
+            "wifi_aware" | "wifiaware" => TransportType::WiFiAware,
+            "wifi_direct" | "wifidirect" => TransportType::WiFiDirect,
+            "internet" | "tcp" | "quic" => TransportType::Internet,
+            "local" => TransportType::Local,
+            _ => {
+                warn!("Unknown transport type to disable: {}", transport_type);
+                return;
+            }
+        };
+
+        let mut transports = self.transports.write();
+        if let Some(state) = transports.get_mut(&tt) {
+            state.running = false;
+            state.connected_peers.clear();
+            info!("Transport {} disabled", tt);
+        } else {
+            warn!("Transport {} not registered, cannot disable", tt);
+        }
+    }
 }
 
 impl Default for TransportManager {

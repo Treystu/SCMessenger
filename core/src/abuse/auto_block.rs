@@ -116,7 +116,7 @@ impl AutoBlockEngine {
             return AutoBlockResult {
                 should_block: false,
                 reason: None,
-                reputation_score: ReputationScore::NEUTRAL,
+                reputation_score: 0.0,
                 spam_confidence: 0.0,
             };
         }
@@ -126,16 +126,16 @@ impl AutoBlockEngine {
             return AutoBlockResult {
                 should_block: false,
                 reason: None,
-                reputation_score: self.reputation_manager.get_score(peer_id).value(),
+                reputation_score: self.reputation_manager.get_enhanced_score(peer_id).overall_score(),
                 spam_confidence: 0.0,
             };
         }
 
         let enhanced = self.reputation_manager.get_enhanced_score(peer_id);
-        let rep_value = enhanced.base_score.value();
+        let overall = enhanced.overall_score();
         let spam_conf = enhanced.spam_confidence;
 
-        let low_rep = rep_value < config.reputation_threshold;
+        let low_rep = overall < config.reputation_threshold;
         let high_spam = spam_conf >= config.spam_confidence_threshold;
 
         let (should_block, reason) = if low_rep && high_spam {
@@ -151,7 +151,7 @@ impl AutoBlockEngine {
         AutoBlockResult {
             should_block,
             reason,
-            reputation_score: rep_value,
+            reputation_score: overall,
             spam_confidence: spam_conf,
         }
     }

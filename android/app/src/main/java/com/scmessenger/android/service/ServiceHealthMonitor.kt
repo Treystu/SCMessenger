@@ -83,7 +83,14 @@ class ServiceHealthMonitor(private val context: Context) {
     }
     
     /**
-     * Reset health statistics.
+     * Reset health statistics. Public for diagnostics and external callers.
+     */
+    fun resetHealth() {
+        resetHealthStats()
+    }
+
+    /**
+     * Internal health stats reset.
      */
     private fun resetHealthStats() {
         totalCheckCount = 0

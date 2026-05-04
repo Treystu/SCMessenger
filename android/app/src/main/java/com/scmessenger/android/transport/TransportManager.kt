@@ -31,6 +31,9 @@ class TransportManager(
     private val onDataReceived: (peerId: String, data: ByteArray, transport: TransportType) -> Unit
 ) {
 
+    // Transport health monitor for health-aware transport selection
+    private val transportHealthMonitor = TransportHealthMonitor()
+
     // BLE components
     private var bleScanner: BleScanner? = null
     private var bleAdvertiser: BleAdvertiser? = null
@@ -158,32 +161,37 @@ class TransportManager(
 
     /**
      * Send data to a peer using the best available transport.
+     * Uses TransportHealthMonitor.shouldUseTransport to skip degraded transports.
      */
     fun sendData(peerId: String, data: ByteArray): Boolean {
-        // Use cached transport if available
+        // Use cached transport if available and healthy
         val preferredTransport = peerTransports[peerId]
 
         if (preferredTransport != null) {
-            val success = sendViaTransport(peerId, data, preferredTransport)
-            if (success) return true
+            // Check health before attempting preferred transport
+            if (transportHealthMonitor.shouldUseTransport(preferredTransport.name)) {
+                val success = sendViaTransport(peerId, data, preferredTransport)
+                if (success) return true
+            }
         }
 
         // Try transports in priority order: WiFi Aware > WiFi Direct > BLE
-        if (activeTransports[TransportType.WIFI_AWARE] == true) {
+        // Skip transports that TransportHealthMonitor has marked as degraded
+        if (activeTransports[TransportType.WIFI_AWARE] == true && transportHealthMonitor.shouldUseTransport("wifi_aware")) {
             if (sendViaTransport(peerId, data, TransportType.WIFI_AWARE)) {
                 peerTransports[peerId] = TransportType.WIFI_AWARE
                 return true
             }
         }
 
-        if (activeTransports[TransportType.WIFI_DIRECT] == true) {
+        if (activeTransports[TransportType.WIFI_DIRECT] == true && transportHealthMonitor.shouldUseTransport("wifi_direct")) {
             if (sendViaTransport(peerId, data, TransportType.WIFI_DIRECT)) {
                 peerTransports[peerId] = TransportType.WIFI_DIRECT
                 return true
             }
         }
 
-        if (activeTransports[TransportType.BLE] == true) {
+        if (activeTransports[TransportType.BLE] == true && transportHealthMonitor.shouldUseTransport("ble")) {
             if (sendViaTransport(peerId, data, TransportType.BLE)) {
                 peerTransports[peerId] = TransportType.BLE
                 return true
@@ -463,6 +471,15 @@ class TransportManager(
         scope.cancel()
 
         Timber.i("TransportManager cleaned up")
+    }
+
+    /**
+     * Get the current BLE quota count from the BleQuotaManager.
+     * Wired from BleQuotaManager.currentCount.
+     * Returns the number of scan starts within the current quota window.
+     */
+    fun getBleQuotaCount(): Int {
+        return bleScanner?.getQuotaCount() ?: 0
     }
 
     /**

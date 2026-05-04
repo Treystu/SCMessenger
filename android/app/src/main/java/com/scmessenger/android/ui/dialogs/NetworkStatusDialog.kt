@@ -113,6 +113,14 @@ fun NetworkStatusDialog(
                             Text("  - $rec", style = MaterialTheme.typography.bodySmall)
                         }
                     }
+
+                    // Full report (wired from DiagnosticsReporter.formatReportForUser)
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+                    Text(
+                        text = diagnosticsReporter.formatReportForUser(report!!),
+                        style = MaterialTheme.typography.bodySmall,
+                        fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace
+                    )
                 }
             }
         },

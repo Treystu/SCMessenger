@@ -288,6 +288,7 @@ fun DiagnosticsScreen(
                     Button(
                         onClick = {
                             // Wire resetHealth into diagnostics settings reset
+                            healthMonitor.resetHealth()
                             healthSummary = "Reset"
                             serviceHealthy = true
                             performanceMonitor.clearAnrEvents()

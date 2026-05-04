@@ -45,51 +45,103 @@ class BleAdvertiser(private val context: Context) {
     private var txPowerLevel = AdvertiseSettings.ADVERTISE_TX_POWER_MEDIUM
     private var advertiseMode = AdvertiseSettings.ADVERTISE_MODE_BALANCED
 
+    // --- Named callback methods wired from AdvertiseCallback ---
+
+    /**
+     * Called when BLE advertising starts successfully.
+     * Wired from AdvertiseCallback.onStartSuccess.
+     * Resets the failure counter and updates advertising state.
+     */
+    fun onStartSuccess(@Suppress("UNUSED_PARAMETER") settingsInEffect: AdvertiseSettings?) {
+        Timber.i("BLE Advertising started successfully (mode=${advertiseMode}, txPower=$txPowerLevel)")
+        isAdvertising = true
+        // ANR FIX: Reset failure counter on success
+        advertiseFailureCount = 0
+    }
+
+    /**
+     * Called when BLE advertising fails to start.
+     * Wired from AdvertiseCallback.onStartFailure.
+     * Logs the error and schedules an exponential backoff retry.
+     */
+    fun onStartFailure(errorCode: Int) {
+        Timber.e("BLE Advertising failed with error: $errorCode")
+        isAdvertising = false
+
+        // ANR FIX: Implement exponential backoff for advertising failures
+        advertiseFailureCount++
+        val backoffMs = minOf(1000L * (1L shl advertiseFailureCount), 30000L) // Cap at 30s
+
+        when (errorCode) {
+            AdvertiseCallback.ADVERTISE_FAILED_TOO_MANY_ADVERTISERS -> {
+                Timber.w("BLE advertising failed: Too many advertisers, will retry in ${backoffMs}ms")
+            }
+            AdvertiseCallback.ADVERTISE_FAILED_ALREADY_STARTED -> {
+                Timber.w("BLE advertising failed: Already started, stopping first")
+                stopAdvertising()
+                return
+            }
+            AdvertiseCallback.ADVERTISE_FAILED_DATA_TOO_LARGE -> {
+                Timber.w("BLE advertising failed: Data too large, falling back to GATT-only mode")
+                return // Don't retry for data size errors
+            }
+            AdvertiseCallback.ADVERTISE_FAILED_FEATURE_UNSUPPORTED -> {
+                Timber.w("BLE advertising failed: Feature unsupported on this device")
+                return // Don't retry for unsupported features
+            }
+            else -> {
+                Timber.w("BLE advertising failed: Error $errorCode, will retry in ${backoffMs}ms")
+            }
+        }
+
+        // Schedule retry after backoff delay
+        handler.postDelayed({
+            if (!isAdvertising && advertiseFailureCount <= 5) { // Max 5 retries
+                Timber.d("Retrying BLE advertising (attempt ${advertiseFailureCount + 1})")
+                startAdvertising()
+            }
+        }, backoffMs)
+    }
+
+    /**
+     * Apply BLE advertise settings based on battery/motion state.
+     * Adjusts advertising mode and TX power based on AutoAdjust profile.
+     * Restarts advertising if currently active to apply new settings.
+     */
+    fun applyAdvertiseSettings(intervalMs: UInt, txPowerDbm: Byte) {
+        // Map interval to advertise mode
+        advertiseMode = when {
+            intervalMs < 500u -> AdvertiseSettings.ADVERTISE_MODE_LOW_LATENCY
+            intervalMs < 1500u -> AdvertiseSettings.ADVERTISE_MODE_BALANCED
+            else -> AdvertiseSettings.ADVERTISE_MODE_LOW_POWER
+        }
+
+        // Map tx power
+        txPowerLevel = when {
+            txPowerDbm >= 0 -> AdvertiseSettings.ADVERTISE_TX_POWER_HIGH
+            txPowerDbm >= -10 -> AdvertiseSettings.ADVERTISE_TX_POWER_MEDIUM
+            txPowerDbm >= -20 -> AdvertiseSettings.ADVERTISE_TX_POWER_LOW
+            else -> AdvertiseSettings.ADVERTISE_TX_POWER_ULTRA_LOW
+        }
+
+        Timber.d("Advertise settings updated: mode=$advertiseMode, txPower=$txPowerLevel")
+
+        // Restart advertising if active
+        if (isAdvertising) {
+            stopAdvertising()
+            startAdvertising()
+        }
+    }
+
+    // --- End of named callback methods ---
+
     private val advertiseCallback = object : AdvertiseCallback() {
         override fun onStartSuccess(settingsInEffect: AdvertiseSettings?) {
-            Timber.i("BLE Advertising started successfully")
-            isAdvertising = true
-            // ANR FIX: Reset failure counter on success
-            advertiseFailureCount = 0
+            this@BleAdvertiser.onStartSuccess(settingsInEffect)
         }
 
         override fun onStartFailure(errorCode: Int) {
-            Timber.e("BLE Advertising failed with error: $errorCode")
-            isAdvertising = false
-            
-            // ANR FIX: Implement exponential backoff for advertising failures
-            advertiseFailureCount++
-            val backoffMs = minOf(1000L * (1L shl advertiseFailureCount), 30000L) // Cap at 30s
-            
-            when (errorCode) {
-                ADVERTISE_FAILED_TOO_MANY_ADVERTISERS -> {
-                    Timber.w("BLE advertising failed: Too many advertisers, will retry in ${backoffMs}ms")
-                }
-                ADVERTISE_FAILED_ALREADY_STARTED -> {
-                    Timber.w("BLE advertising failed: Already started, stopping first")
-                    stopAdvertising()
-                    return
-                }
-                ADVERTISE_FAILED_DATA_TOO_LARGE -> {
-                    Timber.w("BLE advertising failed: Data too large, falling back to GATT-only mode")
-                    return // Don't retry for data size errors
-                }
-                ADVERTISE_FAILED_FEATURE_UNSUPPORTED -> {
-                    Timber.w("BLE advertising failed: Feature unsupported on this device")
-                    return // Don't retry for unsupported features
-                }
-                else -> {
-                    Timber.w("BLE advertising failed: Error $errorCode, will retry in ${backoffMs}ms")
-                }
-            }
-            
-            // Schedule retry after backoff delay
-            android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
-                if (!isAdvertising && advertiseFailureCount <= 5) { // Max 5 retries
-                    Timber.d("Retrying BLE advertising (attempt ${advertiseFailureCount + 1})")
-                    startAdvertising()
-                }
-            }, backoffMs)
+            this@BleAdvertiser.onStartFailure(errorCode)
         }
     }
 
@@ -133,34 +185,6 @@ class BleAdvertiser(private val context: Context) {
 
         if (isAdvertising && intervalMs > 0) {
             startRotation()
-        }
-    }
-
-    /**
-     * Apply advertise settings based on AutoAdjust profile.
-     */
-    fun applyAdvertiseSettings(intervalMs: UInt, txPowerDbm: Byte) {
-        // Map interval to advertise mode
-        advertiseMode = when {
-            intervalMs < 500u -> AdvertiseSettings.ADVERTISE_MODE_LOW_LATENCY
-            intervalMs < 1500u -> AdvertiseSettings.ADVERTISE_MODE_BALANCED
-            else -> AdvertiseSettings.ADVERTISE_MODE_LOW_POWER
-        }
-
-        // Map tx power
-        txPowerLevel = when {
-            txPowerDbm >= 0 -> AdvertiseSettings.ADVERTISE_TX_POWER_HIGH
-            txPowerDbm >= -10 -> AdvertiseSettings.ADVERTISE_TX_POWER_MEDIUM
-            txPowerDbm >= -20 -> AdvertiseSettings.ADVERTISE_TX_POWER_LOW
-            else -> AdvertiseSettings.ADVERTISE_TX_POWER_ULTRA_LOW
-        }
-
-        Timber.d("Advertise settings updated: mode=$advertiseMode, txPower=$txPowerLevel")
-
-        // Restart advertising if active
-        if (isAdvertising) {
-            stopAdvertising()
-            startAdvertising()
         }
     }
 

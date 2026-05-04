@@ -205,6 +205,22 @@ class SmartTransportRouter {
         }
     }
 
+    /**
+     * Get the list of available transport types for a peer.
+     * Returns all transport types that have recorded health data or
+     * that are potentially available (no failures recorded).
+     */
+    fun getAvailableTransports(peerId: String): List<TransportType> {
+        val peerTransports = transportHealth[peerId]
+        return if (peerTransports != null && peerTransports.isNotEmpty()) {
+            // Return transports that have health data (indicating they've been used)
+            peerTransports.keys.toList()
+        } else {
+            // No health data yet — return all transport types as potentially available
+            TransportType.entries
+        }
+    }
+
     // MARK: - Message Deduplication
 
     /**

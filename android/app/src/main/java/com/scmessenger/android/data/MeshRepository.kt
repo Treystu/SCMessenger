@@ -305,6 +305,9 @@ open class MeshRepository(private val context: Context) {
     // Transport Manager for BLE/WiFi transport control
     @Volatile private var transportManager: TransportManager? = null
 
+    // Topic Manager for gossipsub topic subscription and filtering
+    @Volatile private var topicManager: TopicManager? = null
+
     // Service state
     private val _serviceState = MutableStateFlow(uniffi.api.ServiceState.STOPPED)
     open val serviceState: StateFlow<uniffi.api.ServiceState> = _serviceState.asStateFlow()
@@ -1194,6 +1197,11 @@ open class MeshRepository(private val context: Context) {
             smartTransportRouter = com.scmessenger.android.transport.SmartTransportRouter()
             Timber.i("SmartTransportRouter initialized for intelligent transport selection")
 
+            // Initialize TopicManager for gossipsub topic subscription
+            topicManager = TopicManager(this)
+            topicManager?.initialize()
+            Timber.i("TopicManager initialized for gossipsub topic management")
+
             // P0_NETWORK_001: Start network detection for cellular-aware fallback
             networkDetector.startMonitoring()
             Timber.i("NetworkDetector started — cellular-aware transport fallback active")
@@ -1293,6 +1301,9 @@ open class MeshRepository(private val context: Context) {
                                     createIfMissing = false
                                 )
                                 Timber.d("Auto-created/updated contact for discovered peer: ${transportIdentity.canonicalPeerId}")
+
+                                // Auto-subscribe to topics for the newly discovered peer
+                                topicManager?.autoSubscribeToPeerTopics(transportIdentity.canonicalPeerId)
                             } else {
                                 Timber.d("Skipping contact creation for relay peer in onPeerDiscovered: $peerId")
                             }
@@ -7280,6 +7291,9 @@ open class MeshRepository(private val context: Context) {
         if (!PeerIdValidator.isLibp2pPeerId(targetPeerId)) return emptyList()
         val circuits = mutableListOf<String>()
 
+        // Use getHealthyRelays to pre-filter relays with closed (healthy) circuits
+        val healthyRelayAddrs = relayCircuitBreaker.getHealthyRelays().toSet()
+
         // 1. Static Bootstrap Relays (prioritized by network type)
         val prioritizedNodes = emptyList<String>()
 
@@ -7289,6 +7303,11 @@ open class MeshRepository(private val context: Context) {
                 val (relayTransportAddr, relayPeerId) = relayInfo
                 // Skip circuit addresses for relays with open circuit breakers
                 if (relayCircuitBreaker.isCircuitOpen(bootstrap)) return@forEach
+                // Prioritize relays confirmed healthy by circuit breaker
+                if (bootstrap !in healthyRelayAddrs && relayCircuitBreaker.getFailureCount(bootstrap) > 0) {
+                    Timber.d("Skipping unhealthy relay: $bootstrap")
+                    return@forEach
+                }
                 circuits.add("$relayTransportAddr/p2p/$relayPeerId/p2p-circuit/p2p/$targetPeerId")
             }
         }
@@ -7588,12 +7607,15 @@ open class MeshRepository(private val context: Context) {
             relayCircuitBreaker.allowRequest(addr) && shouldAttemptDial(addr)
         }.sortedByDescending { addr ->
             // Boost priority for addresses whose ports are confirmed reachable
+            // Deprioritize addresses with ports likely blocked by current network (isPortLikelyBlocked)
             val port = extractPortFromMultiaddr(addr)
             val host = Regex("""/ip4/([^/]+)|/dns4/([^/]+)""").find(addr)?.groupValues?.let {
                 if (it[1].isNotEmpty()) it[1] else (it[2] ?: "")
             } ?: ""
             val key = "$host:$port"
-            portProbeResults[key] != false // true or null (unprobed) → high priority; false → low
+            val portReachable = portProbeResults[key] != false
+            val portNotBlocked = port == null || !networkDetector.isPortLikelyBlocked(port)
+            portReachable && portNotBlocked
         }
 
         if (candidateAddresses.isEmpty()) {
@@ -8422,6 +8444,175 @@ open class MeshRepository(private val context: Context) {
      */
     fun getActiveTransports(): List<com.scmessenger.android.service.TransportType> {
         return transportManager?.getActiveTransports() ?: emptyList()
+    }
+
+    // --- Wired functions from dead-end resolution tasks ---
+
+    /**
+     * Create a SmartTransportRouter.TransportType from a string value.
+     * Wired from SmartTransportRouter.TransportType.fromValue.
+     * Used by transport selection logic that receives transport type as string.
+     */
+    fun transportTypeFromValue(value: String): SmartTransportRouter.TransportType? {
+        return smartTransportRouter?.let { SmartTransportRouter.TransportType.fromValue(value) }
+    }
+
+    /**
+     * Get the list of available transport types for a peer from SmartTransportRouter.
+     * Wired from SmartTransportRouter.getAvailableTransports.
+     */
+    fun getSmartAvailableTransports(peerId: String): List<SmartTransportRouter.TransportType> {
+        return smartTransportRouter?.getAvailableTransports(peerId) ?: emptyList()
+    }
+
+    /**
+     * Get available transports sorted by priority/score for a peer.
+     * Wired from SmartTransportRouter.getAvailableTransportsSorted.
+     */
+    fun getAvailableTransportsSorted(peerId: String): List<SmartTransportRouter.TransportType> {
+        return smartTransportRouter?.getAvailableTransportsSorted(peerId) ?: emptyList()
+    }
+
+    /**
+     * Get deduplication statistics for a message.
+     * Wired from SmartTransportRouter.getDedupStats.
+     */
+    fun getDedupStats(messageId: String): SmartTransportRouter.MessageDedupEntry? {
+        return smartTransportRouter?.getDedupStats(messageId)
+    }
+
+    /**
+     * Get the list of subscribed topics from TopicManager.
+     * Wired from TopicManager.getSubscribedTopicsList.
+     */
+    fun getSubscribedTopicsList(): List<String> {
+        return topicManager?.getSubscribedTopicsList() ?: emptyList()
+    }
+
+    /**
+     * Get the list of known topics from TopicManager.
+     * Wired from TopicManager.getKnownTopicsList.
+     */
+    fun getKnownTopicsList(): List<String> {
+        return topicManager?.getKnownTopicsList() ?: emptyList()
+    }
+
+    /**
+     * Filter messages by topic from TopicManager.
+     * Wired from TopicManager.filterMessagesByTopic.
+     */
+    fun filterMessagesByTopic(messages: List<uniffi.api.MessageRecord>, topic: String): List<uniffi.api.MessageRecord> {
+        return topicManager?.filterMessagesByTopic(messages, topic) ?: messages
+    }
+
+    /**
+     * Enable a specific transport type at runtime.
+     * Wired from TransportManager.enableTransport.
+     */
+    fun enableTransport(transport: com.scmessenger.android.service.TransportType) {
+        transportManager?.enableTransport(transport)
+    }
+
+    /**
+     * Start all enabled transports.
+     * Wired from TransportManager.startAll.
+     */
+    fun startAllTransports() {
+        transportManager?.startAll()
+    }
+
+    /**
+     * Check if a transport should be used based on health metrics.
+     * Wired from TransportHealthMonitor.shouldUseTransport.
+     */
+    fun shouldUseTransport(transport: String): Boolean {
+        return transportHealthMonitor.shouldUseTransport(transport)
+    }
+
+    /**
+     * Get the current BLE quota count from BleQuotaManager.
+     * Wired from BleQuotaManager.currentCount.
+     */
+    fun getBleQuotaCount(): Int {
+        return transportManager?.getBleQuotaCount() ?: 0
+    }
+
+    /**
+     * Check if a port is likely blocked on the current network.
+     * Wired from NetworkDetector.isPortLikelyBlocked.
+     */
+    fun isPortLikelyBlocked(port: Int): Boolean {
+        return networkDetector.isPortLikelyBlocked(port)
+    }
+
+    /**
+     * Convert current network state to a log string.
+     * Wired from NetworkDiagnostics.toLogString.
+     */
+    fun getNetworkStateLogString(): String {
+        return networkDetector.getNetworkDiagnostics().toLogString()
+    }
+
+    /**
+     * Get list of healthy relay endpoints from CircuitBreaker.
+     * Wired from CircuitBreaker.getHealthyRelays.
+     */
+    fun getHealthyRelays(): List<String> {
+        return relayCircuitBreaker.getHealthyRelays()
+    }
+
+    /**
+     * Get the last failure entry for a relay from NetworkFailureMetrics.
+     * Wired from NetworkFailureMetrics.getLastFailure.
+     */
+    fun getLastFailure(nodeId: String): NetworkFailureMetrics.FailureRecord? {
+        return networkFailureMetrics.getLastFailure(nodeId)
+    }
+
+    /**
+     * Get the last failure reason string for a relay from CircuitBreaker.
+     * Wired from CircuitBreaker.getLastFailureReason.
+     */
+    fun getLastFailureReason(relayAddress: String): String? {
+        return relayCircuitBreaker.getLastFailureReason(relayAddress)
+    }
+
+    /**
+     * Get the count of open circuits from CircuitBreaker.
+     * Wired from CircuitBreaker.getOpenCircuits.
+     */
+    fun getOpenCircuitCount(): Int {
+        return relayCircuitBreaker.getOpenCircuits().size
+    }
+
+    /**
+     * Format a diagnostics report for user display.
+     * Wired from DiagnosticsReporter.formatReportForUser.
+     */
+    suspend fun formatDiagnosticsReportForUser(): String {
+        return try {
+            val report = diagnosticsReporter.generateReport()
+            diagnosticsReporter.formatReportForUser(report)
+        } catch (e: Exception) {
+            Timber.e(e, "Failed to generate diagnostics report for user")
+            "Error generating diagnostics report"
+        }
+    }
+
+    /**
+     * Check for DNS failures from NetworkFailureMetrics.
+     * Wired from NetworkFailureMetrics.hasDnsFailures.
+     */
+    fun hasDnsFailures(): Boolean {
+        return networkFailureMetrics.hasDnsFailures()
+    }
+
+    /**
+     * Check for port blocking from NetworkFailureMetrics.
+     * Wired from NetworkFailureMetrics.hasPortBlocking.
+     */
+    fun hasPortBlocking(): Boolean {
+        return networkFailureMetrics.hasPortBlocking()
     }
 
 }

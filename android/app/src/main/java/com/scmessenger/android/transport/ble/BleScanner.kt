@@ -97,65 +97,156 @@ class BleScanner(
         private const val ADVERTISED_NAME = "SCMesh"
     }
 
-    private val scanCallback = object : ScanCallback() {
-        override fun onScanResult(callbackType: Int, result: ScanResult?) {
-            result?.let { scanResult ->
-                val device = scanResult.device
-                val peerId = device.address
-                if (!matchesMeshAdvertisement(scanResult)) {
-                    return
+    // --- Named callback methods wired from ScanCallback ---
+
+    /**
+     * Process a BLE scan result, extracting peer ID and service data.
+     * Wired from ScanCallback.onScanResult.
+     * Filters for mesh advertisements, deduplicates, and notifies discovery.
+     */
+    fun onScanResult(@Suppress("UNUSED_PARAMETER") callbackType: Int, result: ScanResult?) {
+        result?.let { scanResult ->
+            val device = scanResult.device
+            val peerId = device.address
+            if (!matchesMeshAdvertisement(scanResult)) {
+                return
+            }
+
+            advertisementsSeen.incrementAndGet()
+            lastMatchedAdvertisementAtMs.set(System.currentTimeMillis())
+
+            // Check if we've recently seen this peer
+            val now = System.currentTimeMillis()
+            val lastSeen = recentlySeenPeers[peerId]
+            if (lastSeen != null && (now - lastSeen) < peerCacheTimeoutMs) {
+                // Skip - we've processed this peer recently
+                return
+            }
+
+            // Update cache
+            recentlySeenPeers[peerId] = now
+            peersDiscoveredCount.incrementAndGet()
+
+            // Prune old entries
+            pruneOldPeers(now)
+
+            val rssi = scanResult.rssi
+            val scanRecord = scanResult.scanRecord
+
+            // Extract Service Data
+            val serviceData = scanRecord?.getServiceData(PARCEL_UUID)
+
+            if (serviceData != null) {
+                Timber.v("Discovered peer: $peerId (RSSI: $rssi, Data: ${serviceData.size} bytes)")
+                // Notify discovery
+                onPeerDiscovered(peerId)
+                // Notify data reception
+                onDataReceived(peerId, serviceData)
+            } else {
+                // Just discovery (legacy or beacon)
+                Timber.v("Discovered peer (no data): $peerId (RSSI: $rssi)")
+                onPeerDiscovered(peerId)
+            }
+        }
+    }
+
+    /**
+     * Handle BLE scan failure with proper error classification and retry logic.
+     * Wired from ScanCallback.onScanFailed.
+     * Logs the error code, notifies transport manager, and schedules retry with backoff.
+     */
+    fun onScanFailed(errorCode: Int) {
+        val errorDescription = when (errorCode) {
+            ScanCallback.SCAN_FAILED_ALREADY_STARTED -> "SCAN_FAILED_ALREADY_STARTED"
+            ScanCallback.SCAN_FAILED_APPLICATION_REGISTRATION_FAILED -> "SCAN_FAILED_APPLICATION_REGISTRATION_FAILED"
+            ScanCallback.SCAN_FAILED_INTERNAL_ERROR -> "SCAN_FAILED_INTERNAL_ERROR"
+            ScanCallback.SCAN_FAILED_FEATURE_UNSUPPORTED -> "SCAN_FAILED_FEATURE_UNSUPPORTED"
+            else -> "UNKNOWN_ERROR_$errorCode"
+        }
+
+        Timber.e("BLE Scan failed with error code: $errorCode ($errorDescription)")
+        scanFailures.incrementAndGet()
+        isScanning = false
+
+        // Notify transport manager of BLE failure for graceful degradation
+        onScanFailure?.invoke()
+
+        // Schedule retry with exponential backoff for recoverable errors
+        when (errorCode) {
+            ScanCallback.SCAN_FAILED_ALREADY_STARTED -> {
+                Timber.w("BLE scan already started; stopping existing scan before retry")
+                scope.launch {
+                    try {
+                        stopScanning()
+                        delay(500)
+                        startScanning()
+                    } catch (e: Exception) {
+                        Timber.e(e, "Failed to restart BLE scan after already-started error")
+                    }
                 }
-
-                advertisementsSeen.incrementAndGet()
-                lastMatchedAdvertisementAtMs.set(System.currentTimeMillis())
-
-                // Check if we've recently seen this peer
-                val now = System.currentTimeMillis()
-                val lastSeen = recentlySeenPeers[peerId]
-                if (lastSeen != null && (now - lastSeen) < peerCacheTimeoutMs) {
-                    // Skip - we've processed this peer recently
-                    return
+            }
+            ScanCallback.SCAN_FAILED_APPLICATION_REGISTRATION_FAILED -> {
+                Timber.w("BLE scan app registration failed; scheduling retry")
+                scope.launch {
+                    handleScanFailure(Exception("Scan failed: application registration failed (error $errorCode)"))
                 }
-
-                // Update cache
-                recentlySeenPeers[peerId] = now
-                peersDiscoveredCount.incrementAndGet()
-
-                // Prune old entries
-                pruneOldPeers(now)
-
-                val rssi = scanResult.rssi
-                val scanRecord = scanResult.scanRecord
-
-                // Extract Service Data
-                val serviceData = scanRecord?.getServiceData(PARCEL_UUID)
-
-                if (serviceData != null) {
-                    Timber.v("Discovered peer: $peerId (RSSI: $rssi, Data: ${serviceData.size} bytes)")
-                    // Notify discovery
-                    onPeerDiscovered(peerId)
-                    // Notify data reception
-                    onDataReceived(peerId, serviceData)
-                } else {
-                    // Just discovery (legacy or beacon)
-                    Timber.v("Discovered peer (no data): $peerId (RSSI: $rssi)")
-                    onPeerDiscovered(peerId)
+            }
+            ScanCallback.SCAN_FAILED_FEATURE_UNSUPPORTED -> {
+                Timber.e("BLE scan feature unsupported on this device; cannot retry")
+                // No retry for unsupported feature
+            }
+            else -> {
+                scope.launch {
+                    handleScanFailure(Exception("Scan failed with error code: $errorCode ($errorDescription)"))
                 }
             }
         }
+    }
+
+    /**
+     * Handle scan failure with proper backoff and retry logic.
+     * Schedules a retry after the current backoff delay.
+     */
+    suspend fun handleScanFailure(e: Exception): Boolean {
+        Timber.e(e, "BLE scan failed")
+        // On scan failure, trigger backoff and schedule retry
+        isScanning = false
+        val retryDelay = backoffStrategy.nextDelay()
+        Timber.w("Scheduling BLE scan retry in ${retryDelay}ms due to failure")
+        handler.postDelayed({
+            scope.launch {
+                try {
+                    startScanning()
+                } catch (e: Exception) {
+                    Timber.e(e, "Failed to restart BLE scan after failure")
+                }
+            }
+        }, retryDelay)
+        return false
+    }
+
+    /**
+     * Apply BLE scan settings based on battery/motion state.
+     * Adjusts scan duty cycle (window/interval) based on AutoAdjust profile.
+     * Restarts scanning if currently active to apply new settings.
+     */
+    fun applyScanSettings(scanIntervalMs: UInt) {
+        // Convert AutoAdjust interval to duty cycle
+        val window = minOf(scanIntervalMs.toLong(), 20000L)
+        val interval = maxOf(scanIntervalMs.toLong(), window + 5000L)
+
+        setScanDutyCycle(window, interval)
+    }
+
+    // --- End of named callback methods ---
+
+    private val scanCallback = object : ScanCallback() {
+        override fun onScanResult(callbackType: Int, result: ScanResult?) {
+            this@BleScanner.onScanResult(callbackType, result)
+        }
 
         override fun onScanFailed(errorCode: Int) {
-            Timber.e("BLE Scan failed with error code: $errorCode")
-            scanFailures.incrementAndGet()
-            isScanning = false
-
-            // Notify transport manager of BLE failure for graceful degradation
-            onScanFailure?.invoke()
-
-            // Wire handleScanFailure for comprehensive failure handling
-            scope.launch {
-                handleScanFailure(Exception("Scan failed with error code: $errorCode"))
-            }
+            this@BleScanner.onScanFailed(errorCode)
         }
     }
 
@@ -191,17 +282,6 @@ class BleScanner(
         }
 
         Timber.i("Scan mode changed: background=$background")
-    }
-
-    /**
-     * Update scan settings based on AutoAdjust profile.
-     */
-    fun applyScanSettings(scanIntervalMs: UInt) {
-        // Convert AutoAdjust interval to duty cycle
-        val window = minOf(scanIntervalMs.toLong(), 20000L)
-        val interval = maxOf(scanIntervalMs.toLong(), window + 5000L)
-
-        setScanDutyCycle(window, interval)
     }
 
     @SuppressLint("MissingPermission")
@@ -454,27 +534,6 @@ class BleScanner(
         }, retryDelay)
     }
 
-    /**
-     * Handle scan failure with proper backoff and retry logic.
-     */
-    private suspend fun handleScanFailure(e: Exception): Boolean {
-        Timber.e(e, "BLE scan failed")
-        // On scan failure, trigger backoff and schedule retry
-        isScanning = false
-        val retryDelay = backoffStrategy.nextDelay()
-        Timber.w("Scheduling BLE scan retry in ${retryDelay}ms due to failure")
-        handler.postDelayed({
-            scope.launch {
-                try {
-                    startScanning()
-                } catch (e: Exception) {
-                    Timber.e(e, "Failed to restart BLE scan after failure")
-                }
-            }
-        }, retryDelay)
-        return false
-    }
-
     @SuppressLint("MissingPermission")
     suspend fun stopScanning() = scanLock.withLock {
         if (currentScanSession == null || !isScanning) return@withLock
@@ -507,6 +566,14 @@ class BleScanner(
             scanFailures = scanFailures.get(),
             peerCacheSize = recentlySeenPeers.size
         )
+    }
+
+    /**
+     * Get the current BLE quota count from the BleQuotaManager.
+     * Wired from BleQuotaManager.currentCount.
+     */
+    fun getQuotaCount(): Int {
+        return quotaManager.currentCount()
     }
 
     /**
