@@ -64,24 +64,8 @@
         "MOBILE_BRIDGE"
       ],
       "file_domains": [
-        "core/src/identity/",
-        "core/src/transport/",
-        "core/src/drift/",
-        "core/src/store/",
-        "core/src/routing/",
-        "core/src/relay/",
-        "core/src/abuse/",
-        "core/src/notification/",
-        "core/src/iron_core.rs",
-        "core/src/lib.rs",
-        "core/src/mobile_bridge.rs",
-        "core/src/contacts_bridge.rs",
-        "core/src/blocked_bridge.rs",
-        "core/src/crypto/",
-        "core/src/dspy/",
-        "core/src/wasm_support/",
-        "core/src/privacy/",
-        "core/src/mobile/"
+        "core/",
+        "wasm/"
       ],
       "max_per_type": 1
     },
@@ -100,18 +84,10 @@
         "PLATFORM"
       ],
       "file_domains": [
+        "android/",
         "cli/src/",
-        "wasm/src/",
         "mobile/src/",
-        "core/src/iron_core.rs",
-        "core/src/api.udl",
-        "core/src/mobile_bridge.rs",
-        "core/src/contacts_bridge.rs",
-        "core/src/blocked_bridge.rs",
-        "core/src/lib.rs",
-        "android/app/src/",
-        "android/app/build.gradle",
-        "android/app/build.gradle.kts"
+        "iOS/"
       ],
       "max_per_type": 2
     },

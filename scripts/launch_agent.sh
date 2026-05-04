@@ -88,8 +88,11 @@ COMPLETED_AT=<epoch timestamp>
 
 When you have no more tasks and no task in progress, set NEXT_TASK_REQUESTED=false.
 
+## MANDATORY EXIT PROTOCOL
+Once you have moved all task files to HANDOFF/done/ and written your COMPLETION marker, you MUST type /exit to terminate your process immediately. Do NOT remain in interactive mode after task completion — this blocks the orchestrator from detecting completion and launching the next agent.
+
 ## SELF-PACING
-Use /loop 5m to self-pace."
+Use /loop 5m to self-pace ONLY while actively working. Once all tasks are complete, /exit immediately."
 
 if [ -n "$AGENT_TASK_FILE" ] && [ -f "$AGENT_TASK_FILE" ]; then
     AGENT_PROMPT="You are an SCMessenger Autonomous Sub-Agent (ID: $AGENT_ID, Model: $AGENT_MODEL).
@@ -137,7 +140,7 @@ TASK_FILE=<current location of the task file>
 ERROR=<brief description of the failure>
 COMPLETED_AT=<epoch timestamp>
 
-Use /loop 5m to self-pace."
+Use /loop 5m to self-pace ONLY while actively working. Once all tasks are complete, /exit immediately."
 fi
 
 # Colors for output

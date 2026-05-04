@@ -24,6 +24,9 @@ Treat these files as operational requirements, not optional references.
 4. Keep PRs/batches scoped by manifest batch groups to reduce merge conflicts.
 5. Run edited-target build/test gates before ending each batch.
 6. If a task is blocked, document exact blocker, owner, and next action; do not silently skip.
+7. **CRITICAL: LOOK BEFORE YOU LEAP** — Before you wire a function call to an external struct or trait (e.g., `BootstrapManager`, `OptimizedRoutingEngine`, `AutoAdjustEngine`), you MUST use `grep` or `read` on the target file to prove the method exists. If the method DOES NOT exist, DO NOT hallucinate it. Document the missing API as a BLOCKER in your task file, leave a `todo!()` or empty stub, and immediately move on to the next task. Never fabricate method signatures.
+8. **NO STUBS** — Every wired function must have real production data flow. Do not add placeholder implementations that return empty vectors, `false`, `None`, or hardcoded values. If the underlying subsystem doesn't have the method yet, implement it there too, or document it as a BLOCKER.
+9. **UniFFI Rules** — Do NOT add arbitrary lines to `api.udl`. Any new exposed IronCore methods MUST be written directly inside the `impl IronCore` block in Rust and tagged with `#[uniffi::export]`. The UDL will generate automatically from proc macros.
 
 ---
 
