@@ -1,0 +1,14 @@
+﻿{
+  "file": "relay_health.rs",
+  "chunk": 2,
+  "summary": "This chunk contains a test function `test_relay_fallback_backoff` that tests the `RelayFallback` struct. It initializes a `RelayFallback` instance with a maximum retry count of 3, then simulates multiple attempts to connect to a relay address using `Multiaddr`. The backoff delay is calculated and checked to ensure it increases after each attempt.",
+  "structs_or_classes": ["RelayFallback", "Multiaddr"],
+  "imports": [],
+  "funcs": [
+    {
+      "name": "test_relay_fallback_backoff",
+      "line": 365,
+      "calls_out_to": []
+    }
+  ]
+}

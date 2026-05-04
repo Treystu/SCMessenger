@@ -1,0 +1,64 @@
+﻿{
+  "file": "manager.rs",
+  "chunk": 3,
+  "summary": "This chunk contains tests for the `TransportManager` struct, which manages connections and events related to different transport types.",
+  "structs_or_classes": ["TransportManager", "TransportCapabilities", "TransportEvent"],
+  "imports": [],
+  "funcs": [
+    {
+      "name": "new",
+      "line": 701,
+      "calls_out_to": []
+    },
+    {
+      "name": "register_transport",
+      "line": 708,
+      "calls_out_to": ["caps"]
+    },
+    {
+      "name": "peers_on_transport",
+      "line": 712,
+      "calls_out_to": []
+    },
+    {
+      "name": "handle_event",
+      "line": 719,
+      "calls_out_to": ["discovered", "established"]
+    },
+    {
+      "name": "best_transport_for_peer",
+      "line": 812,
+      "calls_out_to": []
+    },
+    {
+      "name": "is_peer_connected",
+      "line": 902,
+      "calls_out_to": []
+    },
+    {
+      "name": "peers_on_transport",
+      "line": 942,
+      "calls_out_to": []
+    },
+    {
+      "name": "send_to_peer",
+      "line": 946,
+      "calls_out_to": ["priority"]
+    },
+    {
+      "name": "pending_sends",
+      "line": 987,
+      "calls_out_to": []
+    },
+    {
+      "name": "tick_cleanup",
+      "line": 1021,
+      "calls_out_to": []
+    },
+    {
+      "name": "transports_for_peer",
+      "line": 1048,
+      "calls_out_to": []
+    }
+  ]
+}

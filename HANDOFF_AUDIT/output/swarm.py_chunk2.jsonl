@@ -1,0 +1,18 @@
+﻿{
+  "file": "swarm.py",
+  "chunk": 2,
+  "summary": "This chunk is the main entry point of the `swarm.py` script, handling command-line arguments and executing the tasks.",
+  "structs_or_classes": [],
+  "imports": [
+    "argparse",
+    "datetime",
+    "os"
+  ],
+  "funcs": [
+    {
+      "name": "__main__",
+      "line": 351,
+      "calls_out_to": []
+    }
+  ]
+}

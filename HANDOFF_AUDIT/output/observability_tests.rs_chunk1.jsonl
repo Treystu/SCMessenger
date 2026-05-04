@@ -1,0 +1,134 @@
+﻿{
+  "file": "observability_tests.rs",
+  "chunk": 1,
+  "summary": "This chunk contains tests for the `RelayTracePayload` struct, including validation, serialization/deserialization, and boundary value testing.",
+  "structs_or_classes": ["RelayTracePayload"],
+  "imports": [],
+  "funcs": [
+    {
+      "name": "test_valid_payload_passes_validation",
+      "line": 31,
+      "calls_out_to": []
+    },
+    {
+      "name": "test_valid_payload_with_zero_latency",
+      "line": 38,
+      "calls_out_to": []
+    },
+    {
+      "name": "test_display_format",
+      "line": 43,
+      "calls_out_to": []
+    },
+    {
+      "name": "test_minimum_valid_message_id",
+      "line": 61,
+      "calls_out_to": []
+    },
+    {
+      "name": "test_unicode_in_message_id",
+      "line": 68,
+      "calls_out_to": []
+    },
+    {
+      "name": "test_very_long_message_id",
+      "line": 75,
+      "calls_out_to": []
+    },
+    {
+      "name": "test_lowercase_hex_hash",
+      "line": 82,
+      "calls_out_to": []
+    },
+    {
+      "name": "test_uppercase_hex_hash",
+      "line": 91,
+      "calls_out_to": []
+    },
+    {
+      "name": "test_mixed_case_hex_hash",
+      "line": 106,
+      "calls_out_to": []
+    },
+    {
+      "name": "test_empty_message_id",
+      "line": 124,
+      "calls_out_to": []
+    },
+    {
+      "name": "test_empty_relay_node_hash",
+      "line": 131,
+      "calls_out_to": []
+    },
+    {
+      "name": "test_short_relay_node_hash",
+      "line": 138,
+      "calls_out_to": []
+    },
+    {
+      "name": "test_long_relay_node_hash",
+      "line": 145,
+      "calls_out_to": []
+    },
+    {
+      "name": "test_non_hex_characters_in_hash",
+      "line": 152,
+      "calls_out_to": []
+    },
+    {
+      "name": "test_special_characters_in_hash",
+      "line": 169,
+      "calls_out_to": []
+    },
+    {
+      "name": "test_serialize_deserialize_round_trip",
+      "line": 200,
+      "calls_out_to": []
+    },
+    {
+      "name": "test_serde_snake_case_keys",
+      "line": 210,
+      "calls_out_to": []
+    },
+    {
+      "name": "test_deserialize_valid_json",
+      "line": 224,
+      "calls_out_to": []
+    },
+    {
+      "name": "test_deserialize_invalid_json",
+      "line": 239,
+      "calls_out_to": []
+    },
+    {
+      "name": "test_boundary_value_tests",
+      "line": 245,
+      "calls_out_to": []
+    },
+    {
+      "name": "test_hash_length_boundaries",
+      "line": 252,
+      "calls_out_to": []
+    },
+    {
+      "name": "test_latency_boundaries",
+      "line": 280,
+      "calls_out_to": []
+    },
+    {
+      "name": "test_hex_digit_boundaries",
+      "line": 309,
+      "calls_out_to": []
+    },
+    {
+      "name": "test_any_valid_hex_hash_passes_validation",
+      "line": 328,
+      "calls_out_to": []
+    },
+    {
+      "name": "test_display_always_starts_with_relay_trace",
+      "line": 347,
+      "calls_out_to": []
+    }
+  ]
+}

@@ -32,3 +32,8 @@ STATUS: SUCCESS_STOP
 3. **WASM Exposure**:
    - Exposed `getPeerReputation` and `getEnhancedPeerReputation` to JavaScript in `wasm/src/lib.rs`.
 4. **Verification**: Confirmed that `scm status` accurately reflects the core's reputation state for all active peers.
+
+
+--- CLOSEOUT EVIDENCE ---
+VERIFIED WIRED: Called at cli/src/api.rs:416; wasm/src/lib.rs:888. Production call path confirmed.
+Verified by: orchestrator-TRP-2026-05-03

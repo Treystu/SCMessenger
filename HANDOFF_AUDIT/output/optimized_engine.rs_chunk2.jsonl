@@ -1,0 +1,24 @@
+﻿{
+  "file": "optimized_engine.rs",
+  "chunk": 2,
+  "summary": "This chunk contains test functions for the `OptimizedRoutingEngine` struct, which is responsible for managing routing and lifecycle integration in a network application. The tests cover various scenarios such as background and resume of the engine, adaptive TTL calculation based on message activity, and maintenance tasks to clean up unreachable peers.",
+  "structs_or_classes": ["OptimizedRoutingEngine"],
+  "imports": [],
+  "funcs": [
+    {
+      "name": "test_app_lifecycle_integration",
+      "line": 354,
+      "calls_out_to": []
+    },
+    {
+      "name": "test_adaptive_ttl_integration",
+      "line": 380,
+      "calls_out_to": []
+    },
+    {
+      "name": "test_maintenance_integration",
+      "line": 403,
+      "calls_out_to": []
+    }
+  ]
+}

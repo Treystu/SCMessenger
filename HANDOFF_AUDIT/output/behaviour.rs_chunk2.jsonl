@@ -1,0 +1,14 @@
+﻿{
+  "file": "behaviour.rs",
+  "chunk": 2,
+  "summary": "This chunk defines the `IronCoreBehaviour` struct and its associated methods, including creating a new instance of the behaviour with various components such as DHT, Kademlia, and other network protocols.",
+  "structs_or_classes": ["IronCoreBehaviour", "SharedPeerEntry"],
+  "imports": ["libp2p::identity::Keypair", "relay::client::Behaviour", "request_response::cbor::Behaviour", "gossipsub::ConfigBuilder", "kad::Config", "identify::Behaviour", "upnp::tokio::Behaviour"],
+  "funcs": [
+    {
+      "name": "new",
+      "line": 368,
+      "calls_out_to": ["relay_client", "autonat", "ping", "messaging", "address_reflection", "relay", "registration", "ledger_exchange", "gossipsub", "kademlia", "mdns", "identify", "upnp"]
+    }
+  ]
+}

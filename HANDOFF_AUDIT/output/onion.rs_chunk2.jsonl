@@ -1,0 +1,19 @@
+﻿{
+  "file": "onion.rs",
+  "chunk": 2,
+  "summary": "This chunk contains tests for the `construct_onion` function in the `onion.rs` file. It includes various test cases to ensure the function behaves as expected, such as testing different scenarios like maximum hops, empty paths, and key derivation.",
+  "structs_or_classes": ["OnionLayer", "OnionEnvelope"],
+  "imports": ["x25519_dalek::StaticSecret", "PublicKey", "bincode::serialize", "bincode::deserialize", "derive_layer_key", "OnionError"],
+  "funcs": [
+    {
+      "name": "construct_onion",
+      "line": 348,
+      "calls_out_to": ["onion_layer_serialization"]
+    },
+    {
+      "name": "peel_layer",
+      "line": 404,
+      "calls_out_to": ["bincode::serialize", "bincode::deserialize"]
+    }
+  ]
+}

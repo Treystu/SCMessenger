@@ -1,0 +1,19 @@
+﻿{
+  "file": "delegate_prewarm.rs",
+  "chunk": 2,
+  "summary": "The code chunk defines the `DelegatePrewarmManager` struct and its associated methods, including constructors, tests for delegate creation, selection, pre-warming for background tasks, tick maintenance, and statistics gathering.",
+  "structs_or_classes": ["DelegatePrewarmManager", "DelegateInfo"],
+  "imports": ["std::net::SocketAddr", "tokio::runtime::Runtime", "Instant", "HashMap", "Vec", "Option", "Result"],
+  "funcs": [
+    {
+      "name": "create_test_delegate",
+      "line": 360,
+      "calls_out_to": []
+    },
+    {
+      "name": "DelegatePrewarmManager",
+      "line": 417,
+      "calls_out_to": ["std::net::SocketAddr", "tokio::runtime::Runtime"]
+    }
+  ]
+}

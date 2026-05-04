@@ -1,0 +1,14 @@
+﻿{
+  "file": "NetworkDetector.kt",
+  "chunk": 2,
+  "summary": "This chunk defines a data class `NetworkDiagnostics` which holds various network diagnostic information such as type, blocked ports, bandwidth, and recommended transport protocols.",
+  "structs_or_classes": ["data class", "enum class"],
+  "imports": [],
+  "funcs": [
+    {
+      "name": "toLogString",
+      "line": 375,
+      "calls_out_to": []
+    }
+  ]
+}

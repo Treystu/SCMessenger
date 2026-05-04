@@ -1,0 +1,24 @@
+﻿{
+  "file": "gatt.rs",
+  "chunk": 2,
+  "summary": "This chunk contains tests for various functionalities related to GATT (Generic Attribute Profile) in Rust. It includes tests for fragmenting, reassembling, writing requests, and managing a write queue.",
+  "structs_or_classes": ["GattFragmenter", "GattReassembler", "GattWriteRequest", "GattCharacteristic", "GattWriteQueue"],
+  "imports": ["std::vec::Vec", "std::error::Error"],
+  "funcs": [
+    {
+      "name": "fragment",
+      "line": 351,
+      "calls_out_to": ["GattFragmenter"]
+    },
+    {
+      "name": "reassemble",
+      "line": 390,
+      "calls_out_to": ["GattReassembler"]
+    },
+    {
+      "name": "new",
+      "line": 421,
+      "calls_out_to": ["GattWriteRequest", "GattCharacteristic"]
+    }
+  ]
+}

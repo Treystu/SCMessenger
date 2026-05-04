@@ -1,0 +1,44 @@
+﻿{
+  "file": "reputation.rs",
+  "chunk": 2,
+  "summary": "The `AbuseReputationManager` struct manages the reputation scores of peers, including recording signals, retrieving scores, and managing storage.",
+  "structs_or_classes": ["AbuseReputationManager", "PeerAbuseStats"],
+  "imports": ["std::sync::{Arc, Mutex}, std::time::{Duration, Instant}"],
+  "funcs": [
+    {
+      "name": "record_signal",
+      "line": 351,
+      "calls_out_to": ["Peers"]
+    },
+    {
+      "name": "get_score",
+      "line": 378,
+      "calls_out_to": ["Peers"]
+    },
+    {
+      "name": "rate_limit_multiplier",
+      "line": 387,
+      "calls_out_to": ["Peers"]
+    },
+    {
+      "name": "all_reputations",
+      "line": 402,
+      "calls_out_to": ["Peers"]
+    },
+    {
+      "name": "prune_stale",
+      "line": 405,
+      "calls_out_to": ["Peers"]
+    },
+    {
+      "name": "len",
+      "line": 430,
+      "calls_out_to": ["Peers"]
+    },
+    {
+      "name": "is_empty",
+      "line": 435,
+      "calls_out_to": ["Peers"]
+    }
+  ]
+}

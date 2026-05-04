@@ -1,0 +1,14 @@
+﻿{
+  "file": "policy.rs",
+  "chunk": 2,
+  "summary": "This chunk contains test cases for the `PolicyEngine` struct in the `relay` module. It includes tests for various scenarios such as setting and overriding relay budget, battery floor percentage, and profile transitions.",
+  "structs_or_classes": ["PolicyEngine", "DeviceState"],
+  "imports": ["std::sync::Arc", "std::time::Duration", "std::collections::HashMap", "std::net::SocketAddr", "std::io::Write", "std::fs::File", "std::path::PathBuf", "std::process::Command", "std::vec::Vec"],
+  "funcs": [
+    {
+      "name": "make_device_state",
+      "line": 354,
+      "calls_out_to": ["state"]
+    }
+  ]
+}

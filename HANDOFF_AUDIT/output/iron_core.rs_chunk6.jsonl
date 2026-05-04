@@ -1,0 +1,14 @@
+﻿{
+  "file": "iron_core.rs",
+  "chunk": 6,
+  "summary": "This chunk contains the implementation of a method `receive_message` within the `IronCore` struct, which handles incoming messages from the inbox and updates the history store. It also includes methods for managing notifications and routing decisions.",
+  "structs_or_classes": ["List", "of", "classes", "or", "structs"],
+  "imports": ["List", "of", "imports"],
+  "funcs": [
+    {
+      "name": "receive_message",
+      "line": 1751,
+      "calls_out_to": ["self.inbox.write().is_duplicate(&message.id)", "self.inbox.write().receive(ReceivedMessage { ... })"]
+    }
+  ]
+}

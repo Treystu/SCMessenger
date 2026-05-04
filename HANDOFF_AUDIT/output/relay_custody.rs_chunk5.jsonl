@@ -1,0 +1,38 @@
+﻿{
+  "file": "relay_custody.rs",
+  "chunk": 5,
+  "summary": "The code chunk defines a `RelayCustodyStore` struct that manages custody records for a messaging system. It includes methods to accept, mark dispatching, mark failed, and mark delivered custody messages. The store uses a backend to persist the data.",
+  "structs_or_classes": ["RelayCustodyStore", "StoredCustodyRecord"],
+  "imports": [
+    "std::sync::RwLock",
+    "web_time::Duration",
+    "uuid::Uuid"
+  ],
+  "funcs": [
+    {
+      "name": "normalize_lookup_identity",
+      "line": 1402,
+      "calls_out_to": ["is_hex_64"]
+    },
+    {
+      "name": "record_exists",
+      "line": 1421,
+      "calls_out_to": ["backend.get"]
+    },
+    {
+      "name": "get_record_by_identity_id",
+      "line": 1430,
+      "calls_out_to": ["backend.get", "bincode::deserialize"]
+    },
+    {
+      "name": "persist_state",
+      "line": 1466,
+      "calls_out_to": ["backend.put", "CUSTODY_SEQUENCE.fetch_add", "bincode::serialize"]
+    },
+    {
+      "name": "record_transition",
+      "line": 1487,
+      "calls_out_to": ["format", "bincode::serialize"]
+    }
+  ]
+}

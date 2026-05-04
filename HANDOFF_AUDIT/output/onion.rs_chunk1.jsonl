@@ -1,0 +1,19 @@
+﻿{
+  "file": "onion.rs",
+  "chunk": 1,
+  "summary": "The provided code chunk is a Rust implementation of an onion routing protocol. It includes structs, enums, and functions for constructing and peeling onion envelopes.",
+  "structs_or_classes": ["OnionLayer", "OnionHeader", "OnionEnvelope"],
+  "imports": ["chacha20poly1305::aead::{Aead, KeyInit, Payload}", "chacha20poly1305::XChaCha20Poly1305", "serde::{Deserialize, Serialize}", "thiserror::Error", "x25519_dalek::{EphemeralSecret, PublicKey}"],
+  "funcs": [
+    {
+      "name": "construct_onion",
+      "line": 81,
+      "calls_out_to": ["OnionEnvelope"]
+    },
+    {
+      "name": "peel_layer",
+      "line": 236,
+      "calls_out_to": ["OnionLayer"]
+    }
+  ]
+}

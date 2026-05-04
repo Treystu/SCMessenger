@@ -1,0 +1,14 @@
+﻿{
+  "file": "client.rs",
+  "chunk": 3,
+  "summary": "The code chunk is a Rust function `send_and_receive_raw` within the `RelayClient` struct, responsible for sending and receiving raw messages over a TCP stream. It includes methods to set up the connection, handle timeouts, and parse responses.",
+  "structs_or_classes": ["RelayClient", "TcpStream", "Mutex"],
+  "imports": ["std::cmp", "tokio::net::TcpListener", "tokio::time::timeout"],
+  "funcs": [
+    {
+      "name": "send_and_receive_raw",
+      "line": 701,
+      "calls_out_to": ["socket.lock().await"]
+    }
+  ]
+}

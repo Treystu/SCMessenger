@@ -32,3 +32,8 @@ STATUS: SUCCESS_STOP
    - In `IronCore::new` and `IronCore::with_storage`, added logic to sync drift state based on `relay_enabled` setting.
    - In `IronCore::update_settings`, added logic to toggle drift protocol when the relay setting changes.
 4. **Verification**: Checked cross-platform call paths to ensure no dead-ends remain for these functions.
+
+
+--- CLOSEOUT EVIDENCE ---
+VERIFIED WIRED: Called at wasm/src/lib.rs:238,269,300,1009; core/src/mobile_bridge.rs:295,925. Production call path confirmed.
+Verified by: orchestrator-TRP-2026-05-03

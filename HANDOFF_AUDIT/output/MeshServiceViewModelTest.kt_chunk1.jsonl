@@ -1,0 +1,49 @@
+﻿{
+  "file": "MeshServiceViewModelTest.kt",
+  "chunk": 1,
+  "summary": "Unit tests for MeshServiceViewModel.",
+  "structs_or_classes": ["MeshServiceViewModel", "Context", "MeshRepository", "PreferencesRepository"],
+  "imports": ["List", "of", "imports"],
+  "funcs": [
+    {
+      "name": "setup",
+      "line": 32,
+      "calls_out_to": []
+    },
+    {
+      "name": "tearDown",
+      "line": 50,
+      "calls_out_to": []
+    },
+    {
+      "name": "initialStateIsSTOPPED",
+      "line": 64,
+      "calls_out_to": ["viewModel.serviceState.value"]
+    },
+    {
+      "name": "isRunningIsFalseWhenStateIsSTOPPED",
+      "line": 70,
+      "calls_out_to": ["viewModel.isRunning.value"]
+    },
+    {
+      "name": "isRunningIsTrueWhenStateIsRUNNING",
+      "line": 83,
+      "calls_out_to": ["viewModel.isRunning.value", "backgroundScope.launch(UnconfinedTestDispatcher(testDispatcher.scheduler))", "testDispatcher.scheduler.advanceUntilIdle()"]
+    },
+    {
+      "name": "setAutoStartUpdatesPreference",
+      "line": 91,
+      "calls_out_to": ["coEvery { mockPreferencesRepository.setServiceAutoStart(any()) } just runs"]
+    },
+    {
+      "name": "getStatsTextReturnsFormattedStats",
+      "line": 105,
+      "calls_out_to": ["viewModel.serviceStats.collect()"]
+    },
+    {
+      "name": "getStatsTextHandlesNullStats",
+      "line": 132,
+      "calls_out_to": []
+    }
+  ]
+}

@@ -1,0 +1,49 @@
+﻿{
+  "file": "peer_broadcast.rs",
+  "chunk": 1,
+  "summary": "This module implements active relay functionality where relay nodes broadcast peer join/leave events to all connected clients.",
+  "structs_or_classes": ["PeerBroadcaster", "PeerInfo"],
+  "imports": [],
+  "funcs": [
+    {
+      "name": "new",
+      "line": 40,
+      "calls_out_to": []
+    },
+    {
+      "name": "peer_connected",
+      "line": 67,
+      "calls_out_to": ["create_peer_joined_message"]
+    },
+    {
+      "name": "peer_disconnected",
+      "line": 89,
+      "calls_out_to": []
+    },
+    {
+      "name": "create_peer_joined_message",
+      "line": 70,
+      "calls_out_to": []
+    },
+    {
+      "name": "create_peer_left_message",
+      "line": 91,
+      "calls_out_to": []
+    },
+    {
+      "name": "create_peer_list_response",
+      "line": 118,
+      "calls_out_to": []
+    },
+    {
+      "name": "get_peers_except",
+      "line": 120,
+      "calls_out_to": []
+    },
+    {
+      "name": "peer_count",
+      "line": 130,
+      "calls_out_to": []
+    }
+  ]
+}

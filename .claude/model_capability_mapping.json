@@ -17,17 +17,16 @@
     },
     "qwen3-coder-next:cloud": {
       "capabilities": [
-        "implementation",
-        "bug_fixes",
-        "feature_development",
-        "rapid_coding"
+        "repository_scale_coding",
+        "complex_software_engineering",
+        "bug_hunting"
       ],
       "role": "implementer",
-      "size": "80b",
+      "size": "81B",
       "recommended_for": [
         "P0_implementation",
-        "P1_features",
-        "code_changes"
+        "feature_landing",
+        "deep_code_refactoring"
       ]
     },
     "deepseek-v3.2:cloud": {
@@ -63,105 +62,86 @@
     },
     "gemma4:31b:cloud": {
       "capabilities": [
-        "documentation",
-        "testing",
-        "bindings",
-        "platform_engineering",
-        "simple_tasks"
+        "multimodal_reasoning",
+        "configurable_thinking",
+        "efficient_worker"
       ],
-      "role": "worker",
-      "size": "31b",
+      "role": "multimodal_worker",
+      "size": "31B",
       "recommended_for": [
-        "documentation",
-        "unit_tests",
-        "bindings",
-        "P2_tasks"
+        "vision_tasks",
+        "general_labor",
+        "unit_tests"
       ]
     },
     "gemini-3-flash-preview:cloud": {
       "capabilities": [
-        "quick_triage",
-        "lint_fixes",
-        "minor_edits",
-        "ci_gatekeeping",
-        "parsing"
+        "fast_triage",
+        "low_latency_parsing",
+        "ci_gatekeeping"
       ],
       "role": "triage_router",
       "size": "small",
       "recommended_for": [
         "quick_fixes",
-        "under_50_loc",
-        "triage"
+        "triage",
+        "linting"
       ]
     },
     "kimi-k2-thinking:cloud": {
       "capabilities": [
-        "code_review",
-        "final_verification",
-        "pre_merge_checks",
-        "quality_gate"
+        "extended_thought",
+        "deep_verification",
+        "logical_proofs"
       ],
-      "role": "gatekeeper_reviewer",
-      "size": "1t",
+      "role": "deep_gatekeeper",
+      "size": "1.1T",
       "recommended_for": [
-        "final_review",
-        "pre_merge",
-        "quality_gate"
+        "final_verification",
+        "critical_security_gates"
       ]
     },
     "mistral-large-3:675b:cloud": {
       "capabilities": [
-        "pipeline_management",
-        "multi_agent_coordination",
-        "swarm_orchestration"
+        "multilingual_support",
+        "instruction_following",
+        "enterprise_rag"
       ],
-      "role": "swarm_orchestrator",
-      "size": "675b",
+      "role": "general_purpose_orchestrator",
+      "size": "675B MoE",
       "recommended_for": [
         "pipeline_management",
-        "multi_agent_coordination"
+        "stable_coordination"
       ]
     },
     "glm-5.1:cloud": {
       "capabilities": [
-        "rust_core",
-        "protocol_implementation",
-        "proven_compatibility"
+        "agentic_coding",
+        "long_horizon_execution",
+        "iterative_optimization",
+        "rust_core"
       ],
-      "role": "orchestrator",
-      "size": "1.5t",
+      "role": "lead_orchestrator",
+      "size": "1.5T",
       "recommended_for": [
         "P0_orchestration",
-        "P0_coordination",
-        "P0_verification",
-        "rust_core"
+        "complex_agentic_tasks",
+        "rust_core_implementation"
       ]
     },
     "deepseek-v4-pro:cloud": {
       "capabilities": [
-        "deep_analysis",
-        "rca",
-        "protocol_correctness",
-        "proofs",
-        "multi_step_reasoning",
-        "architecture_planning",
-        "implementation_ordering",
-        "security_audit",
-        "adversarial_review",
-        "crypto_validation",
-        "wiring_verification"
+        "advanced_reasoning",
+        "multi_step_planning",
+        "architecture_design",
+        "security_audit"
       ],
-      "role": "architect_planner_validator",
-      "size": "1.6T",
+      "role": "architect_planner",
+      "size": "1.6T MoE",
       "recommended_for": [
         "P0_planning",
-        "P0_architecture",
-        "P0_security",
-        "P0_crypto",
-        "P0_validation",
-        "protocol_implementation",
-        "wiring_verification",
-        "adversarial_review"
+        "SOTA_reasoning",
+        "complex_architecture"
       ]
     },
     "deepseek-v4-flash:cloud": {
@@ -180,16 +160,15 @@
     },
     "kimi-k2.6:cloud": {
       "capabilities": [
-        "general_reasoning",
-        "code_review",
-        "architecture_review"
+        "advanced_review",
+        "contextual_understanding",
+        "quality_gate"
       ],
-      "role": "reviewer",
+      "role": "gatekeeper_reviewer",
       "size": "595B",
       "recommended_for": [
-        "P1_review",
-        "architecture_review",
-        "general_analysis"
+        "pre_merge_review",
+        "quality_assurance"
       ]
     },
     "qwen3.5:397b:cloud": {
@@ -208,16 +187,15 @@
     },
     "cogito-2.1:671b:cloud": {
       "capabilities": [
-        "deliberative_reasoning",
         "complex_analysis",
+        "deliberative_reasoning",
         "tradeoff_evaluation"
       ],
       "role": "deliberator",
-      "size": "688B",
+      "size": "671B",
       "recommended_for": [
         "P0_deliberation",
-        "tradeoff_analysis",
-        "complex_evaluation"
+        "critical_decision_making"
       ]
     },
     "glm-5:cloud": {
@@ -260,15 +238,15 @@
     },
     "minimax-m2.7:cloud": {
       "capabilities": [
-        "general_reasoning",
-        "implementation",
-        "code_generation"
+        "self_evolving_agents",
+        "office_benchmarks",
+        "agentic_efficiency"
       ],
-      "role": "general_implementer",
+      "role": "agentic_worker",
       "size": "480B",
       "recommended_for": [
-        "P1_implementation",
-        "general_coding"
+        "iterative_improvement",
+        "agentic_workflows"
       ]
     },
     "minimax-m2.5:cloud": {
@@ -306,17 +284,15 @@
     },
     "nemotron-3-super:cloud": {
       "capabilities": [
-        "validation",
-        "verification",
-        "robustness_testing",
-        "fallback_vision"
+        "multi_agent_collaboration",
+        "high_throughput",
+        "hybrid_transformer_mamba"
       ],
-      "role": "validator",
-      "size": "230B",
+      "role": "swarm_coordinator",
+      "size": "120B MoE",
       "recommended_for": [
-        "P1_validation",
-        "robustness",
-        "fallback_vision"
+        "throughput_intensive_tasks",
+        "multi_agent_sync"
       ]
     },
     "nemotron-3-nano:30b:cloud": {
@@ -334,17 +310,15 @@
     },
     "devstral-2:123b:cloud": {
       "capabilities": [
-        "developer_tooling",
-        "testing",
-        "bindings",
-        "documentation"
+        "tool_use",
+        "file_editing",
+        "swe_bench_optimization"
       ],
-      "role": "dev_tooler",
-      "size": "128B",
+      "role": "precision_implementer",
+      "size": "123B",
       "recommended_for": [
-        "P2_dev",
-        "tooling",
-        "bindings"
+        "autonomous_file_edits",
+        "tool_heavy_workflows"
       ]
     },
     "devstral-small-2:24b:cloud": {
@@ -362,18 +336,15 @@
     },
     "qwen3-vl:235b:cloud": {
       "capabilities": [
-        "vision",
-        "screenshot_analysis",
-        "ui_review",
-        "diagram_analysis"
+        "vision_analysis",
+        "screenshot_review",
+        "ui_mockup_parsing"
       ],
       "role": "vision_analyst",
-      "size": "470B",
+      "size": "235B",
       "recommended_for": [
-        "vision",
-        "screenshots",
-        "ui_review",
-        "diagrams"
+        "UI_review",
+        "diagram_analysis"
       ]
     },
     "qwen3-vl:235b-instruct:cloud": {
@@ -404,15 +375,15 @@
     },
     "gpt-oss:120b:cloud": {
       "capabilities": [
-        "general_reasoning",
-        "code_generation",
-        "oss_compatible"
+        "transparent_cot",
+        "adjustable_reasoning_effort",
+        "high_efficiency"
       ],
-      "role": "oss_coder",
-      "size": "65B",
+      "role": "reasoning_specialist",
+      "size": "120B MoE",
       "recommended_for": [
-        "oss_compat",
-        "general_coding"
+        "debug_reasoning",
+        "complex_logic_verification"
       ]
     },
     "gpt-oss:20b:cloud": {
@@ -506,13 +477,15 @@
     },
     "rnj-1:8b:cloud": {
       "capabilities": [
-        "lightweight",
-        "simple_tasks"
+        "stem_tasks",
+        "math_code",
+        "high_tool_calling_accuracy"
       ],
-      "role": "rnj_light",
-      "size": "16B",
+      "role": "lightweight_specialist",
+      "size": "8B",
       "recommended_for": [
-        "P3_light"
+        "quick_math",
+        "tool_calling_gatekeeping"
       ]
     },
     "kimi-k2:1t:cloud": {
@@ -543,7 +516,7 @@
     }
   },
   "source_of_truth": "https://ollama.com/api/tags",
-  "last_updated": "2026-04-28T22:30:00Z",
+  "last_updated": "2026-05-04T04:10:00Z",
   "cloud_suffix": ":cloud",
   "validation_rules": {
     "any_model_with_cloud_suffix": "available_via_ollama_cloud",

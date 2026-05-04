@@ -1,0 +1,29 @@
+﻿{
+  "file": "MeshEventBus.kt",
+  "chunk": 1,
+  "summary": "Central event dispatcher for mesh network events.",
+  "structs_or_classes": ["PeerEvent", "MessageEvent", "StatusEvent", "NetworkEvent"],
+  "imports": ["kotlinx.coroutines.flow.MutableSharedFlow", "kotlinx.coroutines.flow.SharedFlow", "timber.log.Timber"],
+  "funcs": [
+    {
+      "name": "emitPeerEvent",
+      "line": 38,
+      "calls_out_to": ["_peerEvents"]
+    },
+    {
+      "name": "emitMessageEvent",
+      "line": 50,
+      "calls_out_to": ["_messageEvents"]
+    },
+    {
+      "name": "emitStatusEvent",
+      "line": 62,
+      "calls_out_to": ["_statusEvents"]
+    },
+    {
+      "name": "emitNetworkEvent",
+      "line": 74,
+      "calls_out_to": ["_networkEvents"]
+    }
+  ]
+}

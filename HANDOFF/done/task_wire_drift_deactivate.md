@@ -32,3 +32,8 @@ STATUS: SUCCESS_STOP
 3. **WASM Integration**:
    - Integrated into `IronCore::update_settings` in `wasm/src/lib.rs` (called when `relay_enabled` is toggled off).
 4. **Verification**: Confirmed that all call paths for protocol suspension are correctly wired and that audit events are emitted during these transitions.
+
+
+--- CLOSEOUT EVIDENCE ---
+VERIFIED WIRED: Called at wasm/src/lib.rs:1011; core/src/mobile_bridge.rs:927. Production call path confirmed.
+Verified by: orchestrator-TRP-2026-05-03

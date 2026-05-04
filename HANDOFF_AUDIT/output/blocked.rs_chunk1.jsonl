@@ -1,0 +1,14 @@
+﻿{
+  "file": "blocked.rs",
+  "chunk": 1,
+  "summary": "This Rust module provides a `BlockedManager` for managing blocked identities in an application. It includes functions to block, unblock, check if a peer is blocked, and list all blocked identities.",
+  "structs_or_classes": ["BlockedIdentity", "BlockedManager"],
+  "imports": ["std::sync::Arc", "web_time::SystemTime", "serde::{Deserialize, Serialize}", "crate::store::backend::StorageBackend", "iron_core_error::IronCoreError"],
+  "funcs": [
+    {
+      "name": "current_timestamp",
+      "line": 243,
+      "calls_out_to": []
+    }
+  ]
+}

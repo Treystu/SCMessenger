@@ -1,0 +1,19 @@
+﻿{
+  "file": "rpc.rs",
+  "chunk": 2,
+  "summary": "This chunk defines two functions `notif_mesh_topology` and `notif_delivery_status`, which are used to send notifications related to mesh topology updates and delivery status, respectively. The functions take a parameter of type `MeshTopologyUpdateParams` or `DeliveryStatusParams` and return a `JsonRpcNotification`. Additionally, there is a test module `tests` with several test cases for serialization and deserialization of JSON-RPC requests and notifications.",
+  "structs_or_classes": ["MeshTopologyUpdateParams", "DeliveryStatusParams"],
+  "imports": ["serde_json"],
+  "funcs": [
+    {
+      "name": "notif_mesh_topology",
+      "line": 352,
+      "calls_out_to": ["notification"]
+    },
+    {
+      "name": "notif_delivery_status",
+      "line": 360,
+      "calls_out_to": ["notification"]
+    }
+  ]
+}

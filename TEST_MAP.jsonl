@@ -1,0 +1,1107 @@
+﻿{
+  "file_path": "MeshRepository.kt (Chunk 1/28)",
+  "file_type": "kotlin",
+  "overall_purpose": "This class provides a repository for interacting with the Rust core via UniFFI bindings. It manages the lifecycle of the Mesh service, contacts management, message history, connection ledger, network settings, and handles fallback protocols in case of bootstrap failures.",
+  "structs_or_classes": [
+    {
+      "name": "MeshRepository",
+      "line_approx": 48
+    }
+  ],
+  "imports_and_exports": [],
+  "functions": [
+    {
+      "name": "getAvailableStorageMB",
+      "line_approx": 190,
+      "calls_out_to": [],
+      "is_stub_or_incomplete": false
+    },
+    {
+      "name": "checkAndRecordMessage",
+      "line_approx": 204,
+      "calls_out_to": ["mapToSmartTransportType", "smartTransportRouter?.checkAndRecordMessage"],
+      "is_stub_or_incomplete": false
+    },
+    {
+      "name": "enhanceNetworkErrorLogging",
+      "line_approx": 206,
+      "calls_out_to": [],
+      "is_stub_or_incomplete": false
+    },
+    {
+      "name": "trackNetworkFailure",
+      "line_approx": 212,
+      "calls_out_to": ["networkFailureMetrics.recordFailure", "networkFailureMetrics.isNodeUnreachable"],
+      "is_stub_or_incomplete": false
+    },
+    {
+      "name": "triggerFallbackProtocol",
+      "line_approx": 232,
+      "calls_out_to": [],
+      "is_stub_or_incomplete": false
+    }
+  ]
+}
+{
+  "file_path": "MeshRepository.kt (Chunk 2/28)",
+  "file_type": "kotlin",
+  "overall_purpose": "This chunk of code defines a class `MeshRepository` in Kotlin, which manages various aspects of the mesh network service. It includes fields for managing different components such as transport routers, BLE scanners, and identity resolution.",
+  "structs_or_classes": [
+    {
+      "name": "MeshRepository",
+      "line_approx": 301,
+      "calls_out_to": [],
+      "is_stub_or_incomplete": false
+    }
+  ],
+  "imports_and_exports": [],
+  "functions": []
+}
+{
+  "file_path": "MeshRepository.kt (Chunk 3/28)",
+  "file_type": "kotlin",
+  "overall_purpose": "This chunk of code is a Kotlin class named MeshRepository that manages various aspects of the mesh network, including message tracking, data managers, and transport management.",
+  "structs_or_classes": [
+    {
+      "name": "MeshRepository",
+      "line_approx": 601,
+      "calls_out_to": [],
+      "is_stub_or_incomplete": false
+    }
+  ],
+  "imports_and_exports": [],
+  "functions": [
+    {
+      "name": "getMessageIdTracking",
+      "line_approx": 630,
+      "calls_out_to": ["MessageTracking"],
+      "is_stub_or_incomplete": false
+    },
+    {
+      "name": "detectAndRecoverMessageTracking",
+      "line_approx": 645,
+      "calls_out_to": [],
+      "is_stub_or_incomplete": false
+    },
+    {
+      "name": "incrementAttemptCount",
+      "line_approx": 672,
+      "calls_out_to": ["retryLock"],
+      "is_stub_or_incomplete": false
+    },
+    {
+      "name": "getRetryDelay",
+      "line_approx": 681,
+      "calls_out_to": [],
+      "is_stub_or_incomplete": false
+    },
+    {
+      "name": "shouldRetryMessage",
+      "line_approx": 695,
+      "calls_out_to": ["getMessageIdTracking"],
+      "is_stub_or_incomplete": false
+    },
+    {
+      "name": "logMessageDeliveryAttempt",
+      "line_approx": 704,
+      "calls_out_to": [],
+      "is_stub_or_incomplete": false
+    },
+    {
+      "name": "logRetryStormDetection",
+      "line_approx": 710,
+      "calls_out_to": [],
+      "is_stub_or_incomplete": false
+    },
+    {
+      "name": "initializeRepository",
+      "line_approx": 736,
+      "calls_out_to": ["startStorageMaintenance", "meshService"],
+      "is_stub_or_incomplete": false
+    },
+    {
+      "name": "checkReinstallState",
+      "line_approx": 745,
+      "calls_out_to": [],
+      "is_stub_or_incomplete": false
+    },
+    {
+      "name": "initializeManagers",
+      "line_approx": 801,
+      "calls_out_to": ["contactManager", "ledgerManager", "autoAdjustEngine", "transportManager"],
+      "is_stub_or_incomplete": false
+    },
+    {
+      "name": "migrateContactsFromOldLocation",
+      "line_approx": 900,
+      "calls_out_to": [],
+      "is_stub_or_incomplete": false
+    },
+    {
+      "name": "migrateTruncatedPublicKeys",
+      "line_approx": 932,
+      "calls_out_to": [],
+      "is_stub_or_incomplete": false
+    },
+    {
+      "name": "verifyContactDataIntegrity",
+      "line_approx": 960,
+      "calls_out_to": ["contactManager"],
+      "is_stub_or_incomplete": false
+    }
+  ]
+}
+{
+  "file_path": "MeshRepository.kt (Chunk 4/28)",
+  "file_type": "kt",
+  "overall_purpose": "This chunk of code is a Kotlin file named MeshRepository.kt that contains various functions related to mesh service management and migration.",
+  "structs_or_classes": [],
+  "imports_and_exports": [
+    {
+      "imported_package": "uniffi.api",
+      "imported_class": "MeshServiceConfig"
+    },
+    {
+      "imported_package": "com.scmessenger.android.transport",
+      "imported_class": "SmartTransportRouter"
+    }
+  ],
+  "functions": [
+    {
+      "name": "migrateContactsFromOldLocation",
+      "line_approx": 901,
+      "calls_out_to": [],
+      "is_stub_or_incomplete": false
+    },
+    {
+      "name": "migrateStaleRoutingHints",
+      "line_approx": 991,
+      "calls_out_to": [],
+      "is_stub_or_incomplete": false
+    },
+    {
+      "name": "migrateTruncatedPublicKeys",
+      "line_approx": 1044,
+      "calls_out_to": [],
+      "is_stub_or_incomplete": false
+    },
+    {
+      "name": "testLedgerRelayConnectivity",
+      "line_approx": 1109,
+      "calls_out_to": [],
+      "is_stub_or_incomplete": false
+    },
+    {
+      "name": "startMeshService",
+      "line_approx": 1152,
+      "calls_out_to": [
+        "uniffi.api.MeshService.withStorageAndLogs"
+      ],
+      "is_stub_or_incomplete": false
+    }
+  ]
+}
+{
+  "file_path": "MeshRepository.kt (Chunk 5/28)",
+  "file_type": "kotlin",
+  "overall_purpose": "This chunk of code is part of a larger system that manages peer discovery and identity information in a messaging application. It handles events related to peer discovery, including identifying new peers and updating their information.",
+  "structs_or_classes": [],
+  "imports_and_exports": [
+    {
+      "name": "com.scmessenger.android.service.TransportType",
+      "line_approx": 1385
+    },
+    {
+      "name": "PeerDiscoveryInfo",
+      "line_approx": 1402
+    }
+  ],
+  "functions": [
+    {
+      "name": "onPeerDiscovered",
+      "line_approx": 1210,
+      "calls_out_to": [],
+      "is_stub_or_incomplete": false
+    },
+    {
+      "name": "onPeerIdentified",
+      "line_approx": 1398,
+      "calls_out_to": [],
+      "is_stub_or_incomplete": false
+    }
+  ]
+}
+{
+  "file_path": "MeshRepository.kt (Chunk 6/28)",
+  "file_type": "kotlin",
+  "overall_purpose": "This chunk of code is a Kotlin function within the MeshRepository class, responsible for handling incoming messages from peers. It includes methods to process messages, manage peer connections, and update contact information.",
+  "structs_or_classes": [],
+  "imports_and_exports": [
+    {
+      "name": "com.scmessenger.android.service.TransportType",
+      "line_approx": 1549
+    },
+    {
+      "name": "uniffi.api.Contact",
+      "line_approx": 1766
+    }
+  ],
+  "functions": [
+    {
+      "name": "onMessageReceived",
+      "line_approx": 1550,
+      "calls_out_to": [],
+      "is_stub_or_incomplete": false
+    }
+  ]
+}
+{
+  "file_path": "MeshRepository.kt (Chunk 7/28)",
+  "file_type": "kotlin",
+  "overall_purpose": "This chunk of code is a Kotlin function `onMessageReceived` within the `MeshRepository` class, which handles incoming messages from peers in a mesh network. It processes different types of messages such as identity sync, history sync, and message delivery receipts.",
+  "structs_or_classes": [],
+  "imports_and_exports": [
+    {
+      "imported_package": "org.json",
+      "imported_class": "JSONArray"
+    }
+  ],
+  "functions": [
+    {
+      "name": "onMessageReceived",
+      "line_approx": 1802,
+      "calls_out_to": [],
+      "is_stub_or_incomplete": false
+    },
+    {
+      "name": "sendDeliveryReceiptAsync",
+      "line_approx": 2077,
+      "calls_out_to": [
+        {
+          "function_name": "prepareReceipt",
+          "class_name": "ironCore"
+        }
+      ],
+      "is_stub_or_incomplete": false
+    }
+  ]
+}
+{
+  "file_path": "MeshRepository.kt (Chunk 8/28)",
+  "file_type": "kotlin",
+  "overall_purpose": "This chunk of code is a part of the MeshRepository class, which manages the sending and receiving of delivery receipts and history sync messages in an application. It includes functions for sending identity and history sync messages, as well as handling BLE transport.",
+  "structs_or_classes": [],
+  "imports_and_exports": [
+    {
+      "imported_module": "com.scmessenger.android.transport.ble.BleGattClient",
+      "line_approx": 2385
+    },
+    {
+      "imported_module": "com.scmessenger.android.transport.ble.BleScanner",
+      "line_approx": 2400
+    }
+  ],
+  "functions": [
+    {
+      "name": "sendIdentitySyncIfNeeded",
+      "line_approx": 2185,
+      "calls_out_to": [],
+      "is_stub_or_incomplete": false
+    },
+    {
+      "name": "sendHistorySyncIfNeeded",
+      "line_approx": 2247,
+      "calls_out_to": [],
+      "is_stub_or_incomplete": false
+    },
+    {
+      "name": "sendHistorySyncDataIfNeeded",
+      "line_approx": 2309,
+      "calls_out_to": [],
+      "is_stub_or_incomplete": false
+    }
+  ]
+}
+{
+  "file_path": "MeshRepository.kt (Chunk 9/28)",
+  "file_type": "kotlin",
+  "overall_purpose": "This chunk of code is responsible for setting up and managing BLE GATT servers and identity beacons in a mesh network application.",
+  "structs_or_classes": [],
+  "imports_and_exports": [
+    {
+      "imported_package": "com.scmessenger.android.transport.ble.BleAdvertiser",
+      "line_approx": 2418
+    },
+    {
+      "imported_package": "com.scmessenger.android.transport.ble.BleGattServer",
+      "line_approx": 2425
+    }
+  ],
+  "functions": [
+    {
+      "name": "onPeerDiscovered",
+      "line_approx": 2401,
+      "calls_out_to": [],
+      "is_stub_or_incomplete": false
+    },
+    {
+      "name": "onDataReceived",
+      "line_approx": 2408,
+      "calls_out_to": [],
+      "is_stub_or_incomplete": false
+    }
+  ]
+}
+{
+  "file_path": "MeshRepository.kt (Chunk 10/28)",
+  "file_type": "kotlin",
+  "overall_purpose": "This chunk of code is a Kotlin function named `updateDiscoveredPeer` within the `MeshRepository` class. It updates the discovered peer information in the repository based on the provided key and info.",
+  "structs_or_classes": [],
+  "imports_and_exports": [],
+  "functions": [
+    {
+      "name": "updateDiscoveredPeer",
+      "line_approx": 2738,
+      "calls_out_to": [],
+      "is_stub_or_incomplete": false
+    }
+  ]
+}
+{
+  "file_path": "MeshRepository.kt (Chunk 11/28)",
+  "file_type": "kotlin",
+  "overall_purpose": "This chunk contains the implementation of various methods related to managing and interacting with a mesh service in an Android application. It includes functions for caching identity fields, reading cached identity fields, setting platform bridges, stopping and resuming the mesh service, handling network events, updating service stats, and more.",
+  "structs_or_classes": [],
+  "imports_and_exports": [
+    {
+      "module_name": "uniffi.api",
+      "type": "import"
+    },
+    {
+      "module_name": "com.scmessenger.android.service",
+      "type": "import"
+    }
+  ],
+  "functions": [
+    {
+      "name": "readCachedIdentityFields",
+      "line_approx": 3012,
+      "calls_out_to": [],
+      "is_stub_or_incomplete": false
+    },
+    {
+      "name": "setPlatformBridge",
+      "line_approx": 3032,
+      "calls_out_to": ["com.scmessenger.android.service.AndroidPlatformBridge"],
+      "is_stub_or_incomplete": false
+    },
+    {
+      "name": "stopMeshService",
+      "line_approx": 3104,
+      "calls_out_to": [],
+      "is_stub_or_incomplete": false
+    },
+    {
+      "name": "pauseMeshService",
+      "line_approx": 3114,
+      "calls_out_to": [],
+      "is_stub_or_incomplete": false
+    },
+    {
+      "name": "resumeMeshService",
+      "line_approx": 3124,
+      "calls_out_to": [],
+      "is_stub_or_incomplete": false
+    },
+    {
+      "name": "resetServiceStats",
+      "line_approx": 3130,
+      "calls_out_to": [],
+      "is_stub_or_incomplete": false
+    },
+    {
+      "name": "notifyNetworkRecovered",
+      "line_approx": 3142,
+      "calls_out_to": [],
+      "is_stub_or_incomplete": false
+    },
+    {
+      "name": "getServiceState",
+      "line_approx": 3152,
+      "calls_out_to": [],
+      "is_stub_or_incomplete": false
+    },
+    {
+      "name": "updateStats",
+      "line_approx": 3160,
+      "calls_out_to": [],
+      "is_stub_or_incomplete": false
+    },
+    {
+      "name": "startPeriodicStatsUpdate",
+      "line_approx": 3203,
+      "calls_out_to": [],
+      "is_stub_or_incomplete": false
+    },
+    {
+      "name": "canonicalContactId",
+      "line_approx": 3261,
+      "calls_out_to": ["com.scmessenger.android.service.PeerIdValidator"],
+      "is_stub_or_incomplete": false
+    }
+  ]
+}
+{
+  "file_path": "MeshRepository.kt (Chunk 12/28)",
+  "file_type": "kotlin",
+  "overall_purpose": "This chunk contains the implementation of a `MeshRepository` class in Kotlin, which manages contact operations such as adding, removing, and listing contacts.",
+  "structs_or_classes": [
+    {
+      "name": "ContactManager",
+      "line_approx": 309,
+      "calls_out_to": [],
+      "is_stub_or_incomplete": false
+    },
+    {
+      "name": "HistoryManager",
+      "line_approx": 342,
+      "calls_out_to": [],
+      "is_stub_or_incomplete": false
+    }
+  ],
+  "imports_and_exports": [
+    {
+      "imported_module": "uniffi.api.Contact",
+      "line_approx": 308
+    },
+    {
+      "exported_module": "ironCore",
+      "line_approx": 342
+    }
+  ],
+  "functions": [
+    {
+      "name": "canonicalId",
+      "line_approx": 3301,
+      "calls_out_to": [],
+      "is_stub_or_incomplete": false
+    },
+    {
+      "name": "addContact",
+      "line_approx": 3308,
+      "calls_out_to": [
+        "contactManager"
+      ],
+      "is_stub_or_incomplete": false
+    },
+    {
+      "name": "getContact",
+      "line_approx": 3352,
+      "calls_out_to": [
+        "contactManager"
+      ],
+      "is_stub_or_incomplete": false
+    },
+    {
+      "name": "hasConversationWith",
+      "line_approx": 3356,
+      "calls_out_to": [],
+      "is_stub_or_incomplete": false
+    },
+    {
+      "name": "removeContact",
+      "line_approx": 3370,
+      "calls_out_to": [
+        "contactManager"
+      ],
+      "is_stub_or_incomplete": false
+    },
+    {
+      "name": "listContacts",
+      "line_approx": 3401,
+      "calls_out_to": [],
+      "is_stub_or_incomplete": false
+    },
+    {
+      "name": "searchContacts",
+      "line_approx": 3405,
+      "calls_out_to": [],
+      "is_stub_or_incomplete": false
+    },
+    {
+      "name": "setContactNickname",
+      "line_approx": 3412,
+      "calls_out_to": [
+        "contactManager"
+      ],
+      "is_stub_or_incomplete": false
+    },
+    {
+      "name": "getContactCount",
+      "line_approx": 3414,
+      "calls_out_to": [],
+      "is_stub_or_incomplete": false
+    },
+    {
+      "name": "blockPeer",
+      "line_approx": 3422,
+      "calls_out_to": [
+        "ironCore"
+      ],
+      "is_stub_or_incomplete": false
+    },
+    {
+      "name": "unblockPeer",
+      "line_approx": 3430,
+      "calls_out_to": [
+        "ironCore"
+      ],
+      "is_stub_or_incomplete": false
+    },
+    {
+      "name": "blockAndDeletePeer",
+      "line_approx": 3445,
+      "calls_out_to": [
+        "ironCore"
+      ],
+      "is_stub_or_incomplete": false
+    },
+    {
+      "name": "isBlocked",
+      "line_approx": 3456,
+      "calls_out_to": [
+        "ironCore"
+      ],
+      "is_stub_or_incomplete": false
+    },
+    {
+      "name": "listBlockedPeers",
+      "line_approx": 3466,
+      "calls_out_to": [],
+      "is_stub_or_incomplete": false
+    },
+    {
+      "name": "getBlockedCount",
+      "line_approx": 3476,
+      "calls_out_to": [],
+      "is_stub_or_incomplete": false
+    },
+    {
+      "name": "signData",
+      "line_approx": 3489,
+      "calls_out_to": [
+        "ironCore"
+      ],
+      "is_stub_or_incomplete": false
+    },
+    {
+      "name": "verifySignature",
+      "line_approx": 3502,
+      "calls_out_to": [
+        "ironCore"
+      ],
+      "is_stub_or_incomplete": false
+    },
+    {
+      "name": "getDeviceId",
+      "line_approx": 3514,
+      "calls_out_to": [],
+      "is_stub_or_incomplete": false
+    },
+    {
+      "name": "getSeniorityTimestamp",
+      "line_approx": 3518,
+      "calls_out_to": [],
+      "is_stub_or_incomplete": false
+    },
+    {
+      "name": "getRegistrationState",
+      "line_approx": 3522,
+      "calls_out_to": [
+        "ironCore"
+      ],
+      "is_stub_or_incomplete": false
+    },
+    {
+      "name": "exportLogs",
+      "line_approx": 3530,
+      "calls_out_to": [],
+      "is_stub_or_incomplete": false
+    },
+    {
+      "name": "getInboxCount",
+      "line_approx": 3542,
+      "calls_out_to": [],
+      "is_stub_or_incomplete": false
+    },
+    {
+      "name": "updateContactDeviceId",
+      "line_approx": 3550,
+      "calls_out_to": [
+        "contactManager"
+      ],
+      "is_stub_or_incomplete": false
+    },
+    {
+      "name": "getIdentityInfoNonBlocking",
+      "line_approx": 3568,
+      "calls_out_to": [],
+      "is_stub_or_incomplete": false
+    }
+  ]
+}
+{
+  "file_path": "MeshRepository.kt (Chunk 13/28)",
+  "file_type": "kotlin",
+  "overall_purpose": "This chunk contains the implementation of methods related to sending messages in a chat application.",
+  "structs_or_classes": [],
+  "imports_and_exports": [
+    {
+      "name": "PeerIdValidator",
+      "line_approx": 3680
+    },
+    {
+      "name": "ContactManager",
+      "line_approx": 3691
+    },
+    {
+      "name": "HistoryManager",
+      "line_approx": 3772
+    },
+    {
+      "name": "SettingsManager",
+      "line_approx": 3885
+    }
+  ],
+  "functions": [
+    {
+      "name": "getIdentityInfo",
+      "line_approx": 3601,
+      "calls_out_to": [],
+      "is_stub_or_incomplete": false
+    },
+    {
+      "name": "setNickname",
+      "line_approx": 3615,
+      "calls_out_to": [
+        {
+          "function_name": "resolveIdentity",
+          "line_approx": 3685
+        }
+      ],
+      "is_stub_or_incomplete": false
+    },
+    {
+      "name": "setLocalNickname",
+      "line_approx": 3660,
+      "calls_out_to": [
+        {
+          "function_name": "setLocalNickname",
+          "line_approx": 3661
+        }
+      ],
+      "is_stub_or_incomplete": false
+    },
+    {
+      "name": "sendMessage",
+      "line_approx": 3678,
+      "calls_out_to": [
+        {
+          "function_name": "resolveIdentity",
+          "line_approx": 3685
+        }
+      ],
+      "is_stub_or_incomplete": false
+    }
+  ]
+}
+{
+  "file_path": "MeshRepository.kt (Chunk 14/28)",
+  "file_type": "kotlin",
+  "overall_purpose": "This chunk contains methods related to managing and interacting with a mesh network, including sending messages, dialing peers, and identity management.",
+  "structs_or_classes": [],
+  "imports_and_exports": [
+    {
+      "imported_package": "uniffi.api",
+      "imported_class": "MeshSettings"
+    },
+    {
+      "imported_package": "uniffi.api",
+      "imported_class": "MeshServiceConfig"
+    }
+  ],
+  "functions": [
+    {
+      "name": "sendEncryptedMessage",
+      "line_approx": 3901,
+      "calls_out_to": [],
+      "is_stub_or_incomplete": false
+    },
+    {
+      "name": "dial",
+      "line_approx": 3974,
+      "calls_out_to": [],
+      "is_stub_or_incomplete": false
+    },
+    {
+      "name": "dialPeer",
+      "line_approx": 3985,
+      "calls_out_to": [],
+      "is_stub_or_incomplete": false
+    },
+    {
+      "name": "isIdentityInitialized",
+      "line_approx": 4016,
+      "calls_out_to": [],
+      "is_stub_or_incomplete": false
+    },
+    {
+      "name": "grantConsent",
+      "line_approx": 4045,
+      "calls_out_to": [],
+      "is_stub_or_incomplete": false
+    },
+    {
+      "name": "hasRequiredRuntimePermissions",
+      "line_approx": 4055,
+      "calls_out_to": [],
+      "is_stub_or_incomplete": false
+    },
+    {
+      "name": "onRuntimePermissionsGranted",
+      "line_approx": 4062,
+      "calls_out_to": [],
+      "is_stub_or_incomplete": false
+    },
+    {
+      "name": "createIdentity",
+      "line_approx": 4111,
+      "calls_out_to": [],
+      "is_stub_or_incomplete": false
+    }
+  ]
+}
+{
+  "file_path": "MeshRepository.kt (Chunk 15/28)",
+  "file_type": "kotlin",
+  "overall_purpose": "This chunk contains the implementation of a `MeshRepository` class in Kotlin, which manages various aspects of a mesh network service. It includes methods for ensuring the service is initialized, handling permissions, managing history records, and interacting with the ledger.",
+  "structs_or_classes": [
+    {
+      "name": "MeshService",
+      "line_approx": 4203,
+      "calls_out_to": [],
+      "is_stub_or_incomplete": false
+    },
+    {
+      "name": "HistoryManager",
+      "line_approx": 4231,
+      "calls_out_to": [],
+      "is_stub_or_incomplete": false
+    },
+    {
+      "name": "ContactManager",
+      "line_approx": 4264,
+      "calls_out_to": [],
+      "is_stub_or_incomplete": false
+    },
+    {
+      "name": "LedgerManager",
+      "line_approx": 4365,
+      "calls_out_to": [],
+      "is_stub_or_incomplete": false
+    },
+    {
+      "name": "SettingsManager",
+      "line_approx": 4398,
+      "calls_out_to": [],
+      "is_stub_or_incomplete": false
+    },
+    {
+      "name": "AutoAdjustEngine",
+      "line_approx": 4421,
+      "calls_out_to": [],
+      "is_stub_or_incomplete": false
+    }
+  ],
+  "imports_and_exports": [
+    {
+      "imported_package": "uniffi.api",
+      "line_approx": 4201,
+      "calls_out_to": []
+    },
+    {
+      "exported_package": "com.scmessenger.android.service",
+      "line_approx": 4485,
+      "calls_out_to": []
+    }
+  ],
+  "functions": [
+    {
+      "name": "ensureServiceInitialized",
+      "line_approx": 4203,
+      "calls_out_to": [],
+      "is_stub_or_incomplete": false
+    },
+    {
+      "name": "hasAllPermissions",
+      "line_approx": 4226,
+      "calls_out_to": [],
+      "is_stub_or_incomplete": false
+    },
+    {
+      "name": "addMessage",
+      "line_approx": 4232,
+      "calls_out_to": [],
+      "is_stub_or_incomplete": false
+    },
+    {
+      "name": "getMessage",
+      "line_approx": 4237,
+      "calls_out_to": [],
+      "is_stub_or_incomplete": false
+    },
+    {
+      "name": "getRecentMessages",
+      "line_approx": 4241,
+      "calls_out_to": [],
+      "is_stub_or_incomplete": false
+    },
+    {
+      "name": "getConversation",
+      "line_approx": 4246,
+      "calls_out_to": [],
+      "is_stub_or_incomplete": false
+    },
+    {
+      "name": "searchMessages",
+      "line_approx": 4250,
+      "calls_out_to": [],
+      "is_stub_or_incomplete": false
+    },
+    {
+      "name": "markMessageDelivered",
+      "line_approx": 4254,
+      "calls_out_to": [],
+      "is_stub_or_incomplete": false
+    },
+    {
+      "name": "clearHistory",
+      "line_approx": 4258,
+      "calls_out_to": [],
+      "is_stub_or_incomplete": false
+    },
+    {
+      "name": "clearConversation",
+      "line_approx": 4316,
+      "calls_out_to": [],
+      "is_stub_or_incomplete": false
+    },
+    {
+      "name": "getHistoryStats",
+      "line_approx": 4276,
+      "calls_out_to": [],
+      "is_stub_or_incomplete": false
+    },
+    {
+      "name": "getMessageCount",
+      "line_approx": 4280,
+      "calls_out_to": [],
+      "is_stub_or_incomplete": false
+    },
+    {
+      "name": "enforceRetention",
+      "line_approx": 4289,
+      "calls_out_to": [],
+      "is_stub_or_incomplete": false
+    },
+    {
+      "name": "pruneBefore",
+      "line_approx": 4302,
+      "calls_out_to": [],
+      "is_stub_or_incomplete": false
+    },
+    {
+      "name": "resetAllData",
+      "line_approx": 4315,
+      "calls_out_to": [],
+      "is_stub_or_incomplete": false
+    },
+    {
+      "name": "recordConnection",
+      "line_approx": 4367,
+      "calls_out_to": [],
+      "is_stub_or_incomplete": false
+    },
+    {
+      "name": "recordConnectionFailure",
+      "line_approx": 4371,
+      "calls_out_to": [],
+      "is_stub_or_incomplete": false
+    },
+    {
+      "name": "getDialableAddresses",
+      "line_approx": 4375,
+      "calls_out_to": [],
+      "is_stub_or_incomplete": false
+    },
+    {
+      "name": "replayDiscoveredPeerEvents",
+      "line_approx": 4380,
+      "calls_out_to": [],
+      "is_stub_or_incomplete": false
+    },
+    {
+      "name": "getAllKnownTopics",
+      "line_approx": 4457,
+      "calls_out_to": [],
+      "is_stub_or_incomplete": false
+    },
+    {
+      "name": "getLedgerSummary",
+      "line_approx": 4461,
+      "calls_out_to": [],
+      "is_stub_or_incomplete": false
+    },
+    {
+      "name": "getConnectionPathState",
+      "line_approx": 4465,
+      "calls_out_to": [],
+      "is_stub_or_incomplete": false
+    },
+    {
+      "name": "getNatStatus",
+      "line_approx": 4474,
+      "calls_out_to": [],
+      "is_stub_or_incomplete": false
+    },
+    {
+      "name": "getServiceStateName",
+      "line_approx": 4483,
+      "calls_out_to": [],
+      "is_stub_or_incomplete": false
+    },
+    {
+      "name": "getDiscoveredPeerCount",
+      "line_approx": 4487,
+      "calls_out_to": [],
+      "is_stub_or_incomplete": false
+    },
+    {
+      "name": "getPendingOutboxCount",
+      "line_approx": 4491,
+      "calls_out_to": [],
+      "is_stub_or_incomplete": false
+    },
+    {
+      "name": "getPendingDeliverySnapshot",
+      "line_approx": 4495,
+      "calls_out_to": [],
+      "is_stub_or_incomplete": false
+    }
+  ]
+}
+{
+  "file_path": "MeshRepository.kt (Chunk 16/28)",
+  "file_type": "kotlin",
+  "overall_purpose": "This chunk of code is a Kotlin class named MeshRepository that contains various functions related to mesh networking and diagnostics.",
+  "structs_or_classes": [],
+  "imports_and_exports": [
+    {
+      "imported_package": "org.json.JSONObject"
+    },
+    {
+      "exported_function": "exportDiagnosticsAsync",
+      "exported_type": "suspend fun exportDiagnosticsAsync(): String"
+    }
+  ],
+  "functions": [
+    {
+      "name": "loadPendingOutbox",
+      "line_approx": 4502,
+      "calls_out_to": [],
+      "is_stub_or_incomplete": false
+    },
+    {
+      "name": "getMissingRuntimePermissions",
+      "line_approx": 4507,
+      "calls_out_to": [],
+      "is_stub_or_incomplete": false
+    },
+    {
+      "name": "exportDiagnosticsAsync",
+      "line_approx": 4521,
+      "calls_out_to": [
+        "kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO)",
+        "org.json.JSONObject"
+      ],
+      "is_stub_or_incomplete": false
+    },
+    {
+      "name": "exportDiagnostics",
+      "line_approx": 4538,
+      "calls_out_to": [
+        "kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO)",
+        "org.json.JSONObject"
+      ],
+      "is_stub_or_incomplete": false
+    },
+    {
+      "name": "saveLedger",
+      "line_approx": 4617,
+      "calls_out_to": [],
+      "is_stub_or_incomplete": false
+    },
+    {
+      "name": "emitIdentityDiscoveredIfChanged",
+      "line_approx": 4627,
+      "calls_out_to": [
+        "com.scmessenger.android.service.MeshEventBus.emitPeerEvent"
+      ],
+      "is_stub_or_incomplete": false
+    },
+    {
+      "name": "emitConnectedIfChanged",
+      "line_approx": 4678,
+      "calls_out_to": [
+        "com.scmessenger.android.service.MeshEventBus.emitPeerEvent"
+      ],
+      "is_stub_or_incomplete": false
+    },
+    {
+      "name": "emitDisconnectedIfChanged",
+      "line_approx": 4709,
+      "calls_out_to": [
+        "com.scmessenger.android.service.MeshEventBus.emitPeerEvent"
+      ],
+      "is_stub_or_incomplete": false
+    },
+    {
+      "name": "loadSettings",
+      "line_approx": 4721,
+      "calls_out_to": [],
+      "is_stub_or_incomplete": false
+    },
+    {
+      "name": "getDefaultSettings",
+      "line_approx": 4734,
+      "calls_out_to": [],
+      "is_stub_or_incomplete": false
+    },
+    {
+      "name": "saveSettings",
+      "line_approx": 4760,
+      "calls_out_to": [],
+      "is_stub_or_incomplete": false
+    },
+    {
+      "name": "applyTransportSettings",
+      "line_approx": 4768,
+      "calls_out_to": [
+        "transportManager?.enableTransport(TransportType.BLE)",
+        "transportManager?.disableTransport(TransportType.WIFI_AWARE)",
+        "transportManager?.disableTransport(TransportType.WIFI_DIRECT)"
+      ],
+      "is_stub_or_incomplete": false
+    }
+  ]
+}

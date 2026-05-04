@@ -1,0 +1,59 @@
+﻿{
+  "file": "ConversationsViewModelTest.kt",
+  "chunk": 1,
+  "summary": "This test class contains various unit tests for the ConversationsViewModel in the SCMessenger Android application. It sets up a mock MeshRepository and uses coroutines to simulate message updates, conversation clearing, blocking/unblocking peers, and checking if a peer is blocked.",
+  "structs_or_classes": ["ConversationsViewModel", "MeshRepository"],
+  "imports": ["List", "of", "imports", "MessageRecord", "MessageDirection", "HistoryStats", "UUID", "Dispatchers", "ExperimentalCoroutinesApi", "MutableSharedFlow", "MutableStateFlow", "runTest", "clearMocks", "verify"],
+  "funcs": [
+    {
+      "name": "setup",
+      "line": 31,
+      "calls_out_to": ["mockMeshRepository"]
+    },
+    {
+      "name": "tearDown",
+      "line": 48,
+      "calls_out_to": []
+    },
+    {
+      "name": "testViewModelLoadsMessagesOnInitialization",
+      "line": 52,
+      "calls_out_to": ["messageUpdatesFlow", "mockMeshRepository"]
+    },
+    {
+      "name": "testViewModelReloadsMessagesWhenAMessageUpdateIsReceived",
+      "line": 61,
+      "calls_out_to": ["messageUpdatesFlow", "mockMeshRepository"]
+    },
+    {
+      "name": "clearConversationDelegatesToRepositoryAndRefreshesList",
+      "line": 90,
+      "calls_out_to": ["mockMeshRepository"]
+    },
+    {
+      "name": "blockPeerDelegatesToRepository",
+      "line": 106,
+      "calls_out_to": ["mockMeshRepository"]
+    },
+    {
+      "name": "unblockPeerDelegatesToRepository",
+      "line": 112,
+      "calls_out_to": ["mockMeshRepository"]
+    },
+    {
+      "name": "blockAndDeletePeerDelegatesToRepository",
+      "line": 126,
+      "calls_out_to": ["mockMeshRepository"]
+    },
+    {
+      "name": "isBlockedDelegatesToRepositoryAndReturnsCorrectValue",
+      "line": 136,
+      "calls_out_to": ["mockMeshRepository"]
+    },
+    {
+      "name": "isBlockedReturnsFalseOnException",
+      "line": 148,
+      "calls_out_to": ["mockMeshRepository"]
+    }
+  ]
+}

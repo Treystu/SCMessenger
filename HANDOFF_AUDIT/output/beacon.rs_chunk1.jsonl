@@ -1,0 +1,44 @@
+﻿{
+  "file": "beacon.rs",
+  "chunk": 1,
+  "summary": "This module provides BLE beacon construction, parsing, and rotation logic. Beacons are encrypted advertisements that rotate every epoch (default 15 minutes). Only devices with the group key can decrypt and recognize beacons.",
+  "structs_or_classes": ["BleBeacon", "BeaconBuilder", "BeaconParser"],
+  "imports": ["crate::transport::discovery::{decrypt_beacon_with_period, BeaconPayload}", "chacha20poly1305::{Aead, KeyInit, Payload}", "web_time::{SystemTime, UNIX_EPOCH}"],
+  "funcs": [
+    {
+      "name": "BleBeaconBuilder::new",
+      "line": 61,
+      "calls_out_to": ["BeaconBuilder"]
+    },
+    {
+      "name": "BeaconBuilder::with_rotation_period",
+      "line": 70,
+      "calls_out_to": ["BeaconBuilder"]
+    },
+    {
+      "name": "BeaconBuilder::build",
+      "line": 123,
+      "calls_out_to": ["BeaconBuilder"]
+    },
+    {
+      "name": "BeaconParser::new",
+      "line": 140,
+      "calls_out_to": ["BeaconParser"]
+    },
+    {
+      "name": "BeaconParser::with_rotation_period",
+      "line": 150,
+      "calls_out_to": ["BeaconParser"]
+    },
+    {
+      "name": "BeaconParser::parse",
+      "line": 201,
+      "calls_out_to": ["BeaconParser"]
+    },
+    {
+      "name": "BeaconParser::is_fresh",
+      "line": 245,
+      "calls_out_to": ["BeaconParser"]
+    }
+  ]
+}

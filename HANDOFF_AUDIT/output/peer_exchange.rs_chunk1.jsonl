@@ -1,0 +1,79 @@
+﻿{
+  "file": "peer_exchange.rs",
+  "chunk": 1,
+  "summary": "This chunk defines a `PeerExchangeManager` struct that manages a list of known relay peers. It includes methods for adding, retrieving, and updating peer information, as well as methods for exchanging peers with new ones.",
+  "structs_or_classes": ["PeerExchangeManager", "RelayPeerInfo"],
+  "imports": [],
+  "funcs": [
+    {
+      "name": "new",
+      "line": 104,
+      "calls_out_to": []
+    },
+    {
+      "name": "with_config",
+      "line": 112,
+      "calls_out_to": []
+    },
+    {
+      "name": "add_peer",
+      "line": 121,
+      "calls_out_to": ["merge_peer_list", "record_success", "mark_seen"]
+    },
+    {
+      "name": "get_peer",
+      "line": 138,
+      "calls_out_to": []
+    },
+    {
+      "name": "get_all_peers",
+      "line": 143,
+      "calls_out_to": []
+    },
+    {
+      "name": "get_peers_by_reliability",
+      "line": 150,
+      "calls_out_to": ["merge_peer_list", "record_success", "mark_seen"]
+    },
+    {
+      "name": "merge_peer_list",
+      "line": 160,
+      "calls_out_to": []
+    },
+    {
+      "name": "prune_stale",
+      "line": 172,
+      "calls_out_to": ["record_success", "mark_seen"]
+    },
+    {
+      "name": "record_success",
+      "line": 180,
+      "calls_out_to": []
+    },
+    {
+      "name": "record_failure",
+      "line": 185,
+      "calls_out_to": []
+    },
+    {
+      "name": "peer_count",
+      "line": 192,
+      "calls_out_to": []
+    },
+    {
+      "name": "has_peer",
+      "line": 197,
+      "calls_out_to": []
+    },
+    {
+      "name": "clear",
+      "line": 202,
+      "calls_out_to": []
+    },
+    {
+      "name": "exchange_peers",
+      "line": 207,
+      "calls_out_to": ["merge_peer_list", "record_success", "mark_seen"]
+    }
+  ]
+}

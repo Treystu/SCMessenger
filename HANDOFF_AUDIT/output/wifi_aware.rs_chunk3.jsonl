@@ -1,0 +1,24 @@
+﻿{
+  "file": "wifi_aware.rs",
+  "chunk": 3,
+  "summary": "This chunk contains test functions for the `estimate_bandwidth_from_rssi` and `get_discovered_peers` methods in the `WifiAwareTransport` struct. It also includes a configuration validation test.",
+  "structs_or_classes": ["WifiAwareTransport", "DiscoveredPeer"],
+  "imports": [],
+  "funcs": [
+    {
+      "name": "estimate_bandwidth_from_rssi",
+      "line": 701,
+      "calls_out_to": []
+    },
+    {
+      "name": "get_discovered_peers",
+      "line": 734,
+      "calls_out_to": []
+    },
+    {
+      "name": "config_validation",
+      "line": 745,
+      "calls_out_to": []
+    }
+  ]
+}

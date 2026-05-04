@@ -1,0 +1,14 @@
+﻿{
+  "file": "encrypt.rs",
+  "chunk": 3,
+  "summary": "This chunk contains a function `verify_envelope` that verifies an envelope using a sender's key. The function is called after encrypting and signing the message, and it checks if the verification is successful.",
+  "structs_or_classes": [],
+  "imports": ["encrypt_message", "sign_envelope", "verify_envelope"],
+  "funcs": [
+    {
+      "name": "verify_envelope",
+      "line": 704,
+      "calls_out_to": []
+    }
+  ]
+}

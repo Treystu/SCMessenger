@@ -1,0 +1,54 @@
+﻿{
+  "file": "abstraction.rs",
+  "chunk": 2,
+  "summary": "This chunk contains tests for various transport-related functionalities in the codebase. It includes tests for different types of events, commands, and serialization.",
+  "structs_or_classes": ["TransportEvent", "TransportCommand", "TransportError", "TransportType", "TransportCapabilities"],
+  "imports": [],
+  "funcs": [
+    {
+      "name": "test_transport_event_peer_discovered",
+      "line": 362,
+      "calls_out_to": []
+    },
+    {
+      "name": "test_transport_event_data_received",
+      "line": 404,
+      "calls_out_to": []
+    },
+    {
+      "name": "test_transport_command_send_data",
+      "line": 448,
+      "calls_out_to": []
+    },
+    {
+      "name": "test_transport_command_connect",
+      "line": 501,
+      "calls_out_to": []
+    },
+    {
+      "name": "test_transport_command_disconnect",
+      "line": 535,
+      "calls_out_to": []
+    },
+    {
+      "name": "test_serialization_transport_event",
+      "line": 583,
+      "calls_out_to": []
+    },
+    {
+      "name": "test_all_transport_types_distinct",
+      "line": 520,
+      "calls_out_to": []
+    },
+    {
+      "name": "test_transport_capabilities_clone",
+      "line": 527,
+      "calls_out_to": []
+    },
+    {
+      "name": "test_transport_error_clone",
+      "line": 534,
+      "calls_out_to": []
+    }
+  ]
+}

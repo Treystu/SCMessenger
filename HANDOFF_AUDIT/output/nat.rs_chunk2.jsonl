@@ -1,0 +1,69 @@
+﻿{
+  "file": "nat.rs",
+  "chunk": 2,
+  "summary": "The `NatTraversal` struct contains methods for NAT traversal, including peer discovery, detection of NAT type and external address, hole-punching attempts, relay circuit establishment, and cleanup.",
+  "structs_or_classes": ["NatTraversal", "PeerAddressDiscovery", "HolePunchAttempt", "RelayCircuit"],
+  "imports": ["std::sync::Arc", "std::time::SystemTime", "std::time::UNIX_EPOCH", "libp2p::SwarmHandle", "libp2p::identity::PeerId", "libp2p::net::SocketAddr", "libp2p::transport::Transport"],
+  "funcs": [
+    {
+      "name": "new",
+      "line": 601,
+      "calls_out_to": ["NatTraversal"]
+    },
+    {
+      "name": "get_nat_type",
+      "line": 779,
+      "calls_out_to": ["NatTraversal"]
+    },
+    {
+      "name": "get_external_address",
+      "line": 843,
+      "calls_out_to": ["NatTraversal"]
+    },
+    {
+      "name": "start_hole_punch",
+      "line": 1025,
+      "calls_out_to": ["NatTraversal", "send_hole_punch_probes"]
+    },
+    {
+      "name": "send_hole_punch_probes",
+      "line": 1349,
+      "calls_out_to": []
+    },
+    {
+      "name": "get_hole_punch_status",
+      "line": 1527,
+      "calls_out_to": ["NatTraversal"]
+    },
+    {
+      "name": "establish_relay_circuit",
+      "line": 1693,
+      "calls_out_to": ["NatTraversal", "close_relay_circuit"]
+    },
+    {
+      "name": "close_relay_circuit",
+      "line": 1759,
+      "calls_out_to": []
+    },
+    {
+      "name": "get_active_circuits",
+      "line": 1825,
+      "calls_out_to": ["NatTraversal"]
+    },
+    {
+      "name": "get_relay_circuit",
+      "line": 1891,
+      "calls_out_to": []
+    },
+    {
+      "name": "cleanup_old_attempts",
+      "line": 1967,
+      "calls_out_to": ["NatTraversal"]
+    },
+    {
+      "name": "shutdown",
+      "line": 2033,
+      "calls_out_to": ["NatTraversal"]
+    }
+  ]
+}

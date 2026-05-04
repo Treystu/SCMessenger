@@ -1,0 +1,24 @@
+﻿{
+  "file": "swarm.rs",
+  "chunk": 6,
+  "summary": "This chunk of code is part of a Swarm struct in the `sc-mesh` crate. It handles various aspects of the mesh network, including message processing, retry logic, and periodic tasks.",
+  "structs_or_classes": ["Swarm", "PendingMessage", "DeliveryAttempt", "MultiPathDelivery", "RelayPeerAddrs", "BootstrapAddrs"],
+  "imports": ["libp2p::multiaddr::Protocol", "std::collections::HashSet", "std::time::Duration", "web_time::SystemTime", "bincode::serialize", "crate::privacy::cover::CoverConfig", "crate::relay::protocol::RelayMessage", "crate::request_response::Event", "crate::request_response::MessageResponse", "crate::request_response::DriftFrameType"],
+  "funcs": [
+    {
+      "name": "process_pending_messages",
+      "line": 1752,
+      "calls_out_to": ["pending_messages.iter()", "multi_path_delivery.delivery_attempt(msg_id)", "attempt.should_retry()", "calculate_next_attempt", "dispatch_ranked_route"]
+    },
+    {
+      "name": "handle_relay_peer_discovery",
+      "line": 2016,
+      "calls_out_to": ["swarm.dial(addr.clone())", "swarm.behaviour_mut().messaging.send_response(channel, MessageResponse { accepted: true, error: None })"]
+    },
+    {
+      "name": "handle_drift_frame_type",
+      "line": 2057,
+      "calls_out_to": ["get_drift_frame_type(&request.envelope_data)"]
+    }
+  ]
+}

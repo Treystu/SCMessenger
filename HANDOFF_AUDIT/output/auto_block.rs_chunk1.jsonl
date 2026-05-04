@@ -1,0 +1,19 @@
+﻿{
+  "file": "auto_block.rs",
+  "chunk": 1,
+  "summary": "This Rust module implements an automatic blocking system based on reputation thresholds. It includes functions to evaluate peers, block them if criteria are met, and manage the audit log.",
+  "structs_or_classes": ["AutoBlockConfig", "AutoBlockReason", "AutoBlockAuditEntry", "AutoBlockResult", "AutoBlockEngine"],
+  "imports": ["std::sync::Arc", "parking_lot::RwLock", "serde::{Deserialize, Serialize}", "crate::abuse::reputation::EnhancedAbuseReputationManager", "crate::store::blocked::BlockedManager", "crate::transport::reputation::ReputationScore"],
+  "funcs": [
+    {
+      "name": "evaluate",
+      "line": 109,
+      "calls_out_to": ["evaluate_and_block"]
+    },
+    {
+      "name": "evaluate_and_block",
+      "line": 234,
+      "calls_out_to": ["exempt_peer", "unexempt_peer", "is_exempt", "audit_log", "update_config", "config"]
+    }
+  ]
+}

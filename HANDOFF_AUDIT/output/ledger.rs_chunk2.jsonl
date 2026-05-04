@@ -1,0 +1,14 @@
+﻿{
+  "file": "ledger.rs",
+  "chunk": 2,
+  "summary": "This chunk contains the implementation of the `merge_peers` method in the `ConnectionLedger` struct, which merges new peers from a ledger exchange into the existing entries. It includes methods for stripping peer IDs and extracting IP:Port from multiaddr strings, as well as tests to verify the functionality.",
+  "structs_or_classes": ["ConnectionLedger", "LedgerEntry"],
+  "imports": ["std::collections::HashMap", "std::net::SocketAddr", "std::time::Duration"],
+  "funcs": [
+    {
+      "name": "merge_peers",
+      "line": 351,
+      "calls_out_to": ["self.entries.insert(stripped, new_entry);"]
+    }
+  ]
+}

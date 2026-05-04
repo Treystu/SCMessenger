@@ -1,0 +1,44 @@
+﻿{
+  "file": "transport.rs",
+  "chunk": 2,
+  "summary": "This chunk contains the implementation of a `WebTransportManager` struct and its associated methods. It includes tests for various functionalities such as adding channels, updating channel states, managing pending outgoing queues, queueing large messages, removing channels, handling connection state transitions, and persisting relays.",
+  "structs_or_classes": ["WebTransportManager", "WebTransportConfig"],
+  "imports": [],
+  "funcs": [
+    {
+      "name": "add_channel",
+      "line": 351,
+      "calls_out_to": []
+    },
+    {
+      "name": "update_channel_state",
+      "line": 372,
+      "calls_out_to": ["manager"]
+    },
+    {
+      "name": "pending_outgoing",
+      "line": 398,
+      "calls_out_to": ["manager"]
+    },
+    {
+      "name": "queue_outgoing",
+      "line": 413,
+      "calls_out_to": ["manager", "url"]
+    },
+    {
+      "name": "remove_channel",
+      "line": 429,
+      "calls_out_to": ["manager"]
+    },
+    {
+      "name": "connection_state_transitions",
+      "line": 435,
+      "calls_out_to": []
+    },
+    {
+      "name": "relay_persistence",
+      "line": 454,
+      "calls_out_to": ["manager", "url"]
+    }
+  ]
+}

@@ -311,6 +311,45 @@ for a in cfg.get('agents', []):
 
     local agent_id="${agent_name}_$(date +%s)"
 
+    # === NEW: REPO_MAP Freshness Gate ===
+    if [ -n "$task_file" ] && [ -f "$task_file" ]; then
+        echo "Running REPO_MAP Freshness Gate..."
+        local freshness_result
+        freshness_result=$($PYTHON .claude/scripts/freshness_gate.py --task-file "$task_file" 2>&1)
+        local freshness_exit=$?
+        
+        if [ $freshness_exit -eq 2 ]; then
+            # STALE files detected — trigger targeted re-index
+            local stale_files=$($PYTHON -c "
+import json, sys
+try:
+    result = json.loads(sys.argv[1])
+    stale = [f.get('path', '') for f in result.get('stale_files', [])]
+    missing = result.get('missing_files', [])
+    print(','.join(stale + missing))
+except Exception as e:
+    pass
+" "$freshness_result")
+            
+            if [ -n "$stale_files" ]; then
+                echo "FRESHNESS GATE: Stale files detected. Triggering targeted re-index..."
+                echo "Files: $stale_files"
+                
+                powershell.exe -NoProfile -ExecutionPolicy Bypass \
+                    -File ".claude/scripts/targeted_reindex.ps1" \
+                    -Files "$stale_files"
+                
+                if [ $? -ne 0 ]; then
+                    echo "WARNING: Targeted re-index failed. Launching agent without fresh context."
+                fi
+            fi
+        fi
+        
+        # Inject context for all FRESH files
+        echo "Injecting REPO_MAP context into task..."
+        $PYTHON .claude/scripts/context_extractor.py --task-file "$task_file"
+    fi
+
     if [ "$launch_type" = "native" ]; then
         # Native agent: validate model before creating marker
         echo "Validating model $model before launch..."

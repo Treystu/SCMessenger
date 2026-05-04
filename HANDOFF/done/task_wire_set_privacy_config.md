@@ -32,3 +32,8 @@ STATUS: SUCCESS_STOP
    - Exposed `setPrivacyConfig` in `wasm/src/lib.rs`.
    - Accepts a JS object and bridges it to the core's JSON-based update path.
 4. **Verification**: Confirmed that updating settings via the CLI results in immediate state changes in the core, verified by the `get_privacy_config` path.
+
+
+--- CLOSEOUT EVIDENCE ---
+VERIFIED WIRED: Called at cli/src/main.rs:1011; wasm/src/lib.rs:910. Production call path confirmed.
+Verified by: orchestrator-TRP-2026-05-03

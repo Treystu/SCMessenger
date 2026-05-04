@@ -1,0 +1,14 @@
+﻿{
+  "file": "bootstrap.rs",
+  "chunk": 3,
+  "summary": "This chunk contains a test function that checks if the list of addresses contains any addresses on the standard HTTPS port (port 443). The function iterates over each address in the list and uses the `to_string()` method to convert it into a string. It then checks if this string contains the substring '443'. If any address matches this condition, the test passes; otherwise, it fails.",
+  "structs_or_classes": [],
+  "imports": ["List", "of", "imports"],
+  "funcs": [
+    {
+      "name": "check_https_addresses",
+      "line": 701,
+      "calls_out_to": []
+    }
+  ]
+}

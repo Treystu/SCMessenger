@@ -1,0 +1,19 @@
+﻿{
+  "file": "DashboardScreen.kt",
+  "chunk": 2,
+  "summary": "This chunk contains the implementation of a dashboard screen in a Kotlin Android application. It includes a `Row` with transport items for different network protocols, such as BLE, WiFi Aware, WiFi Direct, and Internet Relay. Each transport item displays an icon, name, and a boolean indicating whether it is enabled or not. The `TransportItem` composable function handles the layout of these elements.",
+  "structs_or_classes": ["Row", "Column", "Card", "Icon", "Text", "Button"],
+  "imports": [],
+  "funcs": [
+    {
+      "name": "DashboardToPeerListNavigation",
+      "line": 410,
+      "calls_out_to": ["onNavigateToPeerList"]
+    },
+    {
+      "name": "DashboardToTopologyNavigation",
+      "line": 440,
+      "calls_out_to": ["onNavigateToTopology"]
+    }
+  ]
+}

@@ -1,0 +1,74 @@
+﻿{
+  "file": "inbox.rs",
+  "chunk": 1,
+  "summary": "This chunk defines the Inbox struct, which manages a collection of received messages. It includes methods for receiving new messages, checking for duplicates, and retrieving messages by sender.",
+  "structs_or_classes": ["Inbox", "ReceivedMessage"],
+  "imports": ["std::collections::{HashSet, HashMap}", "std::sync::Arc", "serde::{Deserialize, Serialize}"],
+  "funcs": [
+    {
+      "name": "new",
+      "line": 51,
+      "calls_out_to": []
+    },
+    {
+      "name": "persistent_with_storage",
+      "line": 64,
+      "calls_out_to": ["Arc<dyn StorageBackend>"]
+    },
+    {
+      "name": "persistent",
+      "line": 70,
+      "calls_out_to": ["Arc<dyn StorageBackend>"]
+    },
+    {
+      "name": "trigger_maintenance",
+      "line": 82,
+      "calls_out_to": []
+    },
+    {
+      "name": "is_duplicate",
+      "line": 91,
+      "calls_out_to": []
+    },
+    {
+      "name": "receive",
+      "line": 106,
+      "calls_out_to": ["Arc<dyn StorageBackend>"]
+    },
+    {
+      "name": "messages_from",
+      "line": 201,
+      "calls_out_to": []
+    },
+    {
+      "name": "all_messages",
+      "line": 220,
+      "calls_out_to": []
+    },
+    {
+      "name": "total_count",
+      "line": 240,
+      "calls_out_to": []
+    },
+    {
+      "name": "sender_count",
+      "line": 251,
+      "calls_out_to": []
+    },
+    {
+      "name": "get_inbox_count",
+      "line": 267,
+      "calls_out_to": []
+    },
+    {
+      "name": "drain_received_messages",
+      "line": 274,
+      "calls_out_to": ["Arc<dyn StorageBackend>"]
+    },
+    {
+      "name": "clear_messages",
+      "line": 301,
+      "calls_out_to": ["Arc<dyn StorageBackend>"]
+    }
+  ]
+}

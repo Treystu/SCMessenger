@@ -1,0 +1,14 @@
+﻿{
+  "file": "smart_retry.rs",
+  "chunk": 1,
+  "summary": "This module provides functionality for calculating retry delays using exponential backoff strategies and defining triggers for message delivery.",
+  "structs_or_classes": ["BackoffStrategy", "DeliveryTrigger"],
+  "imports": [],
+  "funcs": [
+    {
+      "name": "calculate_next_attempt",
+      "line": 20,
+      "calls_out_to": []
+    }
+  ]
+}

@@ -1,0 +1,34 @@
+﻿{
+  "file": "mesh.rs",
+  "chunk": 2,
+  "summary": "This chunk contains test functions for the WasmMeshNode struct in the mesh.rs file. It includes tests for various functionalities such as state transitions, message handling, relay configuration, and identity management.",
+  "structs_or_classes": ["WasmMeshNode", "WasmMeshConfig"],
+  "imports": [],
+  "funcs": [
+    {
+      "name": "test_state_transitions",
+      "line": 354,
+      "calls_out_to": []
+    },
+    {
+      "name": "test_relay_relay_disabled",
+      "line": 391,
+      "calls_out_to": []
+    },
+    {
+      "name": "test_duplicate_message_not_counted",
+      "line": 405,
+      "calls_out_to": []
+    },
+    {
+      "name": "test_relay_configuration",
+      "line": 412,
+      "calls_out_to": []
+    },
+    {
+      "name": "test_identity_management",
+      "line": 427,
+      "calls_out_to": []
+    }
+  ]
+}

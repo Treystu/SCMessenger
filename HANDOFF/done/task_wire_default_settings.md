@@ -51,3 +51,8 @@ STATUS: SUCCESS_STOP
        // ...
    }
    ```
+
+
+--- CLOSEOUT EVIDENCE ---
+VERIFIED WIRED: Called at core/src/mobile_bridge.rs:2823. Production call path confirmed.
+Verified by: orchestrator-TRP-2026-05-03

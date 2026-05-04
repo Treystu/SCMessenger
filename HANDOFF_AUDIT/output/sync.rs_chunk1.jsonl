@@ -1,0 +1,54 @@
+﻿{
+  "file": "sync.rs",
+  "chunk": 1,
+  "summary": "This chunk defines the `SyncSession` struct, which manages a synchronization session between two peers. It includes methods for initiating, responding to, and completing the sync process.",
+  "structs_or_classes": ["SyncSession"],
+  "imports": [],
+  "funcs": [
+    {
+      "name": "new",
+      "line": 94,
+      "calls_out_to": []
+    },
+    {
+      "name": "state",
+      "line": 105,
+      "calls_out_to": []
+    },
+    {
+      "name": "peer_missing_ids",
+      "line": 110,
+      "calls_out_to": []
+    },
+    {
+      "name": "our_missing_ids",
+      "line": 113,
+      "calls_out_to": []
+    },
+    {
+      "name": "initiate",
+      "line": 120,
+      "calls_out_to": ["MeshStore"]
+    },
+    {
+      "name": "respond",
+      "line": 154,
+      "calls_out_to": ["MeshStore", "IBLT"]
+    },
+    {
+      "name": "complete",
+      "line": 230,
+      "calls_out_to": ["MeshStore", "IBLT"]
+    },
+    {
+      "name": "default",
+      "line": 304,
+      "calls_out_to": []
+    },
+    {
+      "name": "merge_envelopes",
+      "line": 310,
+      "calls_out_to": ["MeshStore"]
+    }
+  ]
+}

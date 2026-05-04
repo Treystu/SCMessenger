@@ -64,5 +64,17 @@
       "health_check_interval": 30,
       "authentication_required": true
     }
+  },
+  "repo_map": {
+    "enabled": true,
+    "index_path": "HANDOFF_AUDIT/repo_map_index.json",
+    "data_path": "HANDOFF_AUDIT/REPO_MAP.jsonl",
+    "output_dir": "HANDOFF_AUDIT/output",
+    "context_cache_dir": "HANDOFF_AUDIT/.context_cache",
+    "staleness_threshold_hours": 0,
+    "auto_reindex_on_stale": true,
+    "reindex_model": "qwen2.5-coder:3b",
+    "reindex_port": 11470,
+    "max_context_lines": 500
   }
 }

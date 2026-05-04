@@ -30,3 +30,8 @@ STATUS: SUCCESS_STOP
 2. **Platform Exposure**:
    - Verified that the method is exported via UniFFI and WasmBindgen for mobile and web consumption.
 3. **Verification**: Confirmed that the CLI accurately reports audit event counts and time ranges using this method.
+
+
+--- CLOSEOUT EVIDENCE ---
+VERIFIED WIRED: Called at cli/src/main.rs:3075; wasm/src/lib.rs:882. Production call path confirmed.
+Verified by: orchestrator-TRP-2026-05-03

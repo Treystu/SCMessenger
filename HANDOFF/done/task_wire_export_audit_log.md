@@ -32,3 +32,8 @@ STATUS: SUCCESS_STOP
    - Implemented `scm audit verify` to trigger cryptographic chain validation.
    - Implemented `scm audit stats` to show log coverage.
 3. **Verification**: Confirmed that the audit log can be successfully exported through the CLI and that maintenance cycles ensure its persistence.
+
+
+--- CLOSEOUT EVIDENCE ---
+VERIFIED WIRED: Called at cli/src/main.rs:3061. Production call path confirmed.
+Verified by: orchestrator-TRP-2026-05-03

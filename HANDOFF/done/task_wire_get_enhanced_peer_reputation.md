@@ -30,3 +30,8 @@ STATUS: SUCCESS_STOP
    - Returns a serialized JS tuple/array for easy consumption by security dashboards.
 3. **CLI Integration**: Scores are now surfaced in the detailed peer list of `scm status`.
 4. **Verification**: Confirmed that enhanced reputation data flows correctly from the core to the peripheral bridges.
+
+
+--- CLOSEOUT EVIDENCE ---
+VERIFIED WIRED: Called at wasm/src/lib.rs:893. Production call path confirmed.
+Verified by: orchestrator-TRP-2026-05-03

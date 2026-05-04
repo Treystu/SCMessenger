@@ -1,0 +1,14 @@
+﻿{
+  "file": "mesh_routing.rs",
+  "chunk": 1,
+  "summary": "This chunk is a Rust file named `mesh_routing.rs` that implements the sovereign mesh routing system. It includes structs, imports, and functions related to relay capabilities, reputation tracking, and continuous retry logic.",
+  "structs_or_classes": ["RankedRoute", "RouteCursorAdvance", "RelayStats", "RelayReputation", "ReputationTracker", "RetryStrategy", "DeliveryAttempt"],
+  "imports": ["libp2p::PeerId", "serde::{Deserialize, Serialize}", "std::collections::HashMap", "web_time::{Duration, SystemTime, UNIX_EPOCH}"],
+  "funcs": [
+    {
+      "name": "unix_now_secs",
+      "line": 70,
+      "calls_out_to": []
+    }
+  ]
+}

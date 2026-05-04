@@ -1,0 +1,78 @@
+﻿{
+  "file": "reputation.rs",
+  "chunk": 1,
+  "summary": "Enhanced abuse reputation manager with spam detection integration.",
+  "structs_or_classes": ["EnhancedAbuseReputationManager", "EnhancedReputationScore"],
+  "imports": [
+    "crate::abuse::spam_detection::{SpamDetectionEngine, SpamSignal}",
+    "crate::transport::reputation::{AbuseReputationManager, AbuseSignal, ReputationScore}",
+    "std::sync::Arc"
+  ],
+  "funcs": [
+    {
+      "name": "new",
+      "line": 21,
+      "calls_out_to": ["EnhancedAbuseReputationManager"]
+    },
+    {
+      "name": "with_backend",
+      "line": 30,
+      "calls_out_to": ["EnhancedAbuseReputationManager"]
+    },
+    {
+      "name": "apply_decay",
+      "line": 41,
+      "calls_out_to": ["AbuseReputationManager"]
+    },
+    {
+      "name": "flush_to_storage",
+      "line": 46,
+      "calls_out_to": ["AbuseReputationManager"]
+    },
+    {
+      "name": "record_signal",
+      "line": 51,
+      "calls_out_to": ["AbuseReputationManager", "SpamDetectionEngine"]
+    },
+    {
+      "name": "record_spam_signal",
+      "line": 71,
+      "calls_out_to": ["SpamDetectionEngine"]
+    },
+    {
+      "name": "record_outbound_message",
+      "line": 99,
+      "calls_out_to": ["SpamDetectionEngine"]
+    },
+    {
+      "name": "get_enhanced_score",
+      "line": 112,
+      "calls_out_to": ["AbuseReputationManager", "SpamDetectionEngine"]
+    },
+    {
+      "name": "get_score",
+      "line": 124,
+      "calls_out_to": ["AbuseReputationManager"]
+    },
+    {
+      "name": "rate_limit_multiplier",
+      "line": 130,
+      "calls_out_to": ["AbuseReputationManager"]
+    },
+    {
+      "name": "all_enhanced_scores",
+      "line": 135,
+      "calls_out_to": ["AbuseReputationManager", "SpamDetectionEngine"]
+    },
+    {
+      "name": "spam_detector",
+      "line": 152,
+      "calls_out_to": ["EnhancedAbuseReputationManager"]
+    },
+    {
+      "name": "base_manager",
+      "line": 158,
+      "calls_out_to": ["EnhancedAbuseReputationManager"]
+    }
+  ]
+}

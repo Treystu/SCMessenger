@@ -1,0 +1,19 @@
+﻿{
+  "file": "swarm.rs",
+  "chunk": 13,
+  "summary": "This chunk of code is part of a Rust function that handles various events in a Swarm, including handling incoming and outgoing connections, processing messages, and managing relay requests. It includes logic for identifying peers, handling gossipsub events, and managing the delivery convergence marker.",
+  "structs_or_classes": ["Swarm", "ConnectionTracker", "PendingCustodyDispatch", "RelayCustodyStore"],
+  "imports": [
+    "libp2p::core::{ConnectedPoint, Listener, Dialer}",
+    "libp2p::identify",
+    "libp2p::gossipsub",
+    "request_response"
+  ],
+  "funcs": [
+    {
+      "name": "handle_events",
+      "line": 4201,
+      "calls_out_to": ["Swarm", "ConnectionTracker", "PendingCustodyDispatch", "RelayCustodyStore"]
+    }
+  ]
+}

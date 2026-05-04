@@ -1,0 +1,14 @@
+﻿{
+  "file": "NetworkStatusDialog.kt",
+  "chunk": 1,
+  "summary": "This Kotlin function `NetworkStatusDialog` is a composable function that displays a dialog to the user with network diagnostics information. It uses the `DiagnosticsReporter` class to fetch and display various diagnostic reports such as network type, internet connectivity, DNS results, and relay status. The dialog includes buttons for retrying the bootstrap process and dismissing it.",
+  "structs_or_classes": ["NetworkStatusDialog", "DiagnosticRow", "formatNetworkType"],
+  "imports": ["com.scmessenger.android.ui.dialogs", "androidx.compose.foundation.layout", "androidx.compose.material3.AlertDialog", "androidx.compose.material3.Button", "androidx.compose.material3.HorizontalDivider", "androidx.compose.material3.MaterialTheme", "androidx.compose.material3.OutlinedButton", "androidx.compose.material3.Text", "androidx.compose.runtime.Composable", "androidx.compose.runtime.LaunchedEffect", "androidx.compose.runtime.getValue", "androidx.compose.runtime.mutableStateOf", "androidx.compose.runtime.remember", "androidx.compose.ui.Alignment", "androidx.compose.ui.Modifier", "androidx.compose.ui.res.stringResource", "androidx.compose.ui.unit.dp"],
+  "funcs": [
+    {
+      "name": "NetworkStatusDialog",
+      "line": 41,
+      "calls_out_to": ["diagnosticsReporter", "onDismiss", "onRetryBootstrap"]
+    }
+  ]
+}

@@ -22,3 +22,8 @@ PHASE 4: TEST & ITERATE
 3. IF COMPILE FAILS: Enter ITERATION. Read the exact error, fix the syntax or imports, and run the test again. 
 4. IF SUCCESSFUL: Verify you successfully wired all targets from Phase 2. If the integration is 100% complete and compiles cleanly, output exactly:
 STATUS: SUCCESS_STOP
+
+
+--- CLOSEOUT EVIDENCE ---
+VERIFIED WIRED: Called at wasm/src/lib.rs via JS bridge (ui/app.js:637,705,718,728); dispatched via RPC at core/src/wasm_support/rpc.rs:183. Production call path confirmed.
+Verified by: orchestrator-TRP-2026-05-03

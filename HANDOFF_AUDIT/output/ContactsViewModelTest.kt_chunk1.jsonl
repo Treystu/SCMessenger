@@ -1,0 +1,44 @@
+﻿{
+  "file": "ContactsViewModelTest.kt",
+  "chunk": 1,
+  "summary": "This chunk defines a test class for the `ContactsViewModel` in the `com.scmessenger.android.test` package. It includes methods to test various functionalities of the view model, such as loading contacts, adding and removing contacts, searching for contacts by nickname, and handling online status updates from peer events.",
+  "structs_or_classes": ["ContactsViewModel", "MeshRepository", "PeerEventBus", "TransportType"],
+  "imports": ["List", "of", "imports", "uniffi.api.Contact", "io.mockk.every", "io.mockk.mockk", "io.mockk.verify", "kotlinx.coroutines.Dispatchers", "kotlinx.coroutines.ExperimentalCoroutinesApi", "kotlinx.coroutines.flow.collect", "kotlinx.coroutines.test.StandardTestDispatcher", "kotlinx.coroutines.test.UnconfinedTestDispatcher", "kotlinx.coroutines.test.advanceTimeBy", "kotlinx.coroutines.test.advanceUntilIdle", "kotlinx.coroutines.test.runCurrent", "kotlinx.coroutines.test.resetMain", "kotlinx.coroutines.test.runTest", "kotlinx.coroutines.test.setMain", "kotlinx.coroutines.launch"],
+  "funcs": [
+    {
+      "name": "setup",
+      "line": 52,
+      "calls_out_to": ["mockk"]
+    },
+    {
+      "name": "tearDown",
+      "line": 73,
+      "calls_out_to": []
+    },
+    {
+      "name": "loadContacts populates contacts state",
+      "line": 80,
+      "calls_out_to": ["viewModel.contacts.value.size", "assertEquals"]
+    },
+    {
+      "name": "addContact validates key and persists contact",
+      "line": 95,
+      "calls_out_to": ["repository.addContact", "repository.connectToPeer"]
+    },
+    {
+      "name": "removeContact forwards removal to repository",
+      "line": 104,
+      "calls_out_to": ["repository.removeContact"]
+    },
+    {
+      "name": "search filters contacts by nickname",
+      "line": 113,
+      "calls_out_to": ["viewModel.filteredContacts.collect", "viewModel.setSearchQuery", "assertEquals"]
+    },
+    {
+      "name": "online status updates nearby peers from peer events",
+      "line": 126,
+      "calls_out_to": ["repository.replayDiscoveredPeerEvents", "repository.isBootstrapRelayPeer", "repository.getContact", "MeshEventBus.emitPeerEvent", "runCurrent"]
+    }
+  ]
+}

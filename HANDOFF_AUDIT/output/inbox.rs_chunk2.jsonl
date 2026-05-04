@@ -1,0 +1,49 @@
+﻿{
+  "file": "inbox.rs",
+  "chunk": 2,
+  "summary": "This chunk contains test functions for the Inbox struct, including tests for receiving messages, deduplication, and managing the inbox's state.",
+  "structs_or_classes": ["Inbox"],
+  "imports": ["tempfile", "Arc", "crate::store::backend::SledStorage", "make_received"],
+  "funcs": [
+    {
+      "name": "test_deduplication",
+      "line": 357,
+      "calls_out_to": []
+    },
+    {
+      "name": "test_is_duplicate",
+      "line": 370,
+      "calls_out_to": []
+    },
+    {
+      "name": "test_all_messages",
+      "line": 386,
+      "calls_out_to": []
+    },
+    {
+      "name": "test_clear_messages",
+      "line": 392,
+      "calls_out_to": []
+    },
+    {
+      "name": "test_persistent_inbox",
+      "line": 401,
+      "calls_out_to": ["make_received"]
+    },
+    {
+      "name": "test_persistent_inbox_survives_restart",
+      "line": 427,
+      "calls_out_to": ["make_received"]
+    },
+    {
+      "name": "test_drain_received_messages",
+      "line": 455,
+      "calls_out_to": []
+    },
+    {
+      "name": "test_get_inbox_count",
+      "line": 479,
+      "calls_out_to": []
+    }
+  ]
+}

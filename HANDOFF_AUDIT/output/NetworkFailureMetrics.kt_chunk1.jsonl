@@ -1,0 +1,49 @@
+﻿{
+  "file": "NetworkFailureMetrics.kt",
+  "chunk": 1,
+  "summary": "Tracks network failure metrics per node for diagnostics.",
+  "structs_or_classes": ["List", "NodeFailureLog", "FailureRecord"],
+  "imports": ["Timber", "ConcurrentHashMap", "javax.inject.Inject", "javax.inject.Singleton"],
+  "funcs": [
+    {
+      "name": "recordFailure",
+      "line": 36,
+      "calls_out_to": ["entries", "it", "calls"]
+    },
+    {
+      "name": "isNodeUnreachable",
+      "line": 57,
+      "calls_out_to": ["entries[nodeId]", "totalFailures >= 5"]
+    },
+    {
+      "name": "hasDnsFailures",
+      "line": 62,
+      "calls_out_to": ["entries.values.any { it.dnsFailures > 0 }"]
+    },
+    {
+      "name": "hasPortBlocking",
+      "line": 63,
+      "calls_out_to": ["entries.values.any { it.portBlockedFailures > 0 }"]
+    },
+    {
+      "name": "getFailureCount",
+      "line": 66,
+      "calls_out_to": ["entries[nodeId]?.totalFailures ?: 0"]
+    },
+    {
+      "name": "getLastFailure",
+      "line": 70,
+      "calls_out_to": ["entries[nodeId] ?: return null; synchronized(log) { return log.records.lastOrNull() }"]
+    },
+    {
+      "name": "getSummary",
+      "line": 90,
+      "calls_out_to": ["nodeDetails", "totalDnsFailures", "totalTimeoutFailures", "totalTlsFailures", "totalPortBlockedFailures", "totalConnRefused", "unreachable"]
+    },
+    {
+      "name": "reset",
+      "line": 128,
+      "calls_out_to": ["entries.clear()"]
+    }
+  ]
+}

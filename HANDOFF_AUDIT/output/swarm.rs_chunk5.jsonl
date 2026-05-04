@@ -1,0 +1,24 @@
+﻿{
+  "file": "swarm.rs",
+  "chunk": 5,
+  "summary": "The code chunk defines the `start_swarm` function, which initializes and starts a libp2p swarm. It includes functions for sending commands to the swarm, handling best paths, shutting down the swarm, and managing various aspects of the swarm's behavior.",
+  "structs_or_classes": ["Swarm", "SwarmCommand", "BindResult", "SwarmHandle"],
+  "imports": ["libp2p::Swarm", "libp2p::tcp", "libp2p::noise", "libp2p::yamux", "multiaddr", "mpsc", "tokio", "std::collections::HashMap", "std::sync::Weak"],
+  "funcs": [
+    {
+      "name": "start_swarm",
+      "line": 1401,
+      "calls_out_to": ["SwarmCommand"]
+    },
+    {
+      "name": "get_best_paths",
+      "line": 1425,
+      "calls_out_to": ["SwarmCommand"]
+    },
+    {
+      "name": "shutdown",
+      "line": 1427,
+      "calls_out_to": ["SwarmCommand"]
+    }
+  ]
+}

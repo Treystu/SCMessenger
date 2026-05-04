@@ -1,0 +1,104 @@
+﻿{
+  "file": "integration.rs",
+  "chunk": 1,
+  "summary": "This chunk contains test cases for the `Cli` struct in the `scmessenger_cli::cli` module. It includes tests for various command parsing functionalities such as initializing a new contact, exporting an identity, adding a contact, searching for contacts, adding a block, relaying messages, sending messages, checking status, listing configurations, and handling history statistics.",
+  "structs_or_classes": ["Cli", "Commands", "ContactAction"],
+  "imports": ["clap::Parser", "scmessenger_cli::ble_daemon::{BleConfig, BleDaemon, BleError, BleStatus}", "scmessenger_cli::cli::{Cli, Commands, ContactAction}"],
+  "funcs": [
+    {
+      "name": "test_cli_parse_init_with_nickname",
+      "line": 6,
+      "calls_out_to": ["Cli::parse_from"]
+    },
+    {
+      "name": "test_cli_parse_identity_export",
+      "line": 12,
+      "calls_out_to": ["Cli::parse_from"]
+    },
+    {
+      "name": "test_cli_parse_contact_add",
+      "line": 20,
+      "calls_out_to": ["Cli::parse_from"]
+    },
+    {
+      "name": "test_cli_parse_contact_search",
+      "line": 31,
+      "calls_out_to": ["Cli::parse_from"]
+    },
+    {
+      "name": "test_cli_parse_block_add",
+      "line": 49,
+      "calls_out_to": ["Cli::parse_from"]
+    },
+    {
+      "name": "test_cli_parse_relay",
+      "line": 62,
+      "calls_out_to": ["Cli::parse_from"]
+    },
+    {
+      "name": "test_cli_parse_send",
+      "line": 75,
+      "calls_out_to": ["Cli::parse_from"]
+    },
+    {
+      "name": "test_cli_parse_status",
+      "line": 88,
+      "calls_out_to": ["Cli::parse_from"]
+    },
+    {
+      "name": "test_cli_parse_config_list",
+      "line": 91,
+      "calls_out_to": ["Cli::parse_from"]
+    },
+    {
+      "name": "test_ble_daemon_default_unavailable",
+      "line": 94,
+      "calls_out_to": ["BleDaemon::default"]
+    },
+    {
+      "name": "test_ble_config_default_values",
+      "line": 97,
+      "calls_out_to": ["BleConfig::default"]
+    },
+    {
+      "name": "test_ble_error_display_messages",
+      "line": 100,
+      "calls_out_to": ["format!"]
+    },
+    {
+      "name": "test_ble_status_variants",
+      "line": 113,
+      "calls_out_to": ["BleStatus::Unavailable", "BleStatus::Disabled"]
+    },
+    {
+      "name": "test_config_default_values",
+      "line": 126,
+      "calls_out_to": ["scmessenger_cli::config::Config::default"]
+    },
+    {
+      "name": "test_cli_parse_history_stats",
+      "line": 130,
+      "calls_out_to": ["Cli::parse_from"]
+    },
+    {
+      "name": "test_cli_parse_history_count",
+      "line": 134,
+      "calls_out_to": ["Cli::parse_from"]
+    },
+    {
+      "name": "test_identity_backup_restore_roundtrip_logic",
+      "line": 142,
+      "calls_out_to": ["Cli::parse_from", "IdentityAction::Export", "IdentityAction::Import"]
+    },
+    {
+      "name": "test_block_unblock_cascade_logic",
+      "line": 189,
+      "calls_out_to": ["Cli::parse_from", "BlockAction::Add", "BlockAction::Remove", "BlockAction::Delete"]
+    },
+    {
+      "name": "test_cli_parse_mark_sent",
+      "line": 230,
+      "calls_out_to": ["Cli::parse_from"]
+    }
+  ]
+}

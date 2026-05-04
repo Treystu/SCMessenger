@@ -1,0 +1,14 @@
+﻿{
+  "file": "client.rs",
+  "chunk": 2,
+  "summary": "The code chunk defines the `connect_quic` method in the `RelayClient` struct, which handles the connection to a relay using QUIC/UDP transport. It includes methods for connecting via TCP and QUIC, handling handshake responses, pushing envelopes to relays, pulling stored envelopes, and managing connections.",
+  "structs_or_classes": ["RelayConnection", "RelayMessage"],
+  "imports": [],
+  "funcs": [
+    {
+      "name": "connect_quic",
+      "line": 362,
+      "calls_out_to": ["self.connect_tcp", "self.connect_quic"]
+    }
+  ]
+}

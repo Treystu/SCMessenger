@@ -1,0 +1,53 @@
+﻿{
+  "file": "surgeon_graph.py",
+  "chunk": 1,
+  "summary": "This module implements a self-healing retry loop for surgical file edits, protected by a strict Philosophy Verifier that ensures all changes comply with core architectural principles.",
+  "structs_or_classes": [],
+  "imports": [
+    "typing",
+    "Annotated",
+    "from langgraph.graph import StateGraph, END",
+    "from langchain_openai import ChatOpenAI",
+    "from langchain_core.messages import SystemMessage, HumanMessage",
+    "import json",
+    "import difflib",
+    "import re"
+  ],
+  "funcs": [
+    {
+      "name": "extract_json",
+      "line": 1,
+      "calls_out_to": []
+    },
+    {
+      "name": "GraphState",
+      "line": 40,
+      "calls_out_to": []
+    },
+    {
+      "name": "create_surgeon_node",
+      "line": 95,
+      "calls_out_to": ["llm", "surgeon"]
+    },
+    {
+      "name": "create_philosophy_verifier",
+      "line": 140,
+      "calls_out_to": ["llm", "philosophy_verifier"]
+    },
+    {
+      "name": "create_applier_node",
+      "line": 185,
+      "calls_out_to": []
+    },
+    {
+      "name": "create_error_resolver",
+      "line": 230,
+      "calls_out_to": ["llm", "error_resolver"]
+    },
+    {
+      "name": "create_surgical_edit_graph",
+      "line": 327,
+      "calls_out_to": ["workflow", "END", "route_from_philosophy_verifier", "route_from_applier"]
+    }
+  ]
+}

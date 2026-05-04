@@ -1,0 +1,90 @@
+﻿{
+  "file": "MeshRepository.kt",
+  "chunk": 2,
+  "summary": "This class manages various state and data structures used in the Mesh repository, including peer tracking, message delivery tracking, and retry logic.",
+  "structs_or_classes": [
+    {
+      "name": "RoutingHints",
+      "line": 410
+    },
+    {
+      "name": "TransportIdentityResolution",
+      "line": 417
+    },
+    {
+      "name": "PendingOutboundEnvelope",
+      "line": 424
+    },
+    {
+      "name": "MessageIdentityHints",
+      "line": 440
+    },
+    {
+      "name": "DecodedMessagePayload",
+      "line": 451
+    },
+    {
+      "name": "PeerDiscoveryInfo",
+      "line": 461
+    },
+    {
+      "name": "DeliveryAttemptResult",
+      "line": 473
+    },
+    {
+      "name": "ReplayDiscoveredIdentity",
+      "line": 480
+    },
+    {
+      "name": "IdentityEmissionSignature",
+      "line": 489
+    },
+    {
+      "name": "BleRouteObservation",
+      "line": 497
+    },
+    {
+      "name": "MessageTracking",
+      "line": 508
+    },
+    {
+      "name": "DeliveryStatus",
+      "line": 583
+    }
+  ],
+  "imports": [
+    "java.util.concurrent.ConcurrentHashMap",
+    "kotlinx.coroutines.sync.Mutex"
+  ],
+  "funcs": [
+    {
+      "name": "getMessageIdTracking",
+      "line": 626,
+      "calls_out_to": []
+    },
+    {
+      "name": "detectAndRecoverMessageTracking",
+      "line": 644,
+      "calls_out_to": []
+    },
+    {
+      "name": "incrementAttemptCount",
+      "line": 672,
+      "calls_out_to": [
+        "kotlinx.coroutines.sync.Mutex.withLock"
+      ]
+    },
+    {
+      "name": "getRetryDelay",
+      "line": 682,
+      "calls_out_to": []
+    },
+    {
+      "name": "shouldRetryMessage",
+      "line": 696,
+      "calls_out_to": [
+        "getMessageIdTracking"
+      ]
+    }
+  ]
+}

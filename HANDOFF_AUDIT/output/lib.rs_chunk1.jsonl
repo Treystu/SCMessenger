@@ -1,0 +1,8 @@
+﻿{
+  "file": "lib.rs",
+  "chunk": 1,
+  "summary": "This chunk is a module-level declaration for the SCMessenger CLI Library. It re-exports various modules for testing purposes.",
+  "structs_or_classes": [],
+  "imports": ["api", "ble_daemon", "ble_mesh", "bootstrap", "cli", "config", "contacts", "history", "ledger", "server", "transport_api", "transport_bridge"],
+  "funcs": []
+}

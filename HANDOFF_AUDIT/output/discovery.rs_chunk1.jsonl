@@ -1,0 +1,19 @@
+﻿{
+  "file": "discovery.rs",
+  "chunk": 1,
+  "summary": "This module provides configurable discovery modes to control how the node advertises and discovers peers on the network. Each mode offers different tradeoffs between discoverability and privacy.",
+  "structs_or_classes": ["DiscoveryMode", "BeaconPayload"],
+  "imports": ["chacha20poly1305", "serde", "thiserror::Error", "web_time", "blake3"],
+  "funcs": [
+    {
+      "name": "create_encrypted_beacon",
+      "line": 174,
+      "calls_out_to": ["XChaCha20Poly1305"]
+    },
+    {
+      "name": "decrypt_beacon",
+      "line": 298,
+      "calls_out_to": ["XChaCha20Poly1305"]
+    }
+  ]
+}

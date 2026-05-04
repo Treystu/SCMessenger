@@ -1,0 +1,54 @@
+﻿{
+  "file": "nat.rs",
+  "chunk": 3,
+  "summary": "This chunk contains tests for the `NatTraversal` struct in the `nat` module. It includes various test functions to ensure the functionality of establishing, closing, and retrieving relay circuits.",
+  "structs_or_classes": ["NatTraversal", "HolePunchAttempt"],
+  "imports": [],
+  "funcs": [
+    {
+      "name": "test_establish_relay_circuit",
+      "line": 703,
+      "calls_out_to": []
+    },
+    {
+      "name": "test_relay_fallback_disabled",
+      "line": 721,
+      "calls_out_to": []
+    },
+    {
+      "name": "test_close_relay_circuit",
+      "line": 741,
+      "calls_out_to": []
+    },
+    {
+      "name": "test_get_relay_circuit",
+      "line": 765,
+      "calls_out_to": []
+    },
+    {
+      "name": "test_cleanup_old_attempts",
+      "line": 803,
+      "calls_out_to": []
+    },
+    {
+      "name": "test_shutdown",
+      "line": 815,
+      "calls_out_to": []
+    },
+    {
+      "name": "test_nat_type_equality",
+      "line": 834,
+      "calls_out_to": []
+    },
+    {
+      "name": "test_hole_punch_status_values",
+      "line": 841,
+      "calls_out_to": []
+    },
+    {
+      "name": "test_nat_config_defaults",
+      "line": 854,
+      "calls_out_to": []
+    }
+  ]
+}

@@ -1,0 +1,29 @@
+﻿{
+  "file": "envelope.rs",
+  "chunk": 3,
+  "summary": "This chunk contains test functions for the `DriftEnvelope` struct, including tests for ciphertext length exceeding the buffer, little-endian timestamps, compressed envelopes, and preservation of compression flags during serialization and deserialization.",
+  "structs_or_classes": ["DriftEnvelope"],
+  "imports": [],
+  "funcs": [
+    {
+      "name": "test_ciphertext_length_exceeds_buffer",
+      "line": 702,
+      "calls_out_to": []
+    },
+    {
+      "name": "test_little_endian_timestamps",
+      "line": 716,
+      "calls_out_to": []
+    },
+    {
+      "name": "test_compressed_envelope_roundtrip",
+      "line": 738,
+      "calls_out_to": []
+    },
+    {
+      "name": "test_compression_flag_preserved_on_roundtrip",
+      "line": 767,
+      "calls_out_to": []
+    }
+  ]
+}

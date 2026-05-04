@@ -1,0 +1,29 @@
+﻿{
+  "file": "history.rs",
+  "chunk": 2,
+  "summary": "The code chunk defines a `HistoryManager` struct with methods for managing message history in an application. It includes functions to count messages, enforce retention policies, prune records before a timestamp, and flush the storage.",
+  "structs_or_classes": ["HistoryManager", "MessageRecord"],
+  "imports": ["Arc", "MemoryStorage", "MessageDirection", "IronCoreError", "serde_json"],
+  "funcs": [
+    {
+      "name": "count",
+      "line": 354,
+      "calls_out_to": []
+    },
+    {
+      "name": "enforce_retention",
+      "line": 368,
+      "calls_out_to": ["scan_prefix", "remove"]
+    },
+    {
+      "name": "prune_before",
+      "line": 407,
+      "calls_out_to": ["scan_prefix", "remove"]
+    },
+    {
+      "name": "flush",
+      "line": 411,
+      "calls_out_to": []
+    }
+  ]
+}

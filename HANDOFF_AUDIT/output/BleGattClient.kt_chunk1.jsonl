@@ -1,0 +1,24 @@
+﻿{
+  "file": "BleGattClient.kt",
+  "chunk": 1,
+  "summary": "This Kotlin class provides a GATT client for connecting to discovered SCMessenger peripherals, handling various operations such as identity beacon retrieval, sync handshake, and message frame writing. It uses a per-device queue and semaphore to ensure sequential execution of GATT operations.",
+  "structs_or_classes": ["GattOpGate", "BleGattClientStats"],
+  "imports": ["BluetoothManager", "BluetoothDevice", "BluetoothGattCallback", "Channel", "Semaphore", "CoroutineScope", "Dispatchers", "SupervisorJob", "AtomicBoolean", "AtomicInteger", "List", "ByteArray", "Long", "Int"],
+  "funcs": [
+    {
+      "name": "connect",
+      "line": 195,
+      "calls_out_to": ["GattOpGate"]
+    },
+    {
+      "name": "disconnect",
+      "line": 307,
+      "calls_out_to": ["GattOpGate"]
+    },
+    {
+      "name": "sendData",
+      "line": 322,
+      "calls_out_to": ["GattOpGate"]
+    }
+  ]
+}

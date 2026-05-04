@@ -1,0 +1,74 @@
+﻿{
+  "file": "session_manager.rs",
+  "chunk": 1,
+  "summary": "The `RatchetSessionManager` struct manages ratchet sessions for multiple peer conversations.",
+  "structs_or_classes": ["RatchetSessionManager", "SerializableRatchetSession", "ChainState"],
+  "imports": ["super::ratchet::{Chain, RatchetKey, RatchetSession}", "crate::store::backend::StorageBackend", "anyhow::{bail, Result}", "serde::{Deserialize, Serialize}", "std::collections::HashMap", "std::sync::Arc", "x25519_dalek::{PublicKey as X25519PublicKey, StaticSecret as X25519StaticSecret}"],
+  "funcs": [
+    {
+      "name": "new",
+      "line": 24,
+      "calls_out_to": []
+    },
+    {
+      "name": "with_backend",
+      "line": 31,
+      "calls_out_to": ["backend"]
+    },
+    {
+      "name": "save",
+      "line": 40,
+      "calls_out_to": ["backend"]
+    },
+    {
+      "name": "load",
+      "line": 50,
+      "calls_out_to": ["backend"]
+    },
+    {
+      "name": "get_or_create_session",
+      "line": 71,
+      "calls_out_to": []
+    },
+    {
+      "name": "create_receiver_session",
+      "line": 81,
+      "calls_out_to": []
+    },
+    {
+      "name": "get_session",
+      "line": 93,
+      "calls_out_to": []
+    },
+    {
+      "name": "get_session_mut",
+      "line": 100,
+      "calls_out_to": []
+    },
+    {
+      "name": "remove_session",
+      "line": 104,
+      "calls_out_to": []
+    },
+    {
+      "name": "session_count",
+      "line": 108,
+      "calls_out_to": []
+    },
+    {
+      "name": "has_session",
+      "line": 112,
+      "calls_out_to": []
+    },
+    {
+      "name": "serialize_sessions",
+      "line": 119,
+      "calls_out_to": []
+    },
+    {
+      "name": "deserialize_sessions",
+      "line": 130,
+      "calls_out_to": []
+    }
+  ]
+}

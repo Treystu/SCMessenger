@@ -1,0 +1,14 @@
+﻿{
+  "file": "neighborhood.rs",
+  "chunk": 3,
+  "summary": "This chunk contains the implementation of a `process_gossip` function in a neighborhood table, which processes gossip messages from peers and updates the neighborhood summary accordingly. It also includes tests to verify the functionality of deduplication based on reliability.",
+  "structs_or_classes": ["NeighborhoodTable", "NeighborhoodSummary", "NeighborhoodGossip"],
+  "imports": [],
+  "funcs": [
+    {
+      "name": "process_gossip",
+      "line": 701,
+      "calls_out_to": ["table_b.process_gossip(peer_a, gossip)"]
+    }
+  ]
+}

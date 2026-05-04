@@ -1,5 +1,5 @@
 {
-  "total_tasks": 318,
+  "total_tasks": 299,
   "tasks": [
     {
       "task_file": "HANDOFF/todo/task_wire_abusive_peer_burst_is_rate_limited_but_other_peer_still_passes.md",
@@ -9,11 +9,11 @@
       "target": "core/src/transport/swarm.rs",
       "variant": "Core",
       "batch": "B2-core-transport-routing",
-      "definition_line": 4403,
+      "definition_line": 4500,
       "external_reference_hits": 0,
       "implementation_patch_template": {
         "file": "core/src/transport/swarm.rs",
-        "anchor_line": 4403,
+        "anchor_line": 4500,
         "required_change": "Wire `abusive_peer_burst_is_rate_limited_but_other_peer_still_passes` into production call path(s) and add parity-safe tests"
       }
     },
@@ -25,11 +25,11 @@
       "target": "android/app/src/main/java/com/scmessenger/android/service/MeshForegroundService.kt",
       "variant": "Android",
       "batch": "B5-android-transport-service",
-      "definition_line": 251,
-      "external_reference_hits": 0,
+      "definition_line": 261,
+      "external_reference_hits": 1,
       "implementation_patch_template": {
         "file": "android/app/src/main/java/com/scmessenger/android/service/MeshForegroundService.kt",
-        "anchor_line": 251,
+        "anchor_line": 261,
         "required_change": "Wire `acquireWakeLock` into production call path(s) and add parity-safe tests"
       }
     },
@@ -57,11 +57,11 @@
       "target": "core/src/transport/wifi_aware.rs",
       "variant": "Core",
       "batch": "B2-core-transport-routing",
-      "definition_line": 201,
+      "definition_line": 190,
       "external_reference_hits": 0,
       "implementation_patch_template": {
         "file": "core/src/transport/wifi_aware.rs",
-        "anchor_line": 201,
+        "anchor_line": 190,
         "required_change": "Wire `add_discovered_peer` into production call path(s) and add parity-safe tests"
       }
     },
@@ -73,11 +73,11 @@
       "target": "core/src/transport/swarm.rs",
       "variant": "Core",
       "batch": "B2-core-transport-routing",
-      "definition_line": 1286,
+      "definition_line": 1300,
       "external_reference_hits": 0,
       "implementation_patch_template": {
         "file": "core/src/transport/swarm.rs",
-        "anchor_line": 1286,
+        "anchor_line": 1300,
         "required_change": "Wire `add_kad_address` into production call path(s) and add parity-safe tests"
       }
     },
@@ -106,7 +106,7 @@
       "variant": "Core",
       "batch": "B8-cross-cutting",
       "definition_line": 84,
-      "external_reference_hits": 3,
+      "external_reference_hits": 0,
       "implementation_patch_template": {
         "file": "core/src/dspy/modules.rs",
         "anchor_line": 84,
@@ -137,11 +137,11 @@
       "target": "cli/src/ble_daemon.rs",
       "variant": "CLI",
       "batch": "B7-cli",
-      "definition_line": 253,
+      "definition_line": 265,
       "external_reference_hits": 0,
       "implementation_patch_template": {
         "file": "cli/src/ble_daemon.rs",
-        "anchor_line": 253,
+        "anchor_line": 265,
         "required_change": "Wire `advertise_service` into production call path(s) and add parity-safe tests"
       }
     },
@@ -169,11 +169,11 @@
       "target": "core/src/drift/relay.rs",
       "variant": "Core",
       "batch": "B8-cross-cutting",
-      "definition_line": 366,
+      "definition_line": 371,
       "external_reference_hits": 0,
       "implementation_patch_template": {
         "file": "core/src/drift/relay.rs",
-        "anchor_line": 366,
+        "anchor_line": 371,
         "required_change": "Wire `apply_policy_config` into production call path(s) and add parity-safe tests"
       }
     },
@@ -186,7 +186,7 @@
       "variant": "Android",
       "batch": "B5-android-transport-service",
       "definition_line": 142,
-      "external_reference_hits": 1,
+      "external_reference_hits": 5,
       "implementation_patch_template": {
         "file": "android/app/src/main/java/com/scmessenger/android/transport/ble/BleAdvertiser.kt",
         "anchor_line": 142,
@@ -201,11 +201,11 @@
       "target": "android/app/src/main/java/com/scmessenger/android/transport/ble/BleScanner.kt",
       "variant": "Android",
       "batch": "B5-android-transport-service",
-      "definition_line": 237,
-      "external_reference_hits": 2,
+      "definition_line": 195,
+      "external_reference_hits": 6,
       "implementation_patch_template": {
         "file": "android/app/src/main/java/com/scmessenger/android/transport/ble/BleScanner.kt",
-        "anchor_line": 237,
+        "anchor_line": 195,
         "required_change": "Wire `applyScanSettings` into production call path(s) and add parity-safe tests"
       }
     },
@@ -217,11 +217,11 @@
       "target": "android/app/src/main/java/com/scmessenger/android/transport/TransportManager.kt",
       "variant": "Android",
       "batch": "B5-android-transport-service",
-      "definition_line": 454,
+      "definition_line": 511,
       "external_reference_hits": 0,
       "implementation_patch_template": {
         "file": "android/app/src/main/java/com/scmessenger/android/transport/TransportManager.kt",
-        "anchor_line": 454,
+        "anchor_line": 511,
         "required_change": "Wire `attemptBleRecovery` into production call path(s) and add parity-safe tests"
       }
     },
@@ -234,7 +234,7 @@
       "variant": "Core",
       "batch": "B2-core-transport-routing",
       "definition_line": 723,
-      "external_reference_hits": 0,
+      "external_reference_hits": 2,
       "implementation_patch_template": {
         "file": "core/src/store/relay_custody.rs",
         "anchor_line": 723,
@@ -266,27 +266,11 @@
       "variant": "Core",
       "batch": "B2-core-transport-routing",
       "definition_line": 214,
-      "external_reference_hits": 1,
+      "external_reference_hits": 4,
       "implementation_patch_template": {
         "file": "core/src/transport/mesh_routing.rs",
         "anchor_line": 214,
         "required_change": "Wire `best_relays` into production call path(s) and add parity-safe tests"
-      }
-    },
-    {
-      "task_file": "HANDOFF/todo/task_wire_blake3_hash.md",
-      "task_name": "blake3_hash",
-      "function": "blake3_hash",
-      "resolved_symbol": "blake3_hash",
-      "target": "core/src/dspy/signatures.rs",
-      "variant": "Core",
-      "batch": "B8-cross-cutting",
-      "definition_line": 136,
-      "external_reference_hits": 0,
-      "implementation_patch_template": {
-        "file": "core/src/dspy/signatures.rs",
-        "anchor_line": 136,
-        "required_change": "Wire `blake3_hash` into production call path(s) and add parity-safe tests"
       }
     },
     {
@@ -298,7 +282,7 @@
       "variant": "Core",
       "batch": "B8-cross-cutting",
       "definition_line": 230,
-      "external_reference_hits": 0,
+      "external_reference_hits": 3,
       "implementation_patch_template": {
         "file": "core/src/store/blocked.rs",
         "anchor_line": 230,
@@ -346,7 +330,7 @@
       "variant": "Android",
       "batch": "B8-cross-cutting",
       "definition_line": 175,
-      "external_reference_hits": 0,
+      "external_reference_hits": 2,
       "implementation_patch_template": {
         "file": "android/app/src/main/java/com/scmessenger/android/utils/NotificationHelper.kt",
         "anchor_line": 175,
@@ -362,7 +346,7 @@
       "variant": "Core",
       "batch": "B2-core-transport-routing",
       "definition_line": 150,
-      "external_reference_hits": 2,
+      "external_reference_hits": 3,
       "implementation_patch_template": {
         "file": "core/src/routing/adaptive_ttl.rs",
         "anchor_line": 150,
@@ -377,11 +361,11 @@
       "target": "core/src/transport/mesh_routing.rs",
       "variant": "Core",
       "batch": "B2-core-transport-routing",
-      "definition_line": 610,
+      "definition_line": 615,
       "external_reference_hits": 2,
       "implementation_patch_template": {
         "file": "core/src/transport/mesh_routing.rs",
-        "anchor_line": 610,
+        "anchor_line": 615,
         "required_change": "Wire `can_bootstrap_others` into production call path(s) and add parity-safe tests"
       }
     },
@@ -393,11 +377,11 @@
       "target": "cli/src/transport_bridge.rs",
       "variant": "CLI",
       "batch": "B7-cli",
-      "definition_line": 246,
-      "external_reference_hits": 0,
+      "definition_line": 252,
+      "external_reference_hits": 5,
       "implementation_patch_template": {
         "file": "cli/src/transport_bridge.rs",
-        "anchor_line": 246,
+        "anchor_line": 252,
         "required_change": "Wire `can_forward_for_wasm` into production call path(s) and add parity-safe tests"
       }
     },
@@ -409,11 +393,11 @@
       "target": "cli/src/transport_bridge.rs",
       "variant": "CLI",
       "batch": "B7-cli",
-      "definition_line": 264,
+      "definition_line": 270,
       "external_reference_hits": 0,
       "implementation_patch_template": {
         "file": "cli/src/transport_bridge.rs",
-        "anchor_line": 264,
+        "anchor_line": 270,
         "required_change": "Wire `can_reach_destination` into production call path(s) and add parity-safe tests"
       }
     },
@@ -441,28 +425,12 @@
       "target": "core/src/transport/swarm.rs",
       "variant": "Core",
       "batch": "B2-core-transport-routing",
-      "definition_line": 4468,
+      "definition_line": 4565,
       "external_reference_hits": 0,
       "implementation_patch_template": {
         "file": "core/src/transport/swarm.rs",
-        "anchor_line": 4468,
+        "anchor_line": 4565,
         "required_change": "Wire `cheap_heuristics_reject_invalid_payload_shapes` into production call path(s) and add parity-safe tests"
-      }
-    },
-    {
-      "task_file": "HANDOFF/todo/task_wire_checkAndRecordMessage.md",
-      "task_name": "checkAndRecordMessage",
-      "function": "checkAndRecordMessage",
-      "resolved_symbol": "checkAndRecordMessage",
-      "target": "android/app/src/main/java/com/scmessenger/android/transport/SmartTransportRouter.kt",
-      "variant": "Android",
-      "batch": "B5-android-transport-service",
-      "definition_line": 214,
-      "external_reference_hits": 2,
-      "implementation_patch_template": {
-        "file": "android/app/src/main/java/com/scmessenger/android/transport/SmartTransportRouter.kt",
-        "anchor_line": 214,
-        "required_change": "Wire `checkAndRecordMessage` into production call path(s) and add parity-safe tests"
       }
     },
     {
@@ -473,11 +441,11 @@
       "target": "core/src/transport/health.rs",
       "variant": "Core",
       "batch": "B2-core-transport-routing",
-      "definition_line": 409,
-      "external_reference_hits": 0,
+      "definition_line": 422,
+      "external_reference_hits": 1,
       "implementation_patch_template": {
         "file": "core/src/transport/health.rs",
-        "anchor_line": 409,
+        "anchor_line": 422,
         "required_change": "Wire `cleanup_stale_connections` into production call path(s) and add parity-safe tests"
       }
     },
@@ -490,7 +458,7 @@
       "variant": "Core",
       "batch": "B2-core-transport-routing",
       "definition_line": 255,
-      "external_reference_hits": 0,
+      "external_reference_hits": 1,
       "implementation_patch_template": {
         "file": "core/src/routing/optimized_engine.rs",
         "anchor_line": 255,
@@ -522,7 +490,7 @@
       "variant": "Android",
       "batch": "B8-cross-cutting",
       "definition_line": 492,
-      "external_reference_hits": 0,
+      "external_reference_hits": 1,
       "implementation_patch_template": {
         "file": "android/app/src/main/java/com/scmessenger/android/utils/NotificationHelper.kt",
         "anchor_line": 492,
@@ -570,7 +538,7 @@
       "variant": "Android",
       "batch": "B8-cross-cutting",
       "definition_line": 479,
-      "external_reference_hits": 0,
+      "external_reference_hits": 1,
       "implementation_patch_template": {
         "file": "android/app/src/main/java/com/scmessenger/android/utils/NotificationHelper.kt",
         "anchor_line": 479,
@@ -585,11 +553,11 @@
       "target": "android/app/src/main/java/com/scmessenger/android/transport/ble/BleScanner.kt",
       "variant": "Android",
       "batch": "B5-android-transport-service",
-      "definition_line": 536,
+      "definition_line": 494,
       "external_reference_hits": 0,
       "implementation_patch_template": {
         "file": "android/app/src/main/java/com/scmessenger/android/transport/ble/BleScanner.kt",
-        "anchor_line": 536,
+        "anchor_line": 494,
         "required_change": "Wire `clearPeerCache` into production call path(s) and add parity-safe tests"
       }
     },
@@ -601,11 +569,11 @@
       "target": "android/app/src/main/java/com/scmessenger/android/ui/viewmodels/ContactsViewModel.kt",
       "variant": "Android",
       "batch": "B4-android-ui",
-      "definition_line": 549,
-      "external_reference_hits": 0,
+      "definition_line": 548,
+      "external_reference_hits": 1,
       "implementation_patch_template": {
         "file": "android/app/src/main/java/com/scmessenger/android/ui/viewmodels/ContactsViewModel.kt",
-        "anchor_line": 549,
+        "anchor_line": 548,
         "required_change": "Wire `clearSearch` into production call path(s) and add parity-safe tests"
       }
     },
@@ -617,28 +585,12 @@
       "target": "wasm/src/notification_manager.rs",
       "variant": "WASM",
       "batch": "B6-wasm",
-      "definition_line": 308,
-      "external_reference_hits": 0,
+      "definition_line": 301,
+      "external_reference_hits": 5,
       "implementation_patch_template": {
         "file": "wasm/src/notification_manager.rs",
-        "anchor_line": 308,
+        "anchor_line": 301,
         "required_change": "Wire `close_all_notifications` into production call path(s) and add parity-safe tests"
-      }
-    },
-    {
-      "task_file": "HANDOFF/todo/task_wire_ConnectionQualityIndicator.md",
-      "task_name": "ConnectionQualityIndicator",
-      "function": "ConnectionQualityIndicator",
-      "resolved_symbol": "ConnectionQualityIndicator",
-      "target": "android/app/src/main/java/com/scmessenger/android/ui/components/StatusIndicator.kt",
-      "variant": "Android",
-      "batch": "B4-android-ui",
-      "definition_line": 122,
-      "external_reference_hits": 0,
-      "implementation_patch_template": {
-        "file": "android/app/src/main/java/com/scmessenger/android/ui/components/StatusIndicator.kt",
-        "anchor_line": 122,
-        "required_change": "Wire `ConnectionQualityIndicator` into production call path(s) and add parity-safe tests"
       }
     },
     {
@@ -681,11 +633,11 @@
       "target": "android/app/src/main/java/com/scmessenger/android/ui/contacts/ContactDetailScreen.kt",
       "variant": "Android",
       "batch": "B4-android-ui",
-      "definition_line": 38,
-      "external_reference_hits": 0,
+      "definition_line": 42,
+      "external_reference_hits": 2,
       "implementation_patch_template": {
         "file": "android/app/src/main/java/com/scmessenger/android/ui/contacts/ContactDetailScreen.kt",
-        "anchor_line": 38,
+        "anchor_line": 42,
         "required_change": "Wire `ContactDetailScreen` into production call path(s) and add parity-safe tests"
       }
     },
@@ -697,11 +649,11 @@
       "target": "core/src/store/relay_custody.rs",
       "variant": "Core",
       "batch": "B2-core-transport-routing",
-      "definition_line": 1760,
+      "definition_line": 1767,
       "external_reference_hits": 0,
       "implementation_patch_template": {
         "file": "core/src/store/relay_custody.rs",
-        "anchor_line": 1760,
+        "anchor_line": 1767,
         "required_change": "Wire `converge_delivered_for_message_removes_matching_pending_records` into production call path(s) and add parity-safe tests"
       }
     },
@@ -713,11 +665,11 @@
       "target": "core/src/transport/swarm.rs",
       "variant": "Core",
       "batch": "B2-core-transport-routing",
-      "definition_line": 4527,
+      "definition_line": 4624,
       "external_reference_hits": 0,
       "implementation_patch_template": {
         "file": "core/src/transport/swarm.rs",
-        "anchor_line": 4527,
+        "anchor_line": 4624,
         "required_change": "Wire `convergence_marker_accepts_when_custody_exists_locally` into production call path(s) and add parity-safe tests"
       }
     },
@@ -729,11 +681,11 @@
       "target": "core/src/transport/swarm.rs",
       "variant": "Core",
       "batch": "B2-core-transport-routing",
-      "definition_line": 4484,
+      "definition_line": 4581,
       "external_reference_hits": 0,
       "implementation_patch_template": {
         "file": "core/src/transport/swarm.rs",
-        "anchor_line": 4484,
+        "anchor_line": 4581,
         "required_change": "Wire `convergence_marker_rejects_invalid_shape` into production call path(s) and add parity-safe tests"
       }
     },
@@ -745,11 +697,11 @@
       "target": "core/src/transport/swarm.rs",
       "variant": "Core",
       "batch": "B2-core-transport-routing",
-      "definition_line": 4498,
+      "definition_line": 4595,
       "external_reference_hits": 0,
       "implementation_patch_template": {
         "file": "core/src/transport/swarm.rs",
-        "anchor_line": 4498,
+        "anchor_line": 4595,
         "required_change": "Wire `convergence_marker_requires_local_tracking_context` into production call path(s) and add parity-safe tests"
       }
     },
@@ -841,11 +793,11 @@
       "target": "core/src/crypto/session_manager.rs",
       "variant": "Core",
       "batch": "B8-cross-cutting",
-      "definition_line": 76,
+      "definition_line": 80,
       "external_reference_hits": 0,
       "implementation_patch_template": {
         "file": "core/src/crypto/session_manager.rs",
-        "anchor_line": 76,
+        "anchor_line": 80,
         "required_change": "Wire `create_receiver_session` into production call path(s) and add parity-safe tests"
       }
     },
@@ -858,7 +810,7 @@
       "variant": "Core",
       "batch": "B2-core-transport-routing",
       "definition_line": 169,
-      "external_reference_hits": 0,
+      "external_reference_hits": 1,
       "implementation_patch_template": {
         "file": "core/src/routing/optimized_engine.rs",
         "anchor_line": 169,
@@ -889,11 +841,11 @@
       "target": "core/src/store/relay_custody.rs",
       "variant": "Core",
       "batch": "B2-core-transport-routing",
-      "definition_line": 2076,
+      "definition_line": 2083,
       "external_reference_hits": 0,
       "implementation_patch_template": {
         "file": "core/src/store/relay_custody.rs",
-        "anchor_line": 2076,
+        "anchor_line": 2083,
         "required_change": "Wire `custody_audit_persists_across_restart` into production call path(s) and add parity-safe tests"
       }
     },
@@ -905,11 +857,11 @@
       "target": "core/src/store/relay_custody.rs",
       "variant": "Core",
       "batch": "B2-core-transport-routing",
-      "definition_line": 1729,
+      "definition_line": 1736,
       "external_reference_hits": 0,
       "implementation_patch_template": {
         "file": "core/src/store/relay_custody.rs",
-        "anchor_line": 1729,
+        "anchor_line": 1736,
         "required_change": "Wire `custody_deduplicates_same_destination_and_message_id` into production call path(s) and add parity-safe tests"
       }
     },
@@ -921,11 +873,11 @@
       "target": "core/src/store/relay_custody.rs",
       "variant": "Core",
       "batch": "B2-core-transport-routing",
-      "definition_line": 1686,
+      "definition_line": 1693,
       "external_reference_hits": 0,
       "implementation_patch_template": {
         "file": "core/src/store/relay_custody.rs",
-        "anchor_line": 1686,
+        "anchor_line": 1693,
         "required_change": "Wire `custody_transitions_are_recorded` into production call path(s) and add parity-safe tests"
       }
     },
@@ -969,11 +921,11 @@
       "target": "wasm/src/notification_manager.rs",
       "variant": "WASM",
       "batch": "B6-wasm",
-      "definition_line": 323,
+      "definition_line": 318,
       "external_reference_hits": 0,
       "implementation_patch_template": {
         "file": "wasm/src/notification_manager.rs",
-        "anchor_line": 323,
+        "anchor_line": 318,
         "required_change": "Wire `detect_browser` into production call path(s) and add parity-safe tests"
       }
     },
@@ -1001,28 +953,12 @@
       "target": "core/src/notification.rs",
       "variant": "Core",
       "batch": "B8-cross-cutting",
-      "definition_line": 447,
+      "definition_line": 490,
       "external_reference_hits": 0,
       "implementation_patch_template": {
         "file": "core/src/notification.rs",
-        "anchor_line": 447,
+        "anchor_line": 490,
         "required_change": "Wire `disabled_notifications_suppress_delivery` into production call path(s) and add parity-safe tests"
-      }
-    },
-    {
-      "task_file": "HANDOFF/todo/task_wire_disableTransport.md",
-      "task_name": "disableTransport",
-      "function": "disableTransport",
-      "resolved_symbol": "disableTransport",
-      "target": "android/app/src/main/java/com/scmessenger/android/transport/TransportManager.kt",
-      "variant": "Android",
-      "batch": "B5-android-transport-service",
-      "definition_line": 388,
-      "external_reference_hits": 0,
-      "implementation_patch_template": {
-        "file": "android/app/src/main/java/com/scmessenger/android/transport/TransportManager.kt",
-        "anchor_line": 388,
-        "required_change": "Wire `disableTransport` into production call path(s) and add parity-safe tests"
       }
     },
     {
@@ -1033,11 +969,11 @@
       "target": "wasm/src/lib.rs",
       "variant": "WASM",
       "batch": "B6-wasm",
-      "definition_line": 922,
-      "external_reference_hits": 0,
+      "definition_line": 968,
+      "external_reference_hits": 5,
       "implementation_patch_template": {
         "file": "wasm/src/lib.rs",
-        "anchor_line": 922,
+        "anchor_line": 968,
         "required_change": "Wire `drain_received_messages` into production call path(s) and add parity-safe tests"
       }
     },
@@ -1049,11 +985,11 @@
       "target": "core/src/transport/swarm.rs",
       "variant": "Core",
       "batch": "B2-core-transport-routing",
-      "definition_line": 4431,
+      "definition_line": 4528,
       "external_reference_hits": 0,
       "implementation_patch_template": {
         "file": "core/src/transport/swarm.rs",
-        "anchor_line": 4431,
+        "anchor_line": 4528,
         "required_change": "Wire `duplicate_window_suppresses_immediate_replay_then_expires` into production call path(s) and add parity-safe tests"
       }
     },
@@ -1065,11 +1001,11 @@
       "target": "core/src/notification.rs",
       "variant": "Core",
       "batch": "B8-cross-cutting",
-      "definition_line": 462,
+      "definition_line": 505,
       "external_reference_hits": 0,
       "implementation_patch_template": {
         "file": "core/src/notification.rs",
-        "anchor_line": 462,
+        "anchor_line": 505,
         "required_change": "Wire `duplicates_are_suppressed` into production call path(s) and add parity-safe tests"
       }
     },
@@ -1097,11 +1033,11 @@
       "target": "core/src/contacts_bridge.rs",
       "variant": "Core",
       "batch": "B8-cross-cutting",
-      "definition_line": 279,
+      "definition_line": 285,
       "external_reference_hits": 0,
       "implementation_patch_template": {
         "file": "core/src/contacts_bridge.rs",
-        "anchor_line": 279,
+        "anchor_line": 285,
         "required_change": "Wire `emergency_recover` into production call path(s) and add parity-safe tests"
       }
     },
@@ -1113,11 +1049,11 @@
       "target": "android/app/src/main/java/com/scmessenger/android/transport/TransportManager.kt",
       "variant": "Android",
       "batch": "B5-android-transport-service",
-      "definition_line": 364,
-      "external_reference_hits": 0,
+      "definition_line": 392,
+      "external_reference_hits": 3,
       "implementation_patch_template": {
         "file": "android/app/src/main/java/com/scmessenger/android/transport/TransportManager.kt",
-        "anchor_line": 364,
+        "anchor_line": 392,
         "required_change": "Wire `enableTransport` into production call path(s) and add parity-safe tests"
       }
     },
@@ -1146,7 +1082,7 @@
       "variant": "Android",
       "batch": "B4-android-ui",
       "definition_line": 138,
-      "external_reference_hits": 0,
+      "external_reference_hits": 2,
       "implementation_patch_template": {
         "file": "android/app/src/main/java/com/scmessenger/android/ui/components/ErrorBanner.kt",
         "anchor_line": 138,
@@ -1161,11 +1097,11 @@
       "target": "core/src/abuse/auto_block.rs",
       "variant": "Core",
       "batch": "B8-cross-cutting",
-      "definition_line": 226,
-      "external_reference_hits": 0,
+      "definition_line": 230,
+      "external_reference_hits": 1,
       "implementation_patch_template": {
         "file": "core/src/abuse/auto_block.rs",
-        "anchor_line": 226,
+        "anchor_line": 230,
         "required_change": "Wire `evaluate_all_tracked` into production call path(s) and add parity-safe tests"
       }
     },
@@ -1178,7 +1114,7 @@
       "variant": "Core",
       "batch": "B2-core-transport-routing",
       "definition_line": 96,
-      "external_reference_hits": 0,
+      "external_reference_hits": 1,
       "implementation_patch_template": {
         "file": "core/src/transport/observation.rs",
         "anchor_line": 96,
@@ -1193,11 +1129,11 @@
       "target": "core/src/notification.rs",
       "variant": "Core",
       "batch": "B8-cross-cutting",
-      "definition_line": 437,
+      "definition_line": 480,
       "external_reference_hits": 0,
       "implementation_patch_template": {
         "file": "core/src/notification.rs",
-        "anchor_line": 437,
+        "anchor_line": 480,
         "required_change": "Wire `explicit_request_overrides_known_contact_inference` into production call path(s) and add parity-safe tests"
       }
     },
@@ -1209,11 +1145,11 @@
       "target": "android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt",
       "variant": "Android",
       "batch": "B3-android-repository",
-      "definition_line": 4358,
+      "definition_line": 4521,
       "external_reference_hits": 2,
       "implementation_patch_template": {
         "file": "android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt",
-        "anchor_line": 4358,
+        "anchor_line": 4521,
         "required_change": "Wire `exportDiagnosticsAsync` into production call path(s) and add parity-safe tests"
       }
     },
@@ -1225,11 +1161,11 @@
       "target": "core/src/contacts_bridge.rs",
       "variant": "Core",
       "batch": "B8-cross-cutting",
-      "definition_line": 53,
+      "definition_line": 54,
       "external_reference_hits": 0,
       "implementation_patch_template": {
         "file": "core/src/contacts_bridge.rs",
-        "anchor_line": 53,
+        "anchor_line": 54,
         "required_change": "Wire `federated_nickname` into production call path(s) and add parity-safe tests"
       }
     },
@@ -1289,11 +1225,11 @@
       "target": "core/src/store/relay_custody.rs",
       "variant": "Core",
       "batch": "B2-core-transport-routing",
-      "definition_line": 2133,
+      "definition_line": 2140,
       "external_reference_hits": 0,
       "implementation_patch_template": {
         "file": "core/src/store/relay_custody.rs",
-        "anchor_line": 2133,
+        "anchor_line": 2140,
         "required_change": "Wire `for_local_peer_prefers_explicit_custody_dir_override` into production call path(s) and add parity-safe tests"
       }
     },
@@ -1305,28 +1241,12 @@
       "target": "core/src/crypto/ratchet.rs",
       "variant": "Core",
       "batch": "B8-cross-cutting",
-      "definition_line": 420,
+      "definition_line": 442,
       "external_reference_hits": 0,
       "implementation_patch_template": {
         "file": "core/src/crypto/ratchet.rs",
-        "anchor_line": 420,
+        "anchor_line": 442,
         "required_change": "Wire `force_ratchet` into production call path(s) and add parity-safe tests"
-      }
-    },
-    {
-      "task_file": "HANDOFF/todo/task_wire_force_state_for_test.md",
-      "task_name": "force_state_for_test",
-      "function": "force_state_for_test",
-      "resolved_symbol": "force_state_for_test",
-      "target": "core/src/store/relay_custody.rs",
-      "variant": "Core",
-      "batch": "B2-core-transport-routing",
-      "definition_line": 1409,
-      "external_reference_hits": 0,
-      "implementation_patch_template": {
-        "file": "core/src/store/relay_custody.rs",
-        "anchor_line": 1409,
-        "required_change": "Wire `force_state_for_test` into production call path(s) and add parity-safe tests"
       }
     },
     {
@@ -1337,11 +1257,11 @@
       "target": "android/app/src/main/java/com/scmessenger/android/transport/ble/BleScanner.kt",
       "variant": "Android",
       "batch": "B5-android-transport-service",
-      "definition_line": 479,
+      "definition_line": 437,
       "external_reference_hits": 0,
       "implementation_patch_template": {
         "file": "android/app/src/main/java/com/scmessenger/android/transport/ble/BleScanner.kt",
-        "anchor_line": 479,
+        "anchor_line": 437,
         "required_change": "Wire `forceRestartScanning` into production call path(s) and add parity-safe tests"
       }
     },
@@ -1353,11 +1273,11 @@
       "target": "core/src/notification.rs",
       "variant": "Core",
       "batch": "B8-cross-cutting",
-      "definition_line": 475,
+      "definition_line": 518,
       "external_reference_hits": 0,
       "implementation_patch_template": {
         "file": "core/src/notification.rs",
-        "anchor_line": 475,
+        "anchor_line": 518,
         "required_change": "Wire `foreground_direct_messages_follow_foreground_toggle` into production call path(s) and add parity-safe tests"
       }
     },
@@ -1417,11 +1337,11 @@
       "target": "core/src/drift/relay.rs",
       "variant": "Core",
       "batch": "B8-cross-cutting",
-      "definition_line": 179,
+      "definition_line": 183,
       "external_reference_hits": 0,
       "implementation_patch_template": {
         "file": "core/src/drift/relay.rs",
-        "anchor_line": 179,
+        "anchor_line": 183,
         "required_change": "Wire `generate_cover_traffic_if_due` into production call path(s) and add parity-safe tests"
       }
     },
@@ -1449,11 +1369,11 @@
       "target": "core/src/transport/health.rs",
       "variant": "Core",
       "batch": "B2-core-transport-routing",
-      "definition_line": 370,
-      "external_reference_hits": 0,
+      "definition_line": 381,
+      "external_reference_hits": 1,
       "implementation_patch_template": {
         "file": "core/src/transport/health.rs",
-        "anchor_line": 370,
+        "anchor_line": 381,
         "required_change": "Wire `get_all_connection_stats` into production call path(s) and add parity-safe tests"
       }
     },
@@ -1465,11 +1385,11 @@
       "target": "core/src/transport/internet.rs",
       "variant": "Core",
       "batch": "B2-core-transport-routing",
-      "definition_line": 427,
+      "definition_line": 418,
       "external_reference_hits": 0,
       "implementation_patch_template": {
         "file": "core/src/transport/internet.rs",
-        "anchor_line": 427,
+        "anchor_line": 418,
         "required_change": "Wire `get_all_relay_stats` into production call path(s) and add parity-safe tests"
       }
     },
@@ -1481,11 +1401,11 @@
       "target": "cli/src/transport_bridge.rs",
       "variant": "CLI",
       "batch": "B7-cli",
-      "definition_line": 189,
+      "definition_line": 195,
       "external_reference_hits": 0,
       "implementation_patch_template": {
         "file": "cli/src/transport_bridge.rs",
-        "anchor_line": 189,
+        "anchor_line": 195,
         "required_change": "Wire `get_available_paths` into production call path(s) and add parity-safe tests"
       }
     },
@@ -1497,11 +1417,11 @@
       "target": "cli/src/transport_bridge.rs",
       "variant": "CLI",
       "batch": "B7-cli",
-      "definition_line": 279,
+      "definition_line": 285,
       "external_reference_hits": 0,
       "implementation_patch_template": {
         "file": "cli/src/transport_bridge.rs",
-        "anchor_line": 279,
+        "anchor_line": 285,
         "required_change": "Wire `get_best_forwarding_path` into production call path(s) and add parity-safe tests"
       }
     },
@@ -1513,11 +1433,11 @@
       "target": "core/src/transport/mesh_routing.rs",
       "variant": "Core",
       "batch": "B2-core-transport-routing",
-      "definition_line": 605,
-      "external_reference_hits": 1,
+      "definition_line": 610,
+      "external_reference_hits": 3,
       "implementation_patch_template": {
         "file": "core/src/transport/mesh_routing.rs",
-        "anchor_line": 605,
+        "anchor_line": 610,
         "required_change": "Wire `get_bootstrap_candidates` into production call path(s) and add parity-safe tests"
       }
     },
@@ -1529,11 +1449,11 @@
       "target": "wasm/src/notification_manager.rs",
       "variant": "WASM",
       "batch": "B6-wasm",
-      "definition_line": 329,
+      "definition_line": 324,
       "external_reference_hits": 0,
       "implementation_patch_template": {
         "file": "wasm/src/notification_manager.rs",
-        "anchor_line": 329,
+        "anchor_line": 324,
         "required_change": "Wire `get_browser_options` into production call path(s) and add parity-safe tests"
       }
     },
@@ -1545,11 +1465,11 @@
       "target": "wasm/src/lib.rs",
       "variant": "WASM",
       "batch": "B6-wasm",
-      "definition_line": 1097,
+      "definition_line": 1148,
       "external_reference_hits": 0,
       "implementation_patch_template": {
         "file": "wasm/src/lib.rs",
-        "anchor_line": 1097,
+        "anchor_line": 1148,
         "required_change": "Wire `get_contact_manager` into production call path(s) and add parity-safe tests"
       }
     },
@@ -1561,11 +1481,11 @@
       "target": "wasm/src/lib.rs",
       "variant": "WASM",
       "batch": "B6-wasm",
-      "definition_line": 350,
+      "definition_line": 378,
       "external_reference_hits": 0,
       "implementation_patch_template": {
         "file": "wasm/src/lib.rs",
-        "anchor_line": 350,
+        "anchor_line": 378,
         "required_change": "Wire `get_daemon_socket_url` into production call path(s) and add parity-safe tests"
       }
     },
@@ -1593,11 +1513,11 @@
       "target": "cli/src/transport_bridge.rs",
       "variant": "CLI",
       "batch": "B7-cli",
-      "definition_line": 252,
+      "definition_line": 258,
       "external_reference_hits": 0,
       "implementation_patch_template": {
         "file": "cli/src/transport_bridge.rs",
-        "anchor_line": 252,
+        "anchor_line": 258,
         "required_change": "Wire `get_forwarding_capability` into production call path(s) and add parity-safe tests"
       }
     },
@@ -1609,11 +1529,11 @@
       "target": "core/src/transport/health.rs",
       "variant": "Core",
       "batch": "B2-core-transport-routing",
-      "definition_line": 382,
-      "external_reference_hits": 0,
+      "definition_line": 393,
+      "external_reference_hits": 4,
       "implementation_patch_template": {
         "file": "core/src/transport/health.rs",
-        "anchor_line": 382,
+        "anchor_line": 393,
         "required_change": "Wire `get_healthy_connections` into production call path(s) and add parity-safe tests"
       }
     },
@@ -1625,11 +1545,11 @@
       "target": "core/src/transport/circuit_breaker.rs",
       "variant": "Core",
       "batch": "B2-core-transport-routing",
-      "definition_line": 270,
+      "definition_line": 291,
       "external_reference_hits": 0,
       "implementation_patch_template": {
         "file": "core/src/transport/circuit_breaker.rs",
-        "anchor_line": 270,
+        "anchor_line": 291,
         "required_change": "Wire `get_healthy_relays` into production call path(s) and add parity-safe tests"
       }
     },
@@ -1641,11 +1561,11 @@
       "target": "wasm/src/lib.rs",
       "variant": "WASM",
       "batch": "B6-wasm",
-      "definition_line": 1104,
+      "definition_line": 1155,
       "external_reference_hits": 0,
       "implementation_patch_template": {
         "file": "wasm/src/lib.rs",
-        "anchor_line": 1104,
+        "anchor_line": 1155,
         "required_change": "Wire `get_history_manager` into production call path(s) and add parity-safe tests"
       }
     },
@@ -1689,11 +1609,11 @@
       "target": "wasm/src/lib.rs",
       "variant": "WASM",
       "batch": "B6-wasm",
-      "definition_line": 421,
+      "definition_line": 452,
       "external_reference_hits": 0,
       "implementation_patch_template": {
         "file": "wasm/src/lib.rs",
-        "anchor_line": 421,
+        "anchor_line": 452,
         "required_change": "Wire `get_identity_from_daemon` into production call path(s) and add parity-safe tests"
       }
     },
@@ -1705,11 +1625,11 @@
       "target": "wasm/src/daemon_bridge.rs",
       "variant": "WASM",
       "batch": "B6-wasm",
-      "definition_line": 36,
+      "definition_line": 518,
       "external_reference_hits": 0,
       "implementation_patch_template": {
         "file": "wasm/src/daemon_bridge.rs",
-        "anchor_line": 36,
+        "anchor_line": 518,
         "required_change": "Wire `get_identity_wire_shape` into production call path(s) and add parity-safe tests"
       }
     },
@@ -1721,11 +1641,11 @@
       "target": "wasm/src/lib.rs",
       "variant": "WASM",
       "batch": "B6-wasm",
-      "definition_line": 336,
+      "definition_line": 364,
       "external_reference_hits": 0,
       "implementation_patch_template": {
         "file": "wasm/src/lib.rs",
-        "anchor_line": 336,
+        "anchor_line": 364,
         "required_change": "Wire `get_iron_core_mode` into production call path(s) and add parity-safe tests"
       }
     },
@@ -1769,11 +1689,11 @@
       "target": "wasm/src/notification_manager.rs",
       "variant": "WASM",
       "batch": "B6-wasm",
-      "definition_line": 317,
+      "definition_line": 312,
       "external_reference_hits": 0,
       "implementation_patch_template": {
         "file": "wasm/src/notification_manager.rs",
-        "anchor_line": 317,
+        "anchor_line": 312,
         "required_change": "Wire `get_permission` into production call path(s) and add parity-safe tests"
       }
     },
@@ -1786,7 +1706,7 @@
       "variant": "Core",
       "batch": "B2-core-transport-routing",
       "definition_line": 471,
-      "external_reference_hits": 0,
+      "external_reference_hits": 2,
       "implementation_patch_template": {
         "file": "core/src/store/relay_custody.rs",
         "anchor_line": 471,
@@ -1801,11 +1721,11 @@
       "target": "wasm/src/lib.rs",
       "variant": "WASM",
       "batch": "B6-wasm",
-      "definition_line": 940,
-      "external_reference_hits": 31,
+      "definition_line": 986,
+      "external_reference_hits": 3,
       "implementation_patch_template": {
         "file": "wasm/src/lib.rs",
-        "anchor_line": 940,
+        "anchor_line": 986,
         "required_change": "Wire `get_settings` into production call path(s) and add parity-safe tests"
       }
     },
@@ -1834,7 +1754,7 @@
       "variant": "Core",
       "batch": "B8-cross-cutting",
       "definition_line": 156,
-      "external_reference_hits": 3,
+      "external_reference_hits": 0,
       "implementation_patch_template": {
         "file": "core/src/dspy/signatures.rs",
         "anchor_line": 156,
@@ -1849,11 +1769,11 @@
       "target": "core/src/transport/health.rs",
       "variant": "Core",
       "batch": "B2-core-transport-routing",
-      "definition_line": 391,
+      "definition_line": 403,
       "external_reference_hits": 0,
       "implementation_patch_template": {
         "file": "core/src/transport/health.rs",
-        "anchor_line": 391,
+        "anchor_line": 403,
         "required_change": "Wire `get_unhealthy_connections` into production call path(s) and add parity-safe tests"
       }
     },
@@ -1865,11 +1785,11 @@
       "target": "android/app/src/main/java/com/scmessenger/android/transport/TransportManager.kt",
       "variant": "Android",
       "batch": "B5-android-transport-service",
-      "definition_line": 239,
+      "definition_line": 267,
       "external_reference_hits": 0,
       "implementation_patch_template": {
         "file": "android/app/src/main/java/com/scmessenger/android/transport/TransportManager.kt",
-        "anchor_line": 239,
+        "anchor_line": 267,
         "required_change": "Wire `getActiveTransports` into production call path(s) and add parity-safe tests"
       }
     },
@@ -1945,11 +1865,11 @@
       "target": "android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt",
       "variant": "Android",
       "batch": "B3-android-repository",
-      "definition_line": 3348,
+      "definition_line": 3475,
       "external_reference_hits": 0,
       "implementation_patch_template": {
         "file": "android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt",
-        "anchor_line": 3348,
+        "anchor_line": 3475,
         "required_change": "Wire `getBlockedCount` into production call path(s) and add parity-safe tests"
       }
     },
@@ -1961,11 +1881,11 @@
       "target": "android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt",
       "variant": "Android",
       "batch": "B3-android-repository",
-      "definition_line": 67,
+      "definition_line": 81,
       "external_reference_hits": 0,
       "implementation_patch_template": {
         "file": "android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt",
-        "anchor_line": 67,
+        "anchor_line": 81,
         "required_change": "Wire `getBootstrapNodesForSettings` into production call path(s) and add parity-safe tests"
       }
     },
@@ -2025,11 +1945,11 @@
       "target": "android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt",
       "variant": "Android",
       "batch": "B3-android-repository",
-      "definition_line": 3415,
-      "external_reference_hits": 0,
+      "definition_line": 3542,
+      "external_reference_hits": 1,
       "implementation_patch_template": {
         "file": "android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt",
-        "anchor_line": 3415,
+        "anchor_line": 3542,
         "required_change": "Wire `getInboxCount` into production call path(s) and add parity-safe tests"
       }
     },
@@ -2089,11 +2009,11 @@
       "target": "android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt",
       "variant": "Android",
       "batch": "B3-android-repository",
-      "definition_line": 4076,
-      "external_reference_hits": 14,
+      "definition_line": 4236,
+      "external_reference_hits": 1,
       "implementation_patch_template": {
         "file": "android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt",
-        "anchor_line": 4076,
+        "anchor_line": 4236,
         "required_change": "Wire `getMessage` into production call path(s) and add parity-safe tests"
       }
     },
@@ -2105,11 +2025,11 @@
       "target": "android/app/src/main/java/com/scmessenger/android/ui/viewmodels/SettingsViewModel.kt",
       "variant": "Android",
       "batch": "B4-android-ui",
-      "definition_line": 614,
-      "external_reference_hits": 0,
+      "definition_line": 659,
+      "external_reference_hits": 1,
       "implementation_patch_template": {
         "file": "android/app/src/main/java/com/scmessenger/android/ui/viewmodels/SettingsViewModel.kt",
-        "anchor_line": 614,
+        "anchor_line": 659,
         "required_change": "Wire `getNetworkDiagnosticsReport` into production call path(s) and add parity-safe tests"
       }
     },
@@ -2121,11 +2041,11 @@
       "target": "android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt",
       "variant": "Android",
       "batch": "B3-android-repository",
-      "definition_line": 7480,
+      "definition_line": 7821,
       "external_reference_hits": 0,
       "implementation_patch_template": {
         "file": "android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt",
-        "anchor_line": 7480,
+        "anchor_line": 7821,
         "required_change": "Wire `getNetworkDiagnosticsSnapshot` into production call path(s) and add parity-safe tests"
       }
     },
@@ -2137,11 +2057,11 @@
       "target": "android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt",
       "variant": "Android",
       "batch": "B3-android-repository",
-      "definition_line": 7475,
+      "definition_line": 7816,
       "external_reference_hits": 0,
       "implementation_patch_template": {
         "file": "android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt",
-        "anchor_line": 7475,
+        "anchor_line": 7816,
         "required_change": "Wire `getNetworkFailureSummary` into production call path(s) and add parity-safe tests"
       }
     },
@@ -2170,27 +2090,11 @@
       "variant": "Android",
       "batch": "B8-cross-cutting",
       "definition_line": 194,
-      "external_reference_hits": 0,
+      "external_reference_hits": 2,
       "implementation_patch_template": {
         "file": "android/app/src/main/java/com/scmessenger/android/utils/CircuitBreaker.kt",
         "anchor_line": 194,
         "required_change": "Wire `getOpenCircuits` into production call path(s) and add parity-safe tests"
-      }
-    },
-    {
-      "task_file": "HANDOFF/todo/task_wire_getRetryDelay.md",
-      "task_name": "getRetryDelay",
-      "function": "getRetryDelay",
-      "resolved_symbol": "getRetryDelay",
-      "target": "android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt",
-      "variant": "Android",
-      "batch": "B3-android-repository",
-      "definition_line": 623,
-      "external_reference_hits": 0,
-      "implementation_patch_template": {
-        "file": "android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt",
-        "anchor_line": 623,
-        "required_change": "Wire `getRetryDelay` into production call path(s) and add parity-safe tests"
       }
     },
     {
@@ -2233,11 +2137,11 @@
       "target": "android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt",
       "variant": "Android",
       "batch": "B3-android-repository",
-      "definition_line": 8023,
+      "definition_line": 8363,
       "external_reference_hits": 0,
       "implementation_patch_template": {
         "file": "android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt",
-        "anchor_line": 8023,
+        "anchor_line": 8363,
         "required_change": "Wire `getTransportHealthSummary` into production call path(s) and add parity-safe tests"
       }
     },
@@ -2249,11 +2153,11 @@
       "target": "android/app/src/main/java/com/scmessenger/android/transport/TransportManager.kt",
       "variant": "Android",
       "batch": "B5-android-transport-service",
-      "definition_line": 431,
+      "definition_line": 488,
       "external_reference_hits": 0,
       "implementation_patch_template": {
         "file": "android/app/src/main/java/com/scmessenger/android/transport/TransportManager.kt",
-        "anchor_line": 431,
+        "anchor_line": 488,
         "required_change": "Wire `handleBleFailure` into production call path(s) and add parity-safe tests"
       }
     },
@@ -2265,11 +2169,11 @@
       "target": "android/app/src/main/java/com/scmessenger/android/transport/ble/BleScanner.kt",
       "variant": "Android",
       "batch": "B5-android-transport-service",
-      "definition_line": 498,
-      "external_reference_hits": 0,
+      "definition_line": 456,
+      "external_reference_hits": 2,
       "implementation_patch_template": {
         "file": "android/app/src/main/java/com/scmessenger/android/transport/ble/BleScanner.kt",
-        "anchor_line": 498,
+        "anchor_line": 456,
         "required_change": "Wire `handleScanFailure` into production call path(s) and add parity-safe tests"
       }
     },
@@ -2314,7 +2218,7 @@
       "variant": "Android",
       "batch": "B4-android-ui",
       "definition_line": 115,
-      "external_reference_hits": 0,
+      "external_reference_hits": 3,
       "implementation_patch_template": {
         "file": "android/app/src/main/java/com/scmessenger/android/ui/components/Identicon.kt",
         "anchor_line": 115,
@@ -2329,11 +2233,11 @@
       "target": "android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt",
       "variant": "Android",
       "batch": "B3-android-repository",
-      "definition_line": 613,
+      "definition_line": 672,
       "external_reference_hits": 0,
       "implementation_patch_template": {
         "file": "android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt",
-        "anchor_line": 613,
+        "anchor_line": 672,
         "required_change": "Wire `incrementAttemptCount` into production call path(s) and add parity-safe tests"
       }
     },
@@ -2346,7 +2250,7 @@
       "variant": "Android",
       "batch": "B4-android-ui",
       "definition_line": 176,
-      "external_reference_hits": 0,
+      "external_reference_hits": 2,
       "implementation_patch_template": {
         "file": "android/app/src/main/java/com/scmessenger/android/ui/components/ErrorBanner.kt",
         "anchor_line": 176,
@@ -2361,11 +2265,11 @@
       "target": "wasm/src/lib.rs",
       "variant": "WASM",
       "batch": "B6-wasm",
-      "definition_line": 389,
+      "definition_line": 417,
       "external_reference_hits": 0,
       "implementation_patch_template": {
         "file": "wasm/src/lib.rs",
-        "anchor_line": 389,
+        "anchor_line": 417,
         "required_change": "Wire `initialize_identity_from_daemon` into production call path(s) and add parity-safe tests"
       }
     },
@@ -2377,11 +2281,11 @@
       "target": "cli/src/ble_daemon.rs",
       "variant": "CLI",
       "batch": "B7-cli",
-      "definition_line": 286,
+      "definition_line": 300,
       "external_reference_hits": 0,
       "implementation_patch_template": {
         "file": "cli/src/ble_daemon.rs",
-        "anchor_line": 286,
+        "anchor_line": 300,
         "required_change": "Wire `is_ble_available` into production call path(s) and add parity-safe tests"
       }
     },
@@ -2393,11 +2297,11 @@
       "target": "wasm/src/notification_manager.rs",
       "variant": "WASM",
       "batch": "B6-wasm",
-      "definition_line": 231,
+      "definition_line": 221,
       "external_reference_hits": 0,
       "implementation_patch_template": {
         "file": "wasm/src/notification_manager.rs",
-        "anchor_line": 231,
+        "anchor_line": 221,
         "required_change": "Wire `is_permission_granted` into production call path(s) and add parity-safe tests"
       }
     },
@@ -2457,11 +2361,11 @@
       "target": "android/app/src/main/java/com/scmessenger/android/transport/NetworkDetector.kt",
       "variant": "Android",
       "batch": "B5-android-transport-service",
-      "definition_line": 189,
+      "definition_line": 230,
       "external_reference_hits": 0,
       "implementation_patch_template": {
         "file": "android/app/src/main/java/com/scmessenger/android/transport/NetworkDetector.kt",
-        "anchor_line": 189,
+        "anchor_line": 230,
         "required_change": "Wire `isPortLikelyBlocked` into production call path(s) and add parity-safe tests"
       }
     },
@@ -2482,22 +2386,6 @@
       }
     },
     {
-      "task_file": "HANDOFF/todo/task_wire_isStorageStateCritical.md",
-      "task_name": "isStorageStateCritical",
-      "function": "isStorageStateCritical",
-      "resolved_symbol": "isStorageStateCritical",
-      "target": "android/app/src/main/java/com/scmessenger/android/utils/StorageManager.kt",
-      "variant": "Android",
-      "batch": "B8-cross-cutting",
-      "definition_line": 159,
-      "external_reference_hits": 0,
-      "implementation_patch_template": {
-        "file": "android/app/src/main/java/com/scmessenger/android/utils/StorageManager.kt",
-        "anchor_line": 159,
-        "required_change": "Wire `isStorageStateCritical` into production call path(s) and add parity-safe tests"
-      }
-    },
-    {
       "task_file": "HANDOFF/todo/task_wire_jsonrpc_get_identity.md",
       "task_name": "jsonrpc_get_identity",
       "function": "jsonrpc_get_identity",
@@ -2505,11 +2393,11 @@
       "target": "core/src/wasm_support/rpc.rs",
       "variant": "Core",
       "batch": "B8-cross-cutting",
-      "definition_line": 250,
+      "definition_line": 397,
       "external_reference_hits": 0,
       "implementation_patch_template": {
         "file": "core/src/wasm_support/rpc.rs",
-        "anchor_line": 250,
+        "anchor_line": 397,
         "required_change": "Wire `jsonrpc_get_identity` into production call path(s) and add parity-safe tests"
       }
     },
@@ -2521,11 +2409,11 @@
       "target": "core/src/wasm_support/rpc.rs",
       "variant": "Core",
       "batch": "B8-cross-cutting",
-      "definition_line": 224,
+      "definition_line": 371,
       "external_reference_hits": 0,
       "implementation_patch_template": {
         "file": "core/src/wasm_support/rpc.rs",
-        "anchor_line": 224,
+        "anchor_line": 371,
         "required_change": "Wire `jsonrpc_send_message_roundtrip` into production call path(s) and add parity-safe tests"
       }
     },
@@ -2537,11 +2425,11 @@
       "target": "core/src/notification.rs",
       "variant": "Core",
       "batch": "B8-cross-cutting",
-      "definition_line": 428,
+      "definition_line": 471,
       "external_reference_hits": 0,
       "implementation_patch_template": {
         "file": "core/src/notification.rs",
-        "anchor_line": 428,
+        "anchor_line": 471,
         "required_change": "Wire `known_contact_defaults_to_direct_message` into production call path(s) and add parity-safe tests"
       }
     },
@@ -2554,7 +2442,7 @@
       "variant": "Android",
       "batch": "B4-android-ui",
       "definition_line": 89,
-      "external_reference_hits": 0,
+      "external_reference_hits": 2,
       "implementation_patch_template": {
         "file": "android/app/src/main/java/com/scmessenger/android/ui/components/CopyableText.kt",
         "anchor_line": 89,
@@ -2569,11 +2457,11 @@
       "target": "core/src/notification.rs",
       "variant": "Core",
       "batch": "B8-cross-cutting",
-      "definition_line": 357,
-      "external_reference_hits": 0,
+      "definition_line": 349,
+      "external_reference_hits": 7,
       "implementation_patch_template": {
         "file": "core/src/notification.rs",
-        "anchor_line": 357,
+        "anchor_line": 349,
         "required_change": "Wire `list_endpoints` into production call path(s) and add parity-safe tests"
       }
     },
@@ -2617,11 +2505,11 @@
       "target": "android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt",
       "variant": "Android",
       "batch": "B3-android-repository",
-      "definition_line": 5699,
+      "definition_line": 5916,
       "external_reference_hits": 0,
       "implementation_patch_template": {
         "file": "android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt",
-        "anchor_line": 5699,
+        "anchor_line": 5916,
         "required_change": "Wire `loadPendingOutboxAsync` into production call path(s) and add parity-safe tests"
       }
     },
@@ -2633,11 +2521,11 @@
       "target": "android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt",
       "variant": "Android",
       "batch": "B3-android-repository",
-      "definition_line": 645,
+      "definition_line": 704,
       "external_reference_hits": 0,
       "implementation_patch_template": {
         "file": "android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt",
-        "anchor_line": 645,
+        "anchor_line": 704,
         "required_change": "Wire `logMessageDeliveryAttempt` into production call path(s) and add parity-safe tests"
       }
     },
@@ -2681,11 +2569,11 @@
       "target": "android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt",
       "variant": "Android",
       "batch": "B3-android-repository",
-      "definition_line": 472,
+      "definition_line": 531,
       "external_reference_hits": 0,
       "implementation_patch_template": {
         "file": "android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt",
-        "anchor_line": 472,
+        "anchor_line": 531,
         "required_change": "Wire `markCorrupted` into production call path(s) and add parity-safe tests"
       }
     },
@@ -2697,11 +2585,11 @@
       "target": "android/app/src/main/java/com/scmessenger/android/ui/settings/MeshSettingsScreen.kt",
       "variant": "Android",
       "batch": "B4-android-ui",
-      "definition_line": 32,
-      "external_reference_hits": 2,
+      "definition_line": 33,
+      "external_reference_hits": 7,
       "implementation_patch_template": {
         "file": "android/app/src/main/java/com/scmessenger/android/ui/settings/MeshSettingsScreen.kt",
-        "anchor_line": 32,
+        "anchor_line": 33,
         "required_change": "Wire `MeshSettingsScreen` into production call path(s) and add parity-safe tests"
       }
     },
@@ -2714,7 +2602,7 @@
       "variant": "Android",
       "batch": "B4-android-ui",
       "definition_line": 20,
-      "external_reference_hits": 0,
+      "external_reference_hits": 4,
       "implementation_patch_template": {
         "file": "android/app/src/main/java/com/scmessenger/android/ui/chat/MessageInput.kt",
         "anchor_line": 20,
@@ -2730,7 +2618,7 @@
       "variant": "Core",
       "batch": "B2-core-transport-routing",
       "definition_line": 184,
-      "external_reference_hits": 0,
+      "external_reference_hits": 1,
       "implementation_patch_template": {
         "file": "core/src/routing/optimized_engine.rs",
         "anchor_line": 184,
@@ -2793,11 +2681,11 @@
       "target": "core/src/transport/swarm.rs",
       "variant": "Core",
       "batch": "B2-core-transport-routing",
-      "definition_line": 4417,
+      "definition_line": 4514,
       "external_reference_hits": 0,
       "implementation_patch_template": {
         "file": "core/src/transport/swarm.rs",
-        "anchor_line": 4417,
+        "anchor_line": 4514,
         "required_change": "Wire `normal_low_volume_usage_is_unaffected` into production call path(s) and add parity-safe tests"
       }
     },
@@ -2809,11 +2697,11 @@
       "target": "core/src/wasm_support/rpc.rs",
       "variant": "Core",
       "batch": "B8-cross-cutting",
-      "definition_line": 205,
+      "definition_line": 352,
       "external_reference_hits": 0,
       "implementation_patch_template": {
         "file": "core/src/wasm_support/rpc.rs",
-        "anchor_line": 205,
+        "anchor_line": 352,
         "required_change": "Wire `notif_mesh_topology` into production call path(s) and add parity-safe tests"
       }
     },
@@ -2825,11 +2713,11 @@
       "target": "wasm/src/daemon_bridge.rs",
       "variant": "WASM",
       "batch": "B6-wasm",
-      "definition_line": 45,
+      "definition_line": 562,
       "external_reference_hits": 0,
       "implementation_patch_template": {
         "file": "wasm/src/daemon_bridge.rs",
-        "anchor_line": 45,
+        "anchor_line": 562,
         "required_change": "Wire `notification_roundtrip_for_ui_state` into production call path(s) and add parity-safe tests"
       }
     },
@@ -2841,11 +2729,11 @@
       "target": "core/src/wasm_support/rpc.rs",
       "variant": "Core",
       "batch": "B8-cross-cutting",
-      "definition_line": 264,
+      "definition_line": 411,
       "external_reference_hits": 0,
       "implementation_patch_template": {
         "file": "core/src/wasm_support/rpc.rs",
-        "anchor_line": 264,
+        "anchor_line": 411,
         "required_change": "Wire `notification_serialization` into production call path(s) and add parity-safe tests"
       }
     },
@@ -2857,28 +2745,12 @@
       "target": "android/app/src/main/java/com/scmessenger/android/service/AndroidPlatformBridge.kt",
       "variant": "Android",
       "batch": "B5-android-transport-service",
-      "definition_line": 399,
-      "external_reference_hits": 0,
+      "definition_line": 453,
+      "external_reference_hits": 1,
       "implementation_patch_template": {
         "file": "android/app/src/main/java/com/scmessenger/android/service/AndroidPlatformBridge.kt",
-        "anchor_line": 399,
+        "anchor_line": 453,
         "required_change": "Wire `notifyBackground` into production call path(s) and add parity-safe tests"
-      }
-    },
-    {
-      "task_file": "HANDOFF/todo/task_wire_notifyForeground.md",
-      "task_name": "notifyForeground",
-      "function": "notifyForeground",
-      "resolved_symbol": "notifyForeground",
-      "target": "android/app/src/main/java/com/scmessenger/android/service/AndroidPlatformBridge.kt",
-      "variant": "Android",
-      "batch": "B5-android-transport-service",
-      "definition_line": 406,
-      "external_reference_hits": 0,
-      "implementation_patch_template": {
-        "file": "android/app/src/main/java/com/scmessenger/android/service/AndroidPlatformBridge.kt",
-        "anchor_line": 406,
-        "required_change": "Wire `notifyForeground` into production call path(s) and add parity-safe tests"
       }
     },
     {
@@ -2889,11 +2761,11 @@
       "target": "android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt",
       "variant": "Android",
       "batch": "B3-android-repository",
-      "definition_line": 7633,
+      "definition_line": 7974,
       "external_reference_hits": 0,
       "implementation_patch_template": {
         "file": "android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt",
-        "anchor_line": 7633,
+        "anchor_line": 7974,
         "required_change": "Wire `observeNetworkStats` into production call path(s) and add parity-safe tests"
       }
     },
@@ -2905,11 +2777,11 @@
       "target": "android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt",
       "variant": "Android",
       "batch": "B3-android-repository",
-      "definition_line": 7618,
+      "definition_line": 7959,
       "external_reference_hits": 0,
       "implementation_patch_template": {
         "file": "android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt",
-        "anchor_line": 7618,
+        "anchor_line": 7959,
         "required_change": "Wire `observePeers` into production call path(s) and add parity-safe tests"
       }
     },
@@ -2969,11 +2841,11 @@
       "target": "android/app/src/main/java/com/scmessenger/android/service/MeshForegroundService.kt",
       "variant": "Android",
       "batch": "B5-android-transport-service",
-      "definition_line": 534,
+      "definition_line": 598,
       "external_reference_hits": 0,
       "implementation_patch_template": {
         "file": "android/app/src/main/java/com/scmessenger/android/service/MeshForegroundService.kt",
-        "anchor_line": 534,
+        "anchor_line": 598,
         "required_change": "Wire `onBind` into production call path(s) and add parity-safe tests"
       }
     },
@@ -2985,11 +2857,11 @@
       "target": "android/app/src/main/java/com/scmessenger/android/service/AndroidPlatformBridge.kt",
       "variant": "Android",
       "batch": "B5-android-transport-service",
-      "definition_line": 314,
+      "definition_line": 335,
       "external_reference_hits": 22,
       "implementation_patch_template": {
         "file": "android/app/src/main/java/com/scmessenger/android/service/AndroidPlatformBridge.kt",
-        "anchor_line": 314,
+        "anchor_line": 335,
         "required_change": "Wire `onBleDataReceived` into production call path(s) and add parity-safe tests"
       }
     },
@@ -3001,11 +2873,11 @@
       "target": "android/app/src/main/java/com/scmessenger/android/transport/MdnsServiceDiscovery.kt",
       "variant": "Android",
       "batch": "B5-android-transport-service",
-      "definition_line": 141,
+      "definition_line": 153,
       "external_reference_hits": 0,
       "implementation_patch_template": {
         "file": "android/app/src/main/java/com/scmessenger/android/transport/MdnsServiceDiscovery.kt",
-        "anchor_line": 141,
+        "anchor_line": 153,
         "required_change": "Wire `onDiscoveryStarted` into production call path(s) and add parity-safe tests"
       }
     },
@@ -3017,11 +2889,11 @@
       "target": "android/app/src/main/java/com/scmessenger/android/transport/MdnsServiceDiscovery.kt",
       "variant": "Android",
       "batch": "B5-android-transport-service",
-      "definition_line": 146,
+      "definition_line": 158,
       "external_reference_hits": 0,
       "implementation_patch_template": {
         "file": "android/app/src/main/java/com/scmessenger/android/transport/MdnsServiceDiscovery.kt",
-        "anchor_line": 146,
+        "anchor_line": 158,
         "required_change": "Wire `onDiscoveryStopped` into production call path(s) and add parity-safe tests"
       }
     },
@@ -3033,11 +2905,11 @@
       "target": "android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt",
       "variant": "Android",
       "batch": "B3-android-repository",
-      "definition_line": 1444,
+      "definition_line": 1517,
       "external_reference_hits": 25,
       "implementation_patch_template": {
         "file": "android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt",
-        "anchor_line": 1444,
+        "anchor_line": 1517,
         "required_change": "Wire `onPeerDisconnected` into production call path(s) and add parity-safe tests"
       }
     },
@@ -3049,11 +2921,11 @@
       "target": "android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt",
       "variant": "Android",
       "batch": "B3-android-repository",
-      "definition_line": 1860,
+      "definition_line": 1942,
       "external_reference_hits": 17,
       "implementation_patch_template": {
         "file": "android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt",
-        "anchor_line": 1860,
+        "anchor_line": 1942,
         "required_change": "Wire `onReceiptReceived` into production call path(s) and add parity-safe tests"
       }
     },
@@ -3065,11 +2937,11 @@
       "target": "android/app/src/main/java/com/scmessenger/android/transport/MdnsServiceDiscovery.kt",
       "variant": "Android",
       "batch": "B5-android-transport-service",
-      "definition_line": 113,
+      "definition_line": 125,
       "external_reference_hits": 0,
       "implementation_patch_template": {
         "file": "android/app/src/main/java/com/scmessenger/android/transport/MdnsServiceDiscovery.kt",
-        "anchor_line": 113,
+        "anchor_line": 125,
         "required_change": "Wire `onRegistrationFailed` into production call path(s) and add parity-safe tests"
       }
     },
@@ -3081,11 +2953,11 @@
       "target": "android/app/src/main/java/com/scmessenger/android/transport/MdnsServiceDiscovery.kt",
       "variant": "Android",
       "batch": "B5-android-transport-service",
-      "definition_line": 183,
+      "definition_line": 208,
       "external_reference_hits": 0,
       "implementation_patch_template": {
         "file": "android/app/src/main/java/com/scmessenger/android/transport/MdnsServiceDiscovery.kt",
-        "anchor_line": 183,
+        "anchor_line": 208,
         "required_change": "Wire `onResolveFailed` into production call path(s) and add parity-safe tests"
       }
     },
@@ -3129,11 +3001,11 @@
       "target": "android/app/src/main/java/com/scmessenger/android/transport/MdnsServiceDiscovery.kt",
       "variant": "Android",
       "batch": "B5-android-transport-service",
-      "definition_line": 151,
+      "definition_line": 163,
       "external_reference_hits": 0,
       "implementation_patch_template": {
         "file": "android/app/src/main/java/com/scmessenger/android/transport/MdnsServiceDiscovery.kt",
-        "anchor_line": 151,
+        "anchor_line": 163,
         "required_change": "Wire `onServiceFound` into production call path(s) and add parity-safe tests"
       }
     },
@@ -3145,11 +3017,11 @@
       "target": "android/app/src/main/java/com/scmessenger/android/transport/MdnsServiceDiscovery.kt",
       "variant": "Android",
       "batch": "B5-android-transport-service",
-      "definition_line": 161,
+      "definition_line": 173,
       "external_reference_hits": 0,
       "implementation_patch_template": {
         "file": "android/app/src/main/java/com/scmessenger/android/transport/MdnsServiceDiscovery.kt",
-        "anchor_line": 161,
+        "anchor_line": 173,
         "required_change": "Wire `onServiceLost` into production call path(s) and add parity-safe tests"
       }
     },
@@ -3161,11 +3033,11 @@
       "target": "android/app/src/main/java/com/scmessenger/android/transport/MdnsServiceDiscovery.kt",
       "variant": "Android",
       "batch": "B5-android-transport-service",
-      "definition_line": 122,
+      "definition_line": 134,
       "external_reference_hits": 0,
       "implementation_patch_template": {
         "file": "android/app/src/main/java/com/scmessenger/android/transport/MdnsServiceDiscovery.kt",
-        "anchor_line": 122,
+        "anchor_line": 134,
         "required_change": "Wire `onServiceRegistered` into production call path(s) and add parity-safe tests"
       }
     },
@@ -3177,11 +3049,11 @@
       "target": "android/app/src/main/java/com/scmessenger/android/transport/MdnsServiceDiscovery.kt",
       "variant": "Android",
       "batch": "B5-android-transport-service",
-      "definition_line": 187,
+      "definition_line": 212,
       "external_reference_hits": 0,
       "implementation_patch_template": {
         "file": "android/app/src/main/java/com/scmessenger/android/transport/MdnsServiceDiscovery.kt",
-        "anchor_line": 187,
+        "anchor_line": 212,
         "required_change": "Wire `onServiceResolved` into production call path(s) and add parity-safe tests"
       }
     },
@@ -3193,11 +3065,11 @@
       "target": "android/app/src/main/java/com/scmessenger/android/transport/MdnsServiceDiscovery.kt",
       "variant": "Android",
       "batch": "B5-android-transport-service",
-      "definition_line": 127,
+      "definition_line": 139,
       "external_reference_hits": 0,
       "implementation_patch_template": {
         "file": "android/app/src/main/java/com/scmessenger/android/transport/MdnsServiceDiscovery.kt",
-        "anchor_line": 127,
+        "anchor_line": 139,
         "required_change": "Wire `onServiceUnregistered` into production call path(s) and add parity-safe tests"
       }
     },
@@ -3209,11 +3081,11 @@
       "target": "android/app/src/main/java/com/scmessenger/android/transport/MdnsServiceDiscovery.kt",
       "variant": "Android",
       "batch": "B5-android-transport-service",
-      "definition_line": 165,
+      "definition_line": 177,
       "external_reference_hits": 0,
       "implementation_patch_template": {
         "file": "android/app/src/main/java/com/scmessenger/android/transport/MdnsServiceDiscovery.kt",
-        "anchor_line": 165,
+        "anchor_line": 177,
         "required_change": "Wire `onStartDiscoveryFailed` into production call path(s) and add parity-safe tests"
       }
     },
@@ -3257,11 +3129,11 @@
       "target": "android/app/src/main/java/com/scmessenger/android/transport/MdnsServiceDiscovery.kt",
       "variant": "Android",
       "batch": "B5-android-transport-service",
-      "definition_line": 170,
+      "definition_line": 182,
       "external_reference_hits": 0,
       "implementation_patch_template": {
         "file": "android/app/src/main/java/com/scmessenger/android/transport/MdnsServiceDiscovery.kt",
-        "anchor_line": 170,
+        "anchor_line": 182,
         "required_change": "Wire `onStopDiscoveryFailed` into production call path(s) and add parity-safe tests"
       }
     },
@@ -3273,11 +3145,11 @@
       "target": "android/app/src/main/java/com/scmessenger/android/transport/MdnsServiceDiscovery.kt",
       "variant": "Android",
       "batch": "B5-android-transport-service",
-      "definition_line": 118,
+      "definition_line": 130,
       "external_reference_hits": 0,
       "implementation_patch_template": {
         "file": "android/app/src/main/java/com/scmessenger/android/transport/MdnsServiceDiscovery.kt",
-        "anchor_line": 118,
+        "anchor_line": 130,
         "required_change": "Wire `onUnregistrationFailed` into production call path(s) and add parity-safe tests"
       }
     },
@@ -3289,11 +3161,11 @@
       "target": "core/src/abuse/reputation.rs",
       "variant": "Core",
       "batch": "B8-cross-cutting",
-      "definition_line": 169,
-      "external_reference_hits": 28,
+      "definition_line": 177,
+      "external_reference_hits": 0,
       "implementation_patch_template": {
         "file": "core/src/abuse/reputation.rs",
-        "anchor_line": 169,
+        "anchor_line": 177,
         "required_change": "Wire `overall_score` into production call path(s) and add parity-safe tests"
       }
     },
@@ -3337,11 +3209,11 @@
       "target": "wasm/src/daemon_bridge.rs",
       "variant": "WASM",
       "batch": "B6-wasm",
-      "definition_line": 21,
-      "external_reference_hits": 7,
+      "definition_line": 236,
+      "external_reference_hits": 1,
       "implementation_patch_template": {
         "file": "wasm/src/daemon_bridge.rs",
-        "anchor_line": 21,
+        "anchor_line": 236,
         "required_change": "Wire `parse_response` into production call path(s) and add parity-safe tests"
       }
     },
@@ -3353,11 +3225,11 @@
       "target": "core/src/transport/swarm.rs",
       "variant": "Core",
       "batch": "B2-core-transport-routing",
-      "definition_line": 4564,
+      "definition_line": 4661,
       "external_reference_hits": 0,
       "implementation_patch_template": {
         "file": "core/src/transport/swarm.rs",
-        "anchor_line": 4564,
+        "anchor_line": 4661,
         "required_change": "Wire `peer_id_public_key_extraction_roundtrips_for_ed25519_peers` into production call path(s) and add parity-safe tests"
       }
     },
@@ -3369,11 +3241,11 @@
       "target": "android/app/src/main/java/com/scmessenger/android/ui/dashboard/PeerListScreen.kt",
       "variant": "Android",
       "batch": "B4-android-ui",
-      "definition_line": 36,
-      "external_reference_hits": 0,
+      "definition_line": 40,
+      "external_reference_hits": 4,
       "implementation_patch_template": {
         "file": "android/app/src/main/java/com/scmessenger/android/ui/dashboard/PeerListScreen.kt",
-        "anchor_line": 36,
+        "anchor_line": 40,
         "required_change": "Wire `PeerListScreen` into production call path(s) and add parity-safe tests"
       }
     },
@@ -3385,11 +3257,11 @@
       "target": "core/src/transport/manager.rs",
       "variant": "Core",
       "batch": "B2-core-transport-routing",
-      "definition_line": 446,
+      "definition_line": 482,
       "external_reference_hits": 0,
       "implementation_patch_template": {
         "file": "core/src/transport/manager.rs",
-        "anchor_line": 446,
+        "anchor_line": 482,
         "required_change": "Wire `peers_needing_reconnect` into production call path(s) and add parity-safe tests"
       }
     },
@@ -3401,11 +3273,11 @@
       "target": "android/app/src/main/java/com/scmessenger/android/ui/settings/PowerSettingsScreen.kt",
       "variant": "Android",
       "batch": "B4-android-ui",
-      "definition_line": 30,
-      "external_reference_hits": 2,
+      "definition_line": 36,
+      "external_reference_hits": 7,
       "implementation_patch_template": {
         "file": "android/app/src/main/java/com/scmessenger/android/ui/settings/PowerSettingsScreen.kt",
-        "anchor_line": 30,
+        "anchor_line": 36,
         "required_change": "Wire `PowerSettingsScreen` into production call path(s) and add parity-safe tests"
       }
     },
@@ -3434,27 +3306,11 @@
       "variant": "Core",
       "batch": "B2-core-transport-routing",
       "definition_line": 189,
-      "external_reference_hits": 0,
+      "external_reference_hits": 1,
       "implementation_patch_template": {
         "file": "core/src/routing/optimized_engine.rs",
         "anchor_line": 189,
         "required_change": "Wire `prefetch_stats` into production call path(s) and add parity-safe tests"
-      }
-    },
-    {
-      "task_file": "HANDOFF/todo/task_wire_prepare_onion_message.md",
-      "task_name": "prepare_onion_message",
-      "function": "prepare_onion_message",
-      "resolved_symbol": "prepare_onion_message",
-      "target": "core/src/lib.rs",
-      "variant": "Core",
-      "batch": "B1-core-entrypoints",
-      "definition_line": 1702,
-      "external_reference_hits": 2,
-      "implementation_patch_template": {
-        "file": "core/src/lib.rs",
-        "anchor_line": 1702,
-        "required_change": "Wire `prepare_onion_message` into production call path(s) and add parity-safe tests"
       }
     },
     {
@@ -3465,11 +3321,11 @@
       "target": "android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt",
       "variant": "Android",
       "batch": "B3-android-repository",
-      "definition_line": 7161,
+      "definition_line": 7459,
       "external_reference_hits": 0,
       "implementation_patch_template": {
         "file": "android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt",
-        "anchor_line": 7161,
+        "anchor_line": 7459,
         "required_change": "Wire `primeRelayBootstrapConnectionsLegacy` into production call path(s) and add parity-safe tests"
       }
     },
@@ -3586,22 +3442,6 @@
       }
     },
     {
-      "task_file": "HANDOFF/todo/task_wire_provideMeshRepository.md",
-      "task_name": "provideMeshRepository",
-      "function": "provideMeshRepository",
-      "resolved_symbol": "provideMeshRepository",
-      "target": "android/app/src/main/java/com/scmessenger/android/di/AppModule.kt",
-      "variant": "Android",
-      "batch": "B8-cross-cutting",
-      "definition_line": 26,
-      "external_reference_hits": 0,
-      "implementation_patch_template": {
-        "file": "android/app/src/main/java/com/scmessenger/android/di/AppModule.kt",
-        "anchor_line": 26,
-        "required_change": "Wire `provideMeshRepository` into production call path(s) and add parity-safe tests"
-      }
-    },
-    {
       "task_file": "HANDOFF/todo/task_wire_providePreferencesRepository.md",
       "task_name": "providePreferencesRepository",
       "function": "providePreferencesRepository",
@@ -3631,70 +3471,6 @@
         "file": "core/src/routing/reputation.rs",
         "anchor_line": 64,
         "required_change": "Wire `prune_below` into production call path(s) and add parity-safe tests"
-      }
-    },
-    {
-      "task_file": "HANDOFF/todo/task_wire_random_port.md",
-      "task_name": "random_port",
-      "function": "random_port",
-      "resolved_symbol": "random_port",
-      "target": "core/src/lib.rs",
-      "variant": "Core",
-      "batch": "B1-core-entrypoints",
-      "definition_line": 3427,
-      "external_reference_hits": 0,
-      "implementation_patch_template": {
-        "file": "core/src/lib.rs",
-        "anchor_line": 3427,
-        "required_change": "Wire `random_port` into production call path(s) and add parity-safe tests"
-      }
-    },
-    {
-      "task_file": "HANDOFF/todo/task_wire_ratchet_has_session.md",
-      "task_name": "ratchet_has_session",
-      "function": "ratchet_has_session",
-      "resolved_symbol": "ratchet_has_session",
-      "target": "core/src/lib.rs",
-      "variant": "Core",
-      "batch": "B1-core-entrypoints",
-      "definition_line": 2192,
-      "external_reference_hits": 0,
-      "implementation_patch_template": {
-        "file": "core/src/lib.rs",
-        "anchor_line": 2192,
-        "required_change": "Wire `ratchet_has_session` into production call path(s) and add parity-safe tests"
-      }
-    },
-    {
-      "task_file": "HANDOFF/todo/task_wire_ratchet_reset_session.md",
-      "task_name": "ratchet_reset_session",
-      "function": "ratchet_reset_session",
-      "resolved_symbol": "ratchet_reset_session",
-      "target": "core/src/lib.rs",
-      "variant": "Core",
-      "batch": "B1-core-entrypoints",
-      "definition_line": 2199,
-      "external_reference_hits": 0,
-      "implementation_patch_template": {
-        "file": "core/src/lib.rs",
-        "anchor_line": 2199,
-        "required_change": "Wire `ratchet_reset_session` into production call path(s) and add parity-safe tests"
-      }
-    },
-    {
-      "task_file": "HANDOFF/todo/task_wire_ratchet_session_count.md",
-      "task_name": "ratchet_session_count",
-      "function": "ratchet_session_count",
-      "resolved_symbol": "ratchet_session_count",
-      "target": "core/src/lib.rs",
-      "variant": "Core",
-      "batch": "B1-core-entrypoints",
-      "definition_line": 2187,
-      "external_reference_hits": 0,
-      "implementation_patch_template": {
-        "file": "core/src/lib.rs",
-        "anchor_line": 2187,
-        "required_change": "Wire `ratchet_session_count` into production call path(s) and add parity-safe tests"
       }
     },
     {
@@ -3737,11 +3513,11 @@
       "target": "android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt",
       "variant": "Android",
       "batch": "B3-android-repository",
-      "definition_line": 4207,
+      "definition_line": 4370,
       "external_reference_hits": 1,
       "implementation_patch_template": {
         "file": "android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt",
-        "anchor_line": 4207,
+        "anchor_line": 4370,
         "required_change": "Wire `recordConnectionFailure` into production call path(s) and add parity-safe tests"
       }
     },
@@ -3753,11 +3529,11 @@
       "target": "android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt",
       "variant": "Android",
       "batch": "B3-android-repository",
-      "definition_line": 8011,
+      "definition_line": 8351,
       "external_reference_hits": 0,
       "implementation_patch_template": {
         "file": "android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt",
-        "anchor_line": 8011,
+        "anchor_line": 8351,
         "required_change": "Wire `recordTransportEvent` into production call path(s) and add parity-safe tests"
       }
     },
@@ -3801,11 +3577,11 @@
       "target": "core/src/notification.rs",
       "variant": "Core",
       "batch": "B8-cross-cutting",
-      "definition_line": 304,
-      "external_reference_hits": 0,
+      "definition_line": 302,
+      "external_reference_hits": 9,
       "implementation_patch_template": {
         "file": "core/src/notification.rs",
-        "anchor_line": 304,
+        "anchor_line": 302,
         "required_change": "Wire `register_endpoint` into production call path(s) and add parity-safe tests"
       }
     },
@@ -3833,11 +3609,11 @@
       "target": "core/src/transport/health.rs",
       "variant": "Core",
       "batch": "B2-core-transport-routing",
-      "definition_line": 400,
+      "definition_line": 413,
       "external_reference_hits": 0,
       "implementation_patch_template": {
         "file": "core/src/transport/health.rs",
-        "anchor_line": 400,
+        "anchor_line": 413,
         "required_change": "Wire `register_state_change_callback` into production call path(s) and add parity-safe tests"
       }
     },
@@ -3866,7 +3642,7 @@
       "variant": "Core",
       "batch": "B2-core-transport-routing",
       "definition_line": 483,
-      "external_reference_hits": 0,
+      "external_reference_hits": 1,
       "implementation_patch_template": {
         "file": "core/src/store/relay_custody.rs",
         "anchor_line": 483,
@@ -3881,28 +3657,12 @@
       "target": "core/src/transport/bootstrap.rs",
       "variant": "Core",
       "batch": "B2-core-transport-routing",
-      "definition_line": 193,
+      "definition_line": 189,
       "external_reference_hits": 0,
       "implementation_patch_template": {
         "file": "core/src/transport/bootstrap.rs",
-        "anchor_line": 193,
+        "anchor_line": 189,
         "required_change": "Wire `relay_discovery_mut` into production call path(s) and add parity-safe tests"
-      }
-    },
-    {
-      "task_file": "HANDOFF/todo/task_wire_relay_jitter_delay.md",
-      "task_name": "relay_jitter_delay",
-      "function": "relay_jitter_delay",
-      "resolved_symbol": "relay_jitter_delay",
-      "target": "core/src/lib.rs",
-      "variant": "Core",
-      "batch": "B1-core-entrypoints",
-      "definition_line": 1801,
-      "external_reference_hits": 0,
-      "implementation_patch_template": {
-        "file": "core/src/lib.rs",
-        "anchor_line": 1801,
-        "required_change": "Wire `relay_jitter_delay` into production call path(s) and add parity-safe tests"
       }
     },
     {
@@ -3977,11 +3737,11 @@
       "target": "wasm/src/notification_manager.rs",
       "variant": "WASM",
       "batch": "B6-wasm",
-      "definition_line": 110,
+      "definition_line": 106,
       "external_reference_hits": 0,
       "implementation_patch_template": {
         "file": "wasm/src/notification_manager.rs",
-        "anchor_line": 110,
+        "anchor_line": 106,
         "required_change": "Wire `request_permission` into production call path(s) and add parity-safe tests"
       }
     },
@@ -3993,11 +3753,11 @@
       "target": "core/src/transport/bootstrap.rs",
       "variant": "Core",
       "batch": "B2-core-transport-routing",
-      "definition_line": 455,
+      "definition_line": 482,
       "external_reference_hits": 0,
       "implementation_patch_template": {
         "file": "core/src/transport/bootstrap.rs",
-        "anchor_line": 455,
+        "anchor_line": 482,
         "required_change": "Wire `reset_circuit_breakers` into production call path(s) and add parity-safe tests"
       }
     },
@@ -4041,11 +3801,11 @@
       "target": "android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt",
       "variant": "Android",
       "batch": "B3-android-repository",
-      "definition_line": 3003,
+      "definition_line": 3130,
       "external_reference_hits": 1,
       "implementation_patch_template": {
         "file": "android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt",
-        "anchor_line": 3003,
+        "anchor_line": 3130,
         "required_change": "Wire `resetServiceStats` into production call path(s) and add parity-safe tests"
       }
     },
@@ -4063,22 +3823,6 @@
         "file": "android/app/src/main/java/com/scmessenger/android/ui/viewmodels/ConversationsViewModel.kt",
         "anchor_line": 395,
         "required_change": "Wire `resolveDeliveryState` into production call path(s) and add parity-safe tests"
-      }
-    },
-    {
-      "task_file": "HANDOFF/todo/task_wire_routing_tick.md",
-      "task_name": "routing_tick",
-      "function": "routing_tick",
-      "resolved_symbol": "routing_tick",
-      "target": "core/src/lib.rs",
-      "variant": "Core",
-      "batch": "B1-core-entrypoints",
-      "definition_line": 2750,
-      "external_reference_hits": 0,
-      "implementation_patch_template": {
-        "file": "core/src/lib.rs",
-        "anchor_line": 2750,
-        "required_change": "Wire `routing_tick` into production call path(s) and add parity-safe tests"
       }
     },
     {
@@ -4105,11 +3849,11 @@
       "target": "cli/src/ble_daemon.rs",
       "variant": "CLI",
       "batch": "B7-cli",
-      "definition_line": 229,
+      "definition_line": 236,
       "external_reference_hits": 0,
       "implementation_patch_template": {
         "file": "cli/src/ble_daemon.rs",
-        "anchor_line": 229,
+        "anchor_line": 236,
         "required_change": "Wire `scan_for_advertisements` into production call path(s) and add parity-safe tests"
       }
     },
@@ -4121,11 +3865,11 @@
       "target": "android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt",
       "variant": "Android",
       "batch": "B3-android-repository",
-      "definition_line": 3277,
+      "definition_line": 3404,
       "external_reference_hits": 1,
       "implementation_patch_template": {
         "file": "android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt",
-        "anchor_line": 3277,
+        "anchor_line": 3404,
         "required_change": "Wire `searchContacts` into production call path(s) and add parity-safe tests"
       }
     },
@@ -4137,11 +3881,11 @@
       "target": "wasm/src/lib.rs",
       "variant": "WASM",
       "batch": "B6-wasm",
-      "definition_line": 565,
+      "definition_line": 601,
       "external_reference_hits": 0,
       "implementation_patch_template": {
         "file": "wasm/src/lib.rs",
-        "anchor_line": 565,
+        "anchor_line": 601,
         "required_change": "Wire `send_prepared_envelope` into production call path(s) and add parity-safe tests"
       }
     },
@@ -4153,11 +3897,11 @@
       "target": "android/app/src/main/java/com/scmessenger/android/service/AndroidPlatformBridge.kt",
       "variant": "Android",
       "batch": "B5-android-transport-service",
-      "definition_line": 334,
+      "definition_line": 355,
       "external_reference_hits": 21,
       "implementation_patch_template": {
         "file": "android/app/src/main/java/com/scmessenger/android/service/AndroidPlatformBridge.kt",
-        "anchor_line": 334,
+        "anchor_line": 355,
         "required_change": "Wire `sendBlePacket` into production call path(s) and add parity-safe tests"
       }
     },
@@ -4169,11 +3913,11 @@
       "target": "core/src/drift/relay.rs",
       "variant": "Core",
       "batch": "B8-cross-cutting",
-      "definition_line": 156,
+      "definition_line": 157,
       "external_reference_hits": 0,
       "implementation_patch_template": {
         "file": "core/src/drift/relay.rs",
-        "anchor_line": 156,
+        "anchor_line": 157,
         "required_change": "Wire `set_cover_traffic` into production call path(s) and add parity-safe tests"
       }
     },
@@ -4185,11 +3929,11 @@
       "target": "wasm/src/lib.rs",
       "variant": "WASM",
       "batch": "B6-wasm",
-      "definition_line": 344,
+      "definition_line": 372,
       "external_reference_hits": 0,
       "implementation_patch_template": {
         "file": "wasm/src/lib.rs",
-        "anchor_line": 344,
+        "anchor_line": 372,
         "required_change": "Wire `set_daemon_socket_url` into production call path(s) and add parity-safe tests"
       }
     },
@@ -4201,11 +3945,11 @@
       "target": "wasm/src/lib.rs",
       "variant": "WASM",
       "batch": "B6-wasm",
-      "definition_line": 327,
+      "definition_line": 355,
       "external_reference_hits": 0,
       "implementation_patch_template": {
         "file": "wasm/src/lib.rs",
-        "anchor_line": 327,
+        "anchor_line": 355,
         "required_change": "Wire `set_iron_core_mode` into production call path(s) and add parity-safe tests"
       }
     },
@@ -4233,11 +3977,11 @@
       "target": "core/src/drift/relay.rs",
       "variant": "Core",
       "batch": "B8-cross-cutting",
-      "definition_line": 170,
+      "definition_line": 171,
       "external_reference_hits": 0,
       "implementation_patch_template": {
         "file": "core/src/drift/relay.rs",
-        "anchor_line": 170,
+        "anchor_line": 171,
         "required_change": "Wire `set_reputation_manager` into production call path(s) and add parity-safe tests"
       }
     },
@@ -4249,11 +3993,11 @@
       "target": "android/app/src/main/java/com/scmessenger/android/service/AndroidPlatformBridge.kt",
       "variant": "Android",
       "batch": "B5-android-transport-service",
-      "definition_line": 87,
+      "definition_line": 92,
       "external_reference_hits": 0,
       "implementation_patch_template": {
         "file": "android/app/src/main/java/com/scmessenger/android/service/AndroidPlatformBridge.kt",
-        "anchor_line": 87,
+        "anchor_line": 92,
         "required_change": "Wire `setBleComponents` into production call path(s) and add parity-safe tests"
       }
     },
@@ -4265,11 +4009,11 @@
       "target": "android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt",
       "variant": "Android",
       "batch": "B3-android-repository",
-      "definition_line": 3281,
+      "definition_line": 3408,
       "external_reference_hits": 1,
       "implementation_patch_template": {
         "file": "android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt",
-        "anchor_line": 3281,
+        "anchor_line": 3408,
         "required_change": "Wire `setContactNickname` into production call path(s) and add parity-safe tests"
       }
     },
@@ -4287,22 +4031,6 @@
         "file": "android/app/src/main/java/com/scmessenger/android/ui/viewmodels/ChatViewModel.kt",
         "anchor_line": 76,
         "required_change": "Wire `setPeer` into production call path(s) and add parity-safe tests"
-      }
-    },
-    {
-      "task_file": "HANDOFF/todo/task_wire_setRotationInterval.md",
-      "task_name": "setRotationInterval",
-      "function": "setRotationInterval",
-      "resolved_symbol": "setRotationInterval",
-      "target": "android/app/src/main/java/com/scmessenger/android/transport/ble/BleAdvertiser.kt",
-      "variant": "Android",
-      "batch": "B5-android-transport-service",
-      "definition_line": 130,
-      "external_reference_hits": 3,
-      "implementation_patch_template": {
-        "file": "android/app/src/main/java/com/scmessenger/android/transport/ble/BleAdvertiser.kt",
-        "anchor_line": 130,
-        "required_change": "Wire `setRotationInterval` into production call path(s) and add parity-safe tests"
       }
     },
     {
@@ -4329,11 +4057,11 @@
       "target": "android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt",
       "variant": "Android",
       "batch": "B3-android-repository",
-      "definition_line": 637,
+      "definition_line": 696,
       "external_reference_hits": 0,
       "implementation_patch_template": {
         "file": "android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt",
-        "anchor_line": 637,
+        "anchor_line": 696,
         "required_change": "Wire `shouldRetryMessage` into production call path(s) and add parity-safe tests"
       }
     },
@@ -4361,11 +4089,11 @@
       "target": "wasm/src/notification_manager.rs",
       "variant": "WASM",
       "batch": "B6-wasm",
-      "definition_line": 355,
+      "definition_line": 350,
       "external_reference_hits": 0,
       "implementation_patch_template": {
         "file": "wasm/src/notification_manager.rs",
-        "anchor_line": 355,
+        "anchor_line": 350,
         "required_change": "Wire `show_permission_guidance` into production call path(s) and add parity-safe tests"
       }
     },
@@ -4378,7 +4106,7 @@
       "variant": "Android",
       "batch": "B8-cross-cutting",
       "definition_line": 533,
-      "external_reference_hits": 0,
+      "external_reference_hits": 2,
       "implementation_patch_template": {
         "file": "android/app/src/main/java/com/scmessenger/android/utils/NotificationHelper.kt",
         "anchor_line": 533,
@@ -4505,11 +4233,11 @@
       "target": "wasm/src/lib.rs",
       "variant": "WASM",
       "batch": "B6-wasm",
-      "definition_line": 896,
+      "definition_line": 942,
       "external_reference_hits": 0,
       "implementation_patch_template": {
         "file": "wasm/src/lib.rs",
-        "anchor_line": 896,
+        "anchor_line": 942,
         "required_change": "Wire `start_receive_loop` into production call path(s) and add parity-safe tests"
       }
     },
@@ -4537,11 +4265,11 @@
       "target": "android/app/src/main/java/com/scmessenger/android/transport/TransportManager.kt",
       "variant": "Android",
       "batch": "B5-android-transport-service",
-      "definition_line": 82,
-      "external_reference_hits": 0,
+      "definition_line": 87,
+      "external_reference_hits": 2,
       "implementation_patch_template": {
         "file": "android/app/src/main/java/com/scmessenger/android/transport/TransportManager.kt",
-        "anchor_line": 82,
+        "anchor_line": 87,
         "required_change": "Wire `startAll` into production call path(s) and add parity-safe tests"
       }
     },
@@ -4553,11 +4281,11 @@
       "target": "wasm/src/lib.rs",
       "variant": "WASM",
       "batch": "B6-wasm",
-      "definition_line": 552,
+      "definition_line": 588,
       "external_reference_hits": 0,
       "implementation_patch_template": {
         "file": "wasm/src/lib.rs",
-        "anchor_line": 552,
+        "anchor_line": 588,
         "required_change": "Wire `stop_swarm` into production call path(s) and add parity-safe tests"
       }
     },
@@ -4569,11 +4297,11 @@
       "target": "core/src/store/relay_custody.rs",
       "variant": "Core",
       "batch": "B2-core-transport-routing",
-      "definition_line": 2012,
+      "definition_line": 2019,
       "external_reference_hits": 0,
       "implementation_patch_template": {
         "file": "core/src/store/relay_custody.rs",
-        "anchor_line": 2012,
+        "anchor_line": 2019,
         "required_change": "Wire `storage_pressure_emergency_mode_rejects_non_critical_and_recovers` into production call path(s) and add parity-safe tests"
       }
     },
@@ -4585,11 +4313,11 @@
       "target": "core/src/store/relay_custody.rs",
       "variant": "Core",
       "batch": "B2-core-transport-routing",
-      "definition_line": 1926,
+      "definition_line": 1933,
       "external_reference_hits": 0,
       "implementation_patch_template": {
         "file": "core/src/store/relay_custody.rs",
-        "anchor_line": 1926,
+        "anchor_line": 1933,
         "required_change": "Wire `storage_pressure_purge_prioritizes_non_identity_then_identity` into production call path(s) and add parity-safe tests"
       }
     },
@@ -4601,11 +4329,11 @@
       "target": "core/src/store/relay_custody.rs",
       "variant": "Core",
       "batch": "B2-core-transport-routing",
-      "definition_line": 1982,
+      "definition_line": 1989,
       "external_reference_hits": 0,
       "implementation_patch_template": {
         "file": "core/src/store/relay_custody.rs",
-        "anchor_line": 1982,
+        "anchor_line": 1989,
         "required_change": "Wire `storage_pressure_purge_records_audit_transition_before_delete` into production call path(s) and add parity-safe tests"
       }
     },
@@ -4617,11 +4345,11 @@
       "target": "core/src/store/relay_custody.rs",
       "variant": "Core",
       "batch": "B2-core-transport-routing",
-      "definition_line": 1802,
+      "definition_line": 1809,
       "external_reference_hits": 0,
       "implementation_patch_template": {
         "file": "core/src/store/relay_custody.rs",
-        "anchor_line": 1802,
+        "anchor_line": 1809,
         "required_change": "Wire `storage_pressure_quota_bands_follow_locked_policy` into production call path(s) and add parity-safe tests"
       }
     },
@@ -4633,11 +4361,11 @@
       "target": "core/src/store/relay_custody.rs",
       "variant": "Core",
       "batch": "B2-core-transport-routing",
-      "definition_line": 2115,
+      "definition_line": 2122,
       "external_reference_hits": 0,
       "implementation_patch_template": {
         "file": "core/src/store/relay_custody.rs",
-        "anchor_line": 2115,
+        "anchor_line": 2122,
         "required_change": "Wire `storage_pressure_state_uses_synthetic_snapshot_when_probe_unavailable` into production call path(s) and add parity-safe tests"
       }
     },
@@ -4649,11 +4377,11 @@
       "target": "android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt",
       "variant": "Android",
       "batch": "B3-android-repository",
-      "definition_line": 1036,
+      "definition_line": 1109,
       "external_reference_hits": 0,
       "implementation_patch_template": {
         "file": "android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt",
-        "anchor_line": 1036,
+        "anchor_line": 1109,
         "required_change": "Wire `testLedgerRelayConnectivity` into production call path(s) and add parity-safe tests"
       }
     },
@@ -4666,7 +4394,7 @@
       "variant": "Core",
       "batch": "B2-core-transport-routing",
       "definition_line": 179,
-      "external_reference_hits": 0,
+      "external_reference_hits": 1,
       "implementation_patch_template": {
         "file": "core/src/routing/optimized_engine.rs",
         "anchor_line": 179,
@@ -4681,11 +4409,11 @@
       "target": "core/src/transport/swarm.rs",
       "variant": "Core",
       "batch": "B2-core-transport-routing",
-      "definition_line": 4455,
+      "definition_line": 4552,
       "external_reference_hits": 0,
       "implementation_patch_template": {
         "file": "core/src/transport/swarm.rs",
-        "anchor_line": 4455,
+        "anchor_line": 4552,
         "required_change": "Wire `token_bucket_refills_after_elapsed_time` into production call path(s) and add parity-safe tests"
       }
     },
@@ -4697,11 +4425,11 @@
       "target": "android/app/src/main/java/com/scmessenger/android/transport/NetworkDetector.kt",
       "variant": "Android",
       "batch": "B5-android-transport-service",
-      "definition_line": 334,
+      "definition_line": 375,
       "external_reference_hits": 0,
       "implementation_patch_template": {
         "file": "android/app/src/main/java/com/scmessenger/android/transport/NetworkDetector.kt",
-        "anchor_line": 334,
+        "anchor_line": 375,
         "required_change": "Wire `toLogString` into production call path(s) and add parity-safe tests"
       }
     },
@@ -4714,7 +4442,7 @@
       "variant": "Android",
       "batch": "B4-android-ui",
       "definition_line": 40,
-      "external_reference_hits": 0,
+      "external_reference_hits": 4,
       "implementation_patch_template": {
         "file": "android/app/src/main/java/com/scmessenger/android/ui/dashboard/TopologyScreen.kt",
         "anchor_line": 40,
@@ -4729,11 +4457,11 @@
       "target": "core/src/notification.rs",
       "variant": "Core",
       "batch": "B8-cross-cutting",
-      "definition_line": 365,
+      "definition_line": 355,
       "external_reference_hits": 0,
       "implementation_patch_template": {
         "file": "core/src/notification.rs",
-        "anchor_line": 365,
+        "anchor_line": 355,
         "required_change": "Wire `touch_endpoint` into production call path(s) and add parity-safe tests"
       }
     },
@@ -4745,11 +4473,11 @@
       "target": "core/src/transport/swarm.rs",
       "variant": "Core",
       "batch": "B2-core-transport-routing",
-      "definition_line": 664,
-      "external_reference_hits": 0,
+      "definition_line": 665,
+      "external_reference_hits": 1,
       "implementation_patch_template": {
         "file": "core/src/transport/swarm.rs",
-        "anchor_line": 664,
+        "anchor_line": 665,
         "required_change": "Wire `transport_type_to_routing_transport` into production call path(s) and add parity-safe tests"
       }
     },
@@ -4762,7 +4490,7 @@
       "variant": "Android",
       "batch": "B4-android-ui",
       "definition_line": 130,
-      "external_reference_hits": 0,
+      "external_reference_hits": 2,
       "implementation_patch_template": {
         "file": "android/app/src/main/java/com/scmessenger/android/ui/components/CopyableText.kt",
         "anchor_line": 130,
@@ -4777,11 +4505,11 @@
       "target": "cli/src/ble_daemon.rs",
       "variant": "CLI",
       "batch": "B7-cli",
-      "definition_line": 331,
+      "definition_line": 345,
       "external_reference_hits": 0,
       "implementation_patch_template": {
         "file": "cli/src/ble_daemon.rs",
-        "anchor_line": 331,
+        "anchor_line": 345,
         "required_change": "Wire `try_enable_bluetooth` into production call path(s) and add parity-safe tests"
       }
     },
@@ -4793,11 +4521,11 @@
       "target": "core/src/wasm_support/rpc.rs",
       "variant": "Core",
       "batch": "B8-cross-cutting",
-      "definition_line": 278,
+      "definition_line": 425,
       "external_reference_hits": 0,
       "implementation_patch_template": {
         "file": "core/src/wasm_support/rpc.rs",
-        "anchor_line": 278,
+        "anchor_line": 425,
         "required_change": "Wire `unknown_method_error` into production call path(s) and add parity-safe tests"
       }
     },
@@ -4809,11 +4537,11 @@
       "target": "core/src/notification.rs",
       "variant": "Core",
       "batch": "B8-cross-cutting",
-      "definition_line": 418,
+      "definition_line": 461,
       "external_reference_hits": 0,
       "implementation_patch_template": {
         "file": "core/src/notification.rs",
-        "anchor_line": 418,
+        "anchor_line": 461,
         "required_change": "Wire `unknown_sender_defaults_to_direct_message_request` into production call path(s) and add parity-safe tests"
       }
     },
@@ -4825,11 +4553,11 @@
       "target": "core/src/notification.rs",
       "variant": "Core",
       "batch": "B8-cross-cutting",
-      "definition_line": 345,
-      "external_reference_hits": 0,
+      "definition_line": 340,
+      "external_reference_hits": 1,
       "implementation_patch_template": {
         "file": "core/src/notification.rs",
-        "anchor_line": 345,
+        "anchor_line": 340,
         "required_change": "Wire `unregister_endpoint` into production call path(s) and add parity-safe tests"
       }
     },
@@ -4914,22 +4642,6 @@
       }
     },
     {
-      "task_file": "HANDOFF/todo/task_wire_update_settings.md",
-      "task_name": "update_settings",
-      "function": "update_settings",
-      "resolved_symbol": "update_settings",
-      "target": "wasm/src/lib.rs",
-      "variant": "WASM",
-      "batch": "B6-wasm",
-      "definition_line": 948,
-      "external_reference_hits": 0,
-      "implementation_patch_template": {
-        "file": "wasm/src/lib.rs",
-        "anchor_line": 948,
-        "required_change": "Wire `update_settings` into production call path(s) and add parity-safe tests"
-      }
-    },
-    {
       "task_file": "HANDOFF/todo/task_wire_updateBatteryFloor.md",
       "task_name": "updateBatteryFloor",
       "function": "updateBatteryFloor",
@@ -4937,11 +4649,11 @@
       "target": "android/app/src/main/java/com/scmessenger/android/ui/viewmodels/SettingsViewModel.kt",
       "variant": "Android",
       "batch": "B4-android-ui",
-      "definition_line": 386,
-      "external_reference_hits": 2,
+      "definition_line": 423,
+      "external_reference_hits": 4,
       "implementation_patch_template": {
         "file": "android/app/src/main/java/com/scmessenger/android/ui/viewmodels/SettingsViewModel.kt",
-        "anchor_line": 386,
+        "anchor_line": 423,
         "required_change": "Wire `updateBatteryFloor` into production call path(s) and add parity-safe tests"
       }
     },
@@ -4953,11 +4665,11 @@
       "target": "android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt",
       "variant": "Android",
       "batch": "B3-android-repository",
-      "definition_line": 3423,
+      "definition_line": 3550,
       "external_reference_hits": 1,
       "implementation_patch_template": {
         "file": "android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt",
-        "anchor_line": 3423,
+        "anchor_line": 3550,
         "required_change": "Wire `updateContactDeviceId` into production call path(s) and add parity-safe tests"
       }
     },
@@ -4969,11 +4681,11 @@
       "target": "android/app/src/main/java/com/scmessenger/android/ui/viewmodels/SettingsViewModel.kt",
       "variant": "Android",
       "batch": "B4-android-ui",
-      "definition_line": 416,
+      "definition_line": 461,
       "external_reference_hits": 2,
       "implementation_patch_template": {
         "file": "android/app/src/main/java/com/scmessenger/android/ui/viewmodels/SettingsViewModel.kt",
-        "anchor_line": 416,
+        "anchor_line": 461,
         "required_change": "Wire `updateDiscoveryMode` into production call path(s) and add parity-safe tests"
       }
     },
@@ -5017,28 +4729,12 @@
       "target": "android/app/src/main/java/com/scmessenger/android/ui/viewmodels/SettingsViewModel.kt",
       "variant": "Android",
       "batch": "B4-android-ui",
-      "definition_line": 380,
+      "definition_line": 417,
       "external_reference_hits": 0,
       "implementation_patch_template": {
         "file": "android/app/src/main/java/com/scmessenger/android/ui/viewmodels/SettingsViewModel.kt",
-        "anchor_line": 380,
+        "anchor_line": 417,
         "required_change": "Wire `updateMaxRelayBudget` into production call path(s) and add parity-safe tests"
-      }
-    },
-    {
-      "task_file": "HANDOFF/todo/task_wire_validate_audit_chain.md",
-      "task_name": "validate_audit_chain",
-      "function": "validate_audit_chain",
-      "resolved_symbol": "validate_audit_chain",
-      "target": "core/src/lib.rs",
-      "variant": "Core",
-      "batch": "B1-core-entrypoints",
-      "definition_line": 2540,
-      "external_reference_hits": 1,
-      "implementation_patch_template": {
-        "file": "core/src/lib.rs",
-        "anchor_line": 2540,
-        "required_change": "Wire `validate_audit_chain` into production call path(s) and add parity-safe tests"
       }
     },
     {
@@ -5049,11 +4745,11 @@
       "target": "wasm/src/lib.rs",
       "variant": "WASM",
       "batch": "B6-wasm",
-      "definition_line": 870,
+      "definition_line": 916,
       "external_reference_hits": 0,
       "implementation_patch_template": {
         "file": "wasm/src/lib.rs",
-        "anchor_line": 870,
+        "anchor_line": 916,
         "required_change": "Wire `validate_settings` into production call path(s) and add parity-safe tests"
       }
     },
@@ -5065,11 +4761,11 @@
       "target": "core/src/transport/swarm.rs",
       "variant": "Core",
       "batch": "B2-core-transport-routing",
-      "definition_line": 4574,
+      "definition_line": 4671,
       "external_reference_hits": 0,
       "implementation_patch_template": {
         "file": "core/src/transport/swarm.rs",
-        "anchor_line": 4574,
+        "anchor_line": 4671,
         "required_change": "Wire `verify_registration_message_rejects_peer_identity_mismatch` into production call path(s) and add parity-safe tests"
       }
     },
@@ -5082,7 +4778,7 @@
       "variant": "Android",
       "batch": "B4-android-ui",
       "definition_line": 157,
-      "external_reference_hits": 0,
+      "external_reference_hits": 3,
       "implementation_patch_template": {
         "file": "android/app/src/main/java/com/scmessenger/android/ui/components/ErrorBanner.kt",
         "anchor_line": 157,

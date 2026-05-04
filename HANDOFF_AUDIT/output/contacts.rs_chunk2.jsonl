@@ -1,0 +1,19 @@
+﻿{
+  "file": "contacts.rs",
+  "chunk": 2,
+  "summary": "This chunk contains test functions for managing contacts in a contact manager. It includes tests for getting, updating, and validating the `last_known_device_id` field of a contact record.",
+  "structs_or_classes": ["Contact", "Manager"],
+  "imports": ["serde_json::from_str", "serde_json::to_string"],
+  "funcs": [
+    {
+      "name": "get_contact",
+      "line": 352,
+      "calls_out_to": ["mgr.get"]
+    },
+    {
+      "name": "update_last_known_device_id",
+      "line": 374,
+      "calls_out_to": ["mgr.update_last_known_device_id"]
+    }
+  ]
+}

@@ -1,0 +1,64 @@
+﻿{
+  "file": "keys.rs",
+  "chunk": 1,
+  "summary": "This file contains the implementation of cryptographic key management functions in Rust. It includes generating, signing, verifying, and serializing/deserializing identity keys.",
+  "structs_or_classes": ["KeyPair", "IdentityKeys"],
+  "imports": ["anyhow", "ed25519_dalek", "zeroize", "blake3"],
+  "funcs": [
+    {
+      "name": "generate_key_pair",
+      "line": 16,
+      "calls_out_to": ["KeyPair"]
+    },
+    {
+      "name": "signing_key",
+      "line": 20,
+      "calls_out_to": ["SigningKey"]
+    },
+    {
+      "name": "verifying_key",
+      "line": 25,
+      "calls_out_to": ["VerifyingKey"]
+    },
+    {
+      "name": "public_key_hex",
+      "line": 48,
+      "calls_out_to": ["PublicKey"]
+    },
+    {
+      "name": "identity_id",
+      "line": 53,
+      "calls_out_to": ["PublicKey"]
+    },
+    {
+      "name": "sign",
+      "line": 60,
+      "calls_out_to": ["SigningKey"]
+    },
+    {
+      "name": "verify",
+      "line": 66,
+      "calls_out_to": ["VerifyingKey", "Ed25519Signature"]
+    },
+    {
+      "name": "to_bytes",
+      "line": 84,
+      "calls_out_to": ["SigningKey"]
+    },
+    {
+      "name": "from_bytes",
+      "line": 90,
+      "calls_out_to": ["SigningKey"]
+    },
+    {
+      "name": "to_libp2p_peer_id",
+      "line": 112,
+      "calls_out_to": ["PublicKey", "libp2p::identity::ed25519::PublicKey"]
+    },
+    {
+      "name": "to_libp2p_keypair",
+      "line": 141,
+      "calls_out_to": ["SigningKey", "libp2p::identity::Keypair"]
+    }
+  ]
+}

@@ -1,0 +1,19 @@
+﻿{
+  "file": "relay.rs",
+  "chunk": 3,
+  "summary": "This chunk contains the implementation of a `RelayEngine` struct and its associated methods, including handling expired messages and toggling network state.",
+  "structs_or_classes": ["RelayEngine", "ExpiredMessage"],
+  "imports": ["web_time::SystemTime", "std::time::Duration"],
+  "funcs": [
+    {
+      "name": "insert_expired",
+      "line": 701,
+      "calls_out_to": ["engine.store_mut().insert(expired_stored)"]
+    },
+    {
+      "name": "process_incoming",
+      "line": 712,
+      "calls_out_to": ["engine.process_incoming(&valid.to_bytes().unwrap())"]
+    }
+  ]
+}

@@ -1,0 +1,80 @@
+﻿{
+  "file": "MeshRepository.kt",
+  "chunk": 3,
+  "summary": "This class manages the initialization and operations of a mesh repository, including logging message delivery attempts, detecting retry storms, initializing managers, and performing migrations.",
+  "structs_or_classes": [],
+  "imports": [
+    "android.content.Context",
+    "android.content.SharedPreferences",
+    "com.alicloud.dms.mesh.repository.MeshRepository"
+  ],
+  "funcs": [
+    {
+      "name": "logMessageDeliveryAttempt",
+      "line": 704,
+      "calls_out_to": []
+    },
+    {
+      "name": "logRetryStormDetection",
+      "line": 711,
+      "calls_out_to": []
+    },
+    {
+      "name": "checkReinstallState",
+      "line": 745,
+      "calls_out_to": [
+        "java.io.File.exists",
+        "java.io.File.length"
+      ]
+    },
+    {
+      "name": "initializeManagers",
+      "line": 770,
+      "calls_out_to": [
+        "uniffi.api.MeshSettingsManager",
+        "uniffi.api.HistoryManager",
+        "uniffi.api.ContactManager",
+        "uniffi.api.LedgerManager",
+        "uniffi.api.AutoAdjustEngine",
+        "TransportManager",
+        "java.io.File.exists"
+      ]
+    },
+    {
+      "name": "verifyContactDataIntegrity",
+      "line": 856,
+      "calls_out_to": [
+        "contactManager.list",
+        "java.io.File.length"
+      ]
+    },
+    {
+      "name": "migrateContactsFromOldLocation",
+      "line": 903,
+      "calls_out_to": [
+        "context.getSharedPreferences",
+        "java.io.File.exists",
+        "java.io.File.length",
+        "java.io.File.mkdirs",
+        "java.io.File.copyTo"
+      ]
+    },
+    {
+      "name": "migrateStaleRoutingHints",
+      "line": 991,
+      "calls_out_to": [
+        "context.getSharedPreferences",
+        "contactManager.list",
+        "java.io.File.exists"
+      ]
+    },
+    {
+      "name": "migrateTruncatedPublicKeys",
+      "line": 1045,
+      "calls_out_to": [
+        "context.getSharedPreferences",
+        "contactManager.list"
+      ]
+    }
+  ]
+}

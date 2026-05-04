@@ -1,0 +1,44 @@
+﻿{
+  "file": "MeshRepository.kt",
+  "chunk": 5,
+  "summary": "This code handles various events related to peer discovery and message processing in a mesh network. It updates discovered peers, emits identity and connected status changes, persists route hints, and manages contacts based on received messages.",
+  "structs_or_classes": [],
+  "imports": [
+    "com.scmessenger.android.service.TransportType",
+    "com.scmessenger.android.service.ContactManager",
+    "com.scmessenger.android.service.IronCore",
+    "com.scmessenger.android.service.PeerIdValidator",
+    "com.scmessenger.android.service.MdnsLanPeers",
+    "com.scmessenger.android.service.SyncPeerIds",
+    "com.scmessenger.android.service.DialCandidatesBuilder",
+    "com.scmessenger.android.service.ContactManager",
+    "com.scmessenger.android.service.Contact"
+  ],
+  "funcs": [
+    {
+      "name": "onPeerDiscovered",
+      "line": 1400,
+      "calls_out_to": []
+    },
+    {
+      "name": "onPeerDisconnected",
+      "line": 1517,
+      "calls_out_to": []
+    },
+    {
+      "name": "onMessageReceived",
+      "line": 1550,
+      "calls_out_to": [
+        "checkAndRecordMessage",
+        "logDeliveryAttempt",
+        "decodeMessageWithIdentityHints",
+        "resolveCanonicalPeerId",
+        "resolveCanonicalPeerIdFromMessageHints",
+        "selectAuthoritativeNickname",
+        "appendRoutingHint",
+        "upsertRoutingListeners",
+        "normalizeOutboundListenerHints"
+      ]
+    }
+  ]
+}

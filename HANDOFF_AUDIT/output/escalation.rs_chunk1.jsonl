@@ -1,0 +1,54 @@
+﻿{
+  "file": "escalation.rs",
+  "chunk": 1,
+  "summary": "The code chunk defines an `EscalationEngine` struct that manages transport escalation for all peers in a system. It includes methods to set capabilities, initialize states, check if escalation should be attempted, attempt escalation, deescalate, get the current transport, update available transports, find the best transport based on policy, calculate escalation score, and find a better or worse transport.",
+  "structs_or_classes": ["EscalationEngine", "EscalationState"],
+  "imports": ["parking_lot::RwLock", "serde::{Deserialize, Serialize}", "std::collections::HashMap", "std::sync::Arc", "thiserror::Error", "tracing::debug"],
+  "funcs": [
+    {
+      "name": "init_peer",
+      "line": 90,
+      "calls_out_to": ["set_capabilities"]
+    },
+    {
+      "name": "should_escalate",
+      "line": 111,
+      "calls_out_to": []
+    },
+    {
+      "name": "escalate",
+      "line": 123,
+      "calls_out_to": []
+    },
+    {
+      "name": "deescalate",
+      "line": 143,
+      "calls_out_to": []
+    },
+    {
+      "name": "current_transport",
+      "line": 167,
+      "calls_out_to": []
+    },
+    {
+      "name": "update_available_transports",
+      "line": 174,
+      "calls_out_to": ["set_capabilities"]
+    },
+    {
+      "name": "select_best_transport",
+      "line": 208,
+      "calls_out_to": ["escalation_score"]
+    },
+    {
+      "name": "find_better_transport",
+      "line": 349,
+      "calls_out_to": []
+    },
+    {
+      "name": "find_worse_transport",
+      "line": 376,
+      "calls_out_to": []
+    }
+  ]
+}

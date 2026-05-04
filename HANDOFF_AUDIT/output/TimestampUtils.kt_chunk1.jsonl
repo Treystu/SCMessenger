@@ -1,0 +1,19 @@
+﻿{
+  "file": "TimestampUtils.kt",
+  "chunk": 1,
+  "summary": "This Kotlin file contains utility functions for converting ULong values to epoch milliseconds and seconds.",
+  "structs_or_classes": ["None"],
+  "imports": ["None"],
+  "funcs": [
+    {
+      "name": "toEpochMillis",
+      "line": 6,
+      "calls_out_to": []
+    },
+    {
+      "name": "toEpochSeconds",
+      "line": 10,
+      "calls_out_to": []
+    }
+  ]
+}

@@ -1,0 +1,24 @@
+﻿{
+  "file": "beacon.rs",
+  "chunk": 2,
+  "summary": "This chunk contains test functions for the `BeaconService` and `BeaconBuilder` structs, which are used to manage beacon-related constants and configurations in a Rust application.",
+  "structs_or_classes": ["BeaconService", "BeaconBuilder"],
+  "imports": [],
+  "funcs": [
+    {
+      "name": "test_beacon_service_uuid_constant",
+      "line": 352,
+      "calls_out_to": []
+    },
+    {
+      "name": "test_default_rotation_period_constant",
+      "line": 357,
+      "calls_out_to": []
+    },
+    {
+      "name": "test_beacon_builder_default_rotation",
+      "line": 362,
+      "calls_out_to": ["BeaconBuilder::new"]
+    }
+  ]
+}

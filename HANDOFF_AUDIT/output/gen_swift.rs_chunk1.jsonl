@@ -1,0 +1,19 @@
+﻿{
+  "file": "gen_swift.rs",
+  "chunk": 1,
+  "summary": "This code snippet is a Rust function `main` that generates Swift bindings for a C library using the Uniffi Bindgen crate. It includes logic to locate the Cdylib, generate the bindings, and update the generated Swift file to ensure compatibility with targets that default to MainActor isolation.",
+  "structs_or_classes": [],
+  "imports": [
+    "camino::Utf8PathBuf",
+    "std::fs",
+    "uniffi_bindgen::bindings::{generate, GenerateOptions, TargetLanguage}",
+    "cfg"
+  ],
+  "funcs": [
+    {
+      "name": "main",
+      "line": 0,
+      "calls_out_to": ["cfg", "use camino::Utf8PathBuf", "use std::fs", "use uniffi_bindgen::bindings::{generate, GenerateOptions, TargetLanguage}", "let manifest_dir = std::env::var(\"CARGO_MANIFEST_DIR\")"]
+    }
+  ]
+}

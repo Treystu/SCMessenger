@@ -1,0 +1,43 @@
+﻿{
+  "file": "blocked_bridge.rs",
+  "chunk": 1,
+  "summary": "This file contains the implementation of a blocked identity bridge for mobile platforms using UniFFI. It includes structs, imports, and functions to manage blocked identities.",
+  "structs_or_classes": ["BlockedIdentity", "BlockedManager"],
+  "imports": [
+    "crate::store::blocked::{BlockedIdentity as CoreBlockedIdentity, BlockedManager as CoreBlockedManager}",
+    "crate::IronCoreError",
+    "std::sync::Arc"
+  ],
+  "funcs": [
+    {
+      "name": "block",
+      "line": 70,
+      "calls_out_to": ["self.inner.block(blocked.into())"]
+    },
+    {
+      "name": "unblock",
+      "line": 75,
+      "calls_out_to": ["self.inner.unblock(peer_id, device_id)"]
+    },
+    {
+      "name": "is_blocked",
+      "line": 80,
+      "calls_out_to": ["self.inner.is_blocked(&peer_id, device_id.as_deref())"]
+    },
+    {
+      "name": "get",
+      "line": 90,
+      "calls_out_to": ["match self.inner.get(&peer_id, device_id.as_deref())? { ... }"]
+    },
+    {
+      "name": "list",
+      "line": 100,
+      "calls_out_to": ["let core_list = self.inner.list()?; ... }"]
+    },
+    {
+      "name": "count",
+      "line": 107,
+      "calls_out_to": ["self.inner.count().map(|c| c as u32)"]
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+﻿{
+  "file": "observability.rs",
+  "chunk": 1,
+  "summary": "This module implements the structured tracing payload for mandatory relay protocol events. It provides the `RelayTracePayload` struct that captures essential telemetry data about message processing through relay nodes.",
+  "structs_or_classes": ["RelayTracePayload"],
+  "imports": [],
+  "funcs": [
+    {
+      "name": "validate",
+      "line": 52,
+      "calls_out_to": []
+    }
+  ]
+}

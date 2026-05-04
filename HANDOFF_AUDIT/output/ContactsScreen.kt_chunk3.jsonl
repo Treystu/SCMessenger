@@ -1,0 +1,14 @@
+﻿{
+  "file": "ContactsScreen.kt",
+  "chunk": 3,
+  "summary": "This chunk contains the implementation of a `ContactsScreen` in Kotlin. It includes a `TextField` for entering a nickname, buttons to add or chat with a peer, and a dismiss button.",
+  "structs_or_classes": ["TextField", "Row", "TextButton"],
+  "imports": [],
+  "funcs": [
+    {
+      "name": "formatTimestamp",
+      "line": 754,
+      "calls_out_to": []
+    }
+  ]
+}

@@ -1,0 +1,29 @@
+﻿{
+  "file": "l2cap.rs",
+  "chunk": 2,
+  "summary": "This chunk contains the implementation of a L2CAP (Logical Link Control and Adaptation Protocol) channel in Rust. It includes various tests to ensure the functionality of the channel, such as connection management, fragmentation, reassembly, and state transitions.",
+  "structs_or_classes": ["L2capChannel", "FragmentHeader", "L2capReassembler"],
+  "imports": ["std::vec::Vec", "std::io::Write", "std::net::SocketAddr", "std::time::Duration"],
+  "funcs": [
+    {
+      "name": "initiate_connection",
+      "line": 354,
+      "calls_out_to": ["L2capChannel"]
+    },
+    {
+      "name": "confirm_connection",
+      "line": 360,
+      "calls_out_to": ["L2capChannel"]
+    },
+    {
+      "name": "initiate_close",
+      "line": 365,
+      "calls_out_to": ["L2capChannel"]
+    },
+    {
+      "name": "confirm_close",
+      "line": 370,
+      "calls_out_to": ["L2capChannel"]
+    }
+  ]
+}

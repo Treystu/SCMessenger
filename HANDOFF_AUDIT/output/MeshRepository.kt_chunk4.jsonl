@@ -1,0 +1,29 @@
+﻿{
+  "file": "MeshRepository.kt",
+  "chunk": 4,
+  "summary": "This code defines a method to start the mesh service with a given configuration.",
+  "structs_or_classes": [],
+  "imports": [
+    "com.scmessenger.android.service.TransportType",
+    "com.scmessenger.android.utils.FileLoggingTree"
+  ],
+  "funcs": [
+    {
+      "name": "startMeshService",
+      "line": 1152,
+      "calls_out_to": [
+        "uniffi.api.MeshService.withStorageAndLogs",
+        "meshService?.start",
+        "ironCore = meshService?.getCore",
+        "smartTransportRouter = com.scmessenger.android.transport.SmartTransportRouter",
+        "networkDetector.startMonitoring",
+        "startNetworkChangeWatch",
+        "migrateToCanonicalIds",
+        "timber.log.Timber.forest().forEach { tree -> if (tree is com.scmessenger.android.utils.FileLoggingTree) { tree.setIronCore(ironCore) } }",
+        "startStorageMaintenance",
+        "ensureLocalIdentityFederation",
+        "coreDelegate = object : uniffi.api.CoreDelegate"
+      ]
+    }
+  ]
+}

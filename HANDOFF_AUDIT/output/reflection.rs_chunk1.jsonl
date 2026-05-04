@@ -1,0 +1,19 @@
+﻿{
+  "file": "reflection.rs",
+  "chunk": 1,
+  "summary": "This chunk defines the `AddressReflectionService` struct, which handles address reflection requests and responses for a mesh network. It includes methods to create requests, decode them, encode responses, and manage statistics.",
+  "structs_or_classes": ["AddressReflectionRequest", "AddressReflectionResponse", "AddressReflectionService"],
+  "imports": ["serde", "std::net::SocketAddr", "std::sync::atomic::{AtomicU64, Ordering}", "std::sync::Arc"],
+  "funcs": [
+    {
+      "name": "new",
+      "line": 103,
+      "calls_out_to": []
+    },
+    {
+      "name": "handle_request",
+      "line": 120,
+      "calls_out_to": ["AddressReflectionRequest", "SocketAddr"]
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+﻿{
+  "file": "contacts_bridge.rs",
+  "chunk": 2,
+  "summary": "The code snippet defines a test function `test_contact_persistence_across_manager_restart` that tests the persistence of contacts across manager restarts in a contact management system.",
+  "structs_or_classes": ["ContactManager", "Contact"],
+  "imports": [],
+  "funcs": [
+    {
+      "name": "test_contact_persistence_across_manager_restart",
+      "line": 356,
+      "calls_out_to": []
+    }
+  ]
+}

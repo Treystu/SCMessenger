@@ -1,0 +1,14 @@
+﻿{
+  "file": "spam_detection.rs",
+  "chunk": 2,
+  "summary": "The code chunk defines the `prune_stale_peers` function in the `SpamDetectionEngine` struct, which removes stale peer tracking entries from a memory storage. The function takes an integer `max_entries` as input and returns the number of entries removed.",
+  "structs_or_classes": ["SpamDetectionEngine", "PeerTracks"],
+  "imports": [],
+  "funcs": [
+    {
+      "name": "prune_stale_peers",
+      "line": 354,
+      "calls_out_to": []
+    }
+  ]
+}

@@ -1,0 +1,39 @@
+﻿{
+  "file": "SettingsScreen.kt",
+  "chunk": 3,
+  "summary": "This chunk contains the implementation of a settings screen in an Android application. It includes various sections such as Identity, Privacy, Advanced Settings, and navigation to other screens.",
+  "structs_or_classes": ["Card", "Column", "Text", "Button", "OutlinedButton", "Icon"],
+  "imports": ["android.content.ClipboardManager", "android.net.Uri", "android.os.Bundle", "android.view.View", "androidx.compose.foundation.layout.Column", "androidx.compose.foundation.layout.Row", "androidx.compose.material.MaterialTheme", "androidx.compose.material.icons.Default.ContentCopy", "androidx.compose.material.icons.Filled.Block", "androidx.compose.runtime.Composable"],
+  "funcs": [
+    {
+      "name": "SettingsScreen",
+      "line": 701,
+      "calls_out_to": ["onCreateIdentity"]
+    },
+    {
+      "name": "IdentityUnavailableSection",
+      "line": 808,
+      "calls_out_to": []
+    },
+    {
+      "name": "PrivacySection",
+      "line": 836,
+      "calls_out_to": ["onNavigateToBlockedPeers"]
+    },
+    {
+      "name": "AdvancedSettingsSection",
+      "line": 881,
+      "calls_out_to": ["onNavigateToDiagnostics"]
+    },
+    {
+      "name": "SettingsToMeshSettingsNavigation",
+      "line": 924,
+      "calls_out_to": ["onNavigateToMeshSettings"]
+    },
+    {
+      "name": "SettingsToPowerSettingsNavigation",
+      "line": 953,
+      "calls_out_to": ["onNavigateToPowerSettings"]
+    }
+  ]
+}

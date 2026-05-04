@@ -1,0 +1,19 @@
+﻿{
+  "file": "iron_core.rs",
+  "chunk": 5,
+  "summary": "The `IronCore` struct contains various methods for managing the core functionality of an Iron Core node, including routing, key management, message handling, and more.",
+  "structs_or_classes": ["IronCore", "Message", "Envelope", "NextHop", "PeerId"],
+  "imports": ["libp2p::identity::Keypair", "blake3::hash", "uuid::Uuid", "web_time::SystemTime", "serde_json"],
+  "funcs": [
+    {
+      "name": "get_libp2p_keypair",
+      "line": 1709,
+      "calls_out_to": ["keys"]
+    },
+    {
+      "name": "receive_message",
+      "line": 1716,
+      "calls_out_to": ["decrypt_message", "decode_envelope"]
+    }
+  ]
+}

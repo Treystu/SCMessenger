@@ -1,0 +1,14 @@
+﻿{
+  "file": "nat.rs",
+  "chunk": 1,
+  "summary": "This chunk defines the `NatTraversal` struct, which is responsible for managing NAT traversal mechanisms in a mesh network. It includes methods for detecting NAT type, performing hole-punch attempts, and establishing relay circuits.",
+  "structs_or_classes": ["NatTraversal", "NatConfig", "HolePunchAttempt", "RelayCircuit"],
+  "imports": ["libp2p::PeerId", "parking_lot::RwLock", "std::collections::HashMap", "std::net::SocketAddr", "thiserror::Error", "tracing::{debug, info}", "web_time::{SystemTime, UNIX_EPOCH}"],
+  "funcs": [
+    {
+      "name": "new",
+      "line": 345,
+      "calls_out_to": ["NatConfig"]
+    }
+  ]
+}

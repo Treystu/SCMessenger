@@ -69,3 +69,8 @@ Android: BUILD SUCCESSFUL
 Rust: cargo check --workspace completed successfully
 
 STATUS: SUCCESS_STOP
+
+
+--- CLOSEOUT EVIDENCE ---
+VERIFIED WIRED: Called at MeshRepository.kt:4777,4788,4799. Production call path confirmed.
+Verified by: orchestrator-TRP-2026-05-03

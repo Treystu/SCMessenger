@@ -1,0 +1,99 @@
+﻿{
+  "file": "global.rs",
+  "chunk": 1,
+  "summary": "This chunk defines a `GlobalRoutes` struct that manages routes for a distributed system, including adding, finding, and cleaning up routes. It also handles route requests and updates local advertisements.",
+  "structs_or_classes": ["GlobalRoutes", "RouteAdvertisement", "RouteRequest"],
+  "imports": [],
+  "funcs": [
+    {
+      "name": "new",
+      "line": 85,
+      "calls_out_to": []
+    },
+    {
+      "name": "with_limits",
+      "line": 96,
+      "calls_out_to": []
+    },
+    {
+      "name": "add_route",
+      "line": 103,
+      "calls_out_to": ["routes", "get_or_default"]
+    },
+    {
+      "name": "routes_for_hint",
+      "line": 170,
+      "calls_out_to": ["routes"]
+    },
+    {
+      "name": "best_route_for_hint",
+      "line": 183,
+      "calls_out_to": ["routes", "min_by"]
+    },
+    {
+      "name": "request_route",
+      "line": 213,
+      "calls_out_to": []
+    },
+    {
+      "name": "is_route_pending",
+      "line": 228,
+      "calls_out_to": []
+    },
+    {
+      "name": "increment_route_request_attempts",
+      "line": 233,
+      "calls_out_to": ["pending_requests"]
+    },
+    {
+      "name": "resolve_route_request",
+      "line": 246,
+      "calls_out_to": []
+    },
+    {
+      "name": "update_local_advertisements",
+      "line": 254,
+      "calls_out_to": ["local_advertisements"]
+    },
+    {
+      "name": "get_advertisements",
+      "line": 278,
+      "calls_out_to": []
+    },
+    {
+      "name": "cleanup",
+      "line": 285,
+      "calls_out_to": ["routes", "retain", "remove"]
+    },
+    {
+      "name": "remove_routes_via",
+      "line": 312,
+      "calls_out_to": ["pending_requests"]
+    },
+    {
+      "name": "route_count",
+      "line": 331,
+      "calls_out_to": []
+    },
+    {
+      "name": "has_route_for",
+      "line": 336,
+      "calls_out_to": []
+    },
+    {
+      "name": "unique_destination_count",
+      "line": 340,
+      "calls_out_to": []
+    },
+    {
+      "name": "pending_request_count",
+      "line": 345,
+      "calls_out_to": []
+    },
+    {
+      "name": "pending_requests",
+      "line": 350,
+      "calls_out_to": []
+    }
+  ]
+}

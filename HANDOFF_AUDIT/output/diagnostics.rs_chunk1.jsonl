@@ -1,0 +1,14 @@
+﻿{
+  "file": "diagnostics.rs",
+  "chunk": 1,
+  "summary": "Provides a cross-platform parity type for network diagnostic information.",
+  "structs_or_classes": ["NetworkDiagnosticsReport", "PeerConnectionSummary"],
+  "imports": ["crate::transport::health::{ConnectionState, ConnectionStats, TransportHealthMonitor}", "libp2p::PeerId", "serde::{Deserialize, Serialize}"],
+  "funcs": [
+    {
+      "name": "get_network_diagnostics_report",
+      "line": 40,
+      "calls_out_to": ["monitor.get_global_metrics()", "monitor.get_all_connection_stats()"]
+    }
+  ]
+}

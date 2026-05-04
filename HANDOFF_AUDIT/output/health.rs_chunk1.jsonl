@@ -1,0 +1,39 @@
+﻿{
+  "file": "health.rs",
+  "chunk": 1,
+  "summary": "This chunk defines the `TransportHealthMonitor` struct, which manages health monitoring for a transport layer. It includes methods to update connection states, record messages, and calculate quality scores.",
+  "structs_or_classes": ["TransportHealthMonitor", "ConnectionStats"],
+  "imports": [],
+  "funcs": [
+    {
+      "name": "update_connection_state",
+      "line": 268,
+      "calls_out_to": []
+    },
+    {
+      "name": "record_message_success",
+      "line": 301,
+      "calls_out_to": []
+    },
+    {
+      "name": "record_message_failure",
+      "line": 312,
+      "calls_out_to": []
+    },
+    {
+      "name": "record_bytes_received",
+      "line": 323,
+      "calls_out_to": []
+    },
+    {
+      "name": "record_connection_attempt",
+      "line": 334,
+      "calls_out_to": []
+    },
+    {
+      "name": "record_successful_connection",
+      "line": 345,
+      "calls_out_to": []
+    }
+  ]
+}

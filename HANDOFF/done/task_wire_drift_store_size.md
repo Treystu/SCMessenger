@@ -31,3 +31,8 @@ STATUS: SUCCESS_STOP
    - Included `store_size` in the `DriftStatusResponse` within `cli/src/api.rs`.
    - Updated `scm status` in `cli/src/main.rs` to show the number of messages currently held in the mesh store.
 5. **Verification**: Confirmed that mesh store occupancy is now correctly reported across all high-level application interfaces.
+
+
+--- CLOSEOUT EVIDENCE ---
+VERIFIED WIRED: Called at wasm/src/lib.rs:871; cli/src/api.rs:551,652; core/src/mobile_bridge.rs:409. Production call path confirmed.
+Verified by: orchestrator-TRP-2026-05-03

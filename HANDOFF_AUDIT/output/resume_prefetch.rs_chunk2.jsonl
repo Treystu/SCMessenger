@@ -1,0 +1,29 @@
+﻿{
+  "file": "resume_prefetch.rs",
+  "chunk": 2,
+  "summary": "The code chunk defines the `ResumePrefetchManager` struct, which manages a list of frequent peers for prefetching. It includes methods to add new peers, record messages, get top frequent peers, clear routes, and update routes.",
+  "structs_or_classes": ["ResumePrefetchManager", "FrequentPeer"],
+  "imports": [],
+  "funcs": [
+    {
+      "name": "on_app_background",
+      "line": 351,
+      "calls_out_to": ["self.frequent_peers"]
+    },
+    {
+      "name": "on_app_resume",
+      "line": 460,
+      "calls_out_to": ["self.top_frequent_peers", "self.update_route"]
+    },
+    {
+      "name": "get_route_early",
+      "line": 471,
+      "calls_out_to": ["self.frequent_peers"]
+    },
+    {
+      "name": "update_route",
+      "line": 486,
+      "calls_out_to": ["self.frequent_peers"]
+    }
+  ]
+}

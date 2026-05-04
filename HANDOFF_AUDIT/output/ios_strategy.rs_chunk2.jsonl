@@ -1,0 +1,104 @@
+﻿{
+  "file": "ios_strategy.rs",
+  "chunk": 2,
+  "summary": "This chunk contains tests for the `IosBackgroundStrategy` struct, which is responsible for managing background services on iOS devices. The tests cover various aspects of configuring and validating the strategy, including enabling and disabling modes, scheduling background fetches, handling Bluetooth state changes, and more.",
+  "structs_or_classes": ["IosBackgroundConfig", "IosBackgroundStrategy"],
+  "imports": [],
+  "funcs": [
+    {
+      "name": "test_ios_background_config_validation",
+      "line": 358,
+      "calls_out_to": []
+    },
+    {
+      "name": "test_ios_background_config_empty_modes",
+      "line": 376,
+      "calls_out_to": []
+    },
+    {
+      "name": "test_ios_background_config_enable_disable_modes",
+      "line": 380,
+      "calls_out_to": []
+    },
+    {
+      "name": "test_ios_background_strategy_creation",
+      "line": 390,
+      "calls_out_to": []
+    },
+    {
+      "name": "test_ios_background_strategy_invalid_config",
+      "line": 400,
+      "calls_out_to": []
+    },
+    {
+      "name": "test_schedule_background_fetch",
+      "line": 405,
+      "calls_out_to": []
+    },
+    {
+      "name": "test_schedule_background_fetch_disabled",
+      "line": 412,
+      "calls_out_to": []
+    },
+    {
+      "name": "test_on_background_fetch",
+      "line": 419,
+      "calls_out_to": []
+    },
+    {
+      "name": "test_enable_location_background",
+      "line": 430,
+      "calls_out_to": []
+    },
+    {
+      "name": "test_enable_location_background_disabled_mode",
+      "line": 435,
+      "calls_out_to": []
+    },
+    {
+      "name": "test_enable_location_background_disabled_accuracy",
+      "line": 440,
+      "calls_out_to": []
+    },
+    {
+      "name": "test_can_run_ble_central",
+      "line": 450,
+      "calls_out_to": []
+    },
+    {
+      "name": "test_cannot_run_ble_central_when_restricted",
+      "line": 461,
+      "calls_out_to": []
+    },
+    {
+      "name": "test_get_recommended_profile",
+      "line": 470,
+      "calls_out_to": []
+    },
+    {
+      "name": "test_get_enabled_modes",
+      "line": 480,
+      "calls_out_to": []
+    },
+    {
+      "name": "test_set_config_valid",
+      "line": 486,
+      "calls_out_to": []
+    },
+    {
+      "name": "test_set_config_invalid",
+      "line": 496,
+      "calls_out_to": []
+    },
+    {
+      "name": "test_bluetooth_state_deactivation",
+      "line": 507,
+      "calls_out_to": []
+    },
+    {
+      "name": "test_location_accuracy_levels",
+      "line": 519,
+      "calls_out_to": []
+    }
+  ]
+}

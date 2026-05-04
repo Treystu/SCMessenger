@@ -1,0 +1,19 @@
+﻿{
+  "file": "protocol.rs",
+  "chunk": 2,
+  "summary": "This chunk contains the implementation of a `RelayMessage` struct and its deserialization tests.",
+  "structs_or_classes": ["RelayMessage"],
+  "imports": [],
+  "funcs": [
+    {
+      "name": "test_relay_message_pull_response",
+      "line": 356,
+      "calls_out_to": []
+    },
+    {
+      "name": "test_invalid_deserialization",
+      "line": 374,
+      "calls_out_to": []
+    }
+  ]
+}

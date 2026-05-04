@@ -1,0 +1,14 @@
+﻿{
+  "file": "frame.rs",
+  "chunk": 2,
+  "summary": "This chunk contains the implementation of various test functions for the `DriftFrame` struct in Rust. It includes tests for different frame types, length calculation, CRC32 validation, and multiple roundtrips.",
+  "structs_or_classes": ["DriftFrame"],
+  "imports": [],
+  "funcs": [
+    {
+      "name": "make_test_frame",
+      "line": 405,
+      "calls_out_to": []
+    }
+  ]
+}

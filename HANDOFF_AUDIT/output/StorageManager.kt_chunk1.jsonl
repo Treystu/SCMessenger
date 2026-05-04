@@ -1,0 +1,14 @@
+﻿{
+  "file": "StorageManager.kt",
+  "chunk": 1,
+  "summary": "Manages application storage, ensuring non-critical data is rotated or pruned, and critical data is prioritized and protected.",
+  "structs_or_classes": ["List", "of", "classes", "or", "structs"],
+  "imports": ["List", "of", "imports"],
+  "funcs": [
+    {
+      "name": "performStartupMaintenance",
+      "line": 26,
+      "calls_out_to": ["funcs", "it", "calls"]
+    }
+  ]
+}

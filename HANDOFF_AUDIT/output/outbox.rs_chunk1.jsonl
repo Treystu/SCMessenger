@@ -1,0 +1,64 @@
+﻿{
+  "file": "outbox.rs",
+  "chunk": 1,
+  "summary": "This chunk defines an Outbox struct that manages a queue of messages for peers. It supports both in-memory and persistent storage backends.",
+  "structs_or_classes": ["Outbox", "QueuedMessage"],
+  "imports": ["serde", "std::collections", "std::sync", "web_time"],
+  "funcs": [
+    {
+      "name": "new",
+      "line": 61,
+      "calls_out_to": []
+    },
+    {
+      "name": "persistent_with_storage",
+      "line": 65,
+      "calls_out_to": ["Arc<dyn StorageBackend>"]
+    },
+    {
+      "name": "persistent",
+      "line": 70,
+      "calls_out_to": ["Arc<dyn StorageBackend>"]
+    },
+    {
+      "name": "enqueue",
+      "line": 93,
+      "calls_out_to": []
+    },
+    {
+      "name": "peek_for_peer",
+      "line": 174,
+      "calls_out_to": []
+    },
+    {
+      "name": "remove",
+      "line": 235,
+      "calls_out_to": []
+    },
+    {
+      "name": "drain_for_peer",
+      "line": 305,
+      "calls_out_to": []
+    },
+    {
+      "name": "record_attempt",
+      "line": 374,
+      "calls_out_to": []
+    },
+    {
+      "name": "total_count",
+      "line": 398,
+      "calls_out_to": []
+    },
+    {
+      "name": "peer_count",
+      "line": 420,
+      "calls_out_to": []
+    },
+    {
+      "name": "remove_expired",
+      "line": 451,
+      "calls_out_to": []
+    }
+  ]
+}

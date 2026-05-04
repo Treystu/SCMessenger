@@ -1,0 +1,14 @@
+﻿{
+  "file": "mobile_bridge.rs",
+  "chunk": 2,
+  "summary": "The code snippet defines a method `start_swarm` in the `MeshService` struct. It initializes a new Swarm with a given listen address and spawns a dedicated OS thread to handle the swarm's operations.",
+  "structs_or_classes": ["MeshService", "SwarmBridge", "Core", "RelayBudget"],
+  "imports": ["libp2p::Multiaddr", "tokio::sync::mpsc::channel", "hex::decode", "std::thread::Builder", "crate::transport::start_swarm_with_config", "crate::message::MessageType", "crate::identity::PublicKey", "crate::ledger_manager::AnnotateIdentity", "crate::delegate::Delegate"],
+  "funcs": [
+    {
+      "name": "start_swarm",
+      "line": 351,
+      "calls_out_to": ["libp2p_keys", "listen_multiaddr", "event_tx", "None", "Vec::new()", "service_storage_path", "iron_core_handle.map(|c| Arc::downgrade(&c))", "headless_mode"]
+    }
+  ]
+}

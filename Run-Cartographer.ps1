@@ -1,162 +1,224 @@
-# Run-Cartographer.ps1 (V8 - The Sanitizer Edition)
-# SCMessenger Autonomous Repo Cartographer
+# Run-Worker.ps1 (V26 - Zero-Leak Strict PID Isolation)
+param (
+    [int]$Port = 11440, # Start at 11440, use 11441 for terminal 2, etc.
+    [int]$Threads = 4  
+)
 
-$repoRoot = "C:\Users\kanal\Documents\Github\SCMessenger"
-$outputFile = "$repoRoot\HANDOFF\discovery\REPO_MAP.jsonl"
-$ollamaEndpoint = "http://localhost:11434/api/generate"
-$modelName = "qwen2.5-coder:7b"
+$ErrorActionPreference = "Continue"
+[Console]::TreatControlCAsInput = $false
 
-# 1. Rules of Engagement
-$allowedExtensions = @('.rs', '.kt', '.swift', '.ts', '.tsx', '.js', '.py')
-$blockedDirs = @('.git', 'target', 'build', 'node_modules', 'ios/Pods', '.gradle', '.claude')
-$chunkSize = 150 # Shrunk to 150 lines for lightning-fast parsing
+# --- ABSOLUTE FOLDER STRUCTURE ---
+$BASE_DIR = (Get-Location).Path
+$QUEUE_DIR = Join-Path $BASE_DIR "HANDOFF_AUDIT"
+$TODO = Join-Path $QUEUE_DIR "todo"
+$PROC = Join-Path $QUEUE_DIR "processing"
+$DONE = Join-Path $QUEUE_DIR "done"
+$ERRS = Join-Path $QUEUE_DIR "errors"
+$OUTP = Join-Path $QUEUE_DIR "output"
 
-Write-Host "[INIT] Booting SCMessenger Cartographer V8..." -ForegroundColor Cyan
+foreach ($dir in @($QUEUE_DIR, $TODO, $PROC, $DONE, $ERRS, $OUTP)) {
+    if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
+}
 
-if (-not (Test-Path (Split-Path $outputFile))) { New-Item -ItemType Directory -Path (Split-Path $outputFile) -Force | Out-Null }
+$workerId = [guid]::NewGuid().ToString().Substring(0, 4)
+$apiUrl = "http://127.0.0.1:$Port/api/generate"
+$global:ActiveOllamaPID = $null
 
-# 2. Incremental Cache
-$mappedFiles = @{}
-if (Test-Path $outputFile) {
-    Get-Content $outputFile | ForEach-Object {
-        try {
-            $entry = $_ | ConvertFrom-Json
-            $mappedFiles[$entry.file_path] = [datetime]$entry.last_analyzed
-        } catch {}
+# --- STRICT PROCESS TREE KILLER ---
+function Kill-OllamaTree {
+    if ($null -ne $global:ActiveOllamaPID) {
+        Write-Host "   [⚙️] Tearing down Ollama process tree (PID: $($global:ActiveOllamaPID))..." -ForegroundColor DarkGray
+        # /T kills child processes (ollama_llama_server.exe). /F forces it.
+        & taskkill /F /T /PID $global:ActiveOllamaPID 2>&1 | Out-Null
+        $global:ActiveOllamaPID = $null
+        Start-Sleep -Seconds 1 # Let Windows free the RAM and Port
     }
 }
 
-$allFiles = Get-ChildItem -Path $repoRoot -Recurse -File | Where-Object {
-    $ext = $_.Extension; $path = $_.FullName
-    $isAllowed = $allowedExtensions -contains $ext
-    $isNotBlocked = $true
-    foreach ($blocked in $blockedDirs) { if ($path -match "[\\/]$blocked[\\/]") { $isNotBlocked = $false; break } }
-    return $isAllowed -and $isNotBlocked
+# --- GRACEFUL EXIT HANDLER ---
+trap { 
+    Write-Host "`n[WORKER $workerId] INTERRUPT DETECTED." -ForegroundColor Red
+    Kill-OllamaTree
+    Write-Host "[WORKER $workerId] Shut down safely." -ForegroundColor Yellow
+    exit 
 }
 
-Write-Host "Found $($allFiles.Count) code files. Beginning Delta Extraction..." -ForegroundColor DarkGray
-
-# 3. Extraction Loop
-foreach ($file in $allFiles) {
-    $relativePath = $file.FullName.Replace("$repoRoot\", "").Replace("\", "/")
+# --- QUEUE INITIALIZATION ---
+$existingTasks = (Get-ChildItem -LiteralPath $TODO).Count + (Get-ChildItem -LiteralPath $PROC).Count + (Get-ChildItem -LiteralPath $DONE).Count + (Get-ChildItem -LiteralPath $ERRS).Count
+if ($existingTasks -eq 0) {
+    Write-Host "[INIT] Generating Task Queue..." -ForegroundColor Cyan
+    $allFiles = Get-ChildItem -Path $BASE_DIR -Recurse -Include *.py, *.rs, *.swift, *.kt | 
+                Where-Object { $_.FullName -notmatch "HANDOFF" -and $_.FullName -notmatch "\.claude" }
     
-    if ($mappedFiles.ContainsKey($relativePath) -and $file.LastWriteTimeUtc -lt $mappedFiles[$relativePath]) {
-        continue 
+    foreach ($file in $allFiles) {
+        $safeName = [guid]::NewGuid().ToString() + ".txt"
+        $taskPath = Join-Path $TODO $safeName
+        $file.FullName | Out-File -FilePath $taskPath -Encoding utf8 -NoNewline
+    }
+    Write-Host "[INIT] Added $($allFiles.Count) tasks." -ForegroundColor Green
+}
+
+Write-Host "[WORKER $workerId] Assigned to Port $Port. Hunting for tasks..." -ForegroundColor Magenta
+
+# --- CORE EXECUTION LOOP ---
+while ($true) {
+    $taskFile = Get-ChildItem -LiteralPath $TODO -Filter *.txt | Sort-Object { Get-Random } | Select-Object -First 1
+    
+    if ($null -eq $taskFile) {
+        Write-Host "[WORKER $workerId] No tasks remaining. Swarm Complete!" -ForegroundColor Green
+        break
     }
 
-    Write-Host "Auditing: $relativePath" -ForegroundColor Yellow
+    $processingPath = Join-Path $PROC $taskFile.Name
+
+    # ATOMIC CLAIM
+    try { Move-Item -LiteralPath $taskFile.FullName -Destination $processingPath -ErrorAction Stop } 
+    catch { continue }
+
+    $targetFilePath = (Get-Content -LiteralPath $processingPath -Raw).Trim()
     
-    # Safely load the file enforcing UTF8 to prevent mojibake reading errors
-    $lines = Get-Content -Path $file.FullName -Encoding UTF8 -Raw -ErrorAction SilentlyContinue
-    if ([string]::IsNullOrWhiteSpace($lines)) { $lines = @("") } else { $lines = $lines -split "`n" }
-    
-    $totalChunks = [math]::Ceiling($lines.Count / $chunkSize)
-    if ($totalChunks -eq 0) { $totalChunks = 1 } 
-    
-    $fileState = @{
-        file_path = $relativePath
-        last_analyzed = ""
-        file_type = "Unknown"
-        overall_purpose = ""
-        imports_and_exports = @()
-        structs_or_classes = @()
-        functions = @()
+    if (-not (Test-Path -LiteralPath $targetFilePath)) {
+        Move-Item -LiteralPath $processingPath -Destination $ERRS -Force
+        continue
     }
 
-    for ($i = 0; $i -lt $totalChunks; $i++) {
-        $start = $i * $chunkSize
-        $end = [math]::Min(($start + $chunkSize - 1), ($lines.Count - 1))
-        
-        # THE SANITIZER: Strip out all invisible control characters (ANSI, Null bytes) that break JSON
-        $rawChunk = $lines[$start..$end] -join "`n"
-        $chunkText = $rawChunk -replace "[\x00-\x08\x0B-\x0C\x0E-\x1F\x7F]", ""
-        
-        $promptHeader = @"
-You are an expert code auditor. Analyze this chunk of code (Lines $($start+1) to $($end+1)) from '$relativePath'.
-Extract the requested data and output ONLY a raw JSON object. Do not include markdown blocks.
+    $targetFile = Get-Item -LiteralPath $targetFilePath
+    Write-Host "`n-> [$workerId | Port $Port] Auditing: $($targetFile.Name)" -ForegroundColor White
 
-CRITICAL REQUIREMENT: Properly escape all double quotes (\") and backslashes (\\) inside your JSON string values.
+    $allLines = Get-Content -LiteralPath $targetFile.FullName -ErrorAction SilentlyContinue
+    if ($null -eq $allLines -or $allLines.Count -eq 0) {
+        Move-Item -LiteralPath $processingPath -Destination $DONE -Force
+        continue
+    }
 
-SCHEMA REQUIREMENTS:
+    # ========================================================
+    # ISOLATED TASK EXECUTION BLOCK (Guarantees Cleanup)
+    # ========================================================
+    try {
+        # 1. BOOT ISOLATED OLLAMA SERVER FOR THIS SPECIFIC FILE
+        $env:OLLAMA_HOST = "127.0.0.1:$Port"
+        $proc = Start-Process -FilePath "ollama" -ArgumentList "serve" -WindowStyle Hidden -PassThru
+        $global:ActiveOllamaPID = $proc.Id
+        
+        Write-Host "   [+] Booted isolated Ollama Server (PID: $($proc.Id)). Waiting for API..." -ForegroundColor DarkGray
+        
+        $booted = $false
+        for ($k = 0; $k -lt 15; $k++) {
+            Start-Sleep -Seconds 1
+            try {
+                $null = Invoke-RestMethod -Uri "http://127.0.0.1:$Port/api/tags" -Method Get -TimeoutSec 1 -ErrorAction Stop
+                $booted = $true
+                break
+            } catch { }
+        }
+        
+        if (-not $booted) { throw "Ollama failed to boot on port $Port." }
+
+        # 2. PROCESS CHUNKS
+        $chunkSize = 350
+        $totalChunks = [math]::Ceiling($allLines.Count / $chunkSize)
+        $outName = "$($targetFile.Name)_$($taskFile.Name.Replace('.txt','')).jsonl"
+        $outputJsonlFile = Join-Path $OUTP $outName
+        $fileCompletelySuccessful = $true
+
+        for ($i = 0; $i -lt $totalChunks; $i++) {
+            $startLine = $i * $chunkSize
+            $endLine = [math]::Min(($startLine + $chunkSize - 1), ($allLines.Count - 1))
+            
+            $sb = New-Object System.Text.StringBuilder
+            for ($j = $startLine; $j -le $endLine; $j++) {
+                $null = $sb.Append($j + 1).Append(": ").AppendLine($allLines[$j])
+            }
+            $chunkContent = $sb.ToString()
+
+            # --- FULL FIDELITY ENTERPRISE PROMPT ---
+            $prompt = @"
+You are an expert code cartographer. Analyze this chunk and extract its architecture.
+Output RAW JSON ONLY. Do not use markdown blocks. Use the exact line numbers provided.
+
+Schema:
 {
-  "file_type_guess": "Choose ONE: Core Logic, UI Component, API Route, Database Model, Config, FFI Bridge, Interface/Trait, Utility Script, or Other",
-  "chunk_purpose": "Briefly describe what this specific block of code does.",
-  "imports_exports": ["List key dependencies imported or symbols exported"],
-  "structs_classes": ["List names of structs, classes, or interfaces defined here"],
-  "functions": [
+  "file": "$($targetFile.Name)",
+  "chunk": $($i+1),
+  "summary": "Detailed summary of this specific chunk",
+  "structs_or_classes": ["List", "of", "classes", "or", "structs"],
+  "imports": ["List", "of", "imports"],
+  "funcs": [
     {
-      "name": "Function Name",
-      "line_approx": $($start+1),
-      "calls_out_to": ["FunctionA", "ModuleB"],
-      "is_stub_or_incomplete": true
+      "name": "function_name",
+      "line": 0,
+      "calls_out_to": ["funcs", "it", "calls"],
+      "is_stub_or_incomplete": false
     }
   ]
 }
-If a field does not apply, return an empty array [].
 
 CODE CHUNK:
+$chunkContent
 "@
-        
-        $promptStr = $promptHeader + "`n" + $chunkText
+            
+            $body = @{
+                model = "qwen2.5-coder:1.5b" 
+                prompt = $prompt
+                stream = $false
+                options = @{ num_ctx = 16384; temperature = 0; num_thread = $Threads }
+            } | ConvertTo-Json -Depth 10 -Compress
 
-        $bodyObj = @{
-            model = $modelName
-            prompt = $promptStr
-            stream = $false
-            format = "json"
-            options = @{
-                num_ctx = 16384 
-            }
-        }
-        
-        $bodyJson = $bodyObj | ConvertTo-Json -Depth 10
+            $chunkSuccess = $false
+            $attempts = 0
+            
+            while (-not $chunkSuccess -and $attempts -lt 3) {
+                $attempts++
+                try {
+                    $response = Invoke-RestMethod -Uri $apiUrl -Method Post -Body ([System.Text.Encoding]::UTF8.GetBytes($body)) -ContentType "application/json" -TimeoutSec 600 -ErrorAction Stop
+                    
+                    if ($null -eq $response -or [string]::IsNullOrWhiteSpace($response.response)) { throw "Empty response." }
 
-        $retries = 0; $valid = $false
-        while (-not $valid -and $retries -lt 3) {
-            try {
-                $response = Invoke-RestMethod -Uri $ollamaEndpoint -Method Post -Body $bodyJson -ContentType "application/json" -TimeoutSec 180
-                $rawJson = $response.response
-                
-                $cleanJson = $rawJson -replace '(?s)^[^{]*', '' -replace '(?s)[^}]*$', ''
-                $delta = $cleanJson | ConvertFrom-Json -ErrorAction Stop
-                
-                if ($null -ne $delta.file_type_guess -or $null -ne $delta.chunk_purpose) {
-                    if ($fileState.file_type -eq "Unknown" -and $delta.file_type_guess) { $fileState.file_type = $delta.file_type_guess }
-                    if ($delta.chunk_purpose) { $fileState.overall_purpose += " " + $delta.chunk_purpose }
-                    if ($delta.imports_exports) { $fileState.imports_and_exports += $delta.imports_exports }
-                    if ($delta.structs_classes) { $fileState.structs_or_classes += $delta.structs_classes }
-                    if ($delta.functions) { $fileState.functions += $delta.functions }
+                    $jsonOutput = $response.response.Trim()
+                    
+                    if ($jsonOutput.StartsWith('```json')) { $jsonOutput = $jsonOutput.Substring(7) }
+                    elseif ($jsonOutput.StartsWith('```')) { $jsonOutput = $jsonOutput.Substring(3) }
+                    if ($jsonOutput.EndsWith('```')) { $jsonOutput = $jsonOutput.Substring(0, $jsonOutput.Length - 3) }
+                    $jsonOutput = $jsonOutput.Trim()
 
-                    $valid = $true
-                    Write-Host "  -> Chunk $($i+1)/$totalChunks parsed." -ForegroundColor DarkGray
-                } else {
-                    throw "JSON missing core keys."
-                }
-            } catch {
-                $retries++
-                $psError = $_.Exception.Message
-                Write-Host "  -> Retry ($retries/3) on chunk $($i+1) Failed." -ForegroundColor Red
-                
-                if ($psError -match "400") {
-                    Write-Host "     [FATAL] HTTP 400 - Invisible bytes broke the payload." -ForegroundColor DarkRed
-                } else {
-                    Write-Host "     [JSON ERROR] The LLM hallucinated bad syntax." -ForegroundColor DarkRed
+                    if ([string]::IsNullOrWhiteSpace($jsonOutput)) { throw "Stripped output empty." }
+
+                    # STRICT VALIDATION
+                    $null = ConvertFrom-Json $jsonOutput -ErrorAction Stop
+
+                    $jsonOutput | Out-File -FilePath $outputJsonlFile -Append -Encoding utf8
+                    Write-Host "   [+] Extracted high-fidelity metadata for chunk $($i+1)/$totalChunks." -ForegroundColor DarkGreen
+                    $chunkSuccess = $true
+
+                } catch {
+                    Write-Host "   [!] Chunk $($i+1) fail (Attempt $attempts): $($_.Exception.Message)" -ForegroundColor DarkGray
                 }
             }
+
+            if (-not $chunkSuccess) {
+                Write-Host "   [X] FATAL: Failed to parse Chunk $($i+1). Aborting file." -ForegroundColor Red
+                $fileCompletelySuccessful = $false
+                break
+            }
         }
-        
-        if (-not $valid) {
-            Write-Host "  -> Chunk $($i+1) skipped after 3 failures." -ForegroundColor Yellow
-            $fileState.overall_purpose += " [Warning: Chunk $($i+1) failed to parse]"
+
+        # 3. ROUTE COMPLETED FILE
+        if ($fileCompletelySuccessful) {
+            Move-Item -LiteralPath $processingPath -Destination $DONE -Force
+            Write-Host "   [SUCCESS] JSON saved to: $outputJsonlFile" -ForegroundColor Cyan
+        } else {
+            Move-Item -LiteralPath $processingPath -Destination $ERRS -Force
+            if (Test-Path -LiteralPath $outputJsonlFile) { Remove-Item -LiteralPath $outputJsonlFile -Force }
         }
+
+    } catch {
+        Write-Host "   [X] Unexpected error: $($_.Exception.Message)" -ForegroundColor Red
+        Move-Item -LiteralPath $processingPath -Destination $ERRS -Force -ErrorAction SilentlyContinue
+    } finally {
+        # ========================================================
+        # THE ZERO-LEAK GUARANTEE
+        # This ALWAYS fires, even if the file succeeds, fails, or crashes
+        # ========================================================
+        Kill-OllamaTree
     }
-
-    $fileState.overall_purpose = $fileState.overall_purpose.Trim()
-    $fileState.last_analyzed = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
-    
-    $finalJsonLine = $fileState | ConvertTo-Json -Depth 10 -Compress
-    Add-Content -Path $outputFile -Value $finalJsonLine -Encoding UTF8
-    Write-Host "  [+] Mapped to REPO_MAP.jsonl" -ForegroundColor Green
 }
-
-Write-Host "[DONE] Cartography Complete! Map saved to $outputFile" -ForegroundColor Cyan

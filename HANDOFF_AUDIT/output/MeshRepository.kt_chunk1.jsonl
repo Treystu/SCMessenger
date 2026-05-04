@@ -1,0 +1,160 @@
+﻿{
+  "file": "MeshRepository.kt",
+  "chunk": 1,
+  "summary": "The provided code snippet is a Kotlin class named `MeshRepository` that serves as an abstraction for accessing the Rust core via UniFFI bindings. It manages various aspects of the mesh service, including lifecycle, contacts, message history, connection ledger, network settings, and more.",
+  "structs_or_classes": ["MeshRepository", "BootstrapSource", "LocalTransportFallbackResult"],
+  "imports": [
+    "android.content.Context",
+    "android.content.pm.PackageManager",
+    "android.content.SharedPreferences",
+    "androidx.core.content.ContextCompat",
+    "com.scmessenger.android.transport.NetworkDetector",
+    "com.scmessenger.android.utils.Permissions",
+    "com.scmessenger.android.utils.CircuitBreaker",
+    "com.scmessenger.android.utils.NetworkFailureMetrics",
+    "com.scmessenger.android.utils.PeerIdValidator",
+    "com.scmessenger.android.utils.PeerKeyUtils",
+    "com.scmessenger.android.transport.TransportManager",
+    "com.scmessenger.android.transport.SmartTransportRouter",
+    "com.scmessenger.android.service.TransportType",
+    "kotlinx.coroutines.flow.MutableSharedFlow",
+    "kotlinx.coroutines.flow.MutableStateFlow",
+    "kotlinx.coroutines.flow.StateFlow",
+    "kotlinx.coroutines.flow.asSharedFlow",
+    "kotlinx.coroutines.flow.asStateFlow",
+    "kotlinx.coroutines.launch",
+    "kotlinx.coroutines.async",
+    "kotlinx.coroutines.Dispatchers",
+    "kotlinx.coroutines.sync.Mutex",
+    "kotlinx.coroutines.sync.withLock",
+    "java.util.concurrent.ConcurrentHashMap",
+    "java.util.concurrent.atomic.AtomicBoolean"
+  ],
+  "funcs": [
+    {
+      "name": "getAvailableStorageMB",
+      "line": 190,
+      "calls_out_to": []
+    },
+    {
+      "name": "checkAndRecordMessage",
+      "line": 204,
+      "calls_out_to": ["smartTransportRouter"]
+    },
+    {
+      "name": "enhanceNetworkErrorLogging",
+      "line": 206,
+      "calls_out_to": []
+    },
+    {
+      "name": "trackNetworkFailure",
+      "line": 212,
+      "calls_out_to": ["networkFailureMetrics"]
+    },
+    {
+      "name": "triggerFallbackProtocol",
+      "line": 232,
+      "calls_out_to": ["swarmBridge", "relayCircuitBreaker", "networkFailureMetrics"]
+    },
+    {
+      "name": "identityBackupPrefs",
+      "line": 263,
+      "calls_out_to": []
+    },
+    {
+      "name": "identityCachePrefs",
+      "line": 269,
+      "calls_out_to": []
+    },
+    {
+      "name": "meshService",
+      "line": 273,
+      "calls_out_to": []
+    },
+    {
+      "name": "contactManager",
+      "line": 277,
+      "calls_out_to": []
+    },
+    {
+      "name": "historyManager",
+      "line": 281,
+      "calls_out_to": []
+    },
+    {
+      "name": "ledgerManager",
+      "line": 285,
+      "calls_out_to": []
+    },
+    {
+      "name": "settingsManager",
+      "line": 289,
+      "calls_out_to": []
+    },
+    {
+      "name": "autoAdjustEngine",
+      "line": 293,
+      "calls_out_to": []
+    },
+    {
+      "name": "relayCircuitBreaker",
+      "line": 284,
+      "calls_out_to": []
+    },
+    {
+      "name": "networkDetector",
+      "line": 285,
+      "calls_out_to": []
+    },
+    {
+      "name": "diagnosticsReporter",
+      "line": 290,
+      "calls_out_to": []
+    },
+    {
+      "name": "ironCore",
+      "line": 296,
+      "calls_out_to": []
+    },
+    {
+      "name": "swarmBridge",
+      "line": 300,
+      "calls_out_to": []
+    },
+    {
+      "name": "wifiTransportManager",
+      "line": 301,
+      "calls_out_to": []
+    },
+    {
+      "name": "smartTransportRouter",
+      "line": 302,
+      "calls_out_to": []
+    },
+    {
+      "name": "transportManager",
+      "line": 306,
+      "calls_out_to": []
+    },
+    {
+      "name": "_serviceState",
+      "line": 310,
+      "calls_out_to": []
+    },
+    {
+      "name": "_serviceStats",
+      "line": 314,
+      "calls_out_to": []
+    },
+    {
+      "name": "_messageUpdates",
+      "line": 318,
+      "calls_out_to": []
+    },
+    {
+      "name": "incomingMessages",
+      "line": 221,
+      "calls_out_to": []
+    }
+  ]
+}

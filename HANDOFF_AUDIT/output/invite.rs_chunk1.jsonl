@@ -1,0 +1,14 @@
+﻿{
+  "file": "invite.rs",
+  "chunk": 1,
+  "summary": "This chunk defines the `InviteToken` struct, which represents a cryptographic invite token signed by an inviter. It includes methods for creating, setting custom expiry duration, metadata, and signature, as well as checking if the token is still valid.",
+  "structs_or_classes": ["InviteToken", "InviteChain"],
+  "imports": [],
+  "funcs": [
+    {
+      "name": "create_invite_token",
+      "line": 235,
+      "calls_out_to": []
+    }
+  ]
+}

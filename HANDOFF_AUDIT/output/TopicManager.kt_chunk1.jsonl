@@ -1,0 +1,59 @@
+﻿{
+  "file": "TopicManager.kt",
+  "chunk": 1,
+  "summary": "The TopicManager class manages subscriptions to gossipsub topics in an Android application. It includes methods for initializing, subscribing, unsubscribing, refreshing known topics, auto-subscribing to peer topics, filtering messages by topic, publishing bytes to a topic, checking if subscribed to a topic, and getting all subscribed and known topics.",
+  "structs_or_classes": ["MeshRepository", "uniffi.api.MessageRecord"],
+  "imports": ["kotlinx.coroutines.flow.MutableStateFlow", "kotlinx.coroutines.flow.StateFlow", "timber.log.Timber"],
+  "funcs": [
+    {
+      "name": "initialize",
+      "line": 50,
+      "calls_out_to": []
+    },
+    {
+      "name": "subscribe",
+      "line": 64,
+      "calls_out_to": ["meshRepository.subscribeTopic(topic)"]
+    },
+    {
+      "name": "unsubscribe",
+      "line": 83,
+      "calls_out_to": ["meshRepository.unsubscribeTopic(topic)"]
+    },
+    {
+      "name": "refreshKnownTopics",
+      "line": 102,
+      "calls_out_to": ["meshRepository.getTopics()", "meshRepository.getAllKnownTopics()"]
+    },
+    {
+      "name": "autoSubscribeToPeerTopics",
+      "line": 121,
+      "calls_out_to": []
+    },
+    {
+      "name": "filterMessagesByTopic",
+      "line": 134,
+      "calls_out_to": ["meshRepository.publishTopic(topic, data)"]
+    },
+    {
+      "name": "publish",
+      "line": 142,
+      "calls_out_to": ["meshRepository.publishTopic(topic, data)"]
+    },
+    {
+      "name": "isSubscribed",
+      "line": 150,
+      "calls_out_to": []
+    },
+    {
+      "name": "getSubscribedTopicsList",
+      "line": 156,
+      "calls_out_to": []
+    },
+    {
+      "name": "getKnownTopicsList",
+      "line": 162,
+      "calls_out_to": []
+    }
+  ]
+}

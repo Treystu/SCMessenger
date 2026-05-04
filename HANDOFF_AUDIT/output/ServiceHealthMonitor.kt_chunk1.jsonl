@@ -1,0 +1,94 @@
+﻿{
+  "file": "ServiceHealthMonitor.kt",
+  "chunk": 1,
+  "summary": "A service that monitors the health and responsiveness of a mesh service.",
+  "structs_or_classes": ["CoroutineScope", "Handler", "AtomicBoolean"],
+  "imports": ["Timber", "kotlinx.coroutines.Dispatchers", "kotlinx.coroutines.SupervisorJob", "kotlinx.coroutines.launch", "java.util.concurrent.atomic.AtomicBoolean"],
+  "funcs": [
+    {
+      "name": "startMonitoring",
+      "line": 51,
+      "calls_out_to": ["monitorScope"]
+    },
+    {
+      "name": "stopMonitoring",
+      "line": 76,
+      "calls_out_to": ["monitorScope"]
+    },
+    {
+      "name": "resetHealthStats",
+      "line": 94,
+      "calls_out_to": []
+    },
+    {
+      "name": "logHealthStats",
+      "line": 100,
+      "calls_out_to": []
+    },
+    {
+      "name": "checkServiceHealth",
+      "line": 116,
+      "calls_out_to": ["lastHeartbeatTime", "serviceTimeoutMs", "consecutiveFailureCount", "serviceHealthy"]
+    },
+    {
+      "name": "handleServiceTimeout",
+      "line": 148,
+      "calls_out_to": []
+    },
+    {
+      "name": "handleServiceFailure",
+      "line": 165,
+      "calls_out_to": []
+    },
+    {
+      "name": "triggerServiceRecovery",
+      "line": 185,
+      "calls_out_to": ["monitorScope"]
+    },
+    {
+      "name": "executeGracefulRestart",
+      "line": 204,
+      "calls_out_to": ["CoroutineScope", "delay", "attemptGracefulShutdown", "restartMeshService", "forceRestartMeshService", "requestManualRestart"]
+    },
+    {
+      "name": "notifyServiceRestartInitiated",
+      "line": 238,
+      "calls_out_to": []
+    },
+    {
+      "name": "attemptGracefulShutdown",
+      "line": 247,
+      "calls_out_to": ["delay"]
+    },
+    {
+      "name": "restartMeshService",
+      "line": 265,
+      "calls_out_to": []
+    },
+    {
+      "name": "forceRestartMeshService",
+      "line": 290,
+      "calls_out_to": []
+    },
+    {
+      "name": "requestManualRestart",
+      "line": 314,
+      "calls_out_to": []
+    },
+    {
+      "name": "updateHeartbeat",
+      "line": 328,
+      "calls_out_to": []
+    },
+    {
+      "name": "isServiceHealthy",
+      "line": 340,
+      "calls_out_to": []
+    },
+    {
+      "name": "getServiceUptimeSeconds",
+      "line": 345,
+      "calls_out_to": []
+    }
+  ]
+}

@@ -1,0 +1,19 @@
+﻿{
+  "file": "engine.rs",
+  "chunk": 1,
+  "summary": "The routing engine is a centralized component responsible for making optimal routing decisions for messages across different layers of the network. It includes methods to route messages directly, through gateways, and via global routes, with options for redundancy and periodic maintenance.",
+  "structs_or_classes": ["LocalCell", "NeighborhoodTable", "GlobalRoutes"],
+  "imports": ["super::global::GlobalRoutes", "super::local::{LocalCell, PeerId, TransportType}", "super::neighborhood::NeighborhoodTable"],
+  "funcs": [
+    {
+      "name": "route_message",
+      "line": 129,
+      "calls_out_to": ["collect_alternative_hops"]
+    },
+    {
+      "name": "route_redundant",
+      "line": 230,
+      "calls_out_to": ["collect_alternative_hops_count"]
+    }
+  ]
+}

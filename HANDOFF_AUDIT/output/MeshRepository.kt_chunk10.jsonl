@@ -1,0 +1,109 @@
+﻿{
+  "file": "MeshRepository.kt",
+  "chunk": 10,
+  "summary": "The `MeshRepository` class provides methods for managing and interacting with a mesh network, including retrieving service state, updating stats, handling contacts, and performing various cryptographic operations.",
+  "structs_or_classes": ["List", "of", "classes", "or", "structs"],
+  "imports": ["List", "of", "imports"],
+  "funcs": [
+    {
+      "name": "getServiceState",
+      "line": 3152,
+      "calls_out_to": ["meshService?.getState() ?: uniffi.api.ServiceState.STOPPED"]
+    },
+    {
+      "name": "updateStats",
+      "line": 3160,
+      "calls_out_to": ["meshService?.getStats()", "_discoveredPeers.value", "_serviceStats.value", "repoScope.launch"]
+    },
+    {
+      "name": "startPeriodicStatsUpdate",
+      "line": 3204,
+      "calls_out_to": ["isActive", "kotlinx.coroutines.delay(5000)", "updateStats"]
+    },
+    {
+      "name": "canonicalContactId",
+      "line": 3263,
+      "calls_out_to": ["trimmedKey.length != 64", "trimmedKey.all { it in '0'..'9' || it in 'a'..'f' || it in 'A'..'F' }"]
+    },
+    {
+      "name": "addContact",
+      "line": 3309,
+      "calls_out_to": ["contactManager?.add(finalContact)", "parseRoutingHints", "annotateIdentityInLedger", "canonicalId", "contactManager?.setNickname(peerId, nickname)"]
+    },
+    {
+      "name": "getContact",
+      "line": 3352,
+      "calls_out_to": ["contactManager?.get(canonicalId(peerId))"]
+    },
+    {
+      "name": "hasConversationWith",
+      "line": 3360,
+      "calls_out_to": ["historyManager?.conversation(canonical, 1u)?.isNotEmpty() == true"]
+    },
+    {
+      "name": "removeContact",
+      "line": 3370,
+      "calls_out_to": ["contactManager?.remove(canonical)", "historyManager?.removeConversation(canonical)"]
+    },
+    {
+      "name": "listContacts",
+      "line": 3401,
+      "calls_out_to": ["contactManager?.list() ?: emptyList()"]
+    },
+    {
+      "name": "searchContacts",
+      "line": 3405,
+      "calls_out_to": ["contactManager?.search(query) ?: emptyList()"]
+    },
+    {
+      "name": "setContactNickname",
+      "line": 3410,
+      "calls_out_to": ["contactManager?.setNickname(peerId, nickname)"]
+    },
+    {
+      "name": "getContactCount",
+      "line": 3414,
+      "calls_out_to": ["contactManager?.count() ?: 0u"]
+    },
+    {
+      "name": "blockPeer",
+      "line": 3422,
+      "calls_out_to": ["ironCore?.blockPeer(peerId, deviceId, reason)"]
+    },
+    {
+      "name": "unblockPeer",
+      "line": 3432,
+      "calls_out_to": ["ironCore?.unblockPeer(peerId, deviceId)"]
+    },
+    {
+      "name": "blockAndDeletePeer",
+      "line": 3446,
+      "calls_out_to": ["ironCore?.blockAndDeletePeer(peerId, deviceId, reason)"]
+    },
+    {
+      "name": "isBlocked",
+      "line": 3456,
+      "calls_out_to": ["ironCore?.isPeerBlocked(peerId, deviceId) ?: false"]
+    },
+    {
+      "name": "listBlockedPeers",
+      "line": 3466,
+      "calls_out_to": ["ironCore?.listBlockedPeers() ?: emptyList()"]
+    },
+    {
+      "name": "getBlockedCount",
+      "line": 3476,
+      "calls_out_to": ["ironCore?.blockedCount() ?: 0u"]
+    },
+    {
+      "name": "signData",
+      "line": 3489,
+      "calls_out_to": ["ironCore?.signData(data)"]
+    },
+    {
+      "name": "verifySignature",
+      "line": 3500,
+      "calls_out_to": ["ironCore?.verifySignature(data, signature, publicKeyHex)"]
+    }
+  ]
+}

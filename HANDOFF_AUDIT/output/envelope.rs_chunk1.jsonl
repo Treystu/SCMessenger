@@ -1,0 +1,30 @@
+﻿{
+  "file": "envelope.rs",
+  "chunk": 1,
+  "summary": "This chunk defines the `DriftEnvelope` struct, which represents a compact binary format for mesh relay messages. It includes fields for the header, routing, crypto, and payload components of the envelope.",
+  "structs_or_classes": ["DriftEnvelope"],
+  "imports": [
+    "super::{DriftError, DRIFT_VERSION}",
+    "crate::message::Envelope",
+    "ed25519_dalek::Signer",
+    "uuid::Uuid",
+    "web_time::{SystemTime, UNIX_EPOCH}"
+  ],
+  "funcs": [
+    {
+      "name": "hint_from_public_key",
+      "line": 334,
+      "calls_out_to": []
+    },
+    {
+      "name": "increment_hop",
+      "line": 341,
+      "calls_out_to": []
+    },
+    {
+      "name": "is_expired",
+      "line": 350,
+      "calls_out_to": []
+    }
+  ]
+}

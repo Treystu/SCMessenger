@@ -1,0 +1,14 @@
+﻿{
+  "file": "cli.rs",
+  "chunk": 1,
+  "summary": "This chunk defines the `Cli` struct and its subcommands, which are used to parse command-line arguments for a CLI tool named SCM. The `Cli` struct represents the top-level command with subcommands for various operations such as initialization, identity management, contact management, configuration, history, start/relay, send, status, mark sent, clear history, enforce retention, prune before, stop, block/unblock, and more.",
+  "structs_or_classes": ["Cli", "Commands"],
+  "imports": [],
+  "funcs": [
+    {
+      "name": "parse_from",
+      "line": 1,
+      "calls_out_to": ["subcommands"]
+    }
+  ]
+}

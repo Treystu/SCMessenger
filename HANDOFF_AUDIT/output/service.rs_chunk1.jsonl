@@ -1,0 +1,88 @@
+﻿{
+  "file": "service.rs",
+  "chunk": 1,
+  "summary": "Core MeshService for mobile platform background operation",
+  "structs_or_classes": ["MeshService", "MeshServiceConfig", "PlatformBridge", "MotionState"],
+  "imports": ["parking_lot::RwLock", "std::sync::Arc", "thiserror::Error", "tracing"],
+  "funcs": [
+    {
+      "name": "new",
+      "line": 142,
+      "calls_out_to": ["config.validate"]
+    },
+    {
+      "name": "set_platform_bridge",
+      "line": 150,
+      "calls_out_to": ["self.platform.write().as_ref()"]
+    },
+    {
+      "name": "start",
+      "line": 163,
+      "calls_out_to": [
+        "config.validate",
+        "platform.read().as_ref().map_err(|e| ServiceError::PlatformBridgeError(e))?",
+        "stats.write().saturating_add(1)",
+        "tracing::info!('Mesh service started')"
+      ]
+    },
+    {
+      "name": "stop",
+      "line": 204,
+      "calls_out_to": [
+        "config.validate",
+        "stats.write().saturating_sub(1)",
+        "tracing::info!('Mesh service stopped')"
+      ]
+    },
+    {
+      "name": "pause",
+      "line": 237,
+      "calls_out_to": ["self.state.write().as_ref()"]
+    },
+    {
+      "name": "resume",
+      "line": 260,
+      "calls_out_to": ["self.state.write().as_ref()"]
+    },
+    {
+      "name": "get_state",
+      "line": 245,
+      "calls_out_to": ["self.state.read()"]
+    },
+    {
+      "name": "set_background_restricted",
+      "line": 250,
+      "calls_out_to": ["self.state.write().as_ref()"]
+    },
+    {
+      "name": "on_peer_discovered",
+      "line": 265,
+      "calls_out_to": ["stats.write().saturating_add(1)", "tracing::debug!('Peer discovered: {}')"]
+    },
+    {
+      "name": "on_peer_disconnected",
+      "line": 278,
+      "calls_out_to": ["stats.write().saturating_sub(1)", "tracing::debug!('Peer disconnected: {}')"]
+    },
+    {
+      "name": "on_data_received",
+      "line": 300,
+      "calls_out_to": ["stats.write().saturating_add(size_bytes as u64)", "tracing::debug!('Data received: {} bytes')"]
+    },
+    {
+      "name": "get_service_stats",
+      "line": 305,
+      "calls_out_to": ["self.stats.read().clone()"]
+    },
+    {
+      "name": "reset_stats",
+      "line": 308,
+      "calls_out_to": ["*stats = ServiceStats::default();"]
+    },
+    {
+      "name": "get_config",
+      "line": 311,
+      "calls_out_to": ["self.config.clone()"]
+    }
+  ]
+}

@@ -1,0 +1,74 @@
+﻿{
+  "file": "server.rs",
+  "chunk": 2,
+  "summary": "This chunk contains test cases for the `RelayServer` struct, which is responsible for managing peer connections and storing/retrieving envelopes.",
+  "structs_or_classes": ["RelayServer", "SocketAddr"],
+  "imports": ["std::net::SocketAddr", "web_time::Duration", "SystemTime"],
+  "funcs": [
+    {
+      "name": "test_server",
+      "line": 35,
+      "calls_out_to": []
+    },
+    {
+      "name": "register_peer",
+      "line": 40,
+      "calls_out_to": ["server"]
+    },
+    {
+      "name": "store_for_peer",
+      "line": 172,
+      "calls_out_to": ["server"]
+    },
+    {
+      "name": "get_stats",
+      "line": 283,
+      "calls_out_to": ["server"]
+    },
+    {
+      "name": "cleanup_expired",
+      "line": 390,
+      "calls_out_to": ["server"]
+    },
+    {
+      "name": "remove_peer",
+      "line": 417,
+      "calls_out_to": ["server"]
+    },
+    {
+      "name": "complete_handshake",
+      "line": 455,
+      "calls_out_to": ["server"]
+    },
+    {
+      "name": "is_peer_connected",
+      "line": 480,
+      "calls_out_to": ["server"]
+    },
+    {
+      "name": "stored_count_for_peer",
+      "line": 519,
+      "calls_out_to": ["server"]
+    },
+    {
+      "name": "create_handshake_ack",
+      "line": 546,
+      "calls_out_to": []
+    },
+    {
+      "name": "add_bytes_relayed",
+      "line": 573,
+      "calls_out_to": ["server"]
+    },
+    {
+      "name": "get_stats",
+      "line": 600,
+      "calls_out_to": ["server"]
+    },
+    {
+      "name": "retrieve_with_timestamp_filter",
+      "line": 627,
+      "calls_out_to": ["server"]
+    }
+  ]
+}

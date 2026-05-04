@@ -1,0 +1,14 @@
+﻿{
+  "file": "frame.rs",
+  "chunk": 1,
+  "summary": "This chunk defines the `DriftFrame` struct and its associated methods for serialization, deserialization, and reading from an async byte stream with a timeout.",
+  "structs_or_classes": ["DriftFrame", "FrameType"],
+  "imports": [],
+  "funcs": [
+    {
+      "name": "read_with_timeout",
+      "line": 224,
+      "calls_out_to": []
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+﻿{
+  "file": "local.rs",
+  "chunk": 2,
+  "summary": "This chunk defines the `LocalCell` struct and its methods, including functions for peer management, timestamp generation, and event handling.",
+  "structs_or_classes": ["LocalCell", "PeerId", "TransportType", "PeerStatus", "PeerEvent"],
+  "imports": [],
+  "funcs": [
+    {
+      "name": "current_timestamp",
+      "line": 356,
+      "calls_out_to": []
+    }
+  ]
+}

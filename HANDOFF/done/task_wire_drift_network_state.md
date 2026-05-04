@@ -31,3 +31,8 @@ STATUS: SUCCESS_STOP
    - Added `DriftStatusResponse` and `get_drift_state_via_api` to `cli/src/api.rs`.
    - Updated `scm status` in `cli/src/main.rs` to display the real-time protocol state and store occupancy.
 5. **Verification**: Verified that external observers can now query the internal Drift protocol state through established API surfaces.
+
+
+--- CLOSEOUT EVIDENCE ---
+VERIFIED WIRED: Called at wasm/src/lib.rs:866; cli/src/api.rs:550,651; core/src/mobile_bridge.rs:404. Production call path confirmed.
+Verified by: orchestrator-TRP-2026-05-03

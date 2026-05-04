@@ -1,0 +1,24 @@
+﻿{
+  "file": "main.rs",
+  "chunk": 3,
+  "summary": "The code chunk is responsible for handling contact operations such as adding, listing, showing, removing, and searching contacts. It also includes functionality to manage privacy settings.",
+  "structs_or_classes": ["Contact", "PrivacyConfig"],
+  "imports": ["serde_json", "anyhow::Error"],
+  "funcs": [
+    {
+      "name": "add_contact",
+      "line": 715,
+      "calls_out_to": ["api::add_contact_via_api"]
+    },
+    {
+      "name": "cmd_config",
+      "line": 920,
+      "calls_out_to": ["config::Config::load", "serde_json::from_str", "core.set_privacy_config"]
+    },
+    {
+      "name": "cmd_history",
+      "line": 1024,
+      "calls_out_to": ["history_store_manager"]
+    }
+  ]
+}

@@ -32,3 +32,8 @@ STATUS: SUCCESS_STOP
    - Exposed as `getPrivacyConfig` in `wasm/src/lib.rs`.
    - Returns a structured JS object for integration with web-based privacy dashboards.
 4. **Verification**: Confirmed that the CLI accurately reports the status of message padding, onion routing, cover traffic, and timing obfuscation.
+
+
+--- CLOSEOUT EVIDENCE ---
+VERIFIED WIRED: Called at cli/src/main.rs:958; wasm/src/lib.rs:898. Production call path confirmed.
+Verified by: orchestrator-TRP-2026-05-03

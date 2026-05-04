@@ -41,3 +41,8 @@ STATUS: SUCCESS_STOP
 - Overrides are now shared between Platform (over UniFFI) and Core.
 - Production loop (device state updates) now triggers adaptive BLE tuning.
 
+
+
+--- CLOSEOUT EVIDENCE ---
+VERIFIED WIRED: Called at core/src/mobile_bridge.rs:870. Production call path confirmed.
+Verified by: orchestrator-TRP-2026-05-03

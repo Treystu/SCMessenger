@@ -1,0 +1,99 @@
+﻿{
+  "file": "global.rs",
+  "chunk": 2,
+  "summary": "Implementation of the GlobalRoutes struct and its methods.",
+  "structs_or_classes": ["GlobalRoutes", "RouteAdvertisement"],
+  "imports": ["std::collections::HashMap", "std::time::Instant"],
+  "funcs": [
+    {
+      "name": "new",
+      "line": 357,
+      "calls_out_to": []
+    },
+    {
+      "name": "add_route",
+      "line": 401,
+      "calls_out_to": ["make_route"]
+    },
+    {
+      "name": "has_route_for",
+      "line": 404,
+      "calls_out_to": ["routes_for_hint"]
+    },
+    {
+      "name": "route_count",
+      "line": 405,
+      "calls_out_to": []
+    },
+    {
+      "name": "routes_for_hint",
+      "line": 406,
+      "calls_out_to": []
+    },
+    {
+      "name": "best_route_for_hint",
+      "line": 439,
+      "calls_out_to": ["route_count", "routes_for_hint"]
+    },
+    {
+      "name": "reject_stale_route_update",
+      "line": 501,
+      "calls_out_to": []
+    },
+    {
+      "name": "accept_newer_route_update",
+      "line": 513,
+      "calls_out_to": []
+    },
+    {
+      "name": "max_routes_per_hint",
+      "line": 528,
+      "calls_out_to": []
+    },
+    {
+      "name": "max_routes_per_hint_replacement",
+      "line": 537,
+      "calls_out_to": []
+    },
+    {
+      "name": "max_total_routes",
+      "line": 546,
+      "calls_out_to": []
+    },
+    {
+      "name": "cleanup_expired_routes",
+      "line": 590,
+      "calls_out_to": []
+    },
+    {
+      "name": "remove_routes_via",
+      "line": 621,
+      "calls_out_to": []
+    },
+    {
+      "name": "request_route",
+      "line": 632,
+      "calls_out_to": ["increment_route_request_attempts"]
+    },
+    {
+      "name": "increment_route_request_attempts",
+      "line": 648,
+      "calls_out_to": []
+    },
+    {
+      "name": "resolve_route_request",
+      "line": 655,
+      "calls_out_to": []
+    },
+    {
+      "name": "update_local_advertisements",
+      "line": 671,
+      "calls_out_to": ["get_advertisements"]
+    },
+    {
+      "name": "get_advertisements",
+      "line": 680,
+      "calls_out_to": []
+    }
+  ]
+}
