@@ -1324,6 +1324,15 @@ open class MeshRepository(private val context: Context) {
                     peerIdentifiedDedupCache[trimmedPeerId] = identifySignature to now
 
                     Timber.d("Core notified identified: $peerId (agent: $agentVersion) with ${listenAddrs.size} addresses")
+                    // Record successful transport event for health monitoring
+                    val transport = when {
+                        listenAddrs.any { it.contains("/ble/") } -> "ble"
+                        listenAddrs.any { it.contains("/ws/") } -> "websocket"
+                        listenAddrs.any { it.contains("/quic") } -> "quic"
+                        listenAddrs.any { it.contains("/tcp/") } -> "tcp"
+                        else -> "unknown"
+                    }
+                    recordTransportEvent(transport, true)
                     repoScope.launch {
                         dialThrottleState.keys
                             .filter { it.endsWith("/p2p/$peerId") || it == peerId }
@@ -1535,6 +1544,8 @@ open class MeshRepository(private val context: Context) {
                     peerDisconnectDedupCache[trimmedPeerId] = now
 
                     Timber.d("Core notified disconnected: $peerId")
+                    // Record transport failure event for health monitoring
+                    recordTransportEvent("mesh", false)
                     repoScope.launch {
                         val canonicalId = transportToCanonicalMap.remove(peerId) ?: peerId
                         activeSessions.remove(peerId)

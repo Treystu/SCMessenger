@@ -13,6 +13,8 @@ use super::engine::*;
 use super::global::RouteAdvertisement;
 use super::local::PeerId;
 use super::negative_cache::{NegativeCache, NegativeCacheStats};
+#[cfg(feature = "phase2_apis")]
+use super::multipath::MultiPathDelivery;
 use super::resume_prefetch::{PrefetchStats, ResumePrefetchManager};
 use super::timeout_budget::{BudgetSummary, DiscoveryPhase, TimeoutBudget};
 use web_time::Duration;
@@ -32,6 +34,9 @@ pub struct OptimizedRoutingEngine {
     prefetch_manager: ResumePrefetchManager,
     /// Adaptive TTL manager for activity-based route freshness
     adaptive_ttl: AdaptiveTTLManager,
+    /// Multipath delivery manager for redundant route tracking (Phase 2)
+    #[cfg(feature = "phase2_apis")]
+    multipath: MultiPathDelivery,
     /// Our own peer ID
     #[allow(dead_code)]
     local_id: PeerId,
@@ -53,6 +58,8 @@ impl OptimizedRoutingEngine {
             negative_cache: NegativeCache::with_defaults(),
             prefetch_manager: ResumePrefetchManager::with_defaults(),
             adaptive_ttl: AdaptiveTTLManager::with_defaults(),
+            #[cfg(feature = "phase2_apis")]
+            multipath: MultiPathDelivery::new(),
             local_id,
             local_hint,
             current_phase: DiscoveryPhase::LocalCache,
@@ -254,6 +261,19 @@ impl OptimizedRoutingEngine {
     /// Clear unreachable status for peer
     pub fn clear_unreachable_peer(&mut self, peer_id: &str) {
         self.negative_cache.clear_unreachable(peer_id);
+    }
+
+    /// Get active multipath delivery paths for a peer.
+    /// Returns an empty list when Phase 2 APIs are not enabled.
+    #[cfg(feature = "phase2_apis")]
+    pub fn active_paths(&self, peer_id: u64) -> Vec<&super::multipath::DeliveryPath> {
+        self.multipath.active_paths(peer_id)
+    }
+
+    /// Get active multipath delivery paths for a peer (stub when Phase 2 not enabled).
+    #[cfg(not(feature = "phase2_apis"))]
+    pub fn active_paths(&self, _peer_id: u64) -> Vec<()> {
+        Vec::new()
     }
 }
 
