@@ -705,12 +705,15 @@ pool_patrol() {
 
     echo "=== Patrol Scan ==="
 
-    # Phase 1: Check for completion markers
+    # Phase 1: Check for completion markers AND zombie detection
     for agent_dir in "$AGENT_ROOT"/*/; do
         [ -d "$agent_dir" ] || continue
         local agent_id=$(basename "$agent_dir")
         local completion_file="$agent_dir/COMPLETION"
+        local task_file_marker="$agent_dir/task_file"
+        local pid_file="$agent_dir/pid"
 
+        # ── COMPLETION MARKER DETECTION ──
         if [ -f "$completion_file" ]; then
             local status=$(grep "^STATUS=" "$completion_file" | cut -d'=' -f2)
             local next_requested=$(grep "^NEXT_TASK_REQUESTED=" "$completion_file" | cut -d'=' -f2)
@@ -718,9 +721,9 @@ pool_patrol() {
             local build_status=$(grep "^BUILD_STATUS=" "$completion_file" | cut -d'=' -f2)
 
             case "$status" in
-                "completed")
-                    if [ "$next_requested" = "false" ]; then
-                        echo "PATROL: Agent $agent_id COMPLETED (build: $build_status). Freeing slot."
+                "completed"|"timeout"|"crashed")
+                    if [ "$next_requested" = "false" ] || [ "$status" = "timeout" ] || [ "$status" = "crashed" ]; then
+                        echo "PATROL: Agent $agent_id $status (build: $build_status). Freeing slot."
                         pool_stop "$agent_id"
                         ((actions_taken++))
                     else
@@ -742,6 +745,35 @@ pool_patrol() {
                     ((actions_taken++))
                     ;;
             esac
+            continue
+        fi
+
+        # ── ZOMBIE DETECTION (agent alive but task file moved to done/) ──
+        # If the agent's assigned task file is no longer in todo/ or IN_PROGRESS/,
+        # the agent has likely finished but didn't write a COMPLETION marker.
+        if [ -f "$task_file_marker" ]; then
+            local assigned_task=$(cat "$task_file_marker")
+            local task_basename=$(basename "$assigned_task" | sed 's/^IN_PROGRESS_//')
+            if [ ! -f "HANDOFF/todo/$task_basename" ] && [ ! -f "HANDOFF/IN_PROGRESS/$task_basename" ]; then
+                echo "PATROL: Agent $agent_id task file '$task_basename' no longer in todo/ or IN_PROGRESS/ — likely completed"
+                # Check if the agent process is still alive
+                if [ -f "$pid_file" ]; then
+                    local pid=$(cat "$pid_file")
+                    if process_alive "$pid"; then
+                        echo "PATROL: Agent $agent_id process $pid still alive — terminating zombie"
+                        kill -9 "$pid" 2>/dev/null || true
+                        taskkill //F //T //PID "$pid" 2>/dev/null || true
+                    fi
+                fi
+                # Write completion marker on behalf of the agent
+                echo "STATUS=completed" > "$completion_file"
+                echo "COMPLETED_AT=$(date +%s)" >> "$completion_file"
+                echo "BUILD_STATUS=unknown" >> "$completion_file"
+                echo "NEXT_TASK_REQUESTED=false" >> "$completion_file"
+                echo "NOTE=Auto-detected by patrol (task file moved)" >> "$completion_file"
+                pool_stop "$agent_id"
+                ((actions_taken++))
+            fi
         fi
     done
 
