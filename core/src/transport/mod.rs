@@ -46,7 +46,7 @@ pub use mesh_routing::{
     ROUTE_REASON_RELAY_TIEBREAK_LAST_SUCCESS, ROUTE_REASON_RELAY_TIEBREAK_PEER_ID,
 };
 pub use multiport::{BindAnalysis, BindResult, ConnectivityStatus, MultiPortConfig};
-pub use observation::{AddressObservation, AddressObserver, ConnectionTracker};
+pub use observation::{AddressObservation, AddressObserver, ConnectionEndpoint, ConnectionTracker};
 pub use peer_broadcast::PeerBroadcaster;
 pub use reflection::{
     AddressReflectionRequest, AddressReflectionResponse, AddressReflectionService,

@@ -898,6 +898,11 @@ impl MeshService {
             bridge.on_network_changed(profile.has_wifi, false); // Cellular not in profile yet
             bridge.on_motion_changed(profile.motion_state);
         }
+
+        // B1_CORE_ENTRY_007: Periodic routing engine maintenance
+        // Advance the routing engine by one tick to maintain up-to-date routing state.
+        // Called on device state changes to ensure routing stays synchronized with network conditions.
+        let _ = self.routing_tick();
     }
 
     /// Return the recommended behavior adjustments for the *current* device state.
@@ -947,8 +952,15 @@ impl MeshService {
         tracing::info!("Peer discovered: {}", peer_id);
     }
 
+    /// B1_CORE_ENTRY_009: Production caller for ratchet_reset_session
+    /// Reset the ratchet session for a peer when they disconnect.
+    /// This ensures fresh keys when they reconnect, providing forward secrecy.
     pub fn on_peer_disconnected(&self, peer_id: String) {
         tracing::info!("Peer disconnected: {}", peer_id);
+        // Reset ratchet session for the disconnected peer to force re-key on reconnection
+        if let Some(core) = self.get_core() {
+            core.ratchet_reset_session(peer_id);
+        }
     }
 
     pub fn on_data_received(&self, peer_id: String, data: Vec<u8>) {

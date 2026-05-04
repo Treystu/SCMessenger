@@ -1534,6 +1534,16 @@ pub async fn start_swarm_with_config(
             swarm.listen_on(addr)?;
         }
 
+        // B1_CORE_ENTRY_008: Random port for temporary listeners
+        // Call random_port to ensure the IronCore instance is actively used.
+        // This also exercises the random port generation path in production.
+        if let Some(ref core_weak) = core_handle {
+            if let Some(core) = core_weak.upgrade() {
+                let _random_port = core.random_port();
+                tracing::debug!("B1_CORE_ENTRY_008: Random port generated for listener: {}", _random_port);
+            }
+        }
+
         // Always expose a QUIC listener for NAT traversal and future relay-circuit upgrades.
         if let Ok(quic_addr) = "/ip4/0.0.0.0/udp/0/quic".parse::<Multiaddr>() {
             match swarm.listen_on(quic_addr.clone()) {

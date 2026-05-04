@@ -5705,6 +5705,7 @@ open class MeshRepository(private val context: Context) {
                 // AND-DELIVERY-001: Enforce maximum retry limit to prevent infinite retries
                 if (item.attemptCount >= pendingOutboxMaxAttempts) {
                     Timber.w("Dropping message ${item.historyRecordId} after ${item.attemptCount} attempts (max=$pendingOutboxMaxAttempts)")
+                    markMessageCorrupted(item.historyRecordId)
                     logDeliveryState(
                         messageId = item.historyRecordId,
                         state = "failed",
@@ -5715,6 +5716,10 @@ open class MeshRepository(private val context: Context) {
                     continue
                 }
                 if (item.nextAttemptAtEpochSec > now) continue
+                if (!shouldRetryMessage(item.historyRecordId)) {
+                    Timber.w("Skipping retry for ${item.historyRecordId}: shouldRetryMessage=false")
+                    continue
+                }
                 if (isMessageDeliveredLocally(item.historyRecordId)) {
                     iterator.remove()
                     updated = true
@@ -5725,6 +5730,7 @@ open class MeshRepository(private val context: Context) {
                     state = "forwarding",
                     detail = "retry_attempt=${item.attemptCount + 1}"
                 )
+                logMessageDeliveryAttempt(item.historyRecordId, item.attemptCount + 1, "forwarding")
 
                 val envelope = try {
                     android.util.Base64.decode(item.envelopeBase64, android.util.Base64.NO_WRAP)
@@ -5819,6 +5825,7 @@ open class MeshRepository(private val context: Context) {
                 }
 
                 val nextAttemptCount = item.attemptCount + 1
+                incrementAttemptCount(item.historyRecordId)
                 // Aggressive retry for transport transitions: fast initial attempts
                 // Attempt 1: 0.5s, 2: 1s, 3: 2s, 4: 4s, 5: 8s, 6: 16s
                 // Attempts 7-20: 60 seconds (steady retry)
