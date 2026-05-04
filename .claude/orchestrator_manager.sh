@@ -311,7 +311,13 @@ for a in cfg.get('agents', []):
 
     local agent_id="${agent_name}_$(date +%s)"
 
-    # === NEW: REPO_MAP Freshness Gate ===
+    # === REPO_MAP REBUILD (ensure current before every launch) ===
+    if [ -f ".claude/scripts/build_repo_index.py" ]; then
+        echo "Rebuilding REPO_MAP index for current codebase..."
+        $PYTHON .claude/scripts/build_repo_index.py 2>/dev/null
+    fi
+
+    # === REPO_MAP Freshness Gate ===
     if [ -n "$task_file" ] && [ -f "$task_file" ]; then
         echo "Running REPO_MAP Freshness Gate..."
         local freshness_result
