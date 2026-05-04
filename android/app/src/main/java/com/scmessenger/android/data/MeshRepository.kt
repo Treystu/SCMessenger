@@ -1704,6 +1704,12 @@ open class MeshRepository(private val context: Context) {
                                 Timber.d("updateLastSeen failed: ${e.message}")
                             }
 
+                            // Update device ID when discovered from message hints
+                            val discoveredDeviceId = verifiedHints?.deviceId
+                            if (discoveredDeviceId != null && discoveredDeviceId != existingContact.lastKnownDeviceId) {
+                                updateContactDeviceId(canonicalPeerId, discoveredDeviceId)
+                            }
+
                             if (existingContact.nickname.isNullOrBlank() && !knownNickname.isNullOrBlank()) {
                                 val updatedContact = uniffi.api.Contact(
                                     peerId = existingContact.peerId,

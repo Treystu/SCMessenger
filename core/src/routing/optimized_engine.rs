@@ -104,6 +104,37 @@ impl OptimizedRoutingEngine {
             };
         }
 
+        // Phase 1.5: Check multipath delivery routes (Phase 2 optimization)
+        // If we have active multipath routes for this peer, prefer the primary route
+        // and use alternatives from the multipath manager.
+        #[cfg(feature = "phase2_apis")]
+        {
+            let peer_id_int = u64::from_be_bytes(recipient_hint[..8].try_into().unwrap_or([0u8; 8]));
+            let active = self.multipath.active_paths(peer_id_int);
+            if let Some(primary_path) = active.first() {
+                if primary_path.active {
+                    let alternatives: Vec<NextHop> = active.iter().skip(1)
+                        .filter(|p| p.active)
+                        .map(|p| NextHop::GlobalRoute {
+                            next_hop_id: p.peer_id.to_be_bytes(),
+                            total_hops: 1,
+                        })
+                        .collect();
+                    return RoutingDecision {
+                        message_id: *message_id,
+                        recipient_hint: *recipient_hint,
+                        primary: NextHop::GlobalRoute {
+                            next_hop_id: primary_path.peer_id.to_be_bytes(),
+                            total_hops: 1,
+                        },
+                        alternatives,
+                        decided_by: RoutingLayer::Global,
+                        confidence: 0.9,
+                    };
+                }
+            }
+        }
+
         // Phase 2: Hierarchical discovery with timeout budgeting (P0 optimization)
         self.start_discovery_if_needed();
 
