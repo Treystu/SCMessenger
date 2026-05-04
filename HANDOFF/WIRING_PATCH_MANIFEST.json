@@ -1,5 +1,5 @@
 {
-  "total_tasks": 299,
+  "total_tasks": 307,
   "tasks": [
     {
       "task_file": "HANDOFF/todo/task_wire_abusive_peer_burst_is_rate_limited_but_other_peer_still_passes.md",
@@ -258,19 +258,19 @@
       }
     },
     {
-      "task_file": "HANDOFF/todo/task_wire_best_relays.md",
-      "task_name": "best_relays",
-      "function": "best_relays",
-      "resolved_symbol": "best_relays",
-      "target": "core/src/transport/mesh_routing.rs",
+      "task_file": "HANDOFF/todo/task_wire_blake3_hash.md",
+      "task_name": "blake3_hash",
+      "function": "blake3_hash",
+      "resolved_symbol": "blake3_hash",
+      "target": "core/src/dspy/signatures.rs",
       "variant": "Core",
-      "batch": "B2-core-transport-routing",
-      "definition_line": 214,
-      "external_reference_hits": 4,
+      "batch": "B8-cross-cutting",
+      "definition_line": 136,
+      "external_reference_hits": 0,
       "implementation_patch_template": {
-        "file": "core/src/transport/mesh_routing.rs",
-        "anchor_line": 214,
-        "required_change": "Wire `best_relays` into production call path(s) and add parity-safe tests"
+        "file": "core/src/dspy/signatures.rs",
+        "anchor_line": 136,
+        "required_change": "Wire `blake3_hash` into production call path(s) and add parity-safe tests"
       }
     },
     {
@@ -1362,22 +1362,6 @@
       }
     },
     {
-      "task_file": "HANDOFF/todo/task_wire_get_all_connection_stats.md",
-      "task_name": "get_all_connection_stats",
-      "function": "get_all_connection_stats",
-      "resolved_symbol": "get_all_connection_stats",
-      "target": "core/src/transport/health.rs",
-      "variant": "Core",
-      "batch": "B2-core-transport-routing",
-      "definition_line": 381,
-      "external_reference_hits": 1,
-      "implementation_patch_template": {
-        "file": "core/src/transport/health.rs",
-        "anchor_line": 381,
-        "required_change": "Wire `get_all_connection_stats` into production call path(s) and add parity-safe tests"
-      }
-    },
-    {
       "task_file": "HANDOFF/todo/task_wire_get_all_relay_stats.md",
       "task_name": "get_all_relay_stats",
       "function": "get_all_relay_stats",
@@ -1426,22 +1410,6 @@
       }
     },
     {
-      "task_file": "HANDOFF/todo/task_wire_get_bootstrap_candidates.md",
-      "task_name": "get_bootstrap_candidates",
-      "function": "get_bootstrap_candidates",
-      "resolved_symbol": "get_bootstrap_candidates",
-      "target": "core/src/transport/mesh_routing.rs",
-      "variant": "Core",
-      "batch": "B2-core-transport-routing",
-      "definition_line": 610,
-      "external_reference_hits": 3,
-      "implementation_patch_template": {
-        "file": "core/src/transport/mesh_routing.rs",
-        "anchor_line": 610,
-        "required_change": "Wire `get_bootstrap_candidates` into production call path(s) and add parity-safe tests"
-      }
-    },
-    {
       "task_file": "HANDOFF/todo/task_wire_get_browser_options.md",
       "task_name": "get_browser_options",
       "function": "get_browser_options",
@@ -1487,6 +1455,22 @@
         "file": "wasm/src/lib.rs",
         "anchor_line": 378,
         "required_change": "Wire `get_daemon_socket_url` into production call path(s) and add parity-safe tests"
+      }
+    },
+    {
+      "task_file": "HANDOFF/todo/task_wire_get_default_settings.md",
+      "task_name": "get_default_settings",
+      "function": "get_default_settings",
+      "resolved_symbol": "get_default_settings",
+      "target": "wasm/src/lib.rs",
+      "variant": "WASM",
+      "batch": "B6-wasm",
+      "definition_line": 1019,
+      "external_reference_hits": 0,
+      "implementation_patch_template": {
+        "file": "wasm/src/lib.rs",
+        "anchor_line": 1019,
+        "required_change": "Wire `get_default_settings` into production call path(s) and add parity-safe tests"
       }
     },
     {
@@ -2786,6 +2770,22 @@
       }
     },
     {
+      "task_file": "HANDOFF/todo/task_wire_on_ble_data_received.md",
+      "task_name": "on_ble_data_received",
+      "function": "on_ble_data_received",
+      "resolved_symbol": "on_ble_data_received",
+      "target": "core/src/mobile_bridge.rs",
+      "variant": "Core",
+      "batch": "B1-core-entrypoints",
+      "definition_line": 1052,
+      "external_reference_hits": 1,
+      "implementation_patch_template": {
+        "file": "core/src/mobile_bridge.rs",
+        "anchor_line": 1052,
+        "required_change": "Wire `on_ble_data_received` into production call path(s) and add parity-safe tests"
+      }
+    },
+    {
       "task_file": "HANDOFF/todo/task_wire_on_read.md",
       "task_name": "on_read",
       "function": "on_read",
@@ -3218,6 +3218,22 @@
       }
     },
     {
+      "task_file": "HANDOFF/todo/task_wire_peel_onion_layer.md",
+      "task_name": "peel_onion_layer",
+      "function": "peel_onion_layer",
+      "resolved_symbol": "peel_onion_layer",
+      "target": "core/src/iron_core.rs",
+      "variant": "Core",
+      "batch": "B8-cross-cutting",
+      "definition_line": 1384,
+      "external_reference_hits": 0,
+      "implementation_patch_template": {
+        "file": "core/src/iron_core.rs",
+        "anchor_line": 1384,
+        "required_change": "Wire `peel_onion_layer` into production call path(s) and add parity-safe tests"
+      }
+    },
+    {
       "task_file": "HANDOFF/todo/task_wire_peer_id_public_key_extraction_roundtrips_for_ed25519_peers.md",
       "task_name": "peer_id_public_key_extraction_roundtrips_for_ed25519_peers",
       "function": "peer_id_public_key_extraction_roundtrips_for_ed25519_peers",
@@ -3311,6 +3327,22 @@
         "file": "core/src/routing/optimized_engine.rs",
         "anchor_line": 189,
         "required_change": "Wire `prefetch_stats` into production call path(s) and add parity-safe tests"
+      }
+    },
+    {
+      "task_file": "HANDOFF/todo/task_wire_prepare_onion_message.md",
+      "task_name": "prepare_onion_message",
+      "function": "prepare_onion_message",
+      "resolved_symbol": "prepare_onion_message",
+      "target": "core/src/iron_core.rs",
+      "variant": "Core",
+      "batch": "B8-cross-cutting",
+      "definition_line": 1358,
+      "external_reference_hits": 0,
+      "implementation_patch_template": {
+        "file": "core/src/iron_core.rs",
+        "anchor_line": 1358,
+        "required_change": "Wire `prepare_onion_message` into production call path(s) and add parity-safe tests"
       }
     },
     {
@@ -3471,6 +3503,70 @@
         "file": "core/src/routing/reputation.rs",
         "anchor_line": 64,
         "required_change": "Wire `prune_below` into production call path(s) and add parity-safe tests"
+      }
+    },
+    {
+      "task_file": "HANDOFF/todo/task_wire_random_port.md",
+      "task_name": "random_port",
+      "function": "random_port",
+      "resolved_symbol": "random_port",
+      "target": "core/src/iron_core.rs",
+      "variant": "Core",
+      "batch": "B8-cross-cutting",
+      "definition_line": 1414,
+      "external_reference_hits": 0,
+      "implementation_patch_template": {
+        "file": "core/src/iron_core.rs",
+        "anchor_line": 1414,
+        "required_change": "Wire `random_port` into production call path(s) and add parity-safe tests"
+      }
+    },
+    {
+      "task_file": "HANDOFF/todo/task_wire_ratchet_has_session.md",
+      "task_name": "ratchet_has_session",
+      "function": "ratchet_has_session",
+      "resolved_symbol": "ratchet_has_session",
+      "target": "core/src/iron_core.rs",
+      "variant": "Core",
+      "batch": "B8-cross-cutting",
+      "definition_line": 1431,
+      "external_reference_hits": 0,
+      "implementation_patch_template": {
+        "file": "core/src/iron_core.rs",
+        "anchor_line": 1431,
+        "required_change": "Wire `ratchet_has_session` into production call path(s) and add parity-safe tests"
+      }
+    },
+    {
+      "task_file": "HANDOFF/todo/task_wire_ratchet_reset_session.md",
+      "task_name": "ratchet_reset_session",
+      "function": "ratchet_reset_session",
+      "resolved_symbol": "ratchet_reset_session",
+      "target": "core/src/iron_core.rs",
+      "variant": "Core",
+      "batch": "B8-cross-cutting",
+      "definition_line": 1436,
+      "external_reference_hits": 0,
+      "implementation_patch_template": {
+        "file": "core/src/iron_core.rs",
+        "anchor_line": 1436,
+        "required_change": "Wire `ratchet_reset_session` into production call path(s) and add parity-safe tests"
+      }
+    },
+    {
+      "task_file": "HANDOFF/todo/task_wire_ratchet_session_count.md",
+      "task_name": "ratchet_session_count",
+      "function": "ratchet_session_count",
+      "resolved_symbol": "ratchet_session_count",
+      "target": "core/src/iron_core.rs",
+      "variant": "Core",
+      "batch": "B8-cross-cutting",
+      "definition_line": 1426,
+      "external_reference_hits": 0,
+      "implementation_patch_template": {
+        "file": "core/src/iron_core.rs",
+        "anchor_line": 1426,
+        "required_change": "Wire `ratchet_session_count` into production call path(s) and add parity-safe tests"
       }
     },
     {
@@ -3826,6 +3922,22 @@
       }
     },
     {
+      "task_file": "HANDOFF/todo/task_wire_routing_tick.md",
+      "task_name": "routing_tick",
+      "function": "routing_tick",
+      "resolved_symbol": "routing_tick",
+      "target": "core/src/iron_core.rs",
+      "variant": "Core",
+      "batch": "B8-cross-cutting",
+      "definition_line": 1491,
+      "external_reference_hits": 0,
+      "implementation_patch_template": {
+        "file": "core/src/iron_core.rs",
+        "anchor_line": 1491,
+        "required_change": "Wire `routing_tick` into production call path(s) and add parity-safe tests"
+      }
+    },
+    {
       "task_file": "HANDOFF/todo/task_wire_run_optimization.md",
       "task_name": "run_optimization",
       "function": "run_optimization",
@@ -3871,6 +3983,22 @@
         "file": "android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt",
         "anchor_line": 3404,
         "required_change": "Wire `searchContacts` into production call path(s) and add parity-safe tests"
+      }
+    },
+    {
+      "task_file": "HANDOFF/todo/task_wire_send_message_status.md",
+      "task_name": "send_message_status",
+      "function": "send_message_status",
+      "resolved_symbol": "send_message_status",
+      "target": "core/src/mobile_bridge.rs",
+      "variant": "Core",
+      "batch": "B1-core-entrypoints",
+      "definition_line": 2155,
+      "external_reference_hits": 0,
+      "implementation_patch_template": {
+        "file": "core/src/mobile_bridge.rs",
+        "anchor_line": 2155,
+        "required_change": "Wire `send_message_status` into production call path(s) and add parity-safe tests"
       }
     },
     {

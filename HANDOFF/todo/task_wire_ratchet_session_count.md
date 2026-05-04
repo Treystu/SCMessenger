@@ -1,12 +1,12 @@
-TARGET: core\src\lib.rs
+TARGET: core/src/iron_core.rs
 
 SYSTEM DIRECTIVE: COMPREHENSIVE DEAD-END RESOLUTION
-The function 'ratchet_session_count' is defined in 'core\src\lib.rs' but is NEVER called anywhere in the repository. Your job is to fully integrate it into the overarching application loop. It may need to be wired into 1, 2, or 3+ different locations.
+The function 'ratchet_session_count' is defined in 'core/src/iron_core.rs' but is NEVER called anywhere in the repository. Your job is to fully integrate it into the overarching application loop. It may need to be wired into 1, 2, or 3+ different locations.
 
 You MUST follow this strict analytical loop. Do not skip phases.
 
 PHASE 1: CONTEXT GATHERING (Search & Ponder)
-1. Open 'core\src\lib.rs' and read the implementation of 'ratchet_session_count'. Understand its parameters, return type, and exact purpose.
+1. Open 'core/src/iron_core.rs' and read the implementation of 'ratchet_session_count'. Understand its parameters, return type, and exact purpose.
 2. Use your terminal search tools (grep, cat, ls) to hunt for related concepts, APIs, UI buttons, or parent managers where similar functions are called.
 3. Identify EVERY valid location in the codebase where 'ratchet_session_count' MUST be invoked to work fully. 
 

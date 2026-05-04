@@ -2,7 +2,14 @@
 
 This file provides exact edit coordinates and patch templates for each wiring task without implementing runtime logic.
 
-Total tasks: **299**
+Total tasks: **307**
+
+## B1-core-entrypoints
+
+| Task | Function | Resolved symbol | Target | Definition line | External refs | Patch template |
+|---|---|---|---|---:|---:|---|
+| `on_ble_data_received` | `on_ble_data_received` | `on_ble_data_received` | `core/src/mobile_bridge.rs` | 1052 | 1 | `WIRE on_ble_data_received call path + tests` |
+| `send_message_status` | `send_message_status` | `send_message_status` | `core/src/mobile_bridge.rs` | 2155 | 0 | `WIRE send_message_status call path + tests` |
 
 ## B2-core-transport-routing
 
@@ -14,7 +21,6 @@ Total tasks: **299**
 | `add_kad_address` | `add_kad_address` | `add_kad_address` | `core/src/transport/swarm.rs` | 1300 | 0 | `WIRE add_kad_address call path + tests` |
 | `all_connections` | `all_connections` | `all_connections` | `core/src/transport/observation.rs` | 198 | 0 | `WIRE all_connections call path + tests` |
 | `audit_count` | `audit_count` | `audit_count` | `core/src/store/relay_custody.rs` | 723 | 2 | `WIRE audit_count call path + tests` |
-| `best_relays` | `best_relays` | `best_relays` | `core/src/transport/mesh_routing.rs` | 214 | 4 | `WIRE best_relays call path + tests` |
 | `calculate_dynamic_ttl` | `calculate_dynamic_ttl` | `calculate_dynamic_ttl` | `core/src/routing/adaptive_ttl.rs` | 150 | 3 | `WIRE calculate_dynamic_ttl call path + tests` |
 | `can_bootstrap_others` | `can_bootstrap_others` | `can_bootstrap_others` | `core/src/transport/mesh_routing.rs` | 615 | 2 | `WIRE can_bootstrap_others call path + tests` |
 | `cheap_heuristics_reject_invalid_payload_shapes` | `cheap_heuristics_reject_invalid_payload_shapes` | `cheap_heuristics_reject_invalid_payload_shapes` | `core/src/transport/swarm.rs` | 4565 | 0 | `WIRE cheap_heuristics_reject_invalid_payload_shapes call path + tests` |
@@ -32,9 +38,7 @@ Total tasks: **299**
 | `expire_old_observations` | `expire_old_observations` | `expire_old_observations` | `core/src/transport/observation.rs` | 96 | 1 | `WIRE expire_old_observations call path + tests` |
 | `for_local_peer_prefers_explicit_custody_dir_override` | `for_local_peer_prefers_explicit_custody_dir_override` | `for_local_peer_prefers_explicit_custody_dir_override` | `core/src/store/relay_custody.rs` | 2140 | 0 | `WIRE for_local_peer_prefers_explicit_custody_dir_override call path + tests` |
 | `get_activity` | `get_activity` | `get_activity` | `core/src/routing/adaptive_ttl.rs` | 125 | 0 | `WIRE get_activity call path + tests` |
-| `get_all_connection_stats` | `get_all_connection_stats` | `get_all_connection_stats` | `core/src/transport/health.rs` | 381 | 1 | `WIRE get_all_connection_stats call path + tests` |
 | `get_all_relay_stats` | `get_all_relay_stats` | `get_all_relay_stats` | `core/src/transport/internet.rs` | 418 | 0 | `WIRE get_all_relay_stats call path + tests` |
-| `get_bootstrap_candidates` | `get_bootstrap_candidates` | `get_bootstrap_candidates` | `core/src/transport/mesh_routing.rs` | 610 | 3 | `WIRE get_bootstrap_candidates call path + tests` |
 | `get_fallback_relays` | `get_fallback_relays` | `get_fallback_relays` | `core/src/transport/relay_health.rs` | 153 | 0 | `WIRE get_fallback_relays call path + tests` |
 | `get_healthy_connections` | `get_healthy_connections` | `get_healthy_connections` | `core/src/transport/health.rs` | 393 | 4 | `WIRE get_healthy_connections call path + tests` |
 | `get_healthy_relays` | `get_healthy_relays` | `get_healthy_relays` | `core/src/transport/circuit_breaker.rs` | 291 | 0 | `WIRE get_healthy_relays call path + tests` |
@@ -212,6 +216,7 @@ Total tasks: **299**
 | `get_browser_options` | `get_browser_options` | `get_browser_options` | `wasm/src/notification_manager.rs` | 324 | 0 | `WIRE get_browser_options call path + tests` |
 | `get_contact_manager` | `get_contact_manager` | `get_contact_manager` | `wasm/src/lib.rs` | 1148 | 0 | `WIRE get_contact_manager call path + tests` |
 | `get_daemon_socket_url` | `get_daemon_socket_url` | `get_daemon_socket_url` | `wasm/src/lib.rs` | 378 | 0 | `WIRE get_daemon_socket_url call path + tests` |
+| `get_default_settings` | `get_default_settings` | `get_default_settings` | `wasm/src/lib.rs` | 1019 | 0 | `WIRE get_default_settings call path + tests` |
 | `get_history_manager` | `get_history_manager` | `get_history_manager` | `wasm/src/lib.rs` | 1155 | 0 | `WIRE get_history_manager call path + tests` |
 | `get_identity_from_daemon` | `get_identity_from_daemon` | `get_identity_from_daemon` | `wasm/src/lib.rs` | 452 | 0 | `WIRE get_identity_from_daemon call path + tests` |
 | `get_identity_wire_shape` | `get_identity_wire_shape` | `get_identity_wire_shape` | `wasm/src/daemon_bridge.rs` | 518 | 0 | `WIRE get_identity_wire_shape call path + tests` |
@@ -260,6 +265,7 @@ Total tasks: **299**
 |---|---|---|---|---:|---:|---|
 | `add_step` | `add_step` | `add_step` | `core/src/dspy/modules.rs` | 84 | 0 | `WIRE add_step call path + tests` |
 | `apply_policy_config` | `apply_policy_config` | `apply_policy_config` | `core/src/drift/relay.rs` | 371 | 0 | `WIRE apply_policy_config call path + tests` |
+| `blake3_hash` | `blake3_hash` | `blake3_hash` | `core/src/dspy/signatures.rs` | 136 | 0 | `WIRE blake3_hash call path + tests` |
 | `blocked_only_peer_ids` | `blocked_only_peer_ids` | `blocked_only_peer_ids` | `core/src/store/blocked.rs` | 230 | 3 | `WIRE blocked_only_peer_ids call path + tests` |
 | `build_optimization_pipeline` | `build_optimization_pipeline` | `build_optimization_pipeline` | `core/src/dspy/teleprompt.rs` | 241 | 0 | `WIRE build_optimization_pipeline call path + tests` |
 | `build_security_audit_pipeline` | `build_security_audit_pipeline` | `build_security_audit_pipeline` | `core/src/dspy/modules.rs` | 240 | 0 | `WIRE build_security_audit_pipeline call path + tests` |
@@ -311,6 +317,8 @@ Total tasks: **299**
 | `overall_score` | `overall_score` | `overall_score` | `core/src/abuse/reputation.rs` | 177 | 0 | `WIRE overall_score call path + tests` |
 | `override_ble_advertise_interval` | `override_ble_advertise_interval` | `override_ble_advertise_interval` | `core/src/mobile/auto_adjust.rs` | 243 | 0 | `WIRE override_ble_advertise_interval call path + tests` |
 | `override_relay_priority_threshold` | `override_relay_priority_threshold` | `override_relay_priority_threshold` | `core/src/mobile/auto_adjust.rs` | 253 | 0 | `WIRE override_relay_priority_threshold call path + tests` |
+| `peel_onion_layer` | `peel_onion_layer` | `peel_onion_layer` | `core/src/iron_core.rs` | 1384 | 0 | `WIRE peel_onion_layer call path + tests` |
+| `prepare_onion_message` | `prepare_onion_message` | `prepare_onion_message` | `core/src/iron_core.rs` | 1358 | 0 | `WIRE prepare_onion_message call path + tests` |
 | `proptest_different_ciphertexts_same_plaintext` | `proptest_different_ciphertexts_same_plaintext` | `proptest_different_ciphertexts_same_plaintext` | `core/src/crypto/proptest_harness.rs` | 57 | 0 | `WIRE proptest_different_ciphertexts_same_plaintext call path + tests` |
 | `proptest_encrypt_decrypt_roundtrip` | `proptest_encrypt_decrypt_roundtrip` | `proptest_encrypt_decrypt_roundtrip` | `core/src/crypto/proptest_harness.rs` | 41 | 0 | `WIRE proptest_encrypt_decrypt_roundtrip call path + tests` |
 | `proptest_envelope_field_lengths` | `proptest_envelope_field_lengths` | `proptest_envelope_field_lengths` | `core/src/crypto/proptest_harness.rs` | 90 | 0 | `WIRE proptest_envelope_field_lengths call path + tests` |
@@ -319,10 +327,15 @@ Total tasks: **299**
 | `proptest_sign_verify_roundtrip` | `proptest_sign_verify_roundtrip` | `proptest_sign_verify_roundtrip` | `core/src/crypto/proptest_harness.rs` | 104 | 0 | `WIRE proptest_sign_verify_roundtrip call path + tests` |
 | `proptest_wrong_key_fails` | `proptest_wrong_key_fails` | `proptest_wrong_key_fails` | `core/src/crypto/proptest_harness.rs` | 75 | 0 | `WIRE proptest_wrong_key_fails call path + tests` |
 | `providePreferencesRepository` | `providePreferencesRepository` | `providePreferencesRepository` | `android/app/src/main/java/com/scmessenger/android/di/AppModule.kt` | 34 | 0 | `WIRE providePreferencesRepository call path + tests` |
+| `random_port` | `random_port` | `random_port` | `core/src/iron_core.rs` | 1414 | 0 | `WIRE random_port call path + tests` |
+| `ratchet_has_session` | `ratchet_has_session` | `ratchet_has_session` | `core/src/iron_core.rs` | 1431 | 0 | `WIRE ratchet_has_session call path + tests` |
+| `ratchet_reset_session` | `ratchet_reset_session` | `ratchet_reset_session` | `core/src/iron_core.rs` | 1436 | 0 | `WIRE ratchet_reset_session call path + tests` |
+| `ratchet_session_count` | `ratchet_session_count` | `ratchet_session_count` | `core/src/iron_core.rs` | 1426 | 0 | `WIRE ratchet_session_count call path + tests` |
 | `read_with_timeout` | `read_with_timeout` | `read_with_timeout` | `core/src/drift/frame.rs` | 183 | 0 | `WIRE read_with_timeout call path + tests` |
 | `refresh_delegate_routes` | `refresh_delegate_routes` | `refresh_delegate_routes` | `core/src/relay/delegate_prewarm.rs` | 215 | 0 | `WIRE refresh_delegate_routes call path + tests` |
 | `register_endpoint` | `register_endpoint` | `register_endpoint` | `core/src/notification.rs` | 302 | 9 | `WIRE register_endpoint call path + tests` |
 | `resetNotificationStats` | `resetNotificationStats` | `resetNotificationStats` | `android/app/src/main/java/com/scmessenger/android/utils/NotificationHelper.kt` | 627 | 0 | `WIRE resetNotificationStats call path + tests` |
+| `routing_tick` | `routing_tick` | `routing_tick` | `core/src/iron_core.rs` | 1491 | 0 | `WIRE routing_tick call path + tests` |
 | `run_optimization` | `run_optimization` | `run_optimization` | `core/src/dspy/modules.rs` | 179 | 0 | `WIRE run_optimization call path + tests` |
 | `set_cover_traffic` | `set_cover_traffic` | `set_cover_traffic` | `core/src/drift/relay.rs` | 157 | 0 | `WIRE set_cover_traffic call path + tests` |
 | `set_reputation_manager` | `set_reputation_manager` | `set_reputation_manager` | `core/src/drift/relay.rs` | 171 | 0 | `WIRE set_reputation_manager call path + tests` |
