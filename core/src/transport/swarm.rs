@@ -1540,7 +1540,10 @@ pub async fn start_swarm_with_config(
         if let Some(ref core_weak) = core_handle {
             if let Some(core) = core_weak.upgrade() {
                 let _random_port = core.random_port();
-                tracing::debug!("B1_CORE_ENTRY_008: Random port generated for listener: {}", _random_port);
+                tracing::debug!(
+                    "B1_CORE_ENTRY_008: Random port generated for listener: {}",
+                    _random_port
+                );
             }
         }
 

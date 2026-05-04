@@ -2434,6 +2434,10 @@ open class MeshRepository(private val context: Context) {
                 },
                 onDataReceived = { peerId, data ->
                     meshService?.onDataReceived(peerId, data)
+                },
+                onScanFailure = {
+                    // Wire BLE failure to TransportManager for graceful degradation
+                    transportManager?.handleBleFailure()
                 }
             )
         }
@@ -2465,6 +2469,9 @@ open class MeshRepository(private val context: Context) {
 
         // Set identity beacon on BLE GATT server so nearby peers can read our Ed25519 public key
         updateBleIdentityBeacon()
+
+        // Wire BLE components into TransportManager for recovery coordination
+        transportManager?.setBleComponents(bleScanner, bleAdvertiser, bleGattClient, bleGattServer)
     }
 
     // Identity beacon data served to BLE scanners via IDENTITY_CHAR_UUID reads.
@@ -3060,6 +3067,8 @@ open class MeshRepository(private val context: Context) {
         // Wire TransportManager to AndroidPlatformBridge for BLE adjustment application
         if (bridge is com.scmessenger.android.service.AndroidPlatformBridge) {
             transportManager?.let { bridge.setTransportManager(it) }
+            // Wire BLE components into platform bridge for data forwarding
+            bridge.setBleComponents(bleAdvertiser, bleScanner, bleGattClient, bleGattServer)
         }
     }
 
@@ -7469,6 +7478,7 @@ open class MeshRepository(private val context: Context) {
                 Timber.w("Bootstrap dial failed for $addr - $errorDetail")
                 relayCircuitBreaker.recordFailure(addr, errorDetail)
                 networkFailureMetrics.recordFailure(addr, errorDetail, e)
+                recordConnectionFailure(addr)
             }
         }
 
@@ -7609,6 +7619,7 @@ open class MeshRepository(private val context: Context) {
                             val detail = classifyBootstrapError(e, addr)
                             relayCircuitBreaker.recordFailure(addr, detail)
                             networkFailureMetrics.recordFailure(addr, detail, e)
+                            recordConnectionFailure(addr)
                             Timber.d("Bootstrap race attempt failed for $addr: $detail")
                             BootstrapAttempt.Failure(addr, e.message ?: "unknown")
                         }
@@ -7664,7 +7675,9 @@ open class MeshRepository(private val context: Context) {
         return if (mdnsResult != null) {
             mdnsResult
         } else {
-            Timber.e("mDNS fallback: no LAN peers discovered within timeout")
+            // Fall back to legacy bootstrap as last resort before declaring complete failure
+            primeRelayBootstrapConnectionsLegacy()
+            Timber.e("mDNS fallback: no LAN peers discovered within timeout, legacy bootstrap attempted")
             BootstrapResult.AllRelaysFailed
         }
     }
@@ -8373,6 +8386,8 @@ open class MeshRepository(private val context: Context) {
             Timber.w("P0_ANDROID_003: BLE transport degraded, initiating graceful fallback")
             // Reduce BLE scan frequency by switching to background mode
             bleScanner?.setBackgroundMode(true)
+            // Clear peer cache to allow re-discovery after recovery
+            bleScanner?.clearPeerCache()
             // Log current transport health for diagnostics
             val bleHealth = transportHealthMonitor.getHealth("ble")
             Timber.w("P0_ANDROID_003: BLE health — successes: ${bleHealth.successCount}, failures: ${bleHealth.failureCount}, consecutive failures: ${bleHealth.consecutiveFailures}")
@@ -8385,6 +8400,10 @@ open class MeshRepository(private val context: Context) {
     fun recordTransportEvent(transport: String, success: Boolean, latencyMs: Long? = null) {
         if (success) {
             transportHealthMonitor.recordSuccess(transport, latencyMs)
+            // If BLE was degraded and is now succeeding, attempt recovery
+            if (transport == "ble" && !transportHealthMonitor.isDegraded("ble")) {
+                transportManager?.attemptBleRecovery()
+            }
         } else {
             transportHealthMonitor.recordFailure(transport)
             // Check if degraded after recording failure
@@ -8396,6 +8415,13 @@ open class MeshRepository(private val context: Context) {
 
     fun getTransportHealthSummary(): Map<String, com.scmessenger.android.transport.TransportHealthMonitor.TransportHealth> {
         return transportHealthMonitor.getSummary()
+    }
+
+    /**
+     * Get list of currently active transports for status display.
+     */
+    fun getActiveTransports(): List<com.scmessenger.android.service.TransportType> {
+        return transportManager?.getActiveTransports() ?: emptyList()
     }
 
 }

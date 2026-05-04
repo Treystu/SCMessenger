@@ -36,7 +36,8 @@ class BleScanner(
     private val onPeerDiscovered: (String) -> Unit,
     private val onDataReceived: (String, ByteArray) -> Unit,
     private val quotaManager: BleQuotaManager = BleQuotaManager(),
-    private val backoffStrategy: BackoffStrategy = BackoffStrategy()
+    private val backoffStrategy: BackoffStrategy = BackoffStrategy(),
+    private val onScanFailure: (() -> Unit)? = null
 ) {
     data class BleDiscoveryStats(
         val advertisementsSeen: Int,
@@ -147,6 +148,9 @@ class BleScanner(
             Timber.e("BLE Scan failed with error code: $errorCode")
             scanFailures.incrementAndGet()
             isScanning = false
+
+            // Notify transport manager of BLE failure for graceful degradation
+            onScanFailure?.invoke()
 
             // Wire handleScanFailure for comprehensive failure handling
             scope.launch {

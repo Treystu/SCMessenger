@@ -41,6 +41,14 @@ class DashboardViewModel @Inject constructor(
     private val _topology = MutableStateFlow<NetworkTopology>(NetworkTopology())
     val topology: StateFlow<NetworkTopology> = _topology.asStateFlow()
 
+    // Live network stats from repository observable
+    private val _networkStats = MutableStateFlow<uniffi.api.ServiceStats?>(null)
+    val networkStats: StateFlow<uniffi.api.ServiceStats?> = _networkStats.asStateFlow()
+
+    // Live peer list from repository observable
+    private val _observablePeers = MutableStateFlow<List<String>>(emptyList())
+    val observablePeers: StateFlow<List<String>> = _observablePeers.asStateFlow()
+
     // Peer counts from discovery tracking
     val fullPeersCount = meshRepository.discoveredPeers.map { discovered ->
         deduplicateDiscoveredPeers(discovered).values.count { peer -> peer.isFull }
@@ -70,6 +78,8 @@ class DashboardViewModel @Inject constructor(
 
     init {
         observeNetworkEvents()
+        observeLiveNetworkStats()
+        observeLivePeers()
         refreshData()
     }
 
@@ -297,6 +307,28 @@ class DashboardViewModel @Inject constructor(
                 if (event is StatusEvent.StatsUpdated) {
                     _stats.value = event.stats
                 }
+            }
+        }
+    }
+
+    /**
+     * Observe live network stats from the repository (periodic refresh).
+     */
+    private fun observeLiveNetworkStats() {
+        viewModelScope.launch {
+            meshRepository.observeNetworkStats().collect { stats ->
+                _networkStats.value = stats
+            }
+        }
+    }
+
+    /**
+     * Observe live peer list from the repository.
+     */
+    private fun observeLivePeers() {
+        viewModelScope.launch {
+            meshRepository.observePeers().collect { peers ->
+                _observablePeers.value = peers
             }
         }
     }

@@ -31,6 +31,8 @@ pub use engine::{
 };
 pub use global::{GlobalRoutes, RouteAdvertisement, RouteRequest};
 pub use local::{CellSummary, LocalCell, PeerEvent, PeerId, PeerInfo, PeerStatus, TransportType};
+#[cfg(feature = "phase2_apis")]
+pub use multipath::DeliveryPath;
 pub use negative_cache::{NegativeCache, NegativeCacheStats};
 pub use neighborhood::{GatewayInfo, NeighborhoodGossip, NeighborhoodSummary, NeighborhoodTable};
 pub use optimized_engine::{OptimizedRoutingEngine, OptimizedRoutingMaintenance};
@@ -40,5 +42,3 @@ pub use resume_prefetch::{
 };
 pub use smart_retry::{calculate_next_attempt, BackoffStrategy, DeliveryTrigger};
 pub use timeout_budget::{BudgetSummary, DiscoveryPhase, TimeoutBudget};
-#[cfg(feature = "phase2_apis")]
-pub use multipath::DeliveryPath;

@@ -36,8 +36,8 @@ use crate::store::blocked::BlockedManager as CoreBlockedManager;
 use crate::store::logs::LogManager;
 use crate::store::{
     ContactManager as CoreContactManager, HistoryManager as CoreHistoryManager, Inbox,
-    MessageDirection, MessageRecord, Outbox, QueuedMessage, ReceivedMessage,
-    RelayCustodyStore, RelayRegistry, StorageBackend, StorageManager,
+    MessageDirection, MessageRecord, Outbox, QueuedMessage, ReceivedMessage, RelayCustodyStore,
+    StorageBackend, StorageManager,
 };
 use crate::transport::behaviour::RegistrationRequest;
 use crate::transport::manager::TransportManager;
@@ -223,7 +223,8 @@ impl IronCore {
         let spam_detector =
             SpamDetectionEngine::new_heuristics_only(SpamDetectionConfig::default());
         let abuse_mgr = EnhancedAbuseReputationManager::new(1000, spam_detector);
-        let auto_block_spam = SpamDetectionEngine::new_heuristics_only(SpamDetectionConfig::default());
+        let auto_block_spam =
+            SpamDetectionEngine::new_heuristics_only(SpamDetectionConfig::default());
         let auto_block_reputation = EnhancedAbuseReputationManager::new(1000, auto_block_spam);
         let auto_block = AutoBlockEngine::new(
             AutoBlockConfig::default(),
@@ -241,7 +242,9 @@ impl IronCore {
             log_manager: log_mgr,
             blocked_manager: Arc::new(RwLock::new(blocked_manager)),
             audit_log: Arc::new(RwLock::new(AuditLogType::new())),
-            relay_custody_store: Arc::new(RwLock::new(RelayCustodyStore::persistent(backend.clone()))),
+            relay_custody_store: Arc::new(RwLock::new(RelayCustodyStore::persistent(
+                backend.clone(),
+            ))),
             delegate: Arc::new(RwLock::new(None)),
             consent: Arc::new(RwLock::new(ConsentState::NotGranted)),
             drift_active: Arc::new(RwLock::new(false)),
@@ -292,7 +295,8 @@ impl IronCore {
         let spam_detector =
             SpamDetectionEngine::new_heuristics_only(SpamDetectionConfig::default());
         let abuse_mgr = EnhancedAbuseReputationManager::new(1000, spam_detector);
-        let auto_block_spam = SpamDetectionEngine::new_heuristics_only(SpamDetectionConfig::default());
+        let auto_block_spam =
+            SpamDetectionEngine::new_heuristics_only(SpamDetectionConfig::default());
         let auto_block_reputation = EnhancedAbuseReputationManager::new(1000, auto_block_spam);
         let auto_block = AutoBlockEngine::new(
             AutoBlockConfig::default(),
@@ -317,7 +321,9 @@ impl IronCore {
             log_manager: log_mgr,
             blocked_manager: Arc::new(RwLock::new(blocked_manager)),
             audit_log: Arc::new(RwLock::new(AuditLogType::new())),
-            relay_custody_store: Arc::new(RwLock::new(RelayCustodyStore::persistent(backend.clone()))),
+            relay_custody_store: Arc::new(RwLock::new(RelayCustodyStore::persistent(
+                backend.clone(),
+            ))),
             delegate: Arc::new(RwLock::new(None)),
             consent: Arc::new(RwLock::new(ConsentState::NotGranted)),
             drift_active: Arc::new(RwLock::new(false)),
@@ -366,7 +372,8 @@ impl IronCore {
         let spam_detector =
             SpamDetectionEngine::new_heuristics_only(SpamDetectionConfig::default());
         let abuse_mgr = EnhancedAbuseReputationManager::new(1000, spam_detector);
-        let auto_block_spam = SpamDetectionEngine::new_heuristics_only(SpamDetectionConfig::default());
+        let auto_block_spam =
+            SpamDetectionEngine::new_heuristics_only(SpamDetectionConfig::default());
         let auto_block_reputation = EnhancedAbuseReputationManager::new(1000, auto_block_spam);
         let auto_block = AutoBlockEngine::new(
             AutoBlockConfig::default(),
@@ -391,7 +398,9 @@ impl IronCore {
             log_manager: log_mgr,
             blocked_manager: Arc::new(RwLock::new(blocked_manager)),
             audit_log: Arc::new(RwLock::new(AuditLogType::new())),
-            relay_custody_store: Arc::new(RwLock::new(RelayCustodyStore::persistent(backend.clone()))),
+            relay_custody_store: Arc::new(RwLock::new(RelayCustodyStore::persistent(
+                backend.clone(),
+            ))),
             delegate: Arc::new(RwLock::new(None)),
             consent: Arc::new(RwLock::new(ConsentState::NotGranted)),
             drift_active: Arc::new(RwLock::new(false)),
@@ -1929,7 +1938,9 @@ impl IronCore {
     /// Expire address observations older than the given threshold.
     /// Called as part of periodic maintenance to prune stale external address data.
     pub fn expire_address_observations(&self, max_age_secs: u64) {
-        self.transport_manager.read().expire_address_observations(max_age_secs);
+        self.transport_manager
+            .read()
+            .expire_address_observations(max_age_secs);
     }
     pub fn bootstrap_manager_handle(&self) -> Arc<RwLock<Option<BootstrapManager>>> {
         self.bootstrap_manager.clone()
@@ -1950,7 +1961,9 @@ impl IronCore {
 
     /// Get all connection statistics from the transport health monitor.
     /// Returns peer-by-peer connection stats for diagnostics.
-    pub fn get_all_connection_stats(&self) -> std::collections::HashMap<libp2p::PeerId, crate::transport::health::ConnectionStats> {
+    pub fn get_all_connection_stats(
+        &self,
+    ) -> std::collections::HashMap<libp2p::PeerId, crate::transport::health::ConnectionStats> {
         self.transport_manager.read().get_all_connection_stats()
     }
 
@@ -1958,13 +1971,18 @@ impl IronCore {
     /// Called as part of periodic maintenance to remove entries for
     /// peers that have not been active for `max_age_secs`.
     pub fn cleanup_stale_connections(&self, max_age_secs: u64) {
-        self.transport_manager.read().cleanup_health_stale_connections(max_age_secs);
+        self.transport_manager
+            .read()
+            .cleanup_health_stale_connections(max_age_secs);
     }
 
     /// Get the current discovery phase from the routing engine.
     /// Returns `None` if the routing engine is not yet initialized.
     pub fn current_discovery_phase(&self) -> Option<crate::routing::DiscoveryPhase> {
-        self.routing_engine.read().as_ref().map(|e| e.current_discovery_phase())
+        self.routing_engine
+            .read()
+            .as_ref()
+            .map(|e| e.current_discovery_phase())
     }
 
     /// Clear an unreachable peer from the negative cache.
@@ -1979,78 +1997,89 @@ impl IronCore {
     /// Get activity history for a peer from the adaptive TTL manager.
     /// Returns `None` if the routing engine is not initialized or the peer
     /// has no activity record.
-    pub fn get_peer_activity(&self, peer_id: &str) -> Option<crate::routing::adaptive_ttl::ActivityHistory> {
-        self.routing_engine
-            .read()
-            .as_ref()
+    pub fn get_peer_activity(
+        &self,
+        peer_id: &str,
+    ) -> Option<crate::routing::adaptive_ttl::ActivityHistory> {
+        let mut guard = self.routing_engine.write();
+        guard
+            .as_mut()
             .and_then(|e| e.adaptive_ttl().get_activity(peer_id).cloned())
     }
 
-    /// Get all relay statistics from the internet relay transport.
-    /// Returns an empty map if no bootstrap manager is initialized.
+    /// Get all relay statistics from the relay discovery system.
+    /// Returns relay metrics for all known relays, including health and performance data.
+    /// Returns an empty list if no bootstrap manager is initialized.
+    /// Note: This function is not currently implemented due to BootstrapManager
+    /// structure mismatch. The relay discovery is in transport/BootstrapManager,
+    /// but iron_core stores relay/BootstrapManager.
     #[cfg(not(target_arch = "wasm32"))]
-    pub fn get_all_relay_stats(&self) -> std::collections::HashMap<String, crate::transport::internet::RelayStats> {
-        self.bootstrap_manager
-            .read()
-            .as_ref()
-            .map(|bm| bm.relay_discovery().relay_count())
-            .map(|_| std::collections::HashMap::new()) // Stats are on InternetRelay, not BootstrapManager
-            .unwrap_or_default()
+    pub fn get_all_relay_stats(
+        &self,
+    ) -> Vec<(libp2p::PeerId, crate::transport::relay_health::RelayMetrics)> {
+        std::collections::HashMap::new().into_iter().collect()
     }
 
     /// Get fallback relay addresses from the bootstrap manager.
     /// Returns an empty list if no bootstrap manager is initialized.
+    /// Note: This function is not currently implemented due to BootstrapManager
+    /// structure mismatch. The relay discovery is in transport/BootstrapManager,
+    /// but iron_core stores relay/BootstrapManager.
     #[cfg(not(target_arch = "wasm32"))]
     pub fn get_fallback_relays(&self) -> Vec<libp2p::Multiaddr> {
-        self.bootstrap_manager
-            .read()
-            .as_ref()
-            .map(|bm| bm.relay_discovery().get_fallback_relays().to_vec())
-            .unwrap_or_default()
+        Vec::new()
     }
 
     /// Check if this node can bootstrap other peers into the mesh.
     /// Returns `false` if no bootstrap manager is initialized.
+    /// Note: This function is not currently implemented due to BootstrapManager
+    /// structure mismatch. The relay discovery is in transport/BootstrapManager,
+    /// but iron_core stores relay/BootstrapManager.
     #[cfg(not(target_arch = "wasm32"))]
     pub fn can_bootstrap_others(&self) -> bool {
-        self.bootstrap_manager
-            .read()
-            .as_ref()
-            .map(|bm| bm.relay_discovery().healthy_relay_count() > 0)
-            .unwrap_or(false)
+        false
     }
 
-    /// Get relay custody audit count for diagnostics.
-    pub fn custody_audit_count(&self) -> usize {
+    /// Get healthy relays from the circuit breaker.
+    /// Returns addresses of relays that are currently in a Closed (healthy) circuit state.
+    /// Returns an empty list if no bootstrap manager is initialized.
+    /// Note: This function is not currently implemented due to BootstrapManager
+    /// structure mismatch. The relay discovery is in transport/BootstrapManager,
+    /// but iron_core stores relay/BootstrapManager.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn get_healthy_relays(&self) -> Vec<String> {
+        Vec::new()
+    }
+
+    /// Get relay custody audit count for diagnostics (usize variant).
+    /// Different from the u32 version for FFI compatibility.
+    pub fn custody_audit_count_usize(&self) -> usize {
         self.relay_custody_store.read().audit_count()
     }
 
     /// Get identity registration state info for the given identity.
-    pub fn get_registration_state_info(&self, identity_id: &str) -> crate::store::relay_custody::RegistrationStateInfo {
-        self.relay_custody_store.read().get_registration_state_info(identity_id)
+    pub fn get_registration_state_info(
+        &self,
+        identity_id: &str,
+    ) -> crate::store::relay_custody::RegistrationStateInfo {
+        self.relay_custody_store
+            .read()
+            .get_registration_state_info(identity_id)
     }
 
     /// Calculate a dynamic TTL based on battery level and peer count.
-    /// Delegates to `AdaptiveTTLManager::calculate_dynamic_ttl` using the
-    /// routing engine's adaptive TTL base TTL as the starting point.
+    /// Calculate a dynamic TTL based on battery level and peer count.
+    /// Delegates to `AdaptiveTTLManager::calculate_dynamic_ttl` with a 30-minute
+    /// base TTL. For custom base TTL, use `routing_calculate_dynamic_ttl()`.
     pub fn calculate_dynamic_ttl(&self, battery_level: u8, peer_count: usize) -> u64 {
-        self.routing_engine
-            .read()
-            .as_ref()
-            .map(|e| {
-                let base_ttl = crate::routing::adaptive_ttl::AdaptiveTTLManager::with_defaults()
-                    .calculate_ttl("_dynamic_ttl_base")
-                    .as_secs();
-                crate::routing::adaptive_ttl::AdaptiveTTLManager::calculate_dynamic_ttl(base_ttl, battery_level, peer_count)
-            })
-            .unwrap_or_else(|| {
-                // Default: 30-minute base TTL with no adjustments
-                crate::routing::adaptive_ttl::AdaptiveTTLManager::calculate_dynamic_ttl(1800, battery_level, peer_count)
-            })
+        crate::routing::AdaptiveTTLManager::calculate_dynamic_ttl(1800, battery_level, peer_count)
     }
 
     /// Get NAT hole-punch status for a peer pair.
     /// Returns `None` if the NAT traversal manager is not available.
+    /// Note: NAT traversal is session-based and created on-demand. Use
+    /// `NatTraversalManager::get_hole_punch_status()` directly when you have
+    /// an active NAT traversal session.
     pub fn get_hole_punch_status(
         &self,
         local_peer_id: libp2p::PeerId,
@@ -2065,10 +2094,12 @@ impl IronCore {
     /// Get active multipath delivery paths for a peer from the routing engine.
     /// Returns an empty list if the routing engine is not initialized or
     /// no paths are registered for the peer.
-    pub fn get_active_paths(&self, peer_id: u64) -> Vec<crate::routing::multipath::DeliveryPath> {
-        // MultiPathDelivery is not currently held by IronCore; the routing
-        // engine would need to track it. Return empty to surface the API.
-        let _ = peer_id;
+    /// Note: The multipath module is behind the "phase2_apis" feature flag.
+    /// This function returns empty paths by default when the feature is not enabled.
+    #[cfg(feature = "phase2_apis")]
+    pub fn get_active_paths(&self, _peer_id: u64) -> Vec<crate::routing::multipath::DeliveryPath> {
+        // MultiPathDelivery tracking is handled by the routing engine.
+        // For now, return empty list to surface the API without breaking.
         Vec::new()
     }
 
@@ -2081,7 +2112,9 @@ impl IronCore {
             if bytes.len() == 32 {
                 let mut peer_id_arr = [0u8; 32];
                 peer_id_arr.copy_from_slice(&bytes);
-                self.transport_manager.read().record_reconnect_success(&peer_id_arr);
+                self.transport_manager
+                    .read()
+                    .record_reconnect_success(&peer_id_arr);
             }
         }
     }

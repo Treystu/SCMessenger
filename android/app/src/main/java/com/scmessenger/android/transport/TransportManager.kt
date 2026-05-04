@@ -466,6 +466,24 @@ class TransportManager(
     }
 
     /**
+     * Set BLE components from external initialization (MeshRepository).
+     * This allows the TransportManager to coordinate recovery and manage
+     * transport lifecycle when BLE components are created by MeshRepository.
+     */
+    fun setBleComponents(
+        scanner: BleScanner?,
+        advertiser: BleAdvertiser?,
+        gattClient: BleGattClient?,
+        gattServer: BleGattServer?
+    ) {
+        this.bleScanner = scanner
+        this.bleAdvertiser = advertiser
+        this.bleGattClient = gattClient
+        this.bleGattServer = gattServer
+        Timber.d("TransportManager: BLE components set from external initialization")
+    }
+
+    /**
      * Apply BLE scan settings from AutoAdjust profile.
      */
     fun applyScanSettings(scanIntervalMs: UInt) {

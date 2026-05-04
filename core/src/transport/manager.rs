@@ -592,7 +592,9 @@ impl TransportManager {
     /// Should be called periodically from the maintenance loop to prune
     /// stale external address observations.
     pub fn expire_address_observations(&self, max_age_secs: u64) {
-        self.address_observer.write().expire_old_observations(max_age_secs);
+        self.address_observer
+            .write()
+            .expire_old_observations(max_age_secs);
     }
 
     /// Return the set of currently healthy peer IDs from the health monitor.
@@ -615,7 +617,9 @@ impl TransportManager {
 
     /// Get all connection statistics from the health monitor.
     /// Returns an empty map if no health monitor is configured.
-    pub fn get_all_connection_stats(&self) -> std::collections::HashMap<libp2p::PeerId, crate::transport::health::ConnectionStats> {
+    pub fn get_all_connection_stats(
+        &self,
+    ) -> std::collections::HashMap<libp2p::PeerId, crate::transport::health::ConnectionStats> {
         self.health_monitor
             .as_ref()
             .map(|m| m.get_all_connection_stats())
@@ -625,20 +629,27 @@ impl TransportManager {
     /// Get all tracked connections from the address observer's connection tracker.
     /// Delegates to AddressObserver::all_connections() to surface observed
     /// connection endpoints for diagnostics.
-    pub fn get_all_observed_connections(&self) -> Vec<crate::transport::observation::ConnectionEndpoint> {
+    pub fn get_all_observed_connections(
+        &self,
+    ) -> Vec<crate::transport::observation::ConnectionEndpoint> {
         // The AddressObserver currently only holds address observations.
         // The ConnectionTracker is a separate type; expose through a
         // dedicated tracker if wired. For now, return tracked peers
         // from the address observer's observations.
-        self.address_observer.read().all_observations().into_iter().map(|obs| {
-            crate::transport::observation::ConnectionEndpoint {
-                peer_id: obs.observer,
-                remote_addr: libp2p::Multiaddr::empty(), // observation records SocketAddr, not Multiaddr
-                local_addr: libp2p::Multiaddr::empty(),
-                connection_id: format!("obs-{}", obs.observer),
-                established_at: obs.timestamp,
-            }
-        }).collect()
+        self.address_observer
+            .read()
+            .all_observations()
+            .into_iter()
+            .map(|obs| {
+                crate::transport::observation::ConnectionEndpoint {
+                    peer_id: obs.observer,
+                    remote_addr: libp2p::Multiaddr::empty(), // observation records SocketAddr, not Multiaddr
+                    local_addr: libp2p::Multiaddr::empty(),
+                    connection_id: format!("obs-{}", obs.observer),
+                    established_at: obs.timestamp,
+                }
+            })
+            .collect()
     }
 
     /// Clean up stale connections in the health monitor.

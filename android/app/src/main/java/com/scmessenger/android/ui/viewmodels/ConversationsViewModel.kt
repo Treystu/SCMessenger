@@ -57,6 +57,10 @@ class ConversationsViewModel @Inject constructor(
     private val _stats = MutableStateFlow<uniffi.api.HistoryStats?>(null)
     val stats: StateFlow<uniffi.api.HistoryStats?> = _stats.asStateFlow()
 
+    // Inbox count for badge display
+    private val _inboxCount = MutableStateFlow(0u)
+    val inboxCount: StateFlow<UInt> = _inboxCount.asStateFlow()
+
     // Blocked peers
     private val _blockedPeers = MutableStateFlow<List<uniffi.api.BlockedIdentity>>(emptyList())
     val blockedPeers: StateFlow<List<uniffi.api.BlockedIdentity>> = _blockedPeers.asStateFlow()
@@ -65,6 +69,7 @@ class ConversationsViewModel @Inject constructor(
         loadMessages()
         loadStats()
         loadBlockedPeers()
+        loadInboxCount()
 
         // Listen for message updates (sent or received) to refresh the list
         viewModelScope.launch {
@@ -97,6 +102,7 @@ class ConversationsViewModel @Inject constructor(
 
                 val messageList = meshRepository.getRecentMessages(limit = limit)
                 _messages.value = messageList
+                _inboxCount.value = meshRepository.getInboxCount()
 
                 Timber.d("Loaded ${messageList.size} messages")
             } catch (e: Exception) {
@@ -327,6 +333,21 @@ class ConversationsViewModel @Inject constructor(
             } catch (e: Exception) {
                 Timber.e(e, "Failed to load stats")
             }
+        }
+    }
+
+    /**
+     * Load inbox count for badge display.
+     */
+    private fun loadInboxCount() {
+        viewModelScope.launch {
+            try {
+                _inboxCount.value = meshRepository.getInboxCount()
+            } catch (e: Exception) {
+                Timber.e(e, "Failed to load inbox count")
+            }
+        }
+    }
         }
     }
 

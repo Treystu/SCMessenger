@@ -61,6 +61,11 @@ class ChatViewModel @Inject constructor(
     // Online status
     private val _isOnline = MutableStateFlow(false)
     val isOnline: StateFlow<Boolean> = _isOnline.asStateFlow()
+
+    // Pending outbox items for retry timing display
+    private val _pendingOutboxCount = MutableStateFlow(0)
+    val pendingOutboxCount: StateFlow<Int> = _pendingOutboxCount.asStateFlow()
+
     private val _conversationLimit = MutableStateFlow(initialConversationLimit)
 
     init {
@@ -68,6 +73,7 @@ class ChatViewModel @Inject constructor(
         observeIncomingMessages()
         observeMessageUpdates()
         observePeerEvents()
+        loadPendingOutboxCount()
     }
 
     /**
@@ -330,6 +336,34 @@ class ChatViewModel @Inject constructor(
                 }
             }
         }
+    }
+
+    /**
+     * Load pending outbox count for display (messages awaiting delivery).
+     */
+    private fun loadPendingOutboxCount() {
+        viewModelScope.launch {
+            try {
+                val pending = meshRepository.loadPendingOutboxAsync()
+                _pendingOutboxCount.value = pending.size
+            } catch (e: Exception) {
+                Timber.e(e, "Failed to load pending outbox count")
+            }
+        }
+    }
+
+    /**
+     * Get retry delay for a given attempt count (for display in message retry timing).
+     */
+    fun getRetryDelayForAttempt(attemptCount: Int): Long {
+        return meshRepository.getRetryDelay(attemptCount)
+    }
+
+    /**
+     * Check if a message should be retried.
+     */
+    fun shouldRetryMessage(messageId: String): Boolean {
+        return meshRepository.shouldRetryMessage(messageId)
     }
 
     /**

@@ -1082,7 +1082,9 @@ impl MeshService {
         envelope_data: Vec<u8>,
         relay_public_keys_json: String,
     ) -> Result<Vec<u8>, crate::IronCoreError> {
-        let core = self.get_core().ok_or(crate::IronCoreError::NotInitialized)?;
+        let core = self
+            .get_core()
+            .ok_or(crate::IronCoreError::NotInitialized)?;
         core.prepare_onion_message(envelope_data, relay_public_keys_json)
     }
 
@@ -1093,7 +1095,9 @@ impl MeshService {
         onion_data: Vec<u8>,
         relay_secret_key: Vec<u8>,
     ) -> Result<crate::PeelResult, crate::IronCoreError> {
-        let core = self.get_core().ok_or(crate::IronCoreError::NotInitialized)?;
+        let core = self
+            .get_core()
+            .ok_or(crate::IronCoreError::NotInitialized)?;
         core.peel_onion_layer(onion_data, relay_secret_key)
     }
 

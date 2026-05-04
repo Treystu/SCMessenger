@@ -723,6 +723,13 @@ class SettingsViewModel @Inject constructor(
     }
 
     /**
+     * Get list of currently active transports for status display.
+     */
+    fun getActiveTransports(): List<com.scmessenger.android.service.TransportType> {
+        return meshRepository.getActiveTransports()
+    }
+
+    /**
      * Test connectivity to ledger relay nodes.
      * Returns true if at least one relay is reachable.
      */

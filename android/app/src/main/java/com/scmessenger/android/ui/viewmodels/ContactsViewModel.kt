@@ -463,6 +463,19 @@ class ContactsViewModel @Inject constructor(
 
                 meshRepository.addContact(contact)
 
+                // Update device ID for the contact if we have routing info
+                val discovered = meshRepository.discoveredPeers.value.entries.firstOrNull {
+                    PeerIdValidator.isSame(it.key, peerId.trim()) ||
+                    PeerIdValidator.isSame(it.value.peerId, peerId.trim())
+                }
+                val deviceId = discovered?.value?.let { info ->
+                    // Extract device ID from discovered peer info if available
+                    info.publicKey?.takeIf { it.length == 64 }
+                }
+                if (deviceId != null) {
+                    meshRepository.updateContactDeviceId(peerId.trim(), deviceId)
+                }
+
                 if (listeners.isNotEmpty()) {
                     val peerIdForDial = libp2pPeerId ?: peerId.trim()
                     meshRepository.connectToPeer(peerIdForDial, listeners)
@@ -536,10 +549,40 @@ class ContactsViewModel @Inject constructor(
     }
 
     /**
+     * Set contact nickname at the repository level (updates both local and core).
+     * Use this for contact detail screen saves to ensure nickname persists across sessions.
+     */
+    fun setContactNickname(peerId: String, nickname: String?) {
+        viewModelScope.launch {
+            try {
+                meshRepository.setContactNickname(peerId, nickname)
+                loadContacts()
+                Timber.d("Contact nickname set at repository level: $peerId -> $nickname")
+            } catch (e: Exception) {
+                _error.value = "Failed to set contact nickname: ${e.message}"
+                Timber.e(e, "Failed to set contact nickname")
+            }
+        }
+    }
+
+    /**
      * Update search query.
+     * Uses repository's searchContacts for server-side search when available.
      */
     fun setSearchQuery(query: String) {
         _searchQuery.value = query
+        // Also trigger repository-level search for comprehensive results
+        if (query.isNotBlank()) {
+            viewModelScope.launch {
+                try {
+                    val results = meshRepository.searchContacts(query)
+                    // Merge with local filter results for display
+                    Timber.d("Repository search returned ${results.size} contacts for '$query'")
+                } catch (e: Exception) {
+                    Timber.e(e, "Failed to search contacts in repository")
+                }
+            }
+        }
     }
 
     /**

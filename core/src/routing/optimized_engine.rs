@@ -12,9 +12,9 @@ use super::adaptive_ttl::AdaptiveTTLManager;
 use super::engine::*;
 use super::global::RouteAdvertisement;
 use super::local::PeerId;
-use super::negative_cache::{NegativeCache, NegativeCacheStats};
 #[cfg(feature = "phase2_apis")]
 use super::multipath::MultiPathDelivery;
+use super::negative_cache::{NegativeCache, NegativeCacheStats};
 use super::resume_prefetch::{PrefetchStats, ResumePrefetchManager};
 use super::timeout_budget::{BudgetSummary, DiscoveryPhase, TimeoutBudget};
 use web_time::Duration;
@@ -109,11 +109,14 @@ impl OptimizedRoutingEngine {
         // and use alternatives from the multipath manager.
         #[cfg(feature = "phase2_apis")]
         {
-            let peer_id_int = u64::from_be_bytes(recipient_hint[..8].try_into().unwrap_or([0u8; 8]));
+            let peer_id_int =
+                u64::from_be_bytes(recipient_hint[..8].try_into().unwrap_or([0u8; 8]));
             let active = self.multipath.active_paths(peer_id_int);
             if let Some(primary_path) = active.first() {
                 if primary_path.active {
-                    let alternatives: Vec<NextHop> = active.iter().skip(1)
+                    let alternatives: Vec<NextHop> = active
+                        .iter()
+                        .skip(1)
                         .filter(|p| p.active)
                         .map(|p| NextHop::GlobalRoute {
                             next_hop_id: p.peer_id.to_be_bytes(),

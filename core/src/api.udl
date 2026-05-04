@@ -359,13 +359,4 @@ namespace api {
     BlockedIdentity blocked_identity_with_device_id(BlockedIdentity blocked, string device_id);
     BlockedIdentity blocked_identity_with_reason(BlockedIdentity blocked, string reason);
     BlockedIdentity blocked_identity_with_notes(BlockedIdentity blocked, string notes);
-
-    // IronCore additional methods (not in #[uniffi::export] block)
-    bytes ironcore_prepare_onion_message(bytes envelope_data, string relay_public_keys_json);
-    bytes ironcore_peel_onion_layer(bytes onion_data, bytes relay_secret_key);
-    u16 ironcore_random_port();
-    u32 ironcore_ratchet_session_count();
-    boolean ironcore_ratchet_has_session(string peer_id);
-    void ironcore_ratchet_reset_session(string peer_id);
-    string ironcore_routing_tick();
 };
