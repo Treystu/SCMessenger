@@ -1,0 +1,102 @@
+﻿{
+  "file": "CircuitBreaker.kt",
+  "chunk": 1,
+  "summary": "A circuit breaker pattern implementation for managing relay connectivity.",
+  "structs_or_classes": [
+    {
+      "name": "CircuitBreakerConfig",
+      "line": 30
+    },
+    {
+      "name": "CircuitState",
+      "line": 40
+    },
+    {
+      "name": "CircuitEntry",
+      "line": 46
+    },
+    {
+      "name": "LastFailureSummary",
+      "line": 186
+    },
+    {
+      "name": "CircuitBreakerStats",
+      "line": 249
+    }
+  ],
+  "imports": [
+    "kotlinx.coroutines.sync.Mutex",
+    "kotlinx.coroutines.sync.withLock",
+    "timber.log.Timber",
+    "java.util.concurrent.ConcurrentHashMap",
+    "javax.inject.Inject",
+    "javax.inject.Singleton"
+  ],
+  "funcs": [
+    {
+      "name": "allowRequest",
+      "line": 63,
+      "calls_out_to": []
+    },
+    {
+      "name": "recordSuccess",
+      "line": 97,
+      "calls_out_to": []
+    },
+    {
+      "name": "recordFailure",
+      "line": 128,
+      "calls_out_to": []
+    },
+    {
+      "name": "getState",
+      "line": 159,
+      "calls_out_to": []
+    },
+    {
+      "name": "isCircuitOpen",
+      "line": 167,
+      "calls_out_to": []
+    },
+    {
+      "name": "getFailureCount",
+      "line": 173,
+      "calls_out_to": []
+    },
+    {
+      "name": "getLastFailureReason",
+      "line": 178,
+      "calls_out_to": []
+    },
+    {
+      "name": "getLastFailure",
+      "line": 186,
+      "calls_out_to": []
+    },
+    {
+      "name": "reset",
+      "line": 209,
+      "calls_out_to": []
+    },
+    {
+      "name": "resetAll",
+      "line": 214,
+      "calls_out_to": []
+    },
+    {
+      "name": "getOpenCircuits",
+      "line": 220,
+      "calls_out_to": []
+    },
+    {
+      "name": "getHealthyRelays",
+      "line": 225,
+      "calls_out_to": []
+    },
+    {
+      "name": "getStats",
+      "line": 249,
+      "calls_out_to": []
+    }
+  ]
+}

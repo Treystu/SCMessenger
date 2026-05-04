@@ -56,20 +56,22 @@ Examples:
 ## Agent Pool Commands
 ```bash
 # View all available agent profiles
-./.claude/orchestrator_manager.sh pool list
+'C:\Program Files\Git\bin\bash.exe' .claude/orchestrator_manager.sh pool list
 
 # Spin up an agent by name
-./.claude/orchestrator_manager.sh pool launch scout
-./.claude/orchestrator_manager.sh pool launch implementer HANDOFF/todo/P0_BUILD_003.md
-./.claude/orchestrator_manager.sh pool launch rust-coder
-./.claude/orchestrator_manager.sh pool launch security-auditor
+'C:\Program Files\Git\bin\bash.exe' .claude/orchestrator_manager.sh pool launch scout
+'C:\Program Files\Git\bin\bash.exe' .claude/orchestrator_manager.sh pool launch implementer HANDOFF/todo/P0_BUILD_003.md
+'C:\Program Files\Git\bin\bash.exe' .claude/orchestrator_manager.sh pool launch rust-coder
+'C:\Program Files\Git\bin\bash.exe' .claude/orchestrator_manager.sh pool launch security-auditor
 
 # Spin down an agent
-./.claude/orchestrator_manager.sh pool stop <agent_id>
+'C:\Program Files\Git\bin\bash.exe' .claude/orchestrator_manager.sh pool stop <agent_id>
 
 # Check pool slot usage
-./.claude/orchestrator_manager.sh pool status
+'C:\Program Files\Git\bin\bash.exe' .claude/orchestrator_manager.sh pool status
 ```
+
+> **Note:** On Unix systems, omit the path and run `bash .claude/orchestrator_manager.sh ...` directly. On Windows, you MUST use the full Git Bash path shown above — `bash` is not in PATH from PowerShell/CMD.
 
 ### Agent Pool Profiles (`.claude/agent_pool.json`)
 

@@ -1,0 +1,38 @@
+﻿{
+  "file": "MessageBubble.kt",
+  "chunk": 1,
+  "summary": "A composable function that displays a message bubble in a chat UI. It handles both sent and received messages, formats timestamps, and uses Material3 components.",
+  "structs_or_classes": [],
+  "imports": [
+    "androidx.compose.foundation.layout.*",
+    "androidx.compose.foundation.shape.RoundedCornerShape",
+    "androidx.compose.material3.*",
+    "androidx.compose.runtime.Composable",
+    "androidx.compose.ui.Alignment",
+    "androidx.compose.ui.Modifier",
+    "androidx.compose.ui.text.font.FontWeight",
+    "androidx.compose.ui.unit.dp",
+    "androidx.compose.ui.unit.sp",
+    "com.scmessenger.android.ui.theme.*",
+    "com.scm messenger.android.utils.toEpochMillis",
+    "java.text.SimpleDateFormat",
+    "java.util.*"
+  ],
+  "funcs": [
+    {
+      "name": "MessageBubble",
+      "line": 23,
+      "calls_out_to": ["formatTimestamp", "isSameDay"]
+    },
+    {
+      "name": "formatTimestamp",
+      "line": 85,
+      "calls_out_to": []
+    },
+    {
+      "name": "isSameDay",
+      "line": 102,
+      "calls_out_to": []
+    }
+  ]
+}

@@ -1,0 +1,33 @@
+﻿{
+  "file": "Theme.kt",
+  "chunk": 1,
+  "summary": "A Composable function that sets up the theme for the SCMessenger application.",
+  "structs_or_classes": [],
+  "imports": [
+    "android.app.Activity",
+    "android.os.Build",
+    "androidx.compose.foundation.isSystemInDarkTheme",
+    "androidx.compose.material3.*",
+    "androidx.compose.runtime.Composable",
+    "androidx.compose.runtime.SideEffect",
+    "androidx.compose.ui.graphics.toArgb",
+    "androidx.compose.ui.platform.LocalContext",
+    "androidx.compose.ui.platform.LocalView",
+    "androidx.core.view.WindowCompat"
+  ],
+  "funcs": [
+    {
+      "name": "SCMessengerTheme",
+      "line": 27,
+      "calls_out_to": [
+        "darkColorScheme",
+        "lightColorScheme",
+        "LocalContext.current",
+        "LocalView.current",
+        "SideEffect",
+        "Activity.window",
+        "WindowCompat.getInsetsController"
+      ]
+    }
+  ]
+}

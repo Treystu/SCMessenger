@@ -150,6 +150,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/docs_sync_check.ps1
 
 ## Windows-Specific Notes
 
+- **Git Bash path:** On Windows, all shell scripts MUST be invoked with the full path to Git Bash: `"C:\Program Files\Git\bin\bash.exe" <script>` or `bash` if already inside the Git Bash shell. Do NOT rely on `bash` being in PATH from PowerShell/CMD.
 - Incremental compilation is disabled (`.cargo/config.toml`: `incremental = false`) to prevent rlib metadata and paging file errors during integration test builds.
 - **Runtime rule:** Before running `cargo check` or `cargo build`, you MUST set `export CARGO_INCREMENTAL=0` in your terminal. This prevents `.rlib` file-lock corruption during concurrent Rust builds on Windows.
 - Shell scripts in `scripts/` require Git Bash or WSL. PowerShell equivalents exist for key scripts (`.ps1`).

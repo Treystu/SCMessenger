@@ -1,0 +1,69 @@
+﻿{
+  "file": "TopologyScreen.kt",
+  "chunk": 1,
+  "summary": "Displays the mesh topology as an interactive graph with nodes, edges, and a legend.",
+  "structs_or_classes": [],
+  "imports": [
+    "androidx.compose.foundation.Canvas",
+    "androidx.compose.foundation.background",
+    "androidx.compose.foundation.layout.*",
+    "androidx.compose.foundation.rememberScrollState",
+    "androidx.compose.foundation.verticalScroll",
+    "androidx.compose.material.icons.Icons",
+    "androidx.compose.material.icons.automirrored.filled.ArrowBack",
+    "androidx.compose.material.icons.filled.Refresh",
+    "androidx.compose.material3.*",
+    "androidx.compose.runtime.*",
+    "androidx.compose.ui.Alignment",
+    "androidx.compose.ui.Modifier",
+    "androidx.compose.ui.geometry.Offset",
+    "androidx.compose.ui.graphics.Color",
+    "androidx.compose.ui.graphics.StrokeCap",
+    "androidx.compose.ui.graphics.drawscope.Stroke",
+    "androidx.compose.ui.text.font.FontWeight",
+    "androidx.compose.ui.unit.dp",
+    "androidx.hilt.navigation.compose.hiltViewModel",
+    "com.scmessenger.android.ui.components.ErrorBanner",
+    "com.scmessenger.android.ui.theme.*",
+    "com.scmessenger.android.ui.viewmodels.DashboardViewModel",
+    "com.scmessenger.android.ui.viewmodels.NetworkTopology",
+    "com.scmessenger.android.ui.viewmodels.TopologyNode"
+  ],
+  "funcs": [
+    {
+      "name": "TopologyScreen",
+      "line": 40,
+      "calls_out_to": ["onNavigateBack", "viewModel.refreshData()"]
+    },
+    {
+      "name": "TopologyStats",
+      "line": 141,
+      "calls_out_to": []
+    },
+    {
+      "name": "StatItem",
+      "line": 174,
+      "calls_out_to": []
+    },
+    {
+      "name": "TopologyGraph",
+      "line": 198,
+      "calls_out_to": ["getTransportColor"]
+    },
+    {
+      "name": "TopologyLegend",
+      "line": 285,
+      "calls_out_to": []
+    },
+    {
+      "name": "LegendItem",
+      "line": 330,
+      "calls_out_to": []
+    },
+    {
+      "name": "getTransportColor",
+      "line": 356,
+      "calls_out_to": []
+    }
+  ]
+}

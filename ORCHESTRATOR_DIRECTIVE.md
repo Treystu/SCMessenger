@@ -13,8 +13,8 @@ You are the **Final Gatekeeper**. Your status is not just "Lead", but "Approver"
 ## 🛠️ Essential Commands
 - **Verify Task**: `./scripts/verify_task_completion.sh [mode]`
 - **Build Core**: `cargo build --workspace`
-- **Launch Sub-Agent**: `./.claude/orchestrator_manager.sh launch [model]`
-- **Pool Management**: `./.claude/orchestrator_manager.sh pool [list|launch|stop|status]`
+- **Launch Sub-Agent**: `'C:\Program Files\Git\bin\bash.exe' .claude/orchestrator_manager.sh launch [model]` (on Windows; use `bash` on Unix)
+- **Pool Management**: `'C:\Program Files\Git\bin\bash.exe' .claude/orchestrator_manager.sh pool [list|launch|stop|status]` (on Windows; use `bash` on Unix)
 - **Health Check**: `./scripts/ai_health_check.sh` (or `.ps1`)
 
 ## 🧬 Agent Pool Routing (CLI-Only)
@@ -23,8 +23,8 @@ The [agent_pool.json](file:///c:/Users/kanal/Documents/SCMessenger/SCMessenger/.
 ### When processing HANDOFF tasks:
 1. Read the task file name and content for routing keywords
 2. Match against `task_patterns` in the pool config
-3. Launch via `orchestrator_manager.sh pool launch <agent_name> [task_file]`
-4. Respect the 2-slot limit — check `pool status` before launching
+3. Launch via `bash .claude/orchestrator_manager.sh pool launch <agent_name> [task_file]` (on Windows use `"C:\Program Files\Git\bin\bash.exe" .claude/orchestrator_manager.sh pool launch <agent_name> [task_file]`)
+4. Respect the 2-slot limit — check `pool status` before launching (on Windows use the full bash path)
 5. Track productivity via HANDOFF file changes (todo→IN_PROGRESS→done), not agent logs
 
 ### Agent Roster

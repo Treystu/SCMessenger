@@ -1,0 +1,177 @@
+﻿{
+  "file": "MeshRepository.kt",
+  "chunk": 13,
+  "summary": "This class manages the mesh service and its associated components, including history management, ledger operations, and network connectivity.",
+  "structs_or_classes": [],
+  "imports": [
+    "android.content.Context",
+    "android.content.pm.PackageManager",
+    "com.scmessenger.android.service.MeshEventBus",
+    "com.scmessenger.android.service.PeerIdValidator",
+    "com.scm messenger.android.service.TransportType",
+    "kotlinx.coroutines.launch"
+  ],
+  "funcs": [
+    {
+      "name": "startMeshService",
+      "line": 419,
+      "calls_out_to": ["uniffi.api.MeshServiceConfig", "startMeshService"]
+    },
+    {
+      "name": "loadSettings",
+      "line": 4208,
+      "calls_out_to": []
+    },
+    {
+      "name": "ensureServiceInitializedDeferred",
+      "line": 4243,
+      "calls_out_to": ["ensureServiceInitialized"]
+    },
+    {
+      "name": "hasAllPermissions",
+      "line": 4276,
+      "calls_out_to": ["ContextCompat.checkSelfPermission"]
+    },
+    {
+      "name": "addMessage",
+      "line": 4278,
+      "calls_out_to": ["historyManager?.add", "historyManager?.flush"]
+    },
+    {
+      "name": "getMessage",
+      "line": 4283,
+      "calls_out_to": ["historyManager?.get"]
+    },
+    {
+      "name": "getRecentMessages",
+      "line": 4287,
+      "calls_out_to": ["historyManager?.recent", "canonicalId"]
+    },
+    {
+      "name": "getConversation",
+      "line": 4293,
+      "calls_out_to": ["historyManager?.conversation", "canonicalId"]
+    },
+    {
+      "name": "searchMessages",
+      "line": 4297,
+      "calls_out_to": ["historyManager?.search"]
+    },
+    {
+      "name": "markMessageDelivered",
+      "line": 4301,
+      "calls_out_to": ["historyManager?.markDelivered", "removePendingOutbound"]
+    },
+    {
+      "name": "clearHistory",
+      "line": 4306,
+      "calls_out_to": ["historyManager?.clear"]
+    },
+    {
+      "name": "clearConversation",
+      "line": 4312,
+      "calls_out_to": ["validateAndStandardizeId", "historyManager?.clearConversation"]
+    },
+    {
+      "name": "getHistoryStats",
+      "line": 4323,
+      "calls_out_to": ["historyManager?.stats"]
+    },
+    {
+      "name": "getMessageCount",
+      "line": 4327,
+      "calls_out_to": ["historyManager?.count"]
+    },
+    {
+      "name": "enforceRetention",
+      "line": 4336,
+      "calls_out_to": ["historyManager?.enforceRetention"]
+    },
+    {
+      "name": "pruneBefore",
+      "line": 4350,
+      "calls_out_to": ["historyManager?.pruneBefore"]
+    },
+    {
+      "name": "resetAllData",
+      "line": 4362,
+      "calls_out_to": [
+        "swarmBridge?.shutdown",
+        "meshService?.stop",
+        "ironCore?.stop",
+        "contactManager?.flush",
+        "historyManager?.flush",
+        "identityBackupPrefs.edit().clear().apply",
+        "identityCachePrefs.edit().clear().apply",
+        "context.filesDir.listFiles()?.forEach { file -> if (file.isDirectory) file.deleteRecursively() else file.delete() }"
+      ]
+    },
+    {
+      "name": "recordConnection",
+      "line": 4413,
+      "calls_out_to": ["ledgerManager?.recordConnection"]
+    },
+    {
+      "name": "recordConnectionFailure",
+      "line": 4418,
+      "calls_out_to": ["ledgerManager?.recordFailure"]
+    },
+    {
+      "name": "getDialableAddresses",
+      "line": 4422,
+      "calls_out_to": ["ledgerManager?.dialableAddresses"]
+    },
+    {
+      "name": "replayDiscoveredPeerEvents",
+      "line": 4427,
+      "calls_out_to": [
+        "_discoveredPeers.value.forEach { (mapKey, info) -> canonicalPeerId = info.peerId.trim().ifEmpty { mapKey.trim() } if (canonicalPeerId.isEmpty()) return@forEach normalizedKey = normalizePublicKey(info.publicKey) aggregateKey = normalizedKey ?: canonicalPeerId routeCandidate = when { PeerIdValidator.isLibp2pPeerId(mapKey) -> mapKey PeerIdValidator.isLibp2pPeerId(canonicalPeerId) -> canonicalPeerId else -> null } discoveredNickname = prepopulateDiscoveryNickname(nickname = info.nickname, peerId = canonicalPeerId, publicKey = normalizedKey) existing = aggregates[aggregateKey] if (existing == null) { aggregates[aggregateKey] = ReplayDiscoveredIdentity(canonicalPeerId = canonicalPeerId, publicKey = normalizedKey, nickname = discoveredNickname, localNickname = info.localNickname, routePeerId = routeCandidate, transport = com.scmessenger.android.service.TransportType.INTERNET) } else { if (existing.publicKey.isNullOrBlank() && !normalizedKey.isNullOrBlank()) existing.publicKey = normalizedKey existing.canonicalPeerId = selectCanonicalPeerId(canonicalPeerId, existing.canonicalPeerId) existing.nickname = selectAuthoritativeNickname(discoveredNickname, existing.nickname) if (existing.localNickname.isNullOrBlank() && !info.localNickname.isNullOrBlank()) existing.localNickname = info.localNickname if (existing.routePeerId.isNullOrBlank() && !routeCandidate.isNullOrBlank()) existing.routePeerId = routeCandidate if (existing.transport != com.scmessenger.android.service.TransportType.INTERNET && info.transport == com.scmessenger.android.service.TransportType.INTERNET) existing.transport = info.transport } aggregates.values.forEach { peer -> listeners = peer.routePeerId?.let(::getDialHintsForRoutePeer).orEmpty() publicKey = peer.publicKey if (!publicKey.isNullOrBlank()) emitIdentityDiscoveredIfChanged(peerId = peer.canonicalPeerId, publicKey = publicKey, nickname = peer.nickname, libp2pPeerId = peer.routePeerId, listeners = listeners) else com.scmessenger.android.service.MeshEventBus.emitPeerEvent(PeerEvent.Discovered(peerId = peer.canonicalPeerId, transport = peer.transport)) }"
+      ]
+    },
+    {
+      "name": "getAllKnownTopics",
+      "line": 4504,
+      "calls_out_to": ["ledgerManager?.allKnownTopics"]
+    },
+    {
+      "name": "getLedgerSummary",
+      "line": 4508,
+      "calls_out_to": ["ledgerManager?.summary"]
+    },
+    {
+      "name": "getConnectionPathState",
+      "line": 4512,
+      "calls_out_to": ["meshService?.getConnectionPathState"]
+    },
+    {
+      "name": "getNatStatus",
+      "line": 4521,
+      "calls_out_to": ["meshService?.getNatStatus"]
+    },
+    {
+      "name": "getServiceStateName",
+      "line": 4530,
+      "calls_out_to": ["meshService?.getState()?.name"]
+    },
+    {
+      "name": "getDiscoveredPeerCount",
+      "line": 4534,
+      "calls_out_to": []
+    },
+    {
+      "name": "getPendingOutboxCount",
+      "line": 4538,
+      "calls_out_to": ["loadPendingOutbox"]
+    },
+    {
+      "name": "getPendingDeliverySnapshot",
+      "line": 4542,
+      "calls_out_to": []
+    },
+    {
+      "name": "getPendingTerminalFailureCode",
+      "line": 4548,
+      "calls_out_to": ["loadPendingOutbox"]
+    }
+  ]
+}

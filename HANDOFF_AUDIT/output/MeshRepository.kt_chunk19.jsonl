@@ -1,0 +1,92 @@
+﻿{
+  "file": "MeshRepository.kt",
+  "chunk": 19,
+  "summary": "This class handles the decoding and processing of messages, including parsing JSON data, normalizing peer IDs and keys, and managing contact information.",
+  "structs_or_classes": [],
+  "imports": [
+    "org.json.JSONArray",
+    "java.util.UUID"
+  ],
+  "funcs": [
+    {
+      "name": "decodeMessagePayload",
+      "line": 629,
+      "calls_out_to": []
+    },
+    {
+      "name": "jsonArrayToStringList",
+      "line": 6318,
+      "calls_out_to": []
+    },
+    {
+      "name": "normalizePublicKey",
+      "line": 6337,
+      "calls_out_to": []
+    },
+    {
+      "name": "normalizeNickname",
+      "line": 6340,
+      "calls_out_to": []
+    },
+    {
+      "name": "isSyntheticFallbackNickname",
+      "line": 6342,
+      "calls_out_to": []
+    },
+    {
+      "name": "selectAuthoritativeNickname",
+      "line": 6350,
+      "calls_out_to": []
+    },
+    {
+      "name": "isBlePeerId",
+      "line": 6368,
+      "calls_out_to": []
+    },
+    {
+      "name": "isWifiPeerId",
+      "line": 6372,
+      "calls_out_to": []
+    },
+    {
+      "name": "selectCanonicalPeerId",
+      "line": 6380,
+      "calls_out_to": []
+    },
+    {
+      "name": "prepopulateDiscoveryNickname",
+      "line": 6401,
+      "calls_out_to": []
+    },
+    {
+      "name": "resolveKnownPeerNickname",
+      "line": 6440,
+      "calls_out_to": []
+    },
+    {
+      "name": "annotateIdentityInLedger",
+      "line": 6526,
+      "calls_out_to": []
+    },
+    {
+      "name": "appendRoutingHint",
+      "line": 6527,
+      "calls_out_to": []
+    },
+    {
+      "name": "storeLastKnownRoutePeerId",
+      "line": 6557,
+      "calls_out_to": []
+    },
+    {
+      "name": "mergeNotes",
+      "line": 6575,
+      "calls_out_to": []
+    },
+    {
+      "name": "resolveTransportIdentity",
+      "line": 6604,
+      "calls_out_to": []
+    }
+  ]
+}

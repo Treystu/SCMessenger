@@ -1,0 +1,63 @@
+﻿{
+  "file": "PeerKeyUtils.kt",
+  "chunk": 1,
+  "summary": "Utility functions for peer key and peer ID conversion.",
+  "structs_or_classes": [
+    {
+      "name": "PeerKeyUtils",
+      "line": 15
+    }
+  ],
+  "imports": [
+    "timber.log.Timber",
+    "java.nio.ByteBuffer",
+    "java.nio.ByteOrder"
+  ],
+  "funcs": [
+    {
+      "name": "extractPublicKeyFromPeerId",
+      "line": 27,
+      "calls_out_to": ["base58Decode", "isValidPublicKey"]
+    },
+    {
+      "name": "generateLibp2pPeerIdFromPublicKey",
+      "line": 79,
+      "calls_out_to": ["isValidPublicKey", "hexToBytes", "MessageDigest.getInstance", "base58Encode"]
+    },
+    {
+      "name": "generateFallbackPeerId",
+      "line": 125,
+      "calls_out_to": []
+    },
+    {
+      "name": "isValidPublicKey",
+      "line": 140,
+      "calls_out_to": []
+    },
+    {
+      "name": "isValidPeerId",
+      "line": 150,
+      "calls_out_to": ["isLibp2pPeerId"]
+    },
+    {
+      "name": "isLibp2pPeerId",
+      "line": 154,
+      "calls_out_to": []
+    },
+    {
+      "name": "extractPeerIdFromPublicKey",
+      "line": 172,
+      "calls_out_to": ["generateLibp2pPeerIdFromPublicKey"]
+    },
+    {
+      "name": "base58Encode",
+      "line": 206,
+      "calls_out_to": []
+    },
+    {
+      "name": "base58Decode",
+      "line": 260,
+      "calls_out_to": []
+    }
+  ]
+}

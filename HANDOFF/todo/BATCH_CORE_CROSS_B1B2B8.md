@@ -75,3 +75,6 @@ CRITICAL: NO STUBS. Every function must be wired into a real production call pat
 
 ## Build verification
 After ALL changes: `cargo check --workspace`
+
+
+# REPO_MAP Context for Task: BATCH_CORE_CROSS_B1B2B8

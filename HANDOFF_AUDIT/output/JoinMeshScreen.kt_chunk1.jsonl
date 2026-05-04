@@ -1,0 +1,69 @@
+﻿{
+  "file": "JoinMeshScreen.kt",
+  "chunk": 1,
+  "summary": "A composable function that manages the join mesh screen, including QR scanning, parsing, connecting, and displaying success/error states.",
+  "structs_or_classes": [],
+  "imports": [
+    "androidx.compose.animation.core.*",
+    "androidx.compose.foundation.layout.*",
+    "androidx.compose.material.icons.Icons",
+    "androidx.compose.material.icons.filled.CheckCircle",
+    "androidx.compose.material.icons.filled.Error",
+    "androidx.compose.material3.*",
+    "androidx.compose.runtime.*",
+    "androidx.compose.ui.Alignment",
+    "androidx.compose.ui.Modifier",
+    "androidx.compose.ui.draw.rotate",
+    "androidx.compose.ui.graphics.Color",
+    "androidx.compose.ui.platform.LocalContext",
+    "androidx.compose.ui.text.style.TextAlign",
+    "androidx.compose.ui.unit.dp",
+    "com.google.android.gms.common.api.CommonStatusCodes",
+    "com.google.mlkit.common.MlKitException",
+    "com.google.mlkit.vision.barcode.common.Barcode",
+    "com.google.mlkit.vision.codescanner.GmsBarcodeScannerOptions",
+    "com.google.mlkit.vision.codescanner.GmsBarcodeScanning",
+    "com.scmessenger.android.data.MeshRepository",
+    "kotlinx.coroutines.Dispatchers",
+    "kotlinx.coroutines.launch",
+    "kotlinx.coroutines.withContext",
+    "timber.log.Timber"
+  ],
+  "funcs": [
+    {
+      "name": "JoinMeshScreen",
+      "line": 46,
+      "calls_out_to": ["QrScannerView", "ParsingView", "ConnectingView", "SuccessView", "ErrorView"]
+    },
+    {
+      "name": "QrScannerView",
+      "line": 120,
+      "calls_out_to": ["onQrScanned", "onScanError", "onCancel"]
+    },
+    {
+      "name": "ParsingView",
+      "line": 185,
+      "calls_out_to": []
+    },
+    {
+      "name": "ConnectingView",
+      "line": 200,
+      "calls_out_to": ["rotation"]
+    },
+    {
+      "name": "SuccessView",
+      "line": 255,
+      "calls_out_to": ["onComplete"]
+    },
+    {
+      "name": "ErrorView",
+      "line": 286,
+      "calls_out_to": ["onRetry", "onCancel"]
+    },
+    {
+      "name": "parseAndJoin",
+      "line": 339,
+      "calls_out_to": []
+    }
+  ]
+}

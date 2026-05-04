@@ -1,0 +1,14 @@
+﻿{
+  "file": "BleGattClient.kt",
+  "chunk": 2,
+  "summary": "Handles BLE GATT operations for sending and receiving data.",
+  "structs_or_classes": [],
+  "imports": [],
+  "funcs": [
+    {
+      "name": "sendData",
+      "line": 351,
+      "calls_out_to": ["enqueueGattOp", "fragmentData", "reconnectAfterWriteFailure"]
+    }
+  ]
+}

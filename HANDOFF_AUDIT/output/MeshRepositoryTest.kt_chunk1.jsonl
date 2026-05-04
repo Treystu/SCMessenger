@@ -1,0 +1,19 @@
+﻿{
+  "file": "MeshRepositoryTest.kt",
+  "chunk": 1,
+  "summary": "This class contains unit tests for the MeshRepository class, which handles mesh settings and participation checks.",
+  "structs_or_classes": [],
+  "imports": [
+    "org.junit.Assert.assertEquals",
+    "org.junit.Assert.assertFalse",
+    "org.junit.Assert.assertTrue",
+    "org.junit.Test"
+  ],
+  "funcs": [
+    {
+      "name": "meshSettings",
+      "line": 10,
+      "calls_out_to": []
+    }
+  ]
+}

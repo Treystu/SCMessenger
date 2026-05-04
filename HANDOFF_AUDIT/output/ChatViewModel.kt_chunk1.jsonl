@@ -1,0 +1,117 @@
+﻿{
+  "file": "ChatViewModel.kt",
+  "chunk": 1,
+  "summary": "ViewModel for a single chat conversation.",
+  "structs_or_classes": [],
+  "imports": [
+    "androidx.lifecycle.ViewModel",
+    "androidx.lifecycle.viewModelScope",
+    "com.scmessenger.android.data.MeshRepository",
+    "com.scmessenger.android.service.MeshEventBus",
+    "com.scmessenger.android.service.MessageEvent",
+    "com.scm messenger.android.utils.toEpochMillis",
+    "com.scmessenger.android.utils.PeerIdValidator",
+    "dagger.hilt.android.lifecycle.HiltViewModel",
+    "kotlinx.coroutines.flow.*",
+    "kotlinx.coroutines.launch",
+    "timber.log.Timber",
+    "javax.inject.Inject"
+  ],
+  "funcs": [
+    {
+      "name": "setPeer",
+      "line": 82,
+      "calls_out_to": ["loadMessages", "loadContact"]
+    },
+    {
+      "name": "loadMessages",
+      "line": 92,
+      "calls_out_to": ["meshRepository.getConversation", "meshRepository.loadPendingOutboxAsync"]
+    },
+    {
+      "name": "loadContact",
+      "line": 134,
+      "calls_out_to": ["meshRepository.getContact"]
+    },
+    {
+      "name": "sendMessage",
+      "line": 153,
+      "calls_out_to": ["PeerIdValidator.normalize", "meshRepository.sendMessage", "meshRepository.loadPendingOutboxAsync"]
+    },
+    {
+      "name": "sendMessage",
+      "line": 214,
+      "calls_out_to": []
+    },
+    {
+      "name": "updateInputText",
+      "line": 222,
+      "calls_out_to": []
+    },
+    {
+      "name": "clearInput",
+      "line": 230,
+      "calls_out_to": []
+    },
+    {
+      "name": "clearError",
+      "line": 238,
+      "calls_out_to": []
+    },
+    {
+      "name": "observeMessageEvents",
+      "line": 245,
+      "calls_out_to": ["MeshEventBus.messageEvents.collect"]
+    },
+    {
+      "name": "observeIncomingMessages",
+      "line": 274,
+      "calls_out_to": ["meshRepository.incomingMessages.collect"]
+    },
+    {
+      "name": "observeMessageUpdates",
+      "line": 287,
+      "calls_out_to": ["meshRepository.messageUpdates.collect"]
+    },
+    {
+      "name": "observePeerEvents",
+      "line": 324,
+      "calls_out_to": ["MeshEventBus.peerEvents.collect"]
+    },
+    {
+      "name": "loadPendingOutboxCount",
+      "line": 344,
+      "calls_out_to": ["meshRepository.loadPendingOutboxAsync"]
+    },
+    {
+      "name": "getRetryDelayForAttempt",
+      "line": 358,
+      "calls_out_to": []
+    },
+    {
+      "name": "shouldRetryMessage",
+      "line": 365,
+      "calls_out_to": []
+    },
+    {
+      "name": "updateMessageStatus",
+      "line": 372,
+      "calls_out_to": ["meshRepository.loadPendingOutboxAsync"]
+    },
+    {
+      "name": "loadMoreMessages",
+      "line": 392,
+      "calls_out_to": []
+    },
+    {
+      "name": "formatTimestamp",
+      "line": 400,
+      "calls_out_to": ["java.util.Date.toEpochMillis", "java.text.SimpleDateFormat"]
+    },
+    {
+      "name": "isSameDay",
+      "line": 414,
+      "calls_out_to": []
+    }
+  ]
+}

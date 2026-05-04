@@ -1,0 +1,37 @@
+﻿{
+  "file": "NetworkTypeDetector.kt",
+  "chunk": 1,
+  "summary": "P0_ANDROID_007: Detects current network type and identifies carrier-level restrictions.",
+  "structs_or_classes": [],
+  "imports": [
+    "android.content.Context",
+    "android.net.ConnectivityManager",
+    "android.net.NetworkCapabilities",
+    "com.scmessenger.android.transport.NetworkType",
+    "@ApplicationContext",
+    "javax.inject.Inject",
+    "javax.inject.Singleton"
+  ],
+  "funcs": [
+    {
+      "name": "detectNetworkType",
+      "line": 24,
+      "calls_out_to": ["connectivityManager.activeNetwork", "connectivityManager.getNetworkCapabilities(network)", "when"]
+    },
+    {
+      "name": "isCellularPortRestricted",
+      "line": 53,
+      "calls_out_to": ["isPortBlocked('8.8.8.8', 9001)", "isPortBlocked('8.8.8.8', 9010)"]
+    },
+    {
+      "name": "isCellularNetwork",
+      "line": 57,
+      "calls_out_to": ["detectNetworkType()"]
+    },
+    {
+      "name": "isPortBlocked",
+      "line": 62,
+      "calls_out_to": ["java.net.Socket.connect(java.net.InetSocketAddress(host, port), 3000)", "java.net.Socket.close()"]
+    }
+  ]
+}

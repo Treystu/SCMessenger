@@ -1,0 +1,100 @@
+﻿{
+  "file": "MeshRepository.kt",
+  "chunk": 14,
+  "summary": "This class provides various functionalities related to mesh operations, including exporting diagnostics asynchronously, managing identity emissions, and applying settings.",
+  "structs_or_classes": [],
+  "imports": [
+    "com.scmessenger.android.service.MeshEventBus",
+    "com.scmessenger.android.service.TransportType",
+    "org.json.JSONObject",
+    "java.util.concurrent.ConcurrentHashMap"
+  ],
+  "funcs": [
+    {
+      "name": "getMissingRuntimePermissions",
+      "line": 4554,
+      "calls_out_to": []
+    },
+    {
+      "name": "exportDiagnosticsAsync",
+      "line": 4568,
+      "calls_out_to": ["kotlinx.coroutines.withContext"]
+    },
+    {
+      "name": "exportDiagnostics",
+      "line": 4585,
+      "calls_out_to": []
+    },
+    {
+      "name": "exportDiagnosticsInternal",
+      "line": 4588,
+      "calls_out_to": ["meshService?.exportDiagnostics"]
+    },
+    {
+      "name": "saveLedger",
+      "line": 4664,
+      "calls_out_to": ["ledgerManager?.save"]
+    },
+    {
+      "name": "emitIdentityDiscoveredIfChanged",
+      "line": 4681,
+      "calls_out_to": [
+        "com.scmessenger.android.service.MeshEventBus.emitPeerEvent"
+      ]
+    },
+    {
+      "name": "emitConnectedIfChanged",
+      "line": 4724,
+      "calls_out_to": ["com.scmessenger.android.service.MeshEventBus.emitPeerEvent"]
+    },
+    {
+      "name": "emitDisconnectedIfChanged",
+      "line": 4745,
+      "calls_out_to": ["com.scmessenger.android.service.MeshEventBus.emitPeerEvent"]
+    },
+    {
+      "name": "loadSettings",
+      "line": 4768,
+      "calls_out_to": ["settingsManager?.load"]
+    },
+    {
+      "name": "getDefaultSettings",
+      "line": 4781,
+      "calls_out_to": ["settingsManager?.defaultSettings"]
+    },
+    {
+      "name": "saveSettings",
+      "line": 4807,
+      "calls_out_to": ["settingsManager?.save"]
+    },
+    {
+      "name": "applyTransportSettings",
+      "line": 4815,
+      "calls_out_to": [
+        "loadSettings",
+        "transportManager?.enableTransport",
+        "transportManager?.disableTransport"
+      ]
+    },
+    {
+      "name": "validateSettings",
+      "line": 4865,
+      "calls_out_to": ["settingsManager?.validate"]
+    },
+    {
+      "name": "computeAdjustmentProfile",
+      "line": 4878,
+      "calls_out_to": ["autoAdjustEngine?.computeProfile"]
+    },
+    {
+      "name": "computeBleAdjustment",
+      "line": 4883,
+      "calls_out_to": ["autoAdjustEngine?.computeBleAdjustment"]
+    },
+    {
+      "name": "computeRelayAdjustment",
+      "line": 4892,
+      "calls_out_to": ["autoAdjustEngine?.computeRelayAdjustment"]
+    }
+  ]
+}

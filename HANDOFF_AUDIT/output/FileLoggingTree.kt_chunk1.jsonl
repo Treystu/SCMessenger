@@ -1,0 +1,32 @@
+﻿{
+  "file": "FileLoggingTree.kt",
+  "chunk": 1,
+  "summary": "A Timber Tree that logs to a file in the app's internal storage.",
+  "structs_or_classes": [
+    {
+      "name": "FileLoggingTree",
+      "line": 15
+    }
+  ],
+  "imports": [
+    "android.content.Context",
+    "timber.log.Timber",
+    "java.io.File",
+    "java.io.FileWriter",
+    "java.io.PrintWriter",
+    "java.text.SimpleDateFormat",
+    "java.util.*"
+  ],
+  "funcs": [
+    {
+      "name": "setIronCore",
+      "line": 24,
+      "calls_out_to": []
+    },
+    {
+      "name": "log",
+      "line": 28,
+      "calls_out_to": ["runCatching", "truncateLogFile"]
+    }
+  ]
+}

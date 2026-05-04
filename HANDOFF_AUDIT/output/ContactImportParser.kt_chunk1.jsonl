@@ -1,0 +1,58 @@
+﻿{
+  "file": "ContactImportParser.kt",
+  "chunk": 1,
+  "summary": "This file contains a class `ImportedContactPayload` and a sealed class `ContactImportParseResult`. It also includes functions to parse contact import payloads from raw strings.",
+  "structs_or_classes": [
+    {
+      "name": "ImportedContactPayload",
+      "line": 6,
+      "fields": [
+        {"name": "peerId", "type": "String"},
+        {"name": "publicKey", "type": "String"},
+        {"name": "nickname", "type": "String?"},
+        {"name": "libp2pPeerId", "type": "String?"},
+        {"name": "listeners", "type": "List<String>"},
+        {"line": 10, "calls_out_to": []},
+        {"line": 11, "calls_out_to": []}
+      ]
+    },
+    {
+      "name": "ContactImportParseResult",
+      "line": 14,
+      "fields": [],
+      "methods": [
+        {
+          "name": "Valid",
+          "line": 15,
+          "calls_out_to": ["ImportedContactPayload"]
+        },
+        {
+          "name": "Invalid",
+          "line": 16,
+          "calls_out_to": ["String"]
+        }
+      ]
+    }
+  ],
+  "imports": [
+    {"package": "org.json", "class": "JSONArray"},
+    {"package": "org.json", "class": "JSONObject"}
+  ],
+  "funcs": [
+    {
+      "name": "parseContactImportPayload",
+      "line": 19,
+      "calls_out_to": ["firstNonBlank", "runCatching", "optString", "optJSONArray", "buildList", "optInt", "trim", "filter", "distinct"]
+    },
+    {
+      "name": "firstNonBlank",
+      "line": 93,
+      "calls_out_to": []
+    },
+    {
+      "name": "parseStringArray",
+      "line": 100,
+      "calls_out_to": ["JSONArray", "optString", "trim"]
+    }
+  ]
+}

@@ -7539,3 +7539,5858 @@
     }
   ]
 }
+{
+  "file": "MeshRepository.kt",
+  "chunk": 7,
+  "summary": "This class handles various mesh-related operations such as starting the mesh service, sending delivery receipts, and managing identity and history syncs.",
+  "structs_or_classes": [],
+  "imports": [
+    "com.scmessenger.android.transport.ble.BleGattClient",
+    "com.scmessenger.android.transport.ble.BleScanner"
+  ],
+  "funcs": [
+    {
+      "name": "sendDeliveryReceiptAsync",
+      "line": 2104,
+      "calls_out_to": ["ironCore?.prepareReceipt", "contactManager?.get", "parseRoutingHints", "buildRoutePeerCandidates", "attemptDirectSwarmDelivery", "logDeliveryAttempt"]
+    },
+    {
+      "name": "sendIdentitySyncIfNeeded",
+      "line": 2223,
+      "calls_out_to": ["ironCore?.extractPublicKeyFromPeerId", "encodeIdentitySyncPayload", "prepareMessageWithId", "contactManager?.list", "parseRoutingHints", "buildRoutePeerCandidates"]
+    },
+    {
+      "name": "sendHistorySyncIfNeeded",
+      "line": 2348,
+      "calls_out_to": ["ironCore?.extractPublicKeyFromPeerId", "encodeMeshMessagePayload", "prepareMessageWithId", "contactManager?.get", "parseRoutingHints", "buildRoutePeerCandidates"]
+    },
+    {
+      "name": "sendHistorySyncDataIfNeeded",
+      "line": 2412,
+      "calls_out_to": ["historyManager?.conversation", "encodeMeshMessagePayload", "prepareMessageWithId", "contactManager?.get", "parseRoutingHints", "buildRoutePeerCandidates"]
+    },
+    {
+      "name": "initializeAndStartBle",
+      "line": 2412,
+      "calls_out_to": ["loadSettings", "hasAllPermissions", "com.scmessenger.android.transport.ble.BleGattClient", "com.scmessenger.android.transport.ble.BleScanner"]
+    }
+  ]
+}
+{
+  "file": "MeshRepository.kt",
+  "chunk": 9,
+  "summary": "This class manages mesh services and transports, including BLE, WiFi, and Swarm.",
+  "structs_or_classes": [],
+  "imports": [
+    "com.scmessenger.android.service.TransportType",
+    "com.scmessenger.android.transport.WifiTransportManager",
+    "uniffi.api.IronCore",
+    "uniffi.api.PlatformBridge"
+  ],
+  "funcs": [
+    {
+      "name": "initializeAndStartWifi",
+      "line": 2893,
+      "calls_out_to": ["loadSettings", "hasAllPermissions", "wifiTransportManager"]
+    },
+    {
+      "name": "initializeAndStartSwarm",
+      "line": 2923,
+      "calls_out_to": ["ensureLocalIdentityFederation", "meshService"]
+    },
+    {
+      "name": "ensureLocalIdentityFederation",
+      "line": 2949,
+      "calls_out_to": ["coreDelegate", "restoreIdentityFromBackup", "identityCachePrefs", "identityBackupPrefs", "storagePath"]
+    },
+    {
+      "name": "restoreIdentityFromBackup",
+      "line": 3001,
+      "calls_out_to": ["coreDelegate"]
+    },
+    {
+      "name": "setPlatformBridge",
+      "line": 3076,
+      "calls_out_to": ["meshService", "transportManager", "bridge"]
+    },
+    {
+      "name": "stopMeshService",
+      "line": 3089,
+      "calls_out_to": [
+        "repoScope.launch",
+        "bleScanner?.stopScanning",
+        "bleAdvertiser?.stopAdvertising",
+        "bleGattServer?.stop",
+        "bleGattClient?.cleanup",
+        "kotlin.runCatching",
+        "meshService?.stop"
+      ]
+    }
+  ]
+}
+{
+  "file": "MeshRepository.kt",
+  "chunk": 11,
+  "summary": "This class provides various methods to interact with the Mesh service, including checking if a peer is blocked, listing blocked peers, getting blocked count, signing data, verifying signatures, managing device IDs, exporting logs, and handling message history.",
+  "structs_or_classes": [],
+  "imports": [
+    "com.example.uniffi.api.BlockedIdentity",
+    "com.example.uniffi.api.IdentityInfo",
+    "com.example.uniffi.api.RegistrationStateInfo",
+    "com.example.uniffi.api.ServiceState",
+    "com.example.uniffi.api.MessageRecord",
+    "com.example.uniffi.api.MessageDirection"
+  ],
+  "funcs": [
+    {
+      "name": "isBlocked",
+      "line": 3502,
+      "calls_out_to": ["ensureServiceInitializedFireAndForget", "ironCore?.isPeerBlocked"]
+    },
+    {
+      "name": "listBlockedPeers",
+      "line": 3512,
+      "calls_out_to": ["ensureServiceInitializedFireAndForget", "ironCore?.listBlockedPeers"]
+    },
+    {
+      "name": "getBlockedCount",
+      "line": 3522,
+      "calls_out_to": ["ensureServiceInitializedFireAndForget", "ironCore?.blockedCount"]
+    },
+    {
+      "name": "signData",
+      "line": 3536,
+      "calls_out_to": ["ensureServiceInitializedFireAndForget", "ironCore?.signData"]
+    },
+    {
+      "name": "verifySignature",
+      "line": 3546,
+      "calls_out_to": ["ensureServiceInitializedFireAndForget", "ironCore?.verifySignature"]
+    },
+    {
+      "name": "getDeviceId",
+      "line": 3560,
+      "calls_out_to": ["ironCore?.getDeviceId"]
+    },
+    {
+      "name": "getSeniorityTimestamp",
+      "line": 3564,
+      "calls_out_to": ["ironCore?.getSeniorityTimestamp"]
+    },
+    {
+      "name": "getRegistrationState",
+      "line": 3568,
+      "calls_out_to": ["ironCore?.getRegistrationState"]
+    },
+    {
+      "name": "exportLogs",
+      "line": 3576,
+      "calls_out_to": ["ensureServiceInitializedFireAndForget", "ironCore?.exportLogs"]
+    },
+    {
+      "name": "getInboxCount",
+      "line": 3589,
+      "calls_out_to": ["ironCore?.inboxCount"]
+    },
+    {
+      "name": "updateContactDeviceId",
+      "line": 3597,
+      "calls_out_to": ["contactManager?.updateDeviceId"]
+    },
+    {
+      "name": "getIdentityInfoNonBlocking",
+      "line": 3615,
+      "calls_out_to": [
+        "ensureServiceInitializedFireAndForget",
+        "ironCore?.getIdentityInfo",
+        "readCachedIdentityFields"
+      ]
+    },
+    {
+      "name": "getIdentityInfo",
+      "line": 3643,
+      "calls_out_to": ["ensureServiceInitializedFireAndForget", "kotlin.runCatching", "ensureLocalIdentityFederation", "ironCore?.getIdentityInfo"]
+    },
+    {
+      "name": "setNickname",
+      "line": 3662,
+      "calls_out_to": [
+        "trimmed.isEmpty",
+        "Timber.d",
+        "core.setNickname",
+        "persistIdentityBackup",
+        "initializeAndStartSwarm",
+        "updateBleIdentityBeacon",
+        "identitySyncSentPeers.clear",
+        "historySyncSentPeers.clear",
+        "swarmBridge?.getPeers"
+      ]
+    },
+    {
+      "name": "setLocalNickname",
+      "line": 3706,
+      "calls_out_to": ["contactManager?.setLocalNickname"]
+    },
+    {
+      "name": "sendMessage",
+      "line": 3725,
+      "calls_out_to": [
+        "kotlinx.coroutines.withContext",
+        "PeerIdValidator.normalize",
+        "java.util.UUID.randomUUID",
+        "System.currentTimeMillis",
+        "ironCore?.resolveIdentity",
+        "contactManager?.get",
+        "publicKey == null && contact != null && !contact.publicKey.isNullOrEmpty()",
+        "publicKey = contact.publicKey.trim()",
+        "publicKey.length != 64",
+        "Timber.e",
+        "discoveredPeer != null && !discoveredPeer.publicKey.isNullOrEmpty()",
+        "publicKey = discoveredPeer.publicKey.trim()",
+        "publicKey == null && PeerIdValidator.isLibp2pPeerId(routingPeerId)",
+        "resolveTransportIdentity",
+        "transportIdentity?.publicKey",
+        "Timber.d",
+        "extractedKey.isNullOrEmpty()",
+        "publicKey = normalizePublicKey(extractedKey)",
+        "Timber.d",
+        "normalizedPeerId = if (publicKey != null) { ... } else { routingPeerId }",
+        "historyManager?.add",
+        "historyManager?.flush",
+        "repoScope.launch",
+        "logDeliveryState",
+        "enqueuePendingOutbound"
+      ]
+    }
+  ]
+}
+{
+  "file": "MeshRepository.kt",
+  "chunk": 12,
+  "summary": "Handles the process of sending messages and managing identity initialization.",
+  "structs_or_classes": [],
+  "imports": [
+    "kotlinx.coroutines.Dispatchers.IO",
+    "kotlinx.coroutines.withContext",
+    "com.squareup.timber.Timber",
+    "uniffi.api.MeshSettings",
+    "uniffi.api.ServiceState",
+    "uniffi.api.MessageDirection",
+    "uniffi.api.MessageRecord"
+  ],
+  "funcs": [
+    {
+      "name": "send",
+      "line": 3849,
+      "calls_out_to": ["dial", "buildRoutePeerCandidates", "encodeMessageWithIdentityHints", "ironCore?.prepareMessageWithId", "historyManager?.delete", "historyManager?.add", "repoScope.launch", "logDeliveryState", "attemptDirectSwarmDelivery", "promotePendingOutboundForPeer", "storeLastKnownRoutePeerId", "isMessageDeliveredLocally", "removePendingOutbound", "logDeliveryState", "enqueuePendingOutbound"]
+    },
+    {
+      "name": "dial",
+      "line": 4021,
+      "calls_out_to": ["swarmBridge?.dial"]
+    },
+    {
+      "name": "isIdentityInitialized",
+      "line": 4043,
+      "calls_out_to": ["identityBackupPrefs.contains", "meshService?.getState", "ironCore?.getIdentityInfo()?.initialized", "restoreIdentityFromBackup", "File.exists"]
+    },
+    {
+      "name": "grantConsent",
+      "line": 4092,
+      "calls_out_to": ["ensureServiceInitializedFireAndForget", "ironCore?.grantConsent"]
+    },
+    {
+      "name": "hasRequiredRuntimePermissions",
+      "line": 4101,
+      "calls_out_to": ["hasAllPermissions"]
+    },
+    {
+      "name": "onRuntimePermissionsGranted",
+      "line": 4105,
+      "calls_out_to": ["ensureServiceInitialized", "initializeAndStartBle", "initializeAndStartWifi", "initializeAndStartSwarm"]
+    },
+    {
+      "name": "createIdentity",
+      "line": 4133,
+      "calls_out_to": ["ironCore?.grantConsent", "ironCore?.initializeIdentity", "ensureLocalIdentityFederation", "persistIdentityBackup"]
+    }
+  ]
+}
+{
+  "file": "MeshRepository.kt",
+  "chunk": 13,
+  "summary": "This class manages the mesh service and its associated components, including history management, ledger operations, and network connectivity.",
+  "structs_or_classes": [],
+  "imports": [
+    "android.content.Context",
+    "android.content.pm.PackageManager",
+    "com.scmessenger.android.service.MeshEventBus",
+    "com.scmessenger.android.service.PeerIdValidator",
+    "com.scm messenger.android.service.TransportType",
+    "kotlinx.coroutines.launch"
+  ],
+  "funcs": [
+    {
+      "name": "startMeshService",
+      "line": 419,
+      "calls_out_to": ["uniffi.api.MeshServiceConfig", "startMeshService"]
+    },
+    {
+      "name": "loadSettings",
+      "line": 4208,
+      "calls_out_to": []
+    },
+    {
+      "name": "ensureServiceInitializedDeferred",
+      "line": 4243,
+      "calls_out_to": ["ensureServiceInitialized"]
+    },
+    {
+      "name": "hasAllPermissions",
+      "line": 4276,
+      "calls_out_to": ["ContextCompat.checkSelfPermission"]
+    },
+    {
+      "name": "addMessage",
+      "line": 4278,
+      "calls_out_to": ["historyManager?.add", "historyManager?.flush"]
+    },
+    {
+      "name": "getMessage",
+      "line": 4283,
+      "calls_out_to": ["historyManager?.get"]
+    },
+    {
+      "name": "getRecentMessages",
+      "line": 4287,
+      "calls_out_to": ["historyManager?.recent", "canonicalId"]
+    },
+    {
+      "name": "getConversation",
+      "line": 4293,
+      "calls_out_to": ["historyManager?.conversation", "canonicalId"]
+    },
+    {
+      "name": "searchMessages",
+      "line": 4297,
+      "calls_out_to": ["historyManager?.search"]
+    },
+    {
+      "name": "markMessageDelivered",
+      "line": 4301,
+      "calls_out_to": ["historyManager?.markDelivered", "removePendingOutbound"]
+    },
+    {
+      "name": "clearHistory",
+      "line": 4306,
+      "calls_out_to": ["historyManager?.clear"]
+    },
+    {
+      "name": "clearConversation",
+      "line": 4312,
+      "calls_out_to": ["validateAndStandardizeId", "historyManager?.clearConversation"]
+    },
+    {
+      "name": "getHistoryStats",
+      "line": 4323,
+      "calls_out_to": ["historyManager?.stats"]
+    },
+    {
+      "name": "getMessageCount",
+      "line": 4327,
+      "calls_out_to": ["historyManager?.count"]
+    },
+    {
+      "name": "enforceRetention",
+      "line": 4336,
+      "calls_out_to": ["historyManager?.enforceRetention"]
+    },
+    {
+      "name": "pruneBefore",
+      "line": 4350,
+      "calls_out_to": ["historyManager?.pruneBefore"]
+    },
+    {
+      "name": "resetAllData",
+      "line": 4362,
+      "calls_out_to": [
+        "swarmBridge?.shutdown",
+        "meshService?.stop",
+        "ironCore?.stop",
+        "contactManager?.flush",
+        "historyManager?.flush",
+        "identityBackupPrefs.edit().clear().apply",
+        "identityCachePrefs.edit().clear().apply",
+        "context.filesDir.listFiles()?.forEach { file -> if (file.isDirectory) file.deleteRecursively() else file.delete() }"
+      ]
+    },
+    {
+      "name": "recordConnection",
+      "line": 4413,
+      "calls_out_to": ["ledgerManager?.recordConnection"]
+    },
+    {
+      "name": "recordConnectionFailure",
+      "line": 4418,
+      "calls_out_to": ["ledgerManager?.recordFailure"]
+    },
+    {
+      "name": "getDialableAddresses",
+      "line": 4422,
+      "calls_out_to": ["ledgerManager?.dialableAddresses"]
+    },
+    {
+      "name": "replayDiscoveredPeerEvents",
+      "line": 4427,
+      "calls_out_to": [
+        "_discoveredPeers.value.forEach { (mapKey, info) -> canonicalPeerId = info.peerId.trim().ifEmpty { mapKey.trim() } if (canonicalPeerId.isEmpty()) return@forEach normalizedKey = normalizePublicKey(info.publicKey) aggregateKey = normalizedKey ?: canonicalPeerId routeCandidate = when { PeerIdValidator.isLibp2pPeerId(mapKey) -> mapKey PeerIdValidator.isLibp2pPeerId(canonicalPeerId) -> canonicalPeerId else -> null } discoveredNickname = prepopulateDiscoveryNickname(nickname = info.nickname, peerId = canonicalPeerId, publicKey = normalizedKey) existing = aggregates[aggregateKey] if (existing == null) { aggregates[aggregateKey] = ReplayDiscoveredIdentity(canonicalPeerId = canonicalPeerId, publicKey = normalizedKey, nickname = discoveredNickname, localNickname = info.localNickname, routePeerId = routeCandidate, transport = com.scmessenger.android.service.TransportType.INTERNET) } else { if (existing.publicKey.isNullOrBlank() && !normalizedKey.isNullOrBlank()) existing.publicKey = normalizedKey existing.canonicalPeerId = selectCanonicalPeerId(canonicalPeerId, existing.canonicalPeerId) existing.nickname = selectAuthoritativeNickname(discoveredNickname, existing.nickname) if (existing.localNickname.isNullOrBlank() && !info.localNickname.isNullOrBlank()) existing.localNickname = info.localNickname if (existing.routePeerId.isNullOrBlank() && !routeCandidate.isNullOrBlank()) existing.routePeerId = routeCandidate if (existing.transport != com.scmessenger.android.service.TransportType.INTERNET && info.transport == com.scmessenger.android.service.TransportType.INTERNET) existing.transport = info.transport } aggregates.values.forEach { peer -> listeners = peer.routePeerId?.let(::getDialHintsForRoutePeer).orEmpty() publicKey = peer.publicKey if (!publicKey.isNullOrBlank()) emitIdentityDiscoveredIfChanged(peerId = peer.canonicalPeerId, publicKey = publicKey, nickname = peer.nickname, libp2pPeerId = peer.routePeerId, listeners = listeners) else com.scmessenger.android.service.MeshEventBus.emitPeerEvent(PeerEvent.Discovered(peerId = peer.canonicalPeerId, transport = peer.transport)) }"
+      ]
+    },
+    {
+      "name": "getAllKnownTopics",
+      "line": 4504,
+      "calls_out_to": ["ledgerManager?.allKnownTopics"]
+    },
+    {
+      "name": "getLedgerSummary",
+      "line": 4508,
+      "calls_out_to": ["ledgerManager?.summary"]
+    },
+    {
+      "name": "getConnectionPathState",
+      "line": 4512,
+      "calls_out_to": ["meshService?.getConnectionPathState"]
+    },
+    {
+      "name": "getNatStatus",
+      "line": 4521,
+      "calls_out_to": ["meshService?.getNatStatus"]
+    },
+    {
+      "name": "getServiceStateName",
+      "line": 4530,
+      "calls_out_to": ["meshService?.getState()?.name"]
+    },
+    {
+      "name": "getDiscoveredPeerCount",
+      "line": 4534,
+      "calls_out_to": []
+    },
+    {
+      "name": "getPendingOutboxCount",
+      "line": 4538,
+      "calls_out_to": ["loadPendingOutbox"]
+    },
+    {
+      "name": "getPendingDeliverySnapshot",
+      "line": 4542,
+      "calls_out_to": []
+    },
+    {
+      "name": "getPendingTerminalFailureCode",
+      "line": 4548,
+      "calls_out_to": ["loadPendingOutbox"]
+    }
+  ]
+}
+{
+  "file": "MeshRepository.kt",
+  "chunk": 14,
+  "summary": "This class provides various functionalities related to mesh operations, including exporting diagnostics asynchronously, managing identity emissions, and applying settings.",
+  "structs_or_classes": [],
+  "imports": [
+    "com.scmessenger.android.service.MeshEventBus",
+    "com.scmessenger.android.service.TransportType",
+    "org.json.JSONObject",
+    "java.util.concurrent.ConcurrentHashMap"
+  ],
+  "funcs": [
+    {
+      "name": "getMissingRuntimePermissions",
+      "line": 4554,
+      "calls_out_to": []
+    },
+    {
+      "name": "exportDiagnosticsAsync",
+      "line": 4568,
+      "calls_out_to": ["kotlinx.coroutines.withContext"]
+    },
+    {
+      "name": "exportDiagnostics",
+      "line": 4585,
+      "calls_out_to": []
+    },
+    {
+      "name": "exportDiagnosticsInternal",
+      "line": 4588,
+      "calls_out_to": ["meshService?.exportDiagnostics"]
+    },
+    {
+      "name": "saveLedger",
+      "line": 4664,
+      "calls_out_to": ["ledgerManager?.save"]
+    },
+    {
+      "name": "emitIdentityDiscoveredIfChanged",
+      "line": 4681,
+      "calls_out_to": [
+        "com.scmessenger.android.service.MeshEventBus.emitPeerEvent"
+      ]
+    },
+    {
+      "name": "emitConnectedIfChanged",
+      "line": 4724,
+      "calls_out_to": ["com.scmessenger.android.service.MeshEventBus.emitPeerEvent"]
+    },
+    {
+      "name": "emitDisconnectedIfChanged",
+      "line": 4745,
+      "calls_out_to": ["com.scmessenger.android.service.MeshEventBus.emitPeerEvent"]
+    },
+    {
+      "name": "loadSettings",
+      "line": 4768,
+      "calls_out_to": ["settingsManager?.load"]
+    },
+    {
+      "name": "getDefaultSettings",
+      "line": 4781,
+      "calls_out_to": ["settingsManager?.defaultSettings"]
+    },
+    {
+      "name": "saveSettings",
+      "line": 4807,
+      "calls_out_to": ["settingsManager?.save"]
+    },
+    {
+      "name": "applyTransportSettings",
+      "line": 4815,
+      "calls_out_to": [
+        "loadSettings",
+        "transportManager?.enableTransport",
+        "transportManager?.disableTransport"
+      ]
+    },
+    {
+      "name": "validateSettings",
+      "line": 4865,
+      "calls_out_to": ["settingsManager?.validate"]
+    },
+    {
+      "name": "computeAdjustmentProfile",
+      "line": 4878,
+      "calls_out_to": ["autoAdjustEngine?.computeProfile"]
+    },
+    {
+      "name": "computeBleAdjustment",
+      "line": 4883,
+      "calls_out_to": ["autoAdjustEngine?.computeBleAdjustment"]
+    },
+    {
+      "name": "computeRelayAdjustment",
+      "line": 4892,
+      "calls_out_to": ["autoAdjustEngine?.computeRelayAdjustment"]
+    }
+  ]
+}
+{
+  "file": "MeshRepository.kt",
+  "chunk": 15,
+  "summary": "This class provides methods for managing mesh communication, including setting BLE scan interval, relay budget, updating device state, and handling peer connections via SwarmBridge.",
+  "structs_or_classes": [],
+  "imports": [
+    "com.example.libp2p.PeerIdValidator",
+    "com.example.libp2p.SwarmBridge",
+    "com.example.libp2p.IronCore",
+    "com.example.libp2p.WifiTransportManager",
+    "com.example.libp2p.BleGattClient",
+    "com.example.libp2p.BleGattServer",
+    "com.example.libp2p.MdnsLanPeers"
+  ],
+  "funcs": [
+    {
+      "name": "overrideBleInterval",
+      "line": 4901,
+      "calls_out_to": ["autoAdjustEngine?.overrideBleScanInterval(intervalMs)"]
+    },
+    {
+      "name": "setRelayBudget",
+      "line": 4905,
+      "calls_out_to": ["meshService?.setRelayBudget(messagesPerHour)"]
+    },
+    {
+      "name": "updateDeviceState",
+      "line": 4910,
+      "calls_out_to": ["meshService?.updateDeviceState(profile)"]
+    },
+    {
+      "name": "overrideRelayMax",
+      "line": 4913,
+      "calls_out_to": ["autoAdjustEngine?.overrideRelayMaxPerHour(max)"]
+    },
+    {
+      "name": "clearAdjustmentOverrides",
+      "line": 4917,
+      "calls_out_to": ["autoAdjustEngine?.clearOverrides()"]
+    },
+    {
+      "name": "getTopics",
+      "line": 4930,
+      "calls_out_to": ["swarmBridge?.getTopics()"]
+    },
+    {
+      "name": "subscribeTopic",
+      "line": 4936,
+      "calls_out_to": ["swarmBridge?.subscribeTopic(topic)"]
+    },
+    {
+      "name": "unsubscribeTopic",
+      "line": 4945,
+      "calls_out_to": ["swarmBridge?.unsubscribeTopic(topic)"]
+    },
+    {
+      "name": "publishTopic",
+      "line": 4953,
+      "calls_out_to": ["swarmBridge?.publishTopic(topic, data)"]
+    },
+    {
+      "name": "sendToAllPeers",
+      "line": 4964,
+      "calls_out_to": ["swarmBridge?.sendToAllPeers(data)"]
+    },
+    {
+      "name": "connectToPeer",
+      "line": 4972,
+      "calls_out_to": [
+        "buildDialCandidatesForPeer(routePeerId, rawAddresses, includeRelayCircuits)",
+        "swarmBridge?.dial(finalAddr)"
+      ]
+    },
+    {
+      "name": "ensurePendingOutboxRetryLoop",
+      "line": 4997,
+      "calls_out_to": ["repoScope.launch { while (true) { try { primeRelayBootstrapConnections() flushPendingOutbox(\"periodic\") kotlinx.coroutines.delay(8000) } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) { Timber.w(e, \"Pending outbox retry loop error\") kotlinx.coroutines.delay(5000) } } }"]
+    },
+    {
+      "name": "ensureCoverTrafficLoop",
+      "line": 5019,
+      "calls_out_to": ["repoScope.launch { while (true) { try { kotlinx.coroutines.delay(30_000) val enabled = try { settingsManager?.load()?.coverTrafficEnabled == true } catch (_: Exception) { false } if (enabled) { val core = ironCore val bridge = swarmBridge if (core != null && bridge != null) { try { val payload = core.prepareCoverTraffic(256u) bridge.sendToAllPeers(payload) } catch (e: Exception) { Timber.d(\"Cover traffic send skipped: ${e.message}\") } } } } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) { Timber.w(e, \"Cover traffic loop error\") kotlinx.coroutines.delay(30_000) } } }"]
+    },
+    {
+      "name": "attemptDirectSwarmDelivery",
+      "line": 5061,
+      "calls_out_to": [
+        "smartTransportRouter?.attemptDelivery(peerId, envelopeData, wifiPeerId, blePeerId, tcpMdnsPeerId, routePeerCandidates, listeners, traceMessageId, attemptContext, tryWifi, tryBle)"
+      ]
+    }
+  ]
+}
+{
+  "file": "MeshRepository.kt",
+  "chunk": 16,
+  "summary": "Handles delivery attempts for messages using various transport methods.",
+  "structs_or_classes": [],
+  "imports": [
+    "com.scmessenger.android.transport.SmartTransportRouter.TransportDeliveryResult",
+    "com.scmessenger.android.transport.SmartTransportRouter.TransportType",
+    "com.scmessenger.android.util.PeerIdValidator"
+  ],
+  "funcs": [
+    {
+      "name": "attemptDirectSwarmDelivery",
+      "line": 5249,
+      "calls_out_to": [
+        "logDeliveryAttempt",
+        "discoverRoutePeersForPublicKey",
+        "getDialHintsForRoutePeer",
+        "buildDialCandidatesForPeer",
+        "connectToPeer",
+        "awaitPeerConnection"
+      ]
+    }
+  ]
+}
+{
+  "file": "MeshRepository.kt",
+  "chunk": 17,
+  "summary": "This function handles the delivery of messages in a mesh network. It attempts to deliver a message directly, then retries using relay circuits if necessary.",
+  "structs_or_classes": [],
+  "imports": [
+    "android.util.Base64",
+    "com.example.swarm.SwarmBridge",
+    "com.example.contact.ContactManager"
+  ],
+  "funcs": [
+    {
+      "name": "deliverMessage",
+      "line": 5597,
+      "calls_out_to": ["awaitPeerConnection", "logDeliveryAttempt", "bridge.sendMessageStatus", "loadPendingOutbox", "savePendingOutbox", "incrementAttemptCount", "storeLastKnownRoutePeerId", "isTerminalIdentityFailure"]
+    },
+    {
+      "name": "awaitPeerConnection",
+      "line": 5696,
+      "calls_out_to": ["bridge.getPeers()"]
+    }
+  ]
+}
+{
+  "file": "MeshRepository.kt",
+  "chunk": 18,
+  "summary": "This class manages the pending outbound envelopes in a repository and provides methods to load, save, and resolve peer IDs.",
+  "structs_or_classes": [],
+  "imports": [
+    "org.json.JSONArray",
+    "org.json.JSONObject",
+    "java.util.UUID",
+    "com.example.ironcore.IronCore",
+    "com.example.contactmanager.ContactManager",
+    "com.example.peeridvalidator.PeerIdValidator"
+  ],
+  "funcs": [
+    {
+      "name": "loadPendingOutboxAsync",
+      "line": 5970,
+      "calls_out_to": ["pendingOutboxFile.exists()", "org.json.JSONArray", "buildList", "optJSONObject", "optString", "optLong", "optInt", "parseRoutingHints", "normalizePublicKey", "resolveCanonicalPeerId"]
+    },
+    {
+      "name": "loadPendingOutboxSync",
+      "line": 6029,
+      "calls_out_to": ["pendingOutboxFile.exists()", "org.json.JSONArray", "buildList", "optJSONObject", "optString", "optLong", "optInt", "parseRoutingHints", "normalizePublicKey"]
+    },
+    {
+      "name": "loadPendingOutbox",
+      "line": 6074,
+      "calls_out_to": ["loadPendingOutboxSync"]
+    },
+    {
+      "name": "savePendingOutbox",
+      "line": 6078,
+      "calls_out_to": ["org.json.JSONArray", "buildList", "optJSONObject", "put", "writeText"]
+    },
+    {
+      "name": "pendingOutboxExpiryReason",
+      "line": 6107,
+      "calls_out_to": []
+    },
+    {
+      "name": "resolveCanonicalPeerId",
+      "line": 6117,
+      "calls_out_to": ["normalizePublicKey", "ironCore?.resolveIdentity", "contactManager?.list", "PeerIdValidator.isSame", "parseRoutingHints"]
+    },
+    {
+      "name": "resolveCanonicalPeerIdFromMessageHints",
+      "line": 6201,
+      "calls_out_to": ["trim", "normalizeNickname", "isBootstrapRelayPeer", "normalizePublicKey", "contactManager?.list", "PeerIdValidator.isSame"]
+    },
+    {
+      "name": "encodeMessageWithIdentityHints",
+      "line": 6238,
+      "calls_out_to": ["encodeMeshMessagePayload"]
+    },
+    {
+      "name": "encodeIdentitySyncPayload",
+      "line": 6243,
+      "calls_out_to": ["encodeMeshMessagePayload"]
+    },
+    {
+      "name": "encodeMeshMessagePayload",
+      "line": 6250,
+      "calls_out_to": ["ironCore?.getIdentityInfo", "normalizePublicKey", "identity.identityId", "identity.deviceId", "normalizeNickname", "getListeningAddresses", "getExternalAddresses"]
+    },
+    {
+      "name": "decodeMessageWithIdentityHints",
+      "line": 6281,
+      "calls_out_to": ["trim", "org.json.JSONObject", "optString", "parseRoutingHints", "normalizePublicKey"]
+    }
+  ]
+}
+{
+  "file": "MeshRepository.kt",
+  "chunk": 19,
+  "summary": "This class handles the decoding and processing of messages, including parsing JSON data, normalizing peer IDs and keys, and managing contact information.",
+  "structs_or_classes": [],
+  "imports": [
+    "org.json.JSONArray",
+    "java.util.UUID"
+  ],
+  "funcs": [
+    {
+      "name": "decodeMessagePayload",
+      "line": 629,
+      "calls_out_to": []
+    },
+    {
+      "name": "jsonArrayToStringList",
+      "line": 6318,
+      "calls_out_to": []
+    },
+    {
+      "name": "normalizePublicKey",
+      "line": 6337,
+      "calls_out_to": []
+    },
+    {
+      "name": "normalizeNickname",
+      "line": 6340,
+      "calls_out_to": []
+    },
+    {
+      "name": "isSyntheticFallbackNickname",
+      "line": 6342,
+      "calls_out_to": []
+    },
+    {
+      "name": "selectAuthoritativeNickname",
+      "line": 6350,
+      "calls_out_to": []
+    },
+    {
+      "name": "isBlePeerId",
+      "line": 6368,
+      "calls_out_to": []
+    },
+    {
+      "name": "isWifiPeerId",
+      "line": 6372,
+      "calls_out_to": []
+    },
+    {
+      "name": "selectCanonicalPeerId",
+      "line": 6380,
+      "calls_out_to": []
+    },
+    {
+      "name": "prepopulateDiscoveryNickname",
+      "line": 6401,
+      "calls_out_to": []
+    },
+    {
+      "name": "resolveKnownPeerNickname",
+      "line": 6440,
+      "calls_out_to": []
+    },
+    {
+      "name": "annotateIdentityInLedger",
+      "line": 6526,
+      "calls_out_to": []
+    },
+    {
+      "name": "appendRoutingHint",
+      "line": 6527,
+      "calls_out_to": []
+    },
+    {
+      "name": "storeLastKnownRoutePeerId",
+      "line": 6557,
+      "calls_out_to": []
+    },
+    {
+      "name": "mergeNotes",
+      "line": 6575,
+      "calls_out_to": []
+    },
+    {
+      "name": "resolveTransportIdentity",
+      "line": 6604,
+      "calls_out_to": []
+    }
+  ]
+}
+{
+  "file": "MeshRepository.kt",
+  "chunk": 20,
+  "summary": "This function is responsible for handling the creation of a transport identity resolution based on the provided normalized key.",
+  "structs_or_classes": [],
+  "imports": [
+    "com.ironcorelabs.sdk.common.PeerKeyUtils",
+    "com.ironcorelabs.sdk.common.RoutingHints",
+    "com.ironcorelabs.sdk.common.exceptions.Timber"
+  ],
+  "funcs": [
+    {
+      "name": "handleTransportIdentityResolution",
+      "line": 6649,
+      "calls_out_to": [
+        "isBootstrapRelayPeerFromKey",
+        "validatePeerBeforeContactCreation",
+        "createEmergencyContact",
+        "logIdentityResolutionDetails",
+        "normalizePublicKey",
+        "contactManager?.list()",
+        "appendRoutingHint",
+        "upsertRoutingListeners",
+        "uniffi.api.Contact",
+        "contactManager?.add(updated)",
+        "annotateIdentityInLedger",
+        "parseRoutingHints",
+        "parseAllRoutingPeerIds"
+      ]
+    }
+  ]
+}
+{
+  "file": "MeshRepository.kt",
+  "chunk": 21,
+  "summary": "This function builds a list of peer candidates for routing based on various sources including discovery, notes, and cached route peer IDs.",
+  "structs_or_classes": [],
+  "imports": [
+    "com.example.PeerIdValidator",
+    "com.example.IronCore",
+    "com.example.LedgerManager"
+  ],
+  "funcs": [
+    {
+      "name": "buildRoutePeerCandidates",
+      "line": 7014,
+      "calls_out_to": [
+        "discoverRoutePeersForPublicKey",
+        "parseAllRoutingPeerIds",
+        "routeCandidateMatchesRecipient",
+        "parseLastKnownRoute",
+        "getDialHintsForRoutePeer",
+        "buildDialCandidatesForPeer",
+        "isKnownRelay"
+      ]
+    },
+    {
+      "name": "discoverRoutePeersForPublicKey",
+      "line": 7084,
+      "calls_out_to": [
+        "normalizePublicKey",
+        "_discoveredPeers.value.values",
+        "filter",
+        "mapNotNull",
+        "toList"
+      ]
+    },
+    {
+      "name": "routeCandidateMatchesRecipient",
+      "line": 7119,
+      "calls_out_to": [
+        "extractIpv4FromMultiaddr",
+        "isPrivateIpv4",
+        "isSameLanAddress",
+        "_discoveredPeers.value.entries.any",
+        "ledgerManager?.dialableAddresses()",
+        "filter"
+      ]
+    },
+    {
+      "name": "parseLastKnownRoute",
+      "line": 7003,
+      "calls_out_to": [
+        "notes.isNullOrBlank",
+        "split",
+        "trim",
+        "removePrefix",
+        "isEmpty",
+        "contains",
+        "removeSuffix"
+      ]
+    },
+    {
+      "name": "getDialHintsForRoutePeer",
+      "line": 7173,
+      "calls_out_to": [
+        "ledgerManager?.dialableAddresses()",
+        "filter",
+        "buildDialCandidatesForPeer"
+      ]
+    },
+    {
+      "name": "buildDialCandidatesForPeer",
+      "line": 7153,
+      "calls_out_to": [
+        "normalizeAddressHint",
+        "mapNotNull",
+        "distinct",
+        "prioritizeAddressesForCurrentNetwork",
+        "relayCircuitAddressesForPeer"
+      ]
+    },
+    {
+      "name": "isKnownRelay",
+      "line": 7282,
+      "calls_out_to": [
+        "_discoveredPeers.value.entries.firstOrNull",
+        "parseBootstrapRelay",
+        "getHealthyRelays",
+        "relayCircuitBreaker.isCircuitOpen",
+        "relayCircuitBreaker.getFailureCount"
+      ]
+    },
+    {
+      "name": "relayCircuitAddressesForPeer",
+      "line": 7291,
+      "calls_out_to": [
+        "parseBootstrapRelay",
+        "_discoveredPeers.value.entries.filter",
+        "getDialHintsForRoutePeer"
+      ]
+    }
+  ]
+}
+{
+  "file": "MeshRepository.kt",
+  "chunk": 22,
+  "summary": "This file contains various functions related to peer management, network connectivity, and logging in a messaging application.",
+  "structs_or_classes": [],
+  "imports": [
+    "com.scmessenger.android.transport.NetworkType",
+    "com.scmessenger.android.transport.MdnsServiceDiscovery"
+  ],
+  "funcs": [
+    {
+      "name": "isBootstrapRelayPeerFromKey",
+      "line": 7352,
+      "calls_out_to": ["PeerKeyUtils.extractPeerIdFromPublicKey"]
+    },
+    {
+      "name": "createEmergencyContact",
+      "line": 7369,
+      "calls_out_to": [
+        "PeerKeyUtils.extractPeerIdFromPublicKey",
+        "PeerIdValidator.normalize"
+      ]
+    },
+    {
+      "name": "validatePeerBeforeContactCreation",
+      "line": 7408,
+      "calls_out_to": ["PeerKeyUtils.isValidPeerId", "PeerKeyUtils.isValidPublicKey"]
+    },
+    {
+      "name": "logIdentityResolutionDetails",
+      "line": 7435,
+      "calls_out_to": []
+    },
+    {
+      "name": "primeRelayBootstrapConnections",
+      "line": 7460,
+      "calls_out_to": [
+        "swarmBridge.dial",
+        "relayCircuitBreaker.allowRequest",
+        "shouldAttemptDial"
+      ]
+    },
+    {
+      "name": "primeRelayBootstrapConnectionsLegacy",
+      "line": 7523,
+      "calls_out_to": ["swarmBridge.dial", "shouldAttemptDial"]
+    },
+    {
+      "name": "prioritizeAddressesForCurrentNetwork",
+      "line": 7538,
+      "calls_out_to": []
+    },
+    {
+      "name": "isSameLanAddress",
+      "line": 7546,
+      "calls_out_to": ["extractIpv4FromMultiaddr", "getLocalIpAddress"]
+    },
+    {
+      "name": "extractIpv4FromMultiaddr",
+      "line": 7552,
+      "calls_out_to": []
+    },
+    {
+      "name": "sameSubnet24",
+      "line": 7561,
+      "calls_out_to": []
+    },
+    {
+      "name": "racingBootstrapWithFallback",
+      "line": 7569,
+      "calls_out_to": [
+        "networkDetector.getTransportPriority",
+        "networkDetector.getNetworkDiagnostics",
+        "relayCircuitBreaker.allowRequest",
+        "shouldAttemptDial",
+        "extractPortFromMultiaddr"
+      ]
+    },
+    {
+      "name": "attemptMdnsFallback",
+      "line": 7676,
+      "calls_out_to": ["meshService.getStats()?.peersDiscovered"]
+    }
+  ]
+}
+{
+  "file": "MeshRepository.kt",
+  "chunk": 23,
+  "summary": "This class manages the mesh repository for a peer-to-peer communication system. It handles bootstraping, network changes, and identity export.",
+  "structs_or_classes": [
+    {
+      "name": "BootstrapAttempt",
+      "line": 7708
+    },
+    {
+      "name": "BootstrapResult",
+      "line": 7714
+    }
+  ],
+  "imports": [],
+  "funcs": [
+    {
+      "name": "bootstrapWithFallbackStrategy",
+      "line": 7724,
+      "calls_out_to": []
+    },
+    {
+      "name": "startNetworkChangeWatch",
+      "line": 7748,
+      "calls_out_to": ["networkDetector.networkType.collect"]
+    },
+    {
+      "name": "stopNetworkChangeWatch",
+      "line": 7792,
+      "calls_out_to": []
+    },
+    {
+      "name": "classifyBootstrapError",
+      "line": 7801,
+      "calls_out_to": ["extractPortFromMultiaddr"]
+    },
+    {
+      "name": "shouldAttemptDial",
+      "line": 7848,
+      "calls_out_to": []
+    },
+    {
+      "name": "startStorageMaintenance",
+      "line": 7895,
+      "calls_out_to": ["android.os.StatFs", "ironCore?.updateDiskStats", "ironCore?.performMaintenance"]
+    },
+    {
+      "name": "getExternalAddresses",
+      "line": 7927,
+      "calls_out_to": ["swarmBridge?.getExternalAddresses"]
+    },
+    {
+      "name": "getListeningAddresses",
+      "line": 7931,
+      "calls_out_to": ["swarmBridge?.getListeners"]
+    },
+    {
+      "name": "getLocalIpAddress",
+      "line": 7942,
+      "calls_out_to": ["java.net.NetworkInterface.getNetworkInterfaces", "java.net.Inet4Address.isLoopbackAddress", "java.net.Inet4Address.isLinkLocalAddress"]
+    },
+    {
+      "name": "getIdentityExportString",
+      "line": 7985,
+      "calls_out_to": ["getIdentityInfo", "normalizeOutboundListenerHints", "normalizeExternalAddressHints", "getPreferredRelay", "getLocalIpAddress"]
+    },
+    {
+      "name": "observeIncomingMessages",
+      "line": 8018,
+      "calls_out_to": ["com.scmessenger.android.service.MeshEventBus.messageEvents"]
+    },
+    {
+      "name": "observePeers",
+      "line": 8025,
+      "calls_out_to": ["com.scmessenger.android.service.MeshEventBus.peerEvents.collect", "ledgerManager?.dialableAddresses()?.mapNotNull"]
+    },
+    {
+      "name": "observeNetworkStats",
+      "line": 8043,
+      "calls_out_to": ["meshService?.getStats"]
+    }
+  ]
+}
+{
+  "file": "MeshRepository.kt",
+  "chunk": 25,
+  "summary": "This class contains methods for handling BLE transport degradation, recording transport events, and managing various aspects of the mesh network.",
+  "structs_or_classes": [],
+  "imports": [
+    "com.scmessenger.android.transport.TransportHealthMonitor",
+    "com.scmessenger.android.service.TransportManager",
+    "com.scmessenger.android.router.SmartTransportRouter",
+    "uniffi.api.MessageRecord",
+    "com.scmessenger.android.topic.TopicManager",
+    "com.scmessenger.android.network.NetworkDetector",
+    "com.scmessenger.android.circuitbreaker.CircuitBreaker",
+    "com.scmessenger.android.diagnostics.DiagnosticsReporter"
+  ],
+  "funcs": [
+    {
+      "name": "handleBleTransportDegradation",
+      "line": 8406,
+      "calls_out_to": ["transportHealthMonitor.isDegraded", "Timber.w", "bleScanner.setBackgroundMode", "bleScanner.clearPeerCache", "transportHealthMonitor.getHealth", "Timber.w"]
+    },
+    {
+      "name": "recordTransportEvent",
+      "line": 8422,
+      "calls_out_to": ["transportHealthMonitor.recordSuccess", "transportManager?.attemptBleRecovery", "transportHealthMonitor.isDegraded", "handleBleTransportDegradation"]
+    },
+    {
+      "name": "getTransportHealthSummary",
+      "line": 8437,
+      "calls_out_to": ["transportHealthMonitor.getSummary"]
+    },
+    {
+      "name": "getActiveTransports",
+      "line": 8445,
+      "calls_out_to": ["transportManager?.getActiveTransports"]
+    },
+    {
+      "name": "transportTypeFromValue",
+      "line": 8456,
+      "calls_out_to": ["smartTransportRouter?.let", "SmartTransportRouter.TransportType.fromValue"]
+    },
+    {
+      "name": "getSmartAvailableTransports",
+      "line": 8464,
+      "calls_out_to": ["smartTransportRouter?.getAvailableTransports"]
+    },
+    {
+      "name": "getAvailableTransportsSorted",
+      "line": 8472,
+      "calls_out_to": ["smartTransportRouter?.getAvailableTransportsSorted"]
+    },
+    {
+      "name": "getDedupStats",
+      "line": 8480,
+      "calls_out_to": ["smartTransportRouter?.getDedupStats"]
+    },
+    {
+      "name": "getSubscribedTopicsList",
+      "line": 8488,
+      "calls_out_to": ["topicManager?.getSubscribedTopicsList"]
+    },
+    {
+      "name": "getKnownTopicsList",
+      "line": 8496,
+      "calls_out_to": ["topicManager?.getKnownTopicsList"]
+    },
+    {
+      "name": "filterMessagesByTopic",
+      "line": 8502,
+      "calls_out_to": ["topicManager?.filterMessagesByTopic"]
+    },
+    {
+      "name": "enableTransport",
+      "line": 8510,
+      "calls_out_to": ["transportManager?.enableTransport"]
+    },
+    {
+      "name": "startAllTransports",
+      "line": 8520,
+      "calls_out_to": ["transportManager?.startAll"]
+    },
+    {
+      "name": "shouldUseTransport",
+      "line": 8526,
+      "calls_out_to": ["transportHealthMonitor.shouldUseTransport"]
+    },
+    {
+      "name": "getBleQuotaCount",
+      "line": 8536,
+      "calls_out_to": ["transportManager?.getBleQuotaCount"]
+    },
+    {
+      "name": "isPortLikelyBlocked",
+      "line": 8542,
+      "calls_out_to": ["networkDetector.isPortLikelyBlocked"]
+    },
+    {
+      "name": "getNetworkStateLogString",
+      "line": 8550,
+      "calls_out_to": ["networkDetector.getNetworkDiagnostics().toLogString"]
+    },
+    {
+      "name": "getHealthyRelays",
+      "line": 8560,
+      "calls_out_to": ["relayCircuitBreaker.getHealthyRelays"]
+    },
+    {
+      "name": "getLastFailure",
+      "line": 8566,
+      "calls_out_to": ["networkFailureMetrics.getLastFailure"]
+    },
+    {
+      "name": "getLastFailureReason",
+      "line": 8574,
+      "calls_out_to": ["relayCircuitBreaker.getLastFailureReason"]
+    },
+    {
+      "name": "getOpenCircuitCount",
+      "line": 8582,
+      "calls_out_to": ["relayCircuitBreaker.getOpenCircuits().size"]
+    },
+    {
+      "name": "formatDiagnosticsReportForUser",
+      "line": 8592,
+      "calls_out_to": ["diagnosticsReporter.generateReport", "diagnosticsReporter.formatReportForUser", "Timber.e"]
+    },
+    {
+      "name": "hasDnsFailures",
+      "line": 8604,
+      "calls_out_to": ["networkFailureMetrics.hasDnsFailures"]
+    },
+    {
+      "name": "hasPortBlocking",
+      "line": 8612,
+      "calls_out_to": ["networkFailureMetrics.hasPortBlocking"]
+    }
+  ]
+}
+{
+  "file": "PreferencesRepository.kt",
+  "chunk": 1,
+  "summary": "Repository for Android-specific preferences using DataStore.",
+  "structs_or_classes": [],
+  "imports": [
+    "android.content.Context",
+    "androidx.datastore.core.DataStore",
+    "androidx.datastore.preferences.core.*",
+    "androidx.datastore.preferences.preferencesDataStore",
+    "kotlinx.coroutines.flow.Flow",
+    "kotlinx.coroutines.flow.map",
+    "timber.log.Timber"
+  ],
+  "funcs": [
+    {
+      "name": "setServiceAutoStart",
+      "line": 48,
+      "calls_out_to": []
+    },
+    {
+      "name": "setVpnMode",
+      "line": 59,
+      "calls_out_to": []
+    },
+    {
+      "name": "setOnboardingCompleted",
+      "line": 74,
+      "calls_out_to": []
+    },
+    {
+      "name": "setInstallChoiceCompleted",
+      "line": 85,
+      "calls_out_to": []
+    },
+    {
+      "name": "setThemeMode",
+      "line": 108,
+      "calls_out_to": []
+    },
+    {
+      "name": "setNotificationsEnabled",
+      "line": 119,
+      "calls_out_to": []
+    },
+    {
+      "name": "setShowPeerCount",
+      "line": 130,
+      "calls_out_to": []
+    },
+    {
+      "name": "setAutoAdjustEnabled",
+      "line": 145,
+      "calls_out_to": []
+    },
+    {
+      "name": "setManualAdjustmentProfile",
+      "line": 156,
+      "calls_out_to": []
+    },
+    {
+      "name": "clearAll",
+      "line": 167,
+      "calls_out_to": []
+    },
+    {
+      "name": "setBleRotationEnabled",
+      "line": 180,
+      "calls_out_to": []
+    },
+    {
+      "name": "setBleRotationIntervalSec",
+      "line": 192,
+      "calls_out_to": []
+    },
+    {
+      "name": "setIdentityNickname",
+      "line": 207,
+      "calls_out_to": []
+    }
+  ]
+}
+{
+  "file": "DiagnosticsReporter.kt",
+  "chunk": 1,
+  "summary": "Aggregates network diagnostics into a user-facing report.",
+  "structs_or_classes": [
+    {
+      "name": "NetworkDiagnosticsReport",
+      "line": 25
+    }
+  ],
+  "imports": [
+    "android.content.Context",
+    "com.scmessenger.android.transport.NetworkType",
+    "com.scmessenger.android.utils.NetworkFailureMetrics",
+    "timber.log.Timber",
+    "dagger.hilt.android.qualifiers.ApplicationContext",
+    "javax.inject.Inject",
+    "javax.inject.Singleton"
+  ],
+  "funcs": [
+    {
+      "name": "generateReport",
+      "line": 35,
+      "calls_out_to": ["networkDiagnostics.testNetworkConnectivity", "networkTypeDetector.detectNetworkType", "failureMetrics.getSummary"]
+    },
+    {
+      "name": "generateRecommendations",
+      "line": 63,
+      "calls_out_to": ["testResults.internetConnectivity", "testResults.dnsResolution", "testResults.portReachability", "report.relayResults"]
+    }
+  ]
+}
+{
+  "file": "NetworkDiagnostics.kt",
+  "chunk": 1,
+  "summary": "This class provides comprehensive network diagnostics to identify and troubleshoot connectivity issues.",
+  "structs_or_classes": [
+    {
+      "name": "NetworkTestResults",
+      "line": 32
+    }
+  ],
+  "imports": [
+    "android.content.Context",
+    "android.net.ConnectivityManager",
+    "android.net.NetworkCapabilities",
+    "com.scmessenger.android.transport.NetworkType",
+    "kotlinx.coroutines.Dispatchers",
+    "kotlinx.coroutines.withContext",
+    "timber.log.Timber",
+    "java.net.HttpURLConnection",
+    "java.net.InetAddress",
+    "java.net.InetSocketAddress",
+    "java.net.Socket",
+    "java.net.URL",
+    "dagger.hilt.android.qualifiers.ApplicationContext",
+    "javax.inject.Inject",
+    "javax.inject.Singleton"
+  ],
+  "funcs": [
+    {
+      "name": "testNetworkConnectivity",
+      "line": 41,
+      "calls_out_to": ["testInternetConnectivity", "testDnsResolution", "testCommonPorts", "testRelaySpecificConnectivity", "detectNetworkType", "detectNetworkRestrictions"]
+    },
+    {
+      "name": "testInternetConnectivity",
+      "line": 60,
+      "calls_out_to": []
+    },
+    {
+      "name": "testDnsResolution",
+      "line": 77,
+      "calls_out_to": []
+    },
+    {
+      "name": "testCommonPorts",
+      "line": 94,
+      "calls_out_to": []
+    },
+    {
+      "name": "testRelaySpecificConnectivity",
+      "line": 109,
+      "calls_out_to": []
+    },
+    {
+      "name": "detectNetworkType",
+      "line": 125,
+      "calls_out_to": ["connectivityManager.activeNetwork", "connectivityManager.getNetworkCapabilities"]
+    },
+    {
+      "name": "detectNetworkRestrictions",
+      "line": 137,
+      "calls_out_to": ["connectivityManager.activeNetwork", "connectivityManager.getNetworkCapabilities"]
+    },
+    {
+      "name": "isPortOpen",
+      "line": 157,
+      "calls_out_to": []
+    }
+  ]
+}
+{
+  "file": "NetworkTypeDetector.kt",
+  "chunk": 1,
+  "summary": "P0_ANDROID_007: Detects current network type and identifies carrier-level restrictions.",
+  "structs_or_classes": [],
+  "imports": [
+    "android.content.Context",
+    "android.net.ConnectivityManager",
+    "android.net.NetworkCapabilities",
+    "com.scmessenger.android.transport.NetworkType",
+    "@ApplicationContext",
+    "javax.inject.Inject",
+    "javax.inject.Singleton"
+  ],
+  "funcs": [
+    {
+      "name": "detectNetworkType",
+      "line": 24,
+      "calls_out_to": ["connectivityManager.activeNetwork", "connectivityManager.getNetworkCapabilities(network)", "when"]
+    },
+    {
+      "name": "isCellularPortRestricted",
+      "line": 53,
+      "calls_out_to": ["isPortBlocked('8.8.8.8', 9001)", "isPortBlocked('8.8.8.8', 9010)"]
+    },
+    {
+      "name": "isCellularNetwork",
+      "line": 57,
+      "calls_out_to": ["detectNetworkType()"]
+    },
+    {
+      "name": "isPortBlocked",
+      "line": 62,
+      "calls_out_to": ["java.net.Socket.connect(java.net.InetSocketAddress(host, port), 3000)", "java.net.Socket.close()"]
+    }
+  ]
+}
+{
+  "file": "MeshRepository.kt",
+  "chunk": 24,
+  "summary": "This class manages the mesh repository, including cleanup, diagnostics, and emergency contact recovery.",
+  "structs_or_classes": [],
+  "imports": [
+    "kotlinx.coroutines.delay",
+    "android.content.Context",
+    "java.io.File",
+    "com.example.ironcore.IronCore",
+    "com.example.contactmanager.ContactManager",
+    "com.example.historymanager.HistoryManager",
+    "com.example.settingsmanager.SettingsManager",
+    "com.example.autoadjustengine.AutoAdjustEngine",
+    "com.example.utils.Timber"
+  ],
+  "funcs": [
+    {
+      "name": "cleanup",
+      "line": 8061,
+      "calls_out_to": []
+    },
+    {
+      "name": "getDiagnosticsLogPath",
+      "line": 8093,
+      "calls_out_to": []
+    },
+    {
+      "name": "getDiagnosticsLogs",
+      "line": 8097,
+      "calls_out_to": [
+        "File.readLines"
+      ]
+    },
+    {
+      "name": "clearDiagnosticsLogs",
+      "line": 8117,
+      "calls_out_to": [
+        "File.writeText"
+      ]
+    },
+    {
+      "name": "logDeliveryState",
+      "line": 8129,
+      "calls_out_to": []
+    },
+    {
+      "name": "logDeliveryAttempt",
+      "line": 8134,
+      "calls_out_to": [
+        "File.exists"
+      ]
+    },
+    {
+      "name": "migrateToCanonicalIds",
+      "line": 8160,
+      "calls_out_to": [
+        "ironCore.resolveIdentity",
+        "contacts.list",
+        "contacts.get",
+        "history.stats",
+        "history.recent",
+        "contacts.add"
+      ]
+    },
+    {
+      "name": "emergencyContactRecovery",
+      "line": 8246,
+      "calls_out_to": [
+        "historyManager.recent",
+        "contacts.list",
+        "ironCore.extractPublicKeyFromPeerId"
+      ]
+    },
+    {
+      "name": "detectAndRepairCorruption",
+      "line": 8318,
+      "calls_out_to": [
+        "historyManager.stats",
+        "contacts.list"
+      ]
+    },
+    {
+      "name": "backupCorruptedDatabase",
+      "line": 8364,
+      "calls_out_to": [
+        "File.mkdirs",
+        "File.exists",
+        "File.copyTo"
+      ]
+    }
+  ]
+}
+{
+  "file": "AndroidPlatformBridge.kt",
+  "chunk": 2,
+  "summary": "This class handles BLE communication and background/foreground state management for a mesh network.",
+  "structs_or_classes": [],
+  "imports": [
+    "import timber.log.Timber"
+  ],
+  "funcs": [
+    {
+      "name": "sendBlePacket",
+      "line": 351,
+      "calls_out_to": ["bleGattClient?.sendData", "bleAdvertiser?.sendData"]
+    },
+    {
+      "name": "onEnteringBackground",
+      "line": 380,
+      "calls_out_to": ["meshRepository.pauseMeshService"]
+    },
+    {
+      "name": "onEnteringForeground",
+      "line": 387,
+      "calls_out_to": ["meshRepository.resumeMeshService"]
+    },
+    {
+      "name": "applyAdjustments",
+      "line": 398,
+      "calls_out_to": ["transportManager?.applyScanSettings", "transportManager?.applyAdvertiseSettings", "applyBleSettings"]
+    },
+    {
+      "name": "notifyBackground",
+      "line": 453,
+      "calls_out_to": ["onEnteringBackground"]
+    },
+    {
+      "name": "notifyForeground",
+      "line": 460,
+      "calls_out_to": ["onEnteringForeground"]
+    },
+    {
+      "name": "checkBatteryState",
+      "line": 467,
+      "calls_out_to": ["updateBatteryState"]
+    },
+    {
+      "name": "checkNetworkState",
+      "line": 474,
+      "calls_out_to": ["updateNetworkState"]
+    }
+  ]
+}
+{
+  "file": "AndroidPlatformBridge.kt",
+  "chunk": 1,
+  "summary": "This class implements the PlatformBridge UniFFI callback interface for Android. It monitors system state and reports changes to the Rust core via the PlatformBridge interface.",
+  "structs_or_classes": [],
+  "imports": [
+    "android.content.BroadcastReceiver",
+    "android.content.Context",
+    "android.content.Intent",
+    "android.content.IntentFilter",
+    "android.net.ConnectivityManager",
+    "android.net.Network",
+    "android.net.NetworkCapabilities",
+    "android.net.NetworkRequest",
+    "android.os.BatteryManager",
+    "android.os.Build",
+    "android.os.PowerManager",
+    "com.scmessenger.android.data.MeshRepository",
+    "com.scmessenger.android.transport.ble.BleAdvertiser",
+    "com.scmessenger.android.transport.ble.BleGattClient",
+    "com.scmessenger.android.transport.ble.BleGattServer",
+    "com.scmessenger.android.transport.ble.BleScanner",
+    "@ApplicationContext",
+    "kotlinx.coroutines.CoroutineScope",
+    "kotlinx.coroutines.Dispatchers",
+    "kotlinx.coroutines.SupervisorJob",
+    "kotlinx.coroutines.launch",
+    "timber.log.Timber",
+    "javax.inject.Inject",
+    "javax.inject.Singleton"
+  ],
+  "funcs": [
+    {
+      "name": "initialize",
+      "line": 77,
+      "calls_out_to": ["registerBatteryMonitor", "registerNetworkMonitor", "initializeMotionDetection"]
+    },
+    {
+      "name": "setBleComponents",
+      "line": 92,
+      "calls_out_to": []
+    },
+    {
+      "name": "setTransportManager",
+      "line": 108,
+      "calls_out_to": []
+    },
+    {
+      "name": "cleanup",
+      "line": 116,
+      "calls_out_to": ["context.unregisterReceiver(batteryReceiver)", "context.unregisterReceiver(networkCallback)", "context.unregisterReceiver(motionReceiver)"]
+    },
+    {
+      "name": "registerBatteryMonitor",
+      "line": 133,
+      "calls_out_to": []
+    },
+    {
+      "name": "onReceive",
+      "line": 135,
+      "calls_out_to": ["updateBatteryState"]
+    },
+    {
+      "name": "updateBatteryState",
+      "line": 149,
+      "calls_out_to": ["context.registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))", "meshRepository.updateDeviceState(deviceProfile)", "meshRepository.computeAdjustmentProfile(deviceProfile)", "meshRepository.computeBleAdjustment(profile)", "meshRepository.computeRelayAdjustment(profile)", "applyAdjustments(bleAdjustment, relayAdjustment)"]
+    },
+    {
+      "name": "registerNetworkMonitor",
+      "line": 178,
+      "calls_out_to": []
+    },
+    {
+      "name": "onAvailable",
+      "line": 184,
+      "calls_out_to": ["updateNetworkState"]
+    },
+    {
+      "name": "onLost",
+      "line": 188,
+      "calls_out_to": ["updateNetworkState"]
+    },
+    {
+      "name": "onCapabilitiesChanged",
+      "line": 192,
+      "calls_out_to": ["updateNetworkState"]
+    },
+    {
+      "name": "updateNetworkState",
+      "line": 204,
+      "calls_out_to": ["connectivityManager.activeNetwork", "connectivityManager.getNetworkCapabilities(it)", "meshRepository.updateDeviceState(deviceProfile)", "meshRepository.computeAdjustmentProfile(deviceProfile)", "meshRepository.computeBleAdjustment(profile)", "meshRepository.computeRelayAdjustment(profile)", "applyAdjustments(bleAdjustment, relayAdjustment)"]
+    },
+    {
+      "name": "initializeMotionDetection",
+      "line": 224,
+      "calls_out_to": []
+    },
+    {
+      "name": "onReceive",
+      "line": 234,
+      "calls_out_to": ["currentMotionState = uniffi.api.MotionState.WALKING", "onMotionChanged(currentMotionState)", "currentMotionState = uniffi.api.MotionState.STILL", "onMotionChanged(currentMotionState)"]
+    },
+    {
+      "name": "onBatteryChanged",
+      "line": 256,
+      "calls_out_to": ["meshRepository.updateDeviceState(deviceProfile)", "meshRepository.computeAdjustmentProfile(deviceProfile)", "meshRepository.computeBleAdjustment(profile)", "meshRepository.computeRelayAdjustment(profile)", "applyAdjustments(bleAdjustment, relayAdjustment)"]
+    },
+    {
+      "name": "onNetworkChanged",
+      "line": 281,
+      "calls_out_to": ["previousWifi = this.hasWifi", "meshRepository.updateDeviceState(deviceProfile)", "meshRepository.computeAdjustmentProfile(deviceProfile)", "meshRepository.computeBleAdjustment(profile)", "meshRepository.computeRelayAdjustment(profile)", "applyAdjustments(bleAdjustment, relayAdjustment)"]
+    },
+    {
+      "name": "onMotionChanged",
+      "line": 311,
+      "calls_out_to": ["meshRepository.updateDeviceState(deviceProfile)", "meshRepository.computeAdjustmentProfile(deviceProfile)", "meshRepository.computeBleAdjustment(profile)", "meshRepository.computeRelayAdjustment(profile)", "applyAdjustments(bleAdjustment, relayAdjustment)"]
+    },
+    {
+      "name": "onBleDataReceived",
+      "line": 335,
+      "calls_out_to": ["MeshEventBus.emitNetworkEvent(NetworkEvent.ConnectionQualityChanged(peerId = peerId, quality = ConnectionQuality.GOOD))", "meshRepository.notifyNetworkRecovered()"]
+    }
+  ]
+}
+{
+  "file": "MeshForegroundService.kt",
+  "chunk": 1,
+  "summary": "A foreground service that manages mesh network connectivity.",
+  "structs_or_classes": [],
+  "imports": [
+    "android.app.Notification",
+    "android.app.NotificationChannel",
+    "android.app.NotificationManager",
+    "android.app.PendingIntent",
+    "android.app.Service",
+    "android.content.Context",
+    "android.content.Intent",
+    "android.content.pm.ServiceInfo",
+    "android.os.Build",
+    "android.os.IBinder",
+    "android.os.PowerManager",
+    "android.os.SystemClock",
+    "androidx.core.app.NotificationCompat",
+    "androidx.core.app.ServiceCompat",
+    "com.scmessenger.android.R",
+    "com.scmessenger.android.ui.MainActivity",
+    "com.scmessenger.android.utils.NotificationHelper",
+    "dagger.hilt.android.AndroidEntryPoint",
+    "kotlinx.coroutines.CoroutineScope",
+    "kotlinx.coroutines.Dispatchers",
+    "kotlinx.coroutines.SupervisorJob",
+    "kotlinx.coroutines.cancel",
+    "kotlinx.coroutines.delay",
+    "kotlinx.coroutines.isActive",
+    "kotlinx.coroutines.launch",
+    "kotlinx.coroutines.withContext",
+    "timber.log.Timber",
+    "java.util.Collections",
+    "java.util.concurrent.atomic.AtomicInteger",
+    "javax.inject.Inject"
+  ],
+  "funcs": [
+    {
+      "name": "onCreate",
+      "line": 70,
+      "calls_out_to": []
+    },
+    {
+      "name": "onStartCommand",
+      "line": 91,
+      "calls_out_to": ["tryStartForeground", "decideCommand"]
+    },
+    {
+      "name": "startMeshService",
+      "line": 121,
+      "calls_out_to": [
+        "withContext(Dispatchers.Default)",
+        "meshRepository.getServiceState() == uniffi.api.ServiceState.RUNNING",
+        "wireCoreDelegate",
+        "launch { meshRepository.incomingMessages.collect { message -> showMessageNotificationWithClassification(message) } }",
+        "launch { MeshEventBus.peerEvents.collect { event -> when (event) { is PeerEvent.Connected -> { connectedPeers.add(event.peerId); updateNotification(); NotificationHelper.showPeerDiscoveredNotification(context = this@MeshForegroundService, peerId = event.peerId, transport = \"Connected\") } is PeerEvent.Disconnected -> { connectedPeers.remove(event.peerId); updateNotification() } else -> {} } } }",
+        "launch { MeshEventBus.statusEvents.collect { event -> when (event) { is StatusEvent.StatsUpdated -> { messagesRelayed.set(event.stats.messagesRelayed.toInt()); updateNotification() } else -> {} } } }",
+        "startPeriodicAdjustments"
+      ]
+    },
+    {
+      "name": "wireCoreDelegate",
+      "line": 257,
+      "calls_out_to": []
+    },
+    {
+      "name": "startPeriodicAdjustments",
+      "line": 263,
+      "calls_out_to": ["delay(30000L)", "platformBridge.checkBatteryState()", "platformBridge.checkNetworkState()", "serviceHealthMonitor.updateHeartbeat()"]
+    },
+    {
+      "name": "acquireWakeLock",
+      "line": 293,
+      "calls_out_to": []
+    },
+    {
+      "name": "releaseWakeLock",
+      "line": 306,
+      "calls_out_to": []
+    },
+    {
+      "name": "stopMeshService",
+      "line": 317,
+      "calls_out_to": [
+        "withContext(Dispatchers.Default)",
+        "kotlin.runCatching { meshRepository.stopMeshService() }",
+        "serviceHealthMonitor.stopMonitoring()"
+      ]
+    }
+  ]
+}
+{"file":"MeshForegroundService.kt","chunk":3,"summary":"","structs_or_classes":[],"imports":[],"funcs":[{"name":"onCreate","line":701,"calls_out_to":[]}],"_REVIEW_REQUIRED":true}
+{
+  "file": "MeshVpnService.kt",
+  "chunk": 1,
+  "summary": "A background service that creates a dummy VPN tunnel to ensure the app stays alive even under aggressive battery optimization.",
+  "structs_or_classes": [],
+  "imports": [
+    "android.content.Intent",
+    "android.net.VpnService",
+    "android.os.Build",
+    "android.os.ParcelFileDescriptor",
+    "timber.log.Timber",
+    "java.io.FileInputStream",
+    "java.nio.ByteBuffer"
+  ],
+  "funcs": [
+    {
+      "name": "onCreate",
+      "line": 26,
+      "calls_out_to": []
+    },
+    {
+      "name": "onStartCommand",
+      "line": 31,
+      "calls_out_to": ["startVpn", "stopVpn"]
+    },
+    {
+      "name": "startVpn",
+      "line": 39,
+      "calls_out_to": [
+        "Builder",
+        "setSession",
+        "addAddress",
+        "establish",
+        "Thread"
+      ]
+    },
+    {
+      "name": "stopVpn",
+      "line": 100,
+      "calls_out_to": ["close"]
+    },
+    {
+      "name": "onDestroy",
+      "line": 118,
+      "calls_out_to": ["stopVpn"]
+    },
+    {
+      "name": "onRevoke",
+      "line": 124,
+      "calls_out_to": ["stopVpn"]
+    }
+  ]
+}
+{
+  "file": "MeshForegroundService.kt",
+  "chunk": 2,
+  "summary": "Handles the lifecycle of a mesh foreground service, including stopping and pausing the service, updating notifications, and managing message notifications.",
+  "structs_or_classes": [],
+  "imports": [
+    "android.app.ActivityManager",
+    "android.content.Intent",
+    "android.content.PendingIntent",
+    "android.os.Build",
+    "android.os.IBinder",
+    "android.os.Looper",
+    "android.os.MessageRecord",
+    "android.service.notification.NotificationCompat",
+    "android.util.Log",
+    "com.scmessenger.android.R",
+    "com.scmessenger.android.repository.MeshRepository",
+    "com.scmessenger.android.utils.NotificationHelper",
+    "com.scmessenger.android.utils.ServiceHealthMonitor"
+  ],
+  "funcs": [
+    {
+      "name": "onCreate",
+      "line": 70,
+      "calls_out_to": []
+    },
+    {
+      "name": "onStartCommand",
+      "line": 91,
+      "calls_out_to": ["startMeshService", "wireCoreDelegate"]
+    },
+    {
+      "name": "startMeshService",
+      "line": 121,
+      "calls_out_to": ["pauseMeshService", "resumeMeshService"]
+    },
+    {
+      "name": "wireCoreDelegate",
+      "line": 257,
+      "calls_out_to": []
+    },
+    {
+      "name": "startPeriodicAdjustments",
+      "line": 263,
+      "calls_out_to": ["pauseMeshService", "resumeMeshService"]
+    },
+    {
+      "name": "acquireWakeLock",
+      "line": 293,
+      "calls_out_to": []
+    },
+    {
+      "name": "releaseWakeLock",
+      "line": 306,
+      "calls_out_to": []
+    },
+    {
+      "name": "stopMeshService",
+      "line": 317,
+      "calls_out_to": ["pauseMeshService", "resumeMeshService"]
+    },
+    {
+      "name": "pauseMeshService",
+      "line": 366,
+      "calls_out_to": []
+    },
+    {
+      "name": "resumeMeshService",
+      "line": 375,
+      "calls_out_to": []
+    },
+    {
+      "name": "createNotification",
+      "line": 384,
+      "calls_out_to": ["createNotificationChannel"]
+    },
+    {
+      "name": "createSimpleForegroundNotification",
+      "line": 437,
+      "calls_out_to": ["createNotificationChannel", "buildForegroundServiceNotification"]
+    },
+    {
+      "name": "updateNotification",
+      "line": 483,
+      "calls_out_to": []
+    },
+    {
+      "name": "tryStartForeground",
+      "line": 489,
+      "calls_out_to": ["createNotification"]
+    },
+    {
+      "name": "showMessageNotificationWithClassification",
+      "line": 526,
+      "calls_out_to": ["getContact", "hasConversationWith", "isAppInForeground", "getActiveConversationId", "meshRepository.getContact", "meshRepository.hasConversationWith", "NotificationHelper.showMessageNotification"]
+    },
+    {
+      "name": "isAppInForeground",
+      "line": 593,
+      "calls_out_to": []
+    },
+    {
+      "name": "getActiveConversationId",
+      "line": 617,
+      "calls_out_to": []
+    },
+    {
+      "name": "createNotificationChannel",
+      "line": 622,
+      "calls_out_to": ["NotificationManager.createNotificationChannel"]
+    },
+    {
+      "name": "onBind",
+      "line": 637,
+      "calls_out_to": ["serviceHealthMonitor.isServiceHealthy", "serviceHealthMonitor.updateHeartbeat"]
+    },
+    {
+      "name": "onDestroy",
+      "line": 645,
+      "calls_out_to": ["releaseWakeLock", "meshRepository.getServiceState", "kotlin.runCatching", "meshRepository.stopMeshService"]
+    }
+  ]
+}
+{
+  "file": "PerformanceMonitor.kt",
+  "chunk": 1,
+  "summary": "A performance monitoring class for tracking ANR events, service uptime, and UI timing.",
+  "structs_or_classes": [
+    {
+      "name": "AnrEvent",
+      "line": 214
+    },
+    {
+      "name": "UITimingEvent",
+      "line": 228
+    }
+  ],
+  "imports": [
+    "android.os.Build",
+    "android.content.Context",
+    "android.os.SystemClock",
+    "android.util.SparseArray",
+    "timber.log.Timber",
+    "java.io.File",
+    "java.util.concurrent.ConcurrentHashMap",
+    "java.util.concurrent.TimeUnit"
+  ],
+  "funcs": [
+    {
+      "name": "recordAnrEvent",
+      "line": 53,
+      "calls_out_to": ["Timber.e", "writeAnrEvent"]
+    },
+    {
+      "name": "recordUiTiming",
+      "line": 88,
+      "calls_out_to": ["Timber.w"]
+    },
+    {
+      "name": "getServiceUptimeMs",
+      "line": 111,
+      "calls_out_to": []
+    },
+    {
+      "name": "getServiceUptimeString",
+      "line": 123,
+      "calls_out_to": []
+    },
+    {
+      "name": "getAnrStats",
+      "line": 134,
+      "calls_out_to": []
+    },
+    {
+      "name": "getHealthStatus",
+      "line": 141,
+      "calls_out_to": ["Timber.i"]
+    },
+    {
+      "name": "getAllAnrEvents",
+      "line": 152,
+      "calls_out_to": []
+    },
+    {
+      "name": "writeAnrEvent",
+      "line": 159,
+      "calls_out_to": ["File.writeText", "Timber.i"]
+    },
+    {
+      "name": "recordServiceStart",
+      "line": 183,
+      "calls_out_to": []
+    },
+    {
+      "name": "recordServiceStop",
+      "line": 191,
+      "calls_out_to": ["Timber.i"]
+    },
+    {
+      "name": "clearAnrEvents",
+      "line": 199,
+      "calls_out_to": ["File.delete", "Timber.i"]
+    }
+  ]
+}
+{
+  "file": "ServiceHealthMonitor.kt",
+  "chunk": 2,
+  "summary": "This class provides methods to monitor the health of a service, including calculating uptime and generating health statistics summary.",
+  "structs_or_classes": [],
+  "imports": [
+    "import android.os.SystemClock"
+  ],
+  "funcs": [
+    {
+      "name": "getServiceUptimeSeconds",
+      "line": 352,
+      "calls_out_to": []
+    },
+    {
+      "name": "getHealthSummary",
+      "line": 359,
+      "calls_out_to": ["getServiceUptimeSeconds"]
+    },
+    {
+      "name": "cleanup",
+      "line": 374,
+      "calls_out_to": ["stopMonitoring"]
+    }
+  ]
+}
+{
+  "file": "BleAdvertiser.kt",
+  "chunk": 1,
+  "summary": "Handles Bluetooth Low Energy advertising to announce presence to the mesh.",
+  "structs_or_classes": [],
+  "imports": [
+    "android.annotation.SuppressLint",
+    "android.Manifest",
+    "android.content.pm.PackageManager",
+    "android.bluetooth.BluetoothManager",
+    "android.bluetooth.le.AdvertiseCallback",
+    "android.bluetooth.le.AdvertiseData",
+    "android.bluetooth.le.AdvertiseSettings",
+    "android.content.Context",
+    "android.os.Build",
+    "android.os.Handler",
+    "android.os.Looper",
+    "android.os.ParcelUuid",
+    "androidx.core.content.ContextCompat",
+    "timber.log.Timber"
+  ],
+  "funcs": [
+    {
+      "name": "onStartSuccess",
+      "line": 55,
+      "calls_out_to": ["Timber.i"]
+    },
+    {
+      "name": "onStartFailure",
+      "line": 67,
+      "calls_out_to": ["Timber.e", "handler.postDelayed"]
+    },
+    {
+      "name": "applyAdvertiseSettings",
+      "line": 111,
+      "calls_out_to": ["Timber.d"]
+    },
+    {
+      "name": "setIdentityData",
+      "line": 151,
+      "calls_out_to": ["Timber.d", "handler.postDelayed"]
+    },
+    {
+      "name": "updateIdentityBeacon",
+      "line": 176,
+      "calls_out_to": []
+    },
+    {
+      "name": "setRotationInterval",
+      "line": 182,
+      "calls_out_to": ["Timber.d", "handler.postDelayed"]
+    },
+    {
+      "name": "startAdvertising",
+      "line": 192,
+      "calls_out_to": [
+        "Timber.w",
+        "hasAdvertisePermission",
+        "advertiser.startAdvertising",
+        "handler.postDelayed"
+      ]
+    },
+    {
+      "name": "startRotation",
+      "line": 239,
+      "calls_out_to": ["Timber.d", "handler.postDelayed"]
+    },
+    {
+      "name": "run",
+      "line": 244,
+      "calls_out_to": []
+    },
+    {
+      "name": "stopRotation",
+      "line": 295,
+      "calls_out_to": ["handler.removeCallbacks"]
+    },
+    {
+      "name": "stopAdvertising",
+      "line": 301,
+      "calls_out_to": [
+        "Timber.w",
+        "hasAdvertisePermission",
+        "advertiser.stopAdvertising",
+        "handler.postDelayed"
+      ]
+    },
+    {
+      "name": "sendData",
+      "line": 327,
+      "calls_out_to": ["Timber.w", "stopAdvertising"]
+    }
+  ]
+}
+{
+  "file": "BleBackoffStrategy.kt",
+  "chunk": 1,
+  "summary": "Exponential backoff strategy with jitter specifically for BLE operations.",
+  "structs_or_classes": [
+    {
+      "name": "BleBackoffStrategy",
+      "line": 16
+    }
+  ],
+  "imports": [
+    "timber.log.Timber",
+    "kotlin.random.Random",
+    "kotlin.math.min",
+    "kotlin.math.max"
+  ],
+  "funcs": [
+    {
+      "name": "nextDelay",
+      "line": 24,
+      "calls_out_to": ["Math.pow", "Random.nextLong"]
+    },
+    {
+      "name": "reset",
+      "line": 41,
+      "calls_out_to": []
+    },
+    {
+      "name": "getCurrentDelay",
+      "line": 46,
+      "calls_out_to": []
+    }
+  ]
+}
+{
+  "file": "AnrWatchdog.kt",
+  "chunk": 1,
+  "summary": "ANR watchdog that detects main thread freezes and triggers recovery.",
+  "structs_or_classes": [
+    {
+      "name": "AnrWatchdog",
+      "line": 29
+    },
+    {
+      "name": "OnAnrDetected",
+      "line": 37
+    }
+  ],
+  "imports": [
+    "android.content.Context",
+    "android.content.Intent",
+    "android.os.Build",
+    "android.os.Handler",
+    "android.os.Looper",
+    "android.os.SystemClock",
+    "timber.log.Timber",
+    "java.io.File",
+    "java.util.concurrent.atomic.AtomicBoolean",
+    "java.util.concurrent.atomic.AtomicLong",
+    "java.util.concurrent.atomic.AtomicInteger"
+  ],
+  "funcs": [
+    {
+      "name": "onAnrDetected",
+      "line": 38,
+      "calls_out_to": []
+    },
+    {
+      "name": "watchdogLoop",
+      "line": 54,
+      "calls_out_to": ["SystemClock.uptimeMillis()", "Thread.sleep(checkIntervalMs)", "Timber.e(...)", "handleAnrWarning(blockedMs, currentConsecutive)", "reduceSystemLoad()", "showBusyIndicator(message: String = \"App not responding\")", "recordRecoveryEvent(consecutiveBlocks: Int)", "triggerAnrRecovery(blockedMs: Long)", "buildAnrDiagnostics(blockedMs: Long)", "writeAnrDiagnostics(anrInfo: String)", "context.startService(intent)", "Timber.d(...)", "anrDir.mkdirs()", "anrFile.writeText(anrInfo)", "Timber.i(...)", "anrFiles.size > 10", "anrFiles[i].delete()", "Timber.d(...)", "watchdogThread.interrupt()", "handler.removeCallbacksAndMessages(null)", "Timber.i(...)", "totalAnrEvents.get()"]
+    },
+    {
+      "name": "handleAnrWarning",
+      "line": 102,
+      "calls_out_to": ["Timber.e(...)", "consecutiveBlocks.incrementAndGet()", "totalAnrEvents.incrementAndGet()", "when (consecutiveCount) { ... }", "onAnrDetected?.invoke(blockedMs, consecutiveCount)"]
+    },
+    {
+      "name": "reduceSystemLoad",
+      "line": 131,
+      "calls_out_to": ["context.getSystemService(Context.ACTIVITY_SERVICE) as android.app.ActivityManager", "activityManager.getMemoryInfo(memoryInfo)", "Timber.d(...)", "context.startService(intent)", "Timber.w(...)", "e.printStackTrace()"]
+    },
+    {
+      "name": "showBusyIndicator",
+      "line": 148,
+      "calls_out_to": ["android.widget.Toast.makeText(context, message, android.widget.Toast.LENGTH_LONG).show()", "Timber.w(...)", "e.printStackTrace()"]
+    },
+    {
+      "name": "recordRecoveryEvent",
+      "line": 162,
+      "calls_out_to": ["Timber.i(...)"]
+    },
+    {
+      "name": "triggerAnrRecovery",
+      "line": 167,
+      "calls_out_to": ["Timber.e(...)", "buildAnrDiagnostics(blockedMs)", "consecutiveBlocks.set(0)", "writeAnrDiagnostics(anrInfo)", "context.startService(intent)", "Timber.e(...)", "e.printStackTrace()"]
+    },
+    {
+      "name": "buildAnrDiagnostics",
+      "line": 197,
+      "calls_out_to": ["System.currentTimeMillis()", "blockedMs", "consecutiveBlocks.get()", "totalAnrEvents.get()", "Build.VERSION.SDK_INT", "Build.BRAND", "Build.MODEL", "activityManager.getMemoryInfo(memoryInfo)", "memoryInfo.availMem / 1024 / 1024", "memoryInfo.lowMemory", "memoryInfo.threshold / 1024 / 1024", "e.printStackTrace()"]
+    },
+    {
+      "name": "writeAnrDiagnostics",
+      "line": 226,
+      "calls_out_to": ["anrDir.mkdirs()", "timestamp", "anrFile.writeText(anrInfo)", "Timber.i(...)", "anrFiles.size > 10", "anrFiles[i].delete()", "Timber.d(...)", "e.printStackTrace()"]
+    },
+    {
+      "name": "start",
+      "line": 247,
+      "calls_out_to": ["isRunning.compareAndSet(false, true)", "lastPingTime = SystemClock.uptimeMillis()", "consecutiveBlocks.set(0)", "watchdogThread.start()", "Timber.i(...)"]
+    },
+    {
+      "name": "stop",
+      "line": 256,
+      "calls_out_to": ["isRunning.compareAndSet(true, false)", "watchdogThread.interrupt()", "handler.removeCallbacksAndMessages(null)", "Timber.i(...)"]
+    },
+    {
+      "name": "getTotalAnrEvents",
+      "line": 264,
+      "calls_out_to": []
+    },
+    {
+      "name": "isMainThreadResponsive",
+      "line": 266,
+      "calls_out_to": ["consecutiveBlocks.get()"]
+    }
+  ]
+}
+{
+  "file": "BleGattClient.kt",
+  "chunk": 2,
+  "summary": "Handles BLE GATT operations for sending and receiving data.",
+  "structs_or_classes": [],
+  "imports": [],
+  "funcs": [
+    {
+      "name": "sendData",
+      "line": 351,
+      "calls_out_to": ["enqueueGattOp", "fragmentData", "reconnectAfterWriteFailure"]
+    }
+  ]
+}
+{
+  "file": "BleL2capManager.kt",
+  "chunk": 1,
+  "summary": "Manages L2CAP connections for high-throughput BLE communication.",
+  "structs_or_classes": [
+    {
+      "name": "BleL2capManager",
+      "line": 24
+    },
+    {
+      "name": "L2capConnection",
+      "line": 218
+    }
+  ],
+  "imports": [
+    "android.annotation.TargetApi",
+    "android.bluetooth.*",
+    "android.content.Context",
+    "android.os.Build",
+    "timber.log.Timber",
+    "java.io.InputStream",
+    "java.io.OutputStream",
+    "java.util.concurrent.ConcurrentHashMap",
+    "kotlinx.coroutines.*"
+  ],
+  "funcs": [
+    {
+      "name": "isSupported",
+      "line": 45,
+      "calls_out_to": []
+    },
+    {
+      "name": "startListening",
+      "line": 52,
+      "calls_out_to": ["serverSocket?.psm", "handleIncomingConnection(socket)"]
+    },
+    {
+      "name": "stopListening",
+      "line": 103,
+      "calls_out_to": []
+    },
+    {
+      "name": "connect",
+      "line": 123,
+      "calls_out_to": ["device?.createInsecureL2capChannel(psm)", "socket.connect()"]
+    },
+    {
+      "name": "disconnect",
+      "line": 170,
+      "calls_out_to": []
+    },
+    {
+      "name": "sendData",
+      "line": 179,
+      "calls_out_to": ["connection.send(data)"]
+    },
+    {
+      "name": "shutdown",
+      "line": 191,
+      "calls_out_to": ["stopListening()", "disconnect(it)"]
+    },
+    {
+      "name": "handleIncomingConnection",
+      "line": 200,
+      "calls_out_to": []
+    }
+  ]
+}
+{
+  "file": "BleGattClient.kt",
+  "chunk": 3,
+  "summary": "This class manages Bluetooth GATT operations for a BLE client. It handles connection, disconnection, data transmission, and MTU changes.",
+  "structs_or_classes": [],
+  "imports": [
+    "import android.bluetooth.BluetoothGatt"
+  ],
+  "funcs": [
+    {
+      "name": "reassembleData",
+      "line": 701,
+      "calls_out_to": []
+    },
+    {
+      "name": "onMtuChanged",
+      "line": 720,
+      "calls_out_to": ["getDeviceAddress", "Timber.d", "negotiatedMtus.put", "requestConnectionPriority", "discoverServices", "disconnect"]
+    },
+    {
+      "name": "getClientStats",
+      "line": 748,
+      "calls_out_to": []
+    },
+    {
+      "name": "readIdentityBeacon",
+      "line": 765,
+      "calls_out_to": ["enqueueGattOp", "Timber.e", "releaseGattOp"]
+    },
+    {
+      "name": "scheduleIdentityRefreshReads",
+      "line": 785,
+      "calls_out_to": ["activeConnections.get", "scope.launch", "delay", "readIdentityBeacon"]
+    },
+    {
+      "name": "enableMessageNotifications",
+      "line": 803,
+      "calls_out_to": ["enqueueGattOp", "Timber.e", "releaseGattOp"]
+    },
+    {
+      "name": "cleanup",
+      "line": 840,
+      "calls_out_to": ["scope.cancel", "disconnectAll"]
+    }
+  ]
+}
+{
+  "file": "BleQuotaManager.kt",
+  "chunk": 1,
+  "summary": "Enforces Android 12+ BLE scan quota by tracking and enforcing the maximum number of scan starts within a 30-second window.",
+  "structs_or_classes": [
+    {
+      "name": "BleQuotaManager",
+      "line": 11
+    }
+  ],
+  "imports": [
+    "timber.log.Timber"
+  ],
+  "funcs": [
+    {
+      "name": "checkQuota",
+      "line": 22,
+      "calls_out_to": ["pruneOldTimestamps", "System.currentTimeMillis"]
+    },
+    {
+      "name": "recordScanStart",
+      "line": 40,
+      "calls_out_to": ["pruneOldTimestamps", "System.currentTimeMillis"]
+    },
+    {
+      "name": "currentCount",
+      "line": 50,
+      "calls_out_to": ["pruneOldTimestamps", "System.currentTimeMillis"]
+    }
+  ]
+}
+{
+  "file": "BleScanner.kt",
+  "chunk": 2,
+  "summary": "Manages BLE scanning and handling scan results, failures, and duty cycles.",
+  "structs_or_classes": [],
+  "imports": [
+    "android.os.Handler",
+    "android.util.Log",
+    "com.example.bluetooth.BleDiscoveryStats",
+    "com.example.bluetooth.BleQuotaManager",
+    "com.example.bluetooth.ScanCallback",
+    "com.example.bluetooth.ServiceUUID",
+    "com.example.bluetooth.ParcelUuid",
+    "com.example.bluetooth.ADVERTISED_NAME",
+    "com.example.bluetooth.PARCEL_UUID",
+    "kotlin.concurrent.Semaphore"
+  ],
+  "funcs": [
+    {
+      "name": "startDutyCycle",
+      "line": 375,
+      "calls_out_to": ["stopDutyCycle", "handler.postDelayed"]
+    },
+    {
+      "name": "stopDutyCycle",
+      "line": 406,
+      "calls_out_to": ["handler.removeCallbacks"]
+    },
+    {
+      "name": "currentFilters",
+      "line": 412,
+      "calls_out_to": []
+    },
+    {
+      "name": "buildScanSettings",
+      "line": 423,
+      "calls_out_to": []
+    },
+    {
+      "name": "scheduleFallbackPromotion",
+      "line": 438,
+      "calls_out_to": ["handler.postDelayed"]
+    },
+    {
+      "name": "restartActiveScan",
+      "line": 462,
+      "calls_out_to": ["scanner.stopScan", "scanner.startScan"]
+    },
+    {
+      "name": "matchesMeshAdvertisement",
+      "line": 478,
+      "calls_out_to": []
+    },
+    {
+      "name": "startScanningInternal",
+      "line": 490,
+      "calls_out_to": ["scanner.startScan"]
+    },
+    {
+      "name": "stopScanningInternal",
+      "line": 505,
+      "calls_out_to": ["scanner.stopScan"]
+    },
+    {
+      "name": "forceRestartScanning",
+      "line": 521,
+      "calls_out_to": ["handler.postDelayed", "scope.launch"]
+    },
+    {
+      "name": "stopScanning",
+      "line": 538,
+      "calls_out_to": ["scanLock.withLock", "currentScanSession?.stopScan", "isScanning = false"]
+    },
+    {
+      "name": "clearPeerCache",
+      "line": 557,
+      "calls_out_to": []
+    },
+    {
+      "name": "getDiscoveryStats",
+      "line": 562,
+      "calls_out_to": []
+    },
+    {
+      "name": "getQuotaCount",
+      "line": 575,
+      "calls_out_to": ["quotaManager.currentCount"]
+    },
+    {
+      "name": "pruneOldPeers",
+      "line": 582,
+      "calls_out_to": []
+    }
+  ]
+}
+{
+  "file": "BleScanner.kt",
+  "chunk": 1,
+  "summary": "Handles Bluetooth Low Energy scanning for mesh peers with features like duty-cycle management, background vs foreground scan mode switching, and scan result caching.",
+  "structs_or_classes": [],
+  "imports": [
+    "android.annotation.SuppressLint",
+    "android.bluetooth.BluetoothAdapter",
+    "android.bluetooth.BluetoothManager",
+    "android.bluetooth.le.ScanCallback",
+    "android.bluetooth.le.ScanFilter",
+    "android.bluetooth.le.ScanResult",
+    "android.bluetooth.le.ScanSettings",
+    "android.content.Context",
+    "android.os.Handler",
+    "android.os.Looper",
+    "android.os.ParcelUuid",
+    "com.scmessenger.android.utils.BackoffStrategy",
+    "kotlinx.coroutines.*",
+    "kotlinx.coroutines.sync.Mutex",
+    "kotlinx.coroutines.sync.withLock",
+    "timber.log.Timber",
+    "java.util.UUID",
+    "java.util.concurrent.ConcurrentHashMap",
+    "java.util.concurrent.atomic.AtomicInteger",
+    "java.util.concurrent.atomic.AtomicLong"
+  ],
+  "funcs": [
+    {
+      "name": "onScanResult",
+      "line": 107,
+      "calls_out_to": ["matchesMeshAdvertisement", "onPeerDiscovered", "onDataReceived"]
+    },
+    {
+      "name": "onScanFailed",
+      "line": 158,
+      "calls_out_to": ["handleScanFailure"]
+    },
+    {
+      "name": "handleScanFailure",
+      "line": 210,
+      "calls_out_to": []
+    },
+    {
+      "name": "applyScanSettings",
+      "line": 233,
+      "calls_out_to": ["setScanDutyCycle"]
+    },
+    {
+      "name": "onScanResult",
+      "line": 244,
+      "calls_out_to": ["matchesMeshAdvertisement", "onPeerDiscovered", "onDataReceived"]
+    },
+    {
+      "name": "onScanFailed",
+      "line": 248,
+      "calls_out_to": ["handleScanFailure"]
+    },
+    {
+      "name": "setScanDutyCycle",
+      "line": 256,
+      "calls_out_to": []
+    },
+    {
+      "name": "setBackgroundMode",
+      "line": 273,
+      "calls_out_to": []
+    },
+    {
+      "name": "startScanning",
+      "line": 288,
+      "calls_out_to": ["stopScanning", "currentFilters", "buildScanSettings"]
+    },
+    {
+      "name": "startDutyCycle",
+      "line": 375,
+      "calls_out_to": []
+    },
+    {
+      "name": "run",
+      "line": 380,
+      "calls_out_to": ["stopScanning", "currentFilters", "buildScanSettings"]
+    },
+    {
+      "name": "stopDutyCycle",
+      "line": 406,
+      "calls_out_to": []
+    },
+    {
+      "name": "currentFilters",
+      "line": 411,
+      "calls_out_to": []
+    },
+    {
+      "name": "buildScanSettings",
+      "line": 423,
+      "calls_out_to": ["matchesMeshAdvertisement"]
+    },
+    {
+      "name": "scheduleFallbackPromotion",
+      "line": 438,
+      "calls_out_to": []
+    },
+    {
+      "name": "restartActiveScan",
+      "line": 462,
+      "calls_out_to": ["stopScanning", "currentFilters", "buildScanSettings"]
+    },
+    {
+      "name": "matchesMeshAdvertisement",
+      "line": 478,
+      "calls_out_to": []
+    },
+    {
+      "name": "startScanningInternal",
+      "line": 490,
+      "calls_out_to": ["stopScanning", "currentFilters", "buildScanSettings"]
+    },
+    {
+      "name": "stopScanningInternal",
+      "line": 505,
+      "calls_out_to": []
+    },
+    {
+      "name": "forceRestartScanning",
+      "line": 521,
+      "calls_out_to": ["stopScanning", "currentFilters", "buildScanSettings"]
+    },
+    {
+      "name": "stopScanning",
+      "line": 538,
+      "calls_out_to": []
+    },
+    {
+      "name": "clearPeerCache",
+      "line": 557,
+      "calls_out_to": []
+    },
+    {
+      "name": "getDiscoveryStats",
+      "line": 562,
+      "calls_out_to": []
+    },
+    {
+      "name": "getQuotaCount",
+      "line": 575,
+      "calls_out_to": []
+    },
+    {
+      "name": "pruneOldPeers",
+      "line": 582,
+      "calls_out_to": []
+    }
+  ]
+}
+{
+  "file": "MdnsServiceDiscovery.kt",
+  "chunk": 2,
+  "summary": "This class manages mDNS service discovery and registration using the Android NsdManager.",
+  "structs_or_classes": [],
+  "imports": [
+    "import android.net.nsd.NsdManager"
+  ],
+  "funcs": [
+    {
+      "name": "registerService",
+      "line": 340,
+      "calls_out_to": ["onRegistrationFailed", "onUnregistrationFailed", "onServiceRegistered", "onServiceUnregistered"]
+    },
+    {
+      "name": "startDiscovery",
+      "line": 378,
+      "calls_out_to": ["onDiscoveryStarted", "onDiscoveryStopped", "onServiceFound", "onServiceLost", "onStartDiscoveryFailed", "onStopDiscoveryFailed"]
+    },
+    {
+      "name": "resolveService",
+      "line": 415,
+      "calls_out_to": ["onResolveFailed", "onServiceResolved"]
+    }
+  ]
+}
+{
+  "file": "BleGattServer.kt",
+  "chunk": 1,
+  "summary": "GATT server implementing SCMessenger BLE service.",
+  "structs_or_classes": [
+    {
+      "name": "BleGattServer",
+      "line": 27
+    }
+  ],
+  "imports": [
+    "android.Manifest",
+    "android.bluetooth.*",
+    "android.content.Context",
+    "android.content.pm.PackageManager",
+    "android.os.Build",
+    "androidx.core.content.ContextCompat",
+    "timber.log.Timber",
+    "java.util.UUID",
+    "java.util.concurrent.ConcurrentHashMap"
+  ],
+  "funcs": [
+    {
+      "name": "setIdentityData",
+      "line": 61,
+      "calls_out_to": []
+    },
+    {
+      "name": "start",
+      "line": 66,
+      "calls_out_to": ["Context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager", "bluetoothManager?.openGattServer(context, gattServerCallback)", "gattServer?.addService(service)", "connectedDevices.values.forEach { device -> gattServer?.cancelConnection(device) }"]
+    },
+    {
+      "name": "stop",
+      "line": 139,
+      "calls_out_to": ["connectedDevices.values.forEach { device -> gattServer?.cancelConnection(device) }", "gattServer?.close()"]
+    },
+    {
+      "name": "sendData",
+      "line": 172,
+      "calls_out_to": [
+        "connectedDevices[deviceAddress] ?: run { Timber.w(\"Device not connected: $deviceAddress\"); return false }",
+        "subscribedDevices[deviceAddress]?.contains(MESSAGE_CHAR_UUID) == true",
+        "gattServer?.getService(SERVICE_UUID)",
+        "gattServer?.getCharacteristic(MESSAGE_CHAR_UUID)",
+        "sendResponseSafe(device, requestId, BluetoothGatt.GATT_SUCCESS, offset, responseValue)"
+      ]
+    },
+    {
+      "name": "getConnectedDeviceAddresses",
+      "line": 220,
+      "calls_out_to": []
+    },
+    {
+      "name": "sendFragmented",
+      "line": 224,
+      "calls_out_to": [
+        "gattServer?.getService(SERVICE_UUID)",
+        "gattServer?.getCharacteristic(MESSAGE_CHAR_UUID)"
+      ]
+    },
+    {
+      "name": "onConnectionStateChange",
+      "line": 263,
+      "calls_out_to": ["connectedDevices[device.address] = device", "connectedDevices.remove(device.address)", "subscribedDevices.remove(device.address)"]
+    },
+    {
+      "name": "onCharacteristicReadRequest",
+      "line": 285,
+      "calls_out_to": [
+        "gattServer?.sendResponse(device, requestId, BluetoothGatt.GATT_SUCCESS, offset, responseValue)"
+      ]
+    },
+    {
+      "name": "onCharacteristicWriteRequest",
+      "line": 336,
+      "calls_out_to": [
+        "handleReassembly(device.address, value) { completeData -> onDataReceived(device.address, completeData) }"
+      ]
+    },
+    {
+      "name": "onDescriptorWriteRequest",
+      "line": 383,
+      "calls_out_to": ["subscribedDevices.getOrPut(device.address) { ConcurrentHashMap.newKeySet() }.add(characteristic.uuid)", "sendResponseSafe(device, requestId, BluetoothGatt.GATT_SUCCESS, offset, value)"
+      ]
+    },
+    {
+      "name": "handleReassembly",
+      "line": 426,
+      "calls_out_to": []
+    },
+    {
+      "name": "onMtuChanged",
+      "line": 465,
+      "calls_out_to": ["gattServer?.sendResponse(device, requestId, BluetoothGatt.GATT_SUCCESS, offset, value)"
+      ]
+    },
+    {
+      "name": "onExecuteWrite",
+      "line": 471,
+      "calls_out_to": [
+        "pendingWrites[device.address]?.let { completeData -> onDataReceived(device.address, completeData) }"
+      ]
+    },
+    {
+      "name": "hasBluetoothConnectPermission",
+      "line": 492,
+      "calls_out_to": ["ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_CONNECT)"
+      ]
+    },
+    {
+      "name": "sendResponseSafe",
+      "line": 500,
+      "calls_out_to": []
+    },
+    {
+      "name": "notifyCharacteristicChangedSafe",
+      "line": 518,
+      "calls_out_to": []
+    }
+  ]
+}
+{
+  "file": "NetworkDetector.kt",
+  "chunk": 1,
+  "summary": "Detects network type and identifies blocked ports for cellular-aware transport selection.",
+  "structs_or_classes": [
+    {
+      "name": "NetworkDetector",
+      "line": 34
+    },
+    {
+      "name": "NetworkType",
+      "line": 342
+    },
+    {
+      "name": "FallbackTransport",
+      "line": 355
+    },
+    {
+      "name": "NetworkDiagnostics",
+      "line": 364
+    }
+  ],
+  "imports": [
+    "android.content.Context",
+    "android.net.ConnectivityManager",
+    "android.net.Network",
+    "android.net.NetworkCapabilities",
+    "android.net.NetworkRequest",
+    "android.os.Build",
+    "kotlinx.coroutines.async",
+    "kotlinx.coroutines.awaitAll",
+    "kotlinx.coroutines.coroutineScope",
+    "kotlinx.coroutines.flow.MutableStateFlow",
+    "kotlinx.coroutines.flow.StateFlow",
+    "kotlinx.coroutines.flow.asStateFlow",
+    "kotlinx.coroutines.Dispatchers",
+    "kotlinx.coroutines.CoroutineScope",
+    "kotlinx.coroutines.SupervisorJob",
+    "kotlinx.coroutines.Job",
+    "kotlinx.coroutines.delay",
+    "kotlinx.coroutines.launch",
+    "timber.log.Timber",
+    "java.util.concurrent.ConcurrentHashMap",
+    "javax.inject.Inject",
+    "javax.inject.Singleton"
+  ],
+  "funcs": [
+    {
+      "name": "startMonitoring",
+      "line": 91,
+      "calls_out_to": ["detectNetworkType", "redetectCurrentNetwork"]
+    },
+    {
+      "name": "onAvailable",
+      "line": 102,
+      "calls_out_to": ["detectNetworkType"]
+    },
+    {
+      "name": "onLost",
+      "line": 106,
+      "calls_out_to": ["networkCapabilities.remove", "redetectCurrentNetwork"]
+    },
+    {
+      "name": "onCapabilitiesChanged",
+      "line": 112,
+      "calls_out_to": ["networkCapabilities[network] = capabilities", "detectNetworkType"]
+    },
+    {
+      "name": "stopMonitoring",
+      "line": 133,
+      "calls_out_to": ["connectivityManager.unregisterNetworkCallback", "debounceJob?.cancel"]
+    },
+    {
+      "name": "detectNetworkType",
+      "line": 150,
+      "calls_out_to": ["connectivityManager.getNetworkCapabilities", "classifyNetworkType"]
+    },
+    {
+      "name": "redetectCurrentNetwork",
+      "line": 189,
+      "calls_out_to": ["connectivityManager.activeNetwork", "detectNetworkType"]
+    },
+    {
+      "name": "classifyNetworkType",
+      "line": 202,
+      "calls_out_to": []
+    },
+    {
+      "name": "isPortLikelyBlocked",
+      "line": 230,
+      "calls_out_to": ["isCellularNetwork"]
+    },
+    {
+      "name": "getTransportPriority",
+      "line": 242,
+      "calls_out_to": []
+    },
+    {
+      "name": "getNetworkDiagnostics",
+      "line": 287,
+      "calls_out_to": ["connectivityManager.activeNetwork", "connectivityManager.getNetworkCapabilities"]
+    },
+    {
+      "name": "probePorts",
+      "line": 313,
+      "calls_out_to": []
+    }
+  ]
+}
+{
+  "file": "TransportHealthMonitor.kt",
+  "chunk": 1,
+  "summary": "Monitors transport health metrics to inform routing decisions.",
+  "structs_or_classes": [
+    {
+      "name": "TransportHealth",
+      "line": 15
+    }
+  ],
+  "imports": [
+    "timber.log.Timber"
+  ],
+  "funcs": [
+    {
+      "name": "recordSuccess",
+      "line": 23,
+      "calls_out_to": ["System.currentTimeMillis()"]
+    },
+    {
+      "name": "recordFailure",
+      "line": 31,
+      "calls_out_to": ["System.currentTimeMillis()"]
+    },
+    {
+      "name": "getHealth",
+      "line": 42,
+      "calls_out_to": []
+    },
+    {
+      "name": "shouldUseTransport",
+      "line": 50,
+      "calls_out_to": ["MIN_SAMPLES", "MIN_SUCCESS_RATE"]
+    },
+    {
+      "name": "isDegraded",
+      "line": 61,
+      "calls_out_to": []
+    },
+    {
+      "name": "getSummary",
+      "line": 66,
+      "calls_out_to": []
+    }
+  ]
+}
+{
+  "file": "WifiAwareTransport.kt",
+  "chunk": 1,
+  "summary": "A WiFi Aware transport implementation for Android, supporting device-to-device discovery and communication without traditional WiFi infrastructure or pairing.",
+  "structs_or_classes": [
+    {
+      "name": "WifiAwareTransport",
+      "line": 32
+    },
+    {
+      "name": "AwareConnection",
+      "line": 389
+    }
+  ],
+  "imports": [
+    "android.content.Context",
+    "android.net.*",
+    "android.net.wifi.aware.*",
+    "android.os.Build",
+    "androidx.annotation.RequiresApi",
+    "timber.log.Timber",
+    "java.io.InputStream",
+    "java.io.OutputStream",
+    "java.net.InetSocketAddress",
+    "java.net.ServerSocket",
+    "java.net.Socket",
+    "java.util.concurrent.ConcurrentHashMap",
+    "kotlinx.coroutines.*"
+  ],
+  "funcs": [
+    {
+      "name": "isAvailable",
+      "line": 59,
+      "calls_out_to": []
+    },
+    {
+      "name": "start",
+      "line": 67,
+      "calls_out_to": ["wifiAwareManager?.attach(attachCallback, null)"]
+    },
+    {
+      "name": "stop",
+      "line": 91,
+      "calls_out_to": [
+        "scope.cancel()",
+        "activeConnections.values.forEach { it.close() }",
+        "publishSession?.close()",
+        "subscribeSession?.close()",
+        "callbacksToUnregister.forEach { callback.unregisterNetworkCallback(it) }",
+        "awareSession?.close()"
+      ]
+    },
+    {
+      "name": "sendData",
+      "line": 135,
+      "calls_out_to": ["connection.send(data)"]
+    },
+    {
+      "name": "onAttached",
+      "line": 145,
+      "calls_out_to": [
+        "awareSession = session",
+        "isRunning = true"
+      ]
+    },
+    {
+      "name": "onAttachFailed",
+      "line": 160,
+      "calls_out_to": ["isRunning = false"]
+    },
+    {
+      "name": "startPublishing",
+      "line": 167,
+      "calls_out_to": [
+        "awareSession?.publish(config, publishDiscoveryCallback, null)"
+      ]
+    },
+    {
+      "name": "startSubscribing",
+      "line": 183,
+      "calls_out_to": [
+        "awareSession?.subscribe(config, subscribeDiscoveryCallback, null)"
+      ]
+    },
+    {
+      "name": "onPublishStarted",
+      "line": 200,
+      "calls_out_to": ["publishSession = session"]
+    },
+    {
+      "name": "onServiceDiscovered",
+      "line": 206,
+      "calls_out_to": [
+        "onPeerDiscovered(peerIdString)",
+        "initiateDataPath(session, peerId, peerIdString, isPublisher = true)"
+      ]
+    },
+    {
+      "name": "onSubscribeStarted",
+      "line": 228,
+      "calls_out_to": ["subscribeSession = session"]
+    },
+    {
+      "name": "onServiceDiscovered",
+      "line": 234,
+      "calls_out_to": [
+        "onPeerDiscovered(peerIdString)",
+        "initiateDataPath(session, peerId, peerIdString, isPublisher = false)"
+      ]
+    },
+    {
+      "name": "initiateDataPath",
+      "line": 256,
+      "calls_out_to": ["connectivityManager.requestNetwork(request, callback)"]
+    },
+    {
+      "name": "createResponderSocket",
+      "line": 338,
+      "calls_out_to": [
+        "serverSocket = ServerSocket(AWARE_PORT)",
+        "socket.accept()",
+        "serverSocket.close()"
+      ]
+    },
+    {
+      "name": "createInitiatorSocket",
+      "line": 369,
+      "calls_out_to": [
+        "socket.connect(InetSocketAddress(peerIpv6, AWARE_PORT), CONNECT_TIMEOUT_MS)"
+      ]
+    },
+    {
+      "name": "startReading",
+      "line": 400,
+      "calls_out_to": ["inputStream.read(buffer)"]
+    },
+    {
+      "name": "send",
+      "line": 427,
+      "calls_out_to": ["outputStream.write(data)", "outputStream.flush()"]
+    },
+    {
+      "name": "close",
+      "line": 438,
+      "calls_out_to": ["socket.close()"]
+    },
+    {
+      "name": "cleanup",
+      "line": 448,
+      "calls_out_to": ["stop()", "scope.cancel()"]
+    }
+  ]
+}
+{
+  "file": "WifiDirectTransport.kt",
+  "chunk": 1,
+  "summary": "WiFi Direct (WiFi P2P) transport implementation for Android.",
+  "structs_or_classes": [
+    {
+      "name": "WifiDirectTransport",
+      "line": 31
+    },
+    {
+      "name": "P2pConnection",
+      "line": 366
+    }
+  ],
+  "imports": [
+    "android.content.BroadcastReceiver",
+    "android.content.Context",
+    "android.content.Intent",
+    "android.content.IntentFilter",
+    "android.net.wifi.p2p.*",
+    "android.net.wifi.p2p.nsd.WifiP2pDnsSdServiceInfo",
+    "android.net.wifi.p2p.nsd.WifiP2pDnsSdServiceRequest",
+    "androidx.core.content.IntentCompat",
+    "timber.log.Timber",
+    "java.io.InputStream",
+    "java.io.OutputStream",
+    "java.net.InetSocketAddress",
+    "java.net.ServerSocket",
+    "java.net.Socket",
+    "java.util.concurrent.ConcurrentHashMap",
+    "kotlinx.coroutines.*"
+  ],
+  "funcs": [
+    {
+      "name": "start",
+      "line": 54,
+      "calls_out_to": ["stop", "startServiceDiscovery", "registerService"]
+    },
+    {
+      "name": "stop",
+      "line": 102,
+      "calls_out_to": ["cleanup"]
+    },
+    {
+      "name": "sendData",
+      "line": 143,
+      "calls_out_to": []
+    },
+    {
+      "name": "startServiceDiscovery",
+      "line": 152,
+      "calls_out_to": ["registerLocalService", "discoverPeers"]
+    },
+    {
+      "name": "onSuccess",
+      "line": 175,
+      "calls_out_to": []
+    },
+    {
+      "name": "onFailure",
+      "line": 180,
+      "calls_out_to": []
+    },
+    {
+      "name": "startPeerDiscovery",
+      "line": 191,
+      "calls_out_to": ["discoverPeers"]
+    },
+    {
+      "name": "onSuccess",
+      "line": 196,
+      "calls_out_to": []
+    },
+    {
+      "name": "onFailure",
+      "line": 200,
+      "calls_out_to": []
+    },
+    {
+      "name": "registerService",
+      "line": 211,
+      "calls_out_to": ["addLocalService"]
+    },
+    {
+      "name": "onSuccess",
+      "line": 227,
+      "calls_out_to": []
+    },
+    {
+      "name": "onFailure",
+      "line": 231,
+      "calls_out_to": []
+    },
+    {
+      "name": "connectToPeer",
+      "line": 242,
+      "calls_out_to": ["connect"]
+    },
+    {
+      "name": "onSuccess",
+      "line": 257,
+      "calls_out_to": []
+    },
+    {
+      "name": "onFailure",
+      "line": 261,
+      "calls_out_to": []
+    },
+    {
+      "name": "onReceive",
+      "line": 273,
+      "calls_out_to": ["handleConnectionInfo"]
+    },
+    {
+      "name": "handleConnectionInfo",
+      "line": 307,
+      "calls_out_to": ["startServer", "connectToGroupOwner"]
+    },
+    {
+      "name": "startServer",
+      "line": 321,
+      "calls_out_to": ["serverSocket"]
+    },
+    {
+      "name": "connectToGroupOwner",
+      "line": 346,
+      "calls_out_to": ["socket"]
+    }
+  ]
+}
+{
+  "file": "MessageBubble.kt",
+  "chunk": 1,
+  "summary": "A composable function that displays a message bubble in a chat UI. It handles both sent and received messages, formats timestamps, and uses Material3 components.",
+  "structs_or_classes": [],
+  "imports": [
+    "androidx.compose.foundation.layout.*",
+    "androidx.compose.foundation.shape.RoundedCornerShape",
+    "androidx.compose.material3.*",
+    "androidx.compose.runtime.Composable",
+    "androidx.compose.ui.Alignment",
+    "androidx.compose.ui.Modifier",
+    "androidx.compose.ui.text.font.FontWeight",
+    "androidx.compose.ui.unit.dp",
+    "androidx.compose.ui.unit.sp",
+    "com.scmessenger.android.ui.theme.*",
+    "com.scm messenger.android.utils.toEpochMillis",
+    "java.text.SimpleDateFormat",
+    "java.util.*"
+  ],
+  "funcs": [
+    {
+      "name": "MessageBubble",
+      "line": 23,
+      "calls_out_to": ["formatTimestamp", "isSameDay"]
+    },
+    {
+      "name": "formatTimestamp",
+      "line": 85,
+      "calls_out_to": []
+    },
+    {
+      "name": "isSameDay",
+      "line": 102,
+      "calls_out_to": []
+    }
+  ]
+}
+{
+  "file": "CopyableText.kt",
+  "chunk": 1,
+  "summary": "A composable component that displays text which can be copied to the clipboard on long-press. It supports optional truncation, expand/collapse functionality, and monospace font.",
+  "structs_or_classes": [],
+  "imports": [
+    "android.content.ClipData",
+    "android.content.ClipboardManager",
+    "android.content.Context",
+    "android.widget.Toast",
+    "androidx.compose.foundation.ExperimentalFoundationApi",
+    "androidx.compose.foundation.combinedClickable",
+    "androidx.compose.foundation.layout.*",
+    "androidx.compose.material.icons.Icons",
+    "androidx.compose.material.icons.filled.ContentCopy",
+    "androidx.compose.material.icons.filled.ExpandLess",
+    "androidx.compose.material.icons.filled.ExpandMore",
+    "androidx.compose.material3.*",
+    "androidx.compose.runtime.*",
+    "androidx.compose.ui.Alignment",
+    "androidx.compose.ui.Modifier",
+    "androidx.compose.ui.platform.LocalContext",
+    "androidx.compose.ui.text.font.FontFamily",
+    "androidx.compose.ui.text.style.TextOverflow",
+    "androidx.compose.ui.unit.dp"
+  ],
+  "funcs": [
+    {
+      "name": "CopyableText",
+      "line": 34,
+      "calls_out_to": ["copyToClipboard"]
+    },
+    {
+      "name": "LabeledCopyableText",
+      "line": 89,
+      "calls_out_to": ["copyToClipboard"]
+    },
+    {
+      "name": "TruncatedCopyableText",
+      "line": 130,
+      "calls_out_to": ["copyToClipboard"]
+    },
+    {
+      "name": "copyToClipboard",
+      "line": 174,
+      "calls_out_to": []
+    }
+  ]
+}
+{
+  "file": "Identicon.kt",
+  "chunk": 1,
+  "summary": "Generates a deterministic identicon from a public key or identity hash.",
+  "structs_or_classes": [],
+  "imports": [
+    "androidx.compose.foundation.Canvas",
+    "androidx.compose.foundation.background",
+    "androidx.compose.foundation.layout.Box",
+    "androidx.compose.foundation.layout.size",
+    "androidx.compose.foundation.shape.CircleShape",
+    "androidx.compose.runtime.Composable",
+    "androidx.compose.ui.Modifier",
+    "androidx.compose.ui.draw.clip",
+    "androidx.compose.ui.geometry.Offset",
+    "androidx.compose.ui.graphics.Color",
+    "androidx.compose.ui.unit.Dp",
+    "androidx.compose.ui.unit.dp",
+    "kotlin.math.absoluteValue"
+  ],
+  "funcs": [
+    {
+      "name": "Identicon",
+      "line": 29,
+      "calls_out_to": ["generateColors", "generatePattern"]
+    },
+    {
+      "name": "generateColors",
+      "line": 77,
+      "calls_out_to": []
+    },
+    {
+      "name": "generatePattern",
+      "line": 100,
+      "calls_out_to": []
+    },
+    {
+      "name": "IdenticonFromHex",
+      "line": 115,
+      "calls_out_to": ["hexString.chunked", "map", "toInt", "toByteArray"]
+    },
+    {
+      "name": "IdenticonFromPeerId",
+      "line": 135,
+      "calls_out_to": ["peerId.toByteArray"]
+    },
+    {
+      "name": "generateIdenticonBitmap",
+      "line": 148,
+      "calls_out_to": ["generateColors", "generatePattern", "android.graphics.Bitmap.createBitmap", "android.graphics.Canvas", "android.graphics.Paint"]
+    }
+  ]
+}
+{
+  "file": "StatusIndicator.kt",
+  "chunk": 1,
+  "summary": "A composable function that displays a status indicator dot for peer online/offline status and transport type. It includes animated pulse for active connections.",
+  "structs_or_classes": [],
+  "imports": [
+    "androidx.compose.animation.core.*",
+    "androidx.compose.foundation.background",
+    "androidx.compose.foundation.layout.Box",
+    "androidx.compose.foundation.layout.size",
+    "androidx.compose.foundation.shape.CircleShape",
+    "androidx.compose.runtime.Composable",
+    "androidx.compose.runtime.getValue",
+    "androidx.compose.ui.Modifier",
+    "androidx.compose.ui.draw.clip",
+    "androidx.compose.ui.draw.scale",
+    "androidx.compose.ui.graphics.Color",
+    "androidx.compose.ui.unit.Dp",
+    "androidx.compose.ui.unit.dp",
+    "com.scmessenger.android.service.TransportType",
+    "com.scmessenger.android.ui.theme.*"
+  ],
+  "funcs": [
+    {
+      "name": "StatusIndicator",
+      "line": 31,
+      "calls_out_to": ["StaticDot", "PulsingDot"]
+    },
+    {
+      "name": "StaticDot",
+      "line": 63,
+      "calls_out_to": []
+    },
+    {
+      "name": "PulsingDot",
+      "line": 81,
+      "calls_out_to": ["rememberInfiniteTransition", "animateFloat"]
+    }
+  ]
+}
+{
+  "file": "AddContactScreen.kt",
+  "chunk": 1,
+  "summary": "Add Contact screen - QR scan, manual entry, nearby discovery.",
+  "structs_or_classes": [],
+  "imports": [
+    "androidx.compose.foundation.layout.*",
+    "androidx.compose.foundation.rememberScrollState",
+    "androidx.compose.foundation.verticalScroll",
+    "androidx.compose.material.icons.Icons",
+    "androidx.compose.material.icons.filled.*",
+    "androidx.compose.material.icons.automirrored.filled.ArrowBack",
+    "androidx.compose.material3.*",
+    "androidx.compose.runtime.*",
+    "androidx.compose.ui.Alignment",
+    "androidx.compose.ui.Modifier",
+    "androidx.compose.ui.platform.LocalContext",
+    "androidx.compose.ui.text.font.FontFamily",
+    "androidx.compose.ui.text.font.FontWeight",
+    "androidx.compose.ui.unit.dp",
+    "androidx.hilt.navigation.compose.hiltViewModel",
+    "com.google.android.gms.common.ConnectionResult",
+    "com.google.android.gms.common.GoogleApiAvailability",
+    "com.google.android.gms.common.api.CommonStatusCodes",
+    "com.google.mlkit.common.MlKitException",
+    "com.google.mlkit.vision.codescanner.GmsBarcodeScannerOptions",
+    "com.google.mlkit.vision.codescanner.GmsBarcodeScanning",
+    "com.google.mlkit.vision.barcode.common.Barcode",
+    "androidx.compose.ui.res.stringResource",
+    "com.scmessenger.android.R",
+    "com.scmessenger.android.ui.components.ErrorBanner",
+    "com.scmessenger.android.ui.components.IdenticonFromPeerId",
+    "com.scmessenger.android.ui.viewmodels.ContactsViewModel",
+    "com.scmessenger.android.utils.ContactImportParseResult",
+    "com.scmessenger.android.utils.parseContactImportPayload",
+    "timber.log.Timber"
+  ],
+  "funcs": [
+    {
+      "name": "AddContactScreen",
+      "line": 42,
+      "calls_out_to": [
+        "hiltViewModel",
+        "collectAsState",
+        "rememberScrollState",
+        "TopAppBar",
+        "Scaffold",
+        "Column",
+        "TabRow",
+        "Tab",
+        "ErrorBanner",
+        "QRScanTab",
+        "NearbyDiscoveryTab"
+      ]
+    },
+    {
+      "name": "ManualEntryTab",
+      "line": 176,
+      "calls_out_to": [
+        "OutlinedTextField",
+        "Card",
+        "Row",
+        "IdenticonFromPeerId",
+        "Text",
+        "Button"
+      ]
+    },
+    {
+      "name": "QRScanTab",
+      "line": 285,
+      "calls_out_to": [
+        "GoogleApiAvailability.getInstance().isGooglePlayServicesAvailable",
+        "GmsBarcodeScannerOptions.Builder",
+        "GmsBarcodeScanning.getClient",
+        "startScan",
+        "addOnSuccessListener",
+        "addOnFailureListener"
+      ]
+    },
+    {
+      "name": "NearbyDiscoveryTab",
+      "line": 371,
+      "calls_out_to": []
+    }
+  ]
+}
+{
+  "file": "ContactDetailScreen.kt",
+  "chunk": 1,
+  "summary": "Displays detailed information about a contact including identity, connection metrics, and actions.",
+  "structs_or_classes": [],
+  "imports": [
+    "androidx.compose.foundation.layout.*",
+    "androidx.compose.foundation.rememberScrollState",
+    "androidx.compose.foundation.verticalScroll",
+    "androidx.compose.material.icons.Icons",
+    "androidx.compose.material.icons.filled.*",
+    "androidx.compose.material.icons.automirrored.filled.ArrowBack",
+    "androidx.compose.material.icons.automirrored.filled.Send",
+    "androidx.compose.material3.*",
+    "androidx.compose.runtime.*",
+    "androidx.compose.ui.Alignment",
+    "androidx.compose.ui.Modifier",
+    "androidx.compose.ui.focus.FocusRequester",
+    "androidx.compose.ui.focus.focusRequester",
+    "androidx.compose.ui.text.font.FontFamily",
+    "androidx.compose.ui.text.font.FontWeight",
+    "androidx.compose.ui.res.stringResource",
+    "androidx.compose.ui.unit.dp",
+    "androidx.hilt.navigation.compose.hiltViewModel",
+    "com.scmessenger.android.R",
+    "com.scmessenger.android.ui.components.CopyableText",
+    "com.scm messenger.android.ui.components.LabeledCopyableText",
+    "com.scmessenger.android.ui.components.TruncatedCopyableText",
+    "com.scmessenger.android.ui.components.IdenticonFromHex",
+    "com.scmessenger.android.ui.components.ErrorBanner",
+    "com.scmessenger.android.ui.components.IdenticonFromPeerId",
+    "com.scmessenger.android.ui.theme.StatusOnline",
+    "com.scmessenger.android.ui.theme.StatusOffline",
+    "com.scmessenger.android.ui.viewmodels.ContactsViewModel",
+    "com.scmessenger.android.utils.toEpochMillis",
+    "java.text.SimpleDateFormat",
+    "java.util.*"
+  ],
+  "funcs": [
+    {
+      "name": "ContactDetailScreen",
+      "line": 45,
+      "calls_out_to": ["onNavigateBack", "onNavigateToChat", "hiltViewModel"]
+    },
+    {
+      "name": "ContactDetailContent",
+      "line": 192,
+      "calls_out_to": ["error", "onClearError", "onSendMessage"]
+    },
+    {
+      "name": "MetadataRow",
+      "line": 340,
+      "calls_out_to": []
+    },
+    {
+      "name": "formatTimestamp",
+      "line": 357,
+      "calls_out_to": ["toEpochMillis"]
+    }
+  ]
+}
+{
+  "file": "TopologyScreen.kt",
+  "chunk": 1,
+  "summary": "Displays the mesh topology as an interactive graph with nodes, edges, and a legend.",
+  "structs_or_classes": [],
+  "imports": [
+    "androidx.compose.foundation.Canvas",
+    "androidx.compose.foundation.background",
+    "androidx.compose.foundation.layout.*",
+    "androidx.compose.foundation.rememberScrollState",
+    "androidx.compose.foundation.verticalScroll",
+    "androidx.compose.material.icons.Icons",
+    "androidx.compose.material.icons.automirrored.filled.ArrowBack",
+    "androidx.compose.material.icons.filled.Refresh",
+    "androidx.compose.material3.*",
+    "androidx.compose.runtime.*",
+    "androidx.compose.ui.Alignment",
+    "androidx.compose.ui.Modifier",
+    "androidx.compose.ui.geometry.Offset",
+    "androidx.compose.ui.graphics.Color",
+    "androidx.compose.ui.graphics.StrokeCap",
+    "androidx.compose.ui.graphics.drawscope.Stroke",
+    "androidx.compose.ui.text.font.FontWeight",
+    "androidx.compose.ui.unit.dp",
+    "androidx.hilt.navigation.compose.hiltViewModel",
+    "com.scmessenger.android.ui.components.ErrorBanner",
+    "com.scmessenger.android.ui.theme.*",
+    "com.scmessenger.android.ui.viewmodels.DashboardViewModel",
+    "com.scmessenger.android.ui.viewmodels.NetworkTopology",
+    "com.scmessenger.android.ui.viewmodels.TopologyNode"
+  ],
+  "funcs": [
+    {
+      "name": "TopologyScreen",
+      "line": 40,
+      "calls_out_to": ["onNavigateBack", "viewModel.refreshData()"]
+    },
+    {
+      "name": "TopologyStats",
+      "line": 141,
+      "calls_out_to": []
+    },
+    {
+      "name": "StatItem",
+      "line": 174,
+      "calls_out_to": []
+    },
+    {
+      "name": "TopologyGraph",
+      "line": 198,
+      "calls_out_to": ["getTransportColor"]
+    },
+    {
+      "name": "TopologyLegend",
+      "line": 285,
+      "calls_out_to": []
+    },
+    {
+      "name": "LegendItem",
+      "line": 330,
+      "calls_out_to": []
+    },
+    {
+      "name": "getTransportColor",
+      "line": 356,
+      "calls_out_to": []
+    }
+  ]
+}
+{
+  "file": "DiagnosticsBundleFormatter.kt",
+  "chunk": 1,
+  "summary": "This class provides a method to format a DiagnosticsBundleInput object into a human-readable string.",
+  "structs_or_classes": [
+    {
+      "name": "DiagnosticsBundleInput",
+      "line": 7
+    }
+  ],
+  "imports": [
+    "java.text.SimpleDateFormat",
+    "java.util.Date",
+    "java.util.Locale"
+  ],
+  "funcs": [
+    {
+      "name": "format",
+      "line": 23,
+      "calls_out_to": [
+        "Date(input.generatedAtEpochMs)",
+        "timestampFormat.format(Date(input.generatedAtEpochMs))",
+        "input.missingPermissions.joinToString(", ")",
+        "if (input.missingPermissions.isEmpty()) { ... } else { ... }"
+      ]
+    }
+  ]
+}
+{
+  "file": "MdnsServiceDiscovery.kt",
+  "chunk": 1,
+  "summary": "mDNS/DNS-SD service discovery for cross-platform LAN discovery.",
+  "structs_or_classes": [
+    {
+      "name": "MdnsServiceDiscovery",
+      "line": 21
+    }
+  ],
+  "imports": [
+    "android.content.Context",
+    "android.net.nsd.NsdManager",
+    "android.net.nsd.NsdServiceInfo",
+    "android.os.Build",
+    "android.os.Handler",
+    "android.os.Looper",
+    "timber.log.Timber",
+    "java.util.concurrent.ConcurrentHashMap"
+  ],
+  "funcs": [
+    {
+      "name": "onDiscoveryStarted",
+      "line": 55,
+      "calls_out_to": []
+    },
+    {
+      "name": "onDiscoveryStopped",
+      "line": 69,
+      "calls_out_to": []
+    },
+    {
+      "name": "onServiceFound",
+      "line": 80,
+      "calls_out_to": [
+        "resolveService"
+      ]
+    },
+    {
+      "name": "onServiceLost",
+      "line": 94,
+      "calls_out_to": []
+    },
+    {
+      "name": "onServiceRegistered",
+      "line": 107,
+      "calls_out_to": []
+    },
+    {
+      "name": "onServiceResolved",
+      "line": 120,
+      "calls_out_to": [
+        "onPeerDiscovered"
+      ]
+    },
+    {
+      "name": "onServiceUnregistered",
+      "line": 178,
+      "calls_out_to": []
+    },
+    {
+      "name": "onStartDiscoveryFailed",
+      "line": 188,
+      "calls_out_to": [
+        "startDiscovery"
+      ]
+    },
+    {
+      "name": "onStopDiscoveryFailed",
+      "line": 211,
+      "calls_out_to": []
+    },
+    {
+      "name": "onRegistrationFailed",
+      "line": 225,
+      "calls_out_to": [
+        "registerService"
+      ]
+    },
+    {
+      "name": "onResolveFailed",
+      "line": 252,
+      "calls_out_to": []
+    },
+    {
+      "name": "onUnregistrationFailed",
+      "line": 264,
+      "calls_out_to": []
+    },
+    {
+      "name": "start",
+      "line": 304,
+      "calls_out_to": [
+        "registerService",
+        "startDiscovery"
+      ]
+    },
+    {
+      "name": "stop",
+      "line": 308,
+      "calls_out_to": [
+        "nsdManager?.stopServiceDiscovery",
+        "nsdManager?.unregisterService"
+      ]
+    },
+    {
+      "name": "registerService",
+      "line": 340,
+      "calls_out_to": []
+    },
+    {
+      "name": "startDiscovery",
+      "line": 378,
+      "calls_out_to": []
+    },
+    {
+      "name": "resolveService",
+      "line": 415,
+      "calls_out_to": []
+    },
+    {
+      "name": "cleanup",
+      "line": 430,
+      "calls_out_to": [
+        "stop"
+      ]
+    }
+  ]
+}
+{
+  "file": "IdentityScreen.kt",
+  "chunk": 1,
+  "summary": "Displays the user's identity information including peer ID, public key, and a scannable QR code for easy contact sharing.",
+  "structs_or_classes": [],
+  "imports": [
+    "android.graphics.Bitmap",
+    "androidx.compose.foundation.Image",
+    "androidx.compose.foundation.layout.*",
+    "androidx.compose.foundation.rememberScrollState",
+    "androidx.compose.foundation.verticalScroll",
+    "androidx.compose.material.icons.Icons",
+    "androidx.compose.material.icons.automirrored.filled.ArrowBack",
+    "androidx.compose.material.icons.filled.Refresh",
+    "androidx.compose.material3.*",
+    "androidx.compose.runtime.*",
+    "androidx.compose.ui.Alignment",
+    "androidx.compose.ui.Modifier",
+    "androidx.compose.ui.graphics.asImageBitmap",
+    "androidx.compose.ui.platform.LocalContext",
+    "androidx.compose.ui.res.stringResource",
+    "androidx.compose.ui.text.font.FontFamily",
+    "androidx.compose.ui.text.font.FontWeight",
+    "androidx.compose.ui.unit.dp",
+    "androidx.hilt.navigation.compose.hiltViewModel",
+    "com.google.zxing.BarcodeFormat",
+    "com.google.zxing.qrcode.QRCodeWriter",
+    "com.scmessenger.android.R",
+    "com.scmessenger.android.ui.components.CopyableText",
+    "com.scm messenger.android.ui.components.ErrorBanner",
+    "com.scmessenger.android.ui.components.IdenticonFromPeerId",
+    "com.scmessenger.android.ui.viewmodels.IdentityViewModel",
+    "timber.log.Timber"
+  ],
+  "funcs": [
+    {
+      "name": "IdentityScreen",
+      "line": 39,
+      "calls_out_to": ["hiltViewModel", "collectAsState"]
+    },
+    {
+      "name": "generateQRCode",
+      "line": 292,
+      "calls_out_to": []
+    }
+  ]
+}
+{
+  "file": "BlockedPeersScreen.kt",
+  "chunk": 1,
+  "summary": "A composable function that displays a screen showing blocked peers and provides options to unblock them.",
+  "structs_or_classes": [],
+  "imports": [
+    "androidx.compose.foundation.layout.*",
+    "androidx.compose.foundation.lazy.LazyColumn",
+    "androidx.compose.foundation.lazy.items",
+    "androidx.compose.material.icons.Icons",
+    "androidx.compose.material.icons.automirrored.filled.ArrowBack",
+    "androidx.compose.material.icons.filled.Block",
+    "androidx.compose.material.icons.filled.Delete",
+    "androidx.compose.material3.*",
+    "androidx.compose.runtime.*",
+    "androidx.compose.ui.Alignment",
+    "androidx.compose.ui.Modifier",
+    "androidx.compose.ui.text.font.FontWeight",
+    "androidx.compose.ui.unit.dp",
+    "androidx.hilt.navigation.compose.hiltViewModel",
+    "com.scmessenger.android.ui.viewmodels.ConversationsViewModel",
+    "java.text.SimpleDateFormat",
+    "java.util.*"
+  ],
+  "funcs": [
+    {
+      "name": "BlockedPeersScreen",
+      "line": 23,
+      "calls_out_to": ["hiltViewModel", "collectAsState"]
+    },
+    {
+      "name": "BlockedPeerItem",
+      "line": 108,
+      "calls_out_to": []
+    }
+  ]
+}
+{
+  "file": "JoinMeshScreen.kt",
+  "chunk": 1,
+  "summary": "A composable function that manages the join mesh screen, including QR scanning, parsing, connecting, and displaying success/error states.",
+  "structs_or_classes": [],
+  "imports": [
+    "androidx.compose.animation.core.*",
+    "androidx.compose.foundation.layout.*",
+    "androidx.compose.material.icons.Icons",
+    "androidx.compose.material.icons.filled.CheckCircle",
+    "androidx.compose.material.icons.filled.Error",
+    "androidx.compose.material3.*",
+    "androidx.compose.runtime.*",
+    "androidx.compose.ui.Alignment",
+    "androidx.compose.ui.Modifier",
+    "androidx.compose.ui.draw.rotate",
+    "androidx.compose.ui.graphics.Color",
+    "androidx.compose.ui.platform.LocalContext",
+    "androidx.compose.ui.text.style.TextAlign",
+    "androidx.compose.ui.unit.dp",
+    "com.google.android.gms.common.api.CommonStatusCodes",
+    "com.google.mlkit.common.MlKitException",
+    "com.google.mlkit.vision.barcode.common.Barcode",
+    "com.google.mlkit.vision.codescanner.GmsBarcodeScannerOptions",
+    "com.google.mlkit.vision.codescanner.GmsBarcodeScanning",
+    "com.scmessenger.android.data.MeshRepository",
+    "kotlinx.coroutines.Dispatchers",
+    "kotlinx.coroutines.launch",
+    "kotlinx.coroutines.withContext",
+    "timber.log.Timber"
+  ],
+  "funcs": [
+    {
+      "name": "JoinMeshScreen",
+      "line": 46,
+      "calls_out_to": ["QrScannerView", "ParsingView", "ConnectingView", "SuccessView", "ErrorView"]
+    },
+    {
+      "name": "QrScannerView",
+      "line": 120,
+      "calls_out_to": ["onQrScanned", "onScanError", "onCancel"]
+    },
+    {
+      "name": "ParsingView",
+      "line": 185,
+      "calls_out_to": []
+    },
+    {
+      "name": "ConnectingView",
+      "line": 200,
+      "calls_out_to": ["rotation"]
+    },
+    {
+      "name": "SuccessView",
+      "line": 255,
+      "calls_out_to": ["onComplete"]
+    },
+    {
+      "name": "ErrorView",
+      "line": 286,
+      "calls_out_to": ["onRetry", "onCancel"]
+    },
+    {
+      "name": "parseAndJoin",
+      "line": 339,
+      "calls_out_to": []
+    }
+  ]
+}
+{
+  "file": "ContactsScreen.kt",
+  "chunk": 2,
+  "summary": "This code defines a function to format a timestamp and a layout for adding or chatting with a peer.",
+  "structs_or_classes": [],
+  "imports": [
+    "androidx.compose.foundation.layout.Column"
+  ],
+  "funcs": [
+    {
+      "name": "formatTimestamp",
+      "line": 754,
+      "calls_out_to": []
+    }
+  ]
+}
+{
+  "file": "ChatScreen.kt",
+  "chunk": 1,
+  "summary": "A composable function that displays a chat screen for a given conversation ID. It handles loading messages, displaying them in a list, and providing input functionality to send new messages.",
+  "structs_or_classes": [],
+  "imports": [
+    "androidx.compose.foundation.background",
+    "androidx.compose.foundation.layout.*",
+    "androidx.compose.foundation.lazy.LazyColumn",
+    "androidx.compose.foundation.lazy.items",
+    "androidx.compose.foundation.lazy.rememberLazyListState",
+    "androidx.compose.foundation.shape.CircleShape",
+    "androidx.compose.foundation.shape.RoundedCornerShape",
+    "androidx.compose.material.icons.Icons",
+    "androidx.compose.material.icons.automirrored.filled.ArrowBack",
+    "androidx.compose.material.icons.filled.Block",
+    "androidx.compose.material.icons.filled.CheckCircle",
+    "androidx.compose.material.icons.automirrored.filled.Send",
+    "androidx.compose.material.icons.outlined.ChatBubbleOutline",
+    "androidx.compose.material3.*",
+    "androidx.compose.runtime.*",
+    "androidx.compose.ui.Alignment",
+    "androidx.compose.ui.Modifier",
+    "androidx.compose.ui.draw.clip",
+    "androidx.compose.ui.graphics.Color",
+    "androidx.compose.ui.text.font.FontWeight",
+    "androidx.compose.ui.unit.dp",
+    "androidx.compose.ui.unit.sp",
+    "androidx.hilt.navigation.compose.hiltViewModel",
+    "com.scmessenger.android.utils.toEpochMillis",
+    "com.scmessenger.android.ui.viewmodels.ConversationsViewModel",
+    "com.scmessenger.android.ui.viewmodels.ContactsViewModel",
+    "com.scmessenger.android.ui.viewmodels.ChatViewModel",
+    "com.scmessenger.android.ui.chat.MessageInput",
+    "kotlinx.coroutines.launch",
+    "timber.log.Timber",
+    "java.text.SimpleDateFormat",
+    "java.util.*"
+  ],
+  "funcs": [
+    {
+      "name": "ChatScreen",
+      "line": 38,
+      "calls_out_to": [
+        "LaunchedEffect(conversationId)",
+        "chatViewModel.setPeer(conversationId)",
+        "viewModel.loadConversation(conversationId).collect { messages -> }",
+        "rememberLazyListState()",
+        "rememberCoroutineScope()",
+        "LaunchedEffect(shouldLoadMore)",
+        "LaunchedEffect(chatMessages.size)",
+        "Scaffold(topBar = {...})",
+        "Column(modifier = Modifier.fillMaxSize().padding(paddingValues))",
+        "Box(modifier = Modifier.fillMaxWidth().imePadding().padding(16.dp).contentAlignment = Alignment.Center)",
+        "Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer))",
+        "AlertDialog(onDismissRequest = {...})",
+        "CoroutineScope.launch { ... }"
+      ]
+    },
+    {
+      "name": "MessageBubble",
+      "line": 430,
+      "calls_out_to": [
+        "Box(modifier = Modifier.clip(shape).background(bubbleColor).padding(horizontal = 16.dp, vertical = 10.dp))",
+        "Text(text = message.content, color = textColor, style = MaterialTheme.typography.bodyLarge)"
+      ]
+    },
+    {
+      "name": "formatTimestamp",
+      "line": 465,
+      "calls_out_to": []
+    }
+  ]
+}
+{
+  "file": "ConversationsScreen.kt",
+  "chunk": 1,
+  "summary": "Displays a list of conversations with options to navigate to chat, delete messages, and clear all history.",
+  "structs_or_classes": [],
+  "imports": [
+    "androidx.compose.foundation.clickable",
+    "androidx.compose.foundation.layout.*",
+    "androidx.compose.foundation.lazy.LazyColumn",
+    "androidx.compose.foundation.lazy.items",
+    "androidx.compose.material3.SwipeToDismissBox",
+    "androidx.compose.material3.SwipeToDismissBoxValue",
+    "androidx.compose.material3.rememberSwipeToDismissBoxState",
+    "androidx.compose.material.icons.Icons",
+    "androidx.compose.material.icons.automirrored.filled.Chat",
+    "androidx.compose.material.icons.filled.Delete",
+    "androidx.compose.material3.*",
+    "androidx.compose.runtime.*",
+    "androidx.compose.ui.Alignment",
+    "androidx.compose.ui.graphics.Color",
+    "androidx.compose.ui.Modifier",
+    "androidx.compose.ui.text.style.TextOverflow",
+    "androidx.compose.ui.unit.dp",
+    "androidx.hilt.navigation.compose.hiltViewModel",
+    "com.scmessenger.android.ui.chat.DeliveryStateMapper",
+    "com.scmessenger.android.ui.chat.DeliveryStatePresentation",
+    "com.scm messenger.android.ui.chat.DeliveryStateSurface",
+    "com.scmessenger.android.service.MeshEventBus",
+    "com.scmessenger.android.ui.viewmodels.ConversationsViewModel",
+    "com.scmessenger.android.utils.toEpochMillis",
+    "java.text.SimpleDateFormat",
+    "java.util.*"
+  ],
+  "funcs": [
+    {
+      "name": "ConversationsScreen",
+      "line": 35,
+      "calls_out_to": ["hiltViewModel", "collectAsState"]
+    },
+    {
+      "name": "StatItem",
+      "line": 245,
+      "calls_out_to": []
+    },
+    {
+      "name": "ConversationItem",
+      "line": 263,
+      "calls_out_to": ["getContactForPeer", "formatTimestamp"]
+    },
+    {
+      "name": "formatTimestamp",
+      "line": 386,
+      "calls_out_to": []
+    }
+  ]
+}
+{
+  "file": "DashboardScreen.kt",
+  "chunk": 1,
+  "summary": "A composable function that displays the dashboard screen of a mesh network, showing service status, quick stats, connection methods, detailed stats, and navigation to peer list and topology screens.",
+  "structs_or_classes": [],
+  "imports": [
+    "androidx.compose.foundation.background",
+    "androidx.compose.foundation.layout.*",
+    "androidx.compose.foundation.lazy.LazyColumn",
+    "androidx.compose.foundation.lazy.items",
+    "androidx.compose.foundation.shape.CircleShape",
+    "androidx.compose.foundation.shape.RoundedCornerShape",
+    "androidx.compose.material.icons.Icons",
+    "androidx.compose.material.icons.automirrored.filled.ArrowBack",
+    "androidx.compose.material.icons.filled.Bluetooth",
+    "androidx.compose.material.icons.filled.Bolt",
+    "androidx.compose.material.icons.filled.NetworkWifi",
+    "androidx.compose.material.icons.filled.People",
+    "androidx.compose.material.icons.filled.Person",
+    "androidx.compose.material.icons.filled.Router",
+    "androidx.compose.material.icons.filled.Settings",
+    "androidx.compose.material.icons.filled.Wifi",
+    "androidx.compose.material3.*",
+    "androidx.compose.runtime.Composable",
+    "androidx.compose.runtime.collectAsState",
+    "androidx.compose.runtime.getValue",
+    "androidx.compose.ui.Alignment",
+    "androidx.compose.ui.Modifier",
+    "androidx.compose.ui.graphics.Color",
+    "androidx.compose.ui.text.font.FontWeight",
+    "androidx.compose.ui.unit.sp",
+    "androidx.compose.ui.unit.dp",
+    "androidx.hilt.navigation.compose.hiltViewModel",
+    "androidx.navigation.NavHostController",
+    "com.scmessenger.android.ui.dashboard.PeerListScreen",
+    "com.scmessenger.android.ui.dashboard.TopologyScreen",
+    "com.scmessenger.android.ui.viewmodels.MeshServiceViewModel",
+    "com.scmessenger.android.ui.viewmodels.DashboardViewModel",
+    "com.scmessenger.android.ui.viewmodels.SettingsViewModel",
+    "com.scmessenger.android.ui.settings.MeshSettingsScreen",
+    "com.scmessenger.android.ui.settings.PowerSettingsScreen"
+  ],
+  "funcs": [
+    {
+      "name": "DashboardScreen",
+      "line": 41,
+      "calls_out_to": [
+        "serviceState.collectAsState",
+        "isRunning.collectAsState",
+        "stats.collectAsState",
+        "fullPeersCount.collectAsState",
+        "headlessPeersCount.collectAsState",
+        "totalPeersCount.collectAsState",
+        "settings.collectAsState"
+      ]
+    },
+    {
+      "name": "PeerItem",
+      "line": 191,
+      "calls_out_to": [
+        "peer.isOnline",
+        "peer.localNickname",
+        "peer.nickname",
+        "peer.peerId",
+        "peer.transport"
+      ]
+    },
+    {
+      "name": "StatusCard",
+      "line": 267,
+      "calls_out_to": [
+        "isRunning.collectAsState",
+        "stateName.collectAsState"
+      ]
+    },
+    {
+      "name": "StatCard",
+      "line": 302,
+      "calls_out_to": [
+        "peer.isOnline",
+        "peer.localNickname",
+        "peer.nickname",
+        "peer.peerId",
+        "peer.transport"
+      ]
+    },
+    {
+      "name": "ConnectionStatusCard",
+      "line": 340,
+      "calls_out_to": [
+        "meshSettings.collectAsState"
+      ]
+    },
+    {
+      "name": "TransportItem",
+      "line": 365,
+      "calls_out_to": []
+    },
+    {
+      "name": "TextDetailRow",
+      "line": 378,
+      "calls_out_to": [
+        "peer.isOnline"
+      ]
+    }
+  ]
+}
+{
+  "file": "DiagnosticsScreen.kt",
+  "chunk": 1,
+  "summary": "A Composable function that displays diagnostic information for the application.",
+  "structs_or_classes": [],
+  "imports": [
+    "android.content.Context",
+    "android.content.Intent",
+    "androidx.compose.foundation.layout.*",
+    "androidx.compose.foundation.rememberScrollState",
+    "androidx.compose.foundation.verticalScroll",
+    "androidx.compose.material.icons.Icons",
+    "androidx.compose.material.icons.automirrored.filled.ArrowBack",
+    "androidx.compose.material.icons.filled.Refresh",
+    "androidx.compose.material.icons.filled.Share",
+    "androidx.compose.material.icons.filled.Delete",
+    "androidx.compose.material3.*",
+    "androidx.compose.runtime.*",
+    "androidx.compose.ui.Modifier",
+    "kotlinx.coroutines.launch",
+    "androidx.compose.ui.platform.LocalContext",
+    "androidx.compose.ui.text.font.FontFamily",
+    "androidx.compose.ui.unit.dp",
+    "androidx.hilt.navigation.compose.hiltViewModel",
+    "com.scmessenger.android.network.DiagnosticsReporter",
+    "com.scmessenger.android.ui.diagnostics.DiagnosticsBundleFormatter",
+    "com.scm messenger.android.ui.diagnostics.DiagnosticsBundleInput",
+    "com.scmessenger.android.ui.dialogs.NetworkStatusDialog",
+    "com.scmessenger.android.ui.viewmodels.SettingsViewModel",
+    "com.scmessenger.android.utils.NotificationHelper",
+    "com.scmessenger.android.service.PerformanceMonitor",
+    "com.scmessenger.android.service.ServiceHealthMonitor",
+    "com.scmessenger.android.service.AnrEvent",
+    "com.scmessenger.android.ui.components.WarningBanner",
+    "com.scm messenger.android.ui.components.InfoBanner",
+    "com.scmessenger.android.ui.components.ErrorState",
+    "androidx.core.content.FileProvider",
+    "timber.log.Timber",
+    "java.io.File"
+  ],
+  "funcs": [
+    {
+      "name": "DiagnosticsScreen",
+      "line": 39,
+      "calls_out_to": ["refreshLogs", "shareDiagnosticsBundle"]
+    },
+    {
+      "name": "refreshLogs",
+      "line": 58,
+      "calls_out_to": []
+    }
+  ]
+}
+{
+  "file": "OnboardingScreen.kt",
+  "chunk": 1,
+  "summary": "This is the main screen for the onboarding process in the SCMessenger app. It handles user consent, identity creation, and contact import.",
+  "structs_or_classes": [],
+  "imports": [
+    "androidx.compose.foundation.layout.*",
+    "androidx.compose.foundation.rememberScrollState",
+    "androidx.compose.foundation.text.KeyboardActions",
+    "androidx.compose.foundation.text.KeyboardOptions",
+    "androidx.compose.foundation.verticalScroll",
+    "androidx.compose.material.icons.Icons",
+    "androidx.compose.material.icons.filled.Lock",
+    "androidx.compose.material.icons.filled.CheckCircle",
+    "androidx.compose.material.icons.filled.Shield",
+    "androidx.compose.material.icons.filled.Warning",
+    "androidx.compose.material3.*",
+    "androidx.compose.runtime.*",
+    "androidx.compose.ui.Alignment",
+    "androidx.compose.ui.Modifier",
+    "androidx.compose.ui.platform.LocalFocusManager",
+    "androidx.compose.ui.text.font.FontFamily",
+    "androidx.compose.ui.text.input.ImeAction",
+    "androidx.compose.ui.text.style.TextAlign",
+    "androidx.compose.ui.unit.dp",
+    "androidx.hilt.navigation.compose.hiltViewModel",
+    "com.scmessenger.android.ui.viewmodels.MainViewModel",
+    "com.google.accompanist.permissions.ExperimentalPermissionsApi",
+    "com.google.accompanist.permissions.rememberMultiplePermissionsState"
+  ],
+  "funcs": [
+    {
+      "name": "OnboardingScreen",
+      "line": 27,
+      "calls_out_to": [
+        "remember",
+        "hiltViewModel",
+        "collectAsState",
+        "LaunchedEffect",
+        "Icon",
+        "Text",
+        "Card",
+        "Checkbox",
+        "Button",
+        "OutlinedTextField",
+        "OutlinedButton",
+        "AlertDialog"
+      ]
+    },
+    {
+      "name": "ConsentInfoItem",
+      "line": 299,
+      "calls_out_to": [
+        "Row",
+        "Icon",
+        "Column",
+        "Text"
+      ]
+    },
+    {
+      "name": "ImportContactDialog",
+      "line": 329,
+      "calls_out_to": [
+        "AlertDialog",
+        "OutlinedTextField",
+        "Button"
+      ]
+    }
+  ]
+}
+{
+  "file": "MeshSettingsScreen.kt",
+  "chunk": 1,
+  "summary": "A Composable function that displays the mesh settings screen for a messaging application. It includes sections for network participation, transport settings, and discovery settings.",
+  "structs_or_classes": [],
+  "imports": [
+    "androidx.compose.foundation.layout.*",
+    "androidx.compose.foundation.rememberScrollState",
+    "androidx.compose.foundation.verticalScroll",
+    "androidx.compose.material.icons.Icons",
+    "androidx.compose.material.icons.automirrored.filled.ArrowBack",
+    "androidx.compose.material3.*",
+    "androidx.compose.runtime.*",
+    "androidx.compose.ui.Alignment",
+    "androidx.compose.ui.Modifier",
+    "androidx.compose.ui.text.font.FontWeight",
+    "androidx.compose.ui.unit.dp",
+    "androidx.hilt.navigation.compose.hiltViewModel",
+    "com.scmessenger.android.ui.components.ErrorBanner",
+    "com.scmessenger.android.ui.components.WarningBanner",
+    "com.scmessenger.android.ui.viewmodels.SettingsViewModel"
+  ],
+  "funcs": [
+    {
+      "name": "MeshSettingsScreen",
+      "line": 33,
+      "calls_out_to": ["hiltViewModel", "collectAsState", "loadSettings", "Scaffold", "TopAppBar", "Column", "ErrorBanner", "WarningBanner", "Card", "SwitchSetting", "SliderSetting", "DiscoveryModeSetting"]
+    }
+  ]
+}
+{
+  "file": "PowerSettingsScreen.kt",
+  "chunk": 1,
+  "summary": "Displays the power settings screen for adjusting auto-adjust engine, manual profile selection, BLE scan interval override, relay budget override, and battery optimization settings.",
+  "structs_or_classes": [],
+  "imports": [
+    "androidx.compose.foundation.layout.*",
+    "androidx.compose.foundation.rememberScrollState",
+    "androidx.compose.foundation.verticalScroll",
+    "androidx.compose.material.icons.Icons",
+    "androidx.compose.material.icons.automirrored.filled.ArrowBack",
+    "androidx.compose.material3.*",
+    "androidx.compose.runtime.*",
+    "androidx.compose.ui.Alignment",
+    "androidx.compose.ui.Modifier",
+    "androidx.compose.ui.text.font.FontWeight",
+    "androidx.compose.ui.unit.dp",
+    "androidx.hilt.navigation.compose.hiltViewModel",
+    "com.scmessenger.android.ui.components.ErrorBanner",
+    "com.scmessenger.android.ui.components.ErrorState",
+    "com.scmessenger.android.ui.components.IdenticonFromHex",
+    "com.scmessenger.android.ui.components.InfoBanner",
+    "com.scmessenger.android.ui.components.LabeledCopyableText",
+    "com.scmessenger.android.ui.components.TruncatedCopyableText",
+    "com.scmessenger.android.ui.components.WarningBanner",
+    "com.scmessenger.android.ui.viewmodels.SettingsViewModel"
+  ],
+  "funcs": [
+    {
+      "name": "PowerSettingsScreen",
+      "line": 36,
+      "calls_out_to": ["hiltViewModel", "collectAsState", "loadSettings", "clearError", "setAutoAdjust", "setManualProfile", "overrideBleScanInterval", "overrideRelayMax", "updateBatteryFloor"]
+    }
+  ]
+}
+{
+  "file": "Color.kt",
+  "chunk": 1,
+  "summary": "This file defines various color constants used in the SCMessenger Android application's theme.",
+  "structs_or_classes": [],
+  "imports": [
+    "androidx.compose.ui.graphics.Color"
+  ],
+  "funcs": []
+}
+{
+  "file": "Theme.kt",
+  "chunk": 1,
+  "summary": "A Composable function that sets up the theme for the SCMessenger application.",
+  "structs_or_classes": [],
+  "imports": [
+    "android.app.Activity",
+    "android.os.Build",
+    "androidx.compose.foundation.isSystemInDarkTheme",
+    "androidx.compose.material3.*",
+    "androidx.compose.runtime.Composable",
+    "androidx.compose.runtime.SideEffect",
+    "androidx.compose.ui.graphics.toArgb",
+    "androidx.compose.ui.platform.LocalContext",
+    "androidx.compose.ui.platform.LocalView",
+    "androidx.core.view.WindowCompat"
+  ],
+  "funcs": [
+    {
+      "name": "SCMessengerTheme",
+      "line": 27,
+      "calls_out_to": [
+        "darkColorScheme",
+        "lightColorScheme",
+        "LocalContext.current",
+        "LocalView.current",
+        "SideEffect",
+        "Activity.window",
+        "WindowCompat.getInsetsController"
+      ]
+    }
+  ]
+}
+{
+  "file": "ChatViewModel.kt",
+  "chunk": 1,
+  "summary": "ViewModel for a single chat conversation.",
+  "structs_or_classes": [],
+  "imports": [
+    "androidx.lifecycle.ViewModel",
+    "androidx.lifecycle.viewModelScope",
+    "com.scmessenger.android.data.MeshRepository",
+    "com.scmessenger.android.service.MeshEventBus",
+    "com.scmessenger.android.service.MessageEvent",
+    "com.scm messenger.android.utils.toEpochMillis",
+    "com.scmessenger.android.utils.PeerIdValidator",
+    "dagger.hilt.android.lifecycle.HiltViewModel",
+    "kotlinx.coroutines.flow.*",
+    "kotlinx.coroutines.launch",
+    "timber.log.Timber",
+    "javax.inject.Inject"
+  ],
+  "funcs": [
+    {
+      "name": "setPeer",
+      "line": 82,
+      "calls_out_to": ["loadMessages", "loadContact"]
+    },
+    {
+      "name": "loadMessages",
+      "line": 92,
+      "calls_out_to": ["meshRepository.getConversation", "meshRepository.loadPendingOutboxAsync"]
+    },
+    {
+      "name": "loadContact",
+      "line": 134,
+      "calls_out_to": ["meshRepository.getContact"]
+    },
+    {
+      "name": "sendMessage",
+      "line": 153,
+      "calls_out_to": ["PeerIdValidator.normalize", "meshRepository.sendMessage", "meshRepository.loadPendingOutboxAsync"]
+    },
+    {
+      "name": "sendMessage",
+      "line": 214,
+      "calls_out_to": []
+    },
+    {
+      "name": "updateInputText",
+      "line": 222,
+      "calls_out_to": []
+    },
+    {
+      "name": "clearInput",
+      "line": 230,
+      "calls_out_to": []
+    },
+    {
+      "name": "clearError",
+      "line": 238,
+      "calls_out_to": []
+    },
+    {
+      "name": "observeMessageEvents",
+      "line": 245,
+      "calls_out_to": ["MeshEventBus.messageEvents.collect"]
+    },
+    {
+      "name": "observeIncomingMessages",
+      "line": 274,
+      "calls_out_to": ["meshRepository.incomingMessages.collect"]
+    },
+    {
+      "name": "observeMessageUpdates",
+      "line": 287,
+      "calls_out_to": ["meshRepository.messageUpdates.collect"]
+    },
+    {
+      "name": "observePeerEvents",
+      "line": 324,
+      "calls_out_to": ["MeshEventBus.peerEvents.collect"]
+    },
+    {
+      "name": "loadPendingOutboxCount",
+      "line": 344,
+      "calls_out_to": ["meshRepository.loadPendingOutboxAsync"]
+    },
+    {
+      "name": "getRetryDelayForAttempt",
+      "line": 358,
+      "calls_out_to": []
+    },
+    {
+      "name": "shouldRetryMessage",
+      "line": 365,
+      "calls_out_to": []
+    },
+    {
+      "name": "updateMessageStatus",
+      "line": 372,
+      "calls_out_to": ["meshRepository.loadPendingOutboxAsync"]
+    },
+    {
+      "name": "loadMoreMessages",
+      "line": 392,
+      "calls_out_to": []
+    },
+    {
+      "name": "formatTimestamp",
+      "line": 400,
+      "calls_out_to": ["java.util.Date.toEpochMillis", "java.text.SimpleDateFormat"]
+    },
+    {
+      "name": "isSameDay",
+      "line": 414,
+      "calls_out_to": []
+    }
+  ]
+}
+{
+  "file": "IdentityViewModel.kt",
+  "chunk": 1,
+  "summary": "ViewModel for managing identity information, including loading, creating, and exporting identities.",
+  "structs_or_classes": [],
+  "imports": [
+    "androidx.lifecycle.ViewModel",
+    "androidx.lifecycle.viewModelScope",
+    "com.scmessenger.android.data.MeshRepository",
+    "dagger.hilt.android.lifecycle.HiltViewModel",
+    "kotlinx.coroutines.Dispatchers",
+    "kotlinx.coroutines.flow.*",
+    "kotlinx.coroutines.launch",
+    "kotlinx.coroutines.withContext",
+    "timber.log.Timber",
+    "javax.inject.Inject"
+  ],
+  "funcs": [
+    {
+      "name": "loadIdentity",
+      "line": 62,
+      "calls_out_to": ["meshRepository.getIdentityInfoNonBlocking", "meshRepository.createIdentity", "meshRepository.setNickname", "meshRepository.getIdentityExportString"]
+    },
+    {
+      "name": "createIdentity",
+      "line": 91,
+      "calls_out_to": ["meshRepository.createIdentity", "meshRepository.setNickname", "meshRepository.getIdentityInfoNonBlocking"]
+    },
+    {
+      "name": "getQrCodeData",
+      "line": 126,
+      "calls_out_to": ["meshRepository.getIdentityExportString"]
+    },
+    {
+      "name": "clearSuccessMessage",
+      "line": 142,
+      "calls_out_to": []
+    },
+    {
+      "name": "clearError",
+      "line": 149,
+      "calls_out_to": []
+    }
+  ]
+}
+{
+  "file": "MainViewModel.kt",
+  "chunk": 1,
+  "summary": "A ViewModel class for managing the state and logic of the main application.",
+  "structs_or_classes": [],
+  "imports": [
+    "android.content.Context",
+    "android.net.Uri",
+    "androidx.lifecycle.ViewModel",
+    "androidx.lifecycle.viewModelScope",
+    "com.scmessenger.android.data.MeshRepository",
+    "com.scmessenger.android.data.PreferencesRepository",
+    "dagger.hilt.android.lifecycle.HiltViewModel",
+    "dagger.hilt.android.qualifiers.ApplicationContext",
+    "kotlinx.coroutines.flow.MutableStateFlow",
+    "kotlinx.coroutines.flow.StateFlow",
+    "kotlinx.coroutines.flow.asStateFlow",
+    "kotlinx.coroutines.flow.*",
+    "kotlinx.coroutines.Dispatchers",
+    "kotlinx.coroutines.launch",
+    "kotlinx.coroutines.withContext",
+    "timber.log.Timber",
+    "com.scmessenger.android.utils.StorageManager",
+    "java.util.concurrent.atomic.AtomicBoolean",
+    "javax.inject.Inject"
+  ],
+  "funcs": [
+    {
+      "name": "grantConsent",
+      "line": 125,
+      "calls_out_to": []
+    },
+    {
+      "name": "refreshIdentityState",
+      "line": 136,
+      "calls_out_to": []
+    },
+    {
+      "name": "createIdentity",
+      "line": 172,
+      "calls_out_to": [
+        "meshRepository.createIdentity",
+        "meshRepository.setNickname"
+      ]
+    },
+    {
+      "name": "clearIdentityError",
+      "line": 229,
+      "calls_out_to": []
+    },
+    {
+      "name": "refreshStorageStatus",
+      "line": 233,
+      "calls_out_to": [
+        "meshRepository.getAvailableStorageMB"
+      ]
+    },
+    {
+      "name": "importContact",
+      "line": 242,
+      "calls_out_to": [
+        "meshRepository.addContact",
+        "meshRepository.connectToPeer"
+      ]
+    },
+    {
+      "name": "clearImportState",
+      "line": 294,
+      "calls_out_to": []
+    },
+    {
+      "name": "skipOnboardingForRelayOnlyInstall",
+      "line": 299,
+      "calls_out_to": [
+        "preferencesRepository.setInstallChoiceCompleted",
+        "preferencesRepository.setOnboardingCompleted"
+      ]
+    },
+    {
+      "name": "handleDeepLink",
+      "line": 307,
+      "calls_out_to": []
+    },
+    {
+      "name": "consumeDeepLink",
+      "line": 323,
+      "calls_out_to": []
+    }
+  ]
+}
+{
+  "file": "MeshServiceViewModel.kt",
+  "chunk": 1,
+  "summary": "This is a ViewModel class that manages the lifecycle and state of the mesh service in an Android application. It uses Hilt for dependency injection, LiveData for reactive data streams, and Timber for logging.",
+  "structs_or_classes": [],
+  "imports": [
+    "android.annotation.SuppressLint",
+    "android.content.Context",
+    "android.content.Intent",
+    "androidx.lifecycle.ViewModel",
+    "androidx.lifecycle.viewModelScope",
+    "com.scmessenger.android.data.MeshRepository",
+    "com.scmessenger.android.data.PreferencesRepository",
+    "com.scmessenger.android.service.MeshForegroundService",
+    "dagger.hilt.android.lifecycle.HiltViewModel",
+    "dagger.hilt.android.qualifiers.ApplicationContext",
+    "kotlinx.coroutines.flow.*",
+    "kotlinx.coroutines.launch",
+    "timber.log.Timber",
+    "javax.inject.Inject"
+  ],
+  "funcs": [
+    {
+      "name": "startService",
+      "line": 71,
+      "calls_out_to": ["context.startForegroundService(intent)"]
+    },
+    {
+      "name": "stopService",
+      "line": 95,
+      "calls_out_to": ["context.startService(intent)", "context.stopService(Intent(context, MeshForegroundService::class.java))"]
+    },
+    {
+      "name": "toggleService",
+      "line": 118,
+      "calls_out_to": []
+    },
+    {
+      "name": "setAutoStart",
+      "line": 131,
+      "calls_out_to": ["preferencesRepository.setServiceAutoStart(enabled)"]
+    },
+    {
+      "name": "applyTransportSettings",
+      "line": 142,
+      "calls_out_to": ["meshRepository.applyTransportSettings(settings)"]
+    },
+    {
+      "name": "getStatsText",
+      "line": 155,
+      "calls_out_to": []
+    },
+    {
+      "name": "formatBytes",
+      "line": 166,
+      "calls_out_to": []
+    },
+    {
+      "name": "formatDuration",
+      "line": 175,
+      "calls_out_to": []
+    }
+  ]
+}
+{
+  "file": "SettingsViewModel.kt",
+  "chunk": 2,
+  "summary": "This class provides methods to retrieve network diagnostics, failures, service stats, active transports, ledger relay connectivity, message count, and reset application data.",
+  "structs_or_classes": [],
+  "imports": [
+    "com.scmessenger.android.repository.MeshRepository",
+    "com.scmessenger.android.utils.NetworkFailureMetrics",
+    "com.scmessenger.android.service.TransportType",
+    "androidx.lifecycle.viewModelScope",
+    "androidx.lifecycle.MutableLiveData"
+  ],
+  "funcs": [
+    {
+      "name": "getNetworkDiagnosticsSnapshot",
+      "line": 701,
+      "calls_out_to": ["meshRepository.getTransportHealthSummary"]
+    },
+    {
+      "name": "getNetworkFailureSummary",
+      "line": 704,
+      "calls_out_to": ["meshRepository.getNetworkFailureSummary"]
+    },
+    {
+      "name": "resetServiceStats",
+      "line": 711,
+      "calls_out_to": ["meshRepository.resetServiceStats"]
+    },
+    {
+      "name": "getActiveTransports",
+      "line": 725,
+      "calls_out_to": ["meshRepository.getActiveTransports"]
+    },
+    {
+      "name": "testLedgerRelayConnectivity",
+      "line": 732,
+      "calls_out_to": ["meshRepository.testLedgerRelayConnectivity"]
+    },
+    {
+      "name": "getMessageCount",
+      "line": 741,
+      "calls_out_to": ["meshRepository.getMessageCount"]
+    },
+    {
+      "name": "setBleRotationEnabled",
+      "line": 750,
+      "calls_out_to": ["preferencesRepository.setBleRotationEnabled"]
+    },
+    {
+      "name": "setBleRotationIntervalSec",
+      "line": 756,
+      "calls_out_to": ["preferencesRepository.setBleRotationIntervalSec"]
+    },
+    {
+      "name": "resetAllData",
+      "line": 763,
+      "calls_out_to": [
+        "preferencesRepository.clearAll",
+        "meshRepository.resetAllData"
+      ]
+    }
+  ]
+}
+{
+  "file": "MeshApp.kt",
+  "chunk": 1,
+  "summary": "Root composable for the SCMessenger app. Sets up the navigation graph and bottom navigation bar.",
+  "structs_or_classes": [],
+  "imports": [
+    "androidx.compose.foundation.layout.*",
+    "androidx.compose.material.icons.filled.Add",
+    "androidx.compose.material.icons.filled.Block",
+    "androidx.compose.material.icons.automirrored.filled.Chat",
+    "androidx.compose.material.icons.Default.People",
+    "androidx.compose.material.icons.Filled.Router",
+    "androidx.compose.material.icons.Default.Settings",
+    "androidx.compose.material3.*",
+    "androidx.compose.runtime.Composable",
+    "androidx.compose.runtime.LaunchedEffect",
+    "androidx.compose.runtime.collectAsState",
+    "androidx.compose.runtime.getValue",
+    "androidx.compose.runtime.mutableStateOf",
+    "androidx.compose.runtime.remember",
+    "androidx.compose.runtime.setValue",
+    "androidx.compose.ui.Modifier",
+    "androidx.hilt.navigation.compose.hiltViewModel",
+    "androidx.navigation.NavHostController",
+    "androidx.navigation.compose.NavHost",
+    "androidx.navigation.compose.composable",
+    "androidx.navigation.compose.currentBackStackEntryAsState",
+    "androidx.navigation.compose.rememberNavController",
+    "com.scmessenger.android.ui.contacts.AddContactScreen",
+    "com.scmessenger.android.ui.contacts.ContactDetailScreen",
+    "com.scm messenger.android.ui.dashboard.PeerListScreen",
+    "com.scmessenger.android.ui.dashboard.TopologyScreen",
+    "com.scmessenger.android.ui.identity.IdentityScreen",
+    "com.scmessenger.android.ui.screens.*",
+    "com.scmessenger.android.ui.viewmodels.MainViewModel",
+    "com.scmessenger.android.ui.viewmodels.DeepLinkData",
+    "com.scmessenger.android.ui.settings.MeshSettingsScreen",
+    "com.scmessenger.android.ui.settings.PowerSettingsScreen"
+  ],
+  "funcs": [
+    {
+      "name": "MeshApp",
+      "line": 42,
+      "calls_out_to": [
+        "hiltViewModel",
+        "collectAsState",
+        "LaunchedEffect",
+        "rememberNavController",
+        "consumeDeepLink",
+        "Box"
+      ]
+    },
+    {
+      "name": "MeshNavHost",
+      "line": 123,
+      "calls_out_to": [
+        "NavHost",
+        "startDestinationForRole",
+        "composable",
+        "popBackStack",
+        "navigate",
+        "consumeDeepLink"
+      ]
+    },
+    {
+      "name": "MeshBottomBar",
+      "line": 288,
+      "calls_out_to": [
+        "currentBackStackEntryAsState",
+        "NavigationBar",
+        "roleBasedBottomNavItems",
+        "NavigationItem",
+        "navigate",
+        "popUpTo"
+      ]
+    },
+    {
+      "name": "roleBasedBottomNavItems",
+      "line": 334,
+      "calls_out_to": []
+    },
+    {
+      "name": "startDestinationForRole",
+      "line": 337,
+      "calls_out_to": []
+    }
+  ]
+}
+{
+  "file": "ContactImportParser.kt",
+  "chunk": 1,
+  "summary": "This file contains a class `ImportedContactPayload` and a sealed class `ContactImportParseResult`. It also includes functions to parse contact import payloads from raw strings.",
+  "structs_or_classes": [
+    {
+      "name": "ImportedContactPayload",
+      "line": 6,
+      "fields": [
+        {"name": "peerId", "type": "String"},
+        {"name": "publicKey", "type": "String"},
+        {"name": "nickname", "type": "String?"},
+        {"name": "libp2pPeerId", "type": "String?"},
+        {"name": "listeners", "type": "List<String>"},
+        {"line": 10, "calls_out_to": []},
+        {"line": 11, "calls_out_to": []}
+      ]
+    },
+    {
+      "name": "ContactImportParseResult",
+      "line": 14,
+      "fields": [],
+      "methods": [
+        {
+          "name": "Valid",
+          "line": 15,
+          "calls_out_to": ["ImportedContactPayload"]
+        },
+        {
+          "name": "Invalid",
+          "line": 16,
+          "calls_out_to": ["String"]
+        }
+      ]
+    }
+  ],
+  "imports": [
+    {"package": "org.json", "class": "JSONArray"},
+    {"package": "org.json", "class": "JSONObject"}
+  ],
+  "funcs": [
+    {
+      "name": "parseContactImportPayload",
+      "line": 19,
+      "calls_out_to": ["firstNonBlank", "runCatching", "optString", "optJSONArray", "buildList", "optInt", "trim", "filter", "distinct"]
+    },
+    {
+      "name": "firstNonBlank",
+      "line": 93,
+      "calls_out_to": []
+    },
+    {
+      "name": "parseStringArray",
+      "line": 100,
+      "calls_out_to": ["JSONArray", "optString", "trim"]
+    }
+  ]
+}
+{
+  "file": "FileLoggingTree.kt",
+  "chunk": 1,
+  "summary": "A Timber Tree that logs to a file in the app's internal storage.",
+  "structs_or_classes": [
+    {
+      "name": "FileLoggingTree",
+      "line": 15
+    }
+  ],
+  "imports": [
+    "android.content.Context",
+    "timber.log.Timber",
+    "java.io.File",
+    "java.io.FileWriter",
+    "java.io.PrintWriter",
+    "java.text.SimpleDateFormat",
+    "java.util.*"
+  ],
+  "funcs": [
+    {
+      "name": "setIronCore",
+      "line": 24,
+      "calls_out_to": []
+    },
+    {
+      "name": "log",
+      "line": 28,
+      "calls_out_to": ["runCatching", "truncateLogFile"]
+    }
+  ]
+}
+{
+  "file": "CircuitBreaker.kt",
+  "chunk": 1,
+  "summary": "A circuit breaker pattern implementation for managing relay connectivity.",
+  "structs_or_classes": [
+    {
+      "name": "CircuitBreakerConfig",
+      "line": 30
+    },
+    {
+      "name": "CircuitState",
+      "line": 40
+    },
+    {
+      "name": "CircuitEntry",
+      "line": 46
+    },
+    {
+      "name": "LastFailureSummary",
+      "line": 186
+    },
+    {
+      "name": "CircuitBreakerStats",
+      "line": 249
+    }
+  ],
+  "imports": [
+    "kotlinx.coroutines.sync.Mutex",
+    "kotlinx.coroutines.sync.withLock",
+    "timber.log.Timber",
+    "java.util.concurrent.ConcurrentHashMap",
+    "javax.inject.Inject",
+    "javax.inject.Singleton"
+  ],
+  "funcs": [
+    {
+      "name": "allowRequest",
+      "line": 63,
+      "calls_out_to": []
+    },
+    {
+      "name": "recordSuccess",
+      "line": 97,
+      "calls_out_to": []
+    },
+    {
+      "name": "recordFailure",
+      "line": 128,
+      "calls_out_to": []
+    },
+    {
+      "name": "getState",
+      "line": 159,
+      "calls_out_to": []
+    },
+    {
+      "name": "isCircuitOpen",
+      "line": 167,
+      "calls_out_to": []
+    },
+    {
+      "name": "getFailureCount",
+      "line": 173,
+      "calls_out_to": []
+    },
+    {
+      "name": "getLastFailureReason",
+      "line": 178,
+      "calls_out_to": []
+    },
+    {
+      "name": "getLastFailure",
+      "line": 186,
+      "calls_out_to": []
+    },
+    {
+      "name": "reset",
+      "line": 209,
+      "calls_out_to": []
+    },
+    {
+      "name": "resetAll",
+      "line": 214,
+      "calls_out_to": []
+    },
+    {
+      "name": "getOpenCircuits",
+      "line": 220,
+      "calls_out_to": []
+    },
+    {
+      "name": "getHealthyRelays",
+      "line": 225,
+      "calls_out_to": []
+    },
+    {
+      "name": "getStats",
+      "line": 249,
+      "calls_out_to": []
+    }
+  ]
+}
+{
+  "file": "PeerIdValidator.kt",
+  "chunk": 1,
+  "summary": "This Kotlin object contains functions to validate and normalize peer IDs. It includes checks for identity IDs, libp2p peer IDs, and compares two normalized IDs.",
+  "structs_or_classes": [],
+  "imports": ["package com.scmessenger.android.utils"],
+  "funcs": [
+    {
+      "name": "validate",
+      "line": 6,
+      "calls_out_to": ["normalize"]
+    },
+    {
+      "name": "normalize",
+      "line": 10,
+      "calls_out_to": []
+    },
+    {
+      "name": "isLibp2pPeerId",
+      "line": 21,
+      "calls_out_to": []
+    },
+    {
+      "name": "isIdentityId",
+      "line": 31,
+      "calls_out_to": []
+    },
+    {
+      "name": "isSame",
+      "line": 34,
+      "calls_out_to": ["normalize"]
+    }
+  ]
+}
+{
+  "file": "Permissions.kt",
+  "chunk": 1,
+  "summary": "Manages permissions required by SCMessenger, providing user-friendly names and rationale explanations.",
+  "structs_or_classes": [],
+  "imports": [
+    "android.Manifest",
+    "android.os.Build"
+  ],
+  "funcs": [
+    {
+      "name": "getPermissionName",
+      "line": 77,
+      "calls_out_to": []
+    },
+    {
+      "name": "getRationale",
+      "line": 97,
+      "calls_out_to": []
+    }
+  ]
+}
+{
+  "file": "PeerKeyUtils.kt",
+  "chunk": 1,
+  "summary": "Utility functions for peer key and peer ID conversion.",
+  "structs_or_classes": [
+    {
+      "name": "PeerKeyUtils",
+      "line": 15
+    }
+  ],
+  "imports": [
+    "timber.log.Timber",
+    "java.nio.ByteBuffer",
+    "java.nio.ByteOrder"
+  ],
+  "funcs": [
+    {
+      "name": "extractPublicKeyFromPeerId",
+      "line": 27,
+      "calls_out_to": ["base58Decode", "isValidPublicKey"]
+    },
+    {
+      "name": "generateLibp2pPeerIdFromPublicKey",
+      "line": 79,
+      "calls_out_to": ["isValidPublicKey", "hexToBytes", "MessageDigest.getInstance", "base58Encode"]
+    },
+    {
+      "name": "generateFallbackPeerId",
+      "line": 125,
+      "calls_out_to": []
+    },
+    {
+      "name": "isValidPublicKey",
+      "line": 140,
+      "calls_out_to": []
+    },
+    {
+      "name": "isValidPeerId",
+      "line": 150,
+      "calls_out_to": ["isLibp2pPeerId"]
+    },
+    {
+      "name": "isLibp2pPeerId",
+      "line": 154,
+      "calls_out_to": []
+    },
+    {
+      "name": "extractPeerIdFromPublicKey",
+      "line": 172,
+      "calls_out_to": ["generateLibp2pPeerIdFromPublicKey"]
+    },
+    {
+      "name": "base58Encode",
+      "line": 206,
+      "calls_out_to": []
+    },
+    {
+      "name": "base58Decode",
+      "line": 260,
+      "calls_out_to": []
+    }
+  ]
+}
+{
+  "file": "MeshApplication.kt",
+  "chunk": 1,
+  "summary": "SCMessenger Application class with Hilt dependency injection.",
+  "structs_or_classes": [],
+  "imports": [
+    "android.app.Application",
+    "dagger.hilt.android.HiltAndroidApp",
+    "kotlinx.coroutines.CoroutineScope",
+    "kotlinx.coroutines.Dispatchers",
+    "kotlinx.coroutines.SupervisorJob",
+    "kotlinx.coroutines.cancel",
+    "kotlinx.coroutines.launch",
+    "timber.log.Timber"
+  ],
+  "funcs": [
+    {
+      "name": "onCreate",
+      "line": 18,
+      "calls_out_to": [
+        "Timber.plant(Timber.DebugTree())",
+        "com.scmessenger.android.utils.FileLoggingTree(this)",
+        "applicationScope.launch { ... }",
+        "com.scmessenger.android.utils.StorageManager.performStartupMaintenance(this@MeshApplication)",
+        "com.scmessenger.android.utils.NotificationHelper.createNotificationChannels(this)"
+      ]
+    },
+    {
+      "name": "onTerminate",
+      "line": 52,
+      "calls_out_to": [
+        "applicationScope.cancel()"
+      ]
+    }
+  ]
+}
+{
+  "file": "DeliveryStateMapperTest.kt",
+  "chunk": 1,
+  "summary": "This class contains unit tests for the DeliveryStateMapper class.",
+  "structs_or_classes": [],
+  "imports": [
+    "com.scmessenger.android.ui.chat.DeliveryStateMapper",
+    "com.scmessenger.android.ui.chat.DeliveryStateSurface",
+    "com.scmessenger.android.ui.chat.PendingDeliverySnapshot",
+    "org.junit.Assert.assertEquals",
+    "org.junit.Test"
+  ],
+  "funcs": [
+    {
+      "name": "DeliveryStateMapperTest",
+      "line": 9,
+      "calls_out_to": []
+    }
+  ]
+}
+{
+  "file": "ShareReceiver.kt",
+  "chunk": 1,
+  "summary": "BroadcastReceiver for handling share intents. Receives Intent.ACTION_SEND and presents a contact picker to encrypt and queue the shared content as a mesh message.",
+  "structs_or_classes": [],
+  "imports": [
+    "android.content.BroadcastReceiver",
+    "android.content.Context",
+    "android.content.Intent",
+    "android.net.Uri",
+    "android.widget.Toast",
+    "androidx.appcompat.app.AlertDialog",
+    "androidx.core.content.IntentCompat",
+    "com.scmessenger.android.R",
+    "com.scmessenger.android.data.MeshRepository",
+    "kotlinx.coroutines.CoroutineScope",
+    "kotlinx.coroutines.Dispatchers",
+    "kotlinx.coroutines.SupervisorJob",
+    "kotlinx.coroutines.cancel",
+    "kotlinx.coroutines.launch",
+    "timber.log.Timber"
+  ],
+  "funcs": [
+    {
+      "name": "onReceive",
+      "line": 33,
+      "calls_out_to": ["handleSingleShare", "handleMultipleShare"]
+    },
+    {
+      "name": "handleSingleShare",
+      "line": 44,
+      "calls_out_to": ["showContactPicker"]
+    },
+    {
+      "name": "handleMultipleShare",
+      "line": 73,
+      "calls_out_to": ["showContactPicker"]
+    },
+    {
+      "name": "showContactPicker",
+      "line": 112,
+      "calls_out_to": ["MeshRepository", "listContacts", "sendMessageToContact"]
+    },
+    {
+      "name": "sendMessageToContact",
+      "line": 160,
+      "calls_out_to": ["MeshRepository.sendMessage"]
+    }
+  ]
+}
+{
+  "file": "DiagnosticsBundleFormatterTest.kt",
+  "chunk": 1,
+  "summary": "This test class checks the functionality of DiagnosticsBundleFormatter by verifying that it correctly formats and includes required sections in a diagnostics bundle.",
+  "structs_or_classes": [],
+  "imports": [
+    "com.scmessenger.android.ui.diagnostics.DiagnosticsBundleFormatter",
+    "com.scmessenger.android.ui.diagnostics.DiagnosticsBundleInput",
+    "org.junit.Assert.assertTrue",
+    "org.junit.Test"
+  ],
+  "funcs": [
+    {
+      "name": "bundleIncludesRequiredTesterSections",
+      "line": 10,
+      "calls_out_to": ["DiagnosticsBundleFormatter.format", "assertTrue"]
+    },
+    {
+      "name": "bundlePreservesCoreDiagnosticsAndLogs",
+      "line": 36,
+      "calls_out_to": ["DiagnosticsBundleFormatter.format", "assertTrue"]
+    }
+  ]
+}
+{
+  "file": "MeshRepositoryTest.kt",
+  "chunk": 1,
+  "summary": "This class contains unit tests for the MeshRepository class, which handles mesh settings and participation checks.",
+  "structs_or_classes": [],
+  "imports": [
+    "org.junit.Assert.assertEquals",
+    "org.junit.Assert.assertFalse",
+    "org.junit.Assert.assertTrue",
+    "org.junit.Test"
+  ],
+  "funcs": [
+    {
+      "name": "meshSettings",
+      "line": 10,
+      "calls_out_to": []
+    }
+  ]
+}
+{
+  "file": "RoleNavigationPolicyTest.kt",
+  "chunk": 1,
+  "summary": "This class contains tests for the RoleNavigationPolicy, which determines the navigation routes and start destination based on user roles.",
+  "structs_or_classes": [],
+  "imports": [
+    "com.scmessenger.android.ui.roleBasedBottomNavItems",
+    "com.scmessenger.android.ui.startDestinationForRole"
+  ],
+  "funcs": [
+    {
+      "name": "relay only role hides conversations and contacts",
+      "line": 12,
+      "calls_out_to": ["roleBasedBottomNavItems", "map", "assertEquals", "assertFalse"]
+    },
+    {
+      "name": "full role exposes conversations and contacts",
+      "line": 21,
+      "calls_out_to": ["roleBasedBottomNavItems", "map", "assertTrue", "assertFalse", "assertEquals"]
+    },
+    {
+      "name": "start destination follows role",
+      "line": 30,
+      "calls_out_to": ["startDestinationForRole"]
+    }
+  ]
+}
+{
+  "file": "UniffiIntegrationTest.kt",
+  "chunk": 1,
+  "summary": "Integration tests for UniFFI boundary.",
+  "structs_or_classes": [],
+  "imports": [
+    "org.junit.Test",
+    "org.junit.Assert.*"
+  ],
+  "funcs": [
+    {
+      "name": "setupLibraryPath",
+      "line": 28,
+      "calls_out_to": []
+    }
+  ]
+}
+{
+  "file": "IdentityFlowRegressionTest.kt",
+  "chunk": 1,
+  "summary": "This class contains regression tests for identity flow bugs in the app, focusing on fixing issues related to AtomicBoolean fallback recursion guard, synchronous backup persistence, and consent grant verification.",
+  "structs_or_classes": [],
+  "imports": [
+    "io.mockk.*",
+    "org.junit.Assert.*",
+    "org.junit.Test",
+    "java.util.concurrent.atomic.AtomicBoolean"
+  ],
+  "funcs": [
+    {
+      "name": "AtomicBoolean compareAndSet prevents concurrent fallback entry",
+      "line": 23,
+      "calls_out_to": ["io.mockk.mockk", "org.junit.Assert.assertEquals", "org.junit.Assert.assertTrue"]
+    },
+    {
+      "name": "AtomicBoolean guard prevents recursive re-entry from same thread",
+      "line": 51,
+      "calls_out_to": ["io.mockk.mockk", "org.junit.Assert.assertFalse", "org.junit.Assert.assertTrue"]
+    },
+    {
+      "name": "AtomicBoolean guard survives high-contention scenarios",
+      "line": 69,
+      "calls_out_to": [
+        "java.util.concurrent.Executors.newFixedThreadPool",
+        "java.util.concurrent.atomic.AtomicInteger.incrementAndGet",
+        "java.util.concurrent.ExecutorService.shutdown"
+      ]
+    },
+    {
+      "name": "persistIdentityBackup uses commit not apply for synchronous write",
+      "line": 93,
+      "calls_out_to": [
+        "io.mockk.mockk",
+        "org.junit.Assert.assertTrue",
+        "org.junit.Assert.verify"
+      ]
+    },
+    {
+      "name": "SharedPreferences commit returns false signals write failure",
+      "line": 115,
+      "calls_out_to": ["io.mockk.mockk", "org.junit.Assert.assertFalse"]
+    },
+    {
+      "name": "grantConsent must be called before initializeIdentity",
+      "line": 127,
+      "calls_out_to": [
+        "io.mockk.mockk",
+        "org.junit.Assert.assertEquals",
+        "org.junit.Assert.verifyOrder"
+      ]
+    },
+    {
+      "name": "initializeIdentity without grantConsent throws ConsentRequired",
+      "line": 153,
+      "calls_out_to": ["io.mockk.mockk", "org.junit.Assert.fail", "org.junit.Assert.assertEquals"]
+    },
+    {
+      "name": "consent is re-granted on process restart when identity is restored from backup",
+      "line": 184,
+      "calls_out_to": [
+        "io.mockk.mockk",
+        "org.junit.Assert.assertEquals",
+        "org.junit.Assert.verify"
+      ]
+    },
+    {
+      "name": "isIdentityInitialized fast path triggers restore when core identity is lost",
+      "line": 213,
+      "calls_out_to": [
+        "java.util.concurrent.atomic.AtomicBoolean.contains",
+        "io.mockk.mockk",
+        "org.junit.Assert.assertEquals",
+        "org.junit.Assert.verify"
+      ]
+    }
+  ]
+}
+{
+  "file": "ble_mesh.rs",
+  "chunk": 1,
+  "summary": "This module contains functions for BLE mesh communication. It includes functions to discover and subscribe to notify events from SCM messenger peripherals, decode and forward decrypted payloads to the local Web UI as JSON-RPC messages.",
+  "structs_or_classes": [],
+  "imports": [
+    "use btleplug::api::bleuuid::uuid_from_u16;",
+    "use btleplug::api::{Central, CentralEvent, CharPropFlags, Manager as _, Peripheral as PeripheralApi, ScanFilter,}",
+    "use btleplug::platform::{Manager, Peripheral};",
+    "use futures_util::StreamExt;",
+    "use scmessenger_core::drift::frame::{DriftFrame, FrameType};",
+    "use scmessenger_core::wasm_support::rpc::{notif_message_received, MessageReceivedParams};",
+    "use scmessenger_core::IronCore;",
+    "use std::collections::HashSet;",
+    "use std::sync::Arc;",
+    "use tokio::sync::Mutex;",
+    "use uuid::Uuid;",
+    "use crate::server::{UiEvent, UiOutbound};"
+  ],
+  "funcs": [
+    {
+      "name": "scm_service_uuid",
+      "line": 27,
+      "calls_out_to": []
+    },
+    {
+      "name": "scm_notify_uuid",
+      "line": 31,
+      "calls_out_to": []
+    },
+    {
+      "name": "decode_ble_payload_for_ui",
+      "line": 36,
+      "calls_out_to": ["DriftFrame::from_bytes", "core.receive_message"]
+    },
+    {
+      "name": "push_message_to_ui",
+      "line": 59,
+      "calls_out_to": ["serde_json::to_value"]
+    },
+    {
+      "name": "subscribe_ingress_for_peripheral",
+      "line": 76,
+      "calls_out_to": [
+        "peripheral.connect",
+        "peripheral.discover_services",
+        "peripheral.characteristics",
+        "peripheral.subscribe",
+        "stream.next"
+      ]
+    },
+    {
+      "name": "run_ble_central_ingress",
+      "line": 128,
+      "calls_out_to": [
+        "Manager::new",
+        "adapter.adapters",
+        "adapter.start_scan",
+        "events.next",
+        "peripheral.peripheral",
+        "subscribe_ingress_for_peripheral"
+      ]
+    },
+    {
+      "name": "run_ble_peripheral_advertising",
+      "line": 225,
+      "calls_out_to": []
+    }
+  ]
+}
+{
+  "file": "bootstrap.rs",
+  "chunk": 1,
+  "summary": "This module implements aggressive bootstrap dialing for a peer-to-peer network. It provides functions to get default bootstrap nodes, strip PeerIDs from multiaddrs, parse multiaddrs to extract expected PeerIDs, merge user-provided bootstrap nodes with defaults, and get all default topics that a node should subscribe to.",
+  "structs_or_classes": [],
+  "imports": [
+    "crate::ledger"
+  ],
+  "funcs": [
+    {
+      "name": "default_bootstrap_nodes",
+      "line": 47,
+      "calls_out_to": []
+    },
+    {
+      "name": "promiscuous_bootstrap_addrs",
+      "line": 92,
+      "calls_out_to": ["default_bootstrap_nodes"]
+    },
+    {
+      "name": "parse_bootstrap_addr",
+      "line": 102,
+      "calls_out_to": []
+    },
+    {
+      "name": "merge_bootstrap_nodes",
+      "line": 113,
+      "calls_out_to": []
+    },
+    {
+      "name": "default_topics",
+      "line": 137,
+      "calls_out_to": []
+    }
+  ]
+}
+{
+  "file": "main.rs",
+  "chunk": 1,
+  "summary": "SCMessenger CLI entry point and main logic.",
+  "structs_or_classes": [],
+  "imports": [
+    "anyhow::{Context, Result}",
+    "clap::{Parser, Subcommand}",
+    "colored::*",
+    "libp2p::{Multiaddr, PeerId}",
+    "scmessenger_core::message::{decode_envelope, MessageType}",
+    "scmessenger_core::store::{Contact, ContactManager, MessageDirection, Outbox, QueuedMessage}",
+    "scmessenger_core::transport::abstraction::TransportType",
+    "scmessenger_core::transport::{self, SwarmEvent}",
+    "scmessenger_core::wasm_support::rpc::{
+      notif_delivery_status, notif_message_received, notif_peer_discovered, rpc_error, rpc_result,
+      ClientIntent, DeliveryStatusParams, MeshTopologyUpdateParams, MessageReceivedParams,
+      PeerDiscoveredParams,
+    }",
+    "scmessenger_core::IronCore",
+    "std::collections::HashMap",
+    "std::sync::Arc"
+  ],
+  "funcs": [
+    {
+      "name": "load_or_create_headless_network_keypair",
+      "line": 33,
+      "calls_out_to": []
+    },
+    {
+      "name": "main",
+      "line": 362,
+      "calls_out_to": ["cmd_stop", "cmd_init", "cmd_identity", "cmd_contact", "cmd_config", "cmd_history", "cmd_start", "cmd_relay", "cmd_status", "cmd_mark_sent", "cmd_history_clear", "cmd_history_enforce_retention", "cmd_history_prune_before", "cmd_block", "cmd_history_get", "cmd_history_stats", "cmd_history_count", "cmd_history_mark_delivered", "cmd_history_clear_conversation", "cmd_history_delete", "cmd_test", "cmd_audit", "cmd_swarm"]
+    }
+  ]
+}
+{
+  "file": "SmartTransportRouter.kt",
+  "chunk": 1,
+  "summary": "A class that manages smart transport selection, message deduplication, and health tracking for messaging applications.",
+  "structs_or_classes": [
+    {
+      "name": "SmartTransportRouter",
+      "line": 16
+    }
+  ],
+  "imports": [
+    "kotlinx.coroutines.*",
+    "kotlinx.coroutines.sync.Mutex",
+    "kotlinx.coroutines.sync.withLock",
+    "timber.log.Timber",
+    "java.util.concurrent.ConcurrentHashMap",
+    "java.util.concurrent.atomic.AtomicLong"
+  ],
+  "funcs": [
+    {
+      "name": "fromValue",
+      "line": 34,
+      "calls_out_to": []
+    },
+    {
+      "name": "recordSuccess",
+      "line": 117,
+      "calls_out_to": ["getHealth", "setHealth"]
+    },
+    {
+      "name": "recordFailure",
+      "line": 142,
+      "calls_out_to": ["getHealth", "setHealth"]
+    },
+    {
+      "name": "getHealth",
+      "line": 157,
+      "calls_out_to": []
+    },
+    {
+      "name": "setHealth",
+      "line": 165,
+      "calls_out_to": []
+    },
+    {
+      "name": "getPreferredTransport",
+      "line": 174,
+      "calls_out_to": ["getHealth", "getAvailableTransportsSorted"]
+    },
+    {
+      "name": "getAvailableTransportsSorted",
+      "line": 202,
+      "calls_out_to": []
+    },
+    {
+      "name": "getAvailableTransports",
+      "line": 213,
+      "calls_out_to": ["transportHealth", "TransportType.entries"]
+    },
+    {
+      "name": "checkAndRecordMessage",
+      "line": 230,
+      "calls_out_to": ["cleanupDedupCache"]
+    },
+    {
+      "name": "getDedupStats",
+      "line": 274,
+      "calls_out_to": []
+    },
+    {
+      "name": "cleanupDedupCache",
+      "line": 281,
+      "calls_out_to": []
+    },
+    {
+      "name": "attemptDelivery",
+      "line": 296,
+      "calls_out_to": ["getPreferredTransport", "withTimeoutOrNull", "coroutineScope"]
+    },
+    {
+      "name": "getHealthSummary",
+      "line": 447,
+      "calls_out_to": []
+    },
+    {
+      "name": "resetHealth",
+      "line": 471,
+      "calls_out_to": []
+    }
+  ]
+}

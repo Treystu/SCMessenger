@@ -1,0 +1,85 @@
+﻿{
+  "file": "MeshRepository.kt",
+  "chunk": 22,
+  "summary": "This file contains various functions related to peer management, network connectivity, and logging in a messaging application.",
+  "structs_or_classes": [],
+  "imports": [
+    "com.scmessenger.android.transport.NetworkType",
+    "com.scmessenger.android.transport.MdnsServiceDiscovery"
+  ],
+  "funcs": [
+    {
+      "name": "isBootstrapRelayPeerFromKey",
+      "line": 7352,
+      "calls_out_to": ["PeerKeyUtils.extractPeerIdFromPublicKey"]
+    },
+    {
+      "name": "createEmergencyContact",
+      "line": 7369,
+      "calls_out_to": [
+        "PeerKeyUtils.extractPeerIdFromPublicKey",
+        "PeerIdValidator.normalize"
+      ]
+    },
+    {
+      "name": "validatePeerBeforeContactCreation",
+      "line": 7408,
+      "calls_out_to": ["PeerKeyUtils.isValidPeerId", "PeerKeyUtils.isValidPublicKey"]
+    },
+    {
+      "name": "logIdentityResolutionDetails",
+      "line": 7435,
+      "calls_out_to": []
+    },
+    {
+      "name": "primeRelayBootstrapConnections",
+      "line": 7460,
+      "calls_out_to": [
+        "swarmBridge.dial",
+        "relayCircuitBreaker.allowRequest",
+        "shouldAttemptDial"
+      ]
+    },
+    {
+      "name": "primeRelayBootstrapConnectionsLegacy",
+      "line": 7523,
+      "calls_out_to": ["swarmBridge.dial", "shouldAttemptDial"]
+    },
+    {
+      "name": "prioritizeAddressesForCurrentNetwork",
+      "line": 7538,
+      "calls_out_to": []
+    },
+    {
+      "name": "isSameLanAddress",
+      "line": 7546,
+      "calls_out_to": ["extractIpv4FromMultiaddr", "getLocalIpAddress"]
+    },
+    {
+      "name": "extractIpv4FromMultiaddr",
+      "line": 7552,
+      "calls_out_to": []
+    },
+    {
+      "name": "sameSubnet24",
+      "line": 7561,
+      "calls_out_to": []
+    },
+    {
+      "name": "racingBootstrapWithFallback",
+      "line": 7569,
+      "calls_out_to": [
+        "networkDetector.getTransportPriority",
+        "networkDetector.getNetworkDiagnostics",
+        "relayCircuitBreaker.allowRequest",
+        "shouldAttemptDial",
+        "extractPortFromMultiaddr"
+      ]
+    },
+    {
+      "name": "attemptMdnsFallback",
+      "line": 7676,
+      "calls_out_to": ["meshService.getStats()?.peersDiscovered"]
+    }
+  ]
+}

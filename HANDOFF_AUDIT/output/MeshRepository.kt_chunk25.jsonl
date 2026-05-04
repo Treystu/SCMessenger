@@ -1,0 +1,138 @@
+﻿{
+  "file": "MeshRepository.kt",
+  "chunk": 25,
+  "summary": "This class contains methods for handling BLE transport degradation, recording transport events, and managing various aspects of the mesh network.",
+  "structs_or_classes": [],
+  "imports": [
+    "com.scmessenger.android.transport.TransportHealthMonitor",
+    "com.scmessenger.android.service.TransportManager",
+    "com.scmessenger.android.router.SmartTransportRouter",
+    "uniffi.api.MessageRecord",
+    "com.scmessenger.android.topic.TopicManager",
+    "com.scmessenger.android.network.NetworkDetector",
+    "com.scmessenger.android.circuitbreaker.CircuitBreaker",
+    "com.scmessenger.android.diagnostics.DiagnosticsReporter"
+  ],
+  "funcs": [
+    {
+      "name": "handleBleTransportDegradation",
+      "line": 8406,
+      "calls_out_to": ["transportHealthMonitor.isDegraded", "Timber.w", "bleScanner.setBackgroundMode", "bleScanner.clearPeerCache", "transportHealthMonitor.getHealth", "Timber.w"]
+    },
+    {
+      "name": "recordTransportEvent",
+      "line": 8422,
+      "calls_out_to": ["transportHealthMonitor.recordSuccess", "transportManager?.attemptBleRecovery", "transportHealthMonitor.isDegraded", "handleBleTransportDegradation"]
+    },
+    {
+      "name": "getTransportHealthSummary",
+      "line": 8437,
+      "calls_out_to": ["transportHealthMonitor.getSummary"]
+    },
+    {
+      "name": "getActiveTransports",
+      "line": 8445,
+      "calls_out_to": ["transportManager?.getActiveTransports"]
+    },
+    {
+      "name": "transportTypeFromValue",
+      "line": 8456,
+      "calls_out_to": ["smartTransportRouter?.let", "SmartTransportRouter.TransportType.fromValue"]
+    },
+    {
+      "name": "getSmartAvailableTransports",
+      "line": 8464,
+      "calls_out_to": ["smartTransportRouter?.getAvailableTransports"]
+    },
+    {
+      "name": "getAvailableTransportsSorted",
+      "line": 8472,
+      "calls_out_to": ["smartTransportRouter?.getAvailableTransportsSorted"]
+    },
+    {
+      "name": "getDedupStats",
+      "line": 8480,
+      "calls_out_to": ["smartTransportRouter?.getDedupStats"]
+    },
+    {
+      "name": "getSubscribedTopicsList",
+      "line": 8488,
+      "calls_out_to": ["topicManager?.getSubscribedTopicsList"]
+    },
+    {
+      "name": "getKnownTopicsList",
+      "line": 8496,
+      "calls_out_to": ["topicManager?.getKnownTopicsList"]
+    },
+    {
+      "name": "filterMessagesByTopic",
+      "line": 8502,
+      "calls_out_to": ["topicManager?.filterMessagesByTopic"]
+    },
+    {
+      "name": "enableTransport",
+      "line": 8510,
+      "calls_out_to": ["transportManager?.enableTransport"]
+    },
+    {
+      "name": "startAllTransports",
+      "line": 8520,
+      "calls_out_to": ["transportManager?.startAll"]
+    },
+    {
+      "name": "shouldUseTransport",
+      "line": 8526,
+      "calls_out_to": ["transportHealthMonitor.shouldUseTransport"]
+    },
+    {
+      "name": "getBleQuotaCount",
+      "line": 8536,
+      "calls_out_to": ["transportManager?.getBleQuotaCount"]
+    },
+    {
+      "name": "isPortLikelyBlocked",
+      "line": 8542,
+      "calls_out_to": ["networkDetector.isPortLikelyBlocked"]
+    },
+    {
+      "name": "getNetworkStateLogString",
+      "line": 8550,
+      "calls_out_to": ["networkDetector.getNetworkDiagnostics().toLogString"]
+    },
+    {
+      "name": "getHealthyRelays",
+      "line": 8560,
+      "calls_out_to": ["relayCircuitBreaker.getHealthyRelays"]
+    },
+    {
+      "name": "getLastFailure",
+      "line": 8566,
+      "calls_out_to": ["networkFailureMetrics.getLastFailure"]
+    },
+    {
+      "name": "getLastFailureReason",
+      "line": 8574,
+      "calls_out_to": ["relayCircuitBreaker.getLastFailureReason"]
+    },
+    {
+      "name": "getOpenCircuitCount",
+      "line": 8582,
+      "calls_out_to": ["relayCircuitBreaker.getOpenCircuits().size"]
+    },
+    {
+      "name": "formatDiagnosticsReportForUser",
+      "line": 8592,
+      "calls_out_to": ["diagnosticsReporter.generateReport", "diagnosticsReporter.formatReportForUser", "Timber.e"]
+    },
+    {
+      "name": "hasDnsFailures",
+      "line": 8604,
+      "calls_out_to": ["networkFailureMetrics.hasDnsFailures"]
+    },
+    {
+      "name": "hasPortBlocking",
+      "line": 8612,
+      "calls_out_to": ["networkFailureMetrics.hasPortBlocking"]
+    }
+  ]
+}

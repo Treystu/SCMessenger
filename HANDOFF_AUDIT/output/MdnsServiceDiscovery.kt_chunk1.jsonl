@@ -1,0 +1,129 @@
+﻿{
+  "file": "MdnsServiceDiscovery.kt",
+  "chunk": 1,
+  "summary": "mDNS/DNS-SD service discovery for cross-platform LAN discovery.",
+  "structs_or_classes": [
+    {
+      "name": "MdnsServiceDiscovery",
+      "line": 21
+    }
+  ],
+  "imports": [
+    "android.content.Context",
+    "android.net.nsd.NsdManager",
+    "android.net.nsd.NsdServiceInfo",
+    "android.os.Build",
+    "android.os.Handler",
+    "android.os.Looper",
+    "timber.log.Timber",
+    "java.util.concurrent.ConcurrentHashMap"
+  ],
+  "funcs": [
+    {
+      "name": "onDiscoveryStarted",
+      "line": 55,
+      "calls_out_to": []
+    },
+    {
+      "name": "onDiscoveryStopped",
+      "line": 69,
+      "calls_out_to": []
+    },
+    {
+      "name": "onServiceFound",
+      "line": 80,
+      "calls_out_to": [
+        "resolveService"
+      ]
+    },
+    {
+      "name": "onServiceLost",
+      "line": 94,
+      "calls_out_to": []
+    },
+    {
+      "name": "onServiceRegistered",
+      "line": 107,
+      "calls_out_to": []
+    },
+    {
+      "name": "onServiceResolved",
+      "line": 120,
+      "calls_out_to": [
+        "onPeerDiscovered"
+      ]
+    },
+    {
+      "name": "onServiceUnregistered",
+      "line": 178,
+      "calls_out_to": []
+    },
+    {
+      "name": "onStartDiscoveryFailed",
+      "line": 188,
+      "calls_out_to": [
+        "startDiscovery"
+      ]
+    },
+    {
+      "name": "onStopDiscoveryFailed",
+      "line": 211,
+      "calls_out_to": []
+    },
+    {
+      "name": "onRegistrationFailed",
+      "line": 225,
+      "calls_out_to": [
+        "registerService"
+      ]
+    },
+    {
+      "name": "onResolveFailed",
+      "line": 252,
+      "calls_out_to": []
+    },
+    {
+      "name": "onUnregistrationFailed",
+      "line": 264,
+      "calls_out_to": []
+    },
+    {
+      "name": "start",
+      "line": 304,
+      "calls_out_to": [
+        "registerService",
+        "startDiscovery"
+      ]
+    },
+    {
+      "name": "stop",
+      "line": 308,
+      "calls_out_to": [
+        "nsdManager?.stopServiceDiscovery",
+        "nsdManager?.unregisterService"
+      ]
+    },
+    {
+      "name": "registerService",
+      "line": 340,
+      "calls_out_to": []
+    },
+    {
+      "name": "startDiscovery",
+      "line": 378,
+      "calls_out_to": []
+    },
+    {
+      "name": "resolveService",
+      "line": 415,
+      "calls_out_to": []
+    },
+    {
+      "name": "cleanup",
+      "line": 430,
+      "calls_out_to": [
+        "stop"
+      ]
+    }
+  ]
+}

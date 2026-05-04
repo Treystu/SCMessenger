@@ -1,0 +1,37 @@
+﻿{
+  "file": "MeshRepository.kt",
+  "chunk": 7,
+  "summary": "This class handles various mesh-related operations such as starting the mesh service, sending delivery receipts, and managing identity and history syncs.",
+  "structs_or_classes": [],
+  "imports": [
+    "com.scmessenger.android.transport.ble.BleGattClient",
+    "com.scmessenger.android.transport.ble.BleScanner"
+  ],
+  "funcs": [
+    {
+      "name": "sendDeliveryReceiptAsync",
+      "line": 2104,
+      "calls_out_to": ["ironCore?.prepareReceipt", "contactManager?.get", "parseRoutingHints", "buildRoutePeerCandidates", "attemptDirectSwarmDelivery", "logDeliveryAttempt"]
+    },
+    {
+      "name": "sendIdentitySyncIfNeeded",
+      "line": 2223,
+      "calls_out_to": ["ironCore?.extractPublicKeyFromPeerId", "encodeIdentitySyncPayload", "prepareMessageWithId", "contactManager?.list", "parseRoutingHints", "buildRoutePeerCandidates"]
+    },
+    {
+      "name": "sendHistorySyncIfNeeded",
+      "line": 2348,
+      "calls_out_to": ["ironCore?.extractPublicKeyFromPeerId", "encodeMeshMessagePayload", "prepareMessageWithId", "contactManager?.get", "parseRoutingHints", "buildRoutePeerCandidates"]
+    },
+    {
+      "name": "sendHistorySyncDataIfNeeded",
+      "line": 2412,
+      "calls_out_to": ["historyManager?.conversation", "encodeMeshMessagePayload", "prepareMessageWithId", "contactManager?.get", "parseRoutingHints", "buildRoutePeerCandidates"]
+    },
+    {
+      "name": "initializeAndStartBle",
+      "line": 2412,
+      "calls_out_to": ["loadSettings", "hasAllPermissions", "com.scmessenger.android.transport.ble.BleGattClient", "com.scmessenger.android.transport.ble.BleScanner"]
+    }
+  ]
+}

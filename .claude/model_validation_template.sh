@@ -106,6 +106,11 @@ except Exception as e:
             model="qwen3-coder-next:cloud" # Safe default
         fi
     fi
+    # Ensure :cloud suffix is always present — all agent models are cloud-routed.
+    # Without this, launch_agent.sh attempts a local Ollama check and fails.
+    if [[ "$model" != *":cloud" ]]; then
+        model="${model}:cloud"
+    fi
 
     # Only the final model name goes to stdout
     echo "$model"

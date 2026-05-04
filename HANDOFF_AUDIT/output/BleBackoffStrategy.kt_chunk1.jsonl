@@ -1,0 +1,34 @@
+﻿{
+  "file": "BleBackoffStrategy.kt",
+  "chunk": 1,
+  "summary": "Exponential backoff strategy with jitter specifically for BLE operations.",
+  "structs_or_classes": [
+    {
+      "name": "BleBackoffStrategy",
+      "line": 16
+    }
+  ],
+  "imports": [
+    "timber.log.Timber",
+    "kotlin.random.Random",
+    "kotlin.math.min",
+    "kotlin.math.max"
+  ],
+  "funcs": [
+    {
+      "name": "nextDelay",
+      "line": 24,
+      "calls_out_to": ["Math.pow", "Random.nextLong"]
+    },
+    {
+      "name": "reset",
+      "line": 41,
+      "calls_out_to": []
+    },
+    {
+      "name": "getCurrentDelay",
+      "line": 46,
+      "calls_out_to": []
+    }
+  ]
+}

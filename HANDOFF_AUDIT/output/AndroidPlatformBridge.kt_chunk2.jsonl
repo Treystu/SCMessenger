@@ -1,0 +1,51 @@
+﻿{
+  "file": "AndroidPlatformBridge.kt",
+  "chunk": 2,
+  "summary": "This class handles BLE communication and background/foreground state management for a mesh network.",
+  "structs_or_classes": [],
+  "imports": [
+    "import timber.log.Timber"
+  ],
+  "funcs": [
+    {
+      "name": "sendBlePacket",
+      "line": 351,
+      "calls_out_to": ["bleGattClient?.sendData", "bleAdvertiser?.sendData"]
+    },
+    {
+      "name": "onEnteringBackground",
+      "line": 380,
+      "calls_out_to": ["meshRepository.pauseMeshService"]
+    },
+    {
+      "name": "onEnteringForeground",
+      "line": 387,
+      "calls_out_to": ["meshRepository.resumeMeshService"]
+    },
+    {
+      "name": "applyAdjustments",
+      "line": 398,
+      "calls_out_to": ["transportManager?.applyScanSettings", "transportManager?.applyAdvertiseSettings", "applyBleSettings"]
+    },
+    {
+      "name": "notifyBackground",
+      "line": 453,
+      "calls_out_to": ["onEnteringBackground"]
+    },
+    {
+      "name": "notifyForeground",
+      "line": 460,
+      "calls_out_to": ["onEnteringForeground"]
+    },
+    {
+      "name": "checkBatteryState",
+      "line": 467,
+      "calls_out_to": ["updateBatteryState"]
+    },
+    {
+      "name": "checkNetworkState",
+      "line": 474,
+      "calls_out_to": ["updateNetworkState"]
+    }
+  ]
+}

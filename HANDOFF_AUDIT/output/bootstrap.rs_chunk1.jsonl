@@ -1,0 +1,36 @@
+﻿{
+  "file": "bootstrap.rs",
+  "chunk": 1,
+  "summary": "This module implements aggressive bootstrap dialing for a peer-to-peer network. It provides functions to get default bootstrap nodes, strip PeerIDs from multiaddrs, parse multiaddrs to extract expected PeerIDs, merge user-provided bootstrap nodes with defaults, and get all default topics that a node should subscribe to.",
+  "structs_or_classes": [],
+  "imports": [
+    "crate::ledger"
+  ],
+  "funcs": [
+    {
+      "name": "default_bootstrap_nodes",
+      "line": 47,
+      "calls_out_to": []
+    },
+    {
+      "name": "promiscuous_bootstrap_addrs",
+      "line": 92,
+      "calls_out_to": ["default_bootstrap_nodes"]
+    },
+    {
+      "name": "parse_bootstrap_addr",
+      "line": 102,
+      "calls_out_to": []
+    },
+    {
+      "name": "merge_bootstrap_nodes",
+      "line": 113,
+      "calls_out_to": []
+    },
+    {
+      "name": "default_topics",
+      "line": 137,
+      "calls_out_to": []
+    }
+  ]
+}

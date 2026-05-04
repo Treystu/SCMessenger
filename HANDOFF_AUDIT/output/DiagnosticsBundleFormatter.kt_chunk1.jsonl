@@ -1,0 +1,28 @@
+﻿{
+  "file": "DiagnosticsBundleFormatter.kt",
+  "chunk": 1,
+  "summary": "This class provides a method to format a DiagnosticsBundleInput object into a human-readable string.",
+  "structs_or_classes": [
+    {
+      "name": "DiagnosticsBundleInput",
+      "line": 7
+    }
+  ],
+  "imports": [
+    "java.text.SimpleDateFormat",
+    "java.util.Date",
+    "java.util.Locale"
+  ],
+  "funcs": [
+    {
+      "name": "format",
+      "line": 23,
+      "calls_out_to": [
+        "Date(input.generatedAtEpochMs)",
+        "timestampFormat.format(Date(input.generatedAtEpochMs))",
+        "input.missingPermissions.joinToString(", ")",
+        "if (input.missingPermissions.isEmpty()) { ... } else { ... }"
+      ]
+    }
+  ]
+}

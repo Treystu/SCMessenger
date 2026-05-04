@@ -1,0 +1,63 @@
+﻿{
+  "file": "SettingsViewModel.kt",
+  "chunk": 2,
+  "summary": "This class provides methods to retrieve network diagnostics, failures, service stats, active transports, ledger relay connectivity, message count, and reset application data.",
+  "structs_or_classes": [],
+  "imports": [
+    "com.scmessenger.android.repository.MeshRepository",
+    "com.scmessenger.android.utils.NetworkFailureMetrics",
+    "com.scmessenger.android.service.TransportType",
+    "androidx.lifecycle.viewModelScope",
+    "androidx.lifecycle.MutableLiveData"
+  ],
+  "funcs": [
+    {
+      "name": "getNetworkDiagnosticsSnapshot",
+      "line": 701,
+      "calls_out_to": ["meshRepository.getTransportHealthSummary"]
+    },
+    {
+      "name": "getNetworkFailureSummary",
+      "line": 704,
+      "calls_out_to": ["meshRepository.getNetworkFailureSummary"]
+    },
+    {
+      "name": "resetServiceStats",
+      "line": 711,
+      "calls_out_to": ["meshRepository.resetServiceStats"]
+    },
+    {
+      "name": "getActiveTransports",
+      "line": 725,
+      "calls_out_to": ["meshRepository.getActiveTransports"]
+    },
+    {
+      "name": "testLedgerRelayConnectivity",
+      "line": 732,
+      "calls_out_to": ["meshRepository.testLedgerRelayConnectivity"]
+    },
+    {
+      "name": "getMessageCount",
+      "line": 741,
+      "calls_out_to": ["meshRepository.getMessageCount"]
+    },
+    {
+      "name": "setBleRotationEnabled",
+      "line": 750,
+      "calls_out_to": ["preferencesRepository.setBleRotationEnabled"]
+    },
+    {
+      "name": "setBleRotationIntervalSec",
+      "line": 756,
+      "calls_out_to": ["preferencesRepository.setBleRotationIntervalSec"]
+    },
+    {
+      "name": "resetAllData",
+      "line": 763,
+      "calls_out_to": [
+        "preferencesRepository.clearAll",
+        "meshRepository.resetAllData"
+      ]
+    }
+  ]
+}

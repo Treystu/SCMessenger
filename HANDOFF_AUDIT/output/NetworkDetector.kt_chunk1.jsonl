@@ -1,0 +1,109 @@
+﻿{
+  "file": "NetworkDetector.kt",
+  "chunk": 1,
+  "summary": "Detects network type and identifies blocked ports for cellular-aware transport selection.",
+  "structs_or_classes": [
+    {
+      "name": "NetworkDetector",
+      "line": 34
+    },
+    {
+      "name": "NetworkType",
+      "line": 342
+    },
+    {
+      "name": "FallbackTransport",
+      "line": 355
+    },
+    {
+      "name": "NetworkDiagnostics",
+      "line": 364
+    }
+  ],
+  "imports": [
+    "android.content.Context",
+    "android.net.ConnectivityManager",
+    "android.net.Network",
+    "android.net.NetworkCapabilities",
+    "android.net.NetworkRequest",
+    "android.os.Build",
+    "kotlinx.coroutines.async",
+    "kotlinx.coroutines.awaitAll",
+    "kotlinx.coroutines.coroutineScope",
+    "kotlinx.coroutines.flow.MutableStateFlow",
+    "kotlinx.coroutines.flow.StateFlow",
+    "kotlinx.coroutines.flow.asStateFlow",
+    "kotlinx.coroutines.Dispatchers",
+    "kotlinx.coroutines.CoroutineScope",
+    "kotlinx.coroutines.SupervisorJob",
+    "kotlinx.coroutines.Job",
+    "kotlinx.coroutines.delay",
+    "kotlinx.coroutines.launch",
+    "timber.log.Timber",
+    "java.util.concurrent.ConcurrentHashMap",
+    "javax.inject.Inject",
+    "javax.inject.Singleton"
+  ],
+  "funcs": [
+    {
+      "name": "startMonitoring",
+      "line": 91,
+      "calls_out_to": ["detectNetworkType", "redetectCurrentNetwork"]
+    },
+    {
+      "name": "onAvailable",
+      "line": 102,
+      "calls_out_to": ["detectNetworkType"]
+    },
+    {
+      "name": "onLost",
+      "line": 106,
+      "calls_out_to": ["networkCapabilities.remove", "redetectCurrentNetwork"]
+    },
+    {
+      "name": "onCapabilitiesChanged",
+      "line": 112,
+      "calls_out_to": ["networkCapabilities[network] = capabilities", "detectNetworkType"]
+    },
+    {
+      "name": "stopMonitoring",
+      "line": 133,
+      "calls_out_to": ["connectivityManager.unregisterNetworkCallback", "debounceJob?.cancel"]
+    },
+    {
+      "name": "detectNetworkType",
+      "line": 150,
+      "calls_out_to": ["connectivityManager.getNetworkCapabilities", "classifyNetworkType"]
+    },
+    {
+      "name": "redetectCurrentNetwork",
+      "line": 189,
+      "calls_out_to": ["connectivityManager.activeNetwork", "detectNetworkType"]
+    },
+    {
+      "name": "classifyNetworkType",
+      "line": 202,
+      "calls_out_to": []
+    },
+    {
+      "name": "isPortLikelyBlocked",
+      "line": 230,
+      "calls_out_to": ["isCellularNetwork"]
+    },
+    {
+      "name": "getTransportPriority",
+      "line": 242,
+      "calls_out_to": []
+    },
+    {
+      "name": "getNetworkDiagnostics",
+      "line": 287,
+      "calls_out_to": ["connectivityManager.activeNetwork", "connectivityManager.getNetworkCapabilities"]
+    },
+    {
+      "name": "probePorts",
+      "line": 313,
+      "calls_out_to": []
+    }
+  ]
+}

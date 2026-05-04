@@ -1,0 +1,61 @@
+﻿{
+  "file": "ContactDetailScreen.kt",
+  "chunk": 1,
+  "summary": "Displays detailed information about a contact including identity, connection metrics, and actions.",
+  "structs_or_classes": [],
+  "imports": [
+    "androidx.compose.foundation.layout.*",
+    "androidx.compose.foundation.rememberScrollState",
+    "androidx.compose.foundation.verticalScroll",
+    "androidx.compose.material.icons.Icons",
+    "androidx.compose.material.icons.filled.*",
+    "androidx.compose.material.icons.automirrored.filled.ArrowBack",
+    "androidx.compose.material.icons.automirrored.filled.Send",
+    "androidx.compose.material3.*",
+    "androidx.compose.runtime.*",
+    "androidx.compose.ui.Alignment",
+    "androidx.compose.ui.Modifier",
+    "androidx.compose.ui.focus.FocusRequester",
+    "androidx.compose.ui.focus.focusRequester",
+    "androidx.compose.ui.text.font.FontFamily",
+    "androidx.compose.ui.text.font.FontWeight",
+    "androidx.compose.ui.res.stringResource",
+    "androidx.compose.ui.unit.dp",
+    "androidx.hilt.navigation.compose.hiltViewModel",
+    "com.scmessenger.android.R",
+    "com.scmessenger.android.ui.components.CopyableText",
+    "com.scm messenger.android.ui.components.LabeledCopyableText",
+    "com.scmessenger.android.ui.components.TruncatedCopyableText",
+    "com.scmessenger.android.ui.components.IdenticonFromHex",
+    "com.scmessenger.android.ui.components.ErrorBanner",
+    "com.scmessenger.android.ui.components.IdenticonFromPeerId",
+    "com.scmessenger.android.ui.theme.StatusOnline",
+    "com.scmessenger.android.ui.theme.StatusOffline",
+    "com.scmessenger.android.ui.viewmodels.ContactsViewModel",
+    "com.scmessenger.android.utils.toEpochMillis",
+    "java.text.SimpleDateFormat",
+    "java.util.*"
+  ],
+  "funcs": [
+    {
+      "name": "ContactDetailScreen",
+      "line": 45,
+      "calls_out_to": ["onNavigateBack", "onNavigateToChat", "hiltViewModel"]
+    },
+    {
+      "name": "ContactDetailContent",
+      "line": 192,
+      "calls_out_to": ["error", "onClearError", "onSendMessage"]
+    },
+    {
+      "name": "MetadataRow",
+      "line": 340,
+      "calls_out_to": []
+    },
+    {
+      "name": "formatTimestamp",
+      "line": 357,
+      "calls_out_to": ["toEpochMillis"]
+    }
+  ]
+}

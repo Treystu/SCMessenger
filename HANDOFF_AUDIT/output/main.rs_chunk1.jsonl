@@ -1,0 +1,36 @@
+﻿{
+  "file": "main.rs",
+  "chunk": 1,
+  "summary": "SCMessenger CLI entry point and main logic.",
+  "structs_or_classes": [],
+  "imports": [
+    "anyhow::{Context, Result}",
+    "clap::{Parser, Subcommand}",
+    "colored::*",
+    "libp2p::{Multiaddr, PeerId}",
+    "scmessenger_core::message::{decode_envelope, MessageType}",
+    "scmessenger_core::store::{Contact, ContactManager, MessageDirection, Outbox, QueuedMessage}",
+    "scmessenger_core::transport::abstraction::TransportType",
+    "scmessenger_core::transport::{self, SwarmEvent}",
+    "scmessenger_core::wasm_support::rpc::{
+      notif_delivery_status, notif_message_received, notif_peer_discovered, rpc_error, rpc_result,
+      ClientIntent, DeliveryStatusParams, MeshTopologyUpdateParams, MessageReceivedParams,
+      PeerDiscoveredParams,
+    }",
+    "scmessenger_core::IronCore",
+    "std::collections::HashMap",
+    "std::sync::Arc"
+  ],
+  "funcs": [
+    {
+      "name": "load_or_create_headless_network_keypair",
+      "line": 33,
+      "calls_out_to": []
+    },
+    {
+      "name": "main",
+      "line": 362,
+      "calls_out_to": ["cmd_stop", "cmd_init", "cmd_identity", "cmd_contact", "cmd_config", "cmd_history", "cmd_start", "cmd_relay", "cmd_status", "cmd_mark_sent", "cmd_history_clear", "cmd_history_enforce_retention", "cmd_history_prune_before", "cmd_block", "cmd_history_get", "cmd_history_stats", "cmd_history_count", "cmd_history_mark_delivered", "cmd_history_clear_conversation", "cmd_history_delete", "cmd_test", "cmd_audit", "cmd_swarm"]
+    }
+  ]
+}

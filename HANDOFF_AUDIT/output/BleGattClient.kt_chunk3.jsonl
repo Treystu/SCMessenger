@@ -1,0 +1,46 @@
+﻿{
+  "file": "BleGattClient.kt",
+  "chunk": 3,
+  "summary": "This class manages Bluetooth GATT operations for a BLE client. It handles connection, disconnection, data transmission, and MTU changes.",
+  "structs_or_classes": [],
+  "imports": [
+    "import android.bluetooth.BluetoothGatt"
+  ],
+  "funcs": [
+    {
+      "name": "reassembleData",
+      "line": 701,
+      "calls_out_to": []
+    },
+    {
+      "name": "onMtuChanged",
+      "line": 720,
+      "calls_out_to": ["getDeviceAddress", "Timber.d", "negotiatedMtus.put", "requestConnectionPriority", "discoverServices", "disconnect"]
+    },
+    {
+      "name": "getClientStats",
+      "line": 748,
+      "calls_out_to": []
+    },
+    {
+      "name": "readIdentityBeacon",
+      "line": 765,
+      "calls_out_to": ["enqueueGattOp", "Timber.e", "releaseGattOp"]
+    },
+    {
+      "name": "scheduleIdentityRefreshReads",
+      "line": 785,
+      "calls_out_to": ["activeConnections.get", "scope.launch", "delay", "readIdentityBeacon"]
+    },
+    {
+      "name": "enableMessageNotifications",
+      "line": 803,
+      "calls_out_to": ["enqueueGattOp", "Timber.e", "releaseGattOp"]
+    },
+    {
+      "name": "cleanup",
+      "line": 840,
+      "calls_out_to": ["scope.cancel", "disconnectAll"]
+    }
+  ]
+}

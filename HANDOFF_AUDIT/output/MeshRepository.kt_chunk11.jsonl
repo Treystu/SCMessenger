@@ -1,0 +1,136 @@
+﻿{
+  "file": "MeshRepository.kt",
+  "chunk": 11,
+  "summary": "This class provides various methods to interact with the Mesh service, including checking if a peer is blocked, listing blocked peers, getting blocked count, signing data, verifying signatures, managing device IDs, exporting logs, and handling message history.",
+  "structs_or_classes": [],
+  "imports": [
+    "com.example.uniffi.api.BlockedIdentity",
+    "com.example.uniffi.api.IdentityInfo",
+    "com.example.uniffi.api.RegistrationStateInfo",
+    "com.example.uniffi.api.ServiceState",
+    "com.example.uniffi.api.MessageRecord",
+    "com.example.uniffi.api.MessageDirection"
+  ],
+  "funcs": [
+    {
+      "name": "isBlocked",
+      "line": 3502,
+      "calls_out_to": ["ensureServiceInitializedFireAndForget", "ironCore?.isPeerBlocked"]
+    },
+    {
+      "name": "listBlockedPeers",
+      "line": 3512,
+      "calls_out_to": ["ensureServiceInitializedFireAndForget", "ironCore?.listBlockedPeers"]
+    },
+    {
+      "name": "getBlockedCount",
+      "line": 3522,
+      "calls_out_to": ["ensureServiceInitializedFireAndForget", "ironCore?.blockedCount"]
+    },
+    {
+      "name": "signData",
+      "line": 3536,
+      "calls_out_to": ["ensureServiceInitializedFireAndForget", "ironCore?.signData"]
+    },
+    {
+      "name": "verifySignature",
+      "line": 3546,
+      "calls_out_to": ["ensureServiceInitializedFireAndForget", "ironCore?.verifySignature"]
+    },
+    {
+      "name": "getDeviceId",
+      "line": 3560,
+      "calls_out_to": ["ironCore?.getDeviceId"]
+    },
+    {
+      "name": "getSeniorityTimestamp",
+      "line": 3564,
+      "calls_out_to": ["ironCore?.getSeniorityTimestamp"]
+    },
+    {
+      "name": "getRegistrationState",
+      "line": 3568,
+      "calls_out_to": ["ironCore?.getRegistrationState"]
+    },
+    {
+      "name": "exportLogs",
+      "line": 3576,
+      "calls_out_to": ["ensureServiceInitializedFireAndForget", "ironCore?.exportLogs"]
+    },
+    {
+      "name": "getInboxCount",
+      "line": 3589,
+      "calls_out_to": ["ironCore?.inboxCount"]
+    },
+    {
+      "name": "updateContactDeviceId",
+      "line": 3597,
+      "calls_out_to": ["contactManager?.updateDeviceId"]
+    },
+    {
+      "name": "getIdentityInfoNonBlocking",
+      "line": 3615,
+      "calls_out_to": [
+        "ensureServiceInitializedFireAndForget",
+        "ironCore?.getIdentityInfo",
+        "readCachedIdentityFields"
+      ]
+    },
+    {
+      "name": "getIdentityInfo",
+      "line": 3643,
+      "calls_out_to": ["ensureServiceInitializedFireAndForget", "kotlin.runCatching", "ensureLocalIdentityFederation", "ironCore?.getIdentityInfo"]
+    },
+    {
+      "name": "setNickname",
+      "line": 3662,
+      "calls_out_to": [
+        "trimmed.isEmpty",
+        "Timber.d",
+        "core.setNickname",
+        "persistIdentityBackup",
+        "initializeAndStartSwarm",
+        "updateBleIdentityBeacon",
+        "identitySyncSentPeers.clear",
+        "historySyncSentPeers.clear",
+        "swarmBridge?.getPeers"
+      ]
+    },
+    {
+      "name": "setLocalNickname",
+      "line": 3706,
+      "calls_out_to": ["contactManager?.setLocalNickname"]
+    },
+    {
+      "name": "sendMessage",
+      "line": 3725,
+      "calls_out_to": [
+        "kotlinx.coroutines.withContext",
+        "PeerIdValidator.normalize",
+        "java.util.UUID.randomUUID",
+        "System.currentTimeMillis",
+        "ironCore?.resolveIdentity",
+        "contactManager?.get",
+        "publicKey == null && contact != null && !contact.publicKey.isNullOrEmpty()",
+        "publicKey = contact.publicKey.trim()",
+        "publicKey.length != 64",
+        "Timber.e",
+        "discoveredPeer != null && !discoveredPeer.publicKey.isNullOrEmpty()",
+        "publicKey = discoveredPeer.publicKey.trim()",
+        "publicKey == null && PeerIdValidator.isLibp2pPeerId(routingPeerId)",
+        "resolveTransportIdentity",
+        "transportIdentity?.publicKey",
+        "Timber.d",
+        "extractedKey.isNullOrEmpty()",
+        "publicKey = normalizePublicKey(extractedKey)",
+        "Timber.d",
+        "normalizedPeerId = if (publicKey != null) { ... } else { routingPeerId }",
+        "historyManager?.add",
+        "historyManager?.flush",
+        "repoScope.launch",
+        "logDeliveryState",
+        "enqueuePendingOutbound"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,93 @@
+﻿{
+  "file": "MeshRepository.kt",
+  "chunk": 24,
+  "summary": "This class manages the mesh repository, including cleanup, diagnostics, and emergency contact recovery.",
+  "structs_or_classes": [],
+  "imports": [
+    "kotlinx.coroutines.delay",
+    "android.content.Context",
+    "java.io.File",
+    "com.example.ironcore.IronCore",
+    "com.example.contactmanager.ContactManager",
+    "com.example.historymanager.HistoryManager",
+    "com.example.settingsmanager.SettingsManager",
+    "com.example.autoadjustengine.AutoAdjustEngine",
+    "com.example.utils.Timber"
+  ],
+  "funcs": [
+    {
+      "name": "cleanup",
+      "line": 8061,
+      "calls_out_to": []
+    },
+    {
+      "name": "getDiagnosticsLogPath",
+      "line": 8093,
+      "calls_out_to": []
+    },
+    {
+      "name": "getDiagnosticsLogs",
+      "line": 8097,
+      "calls_out_to": [
+        "File.readLines"
+      ]
+    },
+    {
+      "name": "clearDiagnosticsLogs",
+      "line": 8117,
+      "calls_out_to": [
+        "File.writeText"
+      ]
+    },
+    {
+      "name": "logDeliveryState",
+      "line": 8129,
+      "calls_out_to": []
+    },
+    {
+      "name": "logDeliveryAttempt",
+      "line": 8134,
+      "calls_out_to": [
+        "File.exists"
+      ]
+    },
+    {
+      "name": "migrateToCanonicalIds",
+      "line": 8160,
+      "calls_out_to": [
+        "ironCore.resolveIdentity",
+        "contacts.list",
+        "contacts.get",
+        "history.stats",
+        "history.recent",
+        "contacts.add"
+      ]
+    },
+    {
+      "name": "emergencyContactRecovery",
+      "line": 8246,
+      "calls_out_to": [
+        "historyManager.recent",
+        "contacts.list",
+        "ironCore.extractPublicKeyFromPeerId"
+      ]
+    },
+    {
+      "name": "detectAndRepairCorruption",
+      "line": 8318,
+      "calls_out_to": [
+        "historyManager.stats",
+        "contacts.list"
+      ]
+    },
+    {
+      "name": "backupCorruptedDatabase",
+      "line": 8364,
+      "calls_out_to": [
+        "File.mkdirs",
+        "File.exists",
+        "File.copyTo"
+      ]
+    }
+  ]
+}

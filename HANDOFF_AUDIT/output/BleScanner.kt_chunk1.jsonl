@@ -1,0 +1,155 @@
+﻿{
+  "file": "BleScanner.kt",
+  "chunk": 1,
+  "summary": "Handles Bluetooth Low Energy scanning for mesh peers with features like duty-cycle management, background vs foreground scan mode switching, and scan result caching.",
+  "structs_or_classes": [],
+  "imports": [
+    "android.annotation.SuppressLint",
+    "android.bluetooth.BluetoothAdapter",
+    "android.bluetooth.BluetoothManager",
+    "android.bluetooth.le.ScanCallback",
+    "android.bluetooth.le.ScanFilter",
+    "android.bluetooth.le.ScanResult",
+    "android.bluetooth.le.ScanSettings",
+    "android.content.Context",
+    "android.os.Handler",
+    "android.os.Looper",
+    "android.os.ParcelUuid",
+    "com.scmessenger.android.utils.BackoffStrategy",
+    "kotlinx.coroutines.*",
+    "kotlinx.coroutines.sync.Mutex",
+    "kotlinx.coroutines.sync.withLock",
+    "timber.log.Timber",
+    "java.util.UUID",
+    "java.util.concurrent.ConcurrentHashMap",
+    "java.util.concurrent.atomic.AtomicInteger",
+    "java.util.concurrent.atomic.AtomicLong"
+  ],
+  "funcs": [
+    {
+      "name": "onScanResult",
+      "line": 107,
+      "calls_out_to": ["matchesMeshAdvertisement", "onPeerDiscovered", "onDataReceived"]
+    },
+    {
+      "name": "onScanFailed",
+      "line": 158,
+      "calls_out_to": ["handleScanFailure"]
+    },
+    {
+      "name": "handleScanFailure",
+      "line": 210,
+      "calls_out_to": []
+    },
+    {
+      "name": "applyScanSettings",
+      "line": 233,
+      "calls_out_to": ["setScanDutyCycle"]
+    },
+    {
+      "name": "onScanResult",
+      "line": 244,
+      "calls_out_to": ["matchesMeshAdvertisement", "onPeerDiscovered", "onDataReceived"]
+    },
+    {
+      "name": "onScanFailed",
+      "line": 248,
+      "calls_out_to": ["handleScanFailure"]
+    },
+    {
+      "name": "setScanDutyCycle",
+      "line": 256,
+      "calls_out_to": []
+    },
+    {
+      "name": "setBackgroundMode",
+      "line": 273,
+      "calls_out_to": []
+    },
+    {
+      "name": "startScanning",
+      "line": 288,
+      "calls_out_to": ["stopScanning", "currentFilters", "buildScanSettings"]
+    },
+    {
+      "name": "startDutyCycle",
+      "line": 375,
+      "calls_out_to": []
+    },
+    {
+      "name": "run",
+      "line": 380,
+      "calls_out_to": ["stopScanning", "currentFilters", "buildScanSettings"]
+    },
+    {
+      "name": "stopDutyCycle",
+      "line": 406,
+      "calls_out_to": []
+    },
+    {
+      "name": "currentFilters",
+      "line": 411,
+      "calls_out_to": []
+    },
+    {
+      "name": "buildScanSettings",
+      "line": 423,
+      "calls_out_to": ["matchesMeshAdvertisement"]
+    },
+    {
+      "name": "scheduleFallbackPromotion",
+      "line": 438,
+      "calls_out_to": []
+    },
+    {
+      "name": "restartActiveScan",
+      "line": 462,
+      "calls_out_to": ["stopScanning", "currentFilters", "buildScanSettings"]
+    },
+    {
+      "name": "matchesMeshAdvertisement",
+      "line": 478,
+      "calls_out_to": []
+    },
+    {
+      "name": "startScanningInternal",
+      "line": 490,
+      "calls_out_to": ["stopScanning", "currentFilters", "buildScanSettings"]
+    },
+    {
+      "name": "stopScanningInternal",
+      "line": 505,
+      "calls_out_to": []
+    },
+    {
+      "name": "forceRestartScanning",
+      "line": 521,
+      "calls_out_to": ["stopScanning", "currentFilters", "buildScanSettings"]
+    },
+    {
+      "name": "stopScanning",
+      "line": 538,
+      "calls_out_to": []
+    },
+    {
+      "name": "clearPeerCache",
+      "line": 557,
+      "calls_out_to": []
+    },
+    {
+      "name": "getDiscoveryStats",
+      "line": 562,
+      "calls_out_to": []
+    },
+    {
+      "name": "getQuotaCount",
+      "line": 575,
+      "calls_out_to": []
+    },
+    {
+      "name": "pruneOldPeers",
+      "line": 582,
+      "calls_out_to": []
+    }
+  ]
+}

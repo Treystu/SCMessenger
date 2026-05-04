@@ -1,0 +1,80 @@
+﻿{
+  "file": "IdentityFlowRegressionTest.kt",
+  "chunk": 1,
+  "summary": "This class contains regression tests for identity flow bugs in the app, focusing on fixing issues related to AtomicBoolean fallback recursion guard, synchronous backup persistence, and consent grant verification.",
+  "structs_or_classes": [],
+  "imports": [
+    "io.mockk.*",
+    "org.junit.Assert.*",
+    "org.junit.Test",
+    "java.util.concurrent.atomic.AtomicBoolean"
+  ],
+  "funcs": [
+    {
+      "name": "AtomicBoolean compareAndSet prevents concurrent fallback entry",
+      "line": 23,
+      "calls_out_to": ["io.mockk.mockk", "org.junit.Assert.assertEquals", "org.junit.Assert.assertTrue"]
+    },
+    {
+      "name": "AtomicBoolean guard prevents recursive re-entry from same thread",
+      "line": 51,
+      "calls_out_to": ["io.mockk.mockk", "org.junit.Assert.assertFalse", "org.junit.Assert.assertTrue"]
+    },
+    {
+      "name": "AtomicBoolean guard survives high-contention scenarios",
+      "line": 69,
+      "calls_out_to": [
+        "java.util.concurrent.Executors.newFixedThreadPool",
+        "java.util.concurrent.atomic.AtomicInteger.incrementAndGet",
+        "java.util.concurrent.ExecutorService.shutdown"
+      ]
+    },
+    {
+      "name": "persistIdentityBackup uses commit not apply for synchronous write",
+      "line": 93,
+      "calls_out_to": [
+        "io.mockk.mockk",
+        "org.junit.Assert.assertTrue",
+        "org.junit.Assert.verify"
+      ]
+    },
+    {
+      "name": "SharedPreferences commit returns false signals write failure",
+      "line": 115,
+      "calls_out_to": ["io.mockk.mockk", "org.junit.Assert.assertFalse"]
+    },
+    {
+      "name": "grantConsent must be called before initializeIdentity",
+      "line": 127,
+      "calls_out_to": [
+        "io.mockk.mockk",
+        "org.junit.Assert.assertEquals",
+        "org.junit.Assert.verifyOrder"
+      ]
+    },
+    {
+      "name": "initializeIdentity without grantConsent throws ConsentRequired",
+      "line": 153,
+      "calls_out_to": ["io.mockk.mockk", "org.junit.Assert.fail", "org.junit.Assert.assertEquals"]
+    },
+    {
+      "name": "consent is re-granted on process restart when identity is restored from backup",
+      "line": 184,
+      "calls_out_to": [
+        "io.mockk.mockk",
+        "org.junit.Assert.assertEquals",
+        "org.junit.Assert.verify"
+      ]
+    },
+    {
+      "name": "isIdentityInitialized fast path triggers restore when core identity is lost",
+      "line": 213,
+      "calls_out_to": [
+        "java.util.concurrent.atomic.AtomicBoolean.contains",
+        "io.mockk.mockk",
+        "org.junit.Assert.assertEquals",
+        "org.junit.Assert.verify"
+      ]
+    }
+  ]
+}

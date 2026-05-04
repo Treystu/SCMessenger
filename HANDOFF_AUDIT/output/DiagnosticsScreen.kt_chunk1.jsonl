@@ -1,0 +1,53 @@
+﻿{
+  "file": "DiagnosticsScreen.kt",
+  "chunk": 1,
+  "summary": "A Composable function that displays diagnostic information for the application.",
+  "structs_or_classes": [],
+  "imports": [
+    "android.content.Context",
+    "android.content.Intent",
+    "androidx.compose.foundation.layout.*",
+    "androidx.compose.foundation.rememberScrollState",
+    "androidx.compose.foundation.verticalScroll",
+    "androidx.compose.material.icons.Icons",
+    "androidx.compose.material.icons.automirrored.filled.ArrowBack",
+    "androidx.compose.material.icons.filled.Refresh",
+    "androidx.compose.material.icons.filled.Share",
+    "androidx.compose.material.icons.filled.Delete",
+    "androidx.compose.material3.*",
+    "androidx.compose.runtime.*",
+    "androidx.compose.ui.Modifier",
+    "kotlinx.coroutines.launch",
+    "androidx.compose.ui.platform.LocalContext",
+    "androidx.compose.ui.text.font.FontFamily",
+    "androidx.compose.ui.unit.dp",
+    "androidx.hilt.navigation.compose.hiltViewModel",
+    "com.scmessenger.android.network.DiagnosticsReporter",
+    "com.scmessenger.android.ui.diagnostics.DiagnosticsBundleFormatter",
+    "com.scm messenger.android.ui.diagnostics.DiagnosticsBundleInput",
+    "com.scmessenger.android.ui.dialogs.NetworkStatusDialog",
+    "com.scmessenger.android.ui.viewmodels.SettingsViewModel",
+    "com.scmessenger.android.utils.NotificationHelper",
+    "com.scmessenger.android.service.PerformanceMonitor",
+    "com.scmessenger.android.service.ServiceHealthMonitor",
+    "com.scmessenger.android.service.AnrEvent",
+    "com.scmessenger.android.ui.components.WarningBanner",
+    "com.scm messenger.android.ui.components.InfoBanner",
+    "com.scmessenger.android.ui.components.ErrorState",
+    "androidx.core.content.FileProvider",
+    "timber.log.Timber",
+    "java.io.File"
+  ],
+  "funcs": [
+    {
+      "name": "DiagnosticsScreen",
+      "line": 39,
+      "calls_out_to": ["refreshLogs", "shareDiagnosticsBundle"]
+    },
+    {
+      "name": "refreshLogs",
+      "line": 58,
+      "calls_out_to": []
+    }
+  ]
+}

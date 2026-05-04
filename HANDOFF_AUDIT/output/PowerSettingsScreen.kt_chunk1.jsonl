@@ -1,0 +1,35 @@
+﻿{
+  "file": "PowerSettingsScreen.kt",
+  "chunk": 1,
+  "summary": "Displays the power settings screen for adjusting auto-adjust engine, manual profile selection, BLE scan interval override, relay budget override, and battery optimization settings.",
+  "structs_or_classes": [],
+  "imports": [
+    "androidx.compose.foundation.layout.*",
+    "androidx.compose.foundation.rememberScrollState",
+    "androidx.compose.foundation.verticalScroll",
+    "androidx.compose.material.icons.Icons",
+    "androidx.compose.material.icons.automirrored.filled.ArrowBack",
+    "androidx.compose.material3.*",
+    "androidx.compose.runtime.*",
+    "androidx.compose.ui.Alignment",
+    "androidx.compose.ui.Modifier",
+    "androidx.compose.ui.text.font.FontWeight",
+    "androidx.compose.ui.unit.dp",
+    "androidx.hilt.navigation.compose.hiltViewModel",
+    "com.scmessenger.android.ui.components.ErrorBanner",
+    "com.scmessenger.android.ui.components.ErrorState",
+    "com.scmessenger.android.ui.components.IdenticonFromHex",
+    "com.scmessenger.android.ui.components.InfoBanner",
+    "com.scmessenger.android.ui.components.LabeledCopyableText",
+    "com.scmessenger.android.ui.components.TruncatedCopyableText",
+    "com.scmessenger.android.ui.components.WarningBanner",
+    "com.scmessenger.android.ui.viewmodels.SettingsViewModel"
+  ],
+  "funcs": [
+    {
+      "name": "PowerSettingsScreen",
+      "line": 36,
+      "calls_out_to": ["hiltViewModel", "collectAsState", "loadSettings", "clearError", "setAutoAdjust", "setManualProfile", "overrideBleScanInterval", "overrideRelayMax", "updateBatteryFloor"]
+    }
+  ]
+}

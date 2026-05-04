@@ -1,0 +1,49 @@
+﻿{
+  "file": "CopyableText.kt",
+  "chunk": 1,
+  "summary": "A composable component that displays text which can be copied to the clipboard on long-press. It supports optional truncation, expand/collapse functionality, and monospace font.",
+  "structs_or_classes": [],
+  "imports": [
+    "android.content.ClipData",
+    "android.content.ClipboardManager",
+    "android.content.Context",
+    "android.widget.Toast",
+    "androidx.compose.foundation.ExperimentalFoundationApi",
+    "androidx.compose.foundation.combinedClickable",
+    "androidx.compose.foundation.layout.*",
+    "androidx.compose.material.icons.Icons",
+    "androidx.compose.material.icons.filled.ContentCopy",
+    "androidx.compose.material.icons.filled.ExpandLess",
+    "androidx.compose.material.icons.filled.ExpandMore",
+    "androidx.compose.material3.*",
+    "androidx.compose.runtime.*",
+    "androidx.compose.ui.Alignment",
+    "androidx.compose.ui.Modifier",
+    "androidx.compose.ui.platform.LocalContext",
+    "androidx.compose.ui.text.font.FontFamily",
+    "androidx.compose.ui.text.style.TextOverflow",
+    "androidx.compose.ui.unit.dp"
+  ],
+  "funcs": [
+    {
+      "name": "CopyableText",
+      "line": 34,
+      "calls_out_to": ["copyToClipboard"]
+    },
+    {
+      "name": "LabeledCopyableText",
+      "line": 89,
+      "calls_out_to": ["copyToClipboard"]
+    },
+    {
+      "name": "TruncatedCopyableText",
+      "line": 130,
+      "calls_out_to": ["copyToClipboard"]
+    },
+    {
+      "name": "copyToClipboard",
+      "line": 174,
+      "calls_out_to": []
+    }
+  ]
+}

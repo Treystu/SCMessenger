@@ -1,0 +1,34 @@
+﻿{
+  "file": "PeerIdValidator.kt",
+  "chunk": 1,
+  "summary": "This Kotlin object contains functions to validate and normalize peer IDs. It includes checks for identity IDs, libp2p peer IDs, and compares two normalized IDs.",
+  "structs_or_classes": [],
+  "imports": ["package com.scmessenger.android.utils"],
+  "funcs": [
+    {
+      "name": "validate",
+      "line": 6,
+      "calls_out_to": ["normalize"]
+    },
+    {
+      "name": "normalize",
+      "line": 10,
+      "calls_out_to": []
+    },
+    {
+      "name": "isLibp2pPeerId",
+      "line": 21,
+      "calls_out_to": []
+    },
+    {
+      "name": "isIdentityId",
+      "line": 31,
+      "calls_out_to": []
+    },
+    {
+      "name": "isSame",
+      "line": 34,
+      "calls_out_to": ["normalize"]
+    }
+  ]
+}

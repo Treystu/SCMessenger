@@ -1,0 +1,52 @@
+﻿{
+  "file": "MeshRepository.kt",
+  "chunk": 12,
+  "summary": "Handles the process of sending messages and managing identity initialization.",
+  "structs_or_classes": [],
+  "imports": [
+    "kotlinx.coroutines.Dispatchers.IO",
+    "kotlinx.coroutines.withContext",
+    "com.squareup.timber.Timber",
+    "uniffi.api.MeshSettings",
+    "uniffi.api.ServiceState",
+    "uniffi.api.MessageDirection",
+    "uniffi.api.MessageRecord"
+  ],
+  "funcs": [
+    {
+      "name": "send",
+      "line": 3849,
+      "calls_out_to": ["dial", "buildRoutePeerCandidates", "encodeMessageWithIdentityHints", "ironCore?.prepareMessageWithId", "historyManager?.delete", "historyManager?.add", "repoScope.launch", "logDeliveryState", "attemptDirectSwarmDelivery", "promotePendingOutboundForPeer", "storeLastKnownRoutePeerId", "isMessageDeliveredLocally", "removePendingOutbound", "logDeliveryState", "enqueuePendingOutbound"]
+    },
+    {
+      "name": "dial",
+      "line": 4021,
+      "calls_out_to": ["swarmBridge?.dial"]
+    },
+    {
+      "name": "isIdentityInitialized",
+      "line": 4043,
+      "calls_out_to": ["identityBackupPrefs.contains", "meshService?.getState", "ironCore?.getIdentityInfo()?.initialized", "restoreIdentityFromBackup", "File.exists"]
+    },
+    {
+      "name": "grantConsent",
+      "line": 4092,
+      "calls_out_to": ["ensureServiceInitializedFireAndForget", "ironCore?.grantConsent"]
+    },
+    {
+      "name": "hasRequiredRuntimePermissions",
+      "line": 4101,
+      "calls_out_to": ["hasAllPermissions"]
+    },
+    {
+      "name": "onRuntimePermissionsGranted",
+      "line": 4105,
+      "calls_out_to": ["ensureServiceInitialized", "initializeAndStartBle", "initializeAndStartWifi", "initializeAndStartSwarm"]
+    },
+    {
+      "name": "createIdentity",
+      "line": 4133,
+      "calls_out_to": ["ironCore?.grantConsent", "ironCore?.initializeIdentity", "ensureLocalIdentityFederation", "persistIdentityBackup"]
+    }
+  ]
+}

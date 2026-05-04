@@ -27,6 +27,24 @@ fi
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/scripts/process_alive.sh"
 
+# Reliable cross-platform process kill.
+# PowerShell Stop-Process is the ONLY method that reliably kills claude.exe on Windows.
+force_kill_pid() {
+    local pid="$1"
+    [ -z "$pid" ] && return 0
+    # Precise recursive tree kill via PowerShell — ensures claude.exe children die
+    powershell.exe -NoProfile -Command "
+        function Kill-Tree([int]\$p) {
+            Get-CimInstance Win32_Process -Filter \"ParentProcessId = \$p\" | ForEach-Object { Kill-Tree \$_.ProcessId }
+            Stop-Process -Id \$p -Force -ErrorAction SilentlyContinue
+        }
+        Kill-Tree $pid
+    " 2>/dev/null || true
+    # Fallbacks
+    kill -9 "$pid" 2>/dev/null || true
+    taskkill //F //T //PID "$pid" 2>/dev/null || true
+}
+
 STATE_FILE=".claude/orchestrator_state.json"
 AGENT_ROOT=".claude/agents"
 POOL_CONFIG=".claude/agent_pool.json"
@@ -128,9 +146,8 @@ clean_stale_pids() {
             # Check if the process is still alive
             if ! process_alive "$pid"; then
                 echo "Cleaning stale agent: $id (PID $pid no longer exists)"
-                # Aggressive dual-kill: POSIX signal + Windows taskkill (belt-and-suspenders)
-                kill -9 $pid 2>/dev/null || true
-                taskkill //F //T //PID $pid 2>/dev/null || true
+                # Precise recursive tree kill to ensure orphaned sub-processes die
+                force_kill_pid "$pid"
                 rm -rf "$dir"
             fi
         fi
@@ -311,11 +328,10 @@ for a in cfg.get('agents', []):
 
     local agent_id="${agent_name}_$(date +%s)"
 
-    # === REPO_MAP REBUILD (ensure current before every launch) ===
-    if [ -f ".claude/scripts/build_repo_index.py" ]; then
-        echo "Rebuilding REPO_MAP index for current codebase..."
-        $PYTHON .claude/scripts/build_repo_index.py 2>/dev/null
-    fi
+    # === REPO_MAP: JIT micro-update only ===
+    # Full rebuild removed - the Freshness Gate below handles per-task
+    # targeted re-indexing of ONLY the files referenced in the task file.
+    # This prevents the orchestrator from blocking on a full repo scan.
 
     # === REPO_MAP Freshness Gate ===
     if [ -n "$task_file" ] && [ -f "$task_file" ]; then

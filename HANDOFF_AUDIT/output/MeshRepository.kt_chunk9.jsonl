@@ -1,0 +1,52 @@
+﻿{
+  "file": "MeshRepository.kt",
+  "chunk": 9,
+  "summary": "This class manages mesh services and transports, including BLE, WiFi, and Swarm.",
+  "structs_or_classes": [],
+  "imports": [
+    "com.scmessenger.android.service.TransportType",
+    "com.scmessenger.android.transport.WifiTransportManager",
+    "uniffi.api.IronCore",
+    "uniffi.api.PlatformBridge"
+  ],
+  "funcs": [
+    {
+      "name": "initializeAndStartWifi",
+      "line": 2893,
+      "calls_out_to": ["loadSettings", "hasAllPermissions", "wifiTransportManager"]
+    },
+    {
+      "name": "initializeAndStartSwarm",
+      "line": 2923,
+      "calls_out_to": ["ensureLocalIdentityFederation", "meshService"]
+    },
+    {
+      "name": "ensureLocalIdentityFederation",
+      "line": 2949,
+      "calls_out_to": ["coreDelegate", "restoreIdentityFromBackup", "identityCachePrefs", "identityBackupPrefs", "storagePath"]
+    },
+    {
+      "name": "restoreIdentityFromBackup",
+      "line": 3001,
+      "calls_out_to": ["coreDelegate"]
+    },
+    {
+      "name": "setPlatformBridge",
+      "line": 3076,
+      "calls_out_to": ["meshService", "transportManager", "bridge"]
+    },
+    {
+      "name": "stopMeshService",
+      "line": 3089,
+      "calls_out_to": [
+        "repoScope.launch",
+        "bleScanner?.stopScanning",
+        "bleAdvertiser?.stopAdvertising",
+        "bleGattServer?.stop",
+        "bleGattClient?.cleanup",
+        "kotlin.runCatching",
+        "meshService?.stop"
+      ]
+    }
+  ]
+}

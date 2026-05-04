@@ -1,0 +1,91 @@
+﻿{
+  "file": "SmartTransportRouter.kt",
+  "chunk": 1,
+  "summary": "A class that manages smart transport selection, message deduplication, and health tracking for messaging applications.",
+  "structs_or_classes": [
+    {
+      "name": "SmartTransportRouter",
+      "line": 16
+    }
+  ],
+  "imports": [
+    "kotlinx.coroutines.*",
+    "kotlinx.coroutines.sync.Mutex",
+    "kotlinx.coroutines.sync.withLock",
+    "timber.log.Timber",
+    "java.util.concurrent.ConcurrentHashMap",
+    "java.util.concurrent.atomic.AtomicLong"
+  ],
+  "funcs": [
+    {
+      "name": "fromValue",
+      "line": 34,
+      "calls_out_to": []
+    },
+    {
+      "name": "recordSuccess",
+      "line": 117,
+      "calls_out_to": ["getHealth", "setHealth"]
+    },
+    {
+      "name": "recordFailure",
+      "line": 142,
+      "calls_out_to": ["getHealth", "setHealth"]
+    },
+    {
+      "name": "getHealth",
+      "line": 157,
+      "calls_out_to": []
+    },
+    {
+      "name": "setHealth",
+      "line": 165,
+      "calls_out_to": []
+    },
+    {
+      "name": "getPreferredTransport",
+      "line": 174,
+      "calls_out_to": ["getHealth", "getAvailableTransportsSorted"]
+    },
+    {
+      "name": "getAvailableTransportsSorted",
+      "line": 202,
+      "calls_out_to": []
+    },
+    {
+      "name": "getAvailableTransports",
+      "line": 213,
+      "calls_out_to": ["transportHealth", "TransportType.entries"]
+    },
+    {
+      "name": "checkAndRecordMessage",
+      "line": 230,
+      "calls_out_to": ["cleanupDedupCache"]
+    },
+    {
+      "name": "getDedupStats",
+      "line": 274,
+      "calls_out_to": []
+    },
+    {
+      "name": "cleanupDedupCache",
+      "line": 281,
+      "calls_out_to": []
+    },
+    {
+      "name": "attemptDelivery",
+      "line": 296,
+      "calls_out_to": ["getPreferredTransport", "withTimeoutOrNull", "coroutineScope"]
+    },
+    {
+      "name": "getHealthSummary",
+      "line": 447,
+      "calls_out_to": []
+    },
+    {
+      "name": "resetHealth",
+      "line": 471,
+      "calls_out_to": []
+    }
+  ]
+}

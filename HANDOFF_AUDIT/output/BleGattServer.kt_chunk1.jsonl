@@ -1,0 +1,122 @@
+﻿{
+  "file": "BleGattServer.kt",
+  "chunk": 1,
+  "summary": "GATT server implementing SCMessenger BLE service.",
+  "structs_or_classes": [
+    {
+      "name": "BleGattServer",
+      "line": 27
+    }
+  ],
+  "imports": [
+    "android.Manifest",
+    "android.bluetooth.*",
+    "android.content.Context",
+    "android.content.pm.PackageManager",
+    "android.os.Build",
+    "androidx.core.content.ContextCompat",
+    "timber.log.Timber",
+    "java.util.UUID",
+    "java.util.concurrent.ConcurrentHashMap"
+  ],
+  "funcs": [
+    {
+      "name": "setIdentityData",
+      "line": 61,
+      "calls_out_to": []
+    },
+    {
+      "name": "start",
+      "line": 66,
+      "calls_out_to": ["Context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager", "bluetoothManager?.openGattServer(context, gattServerCallback)", "gattServer?.addService(service)", "connectedDevices.values.forEach { device -> gattServer?.cancelConnection(device) }"]
+    },
+    {
+      "name": "stop",
+      "line": 139,
+      "calls_out_to": ["connectedDevices.values.forEach { device -> gattServer?.cancelConnection(device) }", "gattServer?.close()"]
+    },
+    {
+      "name": "sendData",
+      "line": 172,
+      "calls_out_to": [
+        "connectedDevices[deviceAddress] ?: run { Timber.w(\"Device not connected: $deviceAddress\"); return false }",
+        "subscribedDevices[deviceAddress]?.contains(MESSAGE_CHAR_UUID) == true",
+        "gattServer?.getService(SERVICE_UUID)",
+        "gattServer?.getCharacteristic(MESSAGE_CHAR_UUID)",
+        "sendResponseSafe(device, requestId, BluetoothGatt.GATT_SUCCESS, offset, responseValue)"
+      ]
+    },
+    {
+      "name": "getConnectedDeviceAddresses",
+      "line": 220,
+      "calls_out_to": []
+    },
+    {
+      "name": "sendFragmented",
+      "line": 224,
+      "calls_out_to": [
+        "gattServer?.getService(SERVICE_UUID)",
+        "gattServer?.getCharacteristic(MESSAGE_CHAR_UUID)"
+      ]
+    },
+    {
+      "name": "onConnectionStateChange",
+      "line": 263,
+      "calls_out_to": ["connectedDevices[device.address] = device", "connectedDevices.remove(device.address)", "subscribedDevices.remove(device.address)"]
+    },
+    {
+      "name": "onCharacteristicReadRequest",
+      "line": 285,
+      "calls_out_to": [
+        "gattServer?.sendResponse(device, requestId, BluetoothGatt.GATT_SUCCESS, offset, responseValue)"
+      ]
+    },
+    {
+      "name": "onCharacteristicWriteRequest",
+      "line": 336,
+      "calls_out_to": [
+        "handleReassembly(device.address, value) { completeData -> onDataReceived(device.address, completeData) }"
+      ]
+    },
+    {
+      "name": "onDescriptorWriteRequest",
+      "line": 383,
+      "calls_out_to": ["subscribedDevices.getOrPut(device.address) { ConcurrentHashMap.newKeySet() }.add(characteristic.uuid)", "sendResponseSafe(device, requestId, BluetoothGatt.GATT_SUCCESS, offset, value)"
+      ]
+    },
+    {
+      "name": "handleReassembly",
+      "line": 426,
+      "calls_out_to": []
+    },
+    {
+      "name": "onMtuChanged",
+      "line": 465,
+      "calls_out_to": ["gattServer?.sendResponse(device, requestId, BluetoothGatt.GATT_SUCCESS, offset, value)"
+      ]
+    },
+    {
+      "name": "onExecuteWrite",
+      "line": 471,
+      "calls_out_to": [
+        "pendingWrites[device.address]?.let { completeData -> onDataReceived(device.address, completeData) }"
+      ]
+    },
+    {
+      "name": "hasBluetoothConnectPermission",
+      "line": 492,
+      "calls_out_to": ["ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_CONNECT)"
+      ]
+    },
+    {
+      "name": "sendResponseSafe",
+      "line": 500,
+      "calls_out_to": []
+    },
+    {
+      "name": "notifyCharacteristicChangedSafe",
+      "line": 518,
+      "calls_out_to": []
+    }
+  ]
+}

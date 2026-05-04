@@ -8,6 +8,25 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/../.claude/scripts/process_alive.sh"
 
+# Reliable cross-platform process kill.
+# PowerShell Stop-Process is the ONLY method that reliably kills claude.exe on Windows.
+# Unix kill and taskkill are kept as belt-and-suspenders fallbacks.
+force_kill_pid() {
+    local pid="$1"
+    [ -z "$pid" ] && return 0
+    # Precise recursive tree kill via PowerShell — ensures claude.exe children die
+    powershell.exe -NoProfile -Command "
+        function Kill-Tree([int]\$p) {
+            Get-CimInstance Win32_Process -Filter \"ParentProcessId = \$p\" | ForEach-Object { Kill-Tree \$_.ProcessId }
+            Stop-Process -Id \$p -Force -ErrorAction SilentlyContinue
+        }
+        Kill-Tree $pid
+    " 2>/dev/null || true
+    # Fallbacks
+    kill -9 "$pid" 2>/dev/null || true
+    taskkill //F //T //PID "$pid" 2>/dev/null || true
+}
+
 # Configuration
 AGENT_MODEL="${1:-glm-5.1:cloud}"
 AGENT_ID="${2:-agent_$(date +%s)}"
@@ -89,10 +108,7 @@ COMPLETED_AT=<epoch timestamp>
 When you have no more tasks and no task in progress, set NEXT_TASK_REQUESTED=false.
 
 ## MANDATORY EXIT PROTOCOL
-Once you have moved all task files to HANDOFF/done/ and written your COMPLETION marker, you MUST type /exit to terminate your process immediately. Do NOT remain in interactive mode after task completion — this blocks the orchestrator from detecting completion and launching the next agent.
-
-## SELF-PACING
-Use /loop 5m to self-pace ONLY while actively working. Once all tasks are complete, /exit immediately."
+Once you have moved all task files to HANDOFF/done/ and written your COMPLETION marker, your task is complete. Do not perform any further actions."
 
 if [ -n "$AGENT_TASK_FILE" ] && [ -f "$AGENT_TASK_FILE" ]; then
     AGENT_PROMPT="You are an SCMessenger Autonomous Sub-Agent (ID: $AGENT_ID, Model: $AGENT_MODEL).
@@ -138,9 +154,7 @@ On failure:
 STATUS=failed
 TASK_FILE=<current location of the task file>
 ERROR=<brief description of the failure>
-COMPLETED_AT=<epoch timestamp>
-
-Use /loop 5m to self-pace ONLY while actively working. Once all tasks are complete, /exit immediately."
+COMPLETED_AT=<epoch timestamp>"
 fi
 
 # Colors for output
@@ -248,14 +262,12 @@ EOF
 start_agent() {
     log "INFO" "Starting agent $AGENT_ID with model $AGENT_MODEL"
 
-    # Launch Claude Code in interactive mode with --dangerously-skip-permissions.
-    # Pipe the agent prompt via stdin so Claude enters interactive (not --print) mode.
-    # The prompt includes /loop 5m for persistent autonomous operation.
-    # This keeps the process alive instead of one-shot exit.
+    # Launch Claude Code in non-interactive --print mode with --dangerously-skip-permissions.
+    # The process will execute the prompt to completion and then exit automatically.
     # Separate stderr to avoid Windows STATUS_BREAKPOINT (0x80000003) corrupting the log.
     export CARGO_INCREMENTAL=0
-    echo "$AGENT_PROMPT" | ollama launch claude --model "$AGENT_MODEL" \
-        -- --dangerously-skip-permissions \
+    ollama launch claude --model "$AGENT_MODEL" \
+        -- --dangerously-skip-permissions --print "$AGENT_PROMPT" \
         >> "$AGENT_LOG" 2>"$AGENT_STDERR" &
 
     local agent_pid=$!
@@ -306,8 +318,7 @@ monitor_agent() {
             log "INFO" "Agent COMPLETION marker found: STATUS=$status"
             # Kill the agent process since it's done
             if process_alive "$agent_pid"; then
-                kill -9 "$agent_pid" 2>/dev/null || true
-                taskkill //F //T //PID "$agent_pid" 2>/dev/null || true
+                force_kill_pid "$agent_pid"
                 log "INFO" "Terminated agent process $agent_pid after completion"
             fi
             return 0
@@ -386,9 +397,7 @@ restart_agent() {
     if [ -f "$AGENT_PID" ]; then
         local old_pid=$(cat "$AGENT_PID")
         if process_alive "$old_pid"; then
-            # Aggressive dual-kill: POSIX signal + Windows taskkill
-            kill -9 $old_pid 2>/dev/null || true
-            taskkill //F //T //PID $old_pid 2>/dev/null || true
+            force_kill_pid "$old_pid"
         fi
     fi
 
@@ -408,9 +417,7 @@ stop_agent() {
     if [ -f "$AGENT_PID" ]; then
         local agent_pid=$(cat "$AGENT_PID")
         if process_alive "$agent_pid"; then
-            # Aggressive dual-kill: POSIX signal + Windows taskkill
-            kill -9 $agent_pid 2>/dev/null || true
-            taskkill //F //T //PID $agent_pid 2>/dev/null || true
+            force_kill_pid "$agent_pid"
             log "INFO" "Agent stopped successfully"
         else
             log "WARN" "Agent process not running"

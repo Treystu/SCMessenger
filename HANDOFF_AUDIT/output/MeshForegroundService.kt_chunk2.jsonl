@@ -1,0 +1,123 @@
+﻿{
+  "file": "MeshForegroundService.kt",
+  "chunk": 2,
+  "summary": "Handles the lifecycle of a mesh foreground service, including stopping and pausing the service, updating notifications, and managing message notifications.",
+  "structs_or_classes": [],
+  "imports": [
+    "android.app.ActivityManager",
+    "android.content.Intent",
+    "android.content.PendingIntent",
+    "android.os.Build",
+    "android.os.IBinder",
+    "android.os.Looper",
+    "android.os.MessageRecord",
+    "android.service.notification.NotificationCompat",
+    "android.util.Log",
+    "com.scmessenger.android.R",
+    "com.scmessenger.android.repository.MeshRepository",
+    "com.scmessenger.android.utils.NotificationHelper",
+    "com.scmessenger.android.utils.ServiceHealthMonitor"
+  ],
+  "funcs": [
+    {
+      "name": "onCreate",
+      "line": 70,
+      "calls_out_to": []
+    },
+    {
+      "name": "onStartCommand",
+      "line": 91,
+      "calls_out_to": ["startMeshService", "wireCoreDelegate"]
+    },
+    {
+      "name": "startMeshService",
+      "line": 121,
+      "calls_out_to": ["pauseMeshService", "resumeMeshService"]
+    },
+    {
+      "name": "wireCoreDelegate",
+      "line": 257,
+      "calls_out_to": []
+    },
+    {
+      "name": "startPeriodicAdjustments",
+      "line": 263,
+      "calls_out_to": ["pauseMeshService", "resumeMeshService"]
+    },
+    {
+      "name": "acquireWakeLock",
+      "line": 293,
+      "calls_out_to": []
+    },
+    {
+      "name": "releaseWakeLock",
+      "line": 306,
+      "calls_out_to": []
+    },
+    {
+      "name": "stopMeshService",
+      "line": 317,
+      "calls_out_to": ["pauseMeshService", "resumeMeshService"]
+    },
+    {
+      "name": "pauseMeshService",
+      "line": 366,
+      "calls_out_to": []
+    },
+    {
+      "name": "resumeMeshService",
+      "line": 375,
+      "calls_out_to": []
+    },
+    {
+      "name": "createNotification",
+      "line": 384,
+      "calls_out_to": ["createNotificationChannel"]
+    },
+    {
+      "name": "createSimpleForegroundNotification",
+      "line": 437,
+      "calls_out_to": ["createNotificationChannel", "buildForegroundServiceNotification"]
+    },
+    {
+      "name": "updateNotification",
+      "line": 483,
+      "calls_out_to": []
+    },
+    {
+      "name": "tryStartForeground",
+      "line": 489,
+      "calls_out_to": ["createNotification"]
+    },
+    {
+      "name": "showMessageNotificationWithClassification",
+      "line": 526,
+      "calls_out_to": ["getContact", "hasConversationWith", "isAppInForeground", "getActiveConversationId", "meshRepository.getContact", "meshRepository.hasConversationWith", "NotificationHelper.showMessageNotification"]
+    },
+    {
+      "name": "isAppInForeground",
+      "line": 593,
+      "calls_out_to": []
+    },
+    {
+      "name": "getActiveConversationId",
+      "line": 617,
+      "calls_out_to": []
+    },
+    {
+      "name": "createNotificationChannel",
+      "line": 622,
+      "calls_out_to": ["NotificationManager.createNotificationChannel"]
+    },
+    {
+      "name": "onBind",
+      "line": 637,
+      "calls_out_to": ["serviceHealthMonitor.isServiceHealthy", "serviceHealthMonitor.updateHeartbeat"]
+    },
+    {
+      "name": "onDestroy",
+      "line": 645,
+      "calls_out_to": ["releaseWakeLock", "meshRepository.getServiceState", "kotlin.runCatching", "meshRepository.stopMeshService"]
+    }
+  ]
+}

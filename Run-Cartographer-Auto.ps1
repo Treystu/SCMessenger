@@ -198,10 +198,13 @@ Schema:
     {
       "name": "REPLACE_WITH_NAME",
       "line": 1,
-      "calls_out_to": []
+      "calls_out_to": [] 
     }
   ]
 }
+
+CRITICAL: Every function MUST have a "calls_out_to" array, even if it is empty [].
+Do not omit any fields from the schema.
 
 CODE CHUNK (Lines $StartLine - $EndLine):
 $chunkContent
@@ -221,14 +224,21 @@ $chunkContent
                 options = @{ num_ctx = $NumCtx; temperature = 0.1; num_thread = $Threads }
             } | ConvertTo-Json -Depth 10 -Compress
 
+            $timeout = if ($AttemptReason -match "timeout") { 900 } else { 600 }
             try {
-                $response = Invoke-RestMethod -Uri "http://127.0.0.1:$Port/api/generate" -Method Post -Body ([System.Text.Encoding]::UTF8.GetBytes($body)) -ContentType "application/json" -TimeoutSec 600
+                $response = Invoke-RestMethod -Uri "http://127.0.0.1:$Port/api/generate" -Method Post -Body ([System.Text.Encoding]::UTF8.GetBytes($body)) -ContentType "application/json" -TimeoutSec $timeout
                 
                 $json = $response.response.Trim()
                 if ($json.StartsWith('```json')) { $json = $json.Substring(7) }
                 elseif ($json.StartsWith('```')) { $json = $json.Substring(3) }
                 if ($json.EndsWith('```')) { $json = $json.Substring(0, $json.Length - 3) }
                 $json = $json.Trim()
+
+                $promptTokens = if ($null -ne $response.prompt_eval_count) { $response.prompt_eval_count } else { 0 }
+                $evalTokens = if ($null -ne $response.eval_count) { $response.eval_count } else { 0 }
+                
+                $tokenLogPath = Join-Path (Get-Item $OutDir).Parent.FullName "token_usage.log"
+                "$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') | FILE: $($File.Name) CHUNK: $ChunkIndex | PROMPT: $promptTokens | EVAL: $evalTokens" | Out-File -FilePath $tokenLogPath -Append -Encoding utf8 -ErrorAction SilentlyContinue
 
                 # Robust JSON extraction
                 $startIndex = $json.IndexOf('{')
@@ -304,14 +314,14 @@ try {
 
     $jobQueue = New-Object System.Collections.Queue
     $priorityQueue = New-Object System.Collections.Queue
-    $chunkSize = 350
+    $chunkSize = 700
     $skippedCount = 0
 
     foreach ($file in $allFiles) {
         $lines = Get-Content -LiteralPath $file.FullName -ErrorAction SilentlyContinue
         if ($null -eq $lines -or $lines.Count -eq 0) { continue }
-
         $totalChunks = [math]::Ceiling($lines.Count / $chunkSize)
+        $fullSkeleton = Get-CodeSkeleton -FilePath $file.FullName
         for ($i = 0; $i -lt $totalChunks; $i++) {
             $chunkIndex = $i + 1
             $ticketName = "$($file.Name)_chunk$($chunkIndex).txt"
@@ -351,11 +361,18 @@ try {
             $contextThreads = [math]::Floor($estimatedTokens / 1500) 
             $reqThreads = [math]::Max(1, [math]::Min($Pool, ($baseThreads + $contextThreads)))
 
+            $chunkStartNum = $startLine + 1
+            $chunkEndNum = $endLine + 1
+            $scopedSkeleton = @{
+                classes = @($fullSkeleton.classes | Where-Object { $_.line -ge $chunkStartNum -and $_.line -le $chunkEndNum })
+                funcs = @($fullSkeleton.funcs | Where-Object { $_.line -ge $chunkStartNum -and $_.line -le $chunkEndNum })
+            }
+
             $jobQueue.Enqueue([PSCustomObject]@{
                 File = $file; ChunkLines = $chunkLines; ChunkIndex = $chunkIndex; TicketName = $ticketName
                 TotalChunks = $totalChunks; Model = $model; NumCtx = $numCtx; 
                 ReqThreads = $reqThreads; Tokens = $estimatedTokens; Attempt = 1; AttemptReason = "";
-                Skeleton = (Get-CodeSkeleton -FilePath $file.FullName); StartLine = ($startLine + 1); EndLine = ($endLine + 1)
+                Skeleton = $scopedSkeleton; StartLine = $chunkStartNum; EndLine = $chunkEndNum
             })
         }
     }
@@ -367,6 +384,16 @@ try {
     $activePods = New-Object System.Collections.ArrayList
     $availablePorts = New-Object System.Collections.Queue
     11450..11465 | ForEach-Object { $availablePorts.Enqueue($_) } 
+
+    function Get-OllamaProcessForPort {
+        param($Port)
+        $conns = Get-NetTCPConnection -LocalPort $Port -ErrorAction SilentlyContinue | Where-Object { $_.State -eq 'Listen' }
+        if ($conns) {
+            $procId = $conns[0].OwningProcess
+            return Get-Process -Id $procId -ErrorAction SilentlyContinue
+        }
+        return $null
+    }
 
     Write-Host "[DEBUG] Entering Main Dispatcher Loop..." -ForegroundColor DarkCyan
 
@@ -436,22 +463,23 @@ try {
                 Remove-Job -Job $pod.Job -Force -ErrorAction SilentlyContinue
                 
                 # Terminate tracked Ollama PID
-                if ($null -ne $pod.OllamaPID) {
-                    # CRITICAL FIX: taskkill /T must run FIRST to trace and kill child runner processes. 
-                    # If Stop-Process runs first, the parent dies and child processes become untraceable ghosts.
+                # Terminate tracked Ollama PID ONLY IF it's hanging or we hit an error threshold
+                # For efficiency, we keep it alive for the next task.
+                if ($null -ne $pod.OllamaPID -and -not $isSuccess) {
+                    Write-Host "   [CLEANUP] Terminating unstable worker on Port $($pod.Port)..." -ForegroundColor DarkGray
                     try { & taskkill.exe /F /T /PID $($pod.OllamaPID) 2>&1 | Out-Null } catch {}
                     try { Stop-Process -Id $pod.OllamaPID -Force -ErrorAction SilentlyContinue } catch {}
                     $global:TrackedOllamaPIDs.Remove($pod.OllamaPID) | Out-Null
+                    
+                    # Failsafe: Snipe any ghost process
+                    try {
+                        $conns = Get-NetTCPConnection -LocalPort $pod.Port -ErrorAction SilentlyContinue
+                        foreach ($conn in $conns) {
+                            try { & taskkill.exe /F /T /PID $($conn.OwningProcess) 2>&1 | Out-Null } catch {}
+                            try { Stop-Process -Id $conn.OwningProcess -Force -ErrorAction SilentlyContinue } catch {}
+                        }
+                    } catch {}
                 }
-                
-                # Failsafe: Snipe any ghost process that might have stolen or still holds the port
-                try {
-                    $conns = Get-NetTCPConnection -LocalPort $pod.Port -ErrorAction SilentlyContinue
-                    foreach ($conn in $conns) {
-                        try { & taskkill.exe /F /T /PID $($conn.OwningProcess) 2>&1 | Out-Null } catch {}
-                        try { Stop-Process -Id $conn.OwningProcess -Force -ErrorAction SilentlyContinue } catch {}
-                    }
-                } catch {}
 
                 $availablePorts.Enqueue($pod.Port) 
                 $toRemove.Add($pod) | Out-Null
@@ -472,9 +500,17 @@ try {
             } else {
                 $nextTask = if ($priorityQueue.Count -gt 0) { $priorityQueue.Peek() } else { $jobQueue.Peek() }
                 
-                $ramOkay = ($currentRam -lt $RamLimit) -or ($activePods.Count -eq 0)
-                $threadsOkay = ($availableThreads -ge 1) -or ($activePods.Count -eq 0)
+                # STRICTER RAM GUARD: Don't launch if RAM is over limit, even if it's the only pod.
+                $ramOkay = ($currentRam -lt $RamLimit)
+                # THREAD GUARD: Require at least 2 threads for any task to prevent extreme slowness.
+                $threadsOkay = ($availableThreads -ge 2)
                 
+                # If we have no active pods, we MUST launch at least one to make progress, but warn if RAM is high.
+                if ($activePods.Count -eq 0 -and -not $ramOkay) {
+                    Write-Host "`r[CRITICAL] RAM is above limit ($currentRam%) but no active pods. Forcing single launch... " -ForegroundColor Red
+                    $ramOkay = $true
+                }
+
                 if ($ramOkay -and $threadsOkay) {
                     $task = if ($priorityQueue.Count -gt 0) { $priorityQueue.Dequeue() } else { $jobQueue.Dequeue() }
                     $port = $availablePorts.Dequeue()
@@ -484,11 +520,18 @@ try {
                     $allocatedThreads = [math]::Min($task.ReqThreads, $availableThreads)
                     if ($allocatedThreads -lt 1) { $allocatedThreads = 1 } 
                     
-                    # Start Ollama directly in the master script to track the PID perfectly
-                    $env:OLLAMA_HOST = "127.0.0.1:$port"
-                    $ollamaProc = Start-Process -FilePath "ollama" -ArgumentList "serve" -WindowStyle Hidden -PassThru
-                    $ollamaPID = $ollamaProc.Id
-                    $global:TrackedOllamaPIDs.Add($ollamaPID) | Out-Null
+                    # Start Ollama ONLY if not already running on this port
+                    $existingProc = Get-OllamaProcessForPort -Port $port
+                    $ollamaPID = $null
+                    if ($null -eq $existingProc) {
+                        Write-Host "   [INIT] Spawning new worker on Port $port..." -ForegroundColor DarkGray
+                        $env:OLLAMA_HOST = "127.0.0.1:$port"
+                        $ollamaProc = Start-Process -FilePath "ollama" -ArgumentList "serve" -WindowStyle Hidden -PassThru
+                        $ollamaPID = $ollamaProc.Id
+                        $global:TrackedOllamaPIDs.Add($ollamaPID) | Out-Null
+                    } else {
+                        $ollamaPID = $existingProc.Id
+                    }
 
                     $newJob = Start-Job -ScriptBlock $SingleShotWorker -ArgumentList $task.File, $task.ChunkLines, $task.ChunkIndex, $task.TotalChunks, $task.Model, $task.NumCtx, $allocatedThreads, $port, $OUT_DIR, $task.AttemptReason, $task.Skeleton, $task.StartLine, $task.EndLine
                     

@@ -1,0 +1,37 @@
+﻿{
+  "file": "BlockedPeersScreen.kt",
+  "chunk": 1,
+  "summary": "A composable function that displays a screen showing blocked peers and provides options to unblock them.",
+  "structs_or_classes": [],
+  "imports": [
+    "androidx.compose.foundation.layout.*",
+    "androidx.compose.foundation.lazy.LazyColumn",
+    "androidx.compose.foundation.lazy.items",
+    "androidx.compose.material.icons.Icons",
+    "androidx.compose.material.icons.automirrored.filled.ArrowBack",
+    "androidx.compose.material.icons.filled.Block",
+    "androidx.compose.material.icons.filled.Delete",
+    "androidx.compose.material3.*",
+    "androidx.compose.runtime.*",
+    "androidx.compose.ui.Alignment",
+    "androidx.compose.ui.Modifier",
+    "androidx.compose.ui.text.font.FontWeight",
+    "androidx.compose.ui.unit.dp",
+    "androidx.hilt.navigation.compose.hiltViewModel",
+    "com.scmessenger.android.ui.viewmodels.ConversationsViewModel",
+    "java.text.SimpleDateFormat",
+    "java.util.*"
+  ],
+  "funcs": [
+    {
+      "name": "BlockedPeersScreen",
+      "line": 23,
+      "calls_out_to": ["hiltViewModel", "collectAsState"]
+    },
+    {
+      "name": "BlockedPeerItem",
+      "line": 108,
+      "calls_out_to": []
+    }
+  ]
+}

@@ -1,0 +1,36 @@
+﻿{
+  "file": "MeshApplication.kt",
+  "chunk": 1,
+  "summary": "SCMessenger Application class with Hilt dependency injection.",
+  "structs_or_classes": [],
+  "imports": [
+    "android.app.Application",
+    "dagger.hilt.android.HiltAndroidApp",
+    "kotlinx.coroutines.CoroutineScope",
+    "kotlinx.coroutines.Dispatchers",
+    "kotlinx.coroutines.SupervisorJob",
+    "kotlinx.coroutines.cancel",
+    "kotlinx.coroutines.launch",
+    "timber.log.Timber"
+  ],
+  "funcs": [
+    {
+      "name": "onCreate",
+      "line": 18,
+      "calls_out_to": [
+        "Timber.plant(Timber.DebugTree())",
+        "com.scmessenger.android.utils.FileLoggingTree(this)",
+        "applicationScope.launch { ... }",
+        "com.scmessenger.android.utils.StorageManager.performStartupMaintenance(this@MeshApplication)",
+        "com.scmessenger.android.utils.NotificationHelper.createNotificationChannels(this)"
+      ]
+    },
+    {
+      "name": "onTerminate",
+      "line": 52,
+      "calls_out_to": [
+        "applicationScope.cancel()"
+      ]
+    }
+  ]
+}

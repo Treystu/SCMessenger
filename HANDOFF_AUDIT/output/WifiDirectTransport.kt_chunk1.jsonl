@@ -1,0 +1,130 @@
+﻿{
+  "file": "WifiDirectTransport.kt",
+  "chunk": 1,
+  "summary": "WiFi Direct (WiFi P2P) transport implementation for Android.",
+  "structs_or_classes": [
+    {
+      "name": "WifiDirectTransport",
+      "line": 31
+    },
+    {
+      "name": "P2pConnection",
+      "line": 366
+    }
+  ],
+  "imports": [
+    "android.content.BroadcastReceiver",
+    "android.content.Context",
+    "android.content.Intent",
+    "android.content.IntentFilter",
+    "android.net.wifi.p2p.*",
+    "android.net.wifi.p2p.nsd.WifiP2pDnsSdServiceInfo",
+    "android.net.wifi.p2p.nsd.WifiP2pDnsSdServiceRequest",
+    "androidx.core.content.IntentCompat",
+    "timber.log.Timber",
+    "java.io.InputStream",
+    "java.io.OutputStream",
+    "java.net.InetSocketAddress",
+    "java.net.ServerSocket",
+    "java.net.Socket",
+    "java.util.concurrent.ConcurrentHashMap",
+    "kotlinx.coroutines.*"
+  ],
+  "funcs": [
+    {
+      "name": "start",
+      "line": 54,
+      "calls_out_to": ["stop", "startServiceDiscovery", "registerService"]
+    },
+    {
+      "name": "stop",
+      "line": 102,
+      "calls_out_to": ["cleanup"]
+    },
+    {
+      "name": "sendData",
+      "line": 143,
+      "calls_out_to": []
+    },
+    {
+      "name": "startServiceDiscovery",
+      "line": 152,
+      "calls_out_to": ["registerLocalService", "discoverPeers"]
+    },
+    {
+      "name": "onSuccess",
+      "line": 175,
+      "calls_out_to": []
+    },
+    {
+      "name": "onFailure",
+      "line": 180,
+      "calls_out_to": []
+    },
+    {
+      "name": "startPeerDiscovery",
+      "line": 191,
+      "calls_out_to": ["discoverPeers"]
+    },
+    {
+      "name": "onSuccess",
+      "line": 196,
+      "calls_out_to": []
+    },
+    {
+      "name": "onFailure",
+      "line": 200,
+      "calls_out_to": []
+    },
+    {
+      "name": "registerService",
+      "line": 211,
+      "calls_out_to": ["addLocalService"]
+    },
+    {
+      "name": "onSuccess",
+      "line": 227,
+      "calls_out_to": []
+    },
+    {
+      "name": "onFailure",
+      "line": 231,
+      "calls_out_to": []
+    },
+    {
+      "name": "connectToPeer",
+      "line": 242,
+      "calls_out_to": ["connect"]
+    },
+    {
+      "name": "onSuccess",
+      "line": 257,
+      "calls_out_to": []
+    },
+    {
+      "name": "onFailure",
+      "line": 261,
+      "calls_out_to": []
+    },
+    {
+      "name": "onReceive",
+      "line": 273,
+      "calls_out_to": ["handleConnectionInfo"]
+    },
+    {
+      "name": "handleConnectionInfo",
+      "line": 307,
+      "calls_out_to": ["startServer", "connectToGroupOwner"]
+    },
+    {
+      "name": "startServer",
+      "line": 321,
+      "calls_out_to": ["serverSocket"]
+    },
+    {
+      "name": "connectToGroupOwner",
+      "line": 346,
+      "calls_out_to": ["socket"]
+    }
+  ]
+}

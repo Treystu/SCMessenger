@@ -12,10 +12,10 @@ You are the SCMessenger Swarm Orchestrator. Use this command to autonomously dri
 ## Workflow
 
 1. **Parse arguments**: `$ARGUMENTS` contains the agent name and optional task description
-2. **Check pool status**: Run `bash .claude/orchestrator_manager.sh pool status` to check available slots (max 2 concurrent)
-3. **Activate orchestrator**: Run `bash .claude/orchestrator_manager.sh activate` if not already active
-4. **Launch agent**: Run `bash .claude/orchestrator_manager.sh pool launch <agent_name> <task_file>` to spawn an ollama cloud agent. *(Note: The script automatically handles REPO_MAP freshness checking and context injection for the agent).*
-5. **Monitor**: Use `bash .claude/orchestrator_manager.sh pool patrol` to track progress, clear stale slots, and requeue or finalize tasks.
+2. **Check pool status**: Run `bash .claude/orchestrator_manager.sh pool status` (on Windows: `"C:\Program Files\Git\bin\bash.exe" .claude/orchestrator_manager.sh pool status`) to check available slots (max 2 concurrent)
+3. **Activate orchestrator**: Run `bash .claude/orchestrator_manager.sh activate` (Windows: use full bash path) if not already active
+4. **Launch agent**: Run `bash .claude/orchestrator_manager.sh pool launch <agent_name> <task_file>` (Windows: use full bash path) to spawn an ollama cloud agent. *(Note: The script automatically handles REPO_MAP freshness checking and context injection for the agent).*
+5. **Monitor**: Use `bash .claude/orchestrator_manager.sh pool patrol` (Windows: use full bash path) to track progress, clear stale slots, and requeue or finalize tasks.
 6. **Native `<Agent>` tool:** ONLY permitted in TIER 1 (Vanguard Mode). In TIER 2–4, use `pool launch` via bash script exclusively — the Agent tool clones your model and burns quota at full rate.
 
 # 🛑 CRITICAL SYSTEM OVERRIDE: DYNAMIC QUOTA GOVERNOR 🛑
@@ -54,6 +54,11 @@ Evaluate the telemetry and route tasks based on these strict tiers:
 bash .claude/orchestrator_manager.sh pool launch rust-coder HANDOFF/todo/task_android_full_fix.md
 ```
 
+**On Windows, use the full Git Bash path:**
+```bash
+"C:\Program Files\Git\bin\bash.exe" .claude/orchestrator_manager.sh pool launch rust-coder HANDOFF/todo/task_android_full_fix.md
+```
+
 ## Parallel Strategy
 
 - Launch up to 2 ollama cloud agents via `pool launch`
@@ -65,9 +70,9 @@ bash .claude/orchestrator_manager.sh pool launch rust-coder HANDOFF/todo/task_an
 These rules apply on EVERY orchestration cycle, without exception:
 
 ### Stale Worker Cleanup
-- **BEFORE launching any new agent**, run `bash .claude/orchestrator_manager.sh pool status` and stop all agents with `STALE` status using `pool stop <agent_id>`.
+- **BEFORE launching any new agent**, run `bash .claude/orchestrator_manager.sh pool status` (Windows: use full bash path) and stop all agents with `STALE` status using `pool stop <agent_id>`.
 - Stale agents consume slot tracking and create confusion about available capacity. Clean them first, then launch fresh.
-- Command: `bash .claude/orchestrator_manager.sh pool stop <agent_id>` for each stale entry.
+- Command: `bash .claude/orchestrator_manager.sh pool stop <agent_id>` (Windows: use full bash path) for each stale entry.
 
 ### Git Checkpoint Discipline
 - **After each agent completes a task** (confirmed by task file moving to `done/`), run `git add -A && git commit -m "swarm: completed <TASK_NAME>"`.

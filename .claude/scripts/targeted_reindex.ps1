@@ -107,6 +107,12 @@ $chunkContent
                 if ($json.EndsWith('```')) { $json = $json.Substring(0, $json.Length - 3) }
                 $json = $json.Trim()
                 
+                $promptTokens = if ($null -ne $response.prompt_eval_count) { $response.prompt_eval_count } else { 0 }
+                $evalTokens = if ($null -ne $response.eval_count) { $response.eval_count } else { 0 }
+                
+                $tokenLogPath = Join-Path (Get-Item $OutDir).Parent.FullName "token_usage.log"
+                "$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') | FILE: $($File.Name) CHUNK: $ChunkIndex | PROMPT: $promptTokens | EVAL: $evalTokens" | Out-File -FilePath $tokenLogPath -Append -Encoding utf8 -ErrorAction SilentlyContinue
+
                 $startIndex = $json.IndexOf('{')
                 $endIndex = $json.LastIndexOf('}')
                 if ($startIndex -ge 0 -and $endIndex -ge $startIndex) {
@@ -163,7 +169,7 @@ try {
         $Lines = Get-Content -LiteralPath $FileAbs -ErrorAction SilentlyContinue
         if ($null -eq $Lines -or $Lines.Count -eq 0) { continue }
         
-        $ChunkSize = 350
+        $ChunkSize = 700
         $TotalChunks = [math]::Ceiling($Lines.Count / $ChunkSize)
         $Skeleton = Get-CodeSkeleton -FilePath $FileAbs
         
@@ -178,8 +184,15 @@ try {
             $EstimatedTokens = [math]::Ceiling($CharCount / 3) + 500
             $NumCtx = if ($EstimatedTokens -lt 2048) { 2048 } elseif ($EstimatedTokens -lt 4096) { 4096 } elseif ($EstimatedTokens -lt 8192) { 8192 } else { 16384 }
             
+            $ChunkStartNum = $StartLine + 1
+            $ChunkEndNum = $EndLine + 1
+            $ScopedSkeleton = @{
+                classes = @($Skeleton.classes | Where-Object { $_.line -ge $ChunkStartNum -and $_.line -le $ChunkEndNum })
+                funcs = @($Skeleton.funcs | Where-Object { $_.line -ge $ChunkStartNum -and $_.line -le $ChunkEndNum })
+            }
+
             Write-Host "[TARGETED] Processing $BaseName chunk $ChunkIndex/$TotalChunks..."
-            $result = Run-SingleWorker -File $FileInfo -ChunkLines $ChunkLines -ChunkIndex $ChunkIndex -TotalChunks $TotalChunks -Model $Model -NumCtx $NumCtx -Threads $Threads -Port $Port -OutDir $OutputDir -AttemptReason "" -Skeleton $Skeleton -StartLine ($StartLine + 1) -EndLine ($EndLine + 1)
+            $result = Run-SingleWorker -File $FileInfo -ChunkLines $ChunkLines -ChunkIndex $ChunkIndex -TotalChunks $TotalChunks -Model $Model -NumCtx $NumCtx -Threads $Threads -Port $Port -OutDir $OutputDir -AttemptReason "" -Skeleton $ScopedSkeleton -StartLine $ChunkStartNum -EndLine $ChunkEndNum
             
             $TicketName = "${BaseName}_chunk${ChunkIndex}.txt"
             if ($result -eq "SUCCESS") {
@@ -190,7 +203,7 @@ try {
                     Get-Content $expectedOutFile | Out-File -FilePath (Join-Path $HandoffAudit "REPO_MAP.jsonl") -Append -Encoding utf8 -ErrorAction SilentlyContinue
                 }
             } else {
-                Write-Host "[TARGETED] Failed chunk $ChunkIndex of $BaseName: $result" -ForegroundColor Red
+                Write-Host "[TARGETED] Failed chunk $ChunkIndex of ${BaseName}: $result" -ForegroundColor Red
                 "FILE: $FileAbs`nCHUNK: $ChunkIndex`nERROR: $result" | Out-File -FilePath (Join-Path $ErrorsDir $TicketName) -Encoding utf8 -ErrorAction SilentlyContinue
             }
         }

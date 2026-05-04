@@ -1,0 +1,92 @@
+﻿{
+  "file": "MeshRepository.kt",
+  "chunk": 15,
+  "summary": "This class provides methods for managing mesh communication, including setting BLE scan interval, relay budget, updating device state, and handling peer connections via SwarmBridge.",
+  "structs_or_classes": [],
+  "imports": [
+    "com.example.libp2p.PeerIdValidator",
+    "com.example.libp2p.SwarmBridge",
+    "com.example.libp2p.IronCore",
+    "com.example.libp2p.WifiTransportManager",
+    "com.example.libp2p.BleGattClient",
+    "com.example.libp2p.BleGattServer",
+    "com.example.libp2p.MdnsLanPeers"
+  ],
+  "funcs": [
+    {
+      "name": "overrideBleInterval",
+      "line": 4901,
+      "calls_out_to": ["autoAdjustEngine?.overrideBleScanInterval(intervalMs)"]
+    },
+    {
+      "name": "setRelayBudget",
+      "line": 4905,
+      "calls_out_to": ["meshService?.setRelayBudget(messagesPerHour)"]
+    },
+    {
+      "name": "updateDeviceState",
+      "line": 4910,
+      "calls_out_to": ["meshService?.updateDeviceState(profile)"]
+    },
+    {
+      "name": "overrideRelayMax",
+      "line": 4913,
+      "calls_out_to": ["autoAdjustEngine?.overrideRelayMaxPerHour(max)"]
+    },
+    {
+      "name": "clearAdjustmentOverrides",
+      "line": 4917,
+      "calls_out_to": ["autoAdjustEngine?.clearOverrides()"]
+    },
+    {
+      "name": "getTopics",
+      "line": 4930,
+      "calls_out_to": ["swarmBridge?.getTopics()"]
+    },
+    {
+      "name": "subscribeTopic",
+      "line": 4936,
+      "calls_out_to": ["swarmBridge?.subscribeTopic(topic)"]
+    },
+    {
+      "name": "unsubscribeTopic",
+      "line": 4945,
+      "calls_out_to": ["swarmBridge?.unsubscribeTopic(topic)"]
+    },
+    {
+      "name": "publishTopic",
+      "line": 4953,
+      "calls_out_to": ["swarmBridge?.publishTopic(topic, data)"]
+    },
+    {
+      "name": "sendToAllPeers",
+      "line": 4964,
+      "calls_out_to": ["swarmBridge?.sendToAllPeers(data)"]
+    },
+    {
+      "name": "connectToPeer",
+      "line": 4972,
+      "calls_out_to": [
+        "buildDialCandidatesForPeer(routePeerId, rawAddresses, includeRelayCircuits)",
+        "swarmBridge?.dial(finalAddr)"
+      ]
+    },
+    {
+      "name": "ensurePendingOutboxRetryLoop",
+      "line": 4997,
+      "calls_out_to": ["repoScope.launch { while (true) { try { primeRelayBootstrapConnections() flushPendingOutbox(\"periodic\") kotlinx.coroutines.delay(8000) } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) { Timber.w(e, \"Pending outbox retry loop error\") kotlinx.coroutines.delay(5000) } } }"]
+    },
+    {
+      "name": "ensureCoverTrafficLoop",
+      "line": 5019,
+      "calls_out_to": ["repoScope.launch { while (true) { try { kotlinx.coroutines.delay(30_000) val enabled = try { settingsManager?.load()?.coverTrafficEnabled == true } catch (_: Exception) { false } if (enabled) { val core = ironCore val bridge = swarmBridge if (core != null && bridge != null) { try { val payload = core.prepareCoverTraffic(256u) bridge.sendToAllPeers(payload) } catch (e: Exception) { Timber.d(\"Cover traffic send skipped: ${e.message}\") } } } } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) { Timber.w(e, \"Cover traffic loop error\") kotlinx.coroutines.delay(30_000) } } }"]
+    },
+    {
+      "name": "attemptDirectSwarmDelivery",
+      "line": 5061,
+      "calls_out_to": [
+        "smartTransportRouter?.attemptDelivery(peerId, envelopeData, wifiPeerId, blePeerId, tcpMdnsPeerId, routePeerCandidates, listeners, traceMessageId, attemptContext, tryWifi, tryBle)"
+      ]
+    }
+  ]
+}

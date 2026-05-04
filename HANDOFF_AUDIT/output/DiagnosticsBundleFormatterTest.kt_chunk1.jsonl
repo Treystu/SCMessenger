@@ -1,0 +1,24 @@
+﻿{
+  "file": "DiagnosticsBundleFormatterTest.kt",
+  "chunk": 1,
+  "summary": "This test class checks the functionality of DiagnosticsBundleFormatter by verifying that it correctly formats and includes required sections in a diagnostics bundle.",
+  "structs_or_classes": [],
+  "imports": [
+    "com.scmessenger.android.ui.diagnostics.DiagnosticsBundleFormatter",
+    "com.scmessenger.android.ui.diagnostics.DiagnosticsBundleInput",
+    "org.junit.Assert.assertTrue",
+    "org.junit.Test"
+  ],
+  "funcs": [
+    {
+      "name": "bundleIncludesRequiredTesterSections",
+      "line": 10,
+      "calls_out_to": ["DiagnosticsBundleFormatter.format", "assertTrue"]
+    },
+    {
+      "name": "bundlePreservesCoreDiagnosticsAndLogs",
+      "line": 36,
+      "calls_out_to": ["DiagnosticsBundleFormatter.format", "assertTrue"]
+    }
+  ]
+}

@@ -1,0 +1,153 @@
+﻿{
+  "file": "WifiAwareTransport.kt",
+  "chunk": 1,
+  "summary": "A WiFi Aware transport implementation for Android, supporting device-to-device discovery and communication without traditional WiFi infrastructure or pairing.",
+  "structs_or_classes": [
+    {
+      "name": "WifiAwareTransport",
+      "line": 32
+    },
+    {
+      "name": "AwareConnection",
+      "line": 389
+    }
+  ],
+  "imports": [
+    "android.content.Context",
+    "android.net.*",
+    "android.net.wifi.aware.*",
+    "android.os.Build",
+    "androidx.annotation.RequiresApi",
+    "timber.log.Timber",
+    "java.io.InputStream",
+    "java.io.OutputStream",
+    "java.net.InetSocketAddress",
+    "java.net.ServerSocket",
+    "java.net.Socket",
+    "java.util.concurrent.ConcurrentHashMap",
+    "kotlinx.coroutines.*"
+  ],
+  "funcs": [
+    {
+      "name": "isAvailable",
+      "line": 59,
+      "calls_out_to": []
+    },
+    {
+      "name": "start",
+      "line": 67,
+      "calls_out_to": ["wifiAwareManager?.attach(attachCallback, null)"]
+    },
+    {
+      "name": "stop",
+      "line": 91,
+      "calls_out_to": [
+        "scope.cancel()",
+        "activeConnections.values.forEach { it.close() }",
+        "publishSession?.close()",
+        "subscribeSession?.close()",
+        "callbacksToUnregister.forEach { callback.unregisterNetworkCallback(it) }",
+        "awareSession?.close()"
+      ]
+    },
+    {
+      "name": "sendData",
+      "line": 135,
+      "calls_out_to": ["connection.send(data)"]
+    },
+    {
+      "name": "onAttached",
+      "line": 145,
+      "calls_out_to": [
+        "awareSession = session",
+        "isRunning = true"
+      ]
+    },
+    {
+      "name": "onAttachFailed",
+      "line": 160,
+      "calls_out_to": ["isRunning = false"]
+    },
+    {
+      "name": "startPublishing",
+      "line": 167,
+      "calls_out_to": [
+        "awareSession?.publish(config, publishDiscoveryCallback, null)"
+      ]
+    },
+    {
+      "name": "startSubscribing",
+      "line": 183,
+      "calls_out_to": [
+        "awareSession?.subscribe(config, subscribeDiscoveryCallback, null)"
+      ]
+    },
+    {
+      "name": "onPublishStarted",
+      "line": 200,
+      "calls_out_to": ["publishSession = session"]
+    },
+    {
+      "name": "onServiceDiscovered",
+      "line": 206,
+      "calls_out_to": [
+        "onPeerDiscovered(peerIdString)",
+        "initiateDataPath(session, peerId, peerIdString, isPublisher = true)"
+      ]
+    },
+    {
+      "name": "onSubscribeStarted",
+      "line": 228,
+      "calls_out_to": ["subscribeSession = session"]
+    },
+    {
+      "name": "onServiceDiscovered",
+      "line": 234,
+      "calls_out_to": [
+        "onPeerDiscovered(peerIdString)",
+        "initiateDataPath(session, peerId, peerIdString, isPublisher = false)"
+      ]
+    },
+    {
+      "name": "initiateDataPath",
+      "line": 256,
+      "calls_out_to": ["connectivityManager.requestNetwork(request, callback)"]
+    },
+    {
+      "name": "createResponderSocket",
+      "line": 338,
+      "calls_out_to": [
+        "serverSocket = ServerSocket(AWARE_PORT)",
+        "socket.accept()",
+        "serverSocket.close()"
+      ]
+    },
+    {
+      "name": "createInitiatorSocket",
+      "line": 369,
+      "calls_out_to": [
+        "socket.connect(InetSocketAddress(peerIpv6, AWARE_PORT), CONNECT_TIMEOUT_MS)"
+      ]
+    },
+    {
+      "name": "startReading",
+      "line": 400,
+      "calls_out_to": ["inputStream.read(buffer)"]
+    },
+    {
+      "name": "send",
+      "line": 427,
+      "calls_out_to": ["outputStream.write(data)", "outputStream.flush()"]
+    },
+    {
+      "name": "close",
+      "line": 438,
+      "calls_out_to": ["socket.close()"]
+    },
+    {
+      "name": "cleanup",
+      "line": 448,
+      "calls_out_to": ["stop()", "scope.cancel()"]
+    }
+  ]
+}

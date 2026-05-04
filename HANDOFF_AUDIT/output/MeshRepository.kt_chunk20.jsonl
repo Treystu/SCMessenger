@@ -1,0 +1,32 @@
+﻿{
+  "file": "MeshRepository.kt",
+  "chunk": 20,
+  "summary": "This function is responsible for handling the creation of a transport identity resolution based on the provided normalized key.",
+  "structs_or_classes": [],
+  "imports": [
+    "com.ironcorelabs.sdk.common.PeerKeyUtils",
+    "com.ironcorelabs.sdk.common.RoutingHints",
+    "com.ironcorelabs.sdk.common.exceptions.Timber"
+  ],
+  "funcs": [
+    {
+      "name": "handleTransportIdentityResolution",
+      "line": 6649,
+      "calls_out_to": [
+        "isBootstrapRelayPeerFromKey",
+        "validatePeerBeforeContactCreation",
+        "createEmergencyContact",
+        "logIdentityResolutionDetails",
+        "normalizePublicKey",
+        "contactManager?.list()",
+        "appendRoutingHint",
+        "upsertRoutingListeners",
+        "uniffi.api.Contact",
+        "contactManager?.add(updated)",
+        "annotateIdentityInLedger",
+        "parseRoutingHints",
+        "parseAllRoutingPeerIds"
+      ]
+    }
+  ]
+}
