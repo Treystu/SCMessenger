@@ -309,10 +309,94 @@ impl OptimizedRoutingEngine {
     pub fn active_paths(&self, _peer_id: u64) -> Vec<()> {
         Vec::new()
     }
+
+    /// Refresh delegate routes by re-querying the base engine's local cell.
+    /// Called when transport state changes (peer connect/disconnect) to update
+    /// cached routing information.
+    pub fn refresh_delegate_routes(&mut self) {
+        // The base engine's local cell is always kept up to date via
+        // `record_message_activity` and `routing_peer_seen`. This method
+        // triggers a sweep of the adaptive TTL to expire stale entries.
+        let now = web_time::SystemTime::now()
+            .duration_since(web_time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+        self.adaptive_ttl.cleanup(Duration::from_secs(300));
+        tracing::debug!(
+            refreshed_at = now,
+            "Delegate routes refreshed via adaptive TTL sweep"
+        );
+    }
+
+    /// Run an optimization cycle over the routing engine.
+    /// Performs a full maintenance tick: base engine maintenance,
+    /// negative cache cleanup, adaptive TTL sweep, and prefetch
+    /// queue optimization.
+    /// Returns the maintenance result for diagnostics.
+    pub fn run_optimization(&mut self) -> OptimizedRoutingMaintenance {
+        let now = web_time::SystemTime::now()
+            .duration_since(web_time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+        self.tick(now)
+    }
+
+    /// Evaluate all tracked peers in the negative cache and adaptive TTL.
+    /// Returns the number of entries that were evicted due to staleness.
+    /// Used by periodic health checks to prune unreachable peers whose
+    /// negative cache entry has expired.
+    pub fn evaluate_all_tracked(&mut self) -> usize {
+        let neg_evicted = self.negative_cache.cleanup_expired();
+        let ttl_evicted = self.adaptive_ttl.cleanup(Duration::from_secs(86400));
+        neg_evicted + ttl_evicted
+    }
+
+    /// Check whether a specific peer is reachable via any known route.
+    /// Returns true if the peer exists in the local routing cell or
+    /// is not in the negative cache (i.e., not definitely unreachable).
+    pub fn can_reach_destination(&mut self, peer_id_hex: &str) -> bool {
+        // If the negative cache says definitely unreachable, return false.
+        if self.negative_cache.is_definitely_unreachable(peer_id_hex) {
+            return false;
+        }
+        // Otherwise check if we have any route to this peer.
+        let hint = if peer_id_hex.len() >= 8 {
+            let bytes = hex::decode(&peer_id_hex[..8]).unwrap_or_default();
+            let arr: [u8; 4] = bytes.try_into().unwrap_or([0u8; 4]);
+            arr
+        } else {
+            [0u8; 4]
+        };
+        let peers = self.base_engine.local_cell().peers_for_hint(&hint);
+        !peers.is_empty()
+    }
+
+    /// Prune entries below a given reputation threshold.
+    /// When Phase 2 APIs are enabled, delegates to the MultiPathDelivery's
+    /// reputation tracker. Otherwise, cleans negative cache entries with
+    /// low confidence scores below the threshold.
+    pub fn prune_below(&mut self, threshold: f64) {
+        #[cfg(feature = "phase2_apis")]
+        {
+            self.multipath.prune_below(threshold);
+        }
+        #[cfg(not(feature = "phase2_apis"))]
+        {
+            // Without Phase 2 multipath, prune negative cache entries that
+            // are below the threshold confidence level.
+            self.negative_cache.prune_below_confidence(threshold);
+        }
+    }
+
+    /// Check whether the timeout budget allows advancing to the next
+    /// discovery phase. Delegates to TimeoutBudget::should_advance().
+    pub fn should_advance(&self) -> bool {
+        self.timeout_budget.should_advance()
+    }
 }
 
 /// Maintenance result for optimized engine
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize)]
 pub struct OptimizedRoutingMaintenance {
     /// Base engine maintenance
     pub base_maintenance: RoutingMaintenance,

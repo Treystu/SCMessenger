@@ -713,6 +713,136 @@ async fn handle_jsonrpc_request(
                 )
             }
         }
+        // ── Onion routing ──
+        ClientIntent::PrepareOnionMessage {
+            envelope_data,
+            relay_public_keys_json,
+        } => {
+            if let Some(ref core) = ctx.core {
+                match hex::decode(&envelope_data) {
+                    Ok(data) => match core.prepare_onion_message(data, relay_public_keys_json) {
+                        Ok(onion_bytes) => {
+                            rpc_result(id, serde_json::json!({"onionData": hex::encode(onion_bytes)}))
+                        }
+                        Err(e) => rpc_error(
+                            id,
+                            JsonRpcErrorBody {
+                                code: -32000,
+                                message: format!("Onion prepare failed: {:?}", e),
+                                data: None,
+                            },
+                        ),
+                    },
+                    Err(e) => rpc_error(
+                        id,
+                        JsonRpcErrorBody {
+                            code: ERR_PARAMS,
+                            message: format!("Invalid hex for envelope_data: {}", e),
+                            data: None,
+                        },
+                    ),
+                }
+            } else {
+                rpc_error(
+                    id,
+                    JsonRpcErrorBody {
+                        code: -32000,
+                        message: "Core not available".to_string(),
+                        data: None,
+                    },
+                )
+            }
+        }
+        ClientIntent::PeelOnionLayer {
+            onion_data,
+            relay_secret_key,
+        } => {
+            if let Some(ref core) = ctx.core {
+                let onion_bytes = match hex::decode(&onion_data) {
+                    Ok(b) => b,
+                    Err(e) => {
+                        return rpc_error(
+                            id,
+                            JsonRpcErrorBody {
+                                code: ERR_PARAMS,
+                                message: format!("Invalid hex for onion_data: {}", e),
+                                data: None,
+                            },
+                        )
+                    }
+                };
+                let secret_bytes = match hex::decode(&relay_secret_key) {
+                    Ok(b) => b,
+                    Err(e) => {
+                        return rpc_error(
+                            id,
+                            JsonRpcErrorBody {
+                                code: ERR_PARAMS,
+                                message: format!("Invalid hex for relay_secret_key: {}", e),
+                                data: None,
+                            },
+                        )
+                    }
+                };
+                match core.peel_onion_layer(onion_bytes, secret_bytes) {
+                    Ok(result) => rpc_result(
+                        id,
+                        serde_json::json!({
+                            "nextHop": result.next_hop.map(|h| hex::encode(h)),
+                            "remainingData": hex::encode(result.remaining_data),
+                        }),
+                    ),
+                    Err(e) => rpc_error(
+                        id,
+                        JsonRpcErrorBody {
+                            code: -32000,
+                            message: format!("Onion peel failed: {:?}", e),
+                            data: None,
+                        },
+                    ),
+                }
+            } else {
+                rpc_error(
+                    id,
+                    JsonRpcErrorBody {
+                        code: -32000,
+                        message: "Core not available".to_string(),
+                        data: None,
+                    },
+                )
+            }
+        }
+        // ── Ratchet session diagnostics ──
+        ClientIntent::RatchetSessionCount {} => {
+            if let Some(ref core) = ctx.core {
+                let count = core.ratchet_session_count();
+                rpc_result(id, serde_json::json!({"sessionCount": count}))
+            } else {
+                rpc_error(
+                    id,
+                    JsonRpcErrorBody {
+                        code: -32000,
+                        message: "Core not available".to_string(),
+                        data: None,
+                    },
+                )
+            }
+        }
+        ClientIntent::RatchetHasSession { peer_id } => {
+            if let Some(ref core) = ctx.core {
+                let has = core.ratchet_has_session(peer_id);
+                rpc_result(id, serde_json::json!({"hasSession": has}))
+            } else {
+                rpc_error(
+                    id,
+                    JsonRpcErrorBody {
+                        code: -32000,
+                        message: "Core not available".to_string(),
+                        data: None,
+                    },
+                )
+            }
+        }
     }
 }
 

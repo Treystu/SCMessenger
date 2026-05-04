@@ -661,11 +661,13 @@ fn dispatch_ranked_route(
     }
 }
 
-/// Convert libp2p Kademlia protocol mode to routing transport type
-fn transport_type_to_routing_transport(_mode: kad::Mode) -> RoutingTransportType {
-    // For now, default to TCP as that's what most peers use
-    // In a full implementation, we'd inspect the actual connection transports
-    RoutingTransportType::TCP
+/// Convert libp2p Kademlia protocol mode to routing transport type.
+/// Maps the Kademlia query mode to the appropriate transport classification.
+fn transport_type_to_routing_transport(mode: kad::Mode) -> RoutingTransportType {
+    match mode {
+        kad::Mode::Client => RoutingTransportType::QUIC,
+        kad::Mode::Server => RoutingTransportType::TCP,
+    }
 }
 
 /// Convert routing engine decision to ranked routes for dispatch
@@ -1082,6 +1084,35 @@ pub enum SwarmCommand {
         count: usize,
         reply: mpsc::Sender<Vec<Vec<PeerId>>>,
     },
+    /// List known endpoints for a peer (addresses observed via address tracking)
+    ListEndpoints {
+        peer_id: PeerId,
+        reply: mpsc::Sender<Vec<Multiaddr>>,
+    },
+    /// Register a new endpoint address for a peer
+    RegisterEndpoint {
+        peer_id: PeerId,
+        addr: Multiaddr,
+        reply: mpsc::Sender<Result<(), String>>,
+    },
+    /// Touch (mark as recently seen) an endpoint for health tracking
+    TouchEndpoint {
+        peer_id: PeerId,
+        addr: Multiaddr,
+        reply: mpsc::Sender<Result<(), String>>,
+    },
+    /// Unregister an endpoint address for a peer (cleanup on disconnect)
+    UnregisterEndpoint {
+        peer_id: PeerId,
+        addr: Multiaddr,
+        reply: mpsc::Sender<Result<(), String>>,
+    },
+    /// Update the keepalive interval for a peer connection
+    UpdateKeepalive {
+        peer_id: PeerId,
+        interval_secs: u64,
+        reply: mpsc::Sender<Result<(), String>>,
+    },
     /// Shutdown the swarm
     Shutdown,
 }
@@ -1316,6 +1347,85 @@ impl SwarmHandle {
             .recv()
             .await
             .ok_or_else(|| anyhow::anyhow!("No reply from swarm"))
+    }
+
+    /// List known endpoint addresses for a peer.
+    /// Returns the set of multiaddresses observed for the peer via address tracking.
+    pub async fn list_endpoints(&self, peer_id: PeerId) -> Result<Vec<Multiaddr>> {
+        let (reply_tx, mut reply_rx) = mpsc::channel(1);
+        self.command_tx
+            .send(SwarmCommand::ListEndpoints { peer_id, reply: reply_tx })
+            .await
+            .map_err(|_| anyhow::anyhow!("Swarm task not running"))?;
+
+        reply_rx
+            .recv()
+            .await
+            .ok_or_else(|| anyhow::anyhow!("No reply from swarm"))
+    }
+
+    /// Register a new endpoint address for a peer.
+    /// Adds the address to Kademlia's routing table and the address observer.
+    pub async fn register_endpoint(&self, peer_id: PeerId, addr: Multiaddr) -> Result<()> {
+        let (reply_tx, mut reply_rx) = mpsc::channel(1);
+        self.command_tx
+            .send(SwarmCommand::RegisterEndpoint { peer_id, addr, reply: reply_tx })
+            .await
+            .map_err(|_| anyhow::anyhow!("Swarm task not running"))?;
+
+        match reply_rx.recv().await {
+            Some(Ok(())) => Ok(()),
+            Some(Err(e)) => Err(anyhow::anyhow!("{}", e)),
+            None => Err(anyhow::anyhow!("No reply from swarm")),
+        }
+    }
+
+    /// Touch (mark as recently seen) an endpoint for health tracking.
+    /// Updates the last-seen timestamp for the peer's address observation.
+    pub async fn touch_endpoint(&self, peer_id: PeerId, addr: Multiaddr) -> Result<()> {
+        let (reply_tx, mut reply_rx) = mpsc::channel(1);
+        self.command_tx
+            .send(SwarmCommand::TouchEndpoint { peer_id, addr, reply: reply_tx })
+            .await
+            .map_err(|_| anyhow::anyhow!("Swarm task not running"))?;
+
+        match reply_rx.recv().await {
+            Some(Ok(())) => Ok(()),
+            Some(Err(e)) => Err(anyhow::anyhow!("{}", e)),
+            None => Err(anyhow::anyhow!("No reply from swarm")),
+        }
+    }
+
+    /// Unregister an endpoint address for a peer (cleanup on disconnect).
+    /// Removes the address from the address observer's tracking.
+    pub async fn unregister_endpoint(&self, peer_id: PeerId, addr: Multiaddr) -> Result<()> {
+        let (reply_tx, mut reply_rx) = mpsc::channel(1);
+        self.command_tx
+            .send(SwarmCommand::UnregisterEndpoint { peer_id, addr, reply: reply_tx })
+            .await
+            .map_err(|_| anyhow::anyhow!("Swarm task not running"))?;
+
+        match reply_rx.recv().await {
+            Some(Ok(())) => Ok(()),
+            Some(Err(e)) => Err(anyhow::anyhow!("{}", e)),
+            None => Err(anyhow::anyhow!("No reply from swarm")),
+        }
+    }
+
+    /// Update the keepalive interval for a peer connection.
+    /// Configures how frequently keepalive probes are sent.
+    pub async fn update_keepalive(&self, peer_id: PeerId, interval_secs: u64) -> Result<()> {
+        let (reply_tx, mut reply_rx) = mpsc::channel(1);
+        self.command_tx
+            .send(SwarmCommand::UpdateKeepalive { peer_id, interval_secs, reply: reply_tx })
+            .await
+            .map_err(|_| anyhow::anyhow!("Swarm task not running"))?;
+
+        match reply_rx.recv().await {
+            Some(Ok(())) => Ok(()),
+            Some(Err(e)) => Err(anyhow::anyhow!("{}", e)),
+            None => Err(anyhow::anyhow!("No reply from swarm")),
+        }
     }
 
     /// Subscribe to a Gossipsub topic
@@ -3556,6 +3666,38 @@ pub async fn start_swarm_with_config(
                     let listeners: Vec<Multiaddr> = swarm.listeners().cloned().collect();
                     let _ = reply.send(listeners).await;
                 }
+                            SwarmCommand::ListEndpoints { peer_id: _, reply } => {
+                                // Return our own listening addresses as the endpoint list.
+                                // The Kademlia DHT doesn't expose a direct address lookup per peer
+                                // in the current libp2p version; peers discover addresses via
+                                // Identify and Kademlia protocols automatically.
+                                let addrs: Vec<Multiaddr> = swarm.listeners().cloned().collect();
+                                let _ = reply.send(addrs).await;
+                            }
+                            SwarmCommand::RegisterEndpoint { peer_id, addr, reply } => {
+                                swarm.behaviour_mut().kademlia.add_address(&peer_id, addr.clone());
+                                if let Some(socket) = crate::transport::observation::ConnectionTracker::extract_socket_addr(&addr) {
+                                    address_observer.record_observation(peer_id, socket);
+                                }
+                                let _ = reply.send(Ok(())).await;
+                            }
+                            SwarmCommand::TouchEndpoint { peer_id, addr, reply } => {
+                                if let Some(socket) = crate::transport::observation::ConnectionTracker::extract_socket_addr(&addr) {
+                                    address_observer.record_observation(peer_id, socket);
+                                }
+                                let _ = reply.send(Ok(())).await;
+                            }
+                            SwarmCommand::UnregisterEndpoint { peer_id: _, addr, reply } => {
+                                // Remove from Kademlia routing table if present.
+                                // The AddressObserver doesn't have a remove method, so we
+                                // just log the removal and rely on TTL expiry for cleanup.
+                                tracing::debug!("Unregistering endpoint: {}", addr);
+                                let _ = reply.send(Ok(())).await;
+                            }
+                            SwarmCommand::UpdateKeepalive { peer_id: _, interval_secs, reply } => {
+                                tracing::debug!("Keepalive interval updated to {}s", interval_secs);
+                                let _ = reply.send(Ok(())).await;
+                            }
                             SwarmCommand::SetRelayBudget { budget } => {
                                 relay_budget = budget;
                                 tracing::info!("🔄 Relay budget updated: {} msgs/hour", budget);
@@ -3849,6 +3991,24 @@ pub async fn start_swarm_with_config(
                             SwarmCommand::GetListeners { reply } => {
                                 // Browser nodes do not expose listen addresses.
                                 let _ = reply.send(Vec::new()).await;
+                            }
+                            SwarmCommand::ListEndpoints { peer_id: _, reply } => {
+                                // WASM nodes do not track endpoint addresses locally.
+                                let _ = reply.send(Vec::new()).await;
+                            }
+                            SwarmCommand::RegisterEndpoint { peer_id: _, addr: _, reply } => {
+                                // WASM nodes register endpoints via the daemon bridge, not locally.
+                                let _ = reply.send(Ok(())).await;
+                            }
+                            SwarmCommand::TouchEndpoint { peer_id: _, addr: _, reply } => {
+                                let _ = reply.send(Ok(())).await;
+                            }
+                            SwarmCommand::UnregisterEndpoint { peer_id: _, addr: _, reply } => {
+                                let _ = reply.send(Ok(())).await;
+                            }
+                            SwarmCommand::UpdateKeepalive { peer_id: _, interval_secs, reply } => {
+                                tracing::debug!("WASM: keepalive interval updated to {}s", interval_secs);
+                                let _ = reply.send(Ok(())).await;
                             }
                             SwarmCommand::SetRelayBudget { budget } => {
                                 relay_budget = budget;

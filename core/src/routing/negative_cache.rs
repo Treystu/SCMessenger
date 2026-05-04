@@ -317,6 +317,18 @@ impl NegativeCache {
         self.bloom.clear();
         self.entries.clear();
     }
+
+    /// Prune entries whose confirmation count falls below the given threshold.
+    /// Entries with fewer confirmations than `min_confirmations` are removed,
+    /// treating low-confirmation entries as less reliable.
+    pub fn prune_below_confidence(&mut self, min_confirmations: f64) -> usize {
+        let threshold = min_confirmations.ceil() as u32;
+        let before = self.entries.len();
+        self.entries.retain(|_, entry| entry.confirmation_count >= threshold);
+        let removed = before - self.entries.len();
+        self.stats.expired_count += removed as u64;
+        removed
+    }
 }
 
 impl Default for NegativeCache {

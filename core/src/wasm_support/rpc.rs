@@ -93,6 +93,20 @@ pub enum ClientIntent {
     UnblockPeer {
         peer_id: String,
     },
+    // ── Onion routing ──
+    PrepareOnionMessage {
+        envelope_data: String, // hex-encoded
+        relay_public_keys_json: String, // JSON array of hex-encoded X25519 public keys
+    },
+    PeelOnionLayer {
+        onion_data: String, // hex-encoded
+        relay_secret_key: String, // hex-encoded 32-byte X25519 secret key
+    },
+    // ── Ratchet session diagnostics ──
+    RatchetSessionCount {},
+    RatchetHasSession {
+        peer_id: String,
+    },
 }
 
 pub const ERR_PARSE: i32 = -32700;
@@ -256,6 +270,74 @@ pub fn parse_intent(req: &JsonRpcRequest) -> Result<ClientIntent, JsonRpcErrorBo
                 })?
                 .to_string();
             Ok(ClientIntent::UnblockPeer { peer_id })
+        }
+        // ── Onion routing ──
+        "prepare_onion_message" => {
+            let envelope_data = req
+                .params
+                .get("envelope_data")
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| JsonRpcErrorBody {
+                    code: ERR_PARAMS,
+                    message: "missing envelope_data".to_string(),
+                    data: None,
+                })?
+                .to_string();
+            let relay_public_keys_json = req
+                .params
+                .get("relay_public_keys_json")
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| JsonRpcErrorBody {
+                    code: ERR_PARAMS,
+                    message: "missing relay_public_keys_json".to_string(),
+                    data: None,
+                })?
+                .to_string();
+            Ok(ClientIntent::PrepareOnionMessage {
+                envelope_data,
+                relay_public_keys_json,
+            })
+        }
+        "peel_onion_layer" => {
+            let onion_data = req
+                .params
+                .get("onion_data")
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| JsonRpcErrorBody {
+                    code: ERR_PARAMS,
+                    message: "missing onion_data".to_string(),
+                    data: None,
+                })?
+                .to_string();
+            let relay_secret_key = req
+                .params
+                .get("relay_secret_key")
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| JsonRpcErrorBody {
+                    code: ERR_PARAMS,
+                    message: "missing relay_secret_key".to_string(),
+                    data: None,
+                })?
+                .to_string();
+            Ok(ClientIntent::PeelOnionLayer {
+                onion_data,
+                relay_secret_key,
+            })
+        }
+        // ── Ratchet session diagnostics ──
+        "ratchet_session_count" => Ok(ClientIntent::RatchetSessionCount {}),
+        "ratchet_has_session" => {
+            let peer_id = req
+                .params
+                .get("peer_id")
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| JsonRpcErrorBody {
+                    code: ERR_PARAMS,
+                    message: "missing peer_id".to_string(),
+                    data: None,
+                })?
+                .to_string();
+            Ok(ClientIntent::RatchetHasSession { peer_id })
         }
         _ => Err(JsonRpcErrorBody {
             code: ERR_METHOD,

@@ -67,7 +67,7 @@ pub struct RoutingDecision {
 }
 
 /// Result of periodic maintenance tick
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize)]
 pub struct RoutingMaintenance {
     /// Peers moved from stale to active
     pub peers_promoted: usize,

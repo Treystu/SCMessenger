@@ -1459,8 +1459,28 @@ impl AutoAdjustEngine {
         *self.ble_scan_override.lock() = Some(interval_ms);
     }
 
+    pub fn override_ble_advertise_interval(&self, interval_ms: Option<u16>) {
+        // The bridge AutoAdjustEngine stores BLE overrides as a single scan interval.
+        // Advertise interval is derived from the profile in compute_ble_adjustment,
+        // so we store it alongside the scan override if both are present.
+        // For now, map the advertise interval to the scan override field
+        // since the bridge type only tracks one BLE interval override.
+        if let Some(v) = interval_ms {
+            *self.ble_scan_override.lock() = Some(v as u32);
+        }
+    }
+
     pub fn override_relay_max_per_hour(&self, max: u32) {
         *self.relay_max_override.lock() = Some(max);
+    }
+
+    pub fn override_relay_priority_threshold(&self, threshold: Option<u8>) {
+        // Map priority threshold to relay max override. The bridge stores
+        // relay overrides as max-per-hour. Higher thresholds mean fewer relays,
+        // so we use a heuristic: threshold * 5 as the max relay count.
+        if let Some(v) = threshold {
+            *self.relay_max_override.lock() = Some(v as u32 * 5);
+        }
     }
 
     pub fn clear_overrides(&self) {
