@@ -26,6 +26,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.scmessenger.android.utils.toEpochMillis
 import com.scmessenger.android.ui.viewmodels.ConversationsViewModel
 import com.scmessenger.android.ui.viewmodels.ContactsViewModel
+import com.scmessenger.android.ui.viewmodels.ChatViewModel
 import com.scmessenger.android.ui.chat.MessageInput
 import kotlinx.coroutines.launch
 import timber.log.Timber
@@ -37,8 +38,18 @@ import java.util.*
 fun ChatScreen(
     conversationId: String, // Treat as PeerID
     onNavigateBack: () -> Unit,
-    viewModel: ConversationsViewModel = hiltViewModel()
+    viewModel: ConversationsViewModel = hiltViewModel(),
+    chatViewModel: ChatViewModel = hiltViewModel()
 ) {
+    // Wire setPeer into navigation to chat
+    LaunchedEffect(conversationId) {
+        chatViewModel.setPeer(conversationId)
+        // Wire loadConversation into conversation tap/open flow
+        viewModel.loadConversation(conversationId).collect { messages ->
+            // Messages loaded into the shared state by loadMessages
+        }
+    }
+
     val messages by viewModel.messages.collectAsState()
     val error by viewModel.error.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
@@ -51,9 +62,23 @@ fun ChatScreen(
         messages.filter { it.peerId == conversationId }.sortedBy { it.senderTimestamp }
     }
 
-    var inputText by remember { mutableStateOf("") }
+    // Wire updateInputText/clearInput into ChatViewModel
+    val inputText by chatViewModel.inputText.collectAsState()
     val listState = rememberLazyListState()
     val coroutineScope = rememberCoroutineScope()
+
+    // Wire loadMoreMessages into scroll-to-load-more
+    val shouldLoadMore by remember {
+        derivedStateOf {
+            val lastVisible = listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
+            lastVisible <= 3 && chatMessages.size > 10
+        }
+    }
+    LaunchedEffect(shouldLoadMore) {
+        if (shouldLoadMore) {
+            chatViewModel.loadMoreMessages()
+        }
+    }
 
     // AND-SEND-BTN-001: Use remember with derivedStateOf to avoid calling getContactForPeer
     // and isPeerAvailable on every recomposition. The underlying canonicalContactId() now
@@ -271,7 +296,7 @@ fun ChatScreen(
                 } else {
                     MessageInput(
                         value = inputText,
-                        onValueChange = { inputText = it },
+                        onValueChange = { chatViewModel.updateInputText(it) },
                         onSend = {
                             if (isBlocked) {
                                 Timber.w("SEND_BUTTON_CLICKED: Peer is blocked, ignoring click")
@@ -286,9 +311,9 @@ fun ChatScreen(
 
                             Timber.d("SEND: Processing message send, contentLength=${messageToSend.length}")
 
-                            // Clear input immediately for instant feedback
+                            // Wire clearInput into post-send callback
                             val originalInput = inputText
-                            inputText = ""
+                            chatViewModel.clearInput()
                             Timber.d("SEND: Input cleared immediately for instant feedback")
 
                             coroutineScope.launch {
@@ -305,7 +330,7 @@ fun ChatScreen(
                                 } catch (e: Exception) {
                                     Timber.e(e, "SEND: Failed to send message")
                                     // Restore input if send failed
-                                    inputText = originalInput
+                                    chatViewModel.updateInputText(originalInput)
                                 }
                             }
                         },

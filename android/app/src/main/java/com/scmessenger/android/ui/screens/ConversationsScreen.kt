@@ -18,6 +18,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.scmessenger.android.ui.chat.DeliveryStateMapper
+import com.scmessenger.android.ui.chat.DeliveryStatePresentation
+import com.scmessenger.android.ui.chat.DeliveryStateSurface
 import com.scmessenger.android.service.MeshEventBus
 import com.scmessenger.android.ui.viewmodels.ConversationsViewModel
 import com.scmessenger.android.utils.toEpochMillis
@@ -46,10 +49,20 @@ fun ConversationsScreen(
     @Suppress("UNUSED_VARIABLE")
     val _refresh = peerEventRefreshTick
 
+    var showClearHistoryDialog by remember { mutableStateOf(false) }
+
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Conversations") }
+                title = { Text("Conversations") },
+                actions = {
+                    IconButton(onClick = { showClearHistoryDialog = true }) {
+                        Icon(
+                            imageVector = Icons.Default.Delete,
+                            contentDescription = "Clear All History"
+                        )
+                    }
+                }
             )
         }
     ) { paddingValues ->
@@ -156,12 +169,38 @@ fun ConversationsScreen(
                                 conversationToDelete = peerId to messages
                                 showDeleteDialog = true
                             },
+                            deliveryState = viewModel.resolveDeliveryState(messages.first()),
+                            onNavigateToChat = onNavigateToChat
                         )
                         Spacer(modifier = Modifier.height(8.dp))
                     }
                 }
             }
         }
+    }
+
+    if (showClearHistoryDialog) {
+        AlertDialog(
+            onDismissRequest = { showClearHistoryDialog = false },
+            title = { Text("Clear All History?") },
+            text = { Text("This will delete ALL messages with ALL contacts. This cannot be undone.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        viewModel.clearAllHistory()
+                        showClearHistoryDialog = false
+                    },
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Text("Clear All")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showClearHistoryDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
     }
 
     if (showDeleteDialog) {
@@ -227,6 +266,8 @@ fun ConversationItem(
     messages: List<uniffi.api.MessageRecord>,
     onClick: () -> Unit,
     onRequestDelete: () -> Unit,
+    deliveryState: DeliveryStatePresentation = DeliveryStatePresentation(DeliveryStateSurface.PENDING, "pending", ""),
+    onNavigateToChat: (String) -> Unit = {},
 ) {
     val lastMessage = messages.firstOrNull() ?: return
     val undeliveredCount = messages.count { !it.delivered }

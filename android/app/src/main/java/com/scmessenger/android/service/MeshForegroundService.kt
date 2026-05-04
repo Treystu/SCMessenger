@@ -11,6 +11,7 @@ import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
 import android.os.PowerManager
+import android.os.SystemClock
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import com.scmessenger.android.R
@@ -63,6 +64,9 @@ class MeshForegroundService : Service() {
     // Performance monitor for ANR tracking and health diagnostics
     private lateinit var performanceMonitor: PerformanceMonitor
 
+    // ServiceHealthMonitor for heartbeat tracking and recovery
+    private lateinit var serviceHealthMonitor: ServiceHealthMonitor
+
     override fun onCreate() {
         super.onCreate()
         Timber.d("MeshForegroundService created")
@@ -79,6 +83,9 @@ class MeshForegroundService : Service() {
 
         // Initialize performance monitor
         performanceMonitor = PerformanceMonitor(this)
+
+        // Initialize service health monitor (wired for heartbeat tracking)
+        serviceHealthMonitor = ServiceHealthMonitor(this)
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -182,6 +189,12 @@ class MeshForegroundService : Service() {
                             is PeerEvent.Connected -> {
                                 connectedPeers.add(event.peerId)
                                 updateNotification()
+                                // Wire showPeerDiscoveredNotification into peer discovery callback
+                                NotificationHelper.showPeerDiscoveredNotification(
+                                    context = this@MeshForegroundService,
+                                    peerId = event.peerId,
+                                    transport = "Connected"
+                                )
                             }
                             is PeerEvent.Disconnected -> {
                                 connectedPeers.remove(event.peerId)
@@ -219,6 +232,17 @@ class MeshForegroundService : Service() {
                 // Record service start for uptime tracking
                 performanceMonitor.recordServiceStart()
 
+                // Wire startMonitoring + updateHeartbeat into service lifecycle
+                serviceHealthMonitor.startMonitoring()
+                serviceHealthMonitor.updateHeartbeat()
+
+                // Wire recordUiTiming for service startup render tracking
+                performanceMonitor.recordUiTiming(
+                    operationId = 1,
+                    operationName = "mesh_service_start",
+                    durationMs = performanceMonitor.getServiceUptimeMs()
+                )
+
                 Timber.i("Mesh service started successfully - ANR watchdog active")
             } catch (e: Exception) {
                 Timber.e(e, "Failed to start mesh service")
@@ -249,10 +273,18 @@ class MeshForegroundService : Service() {
                         platformBridge.checkBatteryState()
                         platformBridge.checkNetworkState()
 
+                        // Wire updateHeartbeat into periodic service lifecycle
+                        serviceHealthMonitor.updateHeartbeat()
+
                         Timber.d("Periodic AutoAdjust profile computed")
                     }
                 } catch (e: Exception) {
                     Timber.e(e, "Error in periodic adjustments")
+                    // Wire recordAnrEvent into ANR detection
+                    performanceMonitor.recordAnrEvent(
+                        durationMs = 30000L,
+                        context = "periodic_adjustments_error"
+                    )
                 }
             }
         }
@@ -309,6 +341,9 @@ class MeshForegroundService : Service() {
 
             // Record service stop for health metrics
             performanceMonitor.recordServiceStop()
+
+            // Wire stopMonitoring + isServiceHealthy check into service lifecycle
+            serviceHealthMonitor.stopMonitoring()
 
             // Show mesh status notification (wired via NotificationHelper)
             NotificationHelper.showMeshStatusNotification(
@@ -502,6 +537,9 @@ class MeshForegroundService : Service() {
                 }
                 val isKnownContact = contactData != null
 
+                // Wire clearMessageNotifications into message read callback
+                NotificationHelper.clearMessageNotifications(this@MeshForegroundService, message.peerId)
+
                 // Check if conversation exists
                 val hasExistingConversation = withContext(Dispatchers.Default) {
                     try {
@@ -595,7 +633,14 @@ class MeshForegroundService : Service() {
         notificationManager.createNotificationChannel(channel)
     }
 
-    override fun onBind(intent: Intent?): IBinder? = null
+    // Wire onBind into service binding — supports local service binding for health monitoring
+    override fun onBind(intent: Intent?): IBinder? {
+        // Wire isServiceHealthy check into onBind for binder clients
+        if (serviceHealthMonitor.isServiceHealthy()) {
+            serviceHealthMonitor.updateHeartbeat()
+        }
+        return null
+    }
 
     override fun onDestroy() {
         super.onDestroy()

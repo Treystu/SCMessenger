@@ -138,6 +138,19 @@ fun MeshSettingsScreen(
                             valueLabel = "${currentSettings.batteryFloor}%",
                             enabled = !isSaving
                         )
+
+                        SliderSetting(
+                            title = "Relay Budget",
+                            description = "Maximum messages to relay per hour",
+                            value = currentSettings.maxRelayBudget.toFloat(),
+                            valueRange = 0f..500f,
+                            steps = 49,
+                            onValueChange = {
+                                viewModel.updateMaxRelayBudget(it.toInt().toUInt())
+                            },
+                            valueLabel = "${currentSettings.maxRelayBudget} msg/hr",
+                            enabled = !isSaving
+                        )
                     }
                 }
 
@@ -189,7 +202,7 @@ fun MeshSettingsScreen(
                     DiscoveryModeSetting(
                         currentMode = currentSettings.discoveryMode,
                         onModeChange = {
-                            viewModel.updateSettings(currentSettings.copy(discoveryMode = it))
+                            viewModel.updateDiscoveryMode(it)
                         },
                         enabled = !isSaving
                     )

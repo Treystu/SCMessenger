@@ -20,6 +20,9 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.scmessenger.android.R
 import com.scmessenger.android.ui.components.CopyableText
+import com.scmessenger.android.ui.components.LabeledCopyableText
+import com.scmessenger.android.ui.components.TruncatedCopyableText
+import com.scmessenger.android.ui.components.IdenticonFromHex
 import com.scmessenger.android.ui.components.ErrorBanner
 import com.scmessenger.android.ui.components.IdenticonFromPeerId
 import com.scmessenger.android.ui.theme.StatusOnline
@@ -265,39 +268,37 @@ private fun ContactDetailContent(
             }
         }
 
-        // Peer ID
+        // Peer ID (wired via LabeledCopyableText)
         Card {
             Column(modifier = Modifier.padding(16.dp)) {
-                Text(
-                    text = "Peer ID",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
-                )
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                CopyableText(
+                LabeledCopyableText(
+                    label = "Peer ID",
                     text = contact.peerId,
                     monospace = true
                 )
             }
         }
 
-        // Public Key
+        // Public Key (wired via LabeledCopyableText + IdenticonFromHex)
         Card {
             Column(modifier = Modifier.padding(16.dp)) {
-                Text(
-                    text = "Public Key",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
-                )
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                CopyableText(
-                    text = contact.publicKey,
-                    monospace = true
-                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    IdenticonFromHex(
+                        hexString = contact.publicKey,
+                        size = 40.dp
+                    )
+                    Column(modifier = Modifier.weight(1f)) {
+                        LabeledCopyableText(
+                            label = "Public Key",
+                            text = contact.publicKey,
+                            monospace = true
+                        )
+                    }
+                }
             }
         }
 

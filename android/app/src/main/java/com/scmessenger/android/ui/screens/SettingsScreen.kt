@@ -25,6 +25,8 @@ import com.scmessenger.android.ui.viewmodels.SettingsViewModel
 import com.scmessenger.android.data.PreferencesRepository
 import com.scmessenger.android.ui.settings.MeshSettingsScreen
 import com.scmessenger.android.ui.settings.PowerSettingsScreen
+import com.scmessenger.android.ui.components.ErrorState
+import com.scmessenger.android.ui.components.WarningBanner
 
 /**
  * Settings screen with mesh configuration and app preferences.
@@ -48,6 +50,7 @@ fun SettingsScreen(
     val serviceState by serviceViewModel.serviceState.collectAsState()
     val isRunning by serviceViewModel.isRunning.collectAsState()
     val serviceStats by serviceViewModel.serviceStats.collectAsState()
+    val settingsError by settingsViewModel.error.collectAsState()
 
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -98,6 +101,22 @@ fun SettingsScreen(
             style = MaterialTheme.typography.headlineMedium,
             modifier = Modifier.padding(bottom = 16.dp)
         )
+
+        // Wire ErrorState into settings error display
+        settingsError?.let {
+            ErrorState(
+                error = it,
+                onDismiss = { settingsViewModel.clearError() }
+            )
+        }
+
+        // Wire WarningBanner into settings for service warnings
+        if (!isRunning) {
+            WarningBanner(
+                message = "Mesh service is not running — start it to enable messaging",
+                onDismiss = {}
+            )
+        }
 
         // Service Control Section
         ServiceControlSection(
