@@ -894,6 +894,13 @@ impl IronCore {
         serde_wasm_bindgen::to_value(&(score, confidence, flagged)).unwrap_or(JsValue::NULL)
     }
 
+    /// Get the combined overall abuse score for a peer.
+    /// Combines base reputation and spam confidence into a single score.
+    #[wasm_bindgen(js_name = getOverallScore)]
+    pub fn get_overall_score(&self, peer_id: String) -> Option<f64> {
+        self.inner.abuse_overall_score(&peer_id)
+    }
+
     #[wasm_bindgen(js_name = getPrivacyConfig)]
     pub fn get_privacy_config(&self) -> JsValue {
         let config = self.inner.privacy_config();
@@ -1046,6 +1053,22 @@ impl IronCore {
             .map_err(|e| js_value_from_str(&format!("Failed to serialize decision: {}", e)))
     }
 
+    /// Unregister a notification endpoint by ID.
+    #[wasm_bindgen(js_name = unregisterNotificationEndpoint)]
+    pub fn unregister_notification_endpoint(&self, endpoint_id: String) -> Result<(), JsValue> {
+        self.inner
+            .unregister_notification_endpoint(&endpoint_id)
+            .map_err(|e| js_value_from_str(&format!("{}", e)))
+    }
+
+    /// Touch (update last-seen timestamp for) a notification endpoint.
+    #[wasm_bindgen(js_name = touchNotificationEndpoint)]
+    pub fn touch_notification_endpoint(&self, endpoint_id: String) -> Result<(), JsValue> {
+        self.inner
+            .touch_notification_endpoint(&endpoint_id)
+            .map_err(|e| js_value_from_str(&format!("{}", e)))
+    }
+
     // ── Identity Management ──────────────────────────────────────────────
 
     /// Set the nickname for the local identity.
@@ -1163,6 +1186,16 @@ impl IronCore {
     #[wasm_bindgen(js_name = contactFederatedNickname)]
     pub fn contact_federated_nickname(&self, peer_id: String) -> Option<String> {
         self.inner.contact_federated_nickname(peer_id)
+    }
+
+    /// Get the signable data for an invite token.
+    /// Returns serialized token data (without signature) suitable for Ed25519 signing.
+    /// The token_bytes must be a bincode-serialized InviteToken.
+    #[wasm_bindgen(js_name = getInviteSignableData)]
+    pub fn get_invite_signable_data(&self, token_bytes: Vec<u8>) -> Result<Vec<u8>, JsValue> {
+        self.inner
+            .invite_get_signable_data(token_bytes)
+            .map_err(|e| js_value_from_str(&format!("{}", e)))
     }
 
     // ── Identity Resolution ──────────────────────────────────────────────
@@ -1318,6 +1351,13 @@ impl IronCore {
     pub fn blake3_hash(&self, data: Vec<u8>) -> String {
         let hash = self.inner.dspy_blake3_hash(&data);
         hash.iter().map(|b| format!("{:02x}", b)).collect()
+    }
+
+    /// Get a DSPy signature description by role name.
+    /// Returns the signature description string if the role is found.
+    #[wasm_bindgen(js_name = getSignature)]
+    pub fn get_signature(&self, role: String) -> Option<String> {
+        self.inner.dspy_get_signature(&role)
     }
 
     // ── Maintenance & Logging ────────────────────────────────────────────
