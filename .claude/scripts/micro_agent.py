@@ -163,8 +163,8 @@ Output ONLY the edit instructions, no explanations."""
 
 def run_ollama(model: str, prompt: str) -> str:
     """Run ollama directly and return the model's output."""
-    # Write prompt to temp file and pipe via stdin — ollama run has no -f flag
-    prompt_file = os.path.join("tmp", "micro_agent_prompt.txt")
+    # Unique temp file per call to avoid parallel agent file locking
+    prompt_file = os.path.join("tmp", f"micro_agent_prompt_{os.getpid()}_{int(__import__('time').time()*1000)}.txt")
     os.makedirs("tmp", exist_ok=True)
     with open(prompt_file, "w", encoding="utf-8") as f:
         f.write(prompt)
