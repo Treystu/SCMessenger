@@ -147,6 +147,21 @@
       "max_per_type": 1
     },
     {
+      "name": "micro-batch-processor",
+      "launch_type": "cli",
+      "model": "gemini-3-flash-preview:cloud",
+      "fallback_model": "deepseek-v4-flash:cloud",
+      "purpose": "Process batches of micro-tasks (lint, quick fixes, formatting) to reduce API overhead",
+      "task_patterns": [
+        "BATCH",
+        "MICRO_BATCH"
+      ],
+      "file_domains": [
+        "HANDOFF/batches/"
+      ],
+      "max_per_type": 1
+    },
+    {
       "name": "wiring-verifier",
       "launch_type": "cli",
       "model": "deepseek-v4-pro:cloud",

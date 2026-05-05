@@ -335,14 +335,22 @@ for a in cfg.get('agents', []):
 
     # === REPO_MAP Freshness Gate ===
     if [ -n "$task_file" ] && [ -f "$task_file" ]; then
-        echo "Running REPO_MAP Freshness Gate..."
-        local freshness_result
-        freshness_result=$($PYTHON .claude/scripts/freshness_gate.py --task-file "$task_file" 2>&1)
-        local freshness_exit=$?
-        
-        if [ $freshness_exit -eq 2 ]; then
-            # STALE files detected — trigger targeted re-index
-            local stale_files=$($PYTHON -c "
+        # Determine if this is a micro-task that doesn't need full context
+        local is_micro_task=false
+        if [[ "$task_file" == *"TRIAGE"* ]] || [[ "$task_file" == *"QUICK"* ]] || [[ "$task_file" == *"LINT"* ]] || [[ "$task_file" == *"FMT"* ]]; then
+            is_micro_task=true
+        fi
+
+        # For non-micro tasks, run full context injection
+        if [ "$is_micro_task" = "false" ]; then
+            echo "Running REPO_MAP Freshness Gate..."
+            local freshness_result
+            freshness_result=$($PYTHON .claude/scripts/freshness_gate.py --task-file "$task_file" 2>&1)
+            local freshness_exit=$?
+
+            if [ $freshness_exit -eq 2 ]; then
+                # STALE files detected — trigger targeted re-index
+                local stale_files=$($PYTHON -c "
 import json, sys
 try:
     result = json.loads(sys.argv[1])
@@ -352,24 +360,27 @@ try:
 except Exception as e:
     pass
 " "$freshness_result")
-            
-            if [ -n "$stale_files" ]; then
-                echo "FRESHNESS GATE: Stale files detected. Triggering targeted re-index..."
-                echo "Files: $stale_files"
-                
-                powershell.exe -NoProfile -ExecutionPolicy Bypass \
-                    -File ".claude/scripts/targeted_reindex.ps1" \
-                    -Files "$stale_files"
-                
-                if [ $? -ne 0 ]; then
-                    echo "WARNING: Targeted re-index failed. Launching agent without fresh context."
+
+                if [ -n "$stale_files" ]; then
+                    echo "FRESHNESS GATE: Stale files detected. Triggering targeted re-index..."
+                    echo "Files: $stale_files"
+
+                    powershell.exe -NoProfile -ExecutionPolicy Bypass \
+                        -File ".claude/scripts/targeted_reindex.ps1" \
+                        -Files "$stale_files"
+
+                    if [ $? -ne 0 ]; then
+                        echo "WARNING: Targeted re-index failed. Launching agent without fresh context."
+                    fi
                 fi
             fi
+
+            # Inject context for all FRESH files
+            echo "Injecting REPO_MAP context into task..."
+            $PYTHON .claude/scripts/context_extractor.py --task-file "$task_file"
+        else
+            echo "Skipping full REPO_MAP context injection for micro-task: $task_file"
         fi
-        
-        # Inject context for all FRESH files
-        echo "Injecting REPO_MAP context into task..."
-        $PYTHON .claude/scripts/context_extractor.py --task-file "$task_file"
     fi
 
     if [ "$launch_type" = "native" ]; then
@@ -395,6 +406,8 @@ ISOLATION=$isolation
 TASK=${task_file:-none}
 START_TIME=$(date +%s)
 EOF
+        # Record start time for timeout tracking
+        echo "$(date +%s)" > "$AGENT_ROOT/$agent_id/start_time"
         echo "Launched native agent: $agent_id"
         echo "  Type: $subagent_type (model: $model)"
         echo "  Isolation: ${isolation:-none}"
@@ -418,6 +431,10 @@ EOF
 
         echo "Launching CLI agent: $agent_id with model $model"
         export CARGO_INCREMENTAL=0
+
+        # Record start time for timeout tracking
+        echo "$(date +%s)" > "$AGENT_ROOT/$agent_id/start_time"
+
         if ! ./scripts/launch_agent.sh "$model" "$agent_id" "$task_file" start 2>/dev/null; then
             if [ -n "$fallback_model" ]; then
                 echo "Primary model $model unavailable, falling back to $fallback_model"
@@ -734,6 +751,36 @@ pool_patrol() {
         local completion_file="$agent_dir/COMPLETION"
         local task_file_marker="$agent_dir/task_file"
         local pid_file="$agent_dir/pid"
+        local start_time_file="$agent_dir/start_time"
+
+        # ── TIMEOUT DETECTION ──
+        # Aggressively timeout agents that have been running too long
+        if [ -f "$start_time_file" ]; then
+            local start_time=$(cat "$start_time_file")
+            local current_time=$(date +%s)
+            local elapsed=$((current_time - start_time))
+            local timeout_limit=1800  # 30 minutes timeout for most tasks
+
+            # Check if this is a micro-task that should have shorter timeout
+            if [ -f "$task_file_marker" ]; then
+                local assigned_task=$(cat "$task_file_marker")
+                # If task is a triage or quick fix, use shorter timeout
+                if [[ "$assigned_task" == *"TRIAGE"* ]] || [[ "$assigned_task" == *"QUICK"* ]] || [[ "$assigned_task" == *"LINT"* ]]; then
+                    timeout_limit=600  # 10 minutes for micro-tasks
+                fi
+            fi
+
+            if [ "$elapsed" -gt "$timeout_limit" ]; then
+                echo "PATROL: Agent $agent_id timed out after $elapsed seconds. Stopping."
+                echo "STATUS=timeout" > "$completion_file"
+                echo "ERROR=Agent exceeded timeout limit of $timeout_limit seconds" >> "$completion_file"
+                echo "BUILD_STATUS=unknown" >> "$completion_file"
+                echo "NEXT_TASK_REQUESTED=false" >> "$completion_file"
+                pool_stop "$agent_id"
+                ((actions_taken++))
+                continue
+            fi
+        fi
 
         # ── COMPLETION MARKER DETECTION ──
         if [ -f "$completion_file" ]; then
@@ -840,14 +887,22 @@ pool_patrol() {
         fi
     fi
 
-    # Phase 5: Summary
+    # Phase 5: Batch micro-tasks if in conservation mode
+    local five_hour_usage=$(grep "5-Hour Usage" .claude/API_QUOTA_STATE.md | cut -d':' -f2 | tr -d '%' | tr -d ' ')
+    if [ -n "$five_hour_usage" ] && [ "$(echo "$five_hour_usage > 75" | bc -l 2>/dev/null || echo "0")" -eq 1 ]; then
+        echo "PATROL: High quota usage detected ($five_hour_usage%). Consolidating micro-tasks..."
+        python3 .claude/scripts/batch_micro_tasks.py 2>/dev/null || python .claude/scripts/batch_micro_tasks.py 2>/dev/null || py -3 .claude/scripts/batch_micro_tasks.py 2>/dev/null || true
+    fi
+
+    # Phase 6: Summary
     active=$(count_active_agents)
     local done_count=$(ls HANDOFF/done/*.md 2>/dev/null | wc -l)
     local todo_count=$(ls HANDOFF/todo/*.md 2>/dev/null | wc -l)
     local in_progress_count=$(ls HANDOFF/IN_PROGRESS/*.md 2>/dev/null | wc -l)
+    local batch_count=$(ls HANDOFF/batches/*.md 2>/dev/null | wc -l 2>/dev/null || echo "0")
     echo ""
     echo "PATROL COMPLETE: $actions_taken action(s) taken"
-    echo "Slots: $active/$MAX_SUBAGENTS | Tasks: $todo_count todo | $in_progress_count in-progress | $done_count done"
+    echo "Slots: $active/$MAX_SUBAGENTS | Tasks: $todo_count todo | $in_progress_count in-progress | $done_count done | $batch_count batches"
 }
 
 # ─── Main Command Router ─────────────────────────────────────────────────────

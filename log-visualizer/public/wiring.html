@@ -1,0 +1,915 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>REPO_MAP Wiring Visualizer</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.30.4/cytoscape.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/cytoscape-dagre@2.5.0/cytoscape-dagre.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/cytoscape-cose-bilkent@4.1.0/cytoscape-cose-bilkent.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/cytoscape-cola@2.5.1/cytoscape-cola.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/cytoscape-avsdf@1.0.0/cytoscape-avsdf.min.js"></script>
+  <script>
+    // Ensure layouts are registered (UMD builds normally auto-register,
+    // but explicit registration guards against CDN loading races)
+    if (typeof cytoscapeDagre !== "undefined") cytoscape.use(cytoscapeDagre);
+    if (typeof cytoscapeCoseBilkent !== "undefined") cytoscape.use(cytoscapeCoseBilkent);
+    if (typeof cytoscapeCola !== "undefined") cytoscape.use(cytoscapeCola);
+    if (typeof cytoscapeAvsdf !== "undefined") cytoscape.use(cytoscapeAvsdf);
+  </script>
+  <style>
+    :root {
+      --bg: #020617;
+      --primary: #00ced1;
+      --accent: #a855f7;
+      --text: #f1f5f9;
+      --text-dim: #94a3b8;
+      --glass: rgba(15, 23, 42, 0.98);
+      --glass-border: rgba(255, 255, 255, 0.1);
+      --header-h: 56px;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: "JetBrains Mono", "Cascadia Code", "Fira Code", monospace;
+      height: 100vh; width: 100vw; overflow: hidden;
+      display: flex; flex-direction: column;
+    }
+
+    /* ── Header ── */
+    header {
+      height: var(--header-h); flex-shrink: 0;
+      padding: 0 20px;
+      background: var(--glass); backdrop-filter: blur(40px);
+      border-bottom: 1px solid var(--glass-border);
+      display: flex; align-items: center; justify-content: space-between;
+      z-index: 100;
+    }
+    .header-left { display: flex; align-items: center; gap: 12px; }
+    .logo {
+      width: 34px; height: 34px;
+      background: linear-gradient(135deg, var(--primary), var(--accent));
+      border-radius: 8px; display: grid; place-items: center;
+      font-weight: 950; color: #000; font-size: 15px;
+    }
+    .title-group h1 { margin: 0; font-size: 0.95rem; font-weight: 900; }
+    .title-group .ver { font-weight: 200; opacity: 0.5; font-size: 0.7rem; }
+
+    .header-controls { display: flex; align-items: center; gap: 14px; }
+    .header-controls select, .header-controls input {
+      background: rgba(0,0,0,0.5); border: 1px solid var(--glass-border);
+      color: white; padding: 5px 10px; border-radius: 6px;
+      font-family: inherit; font-size: 0.75rem; outline: none;
+    }
+    .header-controls select { cursor: pointer; }
+    .header-controls select option { background: #0f172a; }
+    .search-box { position: relative; }
+    .search-box input {
+      padding-left: 28px; width: 180px;
+    }
+    .search-icon {
+      position: absolute; left: 8px; top: 50%; transform: translateY(-50%);
+      color: var(--text-dim); font-size: 0.7rem; pointer-events: none;
+    }
+    .slider-group { display: flex; align-items: center; gap: 6px; font-size: 0.7rem; }
+    .slider-group input[type="range"] { width: 70px; height: 3px; cursor: pointer; accent-color: var(--accent); }
+    .slider-group span { color: var(--accent); min-width: 18px; text-align: center; }
+    .stat-pill {
+      font-size: 0.65rem; padding: 2px 8px; border-radius: 10px;
+      background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.08);
+    }
+    .stat-pill strong { color: var(--primary); }
+
+    /* ── Main layout ── */
+    #main-layout { flex: 1; display: grid; grid-template-columns: 1fr 380px; min-height: 0; }
+    #cy-container { position: relative; background: rgba(0,0,0,0.5); height: 100%; width: 100%; }
+    #cy {
+      width: 100%; height: 100%; display: block;
+    }
+
+    /* ── Sidebar ── */
+    #sidebar {
+      background: var(--glass); backdrop-filter: blur(30px);
+      border-left: 1px solid var(--glass-border);
+      display: flex; flex-direction: column; padding: 20px;
+      height: 100%; overflow: hidden;
+    }
+    #sidebar h3 {
+      font-size: 0.7rem; text-transform: uppercase; color: var(--text-dim);
+      letter-spacing: 0.05em; margin-bottom: 12px; font-weight: 900;
+    }
+    #node-detail { flex: 1; overflow-y: auto; font-size: 0.7rem; }
+    #node-detail .field { margin-bottom: 6px; }
+    #node-detail .label { color: var(--text-dim); text-transform: uppercase; font-size: 0.6rem; }
+    #node-detail .value { word-break: break-all; }
+    #node-detail .value a { color: var(--primary); cursor: pointer; text-decoration: none; }
+    #node-detail .value a:hover { text-decoration: underline; }
+    .call-list { max-height: 200px; overflow-y: auto; }
+    .call-list div { padding: 2px 0; border-bottom: 1px solid rgba(255,255,255,0.03); }
+
+    .btn-row { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+    .btn {
+      padding: 6px 12px; border-radius: 6px; font-size: 0.65rem; font-weight: 700;
+      border: none; cursor: pointer; font-family: inherit; transition: 0.2s;
+    }
+    .btn-primary { background: var(--primary); color: #000; }
+    .btn-primary:hover { background: #00b3b6; }
+    .btn-accent { background: var(--accent); color: white; }
+    .btn-accent:hover { background: #9333ea; }
+    .btn-ghost { background: rgba(255,255,255,0.08); color: var(--text-dim); }
+    .btn-ghost:hover { background: rgba(255,255,255,0.14); }
+
+    /* ── Tooltip ── */
+    #tooltip {
+      position: fixed; padding: 6px 12px; background: var(--primary);
+      border-radius: 4px; color: #000; font-size: 0.7rem; font-weight: 700;
+      pointer-events: none; opacity: 0; z-index: 2000;
+      box-shadow: 0 4px 16px rgba(0,206,209,0.4);
+      font-family: inherit; max-width: 400px; white-space: nowrap;
+      overflow: hidden; text-overflow: ellipsis;
+    }
+
+    /* ── Loading overlay ── */
+    #loading {
+      position: absolute; inset: 0;
+      background: rgba(2,6,23,0.85); display: flex;
+      align-items: center; justify-content: center; z-index: 50;
+      flex-direction: column; gap: 12px;
+    }
+    #loading .spinner {
+      width: 32px; height: 32px; border: 2px solid var(--glass-border);
+      border-top-color: var(--primary); border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Graph control overlay ── */
+    #graph-controls {
+      position: absolute; bottom: 12px; right: 12px; display: flex; gap: 6px; z-index: 10;
+    }
+    .ctrl-btn {
+      width: 30px; height: 30px; border-radius: 6px; background: var(--glass);
+      backdrop-filter: blur(20px); border: 1px solid var(--glass-border);
+      color: var(--text); cursor: pointer; display: grid; place-items: center;
+      font-size: 0.8rem; transition: 0.2s;
+    }
+    .ctrl-btn:hover { background: rgba(255,255,255,0.15); }
+    .legend-row { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--glass-border); }
+    .legend-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 3px; }
+  </style>
+</head>
+<body>
+  <div id="tooltip"></div>
+
+  <!-- ── Header ── -->
+  <header>
+    <div class="header-left">
+      <div class="logo">RW</div>
+      <div class="title-group">
+        <h1>REPO_MAP Wiring</h1>
+        <span class="ver">Call Graph Visualizer</span>
+      </div>
+    </div>
+    <div class="header-controls">
+      <div class="stat-pill">Nodes <strong id="statNodes">-</strong></div>
+      <div class="stat-pill">Edges <strong id="statEdges">-</strong></div>
+      <div class="stat-pill">Unwired <strong id="statUnwired">-</strong></div>
+      <div class="search-box">
+        <span class="search-icon">&#x1F50D;</span>
+        <input type="text" id="searchInput" placeholder="Search functions..." />
+      </div>
+      <div class="slider-group">
+        <label>Depth</label>
+        <input type="range" id="depthSlider" min="1" max="5" step="1" value="1" />
+        <span id="depthVal">1</span>
+      </div>
+      <select id="layoutSelect">
+        <option value="cose-bilkent">Cose</option>
+        <option value="dagre" selected>Dagre</option>
+        <option value="cola">Cola</option>
+        <option value="circle">Circle</option>
+        <option value="grid">Grid</option>
+        <option value="avsdf">AVSDF</option>
+      </select>
+      <select id="groupingSelect">
+        <option value="flat">Flat</option>
+        <option value="file">By File</option>
+        <option value="module">By Module</option>
+        <option value="crate" selected>By Crate</option>
+        <option value="ext">Wired/Unwired</option>
+      </select>
+    </div>
+  </header>
+
+  <!-- ── Main Layout ── -->
+  <div id="main-layout">
+    <div id="cy-container">
+      <div id="loading"><div class="spinner"></div><span style="font-size:0.75rem">Loading wiring graph...</span></div>
+      <div id="cy"></div>
+      <div id="graph-controls">
+        <button class="ctrl-btn" id="btnFit" title="Fit">&#x29C9;</button>
+        <button class="ctrl-btn" id="btnZoomIn" title="Zoom In">+</button>
+        <button class="ctrl-btn" id="btnZoomOut" title="Zoom Out">&minus;</button>
+        <button class="ctrl-btn" id="btnClearSel" title="Clear Selection">&#x2715;</button>
+      </div>
+    </div>
+
+    <!-- ── Sidebar ── -->
+    <div id="sidebar">
+      <h3>&#x25C6; Node Inspector</h3>
+      <div id="node-detail">
+        <span style="color:var(--text-dim); font-size:0.7rem">Click a node to inspect</span>
+      </div>
+      <div class="legend-row">
+        <div><span class="legend-dot" style="background:#00ced1"></span> core</div>
+        <div><span class="legend-dot" style="background:#22d3ee"></span> cli</div>
+        <div><span class="legend-dot" style="background:#3de1ad"></span> Android</div>
+        <div><span class="legend-dot" style="background:#f472b6"></span> iOS</div>
+        <div><span class="legend-dot" style="background:#facc15"></span> Python</div>
+        <div style="font-size:0.6rem; color:var(--text-dim); margin-top:2px">
+          <span style="box-shadow:0 0 5px #ef4444; border-radius:50%; display:inline-block; width:8px;height:8px;"></span> unwired
+          <span style="border-bottom:2px dashed rgba(255,255,255,0.4); margin-left:6px;">---</span> stub
+        </div>
+      </div>
+      <div class="btn-row">
+        <button class="btn btn-primary" id="btnExportPNG">Export PNG</button>
+        <button class="btn btn-ghost" id="btnExportJSON">Export JSON</button>
+        <button class="btn btn-accent" id="btnReset">Reset View</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+  (function() {
+    // ── State ──
+    let cy = null;
+    let fullData = null;        // raw parsed wiring_graph.json
+    let currentNodeId = null;   // selected node
+    let layoutTimer = null;
+
+    // ── DOM refs ──
+    const $cy = document.getElementById("cy");
+    const $loading = document.getElementById("loading");
+    const $tooltip = document.getElementById("tooltip");
+    const $detail = document.getElementById("node-detail");
+    const $search = document.getElementById("searchInput");
+    const $layout = document.getElementById("layoutSelect");
+    const $grouping = document.getElementById("groupingSelect");
+    const $depth = document.getElementById("depthSlider");
+    const $depthVal = document.getElementById("depthVal");
+
+    // ── Load data ──
+    async function loadData() {
+      const resp = await fetch("/data/wiring_graph.json");
+      fullData = await resp.json();
+      document.getElementById("statNodes").textContent = fullData.stats.total_functions;
+      document.getElementById("statEdges").textContent = fullData.stats.internal_edges;
+      document.getElementById("statUnwired").textContent = fullData.stats.unwired;
+      $loading.style.display = "none";
+    }
+
+    // ── Build compound elements for grouping ──
+    function buildElements(grouping) {
+      const nodes = [];
+      const edges = [];
+      const nodeMap = new Map();   // id -> node data obj
+
+      // Index all nodes
+      for (const n of fullData.nodes) {
+        n._visible = true;
+        nodeMap.set(n.id, n);
+      }
+
+      if (grouping === "flat") {
+        // Direct passthrough — all nodes as-is
+        for (const n of fullData.nodes) {
+          nodes.push({
+            data: {
+              id: n.id, label: n.name, name: n.name,
+              file: n.file, crate: n.crate, color: n.color,
+              module: n.module, line: n.line,
+              is_unwired: n.is_unwired, is_stub: n.is_stub,
+              in_degree: n.in_degree, out_degree: n.out_degree,
+              calls_out_to: n.calls_out_to, called_by: n.called_by,
+            }
+          });
+        }
+        for (const e of fullData.edges) {
+          if (!nodeMap.has(e.source) || !nodeMap.has(e.target)) continue;
+          edges.push({ data: { id: `${e.source}→${e.target}`, source: e.source, target: e.target, type: e.type } });
+        }
+        return { nodes, edges };
+      }
+
+      if (grouping === "ext") {
+        // Two groups: wired and unwired
+        const wiredP = "group::wired";
+        const unwiredP = "group::unwired";
+        nodes.push({
+          data: { id: wiredP, label: "Wired Functions", crate: "_group_", color: "#4ade80" },
+          classes: "group-parent"
+        });
+        nodes.push({
+          data: { id: unwiredP, label: "Unwired Functions", crate: "_group_", color: "#ef4444" },
+          classes: "group-parent"
+        });
+        for (const n of fullData.nodes) {
+          const parent = n.is_unwired ? unwiredP : wiredP;
+          nodes.push({
+            data: {
+              id: n.id, label: n.name, name: n.name,
+              file: n.file, crate: n.crate, color: n.color,
+              module: n.module, line: n.line,
+              is_unwired: n.is_unwired, is_stub: n.is_stub,
+              in_degree: n.in_degree, out_degree: n.out_degree,
+              calls_out_to: n.calls_out_to, called_by: n.called_by,
+              parent: parent
+            }
+          });
+        }
+        for (const e of fullData.edges) {
+          if (!nodeMap.has(e.source) || !nodeMap.has(e.target)) continue;
+          edges.push({ data: { id: `${e.source}→${e.target}`, source: e.source, target: e.target, type: e.type } });
+        }
+        return { nodes, edges };
+      }
+
+      // Group by file, module, or crate
+      const groupKey = grouping === "file" ? "group_file" :
+                       grouping === "module" ? "group_module" : "group_crate";
+
+      // Collect unique groups
+      const groups = new Map();
+      for (const n of fullData.nodes) {
+        const gk = n[groupKey];
+        if (!groups.has(gk)) groups.set(gk, []);
+        groups.get(gk).push(n);
+      }
+
+      // Create parent nodes
+      const crateColors = {
+        "scmessenger-core": "#00ced1", "scmessenger-cli": "#22d3ee",
+        "scmessenger-wasm": "#4ade80", "scmessenger-mobile": "#fbbf24",
+        "Android": "#3de1ad", "iOS": "#f472b6", "Python": "#facc15",
+        "Patch": "#fb923c",
+      };
+
+      for (const [gk, members] of groups) {
+        const first = members[0];
+        const pColor = groupKey === "group_crate" ? (crateColors[gk] || "#94a3b8") : "#a855f7";
+        const pId = `group::${gk}`;
+        nodes.push({
+          data: { id: pId, label: gk, crate: first.crate, color: pColor, groupKey: gk },
+          classes: "group-parent"
+        });
+        for (const m of members) {
+          nodes.push({
+            data: {
+              id: m.id, label: m.name, name: m.name,
+              file: m.file, crate: m.crate, color: m.color,
+              module: m.module, line: m.line,
+              is_unwired: m.is_unwired, is_stub: m.is_stub,
+              in_degree: m.in_degree, out_degree: m.out_degree,
+              calls_out_to: m.calls_out_to, called_by: m.called_by,
+              parent: pId
+            }
+          });
+        }
+      }
+
+      for (const e of fullData.edges) {
+        if (!nodeMap.has(e.source) || !nodeMap.has(e.target)) continue;
+        edges.push({ data: { id: `${e.source}→${e.target}`, source: e.source, target: e.target, type: e.type } });
+      }
+      return { nodes, edges };
+    }
+
+    // ── Create Cytoscape instance ──
+    function createGraph(grouping) {
+      if (cy) { cy.destroy(); cy = null; }
+
+      const { nodes, edges } = buildElements(grouping);
+
+      cy = cytoscape({
+        container: $cy,
+        elements: { nodes, edges },
+        style: getStyle(),
+        layout: { name: "preset" },
+        wheelSensitivity: 0.3,
+        minZoom: 0.04,
+        maxZoom: 6,
+      });
+
+      // Run layout
+      runLayout();
+
+      // Events
+      cy.on("tap", "node", onNodeClick);
+      cy.on("dbltap", "node", onNodeDblClick);
+      cy.on("tap", function(evt) {
+        if (evt.target === cy) {
+          clearSelection();
+        }
+      });
+      cy.on("mouseover", "node", onNodeHover);
+      cy.on("mouseout", "node", () => { $tooltip.style.opacity = 0; });
+      cy.on("viewport", () => { if (layoutTimer) { clearTimeout(layoutTimer); layoutTimer = null; } });
+    }
+
+    // ── Cytoscape style ──
+    function getStyle() {
+      return [
+        {
+          selector: "node",
+          style: {
+            "label": "data(label)",
+            "color": "#e2e8f0",
+            "font-size": "8px",
+            "font-family": '"JetBrains Mono", monospace',
+            "text-valign": "center",
+            "text-halign": "center",
+            "text-wrap": "ellipsis",
+            "text-max-width": "140px",
+            "background-color": "data(color)",
+            "shape": "ellipse",
+            "width": 20,
+            "height": 20,
+            "border-width": 1,
+            "border-color": "rgba(255,255,255,0.3)",
+            "transition-property": "width,height,border-width,background-color",
+            "transition-duration": "0.15s",
+          }
+        },
+        {
+          selector: "node.group-parent",
+          style: {
+            "shape": "roundrectangle",
+            "width": 40,
+            "height": 40,
+            "background-color": "data(color)",
+            "background-opacity": 0.15,
+            "border-width": 2,
+            "border-color": "data(color)",
+            "border-opacity": 0.5,
+            "font-size": "9px",
+            "font-weight": "bold",
+            "color": "data(color)",
+            "text-valign": "top",
+            "text-halign": "center",
+            "text-margin-y": 6,
+            "text-wrap": "ellipsis",
+            "text-max-width": "160px",
+            "padding": 30,
+            "compound-sizing-wrt-labels": "include",
+          }
+        },
+        {
+          selector: "node[is_unwired = true]",
+          style: {
+            "border-color": "#ef4444",
+            "border-width": 3,
+            "border-opacity": 0.9,
+            "shadow-color": "#ef4444",
+            "shadow-blur": 8,
+            "shadow-opacity": 0.5,
+          }
+        },
+        {
+          selector: "node[is_stub = true]",
+          style: {
+            "border-style": "dashed",
+            "border-color": "rgba(255,255,255,0.5)",
+            "border-width": 2,
+            "background-opacity": 0.5,
+            "text-opacity": 0.6,
+          }
+        },
+        {
+          selector: "node.selected",
+          style: {
+            "border-color": "#ffffff",
+            "border-width": 4,
+            "shadow-color": "#ffffff",
+            "shadow-blur": 14,
+            "shadow-opacity": 0.7,
+            "z-index": 9999,
+          }
+        },
+        {
+          selector: "node.highlighted",
+          style: {
+            "border-color": "#00ced1",
+            "border-width": 2,
+            "shadow-color": "#00ced1",
+            "shadow-blur": 10,
+            "shadow-opacity": 0.5,
+          }
+        },
+        {
+          selector: "node.dimmed",
+          style: {
+            "opacity": 0.12,
+            "background-opacity": 0.12,
+            "text-opacity": 0,
+            "border-opacity": 0,
+            "shadow-opacity": 0,
+          }
+        },
+        {
+          selector: "edge",
+          style: {
+            "width": 1,
+            "line-color": "rgba(255,255,255,0.18)",
+            "target-arrow-color": "rgba(255,255,255,0.3)",
+            "target-arrow-shape": "triangle",
+            "arrow-scale": 0.6,
+            "curve-style": "bezier",
+            "transition-property": "opacity,line-color,width",
+            "transition-duration": "0.15s",
+          }
+        },
+        {
+          selector: "edge[type = 'external']",
+          style: {
+            "line-color": "rgba(168,85,247,0.35)",
+            "line-style": "dashed",
+            "target-arrow-color": "rgba(168,85,247,0.4)",
+          }
+        },
+        {
+          selector: "edge.highlighted",
+          style: {
+            "width": 2,
+            "line-color": "rgba(0,206,209,0.8)",
+            "target-arrow-color": "rgba(0,206,209,0.9)",
+            "z-index": 9998,
+          }
+        },
+        {
+          selector: "edge.dimmed",
+          style: {
+            "opacity": 0.05,
+            "arrow-scale": 0,
+          }
+        },
+      ];
+    }
+
+    // ── Layout ──
+    function runLayout() {
+      if (!cy || cy.nodes().length === 0) return;
+      const name = $layout.value;
+      const isCompound = $grouping.value !== "flat" && $grouping.value !== "ext";
+
+      const opts = {
+        name: name,
+        animate: true,
+        animationDuration: 600,
+        fit: true,
+        padding: 40,
+      };
+
+      if (name === "dagre") {
+        opts.rankDir = "LR";
+        opts.rankSep = 80;
+        opts.nodeSep = 40;
+      }
+      if (name === "cose-bilkent") {
+        opts.idealEdgeLength = 120;
+        opts.nodeRepulsion = 8000;
+        opts.gravity = 0.3;
+      }
+      if (name === "cola") {
+        opts.edgeLength = 150;
+        opts.maxSimulationTime = 15;
+      }
+      if (isCompound && name === "dagre") {
+        // dagre handles compound nodes well
+        opts.rankDir = "TB";
+      }
+
+      try {
+        const layout = cy.layout(opts);
+        layout.one("layoutstop", () => {
+          cy.fit(undefined, 40);
+        });
+        layout.run();
+      } catch (e) {
+        console.warn("Layout failed:", e.message);
+        // Fallback
+        try {
+          cy.layout({ name: "grid", fit: true, padding: 40 }).run();
+        } catch (_) {}
+      }
+    }
+
+    // ── Selection & Depth Highlight ──
+    let currentDepth = 1;
+
+    function applyDepthHighlight(nodeId) {
+      if (!cy) return;
+      const depth = parseInt($depth.value) || 1;
+      currentDepth = depth;
+
+      // Reset all
+      cy.nodes().removeClass("selected highlighted dimmed");
+      cy.edges().removeClass("highlighted dimmed");
+
+      if (!nodeId) return;
+
+      const root = cy.getElementById(nodeId);
+      if (root.empty()) return;
+
+      root.addClass("selected");
+
+      // BFS for neighborhoods up to `depth`
+      const visited = new Set();
+      const edgeSet = new Set();
+      let frontier = new Set([nodeId]);
+      visited.add(nodeId);
+
+      for (let d = 0; d < depth; d++) {
+        const next = new Set();
+        for (const nid of frontier) {
+          const node = cy.getElementById(nid);
+          if (node.empty()) continue;
+
+          // Outgoing
+          node.connectedEdges().forEach(edge => {
+            const src = edge.source().id();
+            const tgt = edge.target().id();
+            edgeSet.add(edge.id());
+            if (!visited.has(src)) { visited.add(src); next.add(src); }
+            if (!visited.has(tgt)) { visited.add(tgt); next.add(tgt); }
+          });
+
+          // Also traverse incoming via neighborhood
+          node.incomers("node").forEach(n => {
+            if (!visited.has(n.id())) { visited.add(n.id()); next.add(n.id()); }
+          });
+          node.outgoers("node").forEach(n => {
+            if (!visited.has(n.id())) { visited.add(n.id()); next.add(n.id()); }
+          });
+        }
+        frontier = next;
+      }
+
+      // Classify
+      cy.nodes().forEach(n => {
+        if (n.id() === nodeId) return; // root stays selected
+        if (visited.has(n.id())) {
+          n.addClass("highlighted");
+        } else {
+          n.addClass("dimmed");
+        }
+      });
+      cy.edges().forEach(e => {
+        if (edgeSet.has(e.id())) {
+          e.addClass("highlighted");
+        } else {
+          e.addClass("dimmed");
+        }
+      });
+    }
+
+    // ── Event handlers ──
+    function onNodeClick(evt) {
+      const node = evt.target;
+      if (node.hasClass("group-parent")) {
+        // Drill down into group: rebuild with that file/module/crate
+        const gk = node.data("groupKey");
+        if (gk && $grouping.value === "crate") {
+          $grouping.value = "module";
+          refreshGraph();
+          return;
+        }
+        if (gk && $grouping.value === "module") {
+          $grouping.value = "file";
+          refreshGraph();
+          return;
+        }
+        // Expand/collapse compound
+        toggleCompound(node);
+        return;
+      }
+
+      currentNodeId = node.id();
+      applyDepthHighlight(currentNodeId);
+      updateSidebar(node);
+    }
+
+    function onNodeDblClick(evt) {
+      const node = evt.target;
+      if (node.hasClass("group-parent")) return;
+
+      // Focus mode: show only this node + its 1-hop neighborhood
+      currentNodeId = node.id();
+
+      // Dim everything, then show only direct neighbors
+      cy.nodes().removeClass("selected highlighted dimmed");
+      cy.edges().removeClass("highlighted dimmed");
+      cy.nodes().addClass("dimmed");
+      cy.edges().addClass("dimmed");
+
+      node.removeClass("dimmed").addClass("selected");
+
+      const nid = node.id();
+      node.connectedEdges().forEach(e => {
+        e.removeClass("dimmed").addClass("highlighted");
+        const src = e.source();
+        const tgt = e.target();
+        if (src.id() !== nid) src.removeClass("dimmed").addClass("highlighted");
+        if (tgt.id() !== nid) tgt.removeClass("dimmed").addClass("highlighted");
+      });
+
+      cy.fit(node.neighborhood().add(node), 60);
+      updateSidebar(node);
+    }
+
+    function onNodeHover(evt) {
+      const node = evt.target;
+      $tooltip.style.opacity = 1;
+      const name = node.data("name") || node.data("label") || node.id();
+      const file = node.data("file") || "";
+      const crate = node.data("crate") || "";
+      const line = node.data("line") || "";
+      $tooltip.innerHTML = `${name}<br><span style="opacity:0.7;font-size:0.6rem">${file}:${line}  [${crate}]</span>`;
+      $tooltip.style.left = (evt.originalEvent.clientX + 14) + "px";
+      $tooltip.style.top = (evt.originalEvent.clientY - 40) + "px";
+    }
+
+    function toggleCompound(node) {
+      const children = node.children();
+      if (children.length === 0) return;
+      if (children.first().hidden()) {
+        children.show();
+      } else {
+        children.hide();
+      }
+    }
+
+    function clearSelection() {
+      currentNodeId = null;
+      if (cy) {
+        cy.nodes().removeClass("selected highlighted dimmed");
+        cy.edges().removeClass("highlighted dimmed");
+      }
+      $detail.innerHTML = '<span style="color:var(--text-dim); font-size:0.7rem">Click a node to inspect</span>';
+    }
+
+    // ── Sidebar ──
+    function updateSidebar(node) {
+      const d = node.data();
+      const stub = d.is_stub ? " <span style='color:#fbbf24'>[STUB]</span>" : "";
+      const unwired = d.is_unwired ? " <span style='color:#ef4444'>[UNWIRED]</span>" : "";
+      const callsOut = d.calls_out_to || [];
+      const calledBy = d.called_by || [];
+
+      let html = `
+        <div class="field"><div class="label">Name</div><div class="value" style="color:var(--primary);font-weight:700">${esc(d.name || d.label)}${stub}${unwired}</div></div>
+        <div class="field"><div class="label">File</div><div class="value">${esc(d.file || "-")} : ${d.line || "-"}</div></div>
+        <div class="field"><div class="label">Crate</div><div class="value">${esc(d.crate || "-")}</div></div>
+        <div class="field"><div class="label">In-degree</div><div class="value">${d.in_degree}</div></div>
+        <div class="field"><div class="label">Out-degree</div><div class="value">${d.out_degree}</div></div>
+        <div class="field"><div class="label">Calls (${callsOut.length})</div>
+          <div class="call-list">${callsOut.map(c => `<div>${esc(c)}</div>`).join("") || "<div style='color:var(--text-dim)'>none</div>"}</div>
+        </div>
+        <div class="field"><div class="label">Called By (${calledBy.length})</div>
+          <div class="call-list">${calledBy.slice(0,30).map(c => {
+            const cn = fullData.nodes.find(n => n.id === c);
+            const label = cn ? cn.name : c.split("::").pop();
+            return `<div><a onclick="jumpToNode('${escAttr(c)}')">${esc(label)}</a></div>`;
+          }).join("") || "<div style='color:var(--text-dim)'>none</div>"}
+          ${calledBy.length > 30 ? `<div style="color:var(--text-dim)">... and ${calledBy.length - 30} more</div>` : ""}
+          </div>
+        </div>
+      `;
+      $detail.innerHTML = html;
+    }
+
+    function esc(s) { return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
+    function escAttr(s) { return String(s).replace(/'/g,"\\'").replace(/"/g,"&quot;"); }
+
+    // ── Global helpers exposed for sidebar links ──
+    window.jumpToNode = function(nodeId) {
+      if (!cy) return;
+      const node = cy.getElementById(nodeId);
+      if (node.empty()) return;
+      currentNodeId = nodeId;
+      applyDepthHighlight(nodeId);
+      updateSidebar(node);
+      cy.animate({ fit: { eles: node, padding: 100 }, duration: 400 });
+    };
+
+    // ── Search ──
+    $search.addEventListener("input", function() {
+      const q = this.value.toLowerCase().trim();
+      if (!cy) return;
+      if (!q) {
+        cy.nodes().removeClass("dimmed");
+        cy.edges().removeClass("dimmed");
+        return;
+      }
+      cy.nodes().forEach(n => {
+        const name = (n.data("name") || "").toLowerCase();
+        const file = (n.data("file") || "").toLowerCase();
+        const crate = (n.data("crate") || "").toLowerCase();
+        if (name.includes(q) || file.includes(q) || crate.includes(q)) {
+          n.removeClass("dimmed");
+        } else {
+          n.addClass("dimmed");
+        }
+      });
+      // Dim edges where both endpoints are dimmed
+      cy.edges().forEach(e => {
+        if (e.source().hasClass("dimmed") && e.target().hasClass("dimmed")) {
+          e.addClass("dimmed");
+        } else {
+          e.removeClass("dimmed");
+        }
+      });
+    });
+
+    // ── Control handlers ──
+    $depth.addEventListener("input", function() {
+      $depthVal.textContent = this.value;
+      if (currentNodeId) applyDepthHighlight(currentNodeId);
+    });
+
+    $layout.addEventListener("change", () => { runLayout(); });
+    $grouping.addEventListener("change", () => { refreshGraph(); });
+
+    document.getElementById("btnFit").addEventListener("click", () => {
+      if (cy) cy.fit(undefined, 40);
+    });
+    document.getElementById("btnZoomIn").addEventListener("click", () => {
+      if (cy) cy.zoom({ level: cy.zoom() * 1.3, renderedPosition: { x: $cy.clientWidth/2, y: $cy.clientHeight/2 } });
+    });
+    document.getElementById("btnZoomOut").addEventListener("click", () => {
+      if (cy) cy.zoom({ level: cy.zoom() * 0.7, renderedPosition: { x: $cy.clientWidth/2, y: $cy.clientHeight/2 } });
+    });
+    document.getElementById("btnClearSel").addEventListener("click", clearSelection);
+
+    document.getElementById("btnExportPNG").addEventListener("click", () => {
+      if (!cy) return;
+      const b64 = cy.png({ full: true, bg: "#020617", scale: 2 });
+      const a = document.createElement("a");
+      a.href = b64; a.download = "wiring_graph.png"; a.click();
+    });
+
+    document.getElementById("btnExportJSON").addEventListener("click", () => {
+      if (!cy) return;
+      const json = JSON.stringify(cy.json().elements, null, 2);
+      const blob = new Blob([json], { type: "application/json" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = "wiring_graph_export.json"; a.click();
+    });
+
+    document.getElementById("btnReset").addEventListener("click", () => {
+      currentNodeId = null;
+      $grouping.value = "crate";
+      $layout.value = "dagre";
+      $depth.value = 1;
+      $depthVal.textContent = "1";
+      $search.value = "";
+      refreshGraph();
+      $detail.innerHTML = '<span style="color:var(--text-dim); font-size:0.7rem">Click a node to inspect</span>';
+    });
+
+    // ── Refresh ──
+    function refreshGraph() {
+      const grouping = $grouping.value;
+      createGraph(grouping);
+      currentNodeId = null;
+    }
+
+    // ── Resize ──
+    window.addEventListener("resize", () => {
+      if (cy) {
+        if (layoutTimer) clearTimeout(layoutTimer);
+        layoutTimer = setTimeout(() => { cy.fit(undefined, 30); layoutTimer = null; }, 250);
+      }
+    });
+
+    // ── Keyboard shortcuts ──
+    window.addEventListener("keydown", (e) => {
+      if (!cy) return;
+      if (e.key === "Escape") clearSelection();
+      if (e.key === "f" && !e.ctrlKey && !e.metaKey) cy.fit(undefined, 40);
+      if (e.key === "0" && !e.ctrlKey) { $grouping.value = "flat"; refreshGraph(); }
+      if (e.key === "1" && !e.ctrlKey) { $grouping.value = "file"; refreshGraph(); }
+      if (e.key === "2" && !e.ctrlKey) { $grouping.value = "module"; refreshGraph(); }
+      if (e.key === "3" && !e.ctrlKey) { $grouping.value = "crate"; refreshGraph(); }
+      if (e.key === "4" && !e.ctrlKey) { $grouping.value = "ext"; refreshGraph(); }
+    });
+
+    // ── Init ──
+    (async function init() {
+      await loadData();
+      refreshGraph();  // starts with "crate" grouping
+    })();
+  })();
+  </script>
+</body>
+</html>
