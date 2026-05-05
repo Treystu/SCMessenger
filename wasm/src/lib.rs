@@ -1158,6 +1158,13 @@ impl IronCore {
         }
     }
 
+    /// Return the federated nickname for a contact (the nickname advertised by the peer).
+    /// Returns None if the contact is not found or has no federated nickname set.
+    #[wasm_bindgen(js_name = contactFederatedNickname)]
+    pub fn contact_federated_nickname(&self, peer_id: String) -> Option<String> {
+        self.inner.contact_federated_nickname(peer_id)
+    }
+
     // ── Identity Resolution ──────────────────────────────────────────────
 
     /// Resolve any identifier format (peer ID, identity hash, public key hex)

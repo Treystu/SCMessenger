@@ -49,6 +49,12 @@ impl Contact {
         }
         self.nickname.as_deref().unwrap_or(&self.peer_id)
     }
+
+    /// Returns the federated nickname (the nickname advertised by the peer),
+    /// without falling through to local_nickname or peer_id.
+    pub fn federated_nickname(&self) -> Option<&str> {
+        self.nickname.as_deref()
+    }
 }
 
 #[derive(Clone)]

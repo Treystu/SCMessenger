@@ -1108,6 +1108,14 @@ impl IronCore {
 
     // -----------------------------------------------------------------------
     // Abuse / Reputation extended
+    /// Get the overall abuse score for a peer, combining base reputation and spam confidence.
+    pub fn abuse_overall_score(&self, peer: &str) -> Option<f64> {
+        self.abuse_manager
+            .read()
+            .get_enhanced_score(peer)
+            .overall_score()
+            .into()
+    }
     // -----------------------------------------------------------------------
 
     // -----------------------------------------------------------------------
@@ -1342,6 +1350,12 @@ impl IronCore {
     /// Verify a DSPy signature by role name.
     /// Returns the signature description if the role is found.
     pub fn dspy_verify_signature(&self, role: &str) -> Option<String> {
+        crate::dspy::signatures::get_signature(role).map(|s| s.to_string())
+    }
+
+    /// Get a DSPy signature description for the given role.
+    /// Returns the signature description string if the role is found.
+    pub fn dspy_get_signature(&self, role: &str) -> Option<String> {
         crate::dspy::signatures::get_signature(role).map(|s| s.to_string())
     }
 
