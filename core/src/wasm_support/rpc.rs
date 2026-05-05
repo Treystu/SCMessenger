@@ -107,6 +107,10 @@ pub enum ClientIntent {
     RatchetHasSession {
         peer_id: String,
     },
+    // ── DSPy integrity ──
+    Blake3Hash {
+        data_hex: String, // hex-encoded input bytes
+    },
 }
 
 pub const ERR_PARSE: i32 = -32700;

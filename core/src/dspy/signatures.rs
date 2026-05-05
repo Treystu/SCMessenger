@@ -130,6 +130,17 @@ pub fn encrypt_xchacha20(
 }
 "#;
 
+/// Compute BLAKE3 hash of data
+pub fn blake3_hash(data: &[u8]) -> [u8; 32] {
+    blake3::hash(data).into()
+}
+
+/// Compute a BLAKE3 fingerprint of a serialized signature for content-addressable identification.
+pub fn signature_fingerprint(data: &[u8]) -> String {
+    let hash = blake3_hash(data);
+    hash.iter().map(|b| format!("{:02x}", b)).collect()
+}
+
 /// Golden Example: BLAKE3 Hashing
 pub const GOLDEN_BLAKE3_HASHING: &str = r#"
 /// Compute BLAKE3 hash of data
@@ -184,5 +195,28 @@ mod tests {
         assert!(!GOLDEN_CURVE25519_KEYGEN.is_empty());
         assert!(!GOLDEN_XCHACHA20_ENCRYPTION.is_empty());
         assert!(!GOLDEN_BLAKE3_HASHING.is_empty());
+    }
+
+    #[test]
+    fn test_blake3_hash_deterministic() {
+        let data = b"scmessenger-dspy-test";
+        let h1 = blake3_hash(data);
+        let h2 = blake3_hash(data);
+        assert_eq!(h1, h2);
+        assert_eq!(h1.len(), 32);
+    }
+
+    #[test]
+    fn test_blake3_hash_different_inputs() {
+        let h1 = blake3_hash(b"input-a");
+        let h2 = blake3_hash(b"input-b");
+        assert_ne!(h1, h2);
+    }
+
+    #[test]
+    fn test_signature_fingerprint_format() {
+        let fp = signature_fingerprint(b"test-data");
+        assert_eq!(fp.len(), 64); // 32 bytes = 64 hex chars
+        assert!(fp.chars().all(|c| c.is_ascii_hexdigit()));
     }
 }

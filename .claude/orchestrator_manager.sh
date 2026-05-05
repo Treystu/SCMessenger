@@ -173,6 +173,39 @@ clean_stale_pids() {
     done
 }
 
+# Clean orphaned agent directories when no agents are active.
+# Prevents stale directories from causing domain conflicts.
+cleanup_orphaned_agent_dirs() {
+    local active=$(count_active_agents)
+    if [ "$active" -ne 0 ]; then
+        return 0
+    fi
+
+    if [ ! -d "$AGENT_ROOT" ]; then
+        return 0
+    fi
+
+    local orphan_count=0
+    for dir in "$AGENT_ROOT"/*/; do
+        [ -d "$dir" ] || continue
+        local agent_id=$(basename "$dir")
+        # Skip if PID file has a live process
+        if [ -f "$dir/pid" ]; then
+            local pid=$(cat "$dir/pid" 2>/dev/null)
+            if [ -n "$pid" ] && process_alive "$pid"; then
+                continue
+            fi
+        fi
+        echo "CLEANUP: Removing orphaned agent directory: $agent_id"
+        rm -rf "$dir"
+        ((orphan_count++))
+    done
+
+    if [ "$orphan_count" -gt 0 ]; then
+        echo "CLEANUP: Removed $orphan_count orphaned agent directories"
+    fi
+}
+
 count_active_agents() {
     # CLI-launched agents (ollama spawn) are the only source of truth.
     # Native sub-agents (internal Agent tool) are not tracked separately.
@@ -285,6 +318,43 @@ pool_launch() {
     if [ "$active" -ge "$MAX_SUBAGENTS" ]; then
         echo "Error: Sub-agent limit reached ($MAX_SUBAGENTS slots). Stop an agent first."
         return 1
+    fi
+
+    # ─── TASK VALIDATION GATE ────────────────────────────────────────────────
+    if [ -n "$task_file" ] && [ -f "$task_file" ]; then
+        local validation_result
+        validation_result=$(validate_task_before_launch "$task_file")
+        local validation_exit=$?
+
+        case $validation_exit in
+            1)  # FALSE_POSITIVE
+                echo "TASK VALIDATION: $validation_result"
+                echo "Moving false-positive task to done/ with note."
+                local task_basename=$(basename "$task_file")
+                echo "" >> "$task_file"
+                echo "## VALIDATION GATE: FALSE_POSITIVE" >> "$task_file"
+                echo "Reason: $validation_result" >> "$task_file"
+                echo "Date: $(date -u '+%Y-%m-%dT%H:%M:%SZ')" >> "$task_file"
+                mv "$task_file" "HANDOFF/done/$task_basename" 2>/dev/null || true
+                return 1
+                ;;
+            2)  # ALREADY_WIRED
+                echo "TASK VALIDATION: $validation_result"
+                echo "Moving already-wired task to done/ with note."
+                local task_basename=$(basename "$task_file")
+                echo "" >> "$task_file"
+                echo "## VALIDATION GATE: ALREADY_WIRED" >> "$task_file"
+                echo "Reason: $validation_result" >> "$task_file"
+                echo "Date: $(date -u '+%Y-%m-%dT%H:%M:%SZ')" >> "$task_file"
+                mv "$task_file" "HANDOFF/done/$task_basename" 2>/dev/null || true
+                return 1
+                ;;
+            3)  # NEEDS_REVIEW
+                echo "TASK VALIDATION: $validation_result — needs human review, skipping."
+                return 1
+                ;;
+        esac
+        echo "TASK VALIDATION: PASS ($validation_result)"
     fi
 
     # STRICT GATE: Check actual OS process count (Two-Tier Topology: max 3)
@@ -598,6 +668,64 @@ if overlap:
         fi
     done
     return 0
+}
+
+# ─── Pre-Dispatch Task Validation Gate ─────────────────────────────────────────
+# Validates that a task file targets a real production-callable function,
+# not a false positive (test, kani proof, proptest harness, string constant).
+# Delegates to .claude/scripts/task_validator.py for pattern detection.
+# Return codes: 0=VALID, 1=FALSE_POSITIVE, 2=ALREADY_WIRED, 3=NEEDS_REVIEW
+
+validate_task_before_launch() {
+    local task_file="$1"
+
+    if [ -z "$task_file" ] || [ ! -f "$task_file" ]; then
+        echo "VALID"
+        return 0
+    fi
+
+    # Only validate task_wire_* files (skip BATCH_, ORCHESTRATOR_, etc.)
+    local basename=$(basename "$task_file")
+    if [[ "$basename" != task_wire_* ]]; then
+        echo "VALID"
+        return 0
+    fi
+
+    # Extract TARGET line and function name
+    local target_line=$(grep "^TARGET:" "$task_file" | head -1)
+    if [ -z "$target_line" ]; then
+        echo "VALID"
+        return 0
+    fi
+
+    local target_file=$(echo "$target_line" | sed 's/^TARGET:[[:space:]]*//' | tr '\' '/')
+    local func_name=$(echo "$basename" | sed 's/^task_wire_//' | sed 's/\.md$//')
+
+    if [ ! -f "$target_file" ]; then
+        echo "NEEDS_REVIEW:target_file_missing:$target_file"
+        return 3
+    fi
+
+    # Delegate to standalone Python validation script
+    local validation
+    validation=$($PYTHON "$SCRIPT_DIR/scripts/task_validator.py" \
+        "$task_file" "$target_file" "$func_name" 2>/dev/null)
+    local validation_exit=$?
+
+    case $validation_exit in
+        1)  echo "FALSE_POSITIVE:$validation"
+            return 1
+            ;;
+        2)  echo "ALREADY_WIRED:$validation"
+            return 2
+            ;;
+        3)  echo "NEEDS_REVIEW:$validation"
+            return 3
+            ;;
+        *)  echo "VALID"
+            return 0
+            ;;
+    esac
 }
 
 # ─── Pre-Launch Hygiene ──────────────────────────────────────────────────────

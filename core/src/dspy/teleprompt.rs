@@ -3,7 +3,7 @@
 //! This module implements teleprompter functionality for compiling
 //! and optimizing prompts for specific SCM scenarios using Golden Examples.
 
-use crate::dspy::signatures::{ArchitectSignature, CoderSignature, VerifierSignature, AuditorSignature};
+use crate::dspy::signatures::{ArchitectSignature, CoderSignature, VerifierSignature, AuditorSignature, blake3_hash};
 use crate::dspy::modules::{DSPyModule, ModuleFactory, ModuleComplexity, OptimizerPipeline};
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -75,6 +75,16 @@ impl BasicTeleprompter {
     /// Add golden examples for optimization
     pub fn add_golden_examples(&mut self, examples: &[&str]) {
         self.golden_examples.extend(examples.iter().map(|s| s.to_string()));
+    }
+
+    /// Compute a BLAKE3 integrity fingerprint for all loaded golden examples.
+    /// Used to detect corruption or tampering of golden example data.
+    pub fn golden_examples_fingerprint(&self) -> [u8; 32] {
+        let combined: Vec<u8> = self.golden_examples.iter()
+            .flat_map(|s| s.as_bytes())
+            .copied()
+            .collect();
+        blake3_hash(&combined)
     }
 
     /// Compile prompt for a specific signature type
@@ -276,5 +286,16 @@ mod tests {
     fn test_scenario_based_teleprompter() {
         let tp = TeleprompterFactory::create_for_scenario("rust_development");
         assert!(tp.is_ok());
+    }
+
+    #[test]
+    fn test_golden_examples_fingerprint() {
+        let mut tp = BasicTeleprompter::new();
+        let fp_empty = tp.golden_examples_fingerprint();
+        assert_eq!(fp_empty.len(), 32);
+
+        tp.add_golden_examples(&["example1", "example2"]);
+        let fp_loaded = tp.golden_examples_fingerprint();
+        assert_ne!(fp_empty, fp_loaded);
     }
 }

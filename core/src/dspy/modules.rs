@@ -5,7 +5,7 @@
 //! - MultiHopRecall: Retrieve and combine information from multiple sources
 //! - OptimizerPipeline: End-to-end optimization with self-correction
 
-use crate::dspy::signatures::*;
+use crate::dspy::signatures;
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Module Trait
@@ -31,6 +31,21 @@ pub struct ModuleMetadata {
     pub name: String,
     pub complexity: ModuleComplexity,
     pub cached: bool,
+}
+
+impl ModuleMetadata {
+    /// Compute a BLAKE3 fingerprint of this module's metadata for content-addressable identification.
+    pub fn fingerprint(&self) -> [u8; 32] {
+        let mut data = Vec::new();
+        data.extend_from_slice(self.name.as_bytes());
+        data.push(match self.complexity {
+            ModuleComplexity::Simple => 0,
+            ModuleComplexity::Moderate => 1,
+            ModuleComplexity::Complex => 2,
+        });
+        data.push(self.cached as u8);
+        signatures::blake3_hash(&data)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -273,5 +288,30 @@ mod tests {
     fn test_rust_feature_pipeline() {
         let pipeline = ModuleFactory::build_rust_feature_pipeline();
         assert_eq!(pipeline.get_metadata().name, "RustFeaturePipeline");
+    }
+
+    #[test]
+    fn test_module_metadata_fingerprint() {
+        let metadata = ModuleMetadata {
+            name: "test_module".to_string(),
+            complexity: ModuleComplexity::Moderate,
+            cached: true,
+        };
+        let fp = metadata.fingerprint();
+        assert_eq!(fp.len(), 32);
+
+        let same_metadata = ModuleMetadata {
+            name: "test_module".to_string(),
+            complexity: ModuleComplexity::Moderate,
+            cached: true,
+        };
+        assert_eq!(fp, same_metadata.fingerprint());
+
+        let diff_metadata = ModuleMetadata {
+            name: "other_module".to_string(),
+            complexity: ModuleComplexity::Moderate,
+            cached: true,
+        };
+        assert_ne!(fp, diff_metadata.fingerprint());
     }
 }
