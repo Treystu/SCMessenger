@@ -626,6 +626,15 @@ impl TransportManager {
             .unwrap_or_default()
     }
 
+    /// Get global transport metrics from the health monitor.
+    /// Returns empty metrics if no health monitor is configured.
+    pub fn get_global_metrics(&self) -> crate::transport::health::GlobalTransportMetrics {
+        self.health_monitor
+            .as_ref()
+            .map(|m| m.get_global_metrics())
+            .unwrap_or_default()
+    }
+
     /// Get all tracked connections from the address observer's connection tracker.
     /// Delegates to AddressObserver::all_connections() to surface observed
     /// connection endpoints for diagnostics.

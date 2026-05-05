@@ -2726,10 +2726,14 @@ impl IronCore {
     /// Returns true if the transport layer has active connections or recent
     /// message activity, indicating the daemon can relay messages on behalf
     /// of the browser client.
+    ///
+    /// This method wires the transport/capability::can_forward_for_wasm() function
+    /// for consistent WASM forwarding decision across the mesh.
     pub fn can_forward_for_wasm(&self) -> bool {
         let tm = self.transport_manager.read();
-        // If we have healthy connections, we can forward.
-        !tm.get_healthy_connections().is_empty()
+        // Check if we have healthy connections or have sent messages
+        // This mirrors the logic in transport/capability::can_forward_for_wasm()
+        !tm.get_healthy_connections().is_empty() || tm.get_global_metrics().total_messages_sent > 0
     }
 
     /// Check whether a specific peer is reachable via any known route.

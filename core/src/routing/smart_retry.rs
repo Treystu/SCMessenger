@@ -45,6 +45,12 @@ pub fn calculate_next_attempt(attempt_count: u32, strategy: &BackoffStrategy) ->
     now_ms + delay_ms
 }
 
+/// Check if the delay has reached the maximum value.
+/// Used by retry scheduling to determine if further delays should be capped.
+pub fn isAtMaxDelay(delay_ms: u64, max_ms: u64) -> bool {
+    delay_ms >= max_ms
+}
+
 /// Represents the reason for triggering an outbox flush operation.
 #[derive(Debug, Clone, PartialEq)]
 pub enum DeliveryTrigger {

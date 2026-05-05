@@ -40,5 +40,5 @@ pub use resume_prefetch::{
     FrequentPeer, PrefetchConfig, PrefetchStats, PrefetchStatus, PrefetchedRoute,
     ResumePrefetchManager,
 };
-pub use smart_retry::{calculate_next_attempt, BackoffStrategy, DeliveryTrigger};
+pub use smart_retry::{calculate_next_attempt, isAtMaxDelay, BackoffStrategy, DeliveryTrigger};
 pub use timeout_budget::{BudgetSummary, DiscoveryPhase, TimeoutBudget};
