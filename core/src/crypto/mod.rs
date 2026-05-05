@@ -19,3 +19,6 @@ pub use encrypt::{
 };
 pub use ratchet::{RatchetEncryptResult, RatchetKey, RatchetSession};
 pub use session_manager::{RatchetSessionManager, SerializableRatchetSession};
+
+// Re-export DSPy signature functions for crypto signature verification integration
+pub use crate::dspy::signatures::{blake3_hash, get_signature, signature_fingerprint};

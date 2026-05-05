@@ -34,6 +34,7 @@ pub use local::{CellSummary, LocalCell, PeerEvent, PeerId, PeerInfo, PeerStatus,
 #[cfg(feature = "phase2_apis")]
 pub use multipath::DeliveryPath;
 pub use negative_cache::{NegativeCache, NegativeCacheStats};
+pub use crate::abuse::reputation::{EnhancedReputationScore, EnhancedAbuseReputationManager};
 pub use neighborhood::{GatewayInfo, NeighborhoodGossip, NeighborhoodSummary, NeighborhoodTable};
 pub use optimized_engine::{OptimizedRoutingEngine, OptimizedRoutingMaintenance};
 pub use resume_prefetch::{

@@ -11,9 +11,12 @@
 //!    in exchange for fast negative answers. False positives trigger fallback to DHT.
 //! 3. **Time-based expiry**: Negative results expire after TTL to allow recovery
 //! 4. **Privacy-preserving**: Local-only cache, no network queries
+//! 5. **Reputation-aware**: Use overall_score from abuse reputation to avoid caching trusted peers
 
 use std::collections::HashMap;
 use web_time::{Duration, Instant};
+
+use crate::abuse::reputation::EnhancedReputationScore;
 
 /// A simple bloom filter implementation for peer unreachability
 ///
@@ -329,6 +332,46 @@ impl NegativeCache {
         self.stats.expired_count += removed as u64;
         removed
     }
+
+    /// Check if a peer should be exempted from negative caching based on reputation.
+    /// High-reputation peers are less likely to be accurately marked as unreachable.
+    ///
+    /// # Arguments
+    /// * `peer_id` - The peer ID to check
+    /// * `reputation_score` - The overall reputation score from abuse detection
+    ///   (0.0 = abusive, 1.0 = highly trusted)
+    ///
+    /// # Returns
+    /// `true` if the peer should be exempted from negative cache (trusted),
+    /// `false` if normal caching rules apply.
+    pub fn should_exempt_from_negative_cache(&self, peer_id: &str, reputation_score: f64) -> bool {
+        // Peers with overall_score >= 0.5 are considered trusted and exempted
+        // This prevents marking good peers as unreachable due to transient issues
+        reputation_score >= 0.5
+    }
+
+    /// Record unreachability with reputation-based exemption.
+    /// High-reputation peers are exempted from negative caching.
+    ///
+    /// # Arguments
+    /// * `peer_id` - The peer ID that was confirmed unreachable
+    /// * `reputation_score` - The overall reputation score from abuse detection
+    ///   (0.0 = abusive, 1.0 = highly trusted)
+    ///
+    /// # Returns
+    /// `true` if the peer was added to the cache, `false` if exempted.
+    pub fn record_unreachable_with_reputation(
+        &mut self,
+        peer_id: String,
+        reputation_score: f64,
+    ) -> bool {
+        // Exempt high-reputation peers from negative caching
+        if self.should_exempt_from_negative_cache(&peer_id, reputation_score) {
+            return false;
+        }
+        self.record_unreachable(peer_id);
+        true
+    }
 }
 
 impl Default for NegativeCache {
@@ -458,5 +501,35 @@ mod tests {
         let stats = cache.stats();
         assert_eq!(stats.negative_checks, 2);
         assert_eq!(stats.entry_count, 2);
+    }
+
+    #[test]
+    fn test_reputation_based_exemption() {
+        let mut cache = NegativeCache::with_defaults();
+
+        // High reputation peer (score = 0.8) should be exempted
+        let exempted = cache.record_unreachable_with_reputation("good_peer".to_string(), 0.8);
+        assert!(!exempted, "High reputation peer should be exempted");
+
+        // Low reputation peer (score = 0.2) should be cached
+        let cached = cache.record_unreachable_with_reputation("bad_peer".to_string(), 0.2);
+        assert!(cached, "Low reputation peer should be cached");
+
+        // Verify the bad_peer is in cache but good_peer is not
+        assert!(cache.is_definitely_unreachable("bad_peer"));
+        assert!(!cache.is_definitely_unreachable("good_peer"));
+    }
+
+    #[test]
+    fn test_reputation_exemption_boundary() {
+        let mut cache = NegativeCache::with_defaults();
+
+        // Exactly at the boundary (0.5) should be exempted
+        let exempted = cache.record_unreachable_with_reputation("borderline_peer".to_string(), 0.5);
+        assert!(!exempted, "Peer at 0.5 threshold should be exempted");
+
+        // Just below the boundary (0.49) should not be exempted
+        let cached = cache.record_unreachable_with_reputation("just_below".to_string(), 0.49);
+        assert!(cached, "Peer below 0.5 should be cached");
     }
 }

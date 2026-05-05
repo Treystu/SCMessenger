@@ -1,0 +1,1 @@
+- [Micro Agent Benchmark](micro_agent_benchmark.md) — API cost/quality comparison for direct ollama micro tasks

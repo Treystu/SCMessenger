@@ -6,6 +6,7 @@ mod store;
 pub use keys::{IdentityKeys, KeyPair};
 pub use store::{DeviceMetadata, IdentityStore};
 
+use crate::dspy::signatures::{blake3_hash, get_signature, signature_fingerprint};
 use crate::store::backend::StorageBackend;
 use anyhow::Result;
 use std::sync::Arc;
@@ -164,6 +165,42 @@ impl IdentityManager {
         self.ensure_device_metadata()?;
         Ok(())
     }
+
+    /// Get DSPy signature description for identity-related roles.
+    /// Used for signature verification schema lookup in authentication flows.
+    ///
+    /// # Arguments
+    /// * `role` - The DSPy role name (e.g., "architect", "coder", "verifier", "auditor")
+    ///
+    /// # Returns
+    /// The signature description if the role is known, `None` otherwise.
+    pub fn get_dspy_signature(&self, role: &str) -> Option<String> {
+        get_signature(role).map(|s| s.to_string())
+    }
+
+    /// Compute a BLAKE3 fingerprint of a signature for content-addressable identification.
+    /// Used in identity authentication flows to verify signature integrity.
+    ///
+    /// # Arguments
+    /// * `data` - The data to compute fingerprint for (typically a serialized signature)
+    ///
+    /// # Returns
+    /// A hex-encoded string of the BLAKE3 hash.
+    pub fn signature_fingerprint(&self, data: &[u8]) -> String {
+        signature_fingerprint(data)
+    }
+
+    /// Compute a BLAKE3 hash of data.
+    /// Used for signature verification and integrity checks in identity authentication.
+    ///
+    /// # Arguments
+    /// * `data` - The data to hash
+    ///
+    /// # Returns
+    /// A 32-byte array containing the BLAKE3 hash.
+    pub fn blake3_hash(&self, data: &[u8]) -> [u8; 32] {
+        blake3_hash(data)
+    }
 }
 
 impl Default for IdentityManager {
@@ -307,5 +344,80 @@ mod tests {
         assert_eq!(manager.nickname(), Some("PersistedNick".to_string()));
         assert!(manager.device_id().is_some());
         assert!(manager.seniority_timestamp().is_some());
+    }
+
+    #[test]
+    fn test_get_dspy_signature() {
+        let manager = IdentityManager::new();
+
+        // Test all valid DSPy roles
+        assert!(manager.get_dspy_signature("architect").is_some());
+        assert!(manager.get_dspy_signature("coder").is_some());
+        assert!(manager.get_dspy_signature("verifier").is_some());
+        assert!(manager.get_dspy_signature("auditor").is_some());
+
+        // Test invalid role
+        assert!(manager.get_dspy_signature("invalid_role").is_none());
+    }
+
+    #[test]
+    fn test_get_dspy_signature_content() {
+        let manager = IdentityManager::new();
+
+        // Verify the signature content matches expected descriptions
+        let architect = manager.get_dspy_signature("architect").unwrap();
+        assert!(architect.contains("System design"));
+
+        let coder = manager.get_dspy_signature("coder").unwrap();
+        assert!(coder.contains("Rust code generation"));
+    }
+
+    #[test]
+    fn test_signature_fingerprint() {
+        let manager = IdentityManager::new();
+
+        // Test fingerprint generation
+        let data = b"test signature data";
+        let fp = manager.signature_fingerprint(data);
+
+        // Fingerprint should be 64 hex characters (32 bytes)
+        assert_eq!(fp.len(), 64);
+        assert!(fp.chars().all(|c| c.is_ascii_hexdigit()));
+    }
+
+    #[test]
+    fn test_blake3_hash() {
+        let manager = IdentityManager::new();
+
+        // Test hash is deterministic
+        let data = b"test data";
+        let h1 = manager.blake3_hash(data);
+        let h2 = manager.blake3_hash(data);
+        assert_eq!(h1, h2);
+        assert_eq!(h1.len(), 32);
+
+        // Test different inputs produce different hashes
+        let h3 = manager.blake3_hash(b"different data");
+        assert_ne!(h1, h3);
+    }
+
+    #[test]
+    fn test_identity_signature_integration() {
+        let mut manager = IdentityManager::new();
+        manager.initialize().unwrap();
+
+        // Sign some data
+        let data = b"identity authentication test";
+        let signature = manager.sign(data).unwrap();
+
+        // Verify the signature using identity's verify method
+        let keys = manager.keys().unwrap();
+        let public_key = keys.signing_key.verifying_key().to_bytes();
+        let valid = manager.verify(data, &signature, &public_key).unwrap();
+        assert!(valid);
+
+        // Test fingerprint of signature
+        let fp = manager.signature_fingerprint(&signature);
+        assert_eq!(fp.len(), 64);
     }
 }

@@ -332,6 +332,7 @@ for a in cfg.get('agents', []):
 pool_launch() {
     local agent_name="${1:-}"
     local task_file="${2:-}"
+    local model_override="${3:-}"
 
     if [ -z "$agent_name" ]; then
         echo "Usage: pool launch <agent_name> [task_file]"
@@ -447,6 +448,13 @@ for a in cfg.get('agents', []):
         print(a.get('fallback_model', ''))
         break
 " 2>/dev/null)
+    fi
+
+    # Model override: 3rd arg replaces the agent pool default
+    if [ -n "$model_override" ]; then
+        echo "MODEL OVERRIDE: Using $model_override instead of default $model (fallback: $fallback_model)"
+        fallback_model="$model"
+        model="$model_override"
     fi
 
     local agent_id="${agent_name}_$(date +%s)"
@@ -1322,7 +1330,7 @@ case "$1" in
                 pool_list
                 ;;
             "launch")
-                pool_launch "$3" "$4"
+                pool_launch "$3" "$4" "$5"
                 ;;
             "stop")
                 pool_stop "$3"
