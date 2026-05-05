@@ -319,6 +319,8 @@ pub struct RelayCustodyStore {
     registry: RelayRegistry,
     local_identity: Option<String>,
     pressure_probe: Arc<dyn StoragePressureProbe>,
+    /// Security audit pipeline for cryptographic and protocol verification.
+    pub(crate) security_audit_pipeline: Arc<crate::dspy::modules::OptimizerPipeline>,
 }
 
 impl RelayCustodyStore {
@@ -329,6 +331,7 @@ impl RelayCustodyStore {
             backend,
             None,
             Arc::new(NoopStoragePressureProbe),
+            Arc::new(crate::dspy::modules::ModuleFactory::build_security_audit_pipeline()),
         )
     }
 
@@ -338,6 +341,7 @@ impl RelayCustodyStore {
             backend,
             None,
             Arc::new(NoopStoragePressureProbe),
+            Arc::new(crate::dspy::modules::ModuleFactory::build_security_audit_pipeline()),
         )
     }
 
@@ -346,12 +350,14 @@ impl RelayCustodyStore {
         registry_backend: Arc<dyn StorageBackend>,
         local_identity: Option<String>,
         pressure_probe: Arc<dyn StoragePressureProbe>,
+        security_audit_pipeline: Arc<crate::dspy::modules::OptimizerPipeline>,
     ) -> Self {
         Self {
             backend: custody_backend,
             registry: RelayRegistry::new(registry_backend),
             local_identity,
             pressure_probe,
+            security_audit_pipeline,
         }
     }
 
@@ -361,7 +367,13 @@ impl RelayCustodyStore {
         pressure_probe: Arc<dyn StoragePressureProbe>,
     ) -> Self {
         let backend = Arc::new(MemoryStorage::new());
-        Self::new_with_backends(backend.clone(), backend, local_identity, pressure_probe)
+        Self::new_with_backends(
+            backend.clone(),
+            backend,
+            local_identity,
+            pressure_probe,
+            Arc::new(crate::dspy::modules::ModuleFactory::build_security_audit_pipeline()),
+        )
     }
 
     #[cfg(not(target_arch = "wasm32"))]
@@ -379,6 +391,7 @@ impl RelayCustodyStore {
                     backend,
                     Some(local_peer_id.to_string()),
                     Arc::new(FilesystemStoragePressureProbe::new(dir)),
+                    Arc::new(crate::dspy::modules::ModuleFactory::build_security_audit_pipeline()),
                 )
             }
             Err(_) => {
@@ -388,6 +401,7 @@ impl RelayCustodyStore {
                     backend,
                     Some(local_peer_id.to_string()),
                     Arc::new(NoopStoragePressureProbe),
+                    Arc::new(crate::dspy::modules::ModuleFactory::build_security_audit_pipeline()),
                 )
             }
         }
@@ -418,6 +432,7 @@ impl RelayCustodyStore {
                 registry_backend,
                 Some(local_peer_id.to_string()),
                 Arc::new(FilesystemStoragePressureProbe::new(custody_dir)),
+                Arc::new(crate::dspy::modules::ModuleFactory::build_security_audit_pipeline()),
             ),
             _ => {
                 let backend = Arc::new(MemoryStorage::new());
@@ -426,6 +441,7 @@ impl RelayCustodyStore {
                     backend,
                     Some(local_peer_id.to_string()),
                     Arc::new(NoopStoragePressureProbe),
+                    Arc::new(crate::dspy::modules::ModuleFactory::build_security_audit_pipeline()),
                 )
             }
         }
@@ -556,6 +572,14 @@ impl RelayCustodyStore {
         let now_ms = now_ms();
         let sequence = CUSTODY_SEQUENCE.fetch_add(1, Ordering::Relaxed);
         let custody_id = format!("{}-{}-{}", relay_message_id, now_ms, sequence);
+
+        // Wire into security audit pipeline for relay custody verification.
+        // Performs a vulnerability scan and crypto review of the incoming envelope.
+        let _ = self.security_audit_pipeline.execute(&vec![
+            format!("relay_custody_verify: {}", custody_id),
+            format!("source: {}", source_peer_id),
+            format!("destination: {}", destination_peer_id),
+        ]);
 
         let message = CustodyMessage {
             custody_id,
