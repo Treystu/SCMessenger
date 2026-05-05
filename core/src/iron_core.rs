@@ -1639,6 +1639,15 @@ impl IronCore {
                 "expired_count": neg_stats.expired_count,
                 "entries_cleaned": maintenance.negative_cache_entries_cleaned,
             });
+            let budget = &maintenance.timeout_budget_summary;
+            payload["timeout_budget"] = serde_json::json!({
+                "total_budget_ms": budget.total_budget.as_millis(),
+                "elapsed_ms": budget.elapsed.as_millis(),
+                "remaining_ms": budget.remaining.as_millis(),
+                "phase": format!("{:?}", budget.current_phase),
+                "phase_elapsed_ms": budget.phase_elapsed.as_millis(),
+                "exhausted": budget.is_exhausted,
+            });
             serde_json::to_string(&payload).unwrap_or_else(|_| "{}".to_string())
         } else {
             "{}".to_string()
