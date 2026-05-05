@@ -482,7 +482,7 @@ for a in cfg.get('agents', []):
 
         # Determine if this is a micro-task that doesn't need full context
         local is_micro_task=false
-        if [[ "$task_file" == *"TRIAGE"* ]] || [[ "$task_file" == *"QUICK"* ]] || [[ "$task_file" == *"LINT"* ]] || [[ "$task_file" == *"FMT"* ]]; then
+        if [[ "$task_file" == *"TRIAGE"* ]] || [[ "$task_file" == *"QUICK"* ]] || [[ "$task_file" == *"LINT"* ]] || [[ "$task_file" == *"FMT"* ]] || [[ "$task_file" == *"_micro_"* ]]; then
             is_micro_task=true
         fi
 
@@ -760,7 +760,7 @@ validate_task_before_launch() {
     fi
 
     local target_file=$(echo "$target_line" | sed 's/^TARGET:[[:space:]]*//' | tr '\' '/')
-    local func_name=$(echo "$basename" | sed 's/^task_wire_//' | sed 's/\.md$//')
+    local func_name=$(echo "$basename" | sed 's/^task_wire_micro_//' | sed 's/^task_wire_//' | sed 's/\.md$//')
 
     if [ ! -f "$target_file" ]; then
         echo "NEEDS_REVIEW:target_file_missing:$target_file"

@@ -113,7 +113,21 @@ When you have no more tasks and no task in progress, set NEXT_TASK_REQUESTED=fal
 Once you have moved all task files to HANDOFF/done/ and written your COMPLETION marker, your task is complete. Do not perform any further actions."
 
 if [ -n "$AGENT_TASK_FILE" ] && [ -f "$AGENT_TASK_FILE" ]; then
-    AGENT_PROMPT="You are an SCMessenger Autonomous Sub-Agent (ID: $AGENT_ID, Model: $AGENT_MODEL).
+    # Micro-prompt: detect from task filename (_micro_ in name) → stripped prompt for small models
+    if [[ "$AGENT_TASK_FILE" == *"_micro_"* ]]; then
+        AGENT_PROMPT="You are agent $AGENT_ID. Execute the task below.
+
+=== TASK ===
+$(cat "$AGENT_TASK_FILE")
+=== END TASK ===
+
+After editing files, run the VERIFY command. Then write to .claude/agents/$AGENT_ID/COMPLETION:
+STATUS=completed or STATUS=failed
+CHANGED_FILES=file1.rs,file2.rs
+BUILD_STATUS=pass or fail
+Move the task file from HANDOFF/todo/ to HANDOFF/done/ on success."
+    else
+        AGENT_PROMPT="You are an SCMessenger Autonomous Sub-Agent (ID: $AGENT_ID, Model: $AGENT_MODEL).
 
 ## ASSIGNED TASK
 Read and execute the task file below completely. Follow all instructions precisely.
@@ -157,6 +171,7 @@ STATUS=failed
 TASK_FILE=<current location of the task file>
 ERROR=<brief description of the failure>
 COMPLETED_AT=<epoch timestamp>"
+    fi
 fi
 
 # Colors for output

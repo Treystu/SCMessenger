@@ -1360,6 +1360,10 @@ impl IronCore {
     pub fn dspy_create_cot(&self, name: &str) -> crate::dspy::modules::ChainOfThought {
         crate::dspy::modules::ModuleFactory::create_cot(name)
     }
+    /// Append a reasoning step to a Chain-of-Thought module.
+    pub fn dspy_add_step(&mut self, cot: &mut crate::dspy::modules::ChainOfThought, step: &str) {
+        cot.add_step(step);
+    }
 
     /// Create a multi-hop recall DSPy module for multi-source reasoning.
     pub fn dspy_create_multihop(&self, name: &str, max_hops: usize) -> crate::dspy::modules::MultiHopRecall {

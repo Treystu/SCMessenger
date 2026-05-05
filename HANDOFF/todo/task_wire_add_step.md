@@ -22,3 +22,14 @@ PHASE 4: TEST & ITERATE
 3. IF COMPILE FAILS: Enter ITERATION. Read the exact error, fix the syntax or imports, and run the test again. 
 4. IF SUCCESSFUL: Verify you successfully wired all targets from Phase 2. If the integration is 100% complete and compiles cleanly, output exactly:
 STATUS: SUCCESS_STOP
+
+
+# REPO_MAP Context for Task: task_wire_add_step
+
+**Target function: `add_step`**
+
+## core/src/dspy/modules.rs — function `add_step` (line 98)
+- **Calls out to:** none
+- **Structs in chunk:** DSPyModule, Input, Output, ModuleMetadata, ModuleMetadata
+
+---
