@@ -239,6 +239,7 @@ def main():
     parser.add_argument('--output', type=str, default='HANDOFF_AUDIT/REPO_MAP.jsonl',
                         help='Output path (default: HANDOFF_AUDIT/REPO_MAP.jsonl)')
     parser.add_argument('--update-index', action='store_true', help='Also update repo_map_index.json timestamps')
+    parser.add_argument('--append', action='store_true', help='Append/update entries instead of overwriting the output file')
     args = parser.parse_args()
 
     repo_root = Path(__file__).resolve().parent.parent.parent
@@ -301,12 +302,34 @@ def main():
         print("No entries generated.")
         return
 
-    # Write as proper JSONL (one JSON object per line)
-    with open(output_path, 'w', encoding='utf-8') as f:
-        for entry in entries:
-            f.write(json.dumps(entry, ensure_ascii=False) + '\n')
+    if args.append and output_path.exists():
+        # Merge mode: load existing entries, replace matching file entries, write back
+        existing = []
+        with open(output_path, 'r', encoding='utf-8') as f:
+            for line in f:
+                line = line.strip()
+                if line:
+                    try:
+                        existing.append(json.loads(line))
+                    except json.JSONDecodeError:
+                        pass
 
-    print(f"Generated {len(entries)} entries -> {output_path}")
+        # Build lookup of new entries by (file, chunk) key
+        new_keys = {(e.get("file", ""), e.get("chunk", 0)) for e in entries}
+        # Keep existing entries that aren't being replaced
+        merged = [e for e in existing if (e.get("file", ""), e.get("chunk", 0)) not in new_keys]
+        merged.extend(entries)
+
+        with open(output_path, 'w', encoding='utf-8') as f:
+            for entry in merged:
+                f.write(json.dumps(entry, ensure_ascii=False) + '\n')
+        print(f"Updated {len(entries)} entries in {output_path} (total: {len(merged)})")
+    else:
+        # Write as proper JSONL (one JSON object per line)
+        with open(output_path, 'w', encoding='utf-8') as f:
+            for entry in entries:
+                f.write(json.dumps(entry, ensure_ascii=False) + '\n')
+        print(f"Generated {len(entries)} entries -> {output_path}")
 
     # Update index timestamps if requested
     if args.update_index:

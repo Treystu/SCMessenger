@@ -458,6 +458,28 @@ for a in cfg.get('agents', []):
 
     # === REPO_MAP Freshness Gate ===
     if [ -n "$task_file" ] && [ -f "$task_file" ]; then
+        # ─── Pre-launch cartography: update REPO_MAP for the TARGET file ───
+        # Extract TARGET line from task file and run structural cartographer
+        # on that specific file. This ensures the REPO_MAP is fresh for the
+        # agent's context injection step. Uses structural (no LLM) cartographer
+        # for speed — local models are reserved for full repo reindexing.
+        local target_line=$(grep "^TARGET:" "$task_file" | head -1)
+        if [ -n "$target_line" ]; then
+            local target_file_path=$(echo "$target_line" | sed 's/^TARGET:[[:space:]]*//' | tr '\\' '/')
+            if [ -f "$target_file_path" ]; then
+                echo "CARTOGRAPHY: Updating REPO_MAP for $target_file_path..."
+                $PYTHON .claude/scripts/structural_cartographer.py \
+                    --files "$target_file_path" --update-index --append 2>/dev/null
+                if [ $? -eq 0 ]; then
+                    echo "CARTOGRAPHY: $target_file_path indexed successfully"
+                else
+                    echo "CARTOGRAPHY: Warning — failed to index $target_file_path (continuing)"
+                fi
+            else
+                echo "CARTOGRAPHY: Target file not found: $target_file_path (skipping)"
+            fi
+        fi
+
         # Determine if this is a micro-task that doesn't need full context
         local is_micro_task=false
         if [[ "$task_file" == *"TRIAGE"* ]] || [[ "$task_file" == *"QUICK"* ]] || [[ "$task_file" == *"LINT"* ]] || [[ "$task_file" == *"FMT"* ]]; then
