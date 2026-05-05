@@ -24,8 +24,8 @@
 # Run-Cartographer-Auto.ps1 (V51 - The Perfection Engine)
 [CmdletBinding()]
 param (
-    [int]$Pool = 11,       
-    [int]$RamLimit = 85    
+    [int]$Pool = 6,        
+    [int]$RamLimit = 80    
 )
 
 $ErrorActionPreference = "Stop"
@@ -145,9 +145,22 @@ function Get-CodeSkeleton {
             if ($Line -match "^\s*(pub\s+|private\s+|internal\s+)?(class|struct|interface|enum|object|actor)\s+([a-zA-Z0-9_]+)") {
                 $Skeleton.classes += [PSCustomObject]@{ name = $matches[3]; line = $LineNum }
             }
-            # Functions
+            # Functions + Stub Detection
             if ($Line -match "^\s*(pub\s+|private\s+|protected\s+|internal\s+|async\s+|suspend\s+|override\s+)*\b(fn|fun|func|void|int|bool|string|Task)\b\s+([a-zA-Z0-9_]+)\s*\(") {
-                $Skeleton.funcs += [PSCustomObject]@{ name = $matches[3]; line = $LineNum }
+                $funcName = $matches[3]
+                $isStub = $false
+                
+                # Check current and next 3 lines for stub markers
+                $lookAhead = ""
+                for ($k = 0; $k -le 3; $k++) {
+                    if ($i + $k -lt $Lines.Count) { $lookAhead += $Lines[$i + $k] }
+                }
+                
+                if ($lookAhead -match "todo!|unimplemented!|TODO\(\)|//\s*stub|\{\s*\}|pass|FIXME") {
+                    $isStub = $true
+                }
+                
+                $Skeleton.funcs += [PSCustomObject]@{ name = $funcName; line = $LineNum; is_stub = $isStub }
             }
         }
     }
@@ -198,12 +211,14 @@ Schema:
     {
       "name": "REPLACE_WITH_NAME",
       "line": 1,
+      "is_stub": false,
       "calls_out_to": [] 
     }
   ]
 }
 
-CRITICAL: Every function MUST have a "calls_out_to" array, even if it is empty [].
+CRITICAL: Every function MUST have a "calls_out_to" array and an "is_stub" boolean.
+Set "is_stub" to true if the code uses todo!(), unimplemented!(), or has an empty body.
 Do not omit any fields from the schema.
 
 CODE CHUNK (Lines $StartLine - $EndLine):
@@ -284,6 +299,8 @@ $chunkContent
             } catch {
                 $retryError = $_.Exception.Message
                 if ($retry -eq $maxRetries) {
+                    $rawLogPath = Join-Path $OutDir "$($File.Name)_chunk$($ChunkIndex)_RAW_FAILURE.txt"
+                    "FAILURE REASON: $retryError`n`nRAW RESPONSE:`n$json" | Out-File -FilePath $rawLogPath -Encoding utf8 -ErrorAction SilentlyContinue
                     throw "JSON VALIDATION FAILED AFTER $maxRetries RETRIES: $retryError"
                 }
                 Start-Sleep -Seconds 2
@@ -314,7 +331,7 @@ try {
 
     $jobQueue = New-Object System.Collections.Queue
     $priorityQueue = New-Object System.Collections.Queue
-    $chunkSize = 700
+    $chunkSize = 400
     $skippedCount = 0
 
     foreach ($file in $allFiles) {
@@ -353,13 +370,17 @@ try {
             else { $numCtx = 16384 }
 
             if ($file.Extension -match "\.rs|\.kt|\.swift|\.java|\.cpp|\.c|\.h") {
-                $model = "qwen2.5-coder:3b"; $baseThreads = 4
+                $symbolDensity = $scopedSkeleton.classes.Count + $scopedSkeleton.funcs.Count
+                if ($symbolDensity -gt 8) {
+                    $model = "qwen2.5-coder:3b"; $baseThreads = 4; $numCtx = 8192
+                } else {
+                    $model = "qwen2.5-coder:1.5b"; $baseThreads = 3; $numCtx = 4096
+                }
             } else {
-                $model = "qwen2.5-coder:1.5b"; $baseThreads = 3
+                $model = "qwen2.5-coder:1.5b"; $baseThreads = 3; $numCtx = 4096
             }
 
-            $contextThreads = [math]::Floor($estimatedTokens / 1500) 
-            $reqThreads = [math]::Max(1, [math]::Min($Pool, ($baseThreads + $contextThreads)))
+            $reqThreads = [math]::Max(1, [math]::Min($Pool, $baseThreads))
 
             $chunkStartNum = $startLine + 1
             $chunkEndNum = $endLine + 1

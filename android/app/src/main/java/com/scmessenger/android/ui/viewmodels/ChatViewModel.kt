@@ -367,6 +367,38 @@ class ChatViewModel @Inject constructor(
     }
 
     /**
+     * Increment attempt count for a message being retried.
+     */
+    fun incrementAttemptCount(messageId: String) {
+        viewModelScope.launch {
+            try {
+                meshRepository.incrementAttemptCount(messageId)
+                Timber.d("Incremented attempt count for message $messageId")
+            } catch (e: Exception) {
+                Timber.e(e, "Failed to increment attempt count for $messageId")
+            }
+        }
+    }
+
+    /**
+     * Log a message delivery attempt.
+     *
+     * @param messageId The message ID
+     * @param attempt The attempt number
+     * @param outcome The outcome ("success", "failed", etc.)
+     */
+    fun logMessageDeliveryAttempt(messageId: String, attempt: Int, outcome: String) {
+        viewModelScope.launch {
+            try {
+                meshRepository.logMessageDeliveryAttempt(messageId, attempt, outcome)
+                Timber.d("Logged delivery attempt for $messageId: attempt=$attempt, outcome=$outcome")
+            } catch (e: Exception) {
+                Timber.e(e, "Failed to log delivery attempt for $messageId")
+            }
+        }
+    }
+
+    /**
      * Update message delivery status in the UI.
      */
     private fun updateMessageStatus(messageId: String, delivered: Boolean) {

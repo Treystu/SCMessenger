@@ -100,24 +100,43 @@ get_orchestrator_pid() {
 }
 
 store_orchestrator_pid() {
-    # On Windows, $PPID points to an intermediate shell, not claude.exe.
-    # Walk up the process tree to find the claude.exe ancestor.
-    local shell_pid=$$
-    local parent_pid=$PPID
-    # Try to find a claude.exe process in the parent chain
-    local found_pid=$(powershell.exe -NoProfile -Command "
-        \$p = Get-Process -Id $parent_pid -ErrorAction SilentlyContinue
-        while (\$p -and \$p.ProcessName -ne 'claude') {
-            \$parentId = \$p.ParentId
-            if (-not \$parentId -or \$parentId -eq 0 -or \$parentId -eq \$p.Id) { break }
-            \$p = Get-Process -Id \$parentId -ErrorAction SilentlyContinue
-        }
-        if (\$p -and \$p.ProcessName -eq 'claude') { Write-Output \$p.Id } else { Write-Output '' }
-    " 2>/dev/null)
-    # Fallback: if the parent chain walk failed, use PPID as best guess
-    if [ -z "$found_pid" ]; then
-        found_pid="$parent_pid"
+    # Multi-strategy PID discovery for the orchestrator's claude.exe process.
+    # Strategy 1: Walk the parent chain from current bash process to find claude.exe.
+    # Strategy 2: Find the oldest claude.exe (orchestrator always starts first).
+    # Strategy 3: Fallback — mark unknown rather than storing garbage PID 0/1.
+
+    local found_pid=""
+
+    # Strategy 1: Parent-chain walk via PowerShell.
+    # $PPID on Windows Git Bash may point to an MSYS2 intermediate; PowerShell
+    # can only resolve Windows-native PIDs. Validate PPID before attempting.
+    local ppid="$PPID"
+    if [ -n "$ppid" ] && [ "$ppid" != "1" ] && [ "$ppid" != "0" ]; then
+        found_pid=$(powershell.exe -NoProfile -Command "
+            \$p = Get-Process -Id $ppid -ErrorAction SilentlyContinue
+            while (\$p -and \$p.ProcessName -ne 'claude') {
+                \$parentId = \$p.ParentId
+                if (-not \$parentId -or \$parentId -eq 0 -or \$parentId -eq \$p.Id) { break }
+                \$p = Get-Process -Id \$parentId -ErrorAction SilentlyContinue
+            }
+            if (\$p -and \$p.ProcessName -eq 'claude') { Write-Output \$p.Id }
+        " 2>/dev/null | tr -d '[:space:]')
     fi
+
+    # Strategy 2: Oldest claude.exe (orchestrator is always the first Claude process)
+    if [ -z "$found_pid" ]; then
+        found_pid=$(powershell.exe -NoProfile -Command "
+            \$procs = @(Get-Process -Name claude -ErrorAction SilentlyContinue | Sort-Object StartTime)
+            if (\$procs.Count -gt 0) { Write-Output \$procs[0].Id }
+        " 2>/dev/null | tr -d '[:space:]')
+    fi
+
+    # Strategy 3: Mark unknown — NEVER store PID 0, 1, or empty
+    if [ -z "$found_pid" ] || [ "$found_pid" = "0" ] || [ "$found_pid" = "1" ]; then
+        echo "WARNING: Could not determine orchestrator PID. Self-preservation guards disabled."
+        found_pid="unknown"
+    fi
+
     echo "$found_pid" > "$ORCHESTRATOR_PID_FILE"
     echo "Orchestrator PID stored: $found_pid"
 }
@@ -487,7 +506,7 @@ pool_stop() {
 # ─── Compile Lock Protocol ──────────────────────────────────────────────────
 
 COMPILE_LOCK=".claude/compile.lock"
-COMPILE_LOCK_TIMEOUT=300  # 5 minutes max hold time
+COMPILE_LOCK_TIMEOUT=900  # 15 minutes max hold time (accommodates slow Windows cargo builds)
 
 acquire_compile_lock() {
     local agent_id="$1"
@@ -591,46 +610,75 @@ pool_launch_clean() {
 
     # Phase 1: Determine tracked PIDs (orchestrator + agents)
     local orch_pid=$(get_orchestrator_pid)
-    local tracked_pids=" $orch_pid"
+    local tracked_pids=""
+
+    # Add orchestrator PID if known (not "unknown")
+    if [ -n "$orch_pid" ] && [ "$orch_pid" != "unknown" ]; then
+        tracked_pids=" $orch_pid"
+    fi
+
+    # Add all known agent PIDs
     for pidfile in "$AGENT_ROOT"/*/pid; do
         if [ -f "$pidfile" ]; then
             tracked_pids="$tracked_pids $(cat "$pidfile")"
         fi
     done
 
-    # Self-preservation: discover the claude.exe hosting this shell and add it to tracked
-    local host_claude_pid=$(powershell.exe -NoProfile -Command "
-        \$bash = Get-Process -Id $$ -ErrorAction SilentlyContinue
-        \$p = \$bash
-        while (\$p -and \$p.ProcessName -ne 'claude') {
-            \$parentId = \$p.ParentId
-            if (-not \$parentId -or \$parentId -eq 0 -or \$parentId -eq \$p.Id) { break }
-            \$p = Get-Process -Id \$parentId -ErrorAction SilentlyContinue
-        }
-        if (\$p -and \$p.ProcessName -eq 'claude') { Write-Output \$p.Id } else { Write-Output '' }
-    " 2>/dev/null)
+    # Self-preservation: discover ALL claude.exe processes that host our infrastructure.
+    # Add the parent-chain ancestor AND the oldest claude.exe to the tracked set.
+    local host_claude_pid=""
+    local ppid="$PPID"
+    if [ -n "$ppid" ] && [ "$ppid" != "1" ] && [ "$ppid" != "0" ]; then
+        host_claude_pid=$(powershell.exe -NoProfile -Command "
+            \$p = Get-Process -Id $ppid -ErrorAction SilentlyContinue
+            while (\$p -and \$p.ProcessName -ne 'claude') {
+                \$parentId = \$p.ParentId
+                if (-not \$parentId -or \$parentId -eq 0 -or \$parentId -eq \$p.Id) { break }
+                \$p = Get-Process -Id \$parentId -ErrorAction SilentlyContinue
+            }
+            if (\$p -and \$p.ProcessName -eq 'claude') { Write-Output \$p.Id }
+        " 2>/dev/null | tr -d '[:space:]')
+    fi
     if [ -n "$host_claude_pid" ]; then
         tracked_pids="$tracked_pids $host_claude_pid"
     fi
 
-    # Kill stale untracked claude.exe processes
-    local untracked=$(powershell.exe -NoProfile -Command "
-        \$tracked = @($(echo "$tracked_pids" | tr ' ' ',' | sed 's/^,//' | sed 's/,$//'))
-        Get-Process -Name claude -ErrorAction SilentlyContinue | Where-Object {
-            \$tracked -notcontains \$_.Id
-        } | ForEach-Object { Write-Output \$_.Id }
-    " 2>/dev/null)
+    # Also add the oldest claude.exe as a safety net
+    local oldest_claude=$(powershell.exe -NoProfile -Command "
+        \$procs = @(Get-Process -Name claude -ErrorAction SilentlyContinue | Sort-Object StartTime)
+        if (\$procs.Count -gt 0) { Write-Output \$procs[0].Id }
+    " 2>/dev/null | tr -d '[:space:]')
+    if [ -n "$oldest_claude" ]; then
+        tracked_pids="$tracked_pids $oldest_claude"
+    fi
 
-    if [ -n "$untracked" ]; then
-        echo "HYGIENE: Untracked claude.exe processes: $untracked"
-        for pid in $untracked; do
-            echo "HYGIENE: Terminating stale claude.exe PID $pid"
-            # Aggressive dual-kill: POSIX signal + Windows taskkill
-            kill -9 $pid 2>/dev/null || true
-            taskkill //F //T //PID $pid 2>/dev/null || true
-        done
+    # Untracked-process kill: ONLY proceed if we have a valid orchestrator PID.
+    # If orchestrator PID is "unknown", skip this phase entirely to avoid self-kill.
+    if [ "$orch_pid" = "unknown" ] || [ -z "$orch_pid" ]; then
+        echo "HYGIENE: Orchestrator PID unknown — skipping untracked-process cleanup (safety first)."
     else
-        echo "HYGIENE: No untracked claude.exe processes"
+        local untracked=$(powershell.exe -NoProfile -Command "
+            \$tracked = @($(echo "$tracked_pids" | tr ' ' ',' | sed 's/^,//' | sed 's/,$//'))
+            Get-Process -Name claude -ErrorAction SilentlyContinue | Where-Object {
+                \$tracked -notcontains \$_.Id
+            } | ForEach-Object { Write-Output \$_.Id }
+        " 2>/dev/null)
+
+        if [ -n "$untracked" ]; then
+            echo "HYGIENE: Untracked claude.exe processes: $untracked"
+            for pid in $untracked; do
+                # FINAL SAFETY CHECK: never kill a PID that is in our tracked set
+                if echo "$tracked_pids" | grep -qw "$pid"; then
+                    echo "HYGIENE: SKIPPING PID $pid (in tracked set — safety guard tripped)"
+                    continue
+                fi
+                echo "HYGIENE: Terminating stale claude.exe PID $pid"
+                kill -9 $pid 2>/dev/null || true
+                taskkill //F //T //PID $pid 2>/dev/null || true
+            done
+        else
+            echo "HYGIENE: No untracked claude.exe processes"
+        fi
     fi
 
     # Phase 2: Clean stale IN_PROGRESS claims (expired > 60 min)
@@ -759,14 +807,14 @@ pool_patrol() {
             local start_time=$(cat "$start_time_file")
             local current_time=$(date +%s)
             local elapsed=$((current_time - start_time))
-            local timeout_limit=1800  # 30 minutes timeout for most tasks
+            local timeout_limit=5400  # 90 minutes timeout for most tasks
 
             # Check if this is a micro-task that should have shorter timeout
             if [ -f "$task_file_marker" ]; then
                 local assigned_task=$(cat "$task_file_marker")
                 # If task is a triage or quick fix, use shorter timeout
                 if [[ "$assigned_task" == *"TRIAGE"* ]] || [[ "$assigned_task" == *"QUICK"* ]] || [[ "$assigned_task" == *"LINT"* ]]; then
-                    timeout_limit=600  # 10 minutes for micro-tasks
+                    timeout_limit=1200  # 20 minutes for micro-tasks
                 fi
             fi
 
@@ -817,31 +865,45 @@ pool_patrol() {
             continue
         fi
 
-        # ── ZOMBIE DETECTION (agent alive but task file moved to done/) ──
-        # If the agent's assigned task file is no longer in todo/ or IN_PROGRESS/,
-        # the agent has likely finished but didn't write a COMPLETION marker.
-        if [ -f "$task_file_marker" ]; then
+        # ── ZOMBIE DETECTION (agent alive but task file moved to done/ without COMPLETION) ──
+        # A zombie is an agent whose task is in done/ (work completed), has NO COMPLETION
+        # marker (protocol violation), AND has been idle (no log output) for 10+ minutes.
+        # All three conditions must hold — this prevents false-positive kills during races.
+        if [ -f "$task_file_marker" ] && [ ! -f "$completion_file" ]; then
             local assigned_task=$(cat "$task_file_marker")
             local task_basename=$(basename "$assigned_task" | sed 's/^IN_PROGRESS_//')
-            if [ ! -f "HANDOFF/todo/$task_basename" ] && [ ! -f "HANDOFF/IN_PROGRESS/$task_basename" ]; then
-                echo "PATROL: Agent $agent_id task file '$task_basename' no longer in todo/ or IN_PROGRESS/ — likely completed"
-                # Check if the agent process is still alive
-                if [ -f "$pid_file" ]; then
-                    local pid=$(cat "$pid_file")
-                    if process_alive "$pid"; then
-                        echo "PATROL: Agent $agent_id process $pid still alive — terminating zombie"
-                        kill -9 "$pid" 2>/dev/null || true
-                        taskkill //F //T //PID "$pid" 2>/dev/null || true
+            # Condition 1: Task file must actually be in done/ (agent genuinely finished work)
+            if [ -f "HANDOFF/done/$task_basename" ]; then
+                # Condition 2: Check agent log idle time (last modification)
+                local log_file="$agent_dir/agent.log"
+                local idle_minutes=0
+                if [ -f "$log_file" ]; then
+                    local log_mtime=$(stat -c %Y "$log_file" 2>/dev/null || echo "0")
+                    if [ -n "$log_mtime" ] && [ "$log_mtime" != "0" ]; then
+                        idle_minutes=$(( (current_time - log_mtime) / 60 ))
                     fi
                 fi
-                # Write completion marker on behalf of the agent
-                echo "STATUS=completed" > "$completion_file"
-                echo "COMPLETED_AT=$(date +%s)" >> "$completion_file"
-                echo "BUILD_STATUS=unknown" >> "$completion_file"
-                echo "NEXT_TASK_REQUESTED=false" >> "$completion_file"
-                echo "NOTE=Auto-detected by patrol (task file moved)" >> "$completion_file"
-                pool_stop "$agent_id"
-                ((actions_taken++))
+                # Condition 3: Agent must have been idle for 10+ minutes
+                if [ "$idle_minutes" -ge 10 ]; then
+                    echo "PATROL: Agent $agent_id is a zombie — task '$task_basename' in done/, no COMPLETION marker, idle ${idle_minutes}m"
+                    # Kill the zombie process if still alive
+                    if [ -f "$pid_file" ]; then
+                        local pid=$(cat "$pid_file")
+                        if process_alive "$pid"; then
+                            echo "PATROL: Agent $agent_id process $pid still alive — terminating zombie"
+                            kill -9 "$pid" 2>/dev/null || true
+                            taskkill //F //T //PID "$pid" 2>/dev/null || true
+                        fi
+                    fi
+                    # Write completion marker on behalf of the agent
+                    echo "STATUS=completed" > "$completion_file"
+                    echo "COMPLETED_AT=$(date +%s)" >> "$completion_file"
+                    echo "BUILD_STATUS=unknown" >> "$completion_file"
+                    echo "NEXT_TASK_REQUESTED=false" >> "$completion_file"
+                    echo "NOTE=Auto-detected by patrol (zombie: task in done/, no marker, idle ${idle_minutes}m)" >> "$completion_file"
+                    pool_stop "$agent_id"
+                    ((actions_taken++))
+                fi
             fi
         fi
     done

@@ -549,6 +549,13 @@ class ContactsViewModel @Inject constructor(
     }
 
     /**
+     * Get count of blocked contacts.
+     */
+    fun getBlockedCount(): UInt {
+        return meshRepository.getBlockedCount()
+    }
+
+    /**
      * Set contact nickname at the repository level (updates both local and core).
      * Use this for contact detail screen saves to ensure nickname persists across sessions.
      */
@@ -561,6 +568,24 @@ class ContactsViewModel @Inject constructor(
             } catch (e: Exception) {
                 _error.value = "Failed to set contact nickname: ${e.message}"
                 Timber.e(e, "Failed to set contact nickname")
+            }
+        }
+    }
+
+    /**
+     * Update contact device ID (for multi-device tracking).
+     *
+     * @param peerId The peer ID
+     * @param deviceId The device ID to associate with this contact
+     */
+    fun updateContactDeviceId(peerId: String, deviceId: String?) {
+        viewModelScope.launch {
+            try {
+                meshRepository.updateContactDeviceId(peerId, deviceId)
+                Timber.d("Updated contact device ID for $peerId: $deviceId")
+            } catch (e: Exception) {
+                _error.value = "Failed to update contact device ID: ${e.message}"
+                Timber.e(e, "Failed to update contact device ID for $peerId")
             }
         }
     }

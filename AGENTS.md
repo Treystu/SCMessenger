@@ -11,10 +11,12 @@ The `count_active_agents` function in the manager script counts all `claude` pro
 **Safe approach**: Use the manager script for all agent lifecycle operations. Do not run `Stop-Process`, `taskkill`, or `kill` directly — these can terminate the orchestrator itself. The manager script's `pool stop` handles cleanup correctly.
 
 ### The ONLY Valid Way to Count/Find Agents
-Use the manager script: `bash .claude/orchestrator_manager.sh pool status`
+Use the manager script:
+`& 'C:\Program Files\Git\bin\bash.exe' .claude/orchestrator_manager.sh pool status`
 
 ### The ONLY Valid Way to Kill Agents
-Use the manager script: `bash .claude/orchestrator_manager.sh pool stop <agent_id>`
+Use the manager script:
+`& 'C:\Program Files\Git\bin\bash.exe' .claude/orchestrator_manager.sh pool stop <agent_id>`
 
 ### Executing Shell Scripts (The PATH Limitation)
 Native Windows cmd.exe and powershell.exe do NOT recognize bash or source commands. NEVER use source.
@@ -34,10 +36,10 @@ The orchestrator manager script (`.claude/orchestrator_manager.sh`) is the singl
 - Native and CLI agent tracking
 
 ### Common Commands
-- `bash .claude/orchestrator_manager.sh pool list` - Show all available agents
-- `bash .claude/orchestrator_manager.sh pool status` - Show active agents and slot usage
-- `bash .claude/orchestrator_manager.sh pool launch <agent_name> [task_file]` - Launch an agent
-- `bash .claude/orchestrator_manager.sh pool stop <agent_id>` - Stop an agent
+- `& 'C:\Program Files\Git\bin\bash.exe' .claude/orchestrator_manager.sh pool list` - Show all available agents
+- `& 'C:\Program Files\Git\bin\bash.exe' .claude/orchestrator_manager.sh pool status` - Show active agents and slot usage
+- `& 'C:\Program Files\Git\bin\bash.exe' .claude/orchestrator_manager.sh pool launch <agent_name> [task_file]` - Launch an agent
+- `& 'C:\Program Files\Git\bin\bash.exe' .claude/orchestrator_manager.sh pool stop <agent_id>` - Stop an agent
 
 ## Agent Profiles
 

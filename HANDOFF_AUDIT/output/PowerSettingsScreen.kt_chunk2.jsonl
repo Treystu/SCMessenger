@@ -1,0 +1,17 @@
+﻿{
+  "file": "PowerSettingsScreen.kt",
+  "chunk": 2,
+  "summary": "This code defines a composable function `PowerSettingsScreen` that displays power settings information.",
+  "structs_or_classes": [],
+  "imports": [
+    "import androidx.compose.foundation.layout.Column"
+  ],
+  "funcs": [
+    {
+      "name": "PowerSettingsScreen",
+      "line": 401,
+      "is_stub": false,
+      "calls_out_to": ["InfoCard"]
+    }
+  ]
+}

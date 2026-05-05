@@ -1,14 +1,38 @@
 ﻿{
-  "file": "surgeon_graph.py",
-  "chunk": 2,
-  "summary": "This chunk defines the initial setup for a surgical edit graph, including creating a dummy test file and initializing the state.",
-  "structs_or_classes": [],
-  "imports": [],
   "funcs": [
     {
-      "name": "create_surgical_edit_graph",
-      "line": 360,
-      "calls_out_to": []
+      "name": "route_from_applier",
+      "parameters": ["state"],
+      "return_type": "str"
+    },
+    {
+      "name": "workflow.add_conditional_edges",
+      "parameters": ["source", "condition_function", "edge_map"]
+    },
+    {
+      "name": "workflow.add_edge",
+      "parameters": ["source", "target"]
+    },
+    {
+      "name": "workflow.set_entry_point",
+      "parameters": ["entry_point"]
     }
-  ]
+  ],
+  "classes": [
+    {
+      "name": "GraphState",
+      "attributes": [
+        "task_description",
+        "target_file",
+        "search_block",
+        "replace_block",
+        "error_message",
+        "file_context",
+        "retry_count",
+        "philosophy_veto"
+      ]
+    }
+  ],
+  "imports": [],
+  "calls": []
 }

@@ -1,0 +1,21 @@
+﻿{
+  "file": "DiagnosticsScreen.kt",
+  "chunk": 2,
+  "summary": "This function creates and shares a diagnostic bundle via an intent.",
+  "structs_or_classes": [],
+  "imports": [
+    "android.content.Intent"
+  ],
+  "funcs": [
+    {
+      "name": "shareDiagnosticsBundle",
+      "line": 401,
+      "is_stub": false,
+      "calls_out_to": [
+        "Intent.FLAG_GRANT_READ_URI_PERMISSION",
+        "putExtra(Intent.EXTRA_SUBJECT, \"SCMessenger Diagnostics Bundle\")",
+        "context.startActivity(Intent.createChooser(intent, \"Share Diagnostics Bundle\"))"
+      ]
+    }
+  ]
+}

@@ -1,8 +1,0 @@
-﻿{
-  "file": "DashboardViewModel.kt",
-  "chunk": 2,
-  "summary": "This chunk defines the `NetworkTopology` class, which represents a network topology with nodes and edges.",
-  "structs_or_classes": ["NetworkTopology", "TopologyNode", "TopologyEdge"],
-  "imports": [],
-  "funcs": []
-}

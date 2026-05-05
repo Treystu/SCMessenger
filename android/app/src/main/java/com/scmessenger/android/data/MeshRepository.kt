@@ -8446,6 +8446,44 @@ open class MeshRepository(private val context: Context) {
         return transportManager?.getActiveTransports() ?: emptyList()
     }
 
+    /**
+     * Handle BLE transport failure with graceful degradation.
+     * Reduces BLE usage and prioritizes other transports when BLE fails.
+     * Wired from TransportManager.handleBleFailure.
+     */
+    fun handleBleFailure() {
+        transportManager?.handleBleFailure()
+        Timber.d("BLE transport failure handled, initiating graceful degradation")
+    }
+
+    /**
+     * Attempt BLE recovery after degradation.
+     * Should be called after a cooldown period to retry BLE operations.
+     * Wired from TransportManager.attemptBleRecovery.
+     */
+    fun attemptBleRecovery() {
+        transportManager?.attemptBleRecovery()
+        Timber.d("Attempting BLE recovery after degradation cooldown")
+    }
+
+    /**
+     * Force restart BLE scanning with proper backoff after a failure.
+     * Wired from BleScanner.forceRestartScanning.
+     */
+    fun forceRestartScanning() {
+        bleScanner?.forceRestartScanning()
+        Timber.d("BLE scanning force restarted with backoff")
+    }
+
+    /**
+     * Clear BLE peer cache to allow re-discovery.
+     * Wired from BleScanner.clearPeerCache.
+     */
+    fun clearPeerCache() {
+        bleScanner?.clearPeerCache()
+        Timber.d("BLE peer cache cleared")
+    }
+
     // --- Wired functions from dead-end resolution tasks ---
 
     /**

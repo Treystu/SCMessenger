@@ -13394,3 +13394,199 @@
     }
   ]
 }
+{
+  "file": "SmartTransportRouter.kt",
+  "chunk": 2,
+  "summary": "Get transport health summary for diagnostics",
+  "structs_or_classes": [],
+  "imports": [],
+  "funcs": [
+    {
+      "name": "getHealthSummary",
+      "line": 447,
+      "is_stub": false,
+      "calls_out_to": []
+    }
+  ]
+}
+{
+  "file": "WifiAwareTransport.kt",
+  "chunk": 2,
+  "summary": "This class handles the communication with a peer using WiFi Aware technology.",
+  "structs_or_classes": [],
+  "imports": [
+    "import kotlinx.coroutines.launch"
+  ],
+  "funcs": [
+    {
+      "name": "send",
+      "line": 427,
+      "is_stub": false,
+      "calls_out_to": ["outputStream.write(data)", "outputStream.flush()"]
+    },
+    {
+      "name": "close",
+      "line": 438,
+      "is_stub": false,
+      "calls_out_to": ["socket.close()", "Timber.w(e, \"Error closing WiFi Aware socket\")"]
+    }
+  ]
+}
+{
+  "file": "TransportManager.kt",
+  "chunk": 2,
+  "summary": "Manages the transport types and their associated functionalities.",
+  "structs_or_classes": [],
+  "imports": [
+    "androidx.lifecycle.LifecycleScope",
+    "com.example.mesh.BleScanner",
+    "com.example.mesh.BleAdvertiser",
+    "com.example.mesh.BleGattClient",
+    "com.example.mesh.BleGattServer",
+    "com.example.mesh.MdnsServiceDiscovery",
+    " timber.Timber"
+  ],
+  "funcs": [
+    {
+      "name": "disableTransport",
+      "line": 436,
+      "is_stub": false,
+      "calls_out_to": []
+    },
+    {
+      "name": "cleanup",
+      "line": 463,
+      "is_stub": false,
+      "calls_out_to": [
+        "stopAll"
+      ]
+    },
+    {
+      "name": "getBleQuotaCount",
+      "line": 481,
+      "is_stub": false,
+      "calls_out_to": []
+    },
+    {
+      "name": "setBleComponents",
+      "line": 490,
+      "is_stub": false,
+      "calls_out_to": [
+        "bleScanner",
+        "bleAdvertiser",
+        "bleGattClient",
+        "bleGattServer"
+      ]
+    },
+    {
+      "name": "applyScanSettings",
+      "line": 506,
+      "is_stub": false,
+      "calls_out_to": []
+    },
+    {
+      "name": "applyAdvertiseSettings",
+      "line": 514,
+      "is_stub": false,
+      "calls_out_to": []
+    },
+    {
+      "name": "handleBleFailure",
+      "line": 523,
+      "is_stub": false,
+      "calls_out_to": [
+        "bleScanner",
+        "bleAdvertiser"
+      ]
+    },
+    {
+      "name": "attemptBleRecovery",
+      "line": 546,
+      "is_stub": false,
+      "calls_out_to": []
+    }
+  ]
+}
+{
+  "file": "WifiDirectTransport.kt",
+  "chunk": 2,
+  "summary": "A class responsible for handling WiFi Direct communication.",
+  "structs_or_classes": [],
+  "imports": [
+    "android.util.Log",
+    "java.io.IOException",
+    "java.nio.ByteBuffer",
+    "java.net.Socket"
+  ],
+  "funcs": [
+    {
+      "name": "send",
+      "line": 420,
+      "is_stub": false,
+      "calls_out_to": ["close"]
+    },
+    {
+      "name": "close",
+      "line": 435,
+      "is_stub": false,
+      "calls_out_to": []
+    }
+  ]
+}
+{
+  "file": "AddContactScreen.kt",
+  "chunk": 2,
+  "summary": "This is a Kotlin file for adding a contact screen in an application.",
+  "structs_or_classes": [],
+  "imports": [
+    "androidx.appcompat.app.AppCompatActivity",
+    "android.os.Bundle",
+    "com.example.myapp.AddContactScreen"
+  ],
+  "funcs": [
+    {
+      "name": "onCreate",
+      "line": 401,
+      "is_stub": false,
+      "calls_out_to": []
+    }
+  ]
+}
+{
+  "file": "DiagnosticsScreen.kt",
+  "chunk": 2,
+  "summary": "This function creates and shares a diagnostic bundle via an intent.",
+  "structs_or_classes": [],
+  "imports": [
+    "android.content.Intent"
+  ],
+  "funcs": [
+    {
+      "name": "shareDiagnosticsBundle",
+      "line": 401,
+      "is_stub": false,
+      "calls_out_to": [
+        "Intent.FLAG_GRANT_READ_URI_PERMISSION",
+        "putExtra(Intent.EXTRA_SUBJECT, \"SCMessenger Diagnostics Bundle\")",
+        "context.startActivity(Intent.createChooser(intent, \"Share Diagnostics Bundle\"))"
+      ]
+    }
+  ]
+}
+{
+  "file": "PowerSettingsScreen.kt",
+  "chunk": 2,
+  "summary": "This code defines a composable function `PowerSettingsScreen` that displays power settings information.",
+  "structs_or_classes": [],
+  "imports": [
+    "import androidx.compose.foundation.layout.Column"
+  ],
+  "funcs": [
+    {
+      "name": "PowerSettingsScreen",
+      "line": 401,
+      "is_stub": false,
+      "calls_out_to": ["InfoCard"]
+    }
+  ]
+}

@@ -730,6 +730,75 @@ class SettingsViewModel @Inject constructor(
     }
 
     /**
+     * Check if a transport should be used based on health status.
+     * Wired from MeshRepository.shouldUseTransport.
+     *
+     * @param transport The transport type (BLE, WiFi, etc.)
+     * @return True if the transport is healthy and should be used
+     */
+    fun shouldUseTransport(transport: String): Boolean {
+        return meshRepository.shouldUseTransport(transport)
+    }
+
+    /**
+     * Handle BLE transport failure with graceful degradation.
+     * Reduces BLE usage and prioritizes other transports when BLE fails.
+     */
+    fun handleBleFailure() {
+        viewModelScope.launch {
+            try {
+                meshRepository.handleBleFailure()
+                Timber.d("BLE transport failure handled")
+            } catch (e: Exception) {
+                Timber.e(e, "Failed to handle BLE failure")
+            }
+        }
+    }
+
+    /**
+     * Attempt BLE recovery after degradation.
+     * Should be called after a cooldown period to retry BLE operations.
+     */
+    fun attemptBleRecovery() {
+        viewModelScope.launch {
+            try {
+                meshRepository.attemptBleRecovery()
+                Timber.d("BLE recovery attempted")
+            } catch (e: Exception) {
+                Timber.e(e, "Failed to attempt BLE recovery")
+            }
+        }
+    }
+
+    /**
+     * Force restart BLE scanning with proper backoff after a failure.
+     */
+    fun forceRestartScanning() {
+        viewModelScope.launch {
+            try {
+                meshRepository.forceRestartScanning()
+                Timber.d("BLE scanning force restarted")
+            } catch (e: Exception) {
+                Timber.e(e, "Failed to force restart BLE scanning")
+            }
+        }
+    }
+
+    /**
+     * Clear BLE peer cache to allow re-discovery.
+     */
+    fun clearPeerCache() {
+        viewModelScope.launch {
+            try {
+                meshRepository.clearPeerCache()
+                Timber.d("BLE peer cache cleared")
+            } catch (e: Exception) {
+                Timber.e(e, "Failed to clear BLE peer cache")
+            }
+        }
+    }
+
+    /**
      * Test connectivity to ledger relay nodes.
      * Returns true if at least one relay is reachable.
      */
@@ -742,6 +811,200 @@ class SettingsViewModel @Inject constructor(
      */
     fun getMessageCount(): UInt {
         return meshRepository.getMessageCount()
+    }
+
+    /**
+     * Get a specific message by ID.
+     *
+     * @param id The message ID
+     * @return The message record or null if not found
+     */
+    fun getMessage(id: String): uniffi.api.MessageRecord? {
+        return meshRepository.getMessage(id)
+    }
+
+    /**
+     * Increment attempt count for a message in the retry tracking.
+     * Called when a delivery attempt is made.
+     */
+    fun incrementAttemptCount(messageId: String) {
+        viewModelScope.launch {
+            try {
+                meshRepository.incrementAttemptCount(messageId)
+                Timber.d("Incremented attempt count for message $messageId")
+            } catch (e: Exception) {
+                Timber.e(e, "Failed to increment attempt count for $messageId")
+            }
+        }
+    }
+
+    /**
+     * Log a message delivery attempt for tracking purposes.
+     *
+     * @param messageId The message ID
+     * @param attempt The attempt number
+     * @param outcome The outcome ("success", "failed", etc.)
+     */
+    fun logMessageDeliveryAttempt(messageId: String, attempt: Int, outcome: String) {
+        viewModelScope.launch {
+            try {
+                meshRepository.logMessageDeliveryAttempt(messageId, attempt, outcome)
+                Timber.d("Logged delivery attempt for $messageId: attempt=$attempt, outcome=$outcome")
+            } catch (e: Exception) {
+                Timber.e(e, "Failed to log delivery attempt for $messageId")
+            }
+        }
+    }
+
+    /**
+     * Record a connection failure for a specific multiaddress.
+     * Used to track and deprecate failing routes.
+     */
+    fun recordConnectionFailure(multiaddr: String) {
+        viewModelScope.launch {
+            try {
+                meshRepository.recordConnectionFailure(multiaddr)
+                Timber.d("Recorded connection failure for $multiaddr")
+            } catch (e: Exception) {
+                Timber.e(e, "Failed to record connection failure for $multiaddr")
+            }
+        }
+    }
+
+    /**
+     * Record a transport event for health tracking.
+     *
+     * @param transport The transport type (BLE, WiFi, etc.)
+     * @param success Whether the transport operation succeeded
+     * @param latencyMs Optional latency in milliseconds
+     */
+    fun recordTransportEvent(transport: String, success: Boolean, latencyMs: Long? = null) {
+        viewModelScope.launch {
+            try {
+                meshRepository.recordTransportEvent(transport, success, latencyMs)
+                Timber.d("Recorded transport event: $transport success=$success, latencyMs=$latencyMs")
+            } catch (e: Exception) {
+                Timber.e(e, "Failed to record transport event for $transport")
+            }
+        }
+    }
+
+    /**
+     * Prime relay bootstrap connections for improved connectivity.
+     * Pre-warms relay connections to reduce initial connection latency.
+     */
+    fun primeRelayBootstrapConnections() {
+        viewModelScope.launch {
+            try {
+                meshRepository.primeRelayBootstrapConnectionsLegacy()
+                Timber.i("Primed relay bootstrap connections")
+            } catch (e: Exception) {
+                Timber.e(e, "Failed to prime relay bootstrap connections")
+            }
+        }
+    }
+
+    /**
+     * Observe peers flow for real-time peer list updates.
+     * Used by PeerListScreen and other screens showing active peers.
+     */
+    fun observePeers(): kotlinx.coroutines.flow.Flow<List<String>> {
+        return meshRepository.observePeers()
+    }
+
+    /**
+     * Observe network stats flow for dashboard and settings display.
+     * Provides real-time service statistics updates.
+     */
+    fun observeNetworkStats(): kotlinx.coroutines.flow.Flow<uniffi.api.ServiceStats> {
+        return meshRepository.observeNetworkStats()
+    }
+
+    /**
+     * Search contacts by query string.
+     *
+     * @param query The search query (peer ID, public key, or nickname)
+     * @return List of matching contacts
+     */
+    fun searchContacts(query: String): List<uniffi.api.Contact> {
+        return meshRepository.searchContacts(query)
+    }
+
+    /**
+     * Update contact nickname at the repository level.
+     *
+     * @param peerId The peer ID
+     * @param nickname The new nickname (nullable to remove)
+     */
+    fun setContactNickname(peerId: String, nickname: String?) {
+        viewModelScope.launch {
+            try {
+                meshRepository.setContactNickname(peerId, nickname)
+                Timber.d("Set contact nickname: $peerId -> $nickname")
+            } catch (e: Exception) {
+                Timber.e(e, "Failed to set contact nickname for $peerId")
+            }
+        }
+    }
+
+    /**
+     * Update contact device ID for multi-device tracking.
+     *
+     * @param peerId The peer ID
+     * @param deviceId The device ID to associate (nullable to clear)
+     */
+    fun updateContactDeviceId(peerId: String, deviceId: String?) {
+        viewModelScope.launch {
+            try {
+                meshRepository.updateContactDeviceId(peerId, deviceId)
+                Timber.d("Updated contact device ID: $peerId -> $deviceId")
+            } catch (e: Exception) {
+                Timber.e(e, "Failed to update contact device ID for $peerId")
+            }
+        }
+    }
+
+    /**
+     * Check if a message should be retried based on delivery state.
+     *
+     * @param messageId The message ID
+     * @return True if message should be retried
+     */
+    fun shouldRetryMessage(messageId: String): Boolean {
+        return meshRepository.shouldRetryMessage(messageId)
+    }
+
+    /**
+     * Load pending outbox messages asynchronously.
+     * Returns list of envelopes waiting to be sent.
+     */
+    suspend fun loadPendingOutboxAsync(): List<*> {
+        return meshRepository.loadPendingOutboxAsync()
+    }
+
+    /**
+     * Mark a message as corrupted in tracking cache.
+     * Used when message processing encounters unrecoverable errors.
+     *
+     * @param messageId The message ID to mark as corrupted
+     */
+    fun markMessageCorrupted(messageId: String) {
+        viewModelScope.launch {
+            try {
+                meshRepository.markMessageCorrupted(messageId)
+                Timber.w("Message $messageId marked as corrupted")
+            } catch (e: Exception) {
+                Timber.e(e, "Failed to mark message $messageId as corrupted")
+            }
+        }
+    }
+
+    /**
+     * Export diagnostics asynchronously to a file.
+     * Returns the path to the exported diagnostics file.
+     */
+    suspend fun exportDiagnosticsAsync(): String {
+        return meshRepository.exportDiagnosticsAsync()
     }
 
     // ========================================================================

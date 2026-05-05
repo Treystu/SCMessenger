@@ -9,6 +9,7 @@
 pub mod abuse;
 pub mod crypto;
 pub mod drift;
+pub mod dspy;
 pub mod identity;
 pub mod iron_core;
 pub mod message;
