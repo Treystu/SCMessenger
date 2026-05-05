@@ -871,6 +871,72 @@ async fn handle_jsonrpc_request(
                 )
             }
         }
+        // ── Routing prefetch ──
+        ClientIntent::RoutingIsPrefetchComplete {} => {
+            if let Some(ref core) = ctx.core {
+                let complete = core.routing_is_prefetch_complete();
+                rpc_result(id, serde_json::json!({"isPrefetchComplete": complete}))
+            } else {
+                rpc_error(id, JsonRpcErrorBody { code: -32000, message: "Core not available".to_string(), data: None })
+            }
+        }
+        ClientIntent::RoutingIsPrefetchInProgress {} => {
+            if let Some(ref core) = ctx.core {
+                let in_progress = core.routing_is_prefetch_in_progress();
+                rpc_result(id, serde_json::json!({"isPrefetchInProgress": in_progress}))
+            } else {
+                rpc_error(id, JsonRpcErrorBody { code: -32000, message: "Core not available".to_string(), data: None })
+            }
+        }
+        ClientIntent::RoutingMarkRefreshFailed { hint } => {
+            if let Some(ref core) = ctx.core {
+                let hint_bytes: [u8; 4] = hint
+                    .and_then(|h| hex::decode(h).ok())
+                    .and_then(|v| {
+                        if v.len() == 4 {
+                            let mut arr = [0u8; 4];
+                            arr.copy_from_slice(&v);
+                            Some(arr)
+                        } else {
+                            None
+                        }
+                    })
+                    .unwrap_or([0, 0, 0, 0]);
+                core.routing_mark_refresh_failed(hint_bytes);
+                rpc_result(id, serde_json::json!({"marked": true}))
+            } else {
+                rpc_error(id, JsonRpcErrorBody { code: -32000, message: "Core not available".to_string(), data: None })
+            }
+        }
+        ClientIntent::RoutingNextRefreshHint {} => {
+            if let Some(ref core) = ctx.core {
+                let hint = core.routing_next_refresh_hint();
+                let hint_hex = hint.map(|h| hex::encode(h)).unwrap_or_default();
+                rpc_result(id, serde_json::json!({"hint": hint_hex}))
+            } else {
+                rpc_error(id, JsonRpcErrorBody { code: -32000, message: "Core not available".to_string(), data: None })
+            }
+        }
+        ClientIntent::RoutingStartRefresh { hint } => {
+            if let Some(ref core) = ctx.core {
+                let hint_bytes: [u8; 4] = hex::decode(&hint)
+                    .ok()
+                    .and_then(|v| {
+                        if v.len() == 4 {
+                            let mut arr = [0u8; 4];
+                            arr.copy_from_slice(&v);
+                            Some(arr)
+                        } else {
+                            None
+                        }
+                    })
+                    .unwrap_or([0, 0, 0, 0]);
+                core.routing_start_refresh(hint_bytes);
+                rpc_result(id, serde_json::json!({"started": true}))
+            } else {
+                rpc_error(id, JsonRpcErrorBody { code: -32000, message: "Core not available".to_string(), data: None })
+            }
+        }
     }
 }
 

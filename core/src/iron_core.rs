@@ -2884,6 +2884,14 @@ impl IronCore {
         }
     }
 
+    /// Start a route refresh cycle for a specific hint.
+    pub fn routing_start_refresh(&self, hint: [u8; 4]) {
+        let mut guard = self.routing_engine.write();
+        if let Some(ref mut engine) = guard.as_mut() {
+            engine.prefetch_manager_mut().start_route_refresh(&hint);
+        }
+    }
+
     /// Touch (update last-seen timestamp for) a notification endpoint.
     pub fn touch_notification_endpoint(
         &self,

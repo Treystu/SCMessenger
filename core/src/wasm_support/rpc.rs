@@ -111,6 +111,17 @@ pub enum ClientIntent {
     Blake3Hash {
         data_hex: String, // hex-encoded input bytes
     },
+    // ── Routing prefetch ──
+    RoutingIsPrefetchComplete {},
+    RoutingIsPrefetchInProgress {},
+    RoutingMarkRefreshFailed {
+        #[serde(default)]
+        hint: Option<String>, // hex-encoded 4 bytes
+    },
+    RoutingNextRefreshHint {},
+    RoutingStartRefresh {
+        hint: String, // hex-encoded 4 bytes
+    },
 }
 
 pub const ERR_PARSE: i32 = -32700;
@@ -356,6 +367,31 @@ pub fn parse_intent(req: &JsonRpcRequest) -> Result<ClientIntent, JsonRpcErrorBo
                 })?
                 .to_string();
             Ok(ClientIntent::Blake3Hash { data_hex })
+        }
+        // ── Routing prefetch ──
+        "routing_is_prefetch_complete" => Ok(ClientIntent::RoutingIsPrefetchComplete {}),
+        "routing_is_prefetch_in_progress" => Ok(ClientIntent::RoutingIsPrefetchInProgress {}),
+        "routing_mark_refresh_failed" => {
+            let hint = req
+                .params
+                .get("hint")
+                .and_then(|v| v.as_str())
+                .map(String::from);
+            Ok(ClientIntent::RoutingMarkRefreshFailed { hint })
+        }
+        "routing_next_refresh_hint" => Ok(ClientIntent::RoutingNextRefreshHint {}),
+        "routing_start_refresh" => {
+            let hint = req
+                .params
+                .get("hint")
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| JsonRpcErrorBody {
+                    code: ERR_PARAMS,
+                    message: "missing hint".to_string(),
+                    data: None,
+                })?
+                .to_string();
+            Ok(ClientIntent::RoutingStartRefresh { hint })
         }
         _ => Err(JsonRpcErrorBody {
             code: ERR_METHOD,
