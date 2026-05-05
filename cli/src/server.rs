@@ -843,6 +843,34 @@ async fn handle_jsonrpc_request(
                 )
             }
         }
+        // ── DSPy integrity ──
+        ClientIntent::Blake3Hash { data_hex } => {
+            if let Some(ref core) = ctx.core {
+                match hex::decode(&data_hex) {
+                    Ok(data) => {
+                        let hash = core.dspy_blake3_hash(&data);
+                        rpc_result(id, serde_json::json!({"hash": hex::encode(hash)}))
+                    }
+                    Err(e) => rpc_error(
+                        id,
+                        JsonRpcErrorBody {
+                            code: ERR_PARAMS,
+                            message: format!("Invalid hex for data_hex: {}", e),
+                            data: None,
+                        },
+                    ),
+                }
+            } else {
+                rpc_error(
+                    id,
+                    JsonRpcErrorBody {
+                        code: -32000,
+                        message: "Core not available".to_string(),
+                        data: None,
+                    },
+                )
+            }
+        }
     }
 }
 

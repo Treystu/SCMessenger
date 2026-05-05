@@ -3,8 +3,8 @@
 //! This module implements teleprompter functionality for compiling
 //! and optimizing prompts for specific SCM scenarios using Golden Examples.
 
-use crate::dspy::signatures::{ArchitectSignature, CoderSignature, VerifierSignature, AuditorSignature, blake3_hash};
-use crate::dspy::modules::{DSPyModule, ModuleFactory, ModuleComplexity, OptimizerPipeline};
+use crate::dspy::signatures::blake3_hash;
+use crate::dspy::modules::{ModuleFactory, OptimizerPipeline};
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Teleprompter Trait
@@ -231,12 +231,12 @@ impl TeleprompterFactory {
                 Ok(Box::new(tp))
             }
             "security_audit" => {
-                let mut tp = BasicTeleprompter::new();
+                let tp = BasicTeleprompter::new();
                 // Add security-focused golden examples
                 Ok(Box::new(tp))
             }
             "protocol_validation" => {
-                let mut tp = BasicTeleprompter::new();
+                let tp = BasicTeleprompter::new();
                 // Add protocol-focused golden examples
                 Ok(Box::new(tp))
             }

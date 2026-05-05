@@ -142,7 +142,7 @@ impl MultiHopRecall {
         }
     }
 
-    pub fn recall(&self, query: &str) -> Result<Vec<String>, DSPyError> {
+    pub fn recall(&self, _query: &str) -> Result<Vec<String>, DSPyError> {
         // Retrieve relevant context from knowledge base
         // This would query the SCMessenger codebase for relevant patterns
         Ok(vec![])
@@ -191,7 +191,7 @@ impl OptimizerPipeline {
         }
     }
 
-    pub fn run_optimization(&mut self, golden_examples: &[&str]) -> Result<(), DSPyError> {
+    pub fn run_optimization(&mut self, _golden_examples: &[&str]) -> Result<(), DSPyError> {
         // Compile best prompts for specific scenarios
         // This would run teleprompter optimization
         Ok(())

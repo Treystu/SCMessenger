@@ -14,7 +14,6 @@ use serde::{Deserialize, Serialize};
 
 use crate::abuse::reputation::EnhancedAbuseReputationManager;
 use crate::store::blocked::BlockedManager;
-use crate::transport::reputation::ReputationScore;
 
 /// Configuration for automatic blocking behavior
 #[derive(Debug, Clone, Serialize, Deserialize)]

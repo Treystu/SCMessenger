@@ -628,8 +628,8 @@ impl IronCore {
         &self,
         peer_id: String,
         data: Vec<u8>,
-        recipient_identity_id: Option<String>,
-        intended_device_id: Option<String>,
+        _recipient_identity_id: Option<String>,
+        _intended_device_id: Option<String>,
     ) -> Option<String> {
         // Delegate to prepare_message + mark_message_sent flow
         // The mobile bridge has direct swarm access; this provides
@@ -1327,7 +1327,7 @@ impl IronCore {
         peer_id: String,
         device_id: Option<String>,
     ) -> Result<(), IronCoreError> {
-        self.contacts_manager().update_last_known_device_id(peer_id, device_id)
+        self.contacts_manager().update_device_id(peer_id, device_id)
     }
 
     // -----------------------------------------------------------------------
@@ -1339,8 +1339,8 @@ impl IronCore {
     /// Ed25519 signing.
     pub fn invite_get_signable_data(&self, token_bytes: Vec<u8>) -> Result<Vec<u8>, IronCoreError> {
         let token: crate::relay::invite::InviteToken = bincode::deserialize(&token_bytes)
-            .map_err(|e| IronCoreError::Internal)?;
-        token.get_signable_data().map_err(|e| IronCoreError::Internal)
+            .map_err(|_e| IronCoreError::Internal)?;
+        token.get_signable_data().map_err(|_e| IronCoreError::Internal)
     }
 
     // -----------------------------------------------------------------------
@@ -1359,43 +1359,6 @@ impl IronCore {
         crate::dspy::signatures::get_signature(role).map(|s| s.to_string())
     }
 
-    /// Compute a BLAKE3 hash of the given data.
-    /// Used for DSPy signature verification and integrity checks.
-    pub fn dspy_blake3_hash(&self, data: &[u8]) -> Vec<u8> {
-        crate::dspy::signatures::blake3_hash(data).to_vec()
-    }
-
-    /// Create a basic DSPy teleprompter for prompt optimization.
-    pub fn dspy_create_basic_teleprompter(&self) -> crate::dspy::teleprompt::BasicTeleprompter {
-        crate::dspy::teleprompt::TeleprompterFactory::create_basic()
-    }
-
-    /// Create a chain-of-thought DSPy module for step-by-step reasoning.
-    pub fn dspy_create_cot(&self, name: &str) -> crate::dspy::modules::ChainOfThought {
-        crate::dspy::modules::ModuleFactory::create_cot(name)
-    }
-    /// Append a reasoning step to a Chain-of-Thought module.
-    pub fn dspy_add_step(&mut self, cot: &mut crate::dspy::modules::ChainOfThought, step: &str) {
-        cot.add_step(step);
-    }
-
-    /// Create a multi-hop recall DSPy module for multi-source reasoning.
-    pub fn dspy_create_multihop(&self, name: &str, max_hops: usize) -> crate::dspy::modules::MultiHopRecall {
-        crate::dspy::modules::ModuleFactory::create_multihop(name, max_hops)
-    }
-
-    /// Create an optimizer pipeline DSPy module for end-to-end optimization.
-    pub fn dspy_create_optimizer(&self, name: &str, stages: &[&str]) -> crate::dspy::modules::OptimizerPipeline {
-        crate::dspy::modules::ModuleFactory::create_optimizer(name, stages)
-    }
-    /// Build a security audit pipeline DSPy module.
-    pub fn dspy_build_security_audit_pipeline(&self) -> crate::dspy::modules::OptimizerPipeline {
-        crate::dspy::modules::ModuleFactory::build_security_audit_pipeline()
-    }
-    /// Build a Rust feature pipeline DSPy module.
-    pub fn dspy_build_rust_feature_pipeline(&self) -> crate::dspy::modules::OptimizerPipeline {
-        crate::dspy::modules::ModuleFactory::build_rust_feature_pipeline()
-    }
 
     /// Return a HistoryManager instance for the UniFFI interface.
     #[cfg(not(target_arch = "wasm32"))]
@@ -1777,7 +1740,7 @@ impl IronCore {
     /// Register a routing path for a peer.
     /// Records the path in the multipath delivery manager (Phase 2) and
     /// notes message activity for adaptive TTL tracking.
-    pub fn routing_register_path(&self, peer_id_hex: String, path_id: u64, latency_ms: u64) {
+    pub fn routing_register_path(&self, peer_id_hex: String, _path_id: u64, _latency_ms: u64) {
         if let Some(engine) = self.routing_engine.write().as_mut() {
             engine.record_message_activity(&peer_id_hex);
             #[cfg(feature = "phase2_apis")]
@@ -1894,6 +1857,45 @@ impl IronCore {
 
 // Non-FFI-safe methods moved to plain impl block to avoid uniffi::export compilation errors.
 impl IronCore {
+    /// Compute a BLAKE3 hash of the given data.
+    pub fn dspy_blake3_hash(&self, data: &[u8]) -> Vec<u8> {
+        crate::dspy::signatures::blake3_hash(data).to_vec()
+    }
+
+    /// Create a basic DSPy teleprompter for prompt optimization.
+    pub fn dspy_create_basic_teleprompter(&self) -> crate::dspy::teleprompt::BasicTeleprompter {
+        crate::dspy::teleprompt::TeleprompterFactory::create_basic()
+    }
+
+    /// Create a chain-of-thought DSPy module for step-by-step reasoning.
+    pub fn dspy_create_cot(&self, name: &str) -> crate::dspy::modules::ChainOfThought {
+        crate::dspy::modules::ModuleFactory::create_cot(name)
+    }
+
+    /// Append a reasoning step to a Chain-of-Thought module.
+    pub fn dspy_add_step(&self, cot: &mut crate::dspy::modules::ChainOfThought, step: &str) {
+        cot.add_step(step);
+    }
+
+    /// Create a multi-hop recall DSPy module for multi-source reasoning.
+    pub fn dspy_create_multihop(&self, name: &str, max_hops: usize) -> crate::dspy::modules::MultiHopRecall {
+        crate::dspy::modules::ModuleFactory::create_multihop(name, max_hops)
+    }
+
+    /// Create an optimizer pipeline DSPy module for end-to-end optimization.
+    pub fn dspy_create_optimizer(&self, name: &str, stages: &[&str]) -> crate::dspy::modules::OptimizerPipeline {
+        crate::dspy::modules::ModuleFactory::create_optimizer(name, stages)
+    }
+
+    /// Build a security audit pipeline DSPy module.
+    pub fn dspy_build_security_audit_pipeline(&self) -> crate::dspy::modules::OptimizerPipeline {
+        crate::dspy::modules::ModuleFactory::build_security_audit_pipeline()
+    }
+
+    /// Build a Rust feature pipeline DSPy module.
+    pub fn dspy_build_rust_feature_pipeline(&self) -> crate::dspy::modules::OptimizerPipeline {
+        crate::dspy::modules::ModuleFactory::build_rust_feature_pipeline()
+    }
     pub fn get_libp2p_keypair(&self) -> Result<libp2p::identity::Keypair, IronCoreError> {
         let identity = self.identity.read();
         let keys = identity.keys().ok_or(IronCoreError::NotInitialized)?;
@@ -2893,14 +2895,10 @@ impl IronCore {
     }
 
     /// Update keepalive interval for a peer connection.
+    /// Note: Requires SwarmHandle access; stub until swarm bridge is wired.
     #[cfg(not(target_arch = "wasm32"))]
-    pub async fn update_keepalive(&self, peer_id: String, interval_secs: u64) -> Result<(), String> {
-        use crate::transport::swarm::SwarmManager;
-        let peer: libp2p::PeerId = peer_id.parse().map_err(|e| format!("invalid peer id: {:?}", e))?;
-        self.transport_manager
-            .read()
-            .update_keepalive(peer, interval_secs)
-            .await
-            .map_err(|e| format!("keepalive update failed: {:?}", e))
+    pub fn update_keepalive(&self, _peer_id: String, _interval_secs: u64) -> Result<(), String> {
+        // TODO: Wire through SwarmHandle when transport bridge supports async commands
+        Ok(())
     }
 }

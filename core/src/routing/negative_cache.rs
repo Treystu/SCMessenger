@@ -16,7 +16,6 @@
 use std::collections::HashMap;
 use web_time::{Duration, Instant};
 
-use crate::abuse::reputation::EnhancedReputationScore;
 
 /// A simple bloom filter implementation for peer unreachability
 ///
@@ -344,7 +343,7 @@ impl NegativeCache {
     /// # Returns
     /// `true` if the peer should be exempted from negative cache (trusted),
     /// `false` if normal caching rules apply.
-    pub fn should_exempt_from_negative_cache(&self, peer_id: &str, reputation_score: f64) -> bool {
+    pub fn should_exempt_from_negative_cache(&self, _peer_id: &str, reputation_score: f64) -> bool {
         // Peers with overall_score >= 0.5 are considered trusted and exempted
         // This prevents marking good peers as unreachable due to transient issues
         reputation_score >= 0.5
