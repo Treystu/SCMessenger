@@ -1456,7 +1456,8 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
                                      let capabilities_clone = capabilities.clone();
                                      let mut bridge = transport_bridge.lock().await;
                                      bridge.register_peer(peer_id, capabilities);
-                                     tracing::info!("Registered transport capabilities for {}: {:?}", peer_id, capabilities_clone);
+                                     let can_reach = bridge.can_reach_destination(&peer_id);
+                                     tracing::info!("Registered transport capabilities for {}: {:?}, reachable={}", peer_id, capabilities_clone, can_reach);
 
                                      // AUTO LEDGER EXCHANGE: Share our known peers with the new connection
                                      let entries = {
@@ -1472,6 +1473,9 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
                                      // atomically; failed sends are re-enqueued so they retry on the
                                      // next connection.
                                      //
+                                     if !can_reach {
+                                         tracing::warn!("No compatible transport path to {}; deferring outbox flush", peer_id);
+                                     } else {
                                      // KEY MATCHING: `peer_id.to_string()` here is the libp2p PeerId
                                      // (a base58-encoded multihash derived from the peer's Ed25519 key,
                                      // e.g. "12D3Koo..."). The outbox stores messages keyed by
@@ -1526,6 +1530,7 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
                                              }
                                          }
                                      }
+                                     } // can_reach guard
                                  }
                             }
                             SwarmEvent::PeerDisconnected(peer_id) => {
@@ -2356,7 +2361,8 @@ async fn cmd_relay(listen_addr: String, http_port: u16, node_name: Option<String
                             let capabilities_clone = capabilities.clone();
                             let mut bridge = transport_bridge.lock().await;
                             bridge.register_peer(peer_id, capabilities);
-                            tracing::info!("Registered transport capabilities for {}: {:?}", peer_id, capabilities_clone);
+                            let can_reach = bridge.can_reach_destination(&peer_id);
+                            tracing::info!("Registered transport capabilities for {}: {:?}, reachable={}", peer_id, capabilities_clone, can_reach);
 
                             // Share ledger with new peer
                             let entries = {
@@ -2367,7 +2373,10 @@ async fn cmd_relay(listen_addr: String, http_port: u16, node_name: Option<String
                                 tracing::warn!("Failed to share ledger with {}: {}", peer_id, e);
                             }
 
-                            // Flush outbox for this peer
+                            // Flush outbox for this peer (only if transport-reachable)
+                            if !can_reach {
+                                tracing::warn!("No compatible transport path to {}; deferring outbox flush", peer_id);
+                            } else {
                             let queued = {
                                 let mut ob = outbox_rx.lock().await;
                                 ob.drain_for_peer(&peer_id.to_string())
@@ -2383,6 +2392,7 @@ async fn cmd_relay(listen_addr: String, http_port: u16, node_name: Option<String
                                     let _ = ob.enqueue(msg);
                                 }
                             }
+                            } // can_reach guard
                         }
                     }
                     SwarmEvent::PeerDisconnected(peer_id) => {

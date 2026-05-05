@@ -393,6 +393,30 @@ impl OptimizedRoutingEngine {
     pub fn should_advance(&self) -> bool {
         self.timeout_budget.should_advance()
     }
+
+    /// Mark a path as failed in the multipath delivery manager (Phase 2).
+    #[cfg(feature = "phase2_apis")]
+    pub fn multipath_mark_path_failed(&mut self, path_id: u64) {
+        self.multipath.mark_path_failed(path_id);
+    }
+
+    /// Register a delivery path in the multipath delivery manager (Phase 2).
+    #[cfg(feature = "phase2_apis")]
+    pub fn multipath_register_path(&mut self, peer_id_hex: String, path_id: u64, latency_ms: u64) {
+        use super::multipath::DeliveryPath;
+        let peer_id_hash = {
+            let bytes = hex::decode(&peer_id_hex).unwrap_or_default();
+            let arr: [u8; 8] = bytes[..8].try_into().unwrap_or([0u8; 8]);
+            u64::from_le_bytes(arr)
+        };
+        let path = DeliveryPath {
+            path_id,
+            peer_id: peer_id_hash,
+            estimated_latency_ms: latency_ms,
+            active: true,
+        };
+        self.multipath.register_path(peer_id_hash, path);
+    }
 }
 
 /// Maintenance result for optimized engine

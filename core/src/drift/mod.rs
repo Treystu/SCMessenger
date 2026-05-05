@@ -27,6 +27,15 @@ pub mod sync;
 
 pub use envelope::{DriftEnvelope, EnvelopeType};
 pub use frame::{DriftFrame, FrameType, FRAME_MAX_PAYLOAD, FRAME_READ_TIMEOUT};
+
+/// Read a drift frame from an async stream with timeout protection.
+/// Wraps `DriftFrame::read_with_timeout` for convenient import.
+#[cfg(not(target_arch = "wasm32"))]
+pub async fn read_frame_with_timeout<R: tokio::io::AsyncReadExt + Unpin>(
+    reader: &mut R,
+) -> Result<DriftFrame, DriftError> {
+    DriftFrame::read_with_timeout(reader).await
+}
 pub use policy::{DeviceState, PolicyEngine, PolicyError, RelayProfile};
 pub use relay::{
     DropReason, MaintenanceReport, NetworkState, RelayConfig, RelayDecision, RelayEngine,

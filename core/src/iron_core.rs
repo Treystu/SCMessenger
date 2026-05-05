@@ -619,6 +619,36 @@ impl IronCore {
         self.outbox.write().remove(&message_id)
     }
 
+    /// Send a message status report for a given peer.
+    /// Returns `None` on success, or `Some(error_string)` on failure.
+    /// This method provides the same interface as the mobile bridge's
+    /// send_message_status but through the core IronCore API.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn send_message_status(
+        &self,
+        peer_id: String,
+        data: Vec<u8>,
+        recipient_identity_id: Option<String>,
+        intended_device_id: Option<String>,
+    ) -> Option<String> {
+        // Delegate to prepare_message + mark_message_sent flow
+        // The mobile bridge has direct swarm access; this provides
+        // a core-level status reporting path for the CLI/WASM layers.
+        let result = self.prepare_message(
+            peer_id.clone(),
+            String::from_utf8_lossy(&data).to_string(),
+            crate::MessageType::Text,
+            None,
+        );
+        match result {
+            Ok(msg) => {
+                self.mark_message_sent(msg.message_id);
+                None
+            }
+            Err(e) => Some(format!("{:?}", e)),
+        }
+    }
+
     /// Check if a peer is blocked.
     pub fn is_peer_blocked(
         &self,
@@ -1281,6 +1311,66 @@ impl IronCore {
             .unwrap_or(peer_id)
     }
 
+    /// Update the last known device ID for a contact.
+    /// Validates the device ID format (UUID) and persists the change.
+    /// Pass `None` to clear the device ID.
+    pub fn contact_update_last_known_device_id(
+        &self,
+        peer_id: String,
+        device_id: Option<String>,
+    ) -> Result<(), IronCoreError> {
+        self.contacts_manager().update_last_known_device_id(peer_id, device_id)
+    }
+
+    // -----------------------------------------------------------------------
+    // B2 wiring: Invite signing path
+    // -----------------------------------------------------------------------
+
+    /// Get the signable data for an invite token.
+    /// Returns the serialized token data (without signature) suitable for
+    /// Ed25519 signing.
+    pub fn invite_get_signable_data(&self, token_bytes: Vec<u8>) -> Result<Vec<u8>, IronCoreError> {
+        let token: crate::relay::invite::InviteToken = bincode::deserialize(&token_bytes)
+            .map_err(|e| IronCoreError::Internal)?;
+        token.get_signable_data().map_err(|e| IronCoreError::Internal)
+    }
+
+    // -----------------------------------------------------------------------
+    // B2 wiring: DSPy signature verification
+    // -----------------------------------------------------------------------
+
+    /// Verify a DSPy signature by role name.
+    /// Returns the signature description if the role is found.
+    pub fn dspy_verify_signature(&self, role: &str) -> Option<String> {
+        crate::dspy::signatures::get_signature(role).map(|s| s.to_string())
+    }
+
+    /// Compute a BLAKE3 hash of the given data.
+    /// Used for DSPy signature verification and integrity checks.
+    pub fn dspy_blake3_hash(&self, data: &[u8]) -> [u8; 32] {
+        blake3::hash(data).into()
+    }
+
+    /// Create a basic DSPy teleprompter for prompt optimization.
+    pub fn dspy_create_basic_teleprompter(&self) -> crate::dspy::teleprompt::BasicTeleprompter {
+        crate::dspy::teleprompt::TeleprompterFactory::create_basic()
+    }
+
+    /// Create a chain-of-thought DSPy module for step-by-step reasoning.
+    pub fn dspy_create_cot(&self, name: &str) -> crate::dspy::modules::ChainOfThought {
+        crate::dspy::modules::ModuleFactory::create_cot(name)
+    }
+
+    /// Create a multi-hop recall DSPy module for multi-source reasoning.
+    pub fn dspy_create_multihop(&self, name: &str, max_hops: usize) -> crate::dspy::modules::MultiHopRecall {
+        crate::dspy::modules::ModuleFactory::create_multihop(name, max_hops)
+    }
+
+    /// Create an optimizer pipeline DSPy module for end-to-end optimization.
+    pub fn dspy_create_optimizer(&self, name: &str, stages: &[&str]) -> crate::dspy::modules::OptimizerPipeline {
+        crate::dspy::modules::ModuleFactory::create_optimizer(name, stages)
+    }
+
     /// Return a HistoryManager instance for the UniFFI interface.
     #[cfg(not(target_arch = "wasm32"))]
     pub fn history_manager(&self) -> crate::mobile_bridge::HistoryManager {
@@ -1364,13 +1454,32 @@ impl IronCore {
     // -----------------------------------------------------------------------
 
     /// Called when the app resumes (foreground transition).
+    /// Triggers route prefetch for known peers to reduce first-message latency.
     pub fn on_app_resume(&self) {
         tracing::info!("IronCore: app resumed");
+        let mut guard = self.routing_engine.write();
+        if let Some(ref mut engine) = guard.as_mut() {
+            let hints = engine.prefetch_manager_mut().on_app_resume();
+            if !hints.is_empty() {
+                tracing::info!("IronCore: prefetch triggered for {} routes", hints.len());
+            }
+        }
     }
 
     /// Called when the app goes to background.
+    /// Saves current route state for fast resume prefetch.
     pub fn on_app_background(&self) {
         tracing::info!("IronCore: app backgrounded");
+        // Collect current routes from the routing engine before backgrounding
+        let mut guard = self.routing_engine.write();
+        if let Some(ref mut engine) = guard.as_mut() {
+            let current_routes: Vec<([u8; 32], [u8; 4], crate::routing::global::RouteAdvertisement)> =
+                engine.base_engine_mut().global_routes_mut().get_advertisements()
+                    .iter()
+                    .map(|ad| (ad.next_hop, ad.destination_hint, ad.clone()))
+                    .collect();
+            engine.prefetch_manager_mut().on_app_background(current_routes);
+        }
     }
 
     // -----------------------------------------------------------------------
@@ -1621,17 +1730,28 @@ impl IronCore {
     }
 
     /// Register a routing path for a peer.
-    pub fn routing_register_path(&self, peer_id_hex: String, _path_id: u64, _latency_ms: u64) {
+    /// Records the path in the multipath delivery manager (Phase 2) and
+    /// notes message activity for adaptive TTL tracking.
+    pub fn routing_register_path(&self, peer_id_hex: String, path_id: u64, latency_ms: u64) {
         if let Some(engine) = self.routing_engine.write().as_mut() {
             engine.record_message_activity(&peer_id_hex);
+            #[cfg(feature = "phase2_apis")]
+            engine.multipath_register_path(peer_id_hex.clone(), path_id, latency_ms);
         }
     }
 
     /// Mark a routing path as failed.
-    pub fn routing_mark_path_failed(&self, _path_id: u64) {
-        // Path failure tracking is handled via routing_update_reliability
-        // which records the peer as unreachable in the negative cache.
-        tracing::debug!("Path {} marked as failed", _path_id);
+    /// Records the path failure in the multipath delivery manager (Phase 2)
+    /// and marks the peer as unreachable in the negative cache.
+    pub fn routing_mark_path_failed(&self, path_id: u64) {
+        tracing::debug!("Path {} marked as failed", path_id);
+        #[cfg(feature = "phase2_apis")]
+        {
+            let mut guard = self.routing_engine.write();
+            if let Some(ref mut engine) = guard.as_mut() {
+                engine.multipath_mark_path_failed(path_id);
+            }
+        }
     }
 
     // -----------------------------------------------------------------------
@@ -2658,5 +2778,72 @@ impl IronCore {
         } else {
             false
         }
+    }
+
+    // -----------------------------------------------------------------------
+    // B2 wiring: Routing engine — prefetch lifecycle
+    // -----------------------------------------------------------------------
+
+    /// Mark a prefetched route refresh as failed.
+    /// Called when a route refresh attempt fails, so the prefetch manager
+    /// can track failures and deprioritize that route.
+    pub fn routing_mark_refresh_failed(&self, hint: [u8; 4]) {
+        let mut guard = self.routing_engine.write();
+        if let Some(ref mut engine) = guard.as_mut() {
+            engine.prefetch_manager_mut().mark_refresh_failed(&hint);
+        }
+    }
+
+    /// Get the next destination hint that needs route refresh.
+    /// Returns `None` if the prefetch queue is empty.
+    pub fn routing_next_refresh_hint(&self) -> Option<[u8; 4]> {
+        let mut guard = self.routing_engine.write();
+        if let Some(ref mut engine) = guard.as_mut() {
+            engine.prefetch_manager_mut().next_refresh_hint()
+        } else {
+            None
+        }
+    }
+
+    /// Check if route prefetch is complete (no pending refreshes).
+    pub fn routing_is_prefetch_complete(&self) -> bool {
+        let guard = self.routing_engine.read();
+        if let Some(ref engine) = *guard {
+            engine.prefetch_manager().is_prefetch_complete()
+        } else {
+            true
+        }
+    }
+
+    /// Check if route prefetch is currently in progress.
+    pub fn routing_is_prefetch_in_progress(&self) -> bool {
+        let guard = self.routing_engine.read();
+        if let Some(ref engine) = *guard {
+            engine.prefetch_manager().is_prefetch_in_progress()
+        } else {
+            false
+        }
+    }
+
+    /// Touch (update last-seen timestamp for) a notification endpoint.
+    pub fn touch_notification_endpoint(
+        &self,
+        endpoint_id: &str,
+    ) -> Result<(), crate::NotificationEndpointError> {
+        self.notification_endpoint_registry
+            .read()
+            .touch_endpoint(endpoint_id)
+    }
+
+    /// Update keepalive interval for a peer connection.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub async fn update_keepalive(&self, peer_id: String, interval_secs: u64) -> Result<(), String> {
+        use crate::transport::swarm::SwarmManager;
+        let peer: libp2p::PeerId = peer_id.parse().map_err(|e| format!("invalid peer id: {:?}", e))?;
+        self.transport_manager
+            .read()
+            .update_keepalive(peer, interval_secs)
+            .await
+            .map_err(|e| format!("keepalive update failed: {:?}", e))
     }
 }

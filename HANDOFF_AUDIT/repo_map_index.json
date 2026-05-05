@@ -3,7 +3,7 @@
   "generated_at": "2026-05-04T18:18:34.071512Z",
   "files": {
     "core/src/transport/abstraction.rs": {
-      "indexed_at": "2026-05-04T00:47:50.092490Z",
+      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
       "file_modified_at": "2026-04-28T12:55:21.109438Z",
       "chunks": [
         2
@@ -12,7 +12,7 @@
       "status": "complete"
     },
     "core/src/routing/adaptive_ttl.rs": {
-      "indexed_at": "2026-05-04T00:04:08.914217Z",
+      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
       "file_modified_at": "2026-04-28T12:55:21.389119Z",
       "chunks": [
         1
@@ -21,7 +21,7 @@
       "status": "complete"
     },
     "android/app/src/main/java/com/scmessenger/android/service/AndroidPlatformBridge.kt": {
-      "indexed_at": "2026-05-04T16:35:48.542676Z",
+      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
       "file_modified_at": "2026-05-02T01:51:58.011027Z",
       "chunks": [
         1,
@@ -31,7 +31,7 @@
       "status": "complete"
     },
     "android/app/src/main/java/com/scmessenger/android/service/AnrWatchdog.kt": {
-      "indexed_at": "2026-05-04T16:55:47.879102Z",
+      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
       "file_modified_at": "2026-04-28T12:55:18.022610Z",
       "chunks": [
         1
@@ -40,7 +40,7 @@
       "status": "complete"
     },
     "cli/src/api.rs": {
-      "indexed_at": "2026-05-03T22:33:51.763566Z",
+      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
       "file_modified_at": "2026-05-02T22:26:25.256642Z",
       "chunks": [
         2
@@ -49,7 +49,7 @@
       "status": "complete"
     },
     "android/app/src/main/java/com/scmessenger/android/di/AppModule.kt": {
-      "indexed_at": "2026-05-03T15:11:33.703077Z",
+      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
       "file_modified_at": "2026-04-28T12:55:18.323608Z",
       "chunks": [
         1
@@ -58,7 +58,7 @@
       "status": "complete"
     },
     "core/src/mobile/auto_adjust.rs": {
-      "indexed_at": "2026-05-03T23:44:11.239593Z",
+      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
       "file_modified_at": "2026-04-28T12:55:19.735018Z",
       "chunks": [
         2
@@ -67,7 +67,7 @@
       "status": "complete"
     },
     "core/src/abuse/auto_block.rs": {
-      "indexed_at": "2026-05-03T22:59:00.831519Z",
+      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
       "file_modified_at": "2026-05-04T08:17:05.095398Z",
       "chunks": [
         1
@@ -76,7 +76,7 @@
       "status": "complete"
     },
     "core/src/store/backend.rs": {
-      "indexed_at": "2026-05-04T00:24:19.539857Z",
+      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
       "file_modified_at": "2026-04-28T12:55:20.010104Z",
       "chunks": [
         1
@@ -85,7 +85,7 @@
       "status": "complete"
     },
     "android/app/src/main/java/com/scmessenger/android/utils/BackoffStrategy.kt": {
-      "indexed_at": "2026-05-03T15:48:24.508973Z",
+      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
       "file_modified_at": "2026-04-28T12:55:17.831609Z",
       "chunks": [
         1
@@ -94,7 +94,7 @@
       "status": "complete"
     },
     "core/src/crypto/backup.rs": {
-      "indexed_at": "2026-05-03T23:03:49.833180Z",
+      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
       "file_modified_at": "2026-04-28T12:55:21.531806Z",
       "chunks": [
         1
@@ -103,7 +103,7 @@
       "status": "complete"
     },
     "core/src/transport/ble/beacon.rs": {
-      "indexed_at": "2026-05-04T00:42:49.843308Z",
+      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
       "file_modified_at": "2026-04-28T12:55:21.198650Z",
       "chunks": [
         1,
@@ -113,7 +113,7 @@
       "status": "complete"
     },
     "core/src/transport/behaviour.rs": {
-      "indexed_at": "2026-05-04T00:51:50.473111Z",
+      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
       "file_modified_at": "2026-04-30T12:43:23.888335Z",
       "chunks": [
         2
@@ -122,7 +122,7 @@
       "status": "complete"
     },
     "android/app/src/main/java/com/scmessenger/android/transport/ble/BleAdvertiser.kt": {
-      "indexed_at": "2026-05-04T16:52:11.410361Z",
+      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
       "file_modified_at": "2026-05-04T08:12:23.300541Z",
       "chunks": [
         1,
@@ -132,7 +132,7 @@
       "status": "complete"
     },
     "android/app/src/main/java/com/scmessenger/android/transport/ble/BleBackoffStrategy.kt": {
-      "indexed_at": "2026-05-04T16:53:01.268600Z",
+      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
       "file_modified_at": "2026-04-28T12:55:18.521063Z",
       "chunks": [
         1
@@ -141,7 +141,7 @@
       "status": "complete"
     },
     "android/app/src/main/java/com/scmessenger/android/transport/ble/BleGattClient.kt": {
-      "indexed_at": "2026-05-04T17:00:37.653182Z",
+      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
       "file_modified_at": "2026-05-01T00:12:02.824132Z",
       "chunks": [
         1,
@@ -152,7 +152,7 @@
       "status": "complete"
     },
     "android/app/src/main/java/com/scmessenger/android/transport/ble/BleGattServer.kt": {
-      "indexed_at": "2026-05-03T19:20:50.655050Z",
+      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
       "file_modified_at": "2026-05-01T00:12:36.118470Z",
       "chunks": [
         2
@@ -161,7 +161,7 @@
       "status": "complete"
     },
     "android/app/src/main/java/com/scmessenger/android/transport/ble/BleL2capManager.kt": {
-      "indexed_at": "2026-05-04T16:59:58.654927Z",
+      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
       "file_modified_at": "2026-04-28T12:55:18.509627Z",
       "chunks": [
         1
@@ -170,7 +170,7 @@
       "status": "complete"
     },
     "android/app/src/main/java/com/scmessenger/android/transport/ble/BleQuotaManager.kt": {
-      "indexed_at": "2026-05-04T17:01:16.307334Z",
+      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
       "file_modified_at": "2026-04-30T08:07:55.236689Z",
       "chunks": [
         1
@@ -179,7 +179,7 @@
       "status": "complete"
     },
     "android/app/src/main/java/com/scmessenger/android/transport/ble/BleScanner.kt": {
-      "indexed_at": "2026-05-04T17:08:05.719603Z",
+      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
       "file_modified_at": "2026-05-04T08:12:34.487446Z",
       "chunks": [
         1,
@@ -189,7 +189,7 @@
       "status": "complete"
     },
     "cli/src/ble_daemon.rs": {
-      "indexed_at": "2026-05-03T22:35:45.253213Z",
+      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
       "file_modified_at": "2026-04-29T07:24:19.909532Z",
       "chunks": [
         1,
@@ -199,7 +199,7 @@
       "status": "complete"
     },
     "core/src/store/blocked.rs": {
-      "indexed_at": "2026-05-04T00:23:18.865132Z",
+      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
       "file_modified_at": "2026-04-29T06:57:41.227029Z",
       "chunks": [
         1
@@ -208,7 +208,7 @@
       "status": "complete"
     },
     "core/src/blocked_bridge.rs": {
-      "indexed_at": "2026-05-04T01:51:24.360703Z",
+      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
       "file_modified_at": "2026-04-28T12:55:19.423593Z",
       "chunks": [
         1
@@ -217,7 +217,7 @@
       "status": "complete"
     },
     "android/app/src/main/java/com/scmessenger/android/service/BootReceiver.kt": {
-      "indexed_at": "2026-05-03T15:13:04.691717Z",
+      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
       "file_modified_at": "2026-04-28T12:55:18.073036Z",
       "chunks": [
         1
@@ -226,7 +226,7 @@
       "status": "complete"
     },
     "core/src/relay/bootstrap.rs": {
-      "indexed_at": "2026-05-03T23:52:43.706311Z",
+      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
       "file_modified_at": "2026-04-28T12:55:19.917122Z",
       "chunks": [
         2
@@ -235,7 +235,7 @@
       "status": "complete"
     },
     "core/src/transport/bootstrap.rs": {
-      "indexed_at": "2026-05-04T00:49:24.648385Z",
+      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
       "file_modified_at": "2026-05-04T06:26:18.884385Z",
       "chunks": [
         3
@@ -244,7 +244,7 @@
       "status": "complete"
     },
     "android/app/src/test/java/com/scmessenger/android/test/ChatViewModelTest.kt": {
-      "indexed_at": "2026-05-03T22:27:06.879500Z",
+      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
       "file_modified_at": "2026-04-28T12:55:18.721531Z",
       "chunks": [
         1
@@ -253,7 +253,7 @@
       "status": "complete"
     },
     "core/src/privacy/circuit.rs": {
-      "indexed_at": "2026-05-03T23:46:41.419840Z",
+      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
       "file_modified_at": "2026-04-28T12:55:19.762659Z",
       "chunks": [
         2
@@ -262,7 +262,7 @@
       "status": "complete"
     },
     "core/src/transport/circuit_breaker.rs": {
-      "indexed_at": "2026-05-04T00:53:02.407475Z",
+      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
       "file_modified_at": "2026-04-29T06:20:52.398847Z",
       "chunks": [
         2
@@ -271,7 +271,7 @@
       "status": "complete"
     },
     "cli/src/cli.rs": {
-      "indexed_at": "2026-05-04T02:27:46.683585Z",
+      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
       "file_modified_at": "2026-04-29T23:56:05.569497Z",
       "chunks": [
         1,
@@ -281,7 +281,7 @@
       "status": "complete"
     },
     "core/src/relay/client.rs": {
-      "indexed_at": "2026-05-03T23:56:46.300156Z",
+      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
       "file_modified_at": "2026-04-29T07:24:24.222654Z",
       "chunks": [
         1,
@@ -292,7 +292,7 @@
       "status": "complete"
     },
     "core/src/message/codec.rs": {
-      "indexed_at": "2026-05-03T23:37:10.987571Z",
+      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
       "file_modified_at": "2026-04-28T12:55:20.341790Z",
       "chunks": [
         1
@@ -301,7 +301,7 @@
       "status": "complete"
     },
     "core/src/drift/compress.rs": {
-      "indexed_at": "2026-05-03T23:11:08.321142Z",
+      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
       "file_modified_at": "2026-04-28T12:55:20.421708Z",
       "chunks": [
         1
@@ -310,7 +310,7 @@
       "status": "complete"
     },
     "cli/src/config.rs": {
-      "indexed_at": "2026-05-03T22:39:06.034024Z",
+      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
       "file_modified_at": "2026-04-29T06:20:51.384947Z",
       "chunks": [
         1
@@ -319,7 +319,7 @@
       "status": "complete"
     },
     "android/app/src/main/java/com/scmessenger/android/ui/contacts/ContactDetailScreen.kt": {
-      "indexed_at": "2026-05-03T21:46:33.706660Z",
+      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
       "file_modified_at": "2026-05-04T07:08:32.566208Z",
       "chunks": [
         2
@@ -328,7 +328,7 @@
       "status": "complete"
     },
     "cli/src/contacts.rs": {
-      "indexed_at": "2026-05-03T22:44:29.920820Z",
+      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
       "file_modified_at": "2026-04-28T12:55:34.155922Z",
       "chunks": [
         1
@@ -337,7 +337,7 @@
       "status": "complete"
     },
     "core/src/store/contacts.rs": {
-      "indexed_at": "2026-05-04T00:21:28.174242Z",
+      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
       "file_modified_at": "2026-04-29T10:18:50.489744Z",
       "chunks": [
         2
@@ -346,7 +346,7 @@
       "status": "complete"
     },
     "android/app/src/main/java/com/scmessenger/android/ui/screens/ContactsScreen.kt": {
-      "indexed_at": "2026-05-03T15:30:07.783360Z",
+      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
       "file_modified_at": "2026-05-02T02:02:20.392780Z",
       "chunks": [
         3
@@ -355,7 +355,7 @@
       "status": "complete"
     },
     "android/app/src/test/java/com/scmessenger/android/test/ContactsViewModelTest.kt": {
-      "indexed_at": "2026-05-03T22:27:55.816178Z",
+      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
       "file_modified_at": "2026-04-28T12:55:18.633344Z",
       "chunks": [
         1
@@ -364,7 +364,7 @@
       "status": "complete"
     },
     "core/src/contacts_bridge.rs": {
-      "indexed_at": "2026-05-04T01:54:23.509263Z",
+      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
       "file_modified_at": "2026-04-30T04:35:49.178175Z",
       "chunks": [
         1,
@@ -374,7 +374,7 @@
       "status": "complete"
     },
     "android/app/src/main/java/com/scmessenger/android/ui/screens/ConversationsScreen.kt": {
-      "indexed_at": "2026-05-03T15:30:26.470216Z",
+      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
       "file_modified_at": "2026-05-04T07:13:19.513812Z",
       "chunks": [
         2
@@ -383,7 +383,7 @@
       "status": "complete"
     },
     "android/app/src/test/java/com/scmessenger/android/ui/viewmodels/ConversationsViewModelTest.kt": {
-      "indexed_at": "2026-05-03T22:34:48.283025Z",
+      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
       "file_modified_at": "2026-04-28T12:55:18.609255Z",
       "chunks": [
         1
@@ -392,7 +392,7 @@
       "status": "complete"
     },
     "core/src/privacy/cover.rs": {
-      "indexed_at": "2026-05-03T23:48:55.354356Z",
+      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
       "file_modified_at": "2026-04-28T12:55:19.808653Z",
       "chunks": [
         2
@@ -401,7 +401,7 @@
       "status": "complete"
     },
     "android/app/src/main/java/com/scmessenger/android/ui/screens/DashboardScreen.kt": {
-      "indexed_at": "2026-05-03T15:31:56.382010Z",
+      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
       "file_modified_at": "2026-05-02T02:18:34.123855Z",
       "chunks": [
         2
@@ -410,7 +410,7 @@
       "status": "complete"
     },
     "android/app/src/main/java/com/scmessenger/android/ui/viewmodels/DashboardViewModel.kt": {
-      "indexed_at": "2026-05-03T15:46:29.389591Z",
+      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
       "file_modified_at": "2026-05-04T06:02:26.573801Z",
       "chunks": [
         1,
@@ -420,7 +420,7 @@
       "status": "complete"
     },
     "core/src/store/dedup.rs": {
-      "indexed_at": "2026-05-04T00:23:00.778669Z",
+      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
       "file_modified_at": "2026-05-02T02:03:34.099389Z",
       "chunks": [
         1
@@ -429,7 +429,7 @@
       "status": "complete"
     },
     "core/src/relay/delegate_prewarm.rs": {
-      "indexed_at": "2026-05-03T23:57:17.972601Z",
+      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
       "file_modified_at": "2026-04-28T12:55:19.901206Z",
       "chunks": [
         2
@@ -438,7 +438,7 @@
       "status": "complete"
     },
     "android/app/src/main/java/com/scmessenger/android/ui/chat/DeliveryStateSurface.kt": {
-      "indexed_at": "2026-05-03T19:43:59.728349Z",
+      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
       "file_modified_at": "2026-04-28T12:55:17.329159Z",
       "chunks": [
         1
@@ -447,7 +447,7 @@
       "status": "complete"
     },
     "core/src/transport/diagnostics.rs": {
-      "indexed_at": "2026-05-04T00:52:49.992632Z",
+      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
       "file_modified_at": "2026-05-04T05:45:29.329547Z",
       "chunks": [
         1
@@ -456,7 +456,7 @@
       "status": "complete"
     },
     "android/app/src/main/java/com/scmessenger/android/network/DiagnosticsReporter.kt": {
-      "indexed_at": "2026-05-04T16:23:30.152544Z",
+      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
       "file_modified_at": "2026-04-28T12:55:17.221872Z",
       "chunks": [
         1
@@ -465,7 +465,7 @@
       "status": "complete"
     },
     "core/src/transport/discovery.rs": {
-      "indexed_at": "2026-05-04T00:55:50.409988Z",
+      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
       "file_modified_at": "2026-04-28T12:55:20.826050Z",
       "chunks": [
         1,
@@ -475,7 +475,7 @@
       "status": "complete"
     },
     "core/src/crypto/encrypt.rs": {
-      "indexed_at": "2026-05-03T23:10:20.607845Z",
+      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
       "file_modified_at": "2026-04-29T06:20:51.881946Z",
       "chunks": [
         2,
@@ -485,7 +485,7 @@
       "status": "complete"
     },
     "core/src/routing/engine.rs": {
-      "indexed_at": "2026-05-04T00:07:53.151681Z",
+      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
       "file_modified_at": "2026-04-28T12:55:21.409710Z",
       "chunks": [
         1,
@@ -495,7 +495,7 @@
       "status": "complete"
     },
     "core/src/drift/envelope.rs": {
-      "indexed_at": "2026-05-03T23:17:12.345448Z",
+      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
       "file_modified_at": "2026-04-29T06:20:51.919148Z",
       "chunks": [
         1,
@@ -505,7 +505,7 @@
       "status": "complete"
     },
     "core/src/message/ephemeral.rs": {
-      "indexed_at": "2026-05-03T23:36:34.693238Z",
+      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
       "file_modified_at": "2026-04-28T12:55:20.350058Z",
       "chunks": [
         1
@@ -514,7 +514,7 @@
       "status": "complete"
     },
     "android/app/src/main/java/com/scmessenger/android/ui/components/ErrorBanner.kt": {
-      "indexed_at": "2026-05-03T15:24:58.991858Z",
+      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
       "file_modified_at": "2026-04-28T12:55:17.318788Z",
       "chunks": [
         1
@@ -523,7 +523,7 @@
       "status": "complete"
     },
     "core/src/transport/escalation.rs": {
-      "indexed_at": "2026-05-04T00:59:01.699766Z",
+      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
       "file_modified_at": "2026-04-28T12:55:20.859326Z",
       "chunks": [
         1,
@@ -533,7 +533,7 @@
       "status": "complete"
     },
     "core/src/relay/findmy.rs": {
-      "indexed_at": "2026-05-04T00:00:33.151905Z",
+      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
       "file_modified_at": "2026-04-28T12:55:19.933729Z",
       "chunks": [
         1,
@@ -543,7 +543,7 @@
       "status": "complete"
     },
     "core/src/drift/frame.rs": {
-      "indexed_at": "2026-05-03T23:21:00.454194Z",
+      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
       "file_modified_at": "2026-04-28T12:55:20.509925Z",
       "chunks": [
         1,
@@ -553,7 +553,7 @@
       "status": "complete"
     },
     "core/src/transport/ble/gatt.rs": {
-      "indexed_at": "2026-05-04T00:44:39.145871Z",
+      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
       "file_modified_at": "2026-04-28T12:55:21.181479Z",
       "chunks": [
         2
@@ -562,7 +562,7 @@
       "status": "complete"
     },
     "core/src/bin/gen_swift.rs": {
-      "indexed_at": "2026-05-03T23:03:35.223306Z",
+      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
       "file_modified_at": "2026-04-30T06:13:50.755420Z",
       "chunks": [
         1
@@ -571,7 +571,7 @@
       "status": "complete"
     },
     "core/src/routing/global.rs": {
-      "indexed_at": "2026-05-04T00:11:05.699536Z",
+      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
       "file_modified_at": "2026-04-28T12:55:21.346023Z",
       "chunks": [
         1,
@@ -582,7 +582,7 @@
       "status": "complete"
     },
     "core/src/transport/health.rs": {
-      "indexed_at": "2026-05-04T00:59:48.969567Z",
+      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
       "file_modified_at": "2026-04-29T07:00:17.579885Z",
       "chunks": [
         1,
@@ -592,7 +592,7 @@
       "status": "complete"
     },
     "cli/src/history.rs": {
-      "indexed_at": "2026-05-03T22:40:21.400115Z",
+      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
       "file_modified_at": "2026-04-28T12:55:34.117800Z",
       "chunks": [
         1
@@ -601,7 +601,7 @@
       "status": "complete"
     },
     "core/src/store/history.rs": {
-      "indexed_at": "2026-05-04T00:23:23.133868Z",
+      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
       "file_modified_at": "2026-05-02T22:26:30.578090Z",
       "chunks": [
         2
@@ -610,7 +610,7 @@
       "status": "complete"
     },
     "core/src/store/inbox.rs": {
-      "indexed_at": "2026-05-04T00:26:38.954459Z",
+      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
       "file_modified_at": "2026-05-02T02:03:34.106957Z",
       "chunks": [
         1,
@@ -620,7 +620,7 @@
       "status": "complete"
     },
     "cli/tests/integration.rs": {
-      "indexed_at": "2026-05-03T23:04:22.448994Z",
+      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
       "file_modified_at": "2026-04-29T06:20:51.544424Z",
       "chunks": [
         1
@@ -629,7 +629,7 @@
       "status": "complete"
     },
     "core/src/transport/internet.rs": {
-      "indexed_at": "2026-05-04T01:02:57.951590Z",
+      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
       "file_modified_at": "2026-04-29T07:24:24.456280Z",
       "chunks": [
         2,
@@ -639,7 +639,7 @@
       "status": "complete"
     },
     "core/src/relay/invite.rs": {
-      "indexed_at": "2026-05-04T00:07:04.488599Z",
+      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
       "file_modified_at": "2026-04-28T12:55:19.869126Z",
       "chunks": [
         1,
@@ -649,7 +649,7 @@
       "status": "complete"
     },
     "core/src/mobile/ios_strategy.rs": {
-      "indexed_at": "2026-05-03T23:41:52.600242Z",
+      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
       "file_modified_at": "2026-04-28T12:55:19.687284Z",
       "chunks": [
         2
@@ -658,7 +658,7 @@
       "status": "complete"
     },
     "core/src/iron_core.rs": {
-      "indexed_at": "2026-05-04T02:01:42.233436Z",
+      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
       "file_modified_at": "2026-05-04T08:47:04.082032Z",
       "chunks": [
         5,
@@ -668,7 +668,7 @@
       "status": "complete"
     },
     "core/src/identity/keys.rs": {
-      "indexed_at": "2026-05-03T23:35:38.926103Z",
+      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
       "file_modified_at": "2026-05-02T02:05:10.955880Z",
       "chunks": [
         1
@@ -677,7 +677,7 @@
       "status": "complete"
     },
     "core/src/transport/ble/l2cap.rs": {
-      "indexed_at": "2026-05-04T00:45:16.851274Z",
+      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
       "file_modified_at": "2026-04-28T12:55:21.214001Z",
       "chunks": [
         2
@@ -686,7 +686,7 @@
       "status": "complete"
     },
     "cli/src/ledger.rs": {
-      "indexed_at": "2026-05-03T22:43:51.781711Z",
+      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
       "file_modified_at": "2026-04-28T12:55:34.219764Z",
       "chunks": [
         1,
@@ -696,7 +696,7 @@
       "status": "complete"
     },
     "cli/src/lib.rs": {
-      "indexed_at": "2026-05-03T22:40:47.306814Z",
+      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
       "file_modified_at": "2026-04-29T07:33:10.495634Z",
       "chunks": [
         1
@@ -705,7 +705,7 @@
       "status": "complete"
     },
     "core/src/routing/local.rs": {
-      "indexed_at": "2026-05-04T00:13:09.078612Z",
+      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
       "file_modified_at": "2026-04-28T12:55:21.431835Z",
       "chunks": [
         2
@@ -714,7 +714,7 @@
       "status": "complete"
     },
     "core/src/store/logs.rs": {
-      "indexed_at": "2026-05-04T00:26:08.186088Z",
+      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
       "file_modified_at": "2026-04-28T12:55:20.091309Z",
       "chunks": [
         1
@@ -723,7 +723,7 @@
       "status": "complete"
     },
     "cli/src/main.rs": {
-      "indexed_at": "2026-05-03T22:45:37.037323Z",
+      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
       "file_modified_at": "2026-05-04T07:02:50.590711Z",
       "chunks": [
         3
@@ -732,7 +732,7 @@
       "status": "complete"
     },
     "core/src/transport/manager.rs": {
-      "indexed_at": "2026-05-04T01:06:36.982873Z",
+      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
       "file_modified_at": "2026-05-04T08:30:32.567564Z",
       "chunks": [
         3,
@@ -742,7 +742,7 @@
       "status": "complete"
     },
     "android/app/src/main/java/com/scmessenger/android/transport/MdnsServiceDiscovery.kt": {
-      "indexed_at": "2026-05-04T17:10:08.362267Z",
+      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
       "file_modified_at": "2026-05-04T07:50:00.604218Z",
       "chunks": [
         2
@@ -751,7 +751,7 @@
       "status": "complete"
     },
     "core/src/wasm_support/mesh.rs": {
-      "indexed_at": "2026-05-04T01:49:37.456985Z",
+      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
       "file_modified_at": "2026-04-28T12:55:20.285520Z",
       "chunks": [
         1,
@@ -761,7 +761,7 @@
       "status": "complete"
     },
     "android/app/src/main/java/com/scmessenger/android/service/MeshEventBus.kt": {
-      "indexed_at": "2026-05-03T19:12:04.874921Z",
+      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
       "file_modified_at": "2026-04-28T12:55:17.995260Z",
       "chunks": [
         1
@@ -770,7 +770,7 @@
       "status": "complete"
     },
     "android/app/src/main/java/com/scmessenger/android/service/MeshForegroundService.kt": {
-      "indexed_at": "2026-05-04T16:43:33.205305Z",
+      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
       "file_modified_at": "2026-05-04T07:11:43.118964Z",
       "chunks": [
         1,
@@ -781,7 +781,7 @@
       "status": "complete"
     },
     "android/app/src/test/java/com/scmessenger/android/test/MeshForegroundServiceTest.kt": {
-      "indexed_at": "2026-05-03T15:54:25.409219Z",
+      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
       "file_modified_at": "2026-04-28T12:55:18.655258Z",
       "chunks": [
         1
@@ -790,7 +790,7 @@
       "status": "complete"
     },
     "android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt": {
-      "indexed_at": "2026-05-04T16:30:27.386445Z",
+      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
       "file_modified_at": "2026-05-04T08:04:51.064026Z",
       "chunks": [
         1,
@@ -823,7 +823,7 @@
       "status": "complete"
     },
     "android/app/src/test/java/com/scmessenger/android/ui/viewmodels/MeshServiceViewModelTest.kt": {
-      "indexed_at": "2026-05-03T22:31:16.956296Z",
+      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
       "file_modified_at": "2026-04-28T12:55:18.596486Z",
       "chunks": [
         1
@@ -832,7 +832,7 @@
       "status": "complete"
     },
     "android/app/src/main/java/com/scmessenger/android/service/MeshVpnService.kt": {
-      "indexed_at": "2026-05-04T16:43:12.545070Z",
+      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
       "file_modified_at": "2026-04-30T08:16:26.985252Z",
       "chunks": [
         1
@@ -841,7 +841,7 @@
       "status": "complete"
     },
     "core/src/transport/mesh_routing.rs": {
-      "indexed_at": "2026-05-04T01:07:24.333302Z",
+      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
       "file_modified_at": "2026-04-28T12:55:20.719778Z",
       "chunks": [
         1
@@ -850,7 +850,7 @@
       "status": "complete"
     },
     "android/app/src/main/java/com/scmessenger/android/ui/chat/MessageInput.kt": {
-      "indexed_at": "2026-05-03T19:23:15.848457Z",
+      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
       "file_modified_at": "2026-04-30T08:07:55.238688Z",
       "chunks": [
         1
@@ -859,7 +859,7 @@
       "status": "complete"
     },
     "core/src/mobile_bridge.rs": {
-      "indexed_at": "2026-05-04T02:11:00.546092Z",
+      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
       "file_modified_at": "2026-05-04T08:02:10.969604Z",
       "chunks": [
         1,
@@ -870,7 +870,7 @@
       "status": "complete"
     },
     "android/app/src/test/java/com/scmessenger/android/test/MockTestHelper.kt": {
-      "indexed_at": "2026-05-03T22:28:47.504964Z",
+      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
       "file_modified_at": "2026-04-30T08:42:15.128736Z",
       "chunks": [
         1
@@ -879,7 +879,7 @@
       "status": "complete"
     },
     "core/src/transport/multiport.rs": {
-      "indexed_at": "2026-05-04T01:10:29.513227Z",
+      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
       "file_modified_at": "2026-04-28T12:55:20.841728Z",
       "chunks": [
         1
@@ -888,7 +888,7 @@
       "status": "complete"
     },
     "core/src/transport/nat.rs": {
-      "indexed_at": "2026-05-04T01:14:49.859762Z",
+      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
       "file_modified_at": "2026-04-28T12:55:21.137209Z",
       "chunks": [
         1,
@@ -899,7 +899,7 @@
       "status": "complete"
     },
     "core/src/routing/negative_cache.rs": {
-      "indexed_at": "2026-05-04T00:16:40.282048Z",
+      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
       "file_modified_at": "2026-04-29T06:20:52.224759Z",
       "chunks": [
         1,
@@ -909,7 +909,7 @@
       "status": "complete"
     },
     "core/src/routing/neighborhood.rs": {
-      "indexed_at": "2026-05-04T00:17:00.605256Z",
+      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
       "file_modified_at": "2026-04-28T12:55:21.269176Z",
       "chunks": [
         1,
@@ -920,7 +920,7 @@
       "status": "complete"
     },
     "android/app/src/main/java/com/scmessenger/android/transport/NetworkDetector.kt": {
-      "indexed_at": "2026-05-03T19:34:48.603278Z",
+      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
       "file_modified_at": "2026-04-30T13:42:36.012112Z",
       "chunks": [
         2
@@ -929,7 +929,7 @@
       "status": "complete"
     },
     "android/app/src/main/java/com/scmessenger/android/network/NetworkDiagnostics.kt": {
-      "indexed_at": "2026-05-04T16:26:34.137099Z",
+      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
       "file_modified_at": "2026-05-01T00:07:08.972732Z",
       "chunks": [
         1
@@ -938,7 +938,7 @@
       "status": "complete"
     },
     "android/app/src/main/java/com/scmessenger/android/utils/NetworkFailureMetrics.kt": {
-      "indexed_at": "2026-05-03T22:22:29.853229Z",
+      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
       "file_modified_at": "2026-04-28T12:55:17.967488Z",
       "chunks": [
         1
@@ -947,7 +947,7 @@
       "status": "complete"
     },
     "android/app/src/main/java/com/scmessenger/android/ui/dialogs/NetworkStatusDialog.kt": {
-      "indexed_at": "2026-05-03T19:25:21.489527Z",
+      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
       "file_modified_at": "2026-05-04T07:59:22.649127Z",
       "chunks": [
         1
@@ -956,7 +956,7 @@
       "status": "complete"
     },
     "android/app/src/main/java/com/scmessenger/android/network/NetworkTypeDetector.kt": {
-      "indexed_at": "2026-05-04T16:27:59.775676Z",
+      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
       "file_modified_at": "2026-04-28T12:55:17.209791Z",
       "chunks": [
         1
@@ -965,7 +965,7 @@
       "status": "complete"
     },
     "android/app/src/main/java/com/scmessenger/android/utils/NotificationHelper.kt": {
-      "indexed_at": "2026-05-03T22:25:50.674611Z",
+      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
       "file_modified_at": "2026-04-30T08:07:55.252696Z",
       "chunks": [
         1
@@ -974,7 +974,7 @@
       "status": "complete"
     },
     "AgentSwarmCline/scmessenger_swarm/observability.rs": {
-      "indexed_at": "2026-05-03T13:29:31.034489Z",
+      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
       "file_modified_at": "2026-04-28T12:55:31.200137Z",
       "chunks": [
         1
@@ -983,7 +983,7 @@
       "status": "complete"
     },
     "AgentSwarmCline/scmessenger_swarm/observability_tests.rs": {
-      "indexed_at": "2026-05-03T13:31:37.007877Z",
+      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
       "file_modified_at": "2026-04-28T12:55:31.181925Z",
       "chunks": [
         1,
@@ -993,7 +993,7 @@
       "status": "complete"
     },
     "core/src/transport/observation.rs": {
-      "indexed_at": "2026-05-04T01:14:12.282738Z",
+      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
       "file_modified_at": "2026-04-29T06:57:41.493175Z",
       "chunks": [
         1
@@ -1002,7 +1002,7 @@
       "status": "complete"
     },
     "core/src/privacy/onion.rs": {
-      "indexed_at": "2026-05-03T23:50:19.415700Z",
+      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
       "file_modified_at": "2026-04-29T12:36:19.537879Z",
       "chunks": [
         1,
@@ -1012,7 +1012,7 @@
       "status": "complete"
     },
     "core/src/routing/optimized_engine.rs": {
-      "indexed_at": "2026-05-04T00:16:07.295032Z",
+      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
       "file_modified_at": "2026-05-04T06:21:33.192159Z",
       "chunks": [
         2
@@ -1021,7 +1021,7 @@
       "status": "complete"
     },
     "core/src/store/outbox.rs": {
-      "indexed_at": "2026-05-04T00:29:50.647210Z",
+      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
       "file_modified_at": "2026-04-29T06:20:52.312643Z",
       "chunks": [
         1,
@@ -1031,7 +1031,7 @@
       "status": "complete"
     },
     "core/src/privacy/padding.rs": {
-      "indexed_at": "2026-05-03T23:52:32.698944Z",
+      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
       "file_modified_at": "2026-04-28T12:55:19.824733Z",
       "chunks": [
         1
@@ -1040,7 +1040,7 @@
       "status": "complete"
     },
     "android/app/src/main/java/com/scmessenger/android/ui/dashboard/PeerListScreen.kt": {
-      "indexed_at": "2026-05-03T15:27:08.454144Z",
+      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
       "file_modified_at": "2026-04-30T16:01:57.826964Z",
       "chunks": [
         1
@@ -1049,7 +1049,7 @@
       "status": "complete"
     },
     "core/src/transport/peer_broadcast.rs": {
-      "indexed_at": "2026-05-04T01:14:11.253731Z",
+      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
       "file_modified_at": "2026-04-28T12:55:20.875972Z",
       "chunks": [
         1
@@ -1058,7 +1058,7 @@
       "status": "complete"
     },
     "core/src/relay/peer_exchange.rs": {
-      "indexed_at": "2026-05-04T00:01:27.154656Z",
+      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
       "file_modified_at": "2026-04-28T12:55:19.853149Z",
       "chunks": [
         1,
@@ -1068,7 +1068,7 @@
       "status": "complete"
     },
     "android/app/src/main/java/com/scmessenger/android/service/PerformanceMonitor.kt": {
-      "indexed_at": "2026-05-04T16:47:04.704757Z",
+      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
       "file_modified_at": "2026-04-30T08:07:55.230689Z",
       "chunks": [
         1
@@ -1077,7 +1077,7 @@
       "status": "complete"
     },
     "core/src/drift/policy.rs": {
-      "indexed_at": "2026-05-03T23:23:05.952801Z",
+      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
       "file_modified_at": "2026-04-28T12:55:20.490228Z",
       "chunks": [
         1,
@@ -1087,7 +1087,7 @@
       "status": "complete"
     },
     "android/app/src/main/java/com/scmessenger/android/data/PreferencesRepository.kt": {
-      "indexed_at": "2026-05-04T16:21:24.146094Z",
+      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
       "file_modified_at": "2026-04-28T12:55:18.302241Z",
       "chunks": [
         1
@@ -1096,7 +1096,7 @@
       "status": "complete"
     },
     "core/src/relay/protocol.rs": {
-      "indexed_at": "2026-05-04T00:04:20.078195Z",
+      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
       "file_modified_at": "2026-04-28T12:55:19.977807Z",
       "chunks": [
         1,
@@ -1106,7 +1106,7 @@
       "status": "complete"
     },
     "core/src/transport/reflection.rs": {
-      "indexed_at": "2026-05-04T01:17:47.854711Z",
+      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
       "file_modified_at": "2026-04-28T12:55:20.759335Z",
       "chunks": [
         1,
@@ -1116,7 +1116,7 @@
       "status": "complete"
     },
     "core/src/drift/relay.rs": {
-      "indexed_at": "2026-05-03T23:24:38.236940Z",
+      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
       "file_modified_at": "2026-04-29T06:20:51.939190Z",
       "chunks": [
         2,
@@ -1126,7 +1126,7 @@
       "status": "complete"
     },
     "core/src/store/relay_custody.rs": {
-      "indexed_at": "2026-05-04T00:36:58.436219Z",
+      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
       "file_modified_at": "2026-05-02T01:51:58.026775Z",
       "chunks": [
         2,
@@ -1137,7 +1137,7 @@
       "status": "complete"
     },
     "core/src/transport/relay_health.rs": {
-      "indexed_at": "2026-05-04T01:15:32.547409Z",
+      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
       "file_modified_at": "2026-05-04T06:24:39.424694Z",
       "chunks": [
         2
@@ -1146,7 +1146,7 @@
       "status": "complete"
     },
     "core/src/abuse/reputation.rs": {
-      "indexed_at": "2026-05-03T23:01:19.676673Z",
+      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
       "file_modified_at": "2026-04-29T06:20:51.851554Z",
       "chunks": [
         1
@@ -1155,7 +1155,7 @@
       "status": "complete"
     },
     "core/src/transport/reputation.rs": {
-      "indexed_at": "2026-05-04T01:19:18.989246Z",
+      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
       "file_modified_at": "2026-04-29T06:20:52.485919Z",
       "chunks": [
         2
@@ -1164,7 +1164,7 @@
       "status": "complete"
     },
     "core/src/routing/resume_prefetch.rs": {
-      "indexed_at": "2026-05-04T00:20:21.773154Z",
+      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
       "file_modified_at": "2026-04-29T06:57:41.126867Z",
       "chunks": [
         1,
@@ -1174,7 +1174,7 @@
       "status": "complete"
     },
     "core/src/wasm_support/rpc.rs": {
-      "indexed_at": "2026-05-04T01:47:33.928269Z",
+      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
       "file_modified_at": "2026-05-04T08:02:10.970604Z",
       "chunks": [
         1,
@@ -1184,7 +1184,7 @@
       "status": "complete"
     },
     "core/src/transport/ble/scanner.rs": {
-      "indexed_at": "2026-05-04T00:47:33.193062Z",
+      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
       "file_modified_at": "2026-04-28T12:55:21.164700Z",
       "chunks": [
         2
@@ -1193,7 +1193,7 @@
       "status": "complete"
     },
     "cli/src/server.rs": {
-      "indexed_at": "2026-05-04T00:03:18.149259Z",
+      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
       "file_modified_at": "2026-05-01T22:01:58.327555Z",
       "chunks": [
         1,
@@ -1204,7 +1204,7 @@
       "status": "complete"
     },
     "core/src/mobile/service.rs": {
-      "indexed_at": "2026-05-03T23:44:29.092997Z",
+      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
       "file_modified_at": "2026-04-28T12:55:19.710394Z",
       "chunks": [
         1,
@@ -1214,7 +1214,7 @@
       "status": "complete"
     },
     "core/src/platform/service.rs": {
-      "indexed_at": "2026-05-03T23:45:03.829070Z",
+      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
       "file_modified_at": "2026-04-28T12:55:19.652188Z",
       "chunks": [
         3
@@ -1223,7 +1223,7 @@
       "status": "complete"
     },
     "android/app/src/main/java/com/scmessenger/android/service/ServiceHealthMonitor.kt": {
-      "indexed_at": "2026-05-04T16:47:53.230420Z",
+      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
       "file_modified_at": "2026-05-04T07:56:45.625947Z",
       "chunks": [
         1,
@@ -1233,7 +1233,7 @@
       "status": "complete"
     },
     "core/src/crypto/session_manager.rs": {
-      "indexed_at": "2026-05-03T23:14:57.128560Z",
+      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
       "file_modified_at": "2026-04-29T06:53:10.968746Z",
       "chunks": [
         1
@@ -1242,7 +1242,7 @@
       "status": "complete"
     },
     "android/app/src/main/java/com/scmessenger/android/ui/screens/SettingsScreen.kt": {
-      "indexed_at": "2026-05-03T22:14:35.689715Z",
+      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
       "file_modified_at": "2026-05-04T07:09:40.150580Z",
       "chunks": [
         2,
@@ -1252,7 +1252,7 @@
       "status": "complete"
     },
     "android/app/src/test/java/com/scmessenger/android/test/SettingsViewModelTest.kt": {
-      "indexed_at": "2026-05-03T22:31:24.352105Z",
+      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
       "file_modified_at": "2026-05-01T22:20:47.212022Z",
       "chunks": [
         1
@@ -1261,7 +1261,7 @@
       "status": "complete"
     },
     "core/src/routing/smart_retry.rs": {
-      "indexed_at": "2026-05-04T00:20:26.285294Z",
+      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
       "file_modified_at": "2026-04-28T12:55:21.292745Z",
       "chunks": [
         1
@@ -1270,7 +1270,7 @@
       "status": "complete"
     },
     "core/src/abuse/spam_detection.rs": {
-      "indexed_at": "2026-05-03T23:00:40.415001Z",
+      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
       "file_modified_at": "2026-05-02T01:51:58.023715Z",
       "chunks": [
         2
@@ -1279,7 +1279,7 @@
       "status": "complete"
     },
     "core/src/wasm_support/storage.rs": {
-      "indexed_at": "2026-05-04T01:49:37.142778Z",
+      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
       "file_modified_at": "2026-04-28T12:55:20.312835Z",
       "chunks": [
         2
@@ -1288,7 +1288,7 @@
       "status": "complete"
     },
     "android/app/src/main/java/com/scmessenger/android/ui/components/StorageWarningBanner.kt": {
-      "indexed_at": "2026-05-03T15:25:23.470643Z",
+      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
       "file_modified_at": "2026-04-28T12:55:17.279772Z",
       "chunks": [
         1
@@ -1297,7 +1297,7 @@
       "status": "complete"
     },
     "core/src/drift/store.rs": {
-      "indexed_at": "2026-05-03T23:29:38.847615Z",
+      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
       "file_modified_at": "2026-04-28T12:55:20.392006Z",
       "chunks": [
         2,
@@ -1307,7 +1307,7 @@
       "status": "complete"
     },
     "AgentSwarmCline/scmessenger_swarm/surgeon_graph.py": {
-      "indexed_at": "2026-05-04T02:35:10.938306Z",
+      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
       "file_modified_at": "2026-04-28T12:55:31.134225Z",
       "chunks": [
         1,
@@ -1317,7 +1317,7 @@
       "status": "complete"
     },
     "AgentSwarmCline/scmessenger_swarm/swarm.py": {
-      "indexed_at": "2026-05-04T02:36:22.189124Z",
+      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
       "file_modified_at": "2026-04-28T12:55:31.166204Z",
       "chunks": [
         2
@@ -1326,7 +1326,7 @@
       "status": "complete"
     },
     "core/src/store/sweeper.rs": {
-      "indexed_at": "2026-05-04T00:38:46.658764Z",
+      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
       "file_modified_at": "2026-04-28T12:55:19.989144Z",
       "chunks": [
         1
@@ -1335,7 +1335,7 @@
       "status": "complete"
     },
     "core/src/drift/sync.rs": {
-      "indexed_at": "2026-05-03T23:31:45.952122Z",
+      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
       "file_modified_at": "2026-04-28T12:55:20.441711Z",
       "chunks": [
         1,
@@ -1345,7 +1345,7 @@
       "status": "complete"
     },
     "android/app/src/main/java/com/scmessenger/android/utils/TimestampUtils.kt": {
-      "indexed_at": "2026-05-03T22:25:22.696354Z",
+      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
       "file_modified_at": "2026-04-28T12:55:17.889387Z",
       "chunks": [
         1
@@ -1354,7 +1354,7 @@
       "status": "complete"
     },
     "core/src/privacy/timing.rs": {
-      "indexed_at": "2026-05-03T23:52:24.693509Z",
+      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
       "file_modified_at": "2026-04-28T12:55:19.774797Z",
       "chunks": [
         1,
@@ -1364,7 +1364,7 @@
       "status": "complete"
     },
     "android/app/src/main/java/com/scmessenger/android/data/TopicManager.kt": {
-      "indexed_at": "2026-05-03T15:14:07.145959Z",
+      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
       "file_modified_at": "2026-04-30T08:07:55.229687Z",
       "chunks": [
         1
@@ -1373,7 +1373,7 @@
       "status": "complete"
     },
     "core/src/wasm_support/transport.rs": {
-      "indexed_at": "2026-05-04T01:51:59.383159Z",
+      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
       "file_modified_at": "2026-04-28T12:55:20.297260Z",
       "chunks": [
         1,
@@ -1383,7 +1383,7 @@
       "status": "complete"
     },
     "android/app/src/main/java/com/scmessenger/android/transport/TransportManager.kt": {
-      "indexed_at": "2026-05-03T21:42:16.641774Z",
+      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
       "file_modified_at": "2026-05-04T08:00:48.385830Z",
       "chunks": [
         1
@@ -1392,7 +1392,7 @@
       "status": "complete"
     },
     "cli/src/transport_api.rs": {
-      "indexed_at": "2026-05-03T22:54:27.892268Z",
+      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
       "file_modified_at": "2026-04-28T12:55:34.104987Z",
       "chunks": [
         1
@@ -1401,7 +1401,7 @@
       "status": "complete"
     },
     "android/app/src/main/java/com/scmessenger/android/ui/theme/Type.kt": {
-      "indexed_at": "2026-05-03T15:38:00.849983Z",
+      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
       "file_modified_at": "2026-04-28T12:55:17.613168Z",
       "chunks": [
         1
@@ -1410,7 +1410,7 @@
       "status": "complete"
     },
     "core/src/message/types.rs": {
-      "indexed_at": "2026-05-03T23:39:15.652321Z",
+      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
       "file_modified_at": "2026-04-29T08:47:11.851245Z",
       "chunks": [
         1
@@ -1419,7 +1419,7 @@
       "status": "complete"
     },
     "core/src/transport/websocket.rs": {
-      "indexed_at": "2026-05-04T01:42:55.159989Z",
+      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
       "file_modified_at": "2026-04-29T06:20:52.545042Z",
       "chunks": [
         1
@@ -1428,13 +1428,308 @@
       "status": "complete"
     },
     "core/src/transport/wifi_aware.rs": {
-      "indexed_at": "2026-05-04T01:43:39.825249Z",
+      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
       "file_modified_at": "2026-05-04T06:24:22.454320Z",
       "chunks": [
         3
       ],
       "total_lines": 796,
       "status": "complete"
+    },
+    "android/app/src/main/java/com/scmessenger/android/MeshApplication.kt": {
+      "indexed_at": "2026-05-05T03:18:35.269437+00:00",
+      "chunks": 1,
+      "lines": 56
+    },
+    "android/app/src/main/java/com/scmessenger/android/transport/SmartTransportRouter.kt": {
+      "indexed_at": "2026-05-05T03:18:35.269437+00:00",
+      "chunks": 1,
+      "lines": 476
+    },
+    "android/app/src/main/java/com/scmessenger/android/transport/TransportHealthMonitor.kt": {
+      "indexed_at": "2026-05-05T03:18:35.269437+00:00",
+      "chunks": 1,
+      "lines": 73
+    },
+    "android/app/src/main/java/com/scmessenger/android/transport/WifiAwareTransport.kt": {
+      "indexed_at": "2026-05-05T03:18:35.269437+00:00",
+      "chunks": 1,
+      "lines": 458
+    },
+    "android/app/src/main/java/com/scmessenger/android/transport/WifiDirectTransport.kt": {
+      "indexed_at": "2026-05-05T03:18:35.269437+00:00",
+      "chunks": 1,
+      "lines": 456
+    },
+    "android/app/src/main/java/com/scmessenger/android/transport/WifiTransportManager.kt": {
+      "indexed_at": "2026-05-05T03:18:35.269437+00:00",
+      "chunks": 1,
+      "lines": 177
+    },
+    "android/app/src/main/java/com/scmessenger/android/ui/chat/MessageBubble.kt": {
+      "indexed_at": "2026-05-05T03:18:35.269437+00:00",
+      "chunks": 1,
+      "lines": 108
+    },
+    "android/app/src/main/java/com/scmessenger/android/ui/components/CopyableText.kt": {
+      "indexed_at": "2026-05-05T03:18:35.269437+00:00",
+      "chunks": 1,
+      "lines": 180
+    },
+    "android/app/src/main/java/com/scmessenger/android/ui/components/Identicon.kt": {
+      "indexed_at": "2026-05-05T03:18:35.269437+00:00",
+      "chunks": 1,
+      "lines": 194
+    },
+    "android/app/src/main/java/com/scmessenger/android/ui/components/StatusIndicator.kt": {
+      "indexed_at": "2026-05-05T03:18:35.269437+00:00",
+      "chunks": 1,
+      "lines": 143
+    },
+    "android/app/src/main/java/com/scmessenger/android/ui/contacts/AddContactScreen.kt": {
+      "indexed_at": "2026-05-05T03:18:35.269437+00:00",
+      "chunks": 1,
+      "lines": 401
+    },
+    "android/app/src/main/java/com/scmessenger/android/ui/dashboard/TopologyScreen.kt": {
+      "indexed_at": "2026-05-05T03:18:35.269437+00:00",
+      "chunks": 1,
+      "lines": 364
+    },
+    "android/app/src/main/java/com/scmessenger/android/ui/diagnostics/DiagnosticsBundleFormatter.kt": {
+      "indexed_at": "2026-05-05T03:18:35.269437+00:00",
+      "chunks": 1,
+      "lines": 66
+    },
+    "android/app/src/main/java/com/scmessenger/android/ui/identity/IdentityScreen.kt": {
+      "indexed_at": "2026-05-05T03:18:35.269437+00:00",
+      "chunks": 1,
+      "lines": 311
+    },
+    "android/app/src/main/java/com/scmessenger/android/ui/join/JoinMeshScreen.kt": {
+      "indexed_at": "2026-05-05T03:18:35.269437+00:00",
+      "chunks": 1,
+      "lines": 436
+    },
+    "android/app/src/main/java/com/scmessenger/android/ui/MainActivity.kt": {
+      "indexed_at": "2026-05-05T03:18:35.269437+00:00",
+      "chunks": 1,
+      "lines": 281
+    },
+    "android/app/src/main/java/com/scmessenger/android/ui/MeshApp.kt": {
+      "indexed_at": "2026-05-05T03:18:35.269437+00:00",
+      "chunks": 1,
+      "lines": 338
+    },
+    "android/app/src/main/java/com/scmessenger/android/ui/screens/BlockedPeersScreen.kt": {
+      "indexed_at": "2026-05-05T03:18:35.269437+00:00",
+      "chunks": 1,
+      "lines": 156
+    },
+    "android/app/src/main/java/com/scmessenger/android/ui/screens/ChatScreen.kt": {
+      "indexed_at": "2026-05-05T03:18:35.269437+00:00",
+      "chunks": 1,
+      "lines": 469
+    },
+    "android/app/src/main/java/com/scmessenger/android/ui/screens/DiagnosticsScreen.kt": {
+      "indexed_at": "2026-05-05T03:18:35.269437+00:00",
+      "chunks": 1,
+      "lines": 405
+    },
+    "android/app/src/main/java/com/scmessenger/android/ui/screens/OnboardingScreen.kt": {
+      "indexed_at": "2026-05-05T03:18:35.269437+00:00",
+      "chunks": 1,
+      "lines": 380
+    },
+    "android/app/src/main/java/com/scmessenger/android/ui/settings/MeshSettingsScreen.kt": {
+      "indexed_at": "2026-05-05T03:18:35.269437+00:00",
+      "chunks": 1,
+      "lines": 379
+    },
+    "android/app/src/main/java/com/scmessenger/android/ui/settings/PowerSettingsScreen.kt": {
+      "indexed_at": "2026-05-05T03:18:35.269437+00:00",
+      "chunks": 1,
+      "lines": 440
+    },
+    "android/app/src/main/java/com/scmessenger/android/ui/theme/Color.kt": {
+      "indexed_at": "2026-05-05T03:18:35.269437+00:00",
+      "chunks": 1,
+      "lines": 60
+    },
+    "android/app/src/main/java/com/scmessenger/android/ui/theme/Theme.kt": {
+      "indexed_at": "2026-05-05T03:18:35.269437+00:00",
+      "chunks": 1,
+      "lines": 57
+    },
+    "android/app/src/main/java/com/scmessenger/android/ui/viewmodels/ChatViewModel.kt": {
+      "indexed_at": "2026-05-05T03:18:35.269437+00:00",
+      "chunks": 1,
+      "lines": 453
+    },
+    "android/app/src/main/java/com/scmessenger/android/ui/viewmodels/ContactsViewModel.kt": {
+      "indexed_at": "2026-05-05T03:18:35.269437+00:00",
+      "chunks": 1,
+      "lines": 672
+    },
+    "android/app/src/main/java/com/scmessenger/android/ui/viewmodels/ConversationsViewModel.kt": {
+      "indexed_at": "2026-05-05T03:18:35.269437+00:00",
+      "chunks": 1,
+      "lines": 433
+    },
+    "android/app/src/main/java/com/scmessenger/android/ui/viewmodels/IdentityViewModel.kt": {
+      "indexed_at": "2026-05-05T03:18:35.269437+00:00",
+      "chunks": 1,
+      "lines": 152
+    },
+    "android/app/src/main/java/com/scmessenger/android/ui/viewmodels/MainViewModel.kt": {
+      "indexed_at": "2026-05-05T03:18:35.269437+00:00",
+      "chunks": 1,
+      "lines": 335
+    },
+    "android/app/src/main/java/com/scmessenger/android/ui/viewmodels/MeshServiceViewModel.kt": {
+      "indexed_at": "2026-05-05T03:18:35.269437+00:00",
+      "chunks": 1,
+      "lines": 187
+    },
+    "android/app/src/main/java/com/scmessenger/android/ui/viewmodels/SettingsViewModel.kt": {
+      "indexed_at": "2026-05-05T03:18:35.269437+00:00",
+      "chunks": 1,
+      "lines": 1049
+    },
+    "android/app/src/main/java/com/scmessenger/android/utils/CircuitBreaker.kt": {
+      "indexed_at": "2026-05-05T03:18:35.269437+00:00",
+      "chunks": 1,
+      "lines": 256
+    },
+    "android/app/src/main/java/com/scmessenger/android/utils/ContactImportParser.kt": {
+      "indexed_at": "2026-05-05T03:18:35.269437+00:00",
+      "chunks": 1,
+      "lines": 108
+    },
+    "android/app/src/main/java/com/scmessenger/android/utils/FileLoggingTree.kt": {
+      "indexed_at": "2026-05-05T03:18:35.269437+00:00",
+      "chunks": 1,
+      "lines": 98
+    },
+    "android/app/src/main/java/com/scmessenger/android/utils/PeerIdValidator.kt": {
+      "indexed_at": "2026-05-05T03:18:35.269437+00:00",
+      "chunks": 1,
+      "lines": 36
+    },
+    "android/app/src/main/java/com/scmessenger/android/utils/PeerKeyUtils.kt": {
+      "indexed_at": "2026-05-05T03:18:35.269437+00:00",
+      "chunks": 1,
+      "lines": 302
+    },
+    "android/app/src/main/java/com/scmessenger/android/utils/Permissions.kt": {
+      "indexed_at": "2026-05-05T03:18:35.269437+00:00",
+      "chunks": 1,
+      "lines": 131
+    },
+    "android/app/src/main/java/com/scmessenger/android/utils/ShareReceiver.kt": {
+      "indexed_at": "2026-05-05T03:18:35.269437+00:00",
+      "chunks": 1,
+      "lines": 180
+    },
+    "android/app/src/main/java/com/scmessenger/android/utils/StorageManager.kt": {
+      "indexed_at": "2026-05-05T03:18:35.269437+00:00",
+      "chunks": 1,
+      "lines": 170
+    },
+    "android/app/src/test/java/com/scmessenger/android/test/DeliveryStateMapperTest.kt": {
+      "indexed_at": "2026-05-05T03:18:35.269437+00:00",
+      "chunks": 1,
+      "lines": 58
+    },
+    "android/app/src/test/java/com/scmessenger/android/test/DiagnosticsBundleFormatterTest.kt": {
+      "indexed_at": "2026-05-05T03:18:35.269437+00:00",
+      "chunks": 1,
+      "lines": 58
+    },
+    "android/app/src/test/java/com/scmessenger/android/test/IdentityFlowRegressionTest.kt": {
+      "indexed_at": "2026-05-05T03:18:35.269437+00:00",
+      "chunks": 1,
+      "lines": 247
+    },
+    "android/app/src/test/java/com/scmessenger/android/test/MeshRepositoryTest.kt": {
+      "indexed_at": "2026-05-05T03:18:35.269437+00:00",
+      "chunks": 1,
+      "lines": 250
+    },
+    "android/app/src/test/java/com/scmessenger/android/test/RoleNavigationPolicyTest.kt": {
+      "indexed_at": "2026-05-05T03:18:35.269437+00:00",
+      "chunks": 1,
+      "lines": 35
+    },
+    "android/app/src/test/java/com/scmessenger/android/test/UniffiIntegrationTest.kt": {
+      "indexed_at": "2026-05-05T03:18:35.269437+00:00",
+      "chunks": 1,
+      "lines": 81
+    },
+    "core/src/wasm_support/mod.rs": {
+      "indexed_at": "2026-05-05T03:18:35.269437+00:00",
+      "chunks": 1,
+      "lines": 6
+    },
+    "wasm/src/connection_state.rs": {
+      "indexed_at": "2026-05-05T03:18:35.269437+00:00",
+      "chunks": 1,
+      "lines": 366
+    },
+    "wasm/src/daemon_bridge.rs": {
+      "indexed_at": "2026-05-05T03:18:35.269437+00:00",
+      "chunks": 1,
+      "lines": 620
+    },
+    "wasm/src/lib.rs": {
+      "indexed_at": "2026-05-05T03:18:35.269437+00:00",
+      "chunks": 1,
+      "lines": 2259
+    },
+    "wasm/src/mesh.rs": {
+      "indexed_at": "2026-05-05T03:18:35.269437+00:00",
+      "chunks": 1,
+      "lines": 550
+    },
+    "wasm/src/notification_manager.rs": {
+      "indexed_at": "2026-05-05T03:18:35.269437+00:00",
+      "chunks": 1,
+      "lines": 524
+    },
+    "wasm/src/storage.rs": {
+      "indexed_at": "2026-05-05T03:18:35.269437+00:00",
+      "chunks": 1,
+      "lines": 497
+    },
+    "wasm/src/transport.rs": {
+      "indexed_at": "2026-05-05T03:18:35.269437+00:00",
+      "chunks": 1,
+      "lines": 1496
+    },
+    "wasm/src/worker.rs": {
+      "indexed_at": "2026-05-05T03:18:35.269437+00:00",
+      "chunks": 1,
+      "lines": 447
+    },
+    "cli/src/ble_mesh.rs": {
+      "indexed_at": "2026-05-05T03:18:35.269437+00:00",
+      "chunks": 1,
+      "lines": 251
+    },
+    "cli/src/bootstrap.rs": {
+      "indexed_at": "2026-05-05T03:18:35.269437+00:00",
+      "chunks": 1,
+      "lines": 219
+    },
+    "cli/src/transport_bridge.rs": {
+      "indexed_at": "2026-05-05T03:18:35.269437+00:00",
+      "chunks": 1,
+      "lines": 386
+    },
+    "mobile/src/lib.rs": {
+      "indexed_at": "2026-05-05T03:18:35.269437+00:00",
+      "chunks": 1,
+      "lines": 77
     }
   }
 }
