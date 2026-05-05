@@ -1378,6 +1378,10 @@ impl IronCore {
     pub fn dspy_build_security_audit_pipeline(&self) -> crate::dspy::modules::OptimizerPipeline {
         crate::dspy::modules::ModuleFactory::build_security_audit_pipeline()
     }
+    /// Build a Rust feature pipeline DSPy module.
+    pub fn dspy_build_rust_feature_pipeline(&self) -> crate::dspy::modules::OptimizerPipeline {
+        crate::dspy::modules::ModuleFactory::build_rust_feature_pipeline()
+    }
 
     /// Return a HistoryManager instance for the UniFFI interface.
     #[cfg(not(target_arch = "wasm32"))]
