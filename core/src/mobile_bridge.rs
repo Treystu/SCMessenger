@@ -1164,7 +1164,7 @@ impl MeshService {
                 (
                     peer_id.to_string(),
                     format!(
-                        "state={},duration_ms={},messages_sent={},message_failures={},bytes_sent={},bytes_received={},avg_latency_ms={},connection_attempts={},successful_connections={},connection_failures={}",
+                        "state={:?},duration_ms={},messages_sent={},message_failures={},bytes_sent={},bytes_received={},avg_latency_ms={},connection_attempts={},successful_connections={},connection_failures={}",
                         conn_stats.state,
                         conn_stats.duration_ms,
                         conn_stats.messages_sent,
