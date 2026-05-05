@@ -343,6 +343,20 @@ pub fn parse_intent(req: &JsonRpcRequest) -> Result<ClientIntent, JsonRpcErrorBo
                 .to_string();
             Ok(ClientIntent::RatchetHasSession { peer_id })
         }
+        // ── DSPy integrity ──
+        "blake3_hash" => {
+            let data_hex = req
+                .params
+                .get("data_hex")
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| JsonRpcErrorBody {
+                    code: ERR_PARAMS,
+                    message: "missing data_hex".to_string(),
+                    data: None,
+                })?
+                .to_string();
+            Ok(ClientIntent::Blake3Hash { data_hex })
+        }
         _ => Err(JsonRpcErrorBody {
             code: ERR_METHOD,
             message: format!("unknown method {}", req.method),

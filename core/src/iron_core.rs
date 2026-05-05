@@ -1347,8 +1347,8 @@ impl IronCore {
 
     /// Compute a BLAKE3 hash of the given data.
     /// Used for DSPy signature verification and integrity checks.
-    pub fn dspy_blake3_hash(&self, data: &[u8]) -> [u8; 32] {
-        crate::dspy::signatures::blake3_hash(data)
+    pub fn dspy_blake3_hash(&self, data: &[u8]) -> Vec<u8> {
+        crate::dspy::signatures::blake3_hash(data).to_vec()
     }
 
     /// Create a basic DSPy teleprompter for prompt optimization.

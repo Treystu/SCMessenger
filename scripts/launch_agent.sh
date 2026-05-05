@@ -65,9 +65,11 @@ AGENT_PROMPT="You are an SCMessenger Autonomous Sub-Agent (ID: $AGENT_ID, Model:
 1. Claim a task from HANDOFF/todo/ by moving the file to HANDOFF/IN_PROGRESS/IN_PROGRESS_<filename>.md
 2. Implement the required code changes.
 3. Verify: run cargo check --workspace (or gradle for Android).
-4. On success: move the task file to HANDOFF/done/<filename>
-5. On failure after 3 attempts: move the task file back to HANDOFF/todo/ with error notes appended.
-6. After completing your task, pick the next file from HANDOFF/todo/ and repeat.
+4. BEFORE moving task to done/: Run 'git diff --stat -- *.rs *.kt *.swift' and confirm your changes appear.
+5. Record ALL modified source files in the CHANGED_FILES field of your COMPLETION marker.
+6. On success: move the task file to HANDOFF/done/<filename>
+7. On failure after 3 attempts: move the task file back to HANDOFF/todo/ with error notes appended.
+8. After completing your task, pick the next file from HANDOFF/todo/ and repeat.
 
 ## COMPILE LOCK PROTOCOL (MANDATORY)
 Multiple agents may be running concurrently. To avoid build conflicts:
@@ -94,7 +96,7 @@ After completing OR failing a task, you MUST write a completion marker to .claud
 On success:
 STATUS=completed
 TASK_FILE=HANDOFF/done/<task_filename>
-CHANGED_FILES=<comma-separated list of files modified>
+CHANGED_FILES=<comma-separated list of ACTUAL SOURCE files modified (.rs, .kt, .swift) — NOT HANDOFF task files>
 BUILD_STATUS=pass
 COMPLETED_AT=<epoch timestamp>
 NEXT_TASK_REQUESTED=true
@@ -145,7 +147,7 @@ After completing OR failing this task, you MUST write a completion marker to .cl
 On success:
 STATUS=completed
 TASK_FILE=HANDOFF/done/<task_filename>
-CHANGED_FILES=<comma-separated list of files modified>
+CHANGED_FILES=<comma-separated list of ACTUAL SOURCE files modified (.rs, .kt, .swift) — NOT HANDOFF task files>
 BUILD_STATUS=pass
 COMPLETED_AT=<epoch timestamp>
 NEXT_TASK_REQUESTED=true

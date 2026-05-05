@@ -1303,6 +1303,16 @@ impl IronCore {
         .unwrap()
     }
 
+    // ── DSPy Integrity ────────────────────────────────────────────────────
+
+    /// Compute a BLAKE3 hash of the given data.
+    /// Returns the 32-byte hash as a hex-encoded string.
+    #[wasm_bindgen(js_name = blake3Hash)]
+    pub fn blake3_hash(&self, data: Vec<u8>) -> String {
+        let hash = self.inner.dspy_blake3_hash(&data);
+        hash.iter().map(|b| format!("{:02x}", b)).collect()
+    }
+
     // ── Maintenance & Logging ────────────────────────────────────────────
 
     /// Perform storage maintenance (quota enforcement, cleanup).

@@ -18,6 +18,19 @@ You are the SCMessenger Swarm Orchestrator. Use this command to autonomously dri
 5. **Monitor**: Use `bash .claude/orchestrator_manager.sh pool patrol` (Windows: use full bash path) to track progress, clear stale slots, and requeue or finalize tasks.
 6. **Native `<Agent>` tool:** ONLY permitted in TIER 1 (Vanguard Mode). In TIER 2–4, use `pool launch` via bash script exclusively — the Agent tool clones your model and burns quota at full rate.
 
+## Pre-Dispatch Validation (MANDATORY)
+
+`pool launch` now automatically validates task files before dispatching agents. You must understand these outcomes:
+
+- **FALSE_POSITIVE**: Task targets a test function, Kani proof, proptest harness, or code inside a `GOLDEN_*` string literal. **Auto-moved to done/. No agent launch.**
+- **ALREADY_WIRED**: Task targets a function that already has callers in the codebase. **Auto-moved to done/. No agent launch.**
+- **NEEDS_REVIEW**: Task target file is missing or ambiguous. **Blocked. Ask the user before proceeding.**
+- **VALID**: Task passes validation. Agent launched normally.
+
+**Batch size enforcement**: BATCH_*.md files exceeding 15 tasks are automatically split into sub-batches (BATCH_*_SUB01.md, _SUB02.md, etc.) before launch.
+
+**Post-completion verification**: When `pool patrol` detects a completed agent, it verifies actual code changes via `git diff`. If an agent moved a task file to done/ without making code changes, the task is **automatically re-queued** to todo/.
+
 # 🛑 CRITICAL SYSTEM OVERRIDE: DYNAMIC QUOTA GOVERNOR 🛑
 You are operating under rolling API limits. Your goal is to hit exactly 99.9% of the 7-day window by the end of the week, without ever triggering a 429 crash on the 5-hour window.
 
@@ -72,7 +85,7 @@ These rules apply on EVERY orchestration cycle, without exception:
 ### Stale Worker Cleanup
 - **BEFORE launching any new agent**, run `bash .claude/orchestrator_manager.sh pool status` (Windows: use full bash path) and stop all agents with `STALE` status using `pool stop <agent_id>`.
 - Stale agents consume slot tracking and create confusion about available capacity. Clean them first, then launch fresh.
-- Command: `bash .claude/orchestrator_manager.sh pool stop <agent_id>` (Windows: use full bash path) for each stale entry.
+- Orphaned agent directories (when pool shows 0 active agents) are now auto-cleaned by `cleanup_orphaned_agent_dirs`. If you still see domain conflicts, manually `rm -rf .claude/agents/<stale_dir>`.
 
 ### Git Checkpoint Discipline
 - **After each agent completes a task** (confirmed by task file moving to `done/`), run `git add -A && git commit -m "swarm: completed <TASK_NAME>"`.
@@ -82,7 +95,7 @@ These rules apply on EVERY orchestration cycle, without exception:
 ### HANDOFF Queue Hygiene
 - Verify that completed task files landed in `HANDOFF/done/`. If a task file is still in `todo/` or `IN_PROGRESS/` after an agent exits, investigate before re-launching.
 - Remove stale batch files that reference completed or abandoned work.
-- If an agent produced zero code changes, move its task file back to `todo/` for re-attempt, not to `done/`.
+- If an agent produced zero code changes, its task is now **automatically re-queued** by `pool patrol`'s `verify_agent_completion` check. You no longer need to do this manually.
 
 ### Build Verification After Agent Work
 - After committing agent changes, run the appropriate build gate:

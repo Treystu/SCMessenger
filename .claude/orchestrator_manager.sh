@@ -357,6 +357,11 @@ pool_launch() {
         echo "TASK VALIDATION: PASS ($validation_result)"
     fi
 
+    # ─── BATCH SIZE ENFORCEMENT ─────────────────────────────────────────────
+    if [ -n "$task_file" ] && [ -f "$task_file" ]; then
+        enforce_batch_size_limit "$task_file"
+    fi
+
     # STRICT GATE: Check actual OS process count (Two-Tier Topology: max 3)
     if ! assert_process_limit; then
         return 1
@@ -728,6 +733,88 @@ validate_task_before_launch() {
     esac
 }
 
+# ─── Post-Completion Verification ──────────────────────────────────────────────
+# Verifies that a completed agent actually made code changes, not just moved files.
+# Return codes: 0=VERIFIED, 1=NO_CODE_CHANGES, 2=MISSING_CLOSEOUT
+
+verify_agent_completion() {
+    local agent_id="$1"
+
+    if [ -z "$agent_id" ]; then
+        return 0
+    fi
+
+    local completion_file="$AGENT_ROOT/$agent_id/COMPLETION"
+
+    # Check 1: COMPLETION marker must exist
+    if [ ! -f "$completion_file" ]; then
+        echo "NO_CLOSEOUT:no COMPLETION marker for $agent_id"
+        return 2
+    fi
+
+    # Check 2: CHANGED_FILES must list source files (not just HANDOFF moves)
+    local changed_files=$(grep "^CHANGED_FILES=" "$completion_file" | cut -d'=' -f2-)
+    local has_source_files=false
+    if [ -n "$changed_files" ]; then
+        # Check if any .rs, .kt, .swift, .java, .ts files are listed
+        if echo "$changed_files" | grep -qE '\.(rs|kt|swift|java|ts)'; then
+            has_source_files=true
+        fi
+    fi
+
+    # Check 3: Verify git diff has actual code changes
+    local code_change_count=$(git diff HEAD --name-only -- '*.rs' '*.kt' '*.swift' '*.java' '*.ts' 2>/dev/null | wc -l)
+
+    if [ "$code_change_count" -eq 0 ] && [ "$has_source_files" = false ]; then
+        echo "NO_CODE_CHANGES:agent $agent_id completed but git shows 0 code diffs"
+        return 1
+    fi
+
+    echo "VERIFIED:$code_change_count code files changed by $agent_id"
+    return 0
+}
+
+# ─── Batch Size Enforcer ────────────────────────────────────────────────────────
+# Prevents oversized batch files from being dispatched to a single agent.
+BATCH_SIZE_LIMIT=15
+
+enforce_batch_size_limit() {
+    local task_file="$1"
+
+    if [ -z "$task_file" ] || [ ! -f "$task_file" ]; then
+        return 0
+    fi
+
+    # Only process BATCH_ files
+    local basename=$(basename "$task_file")
+    if [[ "$basename" != BATCH_* ]]; then
+        return 0
+    fi
+
+    # Count numbered task items
+    local task_count=$(grep -cP '^\d+\.\s+\*\*' "$task_file" 2>/dev/null || echo "0")
+
+    if [ "$task_count" -le "$BATCH_SIZE_LIMIT" ]; then
+        echo "BATCH SIZE: $task_count tasks (within limit of $BATCH_SIZE_LIMIT)"
+        return 0
+    fi
+
+    echo "BATCH SIZE VIOLATION: $task_count tasks exceeds limit of $BATCH_SIZE_LIMIT"
+    echo "Splitting batch into sub-batches of $BATCH_SIZE_LIMIT..."
+
+    $PYTHON "$SCRIPT_DIR/scripts/batch_splitter.py" "$task_file" "$BATCH_SIZE_LIMIT" 2>/dev/null
+
+    if [ $? -eq 0 ]; then
+        # Move original oversized batch to done/
+        mv "$task_file" "HANDOFF/done/$basename" 2>/dev/null || true
+        echo "Original batch moved to done/. Sub-batches created in todo/."
+    else
+        echo "WARNING: Batch splitter failed. Proceeding with oversized batch."
+    fi
+
+    return 0
+}
+
 # ─── Pre-Launch Hygiene ──────────────────────────────────────────────────────
 
 pool_launch_clean() {
@@ -835,6 +922,7 @@ pool_launch_clean() {
 
     # Phase 4: Clean stale agent directories
     clean_stale_pids
+    cleanup_orphaned_agent_dirs
 
     # Phase 5: Check for corrupted build artifacts
     if [ -d "target" ]; then
@@ -966,9 +1054,28 @@ pool_patrol() {
             local build_status=$(grep "^BUILD_STATUS=" "$completion_file" | cut -d'=' -f2)
 
             case "$status" in
-                "completed"|"timeout"|"crashed")
-                    if [ "$next_requested" = "false" ] || [ "$status" = "timeout" ] || [ "$status" = "crashed" ]; then
-                        echo "PATROL: Agent $agent_id $status (build: $build_status). Freeing slot."
+                "completed")
+                    # Verify actual code changes before accepting completion
+                    local verify_result
+                    verify_result=$(verify_agent_completion "$agent_id")
+                    local verify_exit=$?
+
+                    if [ $verify_exit -eq 1 ]; then
+                        # NO_CODE_CHANGES: re-queue the task
+                        echo "PATROL: Agent $agent_id COMPLETED but $verify_result. Re-queuing task."
+                        if [ -n "$task_file" ] && [ -f "$task_file" ]; then
+                            local task_name=$(basename "$task_file" | sed 's/^IN_PROGRESS_//')
+                            mv "$task_file" "HANDOFF/todo/$task_name" 2>/dev/null || true
+                        fi
+                        pool_stop "$agent_id"
+                        ((actions_taken++))
+                        continue
+                    elif [ $verify_exit -eq 2 ]; then
+                        echo "PATROL: Agent $agent_id COMPLETED but missing closeout: $verify_result"
+                    fi
+
+                    if [ "$next_requested" = "false" ]; then
+                        echo "PATROL: Agent $agent_id COMPLETED (build: $build_status, $verify_result). Freeing slot."
                         pool_stop "$agent_id"
                         ((actions_taken++))
                     else
@@ -976,6 +1083,11 @@ pool_patrol() {
                         rm -f "$completion_file"
                         ((actions_taken++))
                     fi
+                    ;;
+                "timeout"|"crashed")
+                    echo "PATROL: Agent $agent_id $status (build: $build_status). Freeing slot."
+                    pool_stop "$agent_id"
+                    ((actions_taken++))
                     ;;
                 "failed")
                     echo "PATROL: Agent $agent_id FAILED. Stopping and re-queuing."
@@ -1036,8 +1148,9 @@ pool_patrol() {
         fi
     done
 
-    # Phase 2: Clean stale PIDs
+    # Phase 2: Clean stale PIDs and orphaned directories
     clean_stale_pids
+    cleanup_orphaned_agent_dirs
 
     # Phase 3: Check for stale claims (IN_PROGRESS older than 60 min)
     local now=$(date +%s)
