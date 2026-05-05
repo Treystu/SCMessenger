@@ -346,6 +346,9 @@ pool_launch() {
         return 1
     fi
 
+    # Clean orphaned agent dirs BEFORE domain conflict check
+    cleanup_orphaned_agent_dirs
+
     # ─── TASK VALIDATION GATE ────────────────────────────────────────────────
     if [ -n "$task_file" ] && [ -f "$task_file" ]; then
         local validation_result
@@ -529,6 +532,7 @@ TASK=${task_file:-none}
 START_TIME=$(date +%s)
 EOF
         # Record start time for timeout tracking
+        mkdir -p "$AGENT_ROOT/$agent_id"
         echo "$(date +%s)" > "$AGENT_ROOT/$agent_id/start_time"
         echo "Launched native agent: $agent_id"
         echo "  Type: $subagent_type (model: $model)"
@@ -555,6 +559,7 @@ EOF
         export CARGO_INCREMENTAL=0
 
         # Record start time for timeout tracking
+        mkdir -p "$AGENT_ROOT/$agent_id"
         echo "$(date +%s)" > "$AGENT_ROOT/$agent_id/start_time"
 
         if ! ./scripts/launch_agent.sh "$model" "$agent_id" "$task_file" start 2>/dev/null; then

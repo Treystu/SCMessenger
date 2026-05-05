@@ -1627,9 +1627,19 @@ impl IronCore {
             .as_secs();
         let mut guard = self.routing_engine.write();
         if let Some(engine) = guard.as_mut() {
-            let _maintenance = engine.tick(now);
+            let maintenance = engine.tick(now);
             let summary = engine.base_engine().routing_summary();
-            serde_json::to_string(&summary).unwrap_or_else(|_| "{}".to_string())
+            let mut payload = serde_json::to_value(&summary).unwrap_or(serde_json::json!({}));
+            let neg_stats = &maintenance.negative_cache_stats;
+            payload["negative_cache"] = serde_json::json!({
+                "negative_checks": neg_stats.negative_checks,
+                "bloom_hits": neg_stats.bloom_hits,
+                "bloom_misses": neg_stats.bloom_misses,
+                "entry_count": neg_stats.entry_count,
+                "expired_count": neg_stats.expired_count,
+                "entries_cleaned": maintenance.negative_cache_entries_cleaned,
+            });
+            serde_json::to_string(&payload).unwrap_or_else(|_| "{}".to_string())
         } else {
             "{}".to_string()
         }

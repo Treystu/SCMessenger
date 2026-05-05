@@ -179,7 +179,7 @@ pub struct NegativeCache {
 }
 
 /// Statistics for the negative cache
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, serde::Serialize)]
 pub struct NegativeCacheStats {
     /// Total number of negative checks performed
     pub negative_checks: u64,

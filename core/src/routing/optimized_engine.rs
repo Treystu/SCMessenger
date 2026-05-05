@@ -259,12 +259,14 @@ impl OptimizedRoutingEngine {
     /// Periodic maintenance for all components
     pub fn tick(&mut self, now: u64) -> OptimizedRoutingMaintenance {
         let base_maint = self.base_engine.tick(now);
+        let neg_cache_stats = self.negative_cache.stats();
         let neg_cache_cleaned = self.negative_cache.cleanup_expired();
         let ttl_cleaned = self.adaptive_ttl.cleanup(Duration::from_secs(86400)); // 24h
 
         OptimizedRoutingMaintenance {
             base_maintenance: base_maint,
             negative_cache_entries_cleaned: neg_cache_cleaned,
+            negative_cache_stats: neg_cache_stats,
             adaptive_ttl_entries_cleaned: ttl_cleaned,
         }
     }
@@ -426,6 +428,8 @@ pub struct OptimizedRoutingMaintenance {
     pub base_maintenance: RoutingMaintenance,
     /// Negative cache entries cleaned
     pub negative_cache_entries_cleaned: usize,
+    /// Negative cache statistics snapshot
+    pub negative_cache_stats: NegativeCacheStats,
     /// Adaptive TTL entries cleaned
     pub adaptive_ttl_entries_cleaned: usize,
 }
@@ -434,10 +438,13 @@ impl std::fmt::Display for OptimizedRoutingMaintenance {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "Optimized Maintenance: base({} promoted, {} demoted), neg_cache({} cleaned), ttl({} cleaned)",
+            "Optimized Maintenance: base({} promoted, {} demoted), neg_cache({} cleaned, {} entries, {} checks, {} bloom_hits), ttl({} cleaned)",
             self.base_maintenance.peers_promoted,
             self.base_maintenance.peers_demoted,
             self.negative_cache_entries_cleaned,
+            self.negative_cache_stats.entry_count,
+            self.negative_cache_stats.negative_checks,
+            self.negative_cache_stats.bloom_hits,
             self.adaptive_ttl_entries_cleaned
         )
     }
