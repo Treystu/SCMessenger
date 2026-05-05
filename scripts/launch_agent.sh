@@ -282,9 +282,11 @@ start_agent() {
     # Launch Claude Code in non-interactive --print mode with --dangerously-skip-permissions.
     # The process will execute the prompt to completion and then exit automatically.
     # Separate stderr to avoid Windows STATUS_BREAKPOINT (0x80000003) corrupting the log.
+    # Write prompt to file and pipe via stdin to avoid Windows command-line argument length limit.
     export CARGO_INCREMENTAL=0
-    ollama launch claude --model "$AGENT_MODEL" \
-        -- --dangerously-skip-permissions --print "$AGENT_PROMPT" \
+    echo "$AGENT_PROMPT" > "$AGENT_WORK_DIR/prompt.txt"
+    cat "$AGENT_WORK_DIR/prompt.txt" | ollama launch claude --model "$AGENT_MODEL" \
+        -- --dangerously-skip-permissions --print \
         >> "$AGENT_LOG" 2>"$AGENT_STDERR" &
 
     local agent_pid=$!
