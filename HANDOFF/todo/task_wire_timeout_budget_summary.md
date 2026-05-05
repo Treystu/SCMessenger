@@ -22,3 +22,14 @@ PHASE 4: TEST & ITERATE
 3. IF COMPILE FAILS: Enter ITERATION. Read the exact error, fix the syntax or imports, and run the test again. 
 4. IF SUCCESSFUL: Verify you successfully wired all targets from Phase 2. If the integration is 100% complete and compiles cleanly, output exactly:
 STATUS: SUCCESS_STOP
+
+
+# REPO_MAP Context for Task: task_wire_timeout_budget_summary
+
+**Target function: `timeout_budget_summary`**
+
+## core/src/routing/optimized_engine.rs — function `timeout_budget_summary` (line 220)
+- **Calls out to:** from_secs
+- **Structs in chunk:** OptimizedRoutingEngine, OptimizedRoutingEngine, OptimizedRoutingMaintenance, std
+
+---

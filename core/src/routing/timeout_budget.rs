@@ -14,7 +14,7 @@
 use web_time::{Duration, Instant};
 
 /// Discovery phases in order of increasing cost
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
 pub enum DiscoveryPhase {
     /// Phase 1: Local cache lookup (cheapest, ~1ms)
     LocalCache,
@@ -209,6 +209,20 @@ impl std::fmt::Display for BudgetSummary {
             "Budget: {:?} elapsed, {:?} remaining, phase: {:?} ({:?} in phase), exhausted: {}",
             self.elapsed, self.remaining, self.current_phase, self.phase_elapsed, self.is_exhausted
         )
+    }
+}
+
+impl serde::Serialize for BudgetSummary {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        use serde::ser::SerializeStruct;
+        let mut state = serializer.serialize_struct("BudgetSummary", 7)?;
+        state.serialize_field("total_budget_ms", &self.total_budget.as_millis())?;
+        state.serialize_field("elapsed_ms", &self.elapsed.as_millis())?;
+        state.serialize_field("remaining_ms", &self.remaining.as_millis())?;
+        state.serialize_field("phase", &self.current_phase)?;
+        state.serialize_field("phase_elapsed_ms", &self.phase_elapsed.as_millis())?;
+        state.serialize_field("exhausted", &self.is_exhausted)?;
+        state.end()
     }
 }
 
