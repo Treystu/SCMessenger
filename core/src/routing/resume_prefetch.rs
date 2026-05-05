@@ -75,7 +75,7 @@ impl PrefetchedRoute {
 
     /// Mark as refreshing
     #[allow(dead_code)]
-    fn start_refresh(&mut self) {
+    pub fn start_refresh(&mut self) {
         self.status = PrefetchStatus::Refreshing;
         self.refresh_attempts += 1;
     }
@@ -285,6 +285,13 @@ impl ResumePrefetchManager {
             prefetched.fail_refresh();
         }
         self.active_refreshes = self.active_refreshes.saturating_sub(1);
+    }
+
+    /// Start a route refresh
+    pub fn start_route_refresh(&mut self, hint: &[u8; 4]) {
+        if let Some(prefetched) = self.routes.get_mut(hint) {
+            prefetched.start_refresh();
+        }
     }
 
     /// Get the next hint that needs refresh

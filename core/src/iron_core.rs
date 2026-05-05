@@ -1374,6 +1374,10 @@ impl IronCore {
     pub fn dspy_create_optimizer(&self, name: &str, stages: &[&str]) -> crate::dspy::modules::OptimizerPipeline {
         crate::dspy::modules::ModuleFactory::create_optimizer(name, stages)
     }
+    /// Build a security audit pipeline DSPy module.
+    pub fn dspy_build_security_audit_pipeline(&self) -> crate::dspy::modules::OptimizerPipeline {
+        crate::dspy::modules::ModuleFactory::build_security_audit_pipeline()
+    }
 
     /// Return a HistoryManager instance for the UniFFI interface.
     #[cfg(not(target_arch = "wasm32"))]
@@ -2810,6 +2814,14 @@ impl IronCore {
     // -----------------------------------------------------------------------
     // B2 wiring: Routing engine — prefetch lifecycle
     // -----------------------------------------------------------------------
+
+    /// Start a refresh for a prefetched route.
+    pub fn prefetch_start_refresh(&self, hint: [u8; 4]) {
+        let mut guard = self.routing_engine.write();
+        if let Some(ref mut engine) = guard.as_mut() {
+            engine.prefetch_manager_mut().start_route_refresh(&hint);
+        }
+    }
 
     /// Mark a prefetched route refresh as failed.
     /// Called when a route refresh attempt fails, so the prefetch manager
