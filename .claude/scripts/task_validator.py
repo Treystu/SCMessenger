@@ -143,7 +143,7 @@ def validate_task(task_file, target_file, func_name):
                     total_refs += int(count_str)
                 except ValueError:
                     pass
-        if total_refs > 4:
+        if total_refs > 1:
             return "ALREADY_WIRED", f"{total_refs}_references"
     except (subprocess.TimeoutExpired, Exception):
         pass
