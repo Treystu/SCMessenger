@@ -40,7 +40,7 @@
       "status": "complete"
     },
     "cli/src/api.rs": {
-      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
+      "indexed_at": "2026-05-05T05:58:54.747051+00:00",
       "file_modified_at": "2026-05-02T22:26:25.256642Z",
       "chunks": [
         2
@@ -85,7 +85,7 @@
       "status": "complete"
     },
     "android/app/src/main/java/com/scmessenger/android/utils/BackoffStrategy.kt": {
-      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
+      "indexed_at": "2026-05-05T05:58:54.747051+00:00",
       "file_modified_at": "2026-04-28T12:55:17.831609Z",
       "chunks": [
         1
@@ -364,7 +364,7 @@
       "status": "complete"
     },
     "core/src/contacts_bridge.rs": {
-      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
+      "indexed_at": "2026-05-05T05:58:54.747051+00:00",
       "file_modified_at": "2026-04-30T04:35:49.178175Z",
       "chunks": [
         1,
@@ -429,7 +429,7 @@
       "status": "complete"
     },
     "core/src/relay/delegate_prewarm.rs": {
-      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
+      "indexed_at": "2026-05-05T05:58:54.747051+00:00",
       "file_modified_at": "2026-04-28T12:55:19.901206Z",
       "chunks": [
         2
@@ -543,7 +543,7 @@
       "status": "complete"
     },
     "core/src/drift/frame.rs": {
-      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
+      "indexed_at": "2026-05-05T05:58:54.747051+00:00",
       "file_modified_at": "2026-04-28T12:55:20.509925Z",
       "chunks": [
         1,
@@ -639,7 +639,7 @@
       "status": "complete"
     },
     "core/src/relay/invite.rs": {
-      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
+      "indexed_at": "2026-05-05T05:58:54.747051+00:00",
       "file_modified_at": "2026-04-28T12:55:19.869126Z",
       "chunks": [
         1,
@@ -723,7 +723,7 @@
       "status": "complete"
     },
     "cli/src/main.rs": {
-      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
+      "indexed_at": "2026-05-05T05:58:54.747051+00:00",
       "file_modified_at": "2026-05-04T07:02:50.590711Z",
       "chunks": [
         3
@@ -965,7 +965,7 @@
       "status": "complete"
     },
     "android/app/src/main/java/com/scmessenger/android/utils/NotificationHelper.kt": {
-      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
+      "indexed_at": "2026-05-05T05:58:54.747051+00:00",
       "file_modified_at": "2026-04-30T08:07:55.252696Z",
       "chunks": [
         1
@@ -1068,7 +1068,7 @@
       "status": "complete"
     },
     "android/app/src/main/java/com/scmessenger/android/service/PerformanceMonitor.kt": {
-      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
+      "indexed_at": "2026-05-05T05:58:54.747051+00:00",
       "file_modified_at": "2026-04-30T08:07:55.230689Z",
       "chunks": [
         1
@@ -1146,7 +1146,7 @@
       "status": "complete"
     },
     "core/src/abuse/reputation.rs": {
-      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
+      "indexed_at": "2026-05-05T05:58:54.747051+00:00",
       "file_modified_at": "2026-04-29T06:20:51.851554Z",
       "chunks": [
         1
@@ -1164,7 +1164,7 @@
       "status": "complete"
     },
     "core/src/routing/resume_prefetch.rs": {
-      "indexed_at": "2026-05-05T03:17:21.364558+00:00",
+      "indexed_at": "2026-05-05T05:58:54.747051+00:00",
       "file_modified_at": "2026-04-29T06:57:41.126867Z",
       "chunks": [
         1,
@@ -1562,17 +1562,17 @@
       "lines": 57
     },
     "android/app/src/main/java/com/scmessenger/android/ui/viewmodels/ChatViewModel.kt": {
-      "indexed_at": "2026-05-05T03:18:35.269437+00:00",
+      "indexed_at": "2026-05-05T05:58:54.747051+00:00",
       "chunks": 1,
       "lines": 453
     },
     "android/app/src/main/java/com/scmessenger/android/ui/viewmodels/ContactsViewModel.kt": {
-      "indexed_at": "2026-05-05T03:18:35.269437+00:00",
+      "indexed_at": "2026-05-05T05:58:54.747051+00:00",
       "chunks": 1,
       "lines": 672
     },
     "android/app/src/main/java/com/scmessenger/android/ui/viewmodels/ConversationsViewModel.kt": {
-      "indexed_at": "2026-05-05T03:18:35.269437+00:00",
+      "indexed_at": "2026-05-05T05:58:54.747051+00:00",
       "chunks": 1,
       "lines": 433
     },
@@ -1682,7 +1682,7 @@
       "lines": 620
     },
     "wasm/src/lib.rs": {
-      "indexed_at": "2026-05-05T03:18:35.269437+00:00",
+      "indexed_at": "2026-05-05T05:58:54.747051+00:00",
       "chunks": 1,
       "lines": 2259
     },
@@ -1730,6 +1730,21 @@
       "indexed_at": "2026-05-05T03:18:35.269437+00:00",
       "chunks": 1,
       "lines": 77
+    },
+    "core/src/notification.rs": {
+      "indexed_at": "2026-05-05T05:58:54.747051+00:00",
+      "chunks": 1,
+      "lines": 0
+    },
+    "core/src/dspy/modules.rs": {
+      "indexed_at": "2026-05-05T05:58:54.747051+00:00",
+      "chunks": 1,
+      "lines": 0
+    },
+    "core/src/dspy/signatures.rs": {
+      "indexed_at": "2026-05-05T05:58:54.747051+00:00",
+      "chunks": 1,
+      "lines": 0
     }
   }
 }
