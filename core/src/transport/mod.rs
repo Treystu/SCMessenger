@@ -69,6 +69,7 @@ pub use routing::{
     smart_retry::{calculate_next_attempt, BackoffStrategy, DeliveryTrigger},
     timeout_budget::{BudgetSummary, DiscoveryPhase, TimeoutBudget},
 };
+pub use routing::EnhancedReputationScore;
 pub use swarm::{
     start_swarm, start_swarm_with_config, SwarmCommand, SwarmEvent2 as SwarmEvent, SwarmHandle,
 };
