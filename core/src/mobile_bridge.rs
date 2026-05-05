@@ -1149,6 +1149,34 @@ impl MeshService {
         *self.state.lock() == ServiceState::Running
     }
 
+    /// Get all connection statistics from the transport health monitor.
+    /// Returns peer-by-peer connection stats for diagnostics.
+    pub fn get_all_connection_stats(&self) -> std::collections::HashMap<String, String> {
+        let core = self.get_core().unwrap_or_else(|| {
+            // Fallback: create a temporary core just for this operation
+            std::sync::Arc::new(crate::IronCore::new())
+        });
+        let stats = core.get_all_connection_stats();
+        // Convert HashMap<PeerId, ConnectionStats> to String map for UniFFI
+        stats
+            .into_iter()
+            .map(|(peer_id, conn_stats)| {
+                (
+                    peer_id.to_string(),
+                    format!(
+                        "state={},latency_ms={:?},messages_sent={},messages_failed={},bytes_sent={},bytes_received={}",
+                        conn_stats.state,
+                        conn_stats.latency_ms,
+                        conn_stats.messages_sent,
+                        conn_stats.messages_failed,
+                        conn_stats.bytes_sent,
+                        conn_stats.bytes_received
+                    ),
+                )
+            })
+            .collect()
+    }
+
     /// Helper to dispatch a packet via BLE bridge
     pub fn dispatch_ble_packet(&self, peer_id: String, data: Vec<u8>) {
         if let Some(bridge) = self.platform_bridge.lock().as_ref() {
@@ -1776,7 +1804,7 @@ impl HistoryManager {
     }
 
     /// Unhide all stored messages for a given peer (called on unblock).
-    pub fn unhide_messages_for_peer(&self, peer_id: &str) -> Result<u32, crate::IronCoreError> {
+    pub fn unhide_messages_for_peer(&self, peer_id: String) -> Result<u32, crate::IronCoreError> {
         let db = self.db.lock();
         let mut to_update: Vec<(Vec<u8>, MessageRecord)> = Vec::new();
 
@@ -1784,7 +1812,7 @@ impl HistoryManager {
             let (key, value) = item.map_err(|_| crate::IronCoreError::StorageError)?;
             let record: MessageRecord =
                 serde_json::from_slice(&value).map_err(|_| crate::IronCoreError::Internal)?;
-            if record.hidden && record.peer_id.eq_ignore_ascii_case(peer_id) {
+            if record.hidden && record.peer_id.eq_ignore_ascii_case(&peer_id) {
                 to_update.push((key.to_vec(), record));
             }
         }
@@ -1801,7 +1829,7 @@ impl HistoryManager {
     }
 
     /// Hide all stored messages for a given peer (called on block).
-    pub fn hide_messages_for_peer(&self, peer_id: &str) -> Result<u32, crate::IronCoreError> {
+    pub fn hide_messages_for_peer(&self, peer_id: String) -> Result<u32, crate::IronCoreError> {
         let db = self.db.lock();
         let mut to_update: Vec<(Vec<u8>, MessageRecord)> = Vec::new();
 
@@ -1809,7 +1837,7 @@ impl HistoryManager {
             let (key, value) = item.map_err(|_| crate::IronCoreError::StorageError)?;
             let record: MessageRecord =
                 serde_json::from_slice(&value).map_err(|_| crate::IronCoreError::Internal)?;
-            if !record.hidden && record.peer_id.eq_ignore_ascii_case(peer_id) {
+            if !record.hidden && record.peer_id.eq_ignore_ascii_case(&peer_id) {
                 to_update.push((key.to_vec(), record));
             }
         }
