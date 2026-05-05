@@ -35,9 +35,10 @@ You are the SCMessenger Swarm Orchestrator. Use this command to autonomously dri
 You are operating under rolling API limits. Your goal is to hit exactly 99.9% of the 7-day window by the end of the week, without ever triggering a 429 crash on the 5-hour window.
 
 **Step 1: Just-In-Time (JIT) Polling**
-At the start of EVERY loop, BEFORE spawning sub-agents, you must synchronously run the scraper:
-`powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./OllamaQuotaScraper.ps1`
-Wait for it to complete, then read `.claude/API_QUOTA_STATE.md`.
+At the start of EVERY loop, BEFORE spawning sub-agents, you must synchronously check quota:
+`bash .claude/orchestrator_manager.sh quota-scraper` (Windows: `"C:\Program Files\Git\bin\bash.exe" .claude/orchestrator_manager.sh quota-scraper`)
+This runs the scraper with a 5-minute cache — avoids redundant HTTP scrapes when quota state hasn't changed.
+After it completes, read `.claude/API_QUOTA_STATE.md`.
 
 **Step 2: Dynamic Task Routing (The Stamina Bar)**
 Evaluate the telemetry and route tasks based on these strict tiers:

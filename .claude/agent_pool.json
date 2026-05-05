@@ -182,7 +182,6 @@
       "model": "qwen3-coder:480b:cloud",
       "fallback_model": "glm-5.1:cloud",
       "purpose": "Acts as an aggressive Beta User against the Rust Core daemon. Tests the JSON-RPC bridge and libp2p mesh.",
-      "system_prompt_additions": "You are the CLIBetaTester. Your job is to interact with the SCMessenger Core daemon using the core_cli_driver skill. Start the node, inject unexpected JSON-RPC payloads, simulate offline/online network states, and attempt to send messages. If the daemon crashes or hangs, use the dump_logs command, save the stack trace to HANDOFF/IN_PROGRESS/CORE_CRASH_REPORT_<timestamp>.md, and request RCA.",
       "task_patterns": [
         "BETA",
         "CLI",

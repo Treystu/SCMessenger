@@ -206,6 +206,32 @@ cleanup_orphaned_agent_dirs() {
     fi
 }
 
+# Quota scraper with 5-minute cache.
+# Avoids redundant HTTP scrapes when quota state hasn't had time to change.
+QUOTA_CACHE_FILE=".claude/quota_cache_timestamp"
+QUOTA_CACHE_TTL=300  # 5 minutes in seconds
+
+run_quota_scraper() {
+    local now=$(date +%s)
+    local cache_age=999999
+
+    if [ -f "$QUOTA_CACHE_FILE" ]; then
+        local cached=$(cat "$QUOTA_CACHE_FILE" 2>/dev/null)
+        if [[ "$cached" =~ ^[0-9]+$ ]]; then
+            cache_age=$((now - cached))
+        fi
+    fi
+
+    if [ "$cache_age" -lt "$QUOTA_CACHE_TTL" ] && [ -f ".claude/API_QUOTA_STATE.md" ]; then
+        echo "QUOTA_CACHE: Using cached quota state (age: ${cache_age}s, TTL: ${QUOTA_CACHE_TTL}s)"
+        return 0
+    fi
+
+    echo "QUOTA_CACHE: Cache expired or missing (age: ${cache_age}s), running scraper..."
+    powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./OllamaQuotaScraper.ps1
+    echo "$now" > "$QUOTA_CACHE_FILE"
+}
+
 count_active_agents() {
     # CLI-launched agents (ollama spawn) are the only source of truth.
     # Native sub-agents (internal Agent tool) are not tracked separately.
@@ -471,7 +497,9 @@ except Exception as e:
 
             # Inject context for all FRESH files
             echo "Injecting REPO_MAP context into task..."
-            $PYTHON .claude/scripts/context_extractor.py --task-file "$task_file"
+            # Extract function name for per-function extraction (saves ~28-32K tokens vs module-level)
+            local inject_func_name=$(basename "$task_file" | sed 's/^task_wire_//' | sed 's/\.md$//')
+            $PYTHON .claude/scripts/context_extractor.py --task-file "$task_file" --function "$inject_func_name"
         else
             echo "Skipping full REPO_MAP context injection for micro-task: $task_file"
         fi
@@ -570,6 +598,7 @@ pool_stop() {
             return 1
         fi
         ./scripts/launch_agent.sh "dummy" "$agent_id" "" stop
+        process_cache_invalidate "$agent_pid"
         rm -rf "$AGENT_ROOT/$agent_id"
         echo "Stopped CLI agent: $agent_id"
     else
@@ -1251,6 +1280,10 @@ case "$1" in
                 fi
             fi
             ./scripts/launch_agent.sh "dummy" "$id" "" stop
+            if [ -f "$AGENT_ROOT/$id/pid" ]; then
+                local agent_pid=$(cat "$AGENT_ROOT/$id/pid" 2>/dev/null)
+                [ -n "$agent_pid" ] && process_cache_invalidate "$agent_pid"
+            fi
             rm -rf "$AGENT_ROOT/$id"
         else
             echo "Error: Agent [$id] not found."
@@ -1298,6 +1331,9 @@ case "$1" in
         clean_stale_pids
         echo "Orchestrator Gatekeeper deactivated."
         ;;
+    "quota-scraper")
+        run_quota_scraper
+        ;;
     "status")
         if [ -f ".claude/orchestrator_active" ]; then
             echo "Orchestrator Status: ACTIVE (Gatekeeper Mode)"
@@ -1307,7 +1343,7 @@ case "$1" in
         fi
         ;;
     *)
-        echo "Usage: $0 {activate|launch|stop|pool|list|status|deactivate}"
+        echo "Usage: $0 {activate|launch|stop|pool|list|status|deactivate|quota-scraper}"
         echo ""
         echo "Commands:"
         echo "  activate               Activate Gatekeeper mode"
@@ -1316,6 +1352,7 @@ case "$1" in
         echo "  list                   List active sub-agents"
         echo "  status                 Show orchestrator status"
         echo "  deactivate             Deactivate Gatekeeper mode"
+        echo "  quota-scraper           Run quota scraper (5-min cache)"
         echo ""
         echo "Pool Commands:"
         echo "  pool list              Show all agent pool profiles"

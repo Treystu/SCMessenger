@@ -294,103 +294,6 @@ start_agent() {
     fi
 }
 
-monitor_agent() {
-    local agent_pid=$(cat "$AGENT_PID")
-    local check_interval=30
-    local consecutive_failures=0
-    local max_failures=3
-    local max_runtime_minutes=120  # Hard timeout: kill after 2 hours
-    local start_time=$(date +%s)
-
-    log "INFO" "Starting agent monitoring for PID: $agent_pid (max runtime: ${max_runtime_minutes}m)"
-
-    while true; do
-        local now=$(date +%s)
-        # Guard against empty/invalid date output on Windows Git Bash
-        if [ -z "$now" ] || ! [[ "$now" =~ ^[0-9]+$ ]]; then
-            sleep $check_interval
-            continue
-        fi
-        local elapsed_seconds=$((now - start_time))
-
-        # ── COMPLETION CHECK (primary detection) ──
-        # Check for COMPLETION marker written by the agent
-        if [ -f "$AGENT_WORK_DIR/COMPLETION" ]; then
-            local status=$(grep "^STATUS=" "$AGENT_WORK_DIR/COMPLETION" | cut -d'=' -f2)
-            log "INFO" "Agent COMPLETION marker found: STATUS=$status"
-            # Kill the agent process since it's done
-            if process_alive "$agent_pid"; then
-                force_kill_pid "$agent_pid"
-                log "INFO" "Terminated agent process $agent_pid after completion"
-            fi
-            return 0
-        fi
-
-        # ── TASK-FILE COMPLETION CHECK (secondary detection) ──
-        # If the agent's task file has been moved to HANDOFF/done/ and no IN_PROGRESS
-        # task remains, the agent is effectively done even without a COMPLETION marker.
-        local in_progress_count=$(ls HANDOFF/IN_PROGRESS/*.md 2>/dev/null | grep -v "BATCH_" | wc -l)
-        local agent_batch="$AGENT_WORK_DIR/task_file"
-        if [ -f "$agent_batch" ]; then
-            local task_name=$(cat "$agent_batch" | xargs basename 2>/dev/null)
-            if [ -n "$task_name" ] && [ ! -f "HANDOFF/todo/$task_name" ] && [ ! -f "HANDOFF/IN_PROGRESS/$task_name" ]; then
-                # Task file is no longer in todo/ or IN_PROGRESS/ — agent must have moved it
-                if [ "$in_progress_count" -eq 0 ]; then
-                    log "INFO" "Task file $task_name no longer in todo/IN_PROGRESS and no active tasks — agent done"
-                    # Write COMPLETION marker on behalf of the agent
-                    echo "STATUS=completed" > "$AGENT_WORK_DIR/COMPLETION"
-                    echo "TASK_FILE=HANDOFF/done/$task_name" >> "$AGENT_WORK_DIR/COMPLETION"
-                    echo "COMPLETED_AT=$(date +%s)" >> "$AGENT_WORK_DIR/COMPLETION"
-                    echo "BUILD_STATUS=unknown" >> "$AGENT_WORK_DIR/COMPLETION"
-                    echo "NEXT_TASK_REQUESTED=false" >> "$AGENT_WORK_DIR/COMPLETION"
-                    if process_alive "$agent_pid"; then
-                        kill -9 "$agent_pid" 2>/dev/null || true
-                        taskkill //F //T //PID "$agent_pid" 2>/dev/null || true
-                        log "INFO" "Terminated agent process $agent_pid (task-file completion detected)"
-                    fi
-                    return 0
-                fi
-            fi
-        fi
-
-        # ── HARD TIMEOUT ──
-        if [ $elapsed_seconds -ge $((max_runtime_minutes * 60)) ]; then
-            log "WARN" "Agent monitor timeout after ${max_runtime_minutes}m, terminating agent"
-            if process_alive "$agent_pid"; then
-                kill -9 "$agent_pid" 2>/dev/null || true
-                taskkill //F //T //PID "$agent_pid" 2>/dev/null || true
-            fi
-            # Write a timeout COMPLETION marker
-            echo "STATUS=timeout" > "$AGENT_WORK_DIR/COMPLETION"
-            echo "COMPLETED_AT=$(date +%s)" >> "$AGENT_WORK_DIR/COMPLETION"
-            echo "ERROR=Agent exceeded ${max_runtime_minutes}m runtime limit" >> "$AGENT_WORK_DIR/COMPLETION"
-            return 1
-        fi
-
-        # ── PROCESS HEALTH CHECK ──
-        if ! process_alive "$agent_pid"; then
-            ((consecutive_failures++))
-            log "WARN" "Agent process not running ($consecutive_failures/$max_failures)"
-
-            if [ $consecutive_failures -ge $max_failures ]; then
-                log "ERROR" "Agent process dead after $max_failures checks, exiting monitor"
-                # Write a crash COMPLETION marker
-                echo "STATUS=crashed" > "$AGENT_WORK_DIR/COMPLETION"
-                echo "COMPLETED_AT=$(date +%s)" >> "$AGENT_WORK_DIR/COMPLETION"
-                echo "ERROR=Agent process died unexpectedly" >> "$AGENT_WORK_DIR/COMPLETION"
-                return 1
-            fi
-        else
-            consecutive_failures=0
-            # Only log every 10th check to reduce noise
-            if [ $((elapsed_seconds / check_interval)) -eq 0 ] || [ $((elapsed_seconds % 300)) -lt $check_interval ]; then
-                log "INFO" "Agent process healthy ($((elapsed_seconds / 60))m elapsed)"
-            fi
-        fi
-
-        sleep $check_interval
-    done
-}
 
 restart_agent() {
     log "INFO" "Restarting agent $AGENT_ID"
@@ -493,9 +396,7 @@ case "$AGENT_COMMAND" in
 
         setup_agent_environment
         if start_agent; then
-            log "INFO" "Agent $AGENT_ID started successfully"
-            # Start monitoring in background
-            monitor_agent &
+            log "INFO" "Agent $AGENT_ID started successfully — monitoring handled by orchestrator Monitor + pool patrol"
             exit 0
         else
             log "ERROR" "Failed to start agent $AGENT_ID"
