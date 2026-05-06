@@ -14,7 +14,7 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use uuid::Uuid;
-
+use crate::dspy::modules::DSPyModule;
 const CUSTODY_MSG_PREFIX: &str = "relay_custody_msg_";
 const CUSTODY_AUDIT_PREFIX: &str = "relay_custody_audit_";
 const REGISTRATION_STATE_PREFIX: &str = "relay_registration_state_";

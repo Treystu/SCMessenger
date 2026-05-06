@@ -8029,10 +8029,10 @@ open class MeshRepository(private val context: Context) {
         return kotlinx.coroutines.flow.flow {
             com.scmessenger.android.service.MeshEventBus.peerEvents.collect { _ ->
                 // Convert peer events to peer list
-                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                    val peers = ledgerManager?.dialableAddresses()?.mapNotNull { it.peerId }?.distinct() ?: emptyList()
-                    emit(peers)
+                val peers = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    ledgerManager?.dialableAddresses()?.mapNotNull { it.peerId }?.distinct() ?: emptyList()
                 }
+                emit(peers)
             }
         }
     }
@@ -8043,11 +8043,11 @@ open class MeshRepository(private val context: Context) {
     fun observeNetworkStats(): kotlinx.coroutines.flow.Flow<uniffi.api.ServiceStats> {
         return kotlinx.coroutines.flow.flow {
             while (true) {
-                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                    val stats = meshService?.getStats()
-                    if (stats != null) {
-                        emit(stats)
-                    }
+                val stats = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    meshService?.getStats()
+                }
+                if (stats != null) {
+                    emit(stats)
                 }
                 kotlinx.coroutines.delay(2000) // Refresh every 2 seconds
             }

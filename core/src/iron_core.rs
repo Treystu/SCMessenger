@@ -229,6 +229,11 @@ impl IronCore {
         let auto_block_spam =
             SpamDetectionEngine::new_heuristics_only(SpamDetectionConfig::default());
         let auto_block_reputation = EnhancedAbuseReputationManager::new(1000, auto_block_spam);
+        let auto_block = AutoBlockEngine::new(
+            AutoBlockConfig::default(),
+            Arc::new(blocked_for_auto_block),
+            Arc::new(auto_block_reputation),
+        );
         let ratchet_sessions = Arc::new(RwLock::new(RatchetSessionManager::new()));
         let security_audit_pipeline =
             Arc::new(crate::dspy::modules::ModuleFactory::build_security_audit_pipeline());
@@ -305,6 +310,8 @@ impl IronCore {
             Arc::new(blocked_for_auto_block),
             Arc::new(auto_block_reputation),
         );
+        let security_audit_pipeline =
+            Arc::new(crate::dspy::modules::ModuleFactory::build_security_audit_pipeline());
 
         Self {
             identity: Arc::new(RwLock::new(
@@ -351,6 +358,7 @@ impl IronCore {
             #[cfg(not(target_arch = "wasm32"))]
             peer_exchange_manager: Arc::new(RwLock::new(PeerExchangeManager::new())),
             ratchet_sessions: Arc::new(RwLock::new(RatchetSessionManager::new())),
+            security_audit_pipeline,
         }
     }
 
@@ -382,6 +390,8 @@ impl IronCore {
             Arc::new(blocked_for_auto_block),
             Arc::new(auto_block_reputation),
         );
+        let security_audit_pipeline =
+            Arc::new(crate::dspy::modules::ModuleFactory::build_security_audit_pipeline());
 
         Self {
             identity: Arc::new(RwLock::new(
@@ -428,6 +438,7 @@ impl IronCore {
             #[cfg(not(target_arch = "wasm32"))]
             peer_exchange_manager: Arc::new(RwLock::new(PeerExchangeManager::new())),
             ratchet_sessions: Arc::new(RwLock::new(RatchetSessionManager::new())),
+            security_audit_pipeline,
         }
     }
 

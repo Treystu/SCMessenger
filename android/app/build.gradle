@@ -214,13 +214,6 @@ task buildRustAndroid {
     outputs.dir('../../core/target/android-libs')
 
     doLast {
-        // Check if library already exists - if so, skip build
-        def libExists = file('../../core/target/android-libs/arm64-v8a/libscmessenger_mobile.so').exists()
-        if (libExists) {
-            println "Rust library already exists, skipping build"
-            return
-        }
-
         def isWindows = System.getProperty('os.name').toLowerCase().contains('windows')
         def taskNames = project.gradle.startParameter.taskNames.join(",")
         def isRelease = taskNames.contains("Release") || taskNames.contains("Bundle")
