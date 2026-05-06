@@ -358,9 +358,13 @@ impl DaemonBridge {
                         if let Some(id_num) = id_val.as_u64() {
                             let cb = pending_map.lock().remove(&id_num);
                             if let Some(cb) = cb {
-                                cb(*id_val, resp.result, resp.error.map(|e| {
-                                serde_json::json!({"code": e.code, "message": e.message})
-                            }));
+                                cb(
+                                    id_val.clone(),
+                                    resp.result,
+                                    resp.error.map(|e| {
+                                        serde_json::json!({"code": e.code, "message": e.message})
+                                    }),
+                                );
                                 return;
                             }
                         }

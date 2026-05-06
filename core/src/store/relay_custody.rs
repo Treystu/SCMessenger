@@ -3,6 +3,7 @@
 // This stores messages accepted by a relay on behalf of offline recipients
 // and records an auditable transition log for custody lifecycle changes.
 
+use crate::dspy::modules::DSPyModule;
 #[cfg(not(target_arch = "wasm32"))]
 use crate::store::backend::SledStorage;
 use crate::store::backend::{MemoryStorage, StorageBackend};
@@ -14,7 +15,7 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use uuid::Uuid;
-use crate::dspy::modules::DSPyModule;
+
 const CUSTODY_MSG_PREFIX: &str = "relay_custody_msg_";
 const CUSTODY_AUDIT_PREFIX: &str = "relay_custody_audit_";
 const REGISTRATION_STATE_PREFIX: &str = "relay_registration_state_";

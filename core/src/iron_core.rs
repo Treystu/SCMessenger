@@ -108,7 +108,7 @@ pub enum ConsentState {
 ///
 /// Wraps all subsystems behind `Arc<RwLock<…>>` for safe concurrent access.
 #[allow(dead_code)]
-#[derive(uniffi::Object)]
+#[cfg_attr(not(target_arch = "wasm32"), derive(uniffi::Object))]
 pub struct IronCore {
     pub(crate) identity: Arc<RwLock<IdentityManager>>,
     pub(crate) outbox: Arc<RwLock<Outbox>>,
@@ -209,10 +209,10 @@ impl Default for IronCore {
     }
 }
 
-#[uniffi::export]
+#[cfg_attr(not(target_arch = "wasm32"), uniffi::export)]
 impl IronCore {
     /// Create an in-memory IronCore with no persistent storage.
-    #[uniffi::constructor]
+    #[cfg_attr(not(target_arch = "wasm32"), uniffi::constructor)]
     pub fn new() -> Self {
         let backend: Arc<dyn StorageBackend> = Arc::new(MemoryStorage::new());
         let contact_manager = CoreContactManager::new(backend.clone());
@@ -284,7 +284,7 @@ impl IronCore {
 
     /// Create IronCore with persistent sled-backed storage at `path`.
     #[cfg(not(target_arch = "wasm32"))]
-    #[uniffi::constructor]
+    #[cfg_attr(not(target_arch = "wasm32"), uniffi::constructor)]
     pub fn with_storage(path: String) -> Self {
         let backend: Arc<dyn StorageBackend> = match SledStorage::new(&path) {
             Ok(s) => Arc::new(s),
@@ -364,7 +364,7 @@ impl IronCore {
 
     /// Create IronCore with persistent storage and a log directory.
     #[cfg(not(target_arch = "wasm32"))]
-    #[uniffi::constructor]
+    #[cfg_attr(not(target_arch = "wasm32"), uniffi::constructor)]
     pub fn with_storage_and_logs(path: String, log_dir: String) -> Self {
         let backend: Arc<dyn StorageBackend> = match SledStorage::new(&path) {
             Ok(s) => Arc::new(s),
@@ -1320,14 +1320,21 @@ impl IronCore {
 
     /// Return the federated nickname for a contact (the nickname advertised by the peer).
     pub fn contact_federated_nickname(&self, peer_id: String) -> Option<String> {
-        let cm = self.contacts_manager();
-        cm.get(peer_id).ok().flatten().and_then(|c| c.federated_nickname().map(|s| s.to_string()))
+        self.contact_manager
+            .read()
+            .get(peer_id)
+            .ok()
+            .flatten()
+            .and_then(|c| c.federated_nickname().map(|s| s.to_string()))
     }
 
     /// Return the display name for a contact, preferring local then federated then peer ID.
     pub fn contact_display_name(&self, peer_id: String) -> String {
-        let cm = self.contacts_manager();
-        cm.get(peer_id.clone()).ok().flatten()
+        self.contact_manager
+            .read()
+            .get(peer_id.clone())
+            .ok()
+            .flatten()
             .map(|c| c.display_name().to_string())
             .unwrap_or(peer_id)
     }
@@ -1340,7 +1347,9 @@ impl IronCore {
         peer_id: String,
         device_id: Option<String>,
     ) -> Result<(), IronCoreError> {
-        self.contacts_manager().update_device_id(peer_id, device_id)
+        self.contact_manager
+            .read()
+            .update_last_known_device_id(peer_id, device_id)
     }
 
     // -----------------------------------------------------------------------
@@ -1350,10 +1359,13 @@ impl IronCore {
     /// Get the signable data for an invite token.
     /// Returns the serialized token data (without signature) suitable for
     /// Ed25519 signing.
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn invite_get_signable_data(&self, token_bytes: Vec<u8>) -> Result<Vec<u8>, IronCoreError> {
-        let token: crate::relay::invite::InviteToken = bincode::deserialize(&token_bytes)
-            .map_err(|_e| IronCoreError::Internal)?;
-        token.get_signable_data().map_err(|_e| IronCoreError::Internal)
+        let token: crate::relay::invite::InviteToken =
+            bincode::deserialize(&token_bytes).map_err(|_e| IronCoreError::Internal)?;
+        token
+            .get_signable_data()
+            .map_err(|_e| IronCoreError::Internal)
     }
 
     // -----------------------------------------------------------------------
@@ -1371,7 +1383,6 @@ impl IronCore {
     pub fn dspy_get_signature(&self, role: &str) -> Option<String> {
         crate::dspy::signatures::get_signature(role).map(|s| s.to_string())
     }
-
 
     /// Return a HistoryManager instance for the UniFFI interface.
     #[cfg(not(target_arch = "wasm32"))]
@@ -1475,12 +1486,20 @@ impl IronCore {
         // Collect current routes from the routing engine before backgrounding
         let mut guard = self.routing_engine.write();
         if let Some(ref mut engine) = guard.as_mut() {
-            let current_routes: Vec<([u8; 32], [u8; 4], crate::routing::global::RouteAdvertisement)> =
-                engine.base_engine_mut().global_routes_mut().get_advertisements()
-                    .iter()
-                    .map(|ad| (ad.next_hop, ad.destination_hint, ad.clone()))
-                    .collect();
-            engine.prefetch_manager_mut().on_app_background(current_routes);
+            let current_routes: Vec<(
+                [u8; 32],
+                [u8; 4],
+                crate::routing::global::RouteAdvertisement,
+            )> = engine
+                .base_engine_mut()
+                .global_routes_mut()
+                .get_advertisements()
+                .iter()
+                .map(|ad| (ad.next_hop, ad.destination_hint, ad.clone()))
+                .collect();
+            engine
+                .prefetch_manager_mut()
+                .on_app_background(current_routes);
         }
     }
 
@@ -1891,12 +1910,20 @@ impl IronCore {
     }
 
     /// Create a multi-hop recall DSPy module for multi-source reasoning.
-    pub fn dspy_create_multihop(&self, name: &str, max_hops: usize) -> crate::dspy::modules::MultiHopRecall {
+    pub fn dspy_create_multihop(
+        &self,
+        name: &str,
+        max_hops: usize,
+    ) -> crate::dspy::modules::MultiHopRecall {
         crate::dspy::modules::ModuleFactory::create_multihop(name, max_hops)
     }
 
     /// Create an optimizer pipeline DSPy module for end-to-end optimization.
-    pub fn dspy_create_optimizer(&self, name: &str, stages: &[&str]) -> crate::dspy::modules::OptimizerPipeline {
+    pub fn dspy_create_optimizer(
+        &self,
+        name: &str,
+        stages: &[&str],
+    ) -> crate::dspy::modules::OptimizerPipeline {
         crate::dspy::modules::ModuleFactory::create_optimizer(name, stages)
     }
 
@@ -2136,9 +2163,11 @@ impl IronCore {
             .read()
             .expire_address_observations(max_age_secs);
     }
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn bootstrap_manager_handle(&self) -> Arc<RwLock<Option<BootstrapManager>>> {
         self.bootstrap_manager.clone()
     }
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn peer_exchange_manager_handle(&self) -> Arc<RwLock<PeerExchangeManager>> {
         self.peer_exchange_manager.clone()
     }
@@ -2383,7 +2412,9 @@ impl IronCore {
     /// then sets it as the health monitor for the transport manager.
     pub fn register_state_change_callback(
         &self,
-        callback: Box<dyn Fn(libp2p::PeerId, crate::transport::health::ConnectionState) + Send + Sync>,
+        callback: Box<
+            dyn Fn(libp2p::PeerId, crate::transport::health::ConnectionState) + Send + Sync,
+        >,
     ) {
         let monitor = crate::transport::health::TransportHealthMonitor::new();
         monitor.register_state_change_callback(callback);
@@ -2403,7 +2434,9 @@ impl IronCore {
             // to the relay discovery subsystem. We mark that we've successfully
             // entered the mutation path; actual relay node changes should be
             // done through BootstrapManager methods directly.
-            tracing::debug!("relay_discovery_mut: bootstrap manager available for relay node changes");
+            tracing::debug!(
+                "relay_discovery_mut: bootstrap manager available for relay node changes"
+            );
             true
         } else {
             tracing::warn!("relay_discovery_mut: no bootstrap manager initialized");
@@ -2444,8 +2477,14 @@ impl IronCore {
                 let arr: [u8; 32] = bytes.try_into().unwrap_or([0u8; 32]);
                 let guard = self.routing_engine.read();
                 if let Some(ref engine) = *guard {
-                    let peers = engine.base_engine().local_cell().peers_for_hint(&arr[0..4].try_into().unwrap_or([0u8; 4]));
-                    return peers.iter().map(|p| format!("{:?}", p.transports)).collect();
+                    let peers = engine
+                        .base_engine()
+                        .local_cell()
+                        .peers_for_hint(&arr[0..4].try_into().unwrap_or([0u8; 4]));
+                    return peers
+                        .iter()
+                        .map(|p| format!("{:?}", p.transports))
+                        .collect();
                 }
             }
         }
@@ -2467,7 +2506,10 @@ impl IronCore {
         let guard = self.routing_engine.read();
         if let Some(ref engine) = *guard {
             engine.base_engine().local_cell().peer_count() > 0
-                && engine.base_engine().local_cell().peers_for_hint(&[0u8; 4])
+                && engine
+                    .base_engine()
+                    .local_cell()
+                    .peers_for_hint(&[0u8; 4])
                     .iter()
                     .any(|p| p.transports.contains(&tt))
         } else {
@@ -2478,7 +2520,9 @@ impl IronCore {
     /// Get prefetch statistics from the routing engine.
     /// Returns detailed information about prefetched routes including hit rates
     /// and current prefetch queue depth. Returns `None` if not initialized.
-    pub fn routing_prefetch_stats_detailed(&self) -> Option<crate::routing::resume_prefetch::PrefetchStats> {
+    pub fn routing_prefetch_stats_detailed(
+        &self,
+    ) -> Option<crate::routing::resume_prefetch::PrefetchStats> {
         self.routing_engine
             .read()
             .as_ref()
@@ -2553,7 +2597,8 @@ impl IronCore {
     /// Returns a JSON string of all registration transitions recorded
     /// for the given identity_id.
     pub fn registration_transitions_for_identity(&self, identity_id: &str) -> String {
-        let transitions = self.relay_custody_store
+        let transitions = self
+            .relay_custody_store
             .read()
             .registration_transitions_for_identity(identity_id);
         serde_json::to_string(&transitions).unwrap_or_else(|_| "[]".to_string())
@@ -2562,7 +2607,9 @@ impl IronCore {
     /// Enforce storage pressure on the relay custody store.
     /// Checks current device storage and purges oldest custody records
     /// if the SCMessenger quota is exceeded. Returns a pressure report.
-    pub fn enforce_storage_pressure(&self) -> Option<crate::store::relay_custody::StoragePressureReport> {
+    pub fn enforce_storage_pressure(
+        &self,
+    ) -> Option<crate::store::relay_custody::StoragePressureReport> {
         self.relay_custody_store
             .read()
             .enforce_storage_pressure()
@@ -2571,10 +2618,10 @@ impl IronCore {
 
     /// Get the current storage pressure state from the relay custody store.
     /// Returns `None` if the store has no data.
-    pub fn storage_pressure_state(&self) -> Option<crate::store::relay_custody::StoragePressureState> {
-        self.relay_custody_store
-            .read()
-            .storage_pressure_state()
+    pub fn storage_pressure_state(
+        &self,
+    ) -> Option<crate::store::relay_custody::StoragePressureState> {
+        self.relay_custody_store.read().storage_pressure_state()
     }
 
     /// Create a persistent relay custody store for the given peer ID.
@@ -2648,6 +2695,7 @@ impl IronCore {
     /// Override BLE advertise interval on the auto-adjust engine.
     /// Sets a manual override for the BLE advertisement interval in milliseconds.
     /// Pass `None` to clear the override and revert to computed defaults.
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn override_ble_advertise_interval(&self, interval_ms: Option<u16>) {
         let engine = self.get_auto_adjust_engine();
         engine.override_ble_advertise_interval(interval_ms);
@@ -2656,6 +2704,7 @@ impl IronCore {
     /// Override relay priority threshold on the auto-adjust engine.
     /// Sets a manual override for the relay priority threshold.
     /// Pass `None` to clear the override and revert to computed defaults.
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn override_relay_priority_threshold(&self, threshold: Option<u8>) {
         let engine = self.get_auto_adjust_engine();
         engine.override_relay_priority_threshold(threshold);
@@ -2663,20 +2712,24 @@ impl IronCore {
 
     /// Compute BLE adjustment parameters for the given device profile.
     /// Returns the BLE advertise interval, scan window, and other BLE-tuned values.
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn compute_ble_adjustment(
         &self,
         profile: crate::mobile_bridge::AdjustmentProfile,
     ) -> crate::mobile_bridge::BleAdjustment {
-        self.get_auto_adjust_engine().compute_ble_adjustment(profile)
+        self.get_auto_adjust_engine()
+            .compute_ble_adjustment(profile)
     }
 
     /// Compute relay adjustment parameters for the given device profile.
     /// Returns the relay priority, max connections, and other relay-tuned values.
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn compute_relay_adjustment(
         &self,
         profile: crate::mobile_bridge::AdjustmentProfile,
     ) -> crate::mobile_bridge::RelayAdjustment {
-        self.get_auto_adjust_engine().compute_relay_adjustment(profile)
+        self.get_auto_adjust_engine()
+            .compute_relay_adjustment(profile)
     }
 
     // -----------------------------------------------------------------------
@@ -2716,7 +2769,8 @@ impl IronCore {
                 *circuit_builder = crate::privacy::circuit::CircuitBuilder::new(
                     Vec::new(), // No known peers at config time; paths built dynamically
                     crate::privacy::circuit::CircuitConfig::default(),
-                ).ok();
+                )
+                .ok();
             }
         }
 
