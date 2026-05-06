@@ -1,3 +1,7 @@
+FROM llama3.2:3b
+
+# Set the system message
+SYSTEM """
 # SCMessenger CLI Expert Prompt
 
 ## ROLE
@@ -39,3 +43,11 @@ Expert:
 1. `python scripts/core_cli_driver.py status` -> Verify daemon is up.
 2. `python scripts/core_cli_driver.py send 12D3KooW... "Hello"` -> Send message.
 3. `python scripts/core_cli_driver.py daemon-log 10` -> Check for delivery confirmation.
+"""
+
+# Set parameters
+PARAMETER temperature 0.1
+PARAMETER top_p 0.9
+PARAMETER num_ctx 2048
+PARAMETER stop "Expert:"
+PARAMETER stop "User:"

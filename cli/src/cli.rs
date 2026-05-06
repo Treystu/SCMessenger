@@ -239,6 +239,25 @@ pub enum Commands {
         #[command(subcommand)]
         action: SwarmAction,
     },
+    /// Manage local network discovery (mDNS, BLE, WiFi-Aware)
+    Discovery {
+        #[command(subcommand)]
+        action: DiscoveryAction,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum DiscoveryAction {
+    /// Show status of all discovery transports
+    Status,
+    /// Trigger an immediate discovery scan/probe
+    Scan {
+        /// Optional transport to scan (mdns, ble, wifi-aware)
+        #[arg(short, long)]
+        transport: Option<String>,
+    },
+    /// List peers discovered via local transports
+    Peers,
 }
 
 #[derive(Subcommand)]

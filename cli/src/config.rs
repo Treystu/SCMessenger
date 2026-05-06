@@ -20,6 +20,14 @@ pub struct Config {
     #[serde(alias = "mdns", default)]
     pub enable_mdns: bool,
 
+    /// Enable BLE for discovery
+    #[serde(default)]
+    pub enable_ble: bool,
+
+    /// Enable WiFi-Aware for discovery
+    #[serde(default)]
+    pub enable_wifi_aware: bool,
+
     /// Enable DHT for wide area network discovery
     #[serde(default)]
     pub enable_dht: bool,
@@ -62,6 +70,8 @@ impl Default for Config {
         Self {
             listen_port: 9000, // Default to 9000 instead of random
             enable_mdns: true,
+            enable_ble: true,
+            enable_wifi_aware: true,
             enable_dht: true,
             storage_path: None,
             network: NetworkConfig::default(),
@@ -147,6 +157,12 @@ impl Config {
             "enable_mdns" => {
                 self.enable_mdns = value.parse().context("Invalid boolean value")?;
             }
+            "enable_ble" => {
+                self.enable_ble = value.parse().context("Invalid boolean value")?;
+            }
+            "enable_wifi_aware" => {
+                self.enable_wifi_aware = value.parse().context("Invalid boolean value")?;
+            }
             "enable_dht" => {
                 self.enable_dht = value.parse().context("Invalid boolean value")?;
             }
@@ -191,6 +207,8 @@ impl Config {
         match key {
             "listen_port" => Some(self.listen_port.to_string()),
             "enable_mdns" => Some(self.enable_mdns.to_string()),
+            "enable_ble" => Some(self.enable_ble.to_string()),
+            "enable_wifi_aware" => Some(self.enable_wifi_aware.to_string()),
             "enable_dht" => Some(self.enable_dht.to_string()),
             "storage_path" => self.storage_path.clone(),
             "max_peers" => Some(self.network.max_peers.to_string()),
@@ -207,6 +225,11 @@ impl Config {
         vec![
             ("listen_port".to_string(), self.listen_port.to_string()),
             ("enable_mdns".to_string(), self.enable_mdns.to_string()),
+            ("enable_ble".to_string(), self.enable_ble.to_string()),
+            (
+                "enable_wifi_aware".to_string(),
+                self.enable_wifi_aware.to_string(),
+            ),
             ("enable_dht".to_string(), self.enable_dht.to_string()),
             (
                 "storage_path".to_string(),

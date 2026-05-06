@@ -191,6 +191,11 @@ enum Commands {
         #[command(subcommand)]
         action: SwarmAction,
     },
+    /// Manage local network discovery (BLE, mDNS, WiFi-Aware)
+    Discovery {
+        #[command(subcommand)]
+        action: DiscoveryAction,
+    },
 }
 
 #[derive(Subcommand)]
@@ -358,6 +363,16 @@ enum SwarmAction {
     Stats,
 }
 
+#[derive(Subcommand)]
+enum DiscoveryAction {
+    /// Show current discovery transport status
+    Status,
+    /// Trigger an active discovery scan
+    Scan,
+    /// List peers discovered via local transports
+    Peers,
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     // 1. Determine data directory early for logging
@@ -434,6 +449,7 @@ async fn main() -> Result<()> {
         Commands::Test => cmd_test().await,
         Commands::Audit { action } => cmd_audit(action).await,
         Commands::Swarm { action } => cmd_swarm(action).await,
+        Commands::Discovery { action } => cmd_discovery(action).await,
     }
 }
 
@@ -1217,8 +1233,25 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
 
     let listen_addr: libp2p::Multiaddr = format!("/ip4/0.0.0.0/tcp/{}", p2p_port).parse()?;
     let (event_tx, mut event_rx) = tokio::sync::mpsc::channel(256);
-    let swarm_handle =
-        transport::start_swarm(network_keypair, Some(listen_addr), event_tx, None, false).await?;
+
+    // Build discovery config from CLI config
+    let discovery_config = scmessenger_core::transport::DiscoveryConfig::new(
+        if config.enable_mdns {
+            scmessenger_core::transport::DiscoveryMode::Open
+        } else {
+            scmessenger_core::transport::DiscoveryMode::Manual
+        },
+    );
+
+    let swarm_handle = transport::start_swarm(
+        network_keypair,
+        Some(listen_addr),
+        event_tx,
+        None,
+        false,
+        Some(discovery_config),
+    )
+    .await?;
 
     // ── WebSocket P2P Bridge for WASM ────────────────────────────────────
     let ws_p2p_port = p2p_port + 1;
@@ -1235,9 +1268,11 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
 
     println!("{} Network started", "✓".green());
 
-    tokio::spawn(async move {
-        ble_daemon::probe_and_log().await;
-    });
+    if config.enable_ble {
+        tokio::spawn(async move {
+            ble_daemon::probe_and_log().await;
+        });
+    }
 
     // Subscribe to any topics from the ledger
     for topic in known_topics {
@@ -1262,16 +1297,18 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
     // peers and ledger Arc<Mutex> were created above before server::start
     // so the landing page and API endpoints have access to them.
 
-    let core_ble = Arc::clone(&core);
-    let ui_ble = ui_broadcast.clone();
-    tokio::spawn(async move {
-        ble_mesh::run_ble_central_ingress(core_ble, ui_ble).await;
-    });
+    if config.enable_ble {
+        let core_ble = Arc::clone(&core);
+        let ui_ble = ui_broadcast.clone();
+        tokio::spawn(async move {
+            ble_mesh::run_ble_central_ingress(core_ble, ui_ble).await;
+        });
 
-    let core_ble_adv = Arc::clone(&core);
-    tokio::spawn(async move {
-        ble_mesh::run_ble_peripheral_advertising(core_ble_adv).await;
-    });
+        let core_ble_adv = Arc::clone(&core);
+        tokio::spawn(async move {
+            ble_mesh::run_ble_peripheral_advertising(core_ble_adv).await;
+        });
+    }
 
     // ── Dial known peers from persistent ledger ──────────────────────────
     // Dial any peers from the persistent ledger that pass backoff.
@@ -2162,12 +2199,22 @@ async fn cmd_relay(listen_addr: String, http_port: u16, node_name: Option<String
     let listen_multiaddr: libp2p::Multiaddr =
         listen_addr.parse().context("Invalid listen multiaddr")?;
     let (event_tx, mut event_rx) = tokio::sync::mpsc::channel(256);
+
+    let discovery_config = scmessenger_core::transport::DiscoveryConfig::new(
+        if config.enable_mdns {
+            scmessenger_core::transport::DiscoveryMode::Open
+        } else {
+            scmessenger_core::transport::DiscoveryMode::Manual
+        },
+    );
+
     let swarm_handle = transport::start_swarm(
         network_keypair,
         Some(listen_multiaddr),
         event_tx,
         None,
         true,
+        Some(discovery_config),
     )
     .await?;
     println!("{} P2P swarm started on {}", "✓".green(), listen_addr);
@@ -2219,19 +2266,21 @@ async fn cmd_relay(listen_addr: String, http_port: u16, node_name: Option<String
         format!("http://127.0.0.1:{}", api::API_PORT).dimmed()
     );
 
-    tokio::spawn(async move {
-        ble_daemon::probe_and_log().await;
-    });
-    let core_ble = Arc::clone(&core_arc);
-    let ui_ble = ui_broadcast.clone();
-    tokio::spawn(async move {
-        ble_mesh::run_ble_central_ingress(core_ble, ui_ble).await;
-    });
+    if config.enable_ble {
+        tokio::spawn(async move {
+            ble_daemon::probe_and_log().await;
+        });
+        let core_ble = Arc::clone(&core_arc);
+        let ui_ble = ui_broadcast.clone();
+        tokio::spawn(async move {
+            ble_mesh::run_ble_central_ingress(core_ble, ui_ble).await;
+        });
 
-    let core_ble_adv = Arc::clone(&core_arc);
-    tokio::spawn(async move {
-        ble_mesh::run_ble_peripheral_advertising(core_ble_adv).await;
-    });
+        let core_ble_adv = Arc::clone(&core_arc);
+        tokio::spawn(async move {
+            ble_mesh::run_ble_peripheral_advertising(core_ble_adv).await;
+        });
+    }
 
     // ── Initial bootstrap dial ──────────────────────────────────────────
     {
@@ -2497,6 +2546,76 @@ async fn cmd_send_offline(recipient: String, message: String) -> Result<()> {
         api::send_message_via_api(&recipient, &message)
             .await
             .context("Failed to send message via API")?;
+        return Ok(());
+    }
+
+    anyhow::bail!("Node is not running. Please start the node first with 'scm start'.");
+}
+
+async fn cmd_discovery(action: DiscoveryAction) -> Result<()> {
+    if !api::is_api_available().await {
+        println!(
+            "{}",
+            "No SCMessenger node is running. Discovery commands require a running node.".yellow()
+        );
+        return Ok(());
+    }
+
+    match action {
+        DiscoveryAction::Status => {
+            let status = api::get_discovery_status().await?;
+            println!("{}", "Local Discovery Status".bold());
+            println!(
+                "  mDNS:       {}",
+                if status.mdns_enabled {
+                    "ENABLED".green()
+                } else {
+                    "DISABLED".red()
+                }
+            );
+            println!(
+                "  BLE:        {}",
+                if status.ble_enabled {
+                    "ENABLED".green()
+                } else {
+                    "DISABLED".red()
+                }
+            );
+            println!(
+                "  WiFi-Aware: {}",
+                if status.wifi_aware_enabled {
+                    "ENABLED".green()
+                } else {
+                    "DISABLED".red()
+                }
+            );
+        }
+        DiscoveryAction::Scan => {
+            print!("Triggering discovery scan... ");
+            api::trigger_discovery_scan().await?;
+            println!("{}", "Done.".green());
+        }
+        DiscoveryAction::Peers => {
+            let peers = api::get_discovery_peers().await?;
+            println!("{}", "Locally Discovered Peers".bold());
+            if peers.is_empty() {
+                println!("  {}", "No peers discovered via local transports.".dimmed());
+            } else {
+                for peer in peers {
+                    println!(
+                        "  • {} ({})",
+                        peer.peer_id.bright_cyan(),
+                        peer.transport.bright_yellow()
+                    );
+                    if let Some(name) = peer.nickname {
+                        println!("    Name: {}", name);
+                    }
+                }
+            }
+        }
+    }
+    Ok(())
+}
         println!("{} Message sent via running node", "✓".green());
         return Ok(());
     }

@@ -20,6 +20,7 @@ use super::behaviour::{
     MessageRequest, MessageResponse, RegistrationMessage, RegistrationRequest,
     RegistrationResponse, RelayResponse, SharedPeerEntry,
 };
+use super::discovery::DiscoveryConfig;
 #[cfg(not(target_arch = "wasm32"))]
 use super::mesh_routing::{
     advance_route_cursor, BootstrapCapability, MultiPathDelivery, RankedRoute,
@@ -1555,6 +1556,7 @@ pub async fn start_swarm(
     event_tx: mpsc::Sender<SwarmEvent2>,
     core_handle: Option<Weak<crate::IronCore>>,
     headless: bool,
+    discovery_config: Option<DiscoveryConfig>,
 ) -> Result<SwarmHandle> {
     start_swarm_with_config(
         keypair,
@@ -1565,6 +1567,7 @@ pub async fn start_swarm(
         None,
         core_handle,
         headless,
+        discovery_config,
     )
     .await
 }
@@ -1584,6 +1587,7 @@ pub async fn start_swarm_with_config(
     storage_path: Option<String>,
     core_handle: Option<Weak<crate::IronCore>>,
     headless: bool,
+    discovery_config: Option<DiscoveryConfig>,
 ) -> Result<SwarmHandle> {
     #[cfg(not(target_arch = "wasm32"))]
     {
@@ -1601,7 +1605,7 @@ pub async fn start_swarm_with_config(
                 .await?
                 .with_relay_client(libp2p::noise::Config::new, libp2p::yamux::Config::default)?
                 .with_behaviour(|key, relay_client| {
-                    IronCoreBehaviour::new(key, relay_client, headless)
+                    IronCoreBehaviour::new(key, relay_client, headless, discovery_config)
                         .expect("Failed to create network behaviour")
                 })?
                 .with_swarm_config(|cfg: libp2p::swarm::Config| {

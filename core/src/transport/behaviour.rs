@@ -13,6 +13,7 @@
 // - ledger_exchange: automatic peer list sharing for aggressive discovery
 
 use super::reflection::{AddressReflectionRequest, AddressReflectionResponse};
+use super::discovery::DiscoveryConfig;
 use crate::identity::IdentityKeys;
 #[cfg(all(not(target_arch = "wasm32"), not(target_os = "android")))]
 use libp2p::mdns;
@@ -368,6 +369,7 @@ impl IronCoreBehaviour {
         keypair: &libp2p::identity::Keypair,
         relay_client: relay::client::Behaviour,
         headless: bool,
+        discovery_config: Option<DiscoveryConfig>,
     ) -> anyhow::Result<Self> {
         let peer_id = keypair.public().to_peer_id();
         let dcutr = dcutr::Behaviour::new(peer_id);
@@ -470,18 +472,27 @@ impl IronCoreBehaviour {
         // multicast support (Docker containers, cloud VMs, CI runners).
         // Also disabled on Android (no multicast support).
         #[cfg(all(not(target_arch = "wasm32"), not(target_os = "android")))]
-        let mdns = match mdns::tokio::Behaviour::new(mdns::Config::default(), peer_id) {
-            Ok(m) => {
-                tracing::info!("mDNS LAN discovery: enabled");
-                Toggle::from(Some(m))
+        let mdns = if discovery_config
+            .as_ref()
+            .map(|c| c.mode.allows_mdns())
+            .unwrap_or(true)
+        {
+            match mdns::tokio::Behaviour::new(mdns::Config::default(), peer_id) {
+                Ok(m) => {
+                    tracing::info!("mDNS LAN discovery: enabled");
+                    Toggle::from(Some(m))
+                }
+                Err(e) => {
+                    tracing::warn!(
+                        "mDNS LAN discovery disabled ({}): container/VM without multicast support",
+                        e
+                    );
+                    Toggle::from(None)
+                }
             }
-            Err(e) => {
-                tracing::warn!(
-                    "mDNS LAN discovery disabled ({}): container/VM without multicast support",
-                    e
-                );
-                Toggle::from(None)
-            }
+        } else {
+            tracing::info!("mDNS LAN discovery: disabled by config");
+            Toggle::from(None)
         };
 
         // Identify protocol — advertise this node as a relay

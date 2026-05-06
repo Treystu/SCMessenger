@@ -7,6 +7,8 @@ Usage:
     python scripts/core_cli_driver.py stop        # Kill daemon gracefully
     python scripts/core_cli_driver.py status      # Check if daemon is running
     python scripts/core_cli_driver.py identity    # Show local identity (JSON)
+    python scripts/core_cli_driver.py discovery status
+    python scripts/core_cli_driver.py discovery peers
     python scripts/core_cli_driver.py contact list
     python scripts/core_cli_driver.py send <peer_id> <message>
     python scripts/core_cli_driver.py daemon-log [N]  # Tail N lines from daemon log
@@ -179,6 +181,10 @@ def cmd_send(recipient: str, message: str):
     run_cli(["send", recipient, message])
 
 
+def cmd_discovery(args: list[str]):
+    run_cli(["discovery"] + args)
+
+
 def run_cli(args: list[str]):
     """Execute a subcommand via subprocess and emit its output."""
     cmd = get_run_cmd(args)
@@ -324,6 +330,14 @@ def main():
         if len(args) < 2:
             fail("Usage: send <recipient> <message>")
         cmd_send(args[0], " ".join(args[1:]))
+    elif command == "discovery":
+        if not args:
+            fail("Usage: discovery <status|scan|peers>")
+        cmd_discovery(args)
+    elif command == "raw":
+        if not args:
+            fail("Usage: raw <subcommand> [args...]")
+        run_cli(args)
     else:
         fail("Unknown command", detail=command)
 

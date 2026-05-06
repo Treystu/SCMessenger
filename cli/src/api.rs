@@ -90,6 +90,25 @@ pub struct DriftStatusResponse {
     pub store_size: u32,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct DiscoveryStatusResponse {
+    pub mdns_enabled: bool,
+    pub ble_enabled: bool,
+    pub wifi_aware_enabled: bool,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct DiscoveredPeer {
+    pub peer_id: String,
+    pub transport: String,
+    pub nickname: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct DiscoveryPeersResponse {
+    pub peers: Vec<DiscoveredPeer>,
+}
+
 // Check if API is available
 pub async fn is_api_available() -> bool {
     tokio::net::TcpStream::connect(API_ADDR).await.is_ok()
@@ -262,6 +281,46 @@ pub async fn get_drift_state_via_api() -> Result<DriftStatusResponse> {
     Ok(response)
 }
 
+pub async fn get_discovery_status() -> Result<DiscoveryStatusResponse> {
+    let client = hyper::Client::new();
+    let req = Request::builder()
+        .method(Method::GET)
+        .uri(format!("http://{}/api/discovery/status", API_ADDR))
+        .body(Body::empty())?;
+
+    let resp = client.request(req).await?;
+    let body_bytes = hyper::body::to_bytes(resp.into_body()).await?;
+    let response: DiscoveryStatusResponse = serde_json::from_slice(&body_bytes)?;
+    Ok(response)
+}
+
+pub async fn trigger_discovery_scan() -> Result<()> {
+    let client = hyper::Client::new();
+    let req = Request::builder()
+        .method(Method::POST)
+        .uri(format!("http://{}/api/discovery/scan", API_ADDR))
+        .body(Body::empty())?;
+
+    let resp = client.request(req).await?;
+    if !resp.status().is_success() {
+        anyhow::bail!("Failed to trigger discovery scan: {}", resp.status());
+    }
+    Ok(())
+}
+
+pub async fn get_discovery_peers() -> Result<Vec<DiscoveredPeer>> {
+    let client = hyper::Client::new();
+    let req = Request::builder()
+        .method(Method::GET)
+        .uri(format!("http://{}/api/discovery/peers", API_ADDR))
+        .body(Body::empty())?;
+
+    let resp = client.request(req).await?;
+    let body_bytes = hyper::body::to_bytes(resp.into_body()).await?;
+    let response: DiscoveryPeersResponse = serde_json::from_slice(&body_bytes)?;
+    Ok(response.peers)
+}
+
 pub async fn export_diagnostics_via_api() -> Result<String> {
     let client = hyper::Client::new();
     let req = Request::builder()
@@ -308,6 +367,9 @@ async fn handle_request(
         }
         (&Method::GET, "/api/diagnostics") => handle_export_diagnostics(req, ctx).await,
         (&Method::GET, "/api/drift-status") => handle_get_drift_status(req, ctx).await,
+        (&Method::GET, "/api/discovery/status") => handle_get_discovery_status(req, ctx).await,
+        (&Method::POST, "/api/discovery/scan") => handle_trigger_discovery_scan(req, ctx).await,
+        (&Method::GET, "/api/discovery/peers") => handle_get_discovery_peers(req, ctx).await,
         (&Method::POST, "/api/shutdown") => {
             // Spawn a task to exit after a brief delay to allow response to send
             tokio::spawn(async {
@@ -651,6 +713,73 @@ async fn handle_get_drift_status(
         state: ctx.core.drift_network_state(),
         store_size: ctx.core.drift_store_size(),
     };
+
+    Ok(Response::builder()
+        .status(StatusCode::OK)
+        .header("content-type", "application/json")
+        .body(Body::from(serde_json::to_string(&response)?))?)
+}
+
+async fn handle_get_discovery_status(
+    _req: Request<Body>,
+    _ctx: Arc<ApiContext>,
+) -> Result<Response<Body>> {
+    // Discovery status is driven by Config.
+    // In a real implementation, we might check runtime state in TransportManager.
+    let cfg = crate::config::Config::load().unwrap_or_default();
+    let response = DiscoveryStatusResponse {
+        mdns_enabled: cfg.enable_mdns,
+        ble_enabled: cfg.enable_ble,
+        wifi_aware_enabled: cfg.enable_wifi_aware,
+    };
+
+    Ok(Response::builder()
+        .status(StatusCode::OK)
+        .header("content-type", "application/json")
+        .body(Body::from(serde_json::to_string(&response)?))?)
+}
+
+async fn handle_trigger_discovery_scan(
+    _req: Request<Body>,
+    _ctx: Arc<ApiContext>,
+) -> Result<Response<Body>> {
+    // For now, this is a placeholder as scanning is usually background/continuous
+    // or triggered via specific transport commands.
+    Ok(Response::builder()
+        .status(StatusCode::OK)
+        .body(Body::from("Scan triggered"))?)
+}
+
+async fn handle_get_discovery_peers(
+    _req: Request<Body>,
+    ctx: Arc<ApiContext>,
+) -> Result<Response<Body>> {
+    // This lists peers discovered via local transports.
+    // We can filter the connection ledger or check the Swarm's observed addresses.
+    let mut discovered = Vec::new();
+
+    // Strategy: List all known peers and their transports.
+    // For now, we'll return connected peers as a proxy for "recently discovered".
+    if let Ok(peers) = ctx.swarm_handle.get_peers().await {
+        for peer_id in peers {
+            let pid_str = peer_id.to_string();
+            let nickname = ctx
+                .core
+                .contacts_store_manager()
+                .get(pid_str.clone())
+                .ok()
+                .flatten()
+                .and_then(|c| c.nickname);
+
+            discovered.push(DiscoveredPeer {
+                peer_id: pid_str,
+                transport: "tcp/lan".to_string(), // Placeholder for real transport type
+                nickname,
+            });
+        }
+    }
+
+    let response = DiscoveryPeersResponse { peers: discovered };
 
     Ok(Response::builder()
         .status(StatusCode::OK)

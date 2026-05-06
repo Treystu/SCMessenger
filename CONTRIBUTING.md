@@ -45,6 +45,40 @@ cargo run -p scmessenger-cli -- --help
 
 ## Development Workflow
 
+### Branch Protection Rules
+
+The `main` branch is protected with the following rules to ensure code quality:
+
+**Required Configuration (via GitHub Settings → Branches → Branch protection rules):**
+
+1. **Prevent force pushes** — Enabled
+   - Protects commit history integrity
+   
+2. **Prevent deletion** — Enabled
+   - Prevents accidental branch deletion
+   
+3. **Require status checks to pass before merging** — Enabled
+   - Required checks:
+     - `ci / rust-core` — Core Rust tests
+     - `ci / rust-android` — Android build (if android/ changed)
+     - `ci / rust-ios` — iOS build (if iOS/ changed)
+     - `ci / rust-wasm` — WASM build (if wasm/ changed)
+     - `ci / rust-cli` — CLI build (if cli/ changed)
+
+**Note:** On GitHub Free tier, we cannot enforce:
+- Required reviewers (requires GitHub Pro)
+- CODEOWNERS enforcement (requires GitHub Pro)
+- Private security advisories (requires GitHub Pro)
+
+**To configure branch protection:**
+1. Go to: `Settings → Branches → Add branch protection rule`
+2. Branch name pattern: `main`
+3. Enable: "Require status checks to pass before merging"
+4. Select required checks from the list above
+5. Enable: "Do not allow bypassing the above settings"
+6. Enable: "Restrict who can push to matching branches" (optional, for team repos)
+7. Save changes
+
 ### 1. Fork and Branch
 
 ```bash

@@ -21,6 +21,7 @@ pub mod routing;
 pub mod swarm;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod websocket;
+pub mod discovery;
 
 pub use behaviour::{
     DeregistrationPayload, DeregistrationRequest, IronCoreBehaviour, LedgerExchangeRequest,
@@ -70,6 +71,7 @@ pub use routing::{
     timeout_budget::{BudgetSummary, DiscoveryPhase, TimeoutBudget},
 };
 pub use routing::EnhancedReputationScore;
+pub use discovery::{DiscoveryConfig, DiscoveryMode};
 pub use swarm::{
     start_swarm, start_swarm_with_config, SwarmCommand, SwarmEvent2 as SwarmEvent, SwarmHandle,
 };

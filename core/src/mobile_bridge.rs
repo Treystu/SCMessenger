@@ -521,6 +521,7 @@ impl MeshService {
                                     Arc::downgrade(&c)
                                 }),
                                 headless_mode,
+                                None, // Use default discovery config (Open/mDNS enabled)
                             )
                             .await
                             {
