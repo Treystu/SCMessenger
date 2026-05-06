@@ -1360,20 +1360,11 @@ impl IronCore {
     /// Returns the serialized token data (without signature) suitable for
     /// Ed25519 signing.
     pub fn invite_get_signable_data(&self, token_bytes: Vec<u8>) -> Result<Vec<u8>, IronCoreError> {
-        #[cfg(not(target_arch = "wasm32"))]
-        {
-            let token: crate::relay::invite::InviteToken =
-                bincode::deserialize(&token_bytes).map_err(|_e| IronCoreError::Internal)?;
-            return token
-                .get_signable_data()
-                .map_err(|_e| IronCoreError::Internal);
-        }
-
-        #[cfg(target_arch = "wasm32")]
-        {
-            let _ = token_bytes;
-            Err(IronCoreError::NetworkError)
-        }
+        let token: crate::relay::invite::InviteToken =
+            bincode::deserialize(&token_bytes).map_err(|_e| IronCoreError::Internal)?;
+        token
+            .get_signable_data()
+            .map_err(|_e| IronCoreError::Internal)
     }
 
     // -----------------------------------------------------------------------
