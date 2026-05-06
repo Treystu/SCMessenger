@@ -41,17 +41,25 @@ IS_WINDOWS = sys.platform == "win32"
 def find_binary():
     """Return the path to the compiled CLI binary, or None."""
     exe_name = "scmessenger-cli.exe" if IS_WINDOWS else "scmessenger-cli"
-
-    # Check all target subdirectories (handles custom target triples)
     target_root = REPO_ROOT / "target"
-    if target_root.exists():
-        for target_dir in sorted(target_root.iterdir(), reverse=True):
-            if not target_dir.is_dir():
-                continue
-            for profile in ["release", "debug"]:
-                cand = target_dir / profile / exe_name
-                if cand.exists():
-                    return str(cand)
+    
+    if not target_root.exists():
+        return None
+
+    # 1. Check direct profile dirs (target/debug, target/release)
+    for profile in ["release", "debug"]:
+        cand = target_root / profile / exe_name
+        if cand.exists():
+            return str(cand)
+
+    # 2. Check triple-specific dirs (target/x86_64-pc-windows-msvc/debug, etc.)
+    for target_dir in target_root.iterdir():
+        if not target_dir.is_dir():
+            continue
+        for profile in ["release", "debug"]:
+            cand = target_dir / profile / exe_name
+            if cand.exists():
+                return str(cand)
 
     return None
 

@@ -2546,76 +2546,6 @@ async fn cmd_send_offline(recipient: String, message: String) -> Result<()> {
         api::send_message_via_api(&recipient, &message)
             .await
             .context("Failed to send message via API")?;
-        return Ok(());
-    }
-
-    anyhow::bail!("Node is not running. Please start the node first with 'scm start'.");
-}
-
-async fn cmd_discovery(action: DiscoveryAction) -> Result<()> {
-    if !api::is_api_available().await {
-        println!(
-            "{}",
-            "No SCMessenger node is running. Discovery commands require a running node.".yellow()
-        );
-        return Ok(());
-    }
-
-    match action {
-        DiscoveryAction::Status => {
-            let status = api::get_discovery_status().await?;
-            println!("{}", "Local Discovery Status".bold());
-            println!(
-                "  mDNS:       {}",
-                if status.mdns_enabled {
-                    "ENABLED".green()
-                } else {
-                    "DISABLED".red()
-                }
-            );
-            println!(
-                "  BLE:        {}",
-                if status.ble_enabled {
-                    "ENABLED".green()
-                } else {
-                    "DISABLED".red()
-                }
-            );
-            println!(
-                "  WiFi-Aware: {}",
-                if status.wifi_aware_enabled {
-                    "ENABLED".green()
-                } else {
-                    "DISABLED".red()
-                }
-            );
-        }
-        DiscoveryAction::Scan => {
-            print!("Triggering discovery scan... ");
-            api::trigger_discovery_scan().await?;
-            println!("{}", "Done.".green());
-        }
-        DiscoveryAction::Peers => {
-            let peers = api::get_discovery_peers().await?;
-            println!("{}", "Locally Discovered Peers".bold());
-            if peers.is_empty() {
-                println!("  {}", "No peers discovered via local transports.".dimmed());
-            } else {
-                for peer in peers {
-                    println!(
-                        "  • {} ({})",
-                        peer.peer_id.bright_cyan(),
-                        peer.transport.bright_yellow()
-                    );
-                    if let Some(name) = peer.nickname {
-                        println!("    Name: {}", name);
-                    }
-                }
-            }
-        }
-    }
-    Ok(())
-}
         println!("{} Message sent via running node", "✓".green());
         return Ok(());
     }
@@ -2691,6 +2621,73 @@ async fn cmd_discovery(action: DiscoveryAction) -> Result<()> {
 
     Ok(())
 }
+
+
+async fn cmd_discovery(action: DiscoveryAction) -> Result<()> {
+    if !api::is_api_available().await {
+        println!(
+            "{}",
+            "No SCMessenger node is running. Discovery commands require a running node.".yellow()
+        );
+        return Ok(());
+    }
+
+    match action {
+        DiscoveryAction::Status => {
+            let status = api::get_discovery_status().await?;
+            println!("{}", "Local Discovery Status".bold());
+            println!(
+                "  mDNS:       {}",
+                if status.mdns_enabled {
+                    "ENABLED".green()
+                } else {
+                    "DISABLED".red()
+                }
+            );
+            println!(
+                "  BLE:        {}",
+                if status.ble_enabled {
+                    "ENABLED".green()
+                } else {
+                    "DISABLED".red()
+                }
+            );
+            println!(
+                "  WiFi-Aware: {}",
+                if status.wifi_aware_enabled {
+                    "ENABLED".green()
+                } else {
+                    "DISABLED".red()
+                }
+            );
+        }
+        DiscoveryAction::Scan => {
+            print!("Triggering discovery scan... ");
+            api::trigger_discovery_scan().await?;
+            println!("{}", "Done.".green());
+        }
+        DiscoveryAction::Peers => {
+            let peers = api::get_discovery_peers().await?;
+            println!("{}", "Locally Discovered Peers".bold());
+            if peers.is_empty() {
+                println!("  {}", "No peers discovered via local transports.".dimmed());
+            } else {
+                for peer in peers {
+                    println!(
+                        "  • {} ({})",
+                        peer.peer_id.bright_cyan(),
+                        peer.transport.bright_yellow()
+                    );
+                    if let Some(name) = peer.nickname {
+                        println!("    Name: {}", name);
+                    }
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
 
 async fn cmd_status() -> Result<()> {
     let data_dir = config::Config::data_dir()?;
