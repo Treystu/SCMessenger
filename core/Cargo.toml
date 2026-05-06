@@ -67,6 +67,7 @@ libp2p = { workspace = true, features = [
 quinn = "0.11"
 ureq = "2"
 tokio-tungstenite = { workspace = true, features = ["native-tls"] }
+libc = "0.2"
 
 [target.'cfg(all(not(target_arch = "wasm32"), target_os = "android"))'.dependencies]
 tokio = { workspace = true, features = ["full"] }

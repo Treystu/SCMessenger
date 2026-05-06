@@ -3,6 +3,7 @@
 // This stores messages accepted by a relay on behalf of offline recipients
 // and records an auditable transition log for custody lifecycle changes.
 
+use crate::dspy::modules::DSPyModule;
 #[cfg(not(target_arch = "wasm32"))]
 use crate::store::backend::SledStorage;
 use crate::store::backend::{MemoryStorage, StorageBackend};

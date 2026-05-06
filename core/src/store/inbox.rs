@@ -16,7 +16,8 @@ const SEEN_IDS_KEY: &[u8] = b"inbox_seen_ids";
 const MESSAGES_PREFIX: &[u8] = b"inbox_msg_";
 
 /// A received message record
-#[derive(Debug, Clone, Serialize, Deserialize, uniffi::Record)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(not(target_arch = "wasm32"), derive(uniffi::Record))]
 pub struct ReceivedMessage {
     /// Message ID
     pub message_id: String,
