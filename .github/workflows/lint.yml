@@ -1,0 +1,135 @@
+name: Lint
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  rust:
+    name: Rust Linting
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+          components: rustfmt, clippy
+      
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: lint-rust-${{ hashFiles('**/Cargo.lock') }}
+          cache-on-failure: true
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      
+      - name: Check Rust formatting
+        run: cargo fmt --all -- --check
+      
+      - name: Run Clippy
+        run: cargo clippy --workspace -- -D warnings -A clippy::empty_line_after_doc_comments
+      
+      - name: Check for unwrap() in library code
+        run: |
+          echo "Checking for unwrap() in library code (core/src, mobile/src)..."
+          if rg -n '\.unwrap\(\)' core/src mobile/src --glob '!*test*' --glob '!*bench*'; then
+            echo "ERROR: unwrap() found in library code. Use ? or expect() with context instead."
+            exit 1
+          fi
+          echo "✓ No unwrap() found in library code"
+      
+      - name: Check for println! in library code
+        run: |
+          echo "Checking for println! in library code (core/src, mobile/src)..."
+          if rg -n 'println!' core/src mobile/src --glob '!*test*' --glob '!*bench*'; then
+            echo "ERROR: println! found in library code. Use tracing macros (info!, debug!, etc.) instead."
+            exit 1
+          fi
+          echo "✓ No println! found in library code"
+
+  kotlin:
+    name: Kotlin Linting
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+      
+      - name: Cache Gradle dependencies
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
+      
+      - name: Run ktlint
+        run: |
+          cd android
+          ./gradlew ktlintCheck
+
+  swift:
+    name: Swift Linting
+    runs-on: macos-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install swiftlint
+        run: brew install swiftlint
+      
+      - name: Run swiftlint
+        run: |
+          cd iOS
+          swiftlint lint --strict
+
+  javascript:
+    name: JavaScript Linting
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      
+      - name: Check if package.json exists
+        id: check-package
+        run: |
+          if [ -f "wasm/package.json" ]; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+            echo "No package.json found in wasm directory - skipping JavaScript linting"
+          fi
+      
+      - name: Cache npm dependencies
+        if: steps.check-package.outputs.exists == 'true'
+        uses: actions/cache@v3
+        with:
+          path: wasm/node_modules
+          key: ${{ runner.os }}-node-${{ hashFiles('wasm/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-
+      
+      - name: Install dependencies
+        if: steps.check-package.outputs.exists == 'true'
+        run: |
+          cd wasm
+          npm install
+      
+      - name: Run eslint
+        if: steps.check-package.outputs.exists == 'true'
+        run: |
+          cd wasm
+          npm run lint

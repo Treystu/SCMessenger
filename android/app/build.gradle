@@ -3,6 +3,7 @@ plugins {
     id 'org.jetbrains.kotlin.android'
     id 'com.google.devtools.ksp'
     id 'dagger.hilt.android.plugin'
+    id 'org.jlleitschuh.gradle.ktlint' version '12.1.0'
 }
 
 // Load keystore.properties if it exists (don't fail CI if it's missing, just fallback)
@@ -16,6 +17,8 @@ android {
     namespace 'com.scmessenger.android'
     compileSdk rootProject.ext.compileSdk
     
+    // Pinned NDK version for build reproducibility (Requirement 7.3)
+    // NDK r26b (26.1.10909125) or NDK r30 (30.0.14904198)
     ndkVersion '30.0.14904198'
 
     signingConfigs {
@@ -328,5 +331,21 @@ afterEvaluate {
     tasks.named("preBuild").configure {
         dependsOn buildRustAndroid
         dependsOn generateUniFFIBindings
+    }
+}
+
+
+// ktlint configuration
+ktlint {
+    version = "1.0.1"
+    android = true
+    ignoreFailures = false
+    reporters {
+        reporter "plain"
+        reporter "checkstyle"
+    }
+    filter {
+        exclude("**/generated/**")
+        exclude("**/build/**")
     }
 }

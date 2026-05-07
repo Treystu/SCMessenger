@@ -1,0 +1,75 @@
+# Docker build optimization: exclude unnecessary files from build context
+# This speeds up Docker builds and reduces image size
+
+# Build artifacts
+target/
+**/target/
+*.rs.bk
+*.pdb
+
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# CI/CD
+.github/
+.claude/
+.kiro/
+
+# IDEs
+.idea/
+.vscode/
+*.iml
+.project
+.classpath
+.settings/
+
+# Platform-specific build artifacts
+android/app/build/
+android/build/
+android/.gradle/
+android/local.properties
+iOS/SCMessenger/Build/
+iOS/SCMessenger/DerivedData/
+wasm/pkg/
+wasm/node_modules/
+
+# Documentation (not needed for builds)
+docs/
+*.md
+!docker/README.md
+
+# Logs and temporary files
+*.log
+*.pid
+logs/
+tmp/
+temp/
+*.tmp
+
+# OS files
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+
+# Secrets (should never be in repo, but extra safety)
+*.keystore
+*.p12
+*.mobileprovision
+*.pem
+*.key
+.env
+secrets/
+
+# Test results
+test-results/
+coverage/
+
+# Docker files (don't need these inside the image)
+docker-compose*.yml
+Dockerfile
+Dockerfile.*
+!docker/build.Dockerfile

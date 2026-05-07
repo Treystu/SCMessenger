@@ -1,0 +1,235 @@
+name: Repository Hygiene
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  hygiene-checks:
+    name: Repository Hygiene Checks
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - name: Check for tracked files matching .gitignore patterns
+        run: |
+          echo "Checking for tracked files that should be ignored..."
+          
+          # Check for keystore files
+          if git ls-files | grep -E '\.(keystore|jks|p12|mobileprovision)$'; then
+            echo "❌ ERROR: Keystore or certificate files found in repository"
+            echo "These files should never be committed:"
+            git ls-files | grep -E '\.(keystore|jks|p12|mobileprovision)$'
+            exit 1
+          fi
+          
+          # Check for base64 encoded secrets
+          if git ls-files | grep -E '(keystore|certificate|profile)_base64\.txt$'; then
+            echo "❌ ERROR: Base64-encoded secret files found in repository"
+            git ls-files | grep -E '(keystore|certificate|profile)_base64\.txt$'
+            exit 1
+          fi
+          
+          # Check for backup instruction files (contain sensitive info)
+          if git ls-files | grep -E 'BACKUP_INSTRUCTIONS\.md$'; then
+            echo "❌ ERROR: Backup instruction files found in repository"
+            git ls-files | grep -E 'BACKUP_INSTRUCTIONS\.md$'
+            exit 1
+          fi
+          
+          # Check for build artifacts
+          if git ls-files | grep -E '^target/|^build/|^\.gradle/|^DerivedData/'; then
+            echo "❌ ERROR: Build artifacts found in repository"
+            git ls-files | grep -E '^target/|^build/|^\.gradle/|^DerivedData/'
+            exit 1
+          fi
+          
+          # Check for IDE files
+          if git ls-files | grep -E '\.(swp|swo|DS_Store)$|^\.idea/|^\.vscode/'; then
+            echo "❌ ERROR: IDE or OS files found in repository"
+            git ls-files | grep -E '\.(swp|swo|DS_Store)$|^\.idea/|^\.vscode/'
+            exit 1
+          fi
+          
+          echo "✅ No ignored files found in repository"
+      
+      - name: Check for trailing whitespace
+        run: |
+          echo "Checking for trailing whitespace..."
+          
+          # Find files with trailing whitespace (exclude binary files and specific patterns)
+          if git diff --check HEAD^ HEAD 2>&1 | grep -v "warning: CRLF will be replaced"; then
+            echo "❌ ERROR: Trailing whitespace found"
+            echo "Run: git diff --check to see details"
+            exit 1
+          fi
+          
+          echo "✅ No trailing whitespace found"
+      
+      - name: Check for case-colliding paths
+        run: |
+          echo "Checking for case-colliding paths..."
+          
+          # Get all tracked files
+          files=$(git ls-files)
+          
+          # Convert to lowercase and check for duplicates
+          duplicates=$(echo "$files" | tr '[:upper:]' '[:lower:]' | sort | uniq -d)
+          
+          if [ -n "$duplicates" ]; then
+            echo "❌ ERROR: Case-colliding paths found"
+            echo "These paths differ only in case:"
+            echo "$duplicates"
+            echo ""
+            echo "This causes issues on case-insensitive filesystems (macOS, Windows)"
+            exit 1
+          fi
+          
+          echo "✅ No case-colliding paths found"
+      
+      - name: Check for nested .git directories
+        run: |
+          echo "Checking for nested .git directories..."
+          
+          # Find .git directories (excluding the root one)
+          nested_git=$(find . -mindepth 2 -name .git -type d)
+          
+          if [ -n "$nested_git" ]; then
+            echo "❌ ERROR: Nested .git directories found"
+            echo "$nested_git"
+            echo ""
+            echo "These should be proper submodules or removed"
+            exit 1
+          fi
+          
+          echo "✅ No nested .git directories found"
+      
+      - name: Check for hardcoded secrets (basic patterns)
+        run: |
+          echo "Checking for potential hardcoded secrets..."
+          
+          # Basic patterns for common secrets (not comprehensive, use gitleaks for full scan)
+          patterns=(
+            "password\s*=\s*['\"][^'\"]{8,}"
+            "api[_-]?key\s*=\s*['\"][^'\"]{16,}"
+            "secret\s*=\s*['\"][^'\"]{16,}"
+            "token\s*=\s*['\"][^'\"]{16,}"
+            "-----BEGIN (RSA |DSA |EC )?PRIVATE KEY-----"
+          )
+          
+          found_secrets=0
+          
+          for pattern in "${patterns[@]}"; do
+            if git grep -iE "$pattern" -- '*.rs' '*.kt' '*.swift' '*.js' '*.ts' '*.toml' '*.yaml' '*.yml' 2>/dev/null; then
+              echo "⚠️  WARNING: Potential secret pattern found: $pattern"
+              found_secrets=1
+            fi
+          done
+          
+          if [ $found_secrets -eq 1 ]; then
+            echo ""
+            echo "⚠️  WARNING: Potential secrets detected"
+            echo "Review the matches above to ensure no real secrets are committed"
+            echo "For comprehensive secret scanning, use gitleaks in the security workflow"
+            # Don't fail the build, just warn
+          else
+            echo "✅ No obvious secret patterns found"
+          fi
+      
+      - name: Check for consistent line endings
+        run: |
+          echo "Checking for consistent line endings..."
+          
+          # Check if .gitattributes exists
+          if [ ! -f .gitattributes ]; then
+            echo "⚠️  WARNING: .gitattributes not found"
+            echo "Consider adding .gitattributes to enforce consistent line endings"
+          else
+            echo "✅ .gitattributes found"
+          fi
+          
+          # Check for mixed line endings in text files
+          mixed_endings=$(git ls-files -z '*.rs' '*.kt' '*.swift' '*.js' '*.ts' '*.md' '*.toml' '*.yaml' '*.yml' | \
+            xargs -0 file | grep -E 'CRLF.*LF|LF.*CRLF' || true)
+          
+          if [ -n "$mixed_endings" ]; then
+            echo "⚠️  WARNING: Files with mixed line endings found"
+            echo "$mixed_endings"
+            echo ""
+            echo "Consider normalizing line endings"
+          else
+            echo "✅ No mixed line endings detected"
+          fi
+      
+      - name: Verify path governance rules
+        run: |
+          echo "Checking path governance rules..."
+          
+          # Check for lowercase 'ios' directory (should be 'iOS')
+          if git ls-files | grep -E '^ios/'; then
+            echo "❌ ERROR: Lowercase 'ios/' directory found"
+            echo "Should be 'iOS/' for consistency"
+            git ls-files | grep -E '^ios/'
+            exit 1
+          fi
+          
+          # Check for inconsistent casing in platform directories
+          if git ls-files | grep -iE '^(android|ios|wasm)/' | grep -vE '^(android|iOS|wasm)/'; then
+            echo "❌ ERROR: Inconsistent platform directory casing"
+            git ls-files | grep -iE '^(android|ios|wasm)/' | grep -vE '^(android|iOS|wasm)/'
+            exit 1
+          fi
+          
+          echo "✅ Path governance rules satisfied"
+      
+      - name: Validate CODEOWNERS syntax
+        run: |
+          echo "Validating CODEOWNERS file syntax..."
+          
+          if [ ! -f .github/CODEOWNERS ]; then
+            echo "⚠️  WARNING: .github/CODEOWNERS file not found"
+            echo "Consider creating CODEOWNERS for documentation purposes"
+            exit 0
+          fi
+          
+          # Check for basic syntax issues
+          errors=0
+          
+          # Check for lines with patterns but no owners
+          while IFS= read -r line; do
+            # Skip comments and empty lines
+            [[ "$line" =~ ^[[:space:]]*# ]] && continue
+            [[ -z "${line// }" ]] && continue
+            
+            # Check if line has a pattern but no owner
+            if [[ "$line" =~ ^[^#[:space:]] ]] && ! [[ "$line" =~ @[a-zA-Z0-9_-]+ ]]; then
+              echo "❌ ERROR: Pattern without owner: $line"
+              errors=1
+            fi
+          done < .github/CODEOWNERS
+          
+          if [ $errors -eq 1 ]; then
+            echo ""
+            echo "CODEOWNERS syntax validation failed"
+            exit 1
+          fi
+          
+          echo "✅ CODEOWNERS syntax valid"
+      
+      - name: Summary
+        if: always()
+        run: |
+          echo ""
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "Repository Hygiene Check Complete"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo ""
+          echo "For comprehensive security scanning, see the 'Security Scan' workflow"
+          echo "For code quality checks, see the 'Lint' workflow"
+          echo ""

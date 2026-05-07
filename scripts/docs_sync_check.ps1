@@ -84,7 +84,15 @@ $HeaderFiles = @(
     "SECURITY.md",
     "SUPPORT.md",
     ".github/copilot-instructions.md",
-    "docs/releases/RELEASE_SYNC_PLAN_V0.1.2_TO_V0.2.0.md"
+    "docs/releases/RELEASE_SYNC_PLAN_V0.1.2_TO_V0.2.0.md",
+    "docs/DEPLOYMENT.md",
+    "docs/platform/ANDROID_SETUP.md",
+    "docs/platform/IOS_SETUP.md",
+    "docs/platform/WASM_SETUP.md",
+    "docs/platform/CLI_SETUP.md",
+    "docs/troubleshooting/BUILD_ISSUES.md",
+    "docs/troubleshooting/CI_FAILURES.md",
+    "docs/troubleshooting/RUNTIME_ISSUES.md"
 )
 
 $LinkCheckFiles = @(
@@ -100,7 +108,15 @@ $LinkCheckFiles = @(
     "docs/ARCHITECTURE.md",
     "docs/V0.2.0_RESIDUAL_RISK_REGISTER.md",
     ".github/copilot-instructions.md",
-    "docs/releases/RELEASE_SYNC_PLAN_V0.1.2_TO_V0.2.0.md"
+    "docs/releases/RELEASE_SYNC_PLAN_V0.1.2_TO_V0.2.0.md",
+    "docs/DEPLOYMENT.md",
+    "docs/platform/ANDROID_SETUP.md",
+    "docs/platform/IOS_SETUP.md",
+    "docs/platform/WASM_SETUP.md",
+    "docs/platform/CLI_SETUP.md",
+    "docs/troubleshooting/BUILD_ISSUES.md",
+    "docs/troubleshooting/CI_FAILURES.md",
+    "docs/troubleshooting/RUNTIME_ISSUES.md"
 )
 
 foreach ($f in $HeaderFiles) {

@@ -1,8 +1,27 @@
 # Contributing to SCMessenger
 
+**Status**: Active  
+**Last updated**: 2026-03-07
+
 Thank you for considering contributing to SCMessenger! This document provides guidelines and instructions for contributing.
 
-Current release line: **v0.2.0 is the active alpha baseline** for repository work and bug reporting. Planned follow-on workstreams `WS13` and `WS14` are tracked as **v0.2.1** scope and should not be treated as part of the current alpha closeout unless maintainers explicitly retarget them.
+Current release line: **v0.2.1 is the active alpha baseline** for repository work and bug reporting. Planned follow-on workstreams `WS13` and `WS14` remain future scope and should not be treated as part of the current alpha closeout unless maintainers explicitly retarget them.
+
+## Table of Contents
+
+- [Philosophy](#philosophy)
+- [Code of Conduct](#code-of-conduct)
+- [Getting Started](#getting-started)
+- [Development Workflow](#development-workflow)
+- [Code Style](#code-style)
+- [Commit Message Format](#commit-message-format)
+- [Testing Requirements](#testing-requirements)
+- [Pull Request Process](#pull-request-process)
+- [Project Structure](#project-structure)
+- [Areas for Contribution](#areas-for-contribution)
+- [Security](#security)
+- [Questions and Support](#questions-and-support)
+- [License](#license)
 
 ## Philosophy
 
@@ -22,9 +41,15 @@ We are committed to providing a welcoming and inspiring community for all. Pleas
 
 ### Prerequisites
 
-- Rust 1.93.1 or later
+**Required:**
+- Rust 1.75.0 or later (see `rust-toolchain.toml`)
 - Cargo (comes with Rust)
-- Git
+- Git 2.30+
+
+**Platform-Specific:**
+- **Android**: Android SDK, NDK r26b, Java 17+ - See [Android Setup Guide](docs/platform/ANDROID_SETUP.md)
+- **iOS**: macOS, Xcode 15+, CocoaPods - See [iOS Setup Guide](docs/platform/IOS_SETUP.md)
+- **WASM**: Node.js 20+, wasm-pack - See [WASM Setup Guide](docs/platform/WASM_SETUP.md)
 
 ### Setting Up Development Environment
 
@@ -33,6 +58,11 @@ We are committed to providing a welcoming and inspiring community for all. Pleas
 git clone https://github.com/Treystu/SCMessenger.git
 cd SCMessenger
 
+# Install pre-commit hooks (recommended)
+./scripts/install_hooks.sh  # Unix/macOS/Git Bash
+# OR
+powershell -ExecutionPolicy Bypass -File scripts/install_hooks.ps1  # Windows PowerShell
+
 # Build the workspace
 cargo build --workspace
 
@@ -40,8 +70,9 @@ cargo build --workspace
 cargo test --workspace
 
 # Run CLI
-cargo run -p scmessenger-cli -- --help
+cargo run --release --bin scmessenger-cli -- --help
 ```
+
 
 ## Development Workflow
 
@@ -88,7 +119,7 @@ cd SCMessenger
 git remote add upstream https://github.com/Treystu/SCMessenger.git
 
 # Create a feature branch
-git checkout -b feature/your-feature-name
+git checkout -b feat/your-feature-name
 ```
 
 ### 2. Make Changes
@@ -102,8 +133,9 @@ git checkout -b feature/your-feature-name
 
 Rust is the primary implementation language for shared/core logic, but this repository also contains active Android (Kotlin), iOS (Swift), and GitHub/doc surfaces that should be updated when a task requires them.
 
-#### Key Conventions
+#### Rust Conventions
 
+**Required:**
 - Use `thiserror` for error types, `anyhow` for error propagation in binaries
 - Use `tracing` for logging (not `println!` in library code)
 - Use `parking_lot::RwLock` over `std::sync::RwLock`
@@ -112,7 +144,7 @@ Rust is the primary implementation language for shared/core logic, but this repo
 - Serialization: `bincode` for wire format, `serde_json` for human-readable
 - Tests go in `#[cfg(test)] mod tests` in the same file
 
-#### Code Quality
+**Code Quality:**
 
 ```bash
 # Format code (REQUIRED before commit)
@@ -132,23 +164,110 @@ cargo test --workspace
 - Use time-based estimates in plans or roadmaps (use LoC estimates only)
 - Decouple relaying from messaging — they are permanently bound
 
+#### Kotlin Style (Android)
+
+- Follow [Kotlin Coding Conventions](https://kotlinlang.org/docs/coding-conventions.html)
+- Use 4 spaces for indentation
+- Maximum line length: 120 characters
+- Use camelCase for variables and functions
+- Use PascalCase for classes
+
+**Linting:**
+```bash
+cd android
+./gradlew ktlintCheck
+./gradlew ktlintFormat  # Auto-fix
+```
+
+#### Swift Style (iOS)
+
+- Follow [Swift API Design Guidelines](https://swift.org/documentation/api-design-guidelines/)
+- Use 4 spaces for indentation
+- Maximum line length: 120 characters
+- Use camelCase for variables and functions
+- Use PascalCase for types
+
+**Linting:**
+```bash
+cd iOS
+swiftlint lint
+```
+
+#### JavaScript/TypeScript Style (WASM)
+
+- Follow [Airbnb JavaScript Style Guide](https://github.com/airbnb/javascript)
+- Use 2 spaces for indentation
+- Maximum line length: 100 characters
+- Use camelCase for variables and functions
+- Use PascalCase for classes
+
+**Linting:**
+```bash
+cd wasm
+npm run lint
+```
+
 ### 4. Commit Messages
 
-Write clear commit messages following these guidelines:
+We use [Conventional Commits](https://www.conventionalcommits.org/) format:
 
 ```
-Short (50 chars or less) summary
+<type>(<scope>): <subject>
 
-More detailed explanatory text, if necessary. Wrap it to about 72
-characters. The blank line separating the summary from the body is
-critical.
+<body>
 
-- Bullet points are okay
-- Use present tense ("Add feature" not "Added feature")
-- Reference issues: "Fixes #123" or "Closes #456"
+<footer>
+```
+
+**Types:**
+- `feat`: New feature
+- `fix`: Bug fix
+- `docs`: Documentation changes
+- `style`: Code style changes (formatting, etc.)
+- `refactor`: Code refactoring
+- `test`: Adding or updating tests
+- `chore`: Maintenance tasks
+- `perf`: Performance improvements
+- `ci`: CI/CD changes
+- `build`: Build system changes
+- `revert`: Revert a previous commit
+
+**Examples:**
+
+```bash
+# Simple feature
+git commit -m "feat: add message encryption"
+
+# Bug fix with scope
+git commit -m "fix(android): resolve BLE connection timeout"
+
+# Breaking change
+git commit -m "feat!: change message format to protobuf
+
+BREAKING CHANGE: Message format changed from bincode to protobuf.
+Clients must upgrade to maintain compatibility."
+
+# Reference issue
+git commit -m "fix: resolve relay connection race condition
+
+Fixes #123"
+```
+
+**Commit Message Hook:**
+
+The repository includes a commit-msg hook that enforces this format. Install it:
+
+```bash
+./scripts/install_hooks.sh  # Unix/macOS/Git Bash
+# OR
+powershell -ExecutionPolicy Bypass -File scripts/install_hooks.ps1  # Windows PowerShell
 ```
 
 ### 5. Testing
+
+All changes must include appropriate tests.
+
+#### Unit Tests
 
 ```bash
 # Run all tests
@@ -159,9 +278,41 @@ cargo test -p scmessenger-core
 
 # Run with logging
 RUST_LOG=debug cargo test --workspace -- --nocapture
+
+# Run specific test
+cargo test -p scmessenger-core test_message_encryption
 ```
 
-All tests relevant to your change must pass before submitting a PR. For the current verified workspace snapshot, see `docs/CURRENT_STATE.md`.
+#### Integration Tests
+
+```bash
+# Run integration tests
+cargo test --workspace --test '*'
+
+# Run specific integration test
+cargo test -p scmessenger-core --test integration_offline_partition_matrix
+```
+
+#### Platform-Specific Tests
+
+```bash
+# Android
+cd android && ./gradlew test
+
+# iOS
+cd iOS && xcodebuild test -workspace SCMessenger.xcworkspace -scheme SCMessenger -destination 'platform=iOS Simulator,name=iPhone 15'
+
+# WASM
+cd wasm && wasm-pack test --headless --firefox
+```
+
+**Test Requirements:**
+- All new features must include tests
+- Bug fixes must include regression tests
+- Maintain or improve code coverage (target: 80% for core modules)
+- Property-based tests for parsers, serializers, and cryptographic operations
+
+See [Testing Guide](docs/TESTING_GUIDE.md) for comprehensive testing documentation.
 
 ### 6. Documentation
 
@@ -169,12 +320,18 @@ All tests relevant to your change must pass before submitting a PR. For the curr
 - Update README.md if you change setup/usage instructions
 - Add inline comments for complex logic (but prefer self-documenting code)
 - Don't write docs longer than the code they document
+- Run documentation sync check:
+  ```bash
+  ./scripts/docs_sync_check.sh  # Unix/macOS/Git Bash
+  # OR
+  powershell -NoProfile -ExecutionPolicy Bypass -File scripts/docs_sync_check.ps1  # Windows PowerShell
+  ```
 
 ### 7. Submit Pull Request
 
 ```bash
 # Push to your fork
-git push origin feature/your-feature-name
+git push origin feat/your-feature-name
 
 # Create PR on GitHub
 ```
@@ -182,36 +339,130 @@ git push origin feature/your-feature-name
 **PR Requirements:**
 - All CI checks must pass (formatting, linting, build, tests)
 - Include description of changes and motivation
-- Reference any related issues
+- Reference any related issues (e.g., "Fixes #123")
 - Add tests for new functionality
 - Update documentation as needed
-- Run `./scripts/docs_sync_check.sh` (Unix / Git Bash) or `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/docs_sync_check.ps1` (Windows) when documentation or GitHub-facing contributor surfaces change
+- Fill out the PR template completely
+
+**PR Template Checklist:**
+- [ ] My code follows the project's style guidelines
+- [ ] I have performed a self-review of my code
+- [ ] I have commented my code, particularly in hard-to-understand areas
+- [ ] I have made corresponding changes to the documentation
+- [ ] My changes generate no new warnings
+- [ ] I have added tests that prove my fix is effective or that my feature works
+- [ ] New and existing unit tests pass locally with my changes
+- [ ] Any dependent changes have been merged and published
+
+## Testing Requirements
+
+### Test Coverage
+
+- **Core modules**: Minimum 80% line coverage
+- **Unit tests**: Test specific examples and edge cases
+- **Integration tests**: Test component interactions
+- **Property-based tests**: Test universal properties (parsers, serializers, crypto)
+- **Regression tests**: Test for all previously fixed critical/high bugs
+
+### Property-Based Testing
+
+For parsers, serializers, and cryptographic operations, use property-based testing:
+
+```rust
+use proptest::prelude::*;
+
+proptest! {
+    #[test]
+    fn test_message_serialization_roundtrip(msg in any::<Message>()) {
+        let encoded = bincode::serialize(&msg).unwrap();
+        let decoded: Message = bincode::deserialize(&encoded).unwrap();
+        assert_eq!(msg, decoded);
+    }
+}
+```
+
+### Running Tests Locally
+
+Before submitting a PR, ensure all tests pass:
+
+```bash
+# Format check
+cargo fmt --all -- --check
+
+# Linting
+cargo clippy --workspace -- -D warnings
+
+# Unit tests
+cargo test --workspace
+
+# Integration tests
+cargo test --workspace --test '*'
+
+# Documentation sync
+./scripts/docs_sync_check.sh
+```
+
+## Pull Request Process
+
+1. **Create PR**: Open a pull request from your fork to `main`
+2. **CI Checks**: Wait for automated checks to complete
+3. **Review**: Address any feedback from maintainers
+4. **Approval**: PR must pass all checks before merge
+5. **Merge**: Maintainer will merge using squash or rebase
+
+**PR Review Criteria:**
+- Code quality and style compliance
+- Test coverage and passing tests
+- Documentation updates
+- No breaking changes (unless justified)
+- Performance considerations
+- Security implications
 
 ## Project Structure
 
 ```
-core/        scmessenger-core    Rust library (~29K LoC)
-cli/         scmessenger-cli     Interactive CLI
-mobile/      scmessenger-mobile  iOS/Android bindings (UniFFI)
-wasm/        scmessenger-wasm    Browser bindings (wasm-bindgen)
-reference/   —                   V1 TypeScript (porting guides only)
-docs/        —                   Architecture and design docs
+SCMessenger/
+├── core/           # scmessenger-core - Rust library (~29K LoC)
+│   ├── src/
+│   │   ├── identity/      # Ed25519 keys, Blake3 hashing
+│   │   ├── crypto/        # X25519 ECDH + XChaCha20-Poly1305
+│   │   ├── message/       # Message types, envelope format
+│   │   ├── store/         # Outbox/inbox with quotas
+│   │   ├── transport/     # BLE, WiFi, Internet, NAT traversal
+│   │   ├── drift/         # Drift Protocol for mesh sync
+│   │   ├── routing/       # Mycorrhizal routing engine
+│   │   ├── relay/         # Self-relay network
+│   │   └── privacy/       # Onion routing, cover traffic
+│   └── tests/
+│       ├── unit/          # Fast unit tests
+│       ├── integration/   # Integration tests
+│       ├── property/      # Property-based tests
+│       └── regression/    # Bug-specific regression tests
+├── mobile/         # scmessenger-mobile - UniFFI bindings
+├── cli/            # scmessenger-cli - Interactive CLI
+├── wasm/           # scmessenger-wasm - Browser bindings
+├── android/        # Android app (Kotlin + Jetpack Compose)
+├── iOS/            # iOS app (Swift + SwiftUI)
+├── docs/           # Architecture and design docs
+├── scripts/        # Build and utility scripts
+└── .github/        # GitHub Actions workflows
+
 ```
 
 ### Core Modules
 
-- `identity` — Ed25519 keys, Blake3 hashing, sled persistence
-- `crypto` — X25519 ECDH + XChaCha20-Poly1305 encryption
-- `message` — Message types, envelope format, bincode codec
-- `store` — Outbox/inbox with quotas and deduplication
-- `transport` — BLE, WiFi Aware, WiFi Direct, Internet, NAT traversal
-- `drift` — Drift Protocol for mesh synchronization
-- `routing` — Mycorrhizal routing engine
-- `relay` — Self-relay network, bootstrap, peer exchange
-- `privacy` — Onion routing, cover traffic, padding
-- `mobile` — Mobile service lifecycle, auto-adjust
-- `platform` — Platform-specific implementations
-- `wasm_support` — Browser mesh participation
+- **identity**: Ed25519 keys, Blake3 hashing, sled persistence
+- **crypto**: X25519 ECDH + XChaCha20-Poly1305 encryption
+- **message**: Message types, envelope format, bincode codec
+- **store**: Outbox/inbox with quotas and deduplication
+- **transport**: BLE, WiFi Aware, WiFi Direct, Internet, NAT traversal
+- **drift**: Drift Protocol for mesh synchronization
+- **routing**: Mycorrhizal routing engine
+- **relay**: Self-relay network, bootstrap, peer exchange
+- **privacy**: Onion routing, cover traffic, padding
+- **mobile**: Mobile service lifecycle, auto-adjust
+- **platform**: Platform-specific implementations
+- **wasm_support**: Browser mesh participation
 
 ## Areas for Contribution
 
@@ -222,6 +473,8 @@ docs/        —                   Architecture and design docs
 - NAT traversal enhancements
 - Routing algorithm refinements
 - Privacy feature additions
+- Test coverage improvements
+- Documentation improvements
 
 ### Documentation
 
@@ -229,6 +482,8 @@ docs/        —                   Architecture and design docs
 - Protocol specifications
 - Platform-specific guides
 - Example applications
+- API documentation
+- Troubleshooting guides
 
 ### Testing
 
@@ -236,19 +491,49 @@ docs/        —                   Architecture and design docs
 - Network scenario testing
 - Load/stress testing
 - Security audits
+- Property-based tests
+- Regression tests
+
+### Infrastructure
+
+- CI/CD improvements
+- Build system optimizations
+- Release automation
+- Monitoring and observability
+- Performance profiling
 
 ## Security
 
-If you discover a security vulnerability, please follow our [Security Policy](SECURITY.md). Do NOT open a public issue.
+If you discover a security vulnerability, please follow our [Security Policy](SECURITY.md). 
+
+**DO NOT** open a public issue for security vulnerabilities.
+
+**Reporting:**
+- Use GitHub Security Advisories (private disclosure)
+- Or email: security@scmessenger.org (if available)
+
+See [SECURITY.md](SECURITY.md) for details on:
+- Supported versions
+- Vulnerability reporting procedures
+- Response time expectations
+- Severity classification
 
 ## Questions and Support
 
-- Use [SUPPORT.md](SUPPORT.md) for the current routing path (bugs vs docs vs security vs general questions)
-- Check existing [Issues](https://github.com/Treystu/SCMessenger/issues)
-- Review the canonical docs starting at [DOCUMENTATION.md](DOCUMENTATION.md)
+- **Documentation**: Start with [DOCUMENTATION.md](DOCUMENTATION.md) and `docs/` directory
+- **Build Issues**: Check [Build Issues Guide](docs/troubleshooting/BUILD_ISSUES.md)
+- **CI Failures**: Check [CI Failures Guide](docs/troubleshooting/CI_FAILURES.md)
+- **Runtime Issues**: Check [Runtime Issues Guide](docs/troubleshooting/RUNTIME_ISSUES.md)
+- **GitHub Issues**: Search existing issues or create a new one
+- **GitHub Discussions**: For questions and general discussion
+- **Support**: See [SUPPORT.md](SUPPORT.md) for routing guidance
 
 ## License
 
-By contributing, you agree that your contributions will be licensed under the MIT License.
+By contributing, you agree that your contributions will be licensed under The Unlicense.
 
-Thank you for making SCMessenger better! 🚀
+---
+
+**Thank you for making SCMessenger better!** 🚀
+
+For the current verified workspace snapshot and implementation status, see [docs/CURRENT_STATE.md](docs/CURRENT_STATE.md).

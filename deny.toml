@@ -28,11 +28,11 @@ confidence-threshold = 0.8
 multiple-versions = "warn"
 # Warn about wildcard dependencies
 wildcards = "warn"
+# Highlight all duplicate dependencies
+highlight = "all"
 
 # Configure advisories checking
 [advisories]
-# GitHub Personal Access Token for accessing private advisories (optional)
-# github-token = "some_token"
 # Database path for storing advisory information
 db-path = "~/.cargo/advisory-db"
 # URL to the advisory database
@@ -40,6 +40,10 @@ db-urls = ["https://github.com/RustSec/advisory-db"]
 
 # Configure sources for crate origins
 [sources]
+# Deny crates from unknown registries
+unknown-registry = "deny"
+# Deny crates from unknown git repositories
+unknown-git = "deny"
 # Allow crates from crates.io (default registry)
 allow-registry = ["https://github.com/rust-lang/crates.io-index"]
 # Allow specific git repositories if needed

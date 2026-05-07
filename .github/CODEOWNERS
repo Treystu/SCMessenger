@@ -1,1 +1,139 @@
-* @Treystu
+# CODEOWNERS - Code Ownership and Review Assignments
+# 
+# This file defines code ownership for different parts of the repository.
+# On GitHub Free tier, this file is for documentation purposes only.
+# Required reviewers and automatic review requests require GitHub Team or Enterprise.
+#
+# Syntax: <pattern> <owner1> <owner2> ...
+# Patterns use .gitignore syntax
+# Later matches take precedence over earlier ones
+#
+# Documentation: https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+
+# Default owners for everything in the repo
+# These owners will be requested for review when someone opens a pull request
+* @YOUR_GITHUB_USERNAME
+
+# Core Rust implementation
+/core/ @YOUR_GITHUB_USERNAME
+/mobile/ @YOUR_GITHUB_USERNAME
+/cli/ @YOUR_GITHUB_USERNAME
+
+# Android platform
+/android/ @YOUR_GITHUB_USERNAME
+/android/app/src/main/java/ @YOUR_GITHUB_USERNAME
+/android/app/build.gradle @YOUR_GITHUB_USERNAME
+
+# iOS platform
+/iOS/ @YOUR_GITHUB_USERNAME
+/iOS/SCMessenger/ @YOUR_GITHUB_USERNAME
+
+# WASM platform
+/wasm/ @YOUR_GITHUB_USERNAME
+
+# Build and CI/CD
+/.github/ @YOUR_GITHUB_USERNAME
+/.github/workflows/ @YOUR_GITHUB_USERNAME
+/scripts/ @YOUR_GITHUB_USERNAME
+/docker/ @YOUR_GITHUB_USERNAME
+
+# Documentation
+/docs/ @YOUR_GITHUB_USERNAME
+/README.md @YOUR_GITHUB_USERNAME
+/CONTRIBUTING.md @YOUR_GITHUB_USERNAME
+/SECURITY.md @YOUR_GITHUB_USERNAME
+
+# Configuration files
+/Cargo.toml @YOUR_GITHUB_USERNAME
+/Cargo.lock @YOUR_GITHUB_USERNAME
+/rust-toolchain.toml @YOUR_GITHUB_USERNAME
+/deny.toml @YOUR_GITHUB_USERNAME
+/.gitignore @YOUR_GITHUB_USERNAME
+
+# Security-sensitive files (require extra scrutiny)
+/SECURITY.md @YOUR_GITHUB_USERNAME
+/deny.toml @YOUR_GITHUB_USERNAME
+/.github/workflows/security.yml @YOUR_GITHUB_USERNAME
+
+# Release and deployment
+/.github/workflows/release.yml @YOUR_GITHUB_USERNAME
+/scripts/sync_version.sh @YOUR_GITHUB_USERNAME
+/scripts/validate_tag.sh @YOUR_GITHUB_USERNAME
+/scripts/generate_changelog.sh @YOUR_GITHUB_USERNAME
+
+# Maintainer Responsibilities (Requirement 10.11)
+#
+# Core Maintainer (@YOUR_GITHUB_USERNAME):
+# - Overall architecture and design decisions
+# - Core Rust implementation (core/, mobile/, cli/)
+# - Cross-platform coordination and compatibility
+# - Release management and version control
+# - Security reviews and vulnerability response
+# - Community management and contributor onboarding
+# - Code quality standards and enforcement
+# - CI/CD pipeline maintenance
+#
+# Platform Maintainers (can be added as project grows):
+# - Android Maintainer:
+#   * Android-specific features and UI
+#   * Gradle build system and dependencies
+#   * Play Store releases and compliance
+#   * Android SDK/NDK compatibility
+#   * Kotlin code quality
+#
+# - iOS Maintainer:
+#   * iOS-specific features and UI
+#   * Xcode project and build system
+#   * App Store releases and compliance
+#   * iOS SDK compatibility
+#   * Swift code quality
+#
+# - WASM Maintainer:
+#   * Web platform features
+#   * npm package management
+#   * Browser compatibility testing
+#   * JavaScript/TypeScript bindings
+#   * Bundle size optimization
+#
+# - CLI Maintainer:
+#   * Command-line interface features
+#   * Desktop platform support
+#   * CLI UX and documentation
+#   * Binary distribution
+#
+# Specialized Roles (can be added as project grows):
+# - Security Lead:
+#   * Security audits and threat modeling
+#   * Vulnerability management and disclosure
+#   * Cryptographic implementation review
+#   * Dependency security scanning
+#   * Security documentation
+#
+# - DevOps Lead:
+#   * CI/CD pipeline optimization
+#   * Infrastructure as code
+#   * Deployment automation
+#   * Build reproducibility
+#   * Performance monitoring
+#
+# - Documentation Lead:
+#   * Technical writing and editing
+#   * API documentation generation
+#   * User guides and tutorials
+#   * Architecture diagrams
+#   * Documentation sync validation
+#
+# - Community Manager:
+#   * Issue triage and labeling
+#   * PR reviews and feedback
+#   * Community engagement
+#   * Contributor recognition
+#   * Code of conduct enforcement
+
+# Notes for GitHub Free Tier:
+# - CODEOWNERS file is visible and documents ownership
+# - Automatic review requests are NOT available (requires GitHub Team)
+# - Required reviewers are NOT enforced (requires GitHub Team)
+# - Branch protection can still require reviews, but not from specific owners
+# - This file serves as documentation for contributors and maintainers
+# - Update @YOUR_GITHUB_USERNAME with actual GitHub username(s) when ready

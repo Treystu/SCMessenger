@@ -1,0 +1,108 @@
+# SwiftLint configuration for SCMessenger iOS
+
+# Disabled rules - rules we don't want to enforce
+disabled_rules:
+  - trailing_whitespace  # Handled by editor config
+
+# Opt-in rules - additional rules to enable
+opt_in_rules:
+  - empty_count
+  - explicit_init
+  - force_unwrapping
+  - closure_spacing
+  - contains_over_first_not_nil
+  - empty_string
+  - explicit_type_interface
+  - fatal_error_message
+  - first_where
+  - joined_default_parameter
+  - literal_expression_end_indentation
+  - multiline_arguments
+  - multiline_parameters
+  - operator_usage_whitespace
+  - overridden_super_call
+  - redundant_nil_coalescing
+  - sorted_first_last
+  - unneeded_parentheses_in_closure_argument
+  - vertical_parameter_alignment_on_call
+
+# Line length - maximum characters per line
+line_length:
+  warning: 120
+  error: 150
+  ignores_function_declarations: false
+  ignores_comments: false
+  ignores_urls: true
+
+# Function body length - maximum lines in a function
+function_body_length:
+  warning: 100
+  error: 150
+
+# Type body length - maximum lines in a type (class, struct, enum)
+type_body_length:
+  warning: 300
+  error: 400
+
+# File length - maximum lines in a file
+file_length:
+  warning: 500
+  error: 1000
+  ignore_comment_only_lines: true
+
+# Cyclomatic complexity - maximum complexity for a function
+cyclomatic_complexity:
+  warning: 15
+  error: 20
+  ignores_case_statements: false
+
+# Nesting - maximum nesting depth
+nesting:
+  type_level:
+    warning: 2
+  statement_level:
+    warning: 5
+
+# Identifier name rules
+identifier_name:
+  min_length:
+    warning: 2
+    error: 1
+  max_length:
+    warning: 50
+    error: 60
+  excluded:
+    - id
+    - x
+    - y
+    - z
+
+# Type name rules
+type_name:
+  min_length:
+    warning: 3
+    error: 2
+  max_length:
+    warning: 50
+    error: 60
+
+# Excluded paths - don't lint these directories
+excluded:
+  - Pods
+  - Build
+  - DerivedData
+  - Generated
+  - .build
+  - vendor
+
+# Reporter type - how to output results
+reporter: "xcode"
+
+# Custom rules
+custom_rules:
+  # Discourage force unwrapping in production code
+  force_unwrap_production:
+    name: "Force Unwrap in Production"
+    regex: '!\s*(?!\/\/)'
+    message: "Avoid force unwrapping in production code. Use optional binding or guard statements."
+    severity: warning

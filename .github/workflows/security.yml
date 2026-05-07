@@ -1,0 +1,194 @@
+name: Security Scan
+
+on:
+  schedule:
+    # Run weekly on Sunday at midnight UTC (optimized for free tier CI minutes)
+    - cron: '0 0 * * 0'
+  workflow_dispatch:  # Allow manual triggering
+
+permissions:
+  contents: read
+  issues: write  # Required for creating GitHub issues
+
+jobs:
+  audit:
+    name: Dependency Security Audit
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+      
+      - name: Install cargo-audit
+        run: cargo install cargo-audit --locked
+      
+      - name: Run cargo-audit
+        id: audit
+        continue-on-error: true
+        run: |
+          cargo audit --json > audit-report.json
+          echo "audit_exit_code=$?" >> $GITHUB_OUTPUT
+      
+      - name: Upload audit report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: audit-report
+          path: audit-report.json
+          retention-days: 30
+      
+      - name: Create GitHub issue for vulnerabilities
+        if: steps.audit.outputs.audit_exit_code != '0'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            
+            // Read audit report
+            let report;
+            try {
+              const reportContent = fs.readFileSync('audit-report.json', 'utf8');
+              report = JSON.parse(reportContent);
+            } catch (error) {
+              console.log('Failed to parse audit report:', error);
+              return;
+            }
+            
+            // Extract vulnerabilities
+            const vulns = report.vulnerabilities?.list || [];
+            
+            if (vulns.length === 0) {
+              console.log('No vulnerabilities found');
+              return;
+            }
+            
+            // Count by severity
+            const severityCounts = {
+              critical: 0,
+              high: 0,
+              medium: 0,
+              low: 0,
+              unknown: 0
+            };
+            
+            vulns.forEach(v => {
+              const severity = (v.advisory?.cvss?.severity?.level || 'unknown').toLowerCase();
+              if (severityCounts.hasOwnProperty(severity)) {
+                severityCounts[severity]++;
+              } else {
+                severityCounts.unknown++;
+              }
+            });
+            
+            // Only create issue for HIGH or CRITICAL vulnerabilities
+            if (severityCounts.critical === 0 && severityCounts.high === 0) {
+              console.log('No HIGH or CRITICAL vulnerabilities found');
+              return;
+            }
+            
+            // Build issue body
+            let body = '## Security Vulnerabilities Detected\n\n';
+            body += `**Scan Date:** ${new Date().toISOString().split('T')[0]}\n\n`;
+            body += '### Summary\n\n';
+            body += `- 🔴 Critical: ${severityCounts.critical}\n`;
+            body += `- 🟠 High: ${severityCounts.high}\n`;
+            body += `- 🟡 Medium: ${severityCounts.medium}\n`;
+            body += `- 🟢 Low: ${severityCounts.low}\n\n`;
+            body += '### Vulnerabilities\n\n';
+            
+            // Sort by severity (critical first)
+            const severityOrder = { critical: 0, high: 1, medium: 2, low: 3, unknown: 4 };
+            vulns.sort((a, b) => {
+              const sevA = (a.advisory?.cvss?.severity?.level || 'unknown').toLowerCase();
+              const sevB = (b.advisory?.cvss?.severity?.level || 'unknown').toLowerCase();
+              return (severityOrder[sevA] || 4) - (severityOrder[sevB] || 4);
+            });
+            
+            // Add vulnerability details
+            vulns.forEach(v => {
+              const advisory = v.advisory || {};
+              const severity = (advisory.cvss?.severity?.level || 'Unknown').toUpperCase();
+              const id = advisory.id || 'Unknown';
+              const title = advisory.title || 'No title';
+              const pkg = v.package?.name || 'Unknown package';
+              const version = v.package?.version || 'Unknown version';
+              const patched = advisory.patched_versions?.join(', ') || 'No patch available';
+              const url = advisory.url || '';
+              
+              body += `#### ${id}: ${title}\n\n`;
+              body += `- **Severity:** ${severity}\n`;
+              body += `- **Package:** \`${pkg}\` @ \`${version}\`\n`;
+              body += `- **Patched Versions:** ${patched}\n`;
+              if (url) {
+                body += `- **Details:** ${url}\n`;
+              }
+              body += '\n';
+            });
+            
+            body += '### Action Required\n\n';
+            body += '1. Review the vulnerabilities listed above\n';
+            body += '2. Update affected dependencies to patched versions\n';
+            body += '3. Run `cargo update` and test thoroughly\n';
+            body += '4. Close this issue once all HIGH/CRITICAL vulnerabilities are resolved\n\n';
+            body += '---\n';
+            body += '*This issue was automatically created by the security scan workflow.*';
+            
+            // Create the issue
+            const title = `Security: ${severityCounts.critical + severityCounts.high} HIGH/CRITICAL vulnerabilities detected`;
+            
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: title,
+              body: body,
+              labels: ['security', 'dependencies']
+            });
+            
+            console.log('Created security issue:', title);
+  
+  license-check:
+    name: License Compliance Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+      
+      - name: Install cargo-deny
+        run: cargo install cargo-deny --locked
+      
+      - name: Check licenses
+        run: cargo deny check licenses
+      
+      - name: Check advisories
+        run: cargo deny check advisories
+      
+      - name: Check bans
+        run: cargo deny check bans
+  
+  secret-scan:
+    name: Secret Detection with Gitleaks
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Full history for comprehensive scanning
+      
+      - name: Run Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_CONFIG: .gitleaks.toml
+      
+      - name: Upload Gitleaks report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gitleaks-report
+          path: gitleaks-report.json
+          retention-days: 30

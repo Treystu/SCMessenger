@@ -7,7 +7,7 @@
 // - address_reflection: sovereign mesh address discovery (replaces STUN)
 // - gossipsub: pub/sub — PERMISSIVE mode for dynamic topic negotiation
 // - kademlia: DHT for peer discovery on WAN
-// - mdns: peer discovery on LAN
+// - mdns: peer discovery on LAN (disabled on Android - uses NsdManager instead)
 // - identify: exchange peer metadata (advertises relay capability)
 // - relay: NAT traversal — all nodes are mandatory relays
 // - ledger_exchange: automatic peer list sharing for aggressive discovery
@@ -61,13 +61,13 @@ pub struct IronCoreBehaviour {
     pub kademlia: kad::Behaviour<kad::store::MemoryStore>,
     /// LAN peer discovery — wrapped in Toggle so it can be disabled in
     /// environments without multicast support (containers, CI, cloud VMs).
-    /// Also disabled on Android (no multicast support).
-    #[cfg(all(not(target_arch = "wasm32"), not(target_os = "android")))]
+    /// On Android, NsdManager is used instead (see MdnsServiceDiscovery.kt).
+    #[cfg(not(target_arch = "wasm32"))]
     pub mdns: Toggle<mdns::tokio::Behaviour>,
     /// Peer identification — advertises relay capability
     pub identify: identify::Behaviour,
     /// UPnP port mapping
-    #[cfg(all(not(target_arch = "wasm32"), not(target_os = "android")))]
+    #[cfg(not(target_arch = "wasm32"))]
     pub upnp: upnp::tokio::Behaviour,
 }
 
@@ -470,7 +470,7 @@ impl IronCoreBehaviour {
 
         // mDNS for LAN discovery — gracefully disabled in environments without
         // multicast support (Docker containers, cloud VMs, CI runners).
-        // Also disabled on Android (no multicast support).
+        // On Android, NsdManager is used instead (see MdnsServiceDiscovery.kt).
         #[cfg(all(not(target_arch = "wasm32"), not(target_os = "android")))]
         let mdns = if discovery_config
             .as_ref()
@@ -479,7 +479,7 @@ impl IronCoreBehaviour {
         {
             match mdns::tokio::Behaviour::new(mdns::Config::default(), peer_id) {
                 Ok(m) => {
-                    tracing::info!("mDNS LAN discovery: enabled");
+                    tracing::info!("mDNS LAN discovery: enabled (libp2p-mdns)");
                     Toggle::from(Some(m))
                 }
                 Err(e) => {

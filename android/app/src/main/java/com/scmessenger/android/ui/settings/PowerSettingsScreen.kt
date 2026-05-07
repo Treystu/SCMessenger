@@ -260,7 +260,8 @@ fun PowerSettingsScreen(
                 }
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            // Extra bottom padding for scroll grace zone
+            Spacer(modifier = Modifier.height(80.dp))
         }
     }
 }

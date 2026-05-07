@@ -123,6 +123,12 @@ reference/Androidlogs.txt
 reference/Android-Debug.md
 .claude/compile.lock
 
+# Additional build artifacts (comprehensive coverage per Requirement 10.1)
+target/
+build/
+.gradle/
+DerivedData/
+
 # Claude Code agent runtime (PID files, logs, per-agent configs)
 .claude/agents/
 **/.claude/agents/
@@ -130,3 +136,178 @@ reference/Android-Debug.md
 # Claude Code scheduled tasks runtime lock
 .claude/scheduled_tasks.lock
 .claude/scheduled_tasks.json
+
+# Signing and Security (NEVER commit these)
+*.keystore
+*.jks
+*.p12
+*.mobileprovision
+keystore_base64.txt
+certificate_base64.txt
+profile_base64.txt
+KEYSTORE_BACKUP_INSTRUCTIONS.md
+IOS_SIGNING_BACKUP_INSTRUCTIONS.md
+android-release.keystore
+ios-distribution.p12
+ios-distribution.mobileprovision
+
+# OS-specific files
+Thumbs.db
+*.swp
+*.swo
+*~
+.directory
+
+# Additional build artifacts (comprehensive coverage)
+*.o
+*.so
+*.dylib
+*.dll
+*.exe
+*.out
+*.class
+*.dex
+*.jar
+!gradle-wrapper.jar
+*.war
+*.ear
+*.nar
+*.zip
+*.tar.gz
+*.rar
+
+# IDE files (comprehensive coverage)
+*.iml
+*.ipr
+*.iws
+.project
+.classpath
+.settings/
+.metadata/
+.recommenders/
+*.sublime-project
+*.sublime-workspace
+.vscode/settings.json
+.vscode/tasks.json
+.vscode/launch.json
+.vscode/extensions.json
+*.code-workspace
+
+# macOS specific
+.AppleDouble
+.LSOverride
+Icon
+._*
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+.AppleDB
+.AppleDesktop
+Network Trash Folder
+Temporary Items
+.apdisk
+
+# Windows specific
+Desktop.ini
+$RECYCLE.BIN/
+*.cab
+*.msi
+*.msix
+*.msm
+*.msp
+*.lnk
+
+# Linux specific
+.fuse_hidden*
+.nfs*
+
+# Environment and secrets (comprehensive)
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+*.crt
+*.cer
+secrets.yml
+secrets.yaml
+credentials.json
+service-account.json
+
+# Gradle additional
+.gradle/
+gradle-app.setting
+!gradle-wrapper.jar
+!gradle-wrapper.properties
+.gradletasknamecache
+
+# Xcode additional
+*.moved-aside
+*.xccheckout
+*.xcscmblueprint
+xcuserdata/
+*.xcuserstate
+project.xcworkspace/
+DerivedData/
+*.hmap
+*.ipa
+*.dSYM.zip
+*.dSYM
+timeline.xctimeline
+playground.xcworkspace
+.build-pre/
+.build-post/
+
+# Rust additional
+**/*.rs.bk
+*.pdb
+Cargo.lock
+# Keep Cargo.lock for applications, remove for libraries
+# Uncomment if this is a library:
+# Cargo.lock
+
+# Testing and coverage
+coverage/
+*.profraw
+*.profdata
+lcov.info
+*.gcda
+*.gcno
+*.gcov
+htmlcov/
+.tox/
+.coverage
+.coverage.*
+.cache
+.pytest_cache/
+.hypothesis/
+
+# Documentation build artifacts
+docs/_build/
+docs/.doctrees/
+site/
+_site/
+.jekyll-cache/
+.jekyll-metadata
+
+# Package managers
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+package-lock.json
+yarn.lock
+pnpm-debug.log*
+.pnpm-store/
+
+# Backup files
+*.bak
+*.backup
+*.old
+*.orig
+*.tmp
+*~.nib

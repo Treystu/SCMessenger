@@ -66,7 +66,7 @@ For lifecycle classification (`Active`, `Planned`, `Mixed`, `Historical`, `Super
 
 ## Repo Automation and Agent Guidance
 
-- [Repository Agent Policy](AGENTS.md)
+- [Repository Agent Policy](BACKUP_AGENTS.md)
 - [GitHub Copilot Instructions](.github/copilot-instructions.md)
 - [Roo Code Integration Plan](scmessenger-roo-code-features-plan.md)
 
@@ -144,7 +144,7 @@ Historical audit artifacts currently live under `docs/historical/`.
   - `docs/V0.2.1_RESIDUAL_RISK_REGISTER.md`
 
 - Documentation/build-verification governance lock (2026-03-13, repo policy tightened so same-run canonical doc updates and edited-target build verification are explicit closeout requirements for both Codex and Copilot agents) is tracked in:
-  - `AGENTS.md`
+  - `BACKUP_AGENTS.md`
   - `.github/copilot-instructions.md`
   - `docs/CURRENT_STATE.md`
   - `REMAINING_WORK_TRACKING.md`

@@ -3024,7 +3024,7 @@ pub async fn start_swarm_with_config(
                                 tracing::trace!("Ping event: {:?}", event);
                             }
 
-                            #[cfg(all(not(target_arch = "wasm32"), not(target_os = "android"), not(target_os = "windows")))]
+                            #[cfg(all(not(target_arch = "wasm32"), not(target_os = "android")))]
                             SwarmEvent::Behaviour(super::behaviour::IronCoreBehaviourEvent::Mdns(
                                 mdns::Event::Discovered(peers)
                             )) => {
@@ -4653,8 +4653,7 @@ use futures::StreamExt;
 use libp2p::identify;
 #[cfg(all(
     not(target_arch = "wasm32"),
-    not(target_os = "android"),
-    not(target_os = "windows")
+    not(target_os = "android")
 ))]
 use libp2p::mdns;
 use libp2p::{gossipsub, request_response};

@@ -67,6 +67,10 @@ fun MeshSettingsScreen(
                     onDismiss = { viewModel.clearError() }
                 )
             }
+            
+            // Bottom padding for scroll grace zone - allows pulling content up slightly
+            // for better visibility of bottom elements on smaller screens
+            Spacer(modifier = Modifier.height(80.dp))
 
             settings?.let { currentSettings ->
                 // Warning banner about relay mode
@@ -215,7 +219,8 @@ fun MeshSettingsScreen(
             CircularProgressIndicator()
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
+        // Extra bottom padding for scroll grace zone
+        Spacer(modifier = Modifier.height(80.dp))
     }
 }
 

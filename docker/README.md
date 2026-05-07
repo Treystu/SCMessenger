@@ -1,308 +1,162 @@
-# SCMessenger Docker Testing Environment
+# Docker Build Environment
 
-## [Current] Section Action Outcome (2026-02-23)
+This directory contains Docker configurations for reproducible Linux builds of SCMessenger.
 
-- `move`: current verified behavior and active priorities belong in `docs/CURRENT_STATE.md` and `REMAINING_WORK_TRACKING.md`.
-- `move`: rollout and architecture-level decisions belong in `docs/GLOBAL_ROLLOUT_PLAN.md`, `docs/UNIFIED_GLOBAL_APP_PLAN.md`, and `docs/REPO_CONTEXT.md`.
-- `rewrite`: operational commands/examples in this file require revalidation against current code/scripts before use.
-- `keep`: retain this file as supporting context and workflow/reference detail.
-- `delete/replace`: do not use this file alone as authoritative current-state truth; use canonical docs above.
+## Purpose
 
-Comprehensive Docker-based testing infrastructure for verifying all SCMessenger features in a simulated multi-network environment.
+The Docker build environment ensures:
+- **Consistent build environment** across different machines and CI systems
+- **Reproducible builds** with pinned Rust toolchain (1.75.0) and dependencies
+- **Isolated builds** that don't depend on host system configuration
+- **Build verification** for release artifacts
+
+## Requirements
+
+- Docker installed and running
+- At least 4GB of available disk space
+- Internet connection for initial image build
 
 ## Quick Start
 
-### Run All Tests
+### Build the Docker Image
 
 ```bash
-./run-all-tests.sh
+./docker/build.sh build-image
 ```
 
-### Run Specific Tests
+This creates a Docker image with:
+- Rust 1.75.0 (pinned via rust-toolchain.toml)
+- Build dependencies (build-essential, pkg-config, libssl-dev)
+- Pre-downloaded Cargo dependencies (cached layer)
+- Non-root builder user
+
+### Build CLI Binary
 
 ```bash
-./run-all-tests.sh --rust-only      # Rust core tests
-./run-all-tests.sh --android-only   # Android unit tests
-./run-all-tests.sh --integration-only # Integration tests
+./docker/build.sh build-cli
 ```
 
-**📖 For detailed testing guide, see [TESTING_GUIDE.md](TESTING_GUIDE.md)**
+This builds the `scmessenger-cli` binary in the Docker container and outputs it to `target/docker-release/scmessenger-cli`.
 
-## Overview
-
-This directory contains Docker configurations and test scripts to validate SCMessenger's core functionality including:
-
-- **Unit Tests**: Rust core library and Android app with MockK
-- **Integration Tests**: Multi-node mesh networking with real containers
-- **Mock Infrastructure**: Configurable NAT, latency, and network simulation
-- Peer-to-peer messaging
-- Relay-based routing
-- Multi-hop relay chains
-- DHT/Kademlia peer discovery
-- Mesh network formation
-- NAT traversal simulation
-- Message delivery tracking
-- Network partition resilience
-
-## Architecture
-
-### Network Topology
-
-```text
-Network-A (172.20.0.0/24)          Network-B (172.21.0.0/24)          Network-C (172.22.0.0/24)
-┌──────────────────┐               ┌──────────────────┐               ┌──────────────────┐
-│                  │               │                  │               │                  │
-│  Alice           │               │  Bob             │               │  Eve             │
-│  Carol           │               │  David           │               │                  │
-│                  │               │                  │               │                  │
-│       ╲          │               │          ╱       │               │                  │
-│        ╲         │               │         ╱        │               │                  │
-│         ╲        │               │        ╱         │               │         ╱        │
-│          Relay1──┼───────────────┼───────Relay2─────┼───────────────┼────────╱         │
-│                  │               │                  │               │                  │
-└──────────────────┘               └──────────────────┘               └──────────────────┘
-
-Direct P2P:     Alice ↔ Carol (same network)
-Single Relay:   Alice ↔ Bob (via Relay1)
-Multi-hop:      Alice ↔ Eve (via Relay1 → Relay2)
-```
-
-### Node Configuration
-
-| Node   | Network(s) | Role                    | Port |
-| ------ | ---------- | ----------------------- | ---- |
-| relay1 | A, B       | Primary bootstrap relay | 4001 |
-| relay2 | B, C       | Secondary relay         | 4002 |
-| alice  | A          | Client node             | -    |
-| bob    | B          | Client node             | -    |
-| carol  | A          | Client node             | -    |
-| david  | B          | Client node             | -    |
-| eve    | C          | Client node             | -    |
-
-## Files
-
-### Docker Images
-
-- `Dockerfile` - Multi-stage build for SCMessenger CLI (production)
-- `Dockerfile.android-test` - Android test environment with SDK, NDK, Rust
-- `Dockerfile.rust-test` - Rust test environment with all tooling
-
-### Docker Compose Configurations
-
-- `docker-compose.yml` - Basic 3-node setup (relay, alice, bob)
-- `docker-compose-extended.yml` - Full 7-node testing environment
-- `docker-compose.test.yml` - **NEW: Comprehensive test infrastructure**
-- `docker-compose.network-test.yml` - Network simulation with NAT
-
-### Scripts
-
-- `run-all-tests.sh` - **NEW: Main test runner for all test suites**
-- `run-tests.sh` - Quick start script for Docker environments
-- `setup-android-test-mocks.sh` - **NEW: Set up Android test mocks**
-- `entrypoint.sh` - Container initialization script
-- `manage.sh` - Docker management utilities
-
-### Documentation
-
-- `README.md` - This file
-- `TESTING_GUIDE.md` - **NEW: Comprehensive testing guide**
-- `test-scripts/` - Integration test scripts
-- `test-results/` - Output directory for test logs and results
-
-## Usage
-
-### Install-Mode Choice (Relay-Only vs Identity)
-
-Containerized/operator flows follow the same model as mobile/desktop:
-
-- Relay-only install path:
-  ```bash
-  scm relay --listen /ip4/0.0.0.0/tcp/9001 --http-port 9000
-  ```
-- Promote later to full identity mode without reinstall:
-  ```bash
-  scm init --name "<nickname>"
-  scm start --port 9001
-  ```
-
-For app variants with GUI (iOS/Android/Desktop/WASM), this is exposed as first-run choice:
-`Generate Identity Now` or `Skip for Relay-Only Install`, plus later identity creation from Settings -> Identity.
-
-### Basic Setup (3 nodes)
-
-Start the basic environment with one relay and two clients:
+### Run Tests
 
 ```bash
-cd docker
-docker compose up --build
+./docker/build.sh test
 ```
 
-This creates:
+This runs the full test suite in the Docker container.
 
-- 1 relay node (bridges network-a and network-b)
-- Alice on network-a
-- Bob on network-b
-
-### Extended Setup (7 nodes)
-
-Start the full testing environment:
+### Clean Up
 
 ```bash
-cd docker
-docker compose -f docker-compose-extended.yml up --build
+./docker/build.sh clean
 ```
 
-This creates:
+This removes the Docker image and build artifacts.
 
-- 2 relay nodes (relay1, relay2)
-- 5 client nodes across 3 networks
-- Full mesh topology for comprehensive testing
+## Manual Docker Commands
 
-### Running Automated Tests
+If you prefer to use Docker directly:
 
-Execute the full integration test suite:
+### Build Image
 
 ```bash
-cd docker
-docker compose -f docker-compose-extended.yml --profile test up --build
+docker build -f docker/build.Dockerfile -t scmessenger-builder:1.75.0 .
 ```
 
-The test runner will:
-
-1. Wait for all nodes to initialize
-2. Verify network connectivity
-3. Test direct P2P messaging
-4. Test single-relay routing
-5. Test multi-hop relay chains
-6. Verify DHT peer discovery
-7. Test bidirectional messaging
-8. Verify mesh routing
-9. Check connection stability
-10. Validate relay load distribution
-
-Test results are saved to `test-results/` with timestamps.
-
-### Manual Testing
-
-Access individual node shells:
+### Build CLI
 
 ```bash
-# Alice's shell
-docker exec -it scm-alice /bin/bash
-
-# Inside container, use CLI commands
-scm identity show
-scm peers list
-scm send <peer-id> "Hello!"
-scm history
+docker run --rm \
+  -v $(pwd)/target/docker-release:/workspace/target/release \
+  scmessenger-builder:1.75.0 \
+  cargo build --release --bin scmessenger-cli --locked
 ```
 
-### Viewing Logs
-
-Monitor logs from all nodes:
+### Run Tests
 
 ```bash
-docker compose -f docker-compose-extended.yml logs -f
+docker run --rm scmessenger-builder:1.75.0 cargo test --workspace --locked
 ```
 
-View logs from specific node:
+### Interactive Shell
 
 ```bash
-docker logs -f scm-alice
+docker run --rm -it scmessenger-builder:1.75.0 /bin/bash
 ```
 
-### Stopping Services
+## Build Reproducibility
 
-Stop all containers:
+The Docker environment ensures reproducible builds by:
 
-```bash
-docker compose -f docker-compose-extended.yml down
+1. **Pinned Rust version**: Uses `rust:1.75.0-slim` base image
+2. **Pinned dependencies**: Uses `Cargo.lock` with `--locked` flag
+3. **Consistent system libraries**: Debian slim with specific package versions
+4. **Isolated environment**: No host system dependencies
+5. **Non-root user**: Builds run as user `builder` (UID 1000)
+
+## Caching Strategy
+
+The Dockerfile uses multi-layer caching to speed up builds:
+
+1. **Base layer**: Rust toolchain and system dependencies (rarely changes)
+2. **Dependency layer**: Cargo dependencies (changes when Cargo.toml/Cargo.lock changes)
+3. **Source layer**: Application source code (changes frequently)
+
+This means:
+- First build: ~10-15 minutes (downloads everything)
+- Subsequent builds with code changes only: ~2-3 minutes
+- Subsequent builds with dependency changes: ~5-7 minutes
+
+## CI/CD Integration
+
+This Docker environment can be used in GitHub Actions:
+
+```yaml
+- name: Build with Docker
+  run: |
+    docker build -f docker/build.Dockerfile -t scmessenger-builder:1.75.0 .
+    docker run --rm \
+      -v ${{ github.workspace }}/target/docker-release:/workspace/target/release \
+      scmessenger-builder:1.75.0 \
+      cargo build --release --bin scmessenger-cli --locked
 ```
-
-Clean up volumes and networks:
-
-```bash
-docker compose -f docker-compose-extended.yml down -v
-```
-
-## Test Suite Details
-
-### Test 1: Relay Node Operational Status
-
-Verifies both relay nodes start successfully and listen on configured ports.
-
-### Test 2: Client Node Connectivity
-
-Ensures all 5 client nodes can connect to the network and establish libp2p swarms.
-
-### Test 3: Identity Creation
-
-Validates that each node successfully generates Ed25519 keypairs and peer IDs.
-
-### Test 4: Direct P2P Messaging
-
-Tests message delivery between two nodes on the same network (Alice → Carol).
-
-### Test 5: Single-Relay Routing
-
-Tests message delivery across networks via one relay (Alice → Bob).
-
-### Test 6: Multi-Hop Relay
-
-Tests message delivery requiring multiple relay hops (Alice → Eve).
-
-### Test 7: DHT Peer Discovery
-
-Validates Kademlia DHT functionality and peer discovery.
-
-### Test 8: Bidirectional Messaging
-
-Tests message delivery in both directions (Bob → Alice).
-
-### Test 9: Mesh Routing
-
-Tests messaging between nodes on the same network (Bob ↔ David).
-
-### Test 10: Message Queueing
-
-Simulates network delays and verifies message queuing.
-
-### Test 11: Connection Stability
-
-Monitors persistent connections over time.
-
-### Test 12: Relay Load Distribution
-
-Verifies both relay nodes are active and handling traffic.
 
 ## Troubleshooting
 
-### Nodes fail to connect
+### Build fails with "permission denied"
 
-Check network configuration:
-
+Make sure the builder user has correct permissions:
 ```bash
-docker network ls
-docker network inspect docker_network-a
+docker run --rm -it scmessenger-builder:1.75.0 /bin/bash
+# Inside container:
+whoami  # Should be "builder"
+ls -la /workspace
 ```
 
-### Messages not delivered
+### Image build is slow
 
-Check logs for routing errors:
-
+The first build downloads all dependencies. Subsequent builds use Docker's layer cache. To force a clean build:
 ```bash
-docker logs scm-alice | grep -i "routing\|relay\|send"
+docker build --no-cache -f docker/build.Dockerfile -t scmessenger-builder:1.75.0 .
 ```
 
-### Tests fail
+### Out of disk space
 
-View detailed test logs:
-
+Clean up old Docker images and containers:
 ```bash
-cat docker/test-results/test_run_*.log
+docker system prune -a
 ```
 
-## Development
+## Security Considerations
 
-- **Modify the App**: Re-run `docker compose build` to include changes from the host source code.
-- **Logs**: Use `docker compose logs -f` to follow logs from all nodes.
+- The Docker image runs as non-root user `builder` (UID 1000)
+- No secrets or credentials are included in the image
+- The image is based on official Rust slim image from Docker Hub
+- System packages are from Debian stable repositories
+
+## Related Documentation
+
+- [Build Reproducibility Requirements](../docs/ARCHITECTURE.md#build-reproducibility)
+- [Release Pipeline](../.github/workflows/release.yml)
+- [Deployment Guide](../docs/DEPLOYMENT.md)
