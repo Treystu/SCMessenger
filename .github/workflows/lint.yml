@@ -63,7 +63,7 @@ jobs:
         uses: android-actions/setup-android@v3
       
       - name: Cache Gradle dependencies
-        uses: actions/cache@v3
+        uses: actions/cache@v5
         with:
           path: |
             ~/.gradle/caches
@@ -115,7 +115,7 @@ jobs:
       
       - name: Cache npm dependencies
         if: steps.check-package.outputs.exists == 'true'
-        uses: actions/cache@v3
+        uses: actions/cache@v5
         with:
           path: wasm/node_modules
           key: ${{ runner.os }}-node-${{ hashFiles('wasm/package-lock.json') }}
