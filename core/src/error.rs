@@ -94,6 +94,55 @@ pub enum MeshError {
         /// The peer that exceeded the rate limit
         peer_id: PeerId,
     },
+
+    /// Invalid state for the requested operation.
+    ///
+    /// The operation cannot be completed because the component is in
+    /// an unexpected state (e.g., not initialized, already running).
+    #[error("invalid state: {0}")]
+    InvalidState(String),
+
+    /// Resource not found.
+    ///
+    /// The requested resource (message, peer, key, etc.) was not found.
+    #[error("not found: {0}")]
+    NotFound(String),
+
+    /// Cryptographic operation failed.
+    ///
+    /// Encryption, decryption, signing, or verification failed.
+    #[error("cryptographic error: {0}")]
+    Crypto(String),
+
+    /// Configuration error.
+    ///
+    /// Invalid or missing configuration prevented the operation.
+    #[error("configuration error: {0}")]
+    Config(String),
+
+    /// Invalid input provided.
+    ///
+    /// The caller provided invalid input for the operation.
+    #[error("invalid input: {0}")]
+    InvalidInput(String),
+
+    /// Storage operation failed.
+    ///
+    /// Database or file system operation failed.
+    #[error("storage error: {0}")]
+    Storage(String),
+
+    /// Identity operation failed.
+    ///
+    /// Identity key generation, loading, or validation failed.
+    #[error("identity error: {0}")]
+    Identity(String),
+
+    /// Message operation failed.
+    ///
+    /// Message parsing, validation, or processing failed.
+    #[error("message error: {0}")]
+    Message(String),
 }
 
 /// Transport layer errors.
@@ -125,6 +174,44 @@ pub enum TransportError {
     /// Wraps standard I/O errors from the underlying transport.
     #[error("I/O error: {0}")]
     Io(#[from] std::io::Error),
+
+    /// Connection timeout.
+    ///
+    /// The connection attempt timed out before completing.
+    #[error("connection timeout: {0}")]
+    Timeout(String),
+
+    /// Dial failure.
+    ///
+    /// Failed to establish a connection to the peer.
+    #[error("dial failed: {peer_id:?}: {reason}")]
+    DialFailed {
+        /// The peer we tried to connect to
+        peer_id: PeerId,
+        /// Reason for failure
+        reason: String,
+    },
+
+    /// No active connection to peer.
+    ///
+    /// The peer is not currently connected.
+    #[error("not connected to peer: {peer_id:?}")]
+    NotConnected {
+        /// The peer that is not connected
+        peer_id: PeerId,
+    },
+
+    /// Invalid multiaddress.
+    ///
+    /// The provided multiaddress could not be parsed or is invalid.
+    #[error("invalid multiaddress: {0}")]
+    InvalidMultiaddr(String),
+
+    /// Transport protocol error.
+    ///
+    /// Protocol violation or unexpected message during transport.
+    #[error("transport protocol error: {0}")]
+    ProtocolError(String),
 }
 
 /// Serialization and deserialization errors.
@@ -156,6 +243,40 @@ pub enum SerializationError {
     /// Wraps serde_json errors for JSON encoding/decoding.
     #[error("JSON error: {0}")]
     Json(#[from] serde_json::Error),
+
+    /// Invalid UTF-8 string.
+    ///
+    /// A string contained invalid UTF-8 bytes.
+    #[error("invalid UTF-8: {0}")]
+    InvalidUtf8(String),
+
+    /// Unexpected data format.
+    ///
+    /// The data format was unexpected or malformed.
+    #[error("unexpected format: expected {expected}, got {got}")]
+    UnexpectedFormat {
+        /// Expected format description
+        expected: String,
+        /// Actual format found
+        got: String,
+    },
+
+    /// Data too large.
+    ///
+    /// The data exceeds the maximum allowed size.
+    #[error("data too large: {size} bytes (max: {max})")]
+    TooLarge {
+        /// Actual size in bytes
+        size: usize,
+        /// Maximum allowed size
+        max: usize,
+    },
+
+    /// Missing required field.
+    ///
+    /// A required field was missing during deserialization.
+    #[error("missing required field: {0}")]
+    MissingField(String),
 }
 
 /// Result type alias for mesh operations.

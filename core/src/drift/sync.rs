@@ -681,4 +681,31 @@ mod tests {
             assert!(!missing_envelopes.is_empty());
         }
     }
+
+    proptest::proptest! {
+        #[test]
+        fn test_proptest_sync_reconciles_arbitrary_sets(
+            val_a in 1..20u8,
+            val_b in 21..40u8,
+        ) {
+            let mut store_a = MeshStore::new();
+            let mut store_b = MeshStore::new();
+
+            store_a.insert(make_test_envelope(make_test_id(val_a), 100));
+            store_b.insert(make_test_envelope(make_test_id(val_b), 100));
+
+            let mut session_a = SyncSession::new();
+            let offer = session_a.initiate(&store_a).unwrap();
+
+            let mut session_b = SyncSession::new();
+            let (response, _) = session_b.respond(&store_b, &offer).unwrap();
+
+            let (_, _received_by_a) = session_a.complete(&store_a, &response).unwrap();
+
+            // A should identify that it is missing val_b
+            assert!(session_a.our_missing_ids().contains(&make_test_id(val_b)));
+            // B should identify that it is missing val_a
+            assert!(session_b.our_missing_ids().contains(&make_test_id(val_a)));
+        }
+    }
 }

@@ -3259,10 +3259,10 @@ async fn cmd_swarm_stats() -> Result<()> {
     println!();
 
     if api::is_api_available().await {
-        match api::get_peers_via_api().await {
-            Ok(peers) => {
-                if peers.is_empty() {
-                    println!("{}", "No active peer connections.".yellow());
+        match api::get_swarm_stats_via_api().await {
+            Ok(stats) => {
+                if stats.is_empty() {
+                    println!("{}", "No active peer connections in the swarm stats.".yellow());
                     println!();
                     println!("  Start the mesh node with: {}", "scm relay".dimmed());
                     println!(
@@ -3270,36 +3270,39 @@ async fn cmd_swarm_stats() -> Result<()> {
                         "scm start".dimmed()
                     );
                 } else {
-                    println!("{:<52} {:<14} {:<10}", "Peer ID", "Reputation", "Status");
-                    println!("{:-<52} {:-<14} {:-<10}", "", "", "");
+                    println!(
+                        "{:<52} {:<12} {:<10} {:<14} {:<20}",
+                        "Peer ID", "State", "Latency", "Sent/Failed", "Bytes Sent/Recv"
+                    );
+                    println!("{:-<52} {:-<12} {:-<10} {:-<14} {:-<20}", "", "", "", "", "");
 
-                    for peer in &peers {
-                        let status = if peer.reputation > 80.0 {
-                            "active".green()
-                        } else if peer.reputation > 30.0 {
-                            "unstable".yellow()
-                        } else {
-                            "degraded".red()
+                    for peer in &stats {
+                        let state_colored = match peer.state.as_str() {
+                            "Connected" => peer.state.green(),
+                            "Connecting" => peer.state.yellow(),
+                            "Failed" => peer.state.red(),
+                            _ => peer.state.normal(),
                         };
+                        let latency = format!("{}ms", peer.avg_latency_ms);
+                        let sent_failed = format!("{}/{}", peer.messages_sent, peer.message_failures);
+                        let bytes_sent_recv = format!("{}/{}", peer.bytes_sent, peer.bytes_received);
 
                         println!(
-                            "{:<52} {:<14.1} {:<10}",
+                            "{:<52} {:<12} {:<10} {:<14} {:<20}",
                             peer.peer_id.dimmed(),
-                            peer.reputation,
-                            status,
+                            state_colored,
+                            latency,
+                            sent_failed,
+                            bytes_sent_recv,
                         );
                     }
 
                     println!();
-                    println!(
-                        "{} {} active peer(s) in the swarm.",
-                        "ℹ".dimmed(),
-                        peers.len()
-                    );
+                    println!("{} {} peer(s) in the swarm stats.", "ℹ".dimmed(), stats.len());
                 }
             }
             Err(e) => {
-                println!("{} Failed to fetch peers: {}", "✗".red(), e);
+                println!("{} Failed to fetch swarm stats: {}", "✗".red(), e);
             }
         }
 
@@ -3321,28 +3324,54 @@ async fn cmd_swarm_stats() -> Result<()> {
         let storage_path = data_dir.join("storage");
         let core = IronCore::with_storage(path_to_string(&storage_path)?);
 
-        let contacts = core.contacts_store_manager();
-        let history = core.history_store_manager();
+        let stats = core.get_all_connection_stats();
 
-        let contact_list = contacts.list().unwrap_or_default();
-        let stats = history
-            .stats()
-            .map_err(|e| anyhow::anyhow!("History stats failed: {:?}", e))?;
+        if stats.is_empty() {
+            println!("{}", "No active peer connections in the swarm stats.".yellow());
+            println!();
+            println!("  Start the mesh node with: {}", "scm relay".dimmed());
+            println!(
+                "  Or start the messaging node with: {}",
+                "scm start".dimmed()
+            );
+        } else {
+            println!(
+                "{:<52} {:<12} {:<10} {:<14} {:<20}",
+                "Peer ID", "State", "Latency", "Sent/Failed", "Bytes Sent/Recv"
+            );
+            println!("{:-<52} {:-<12} {:-<10} {:-<14} {:-<20}", "", "", "", "", "");
 
-        println!(
-            "  {}",
-            "No daemon is running. Local storage overview:".yellow()
-        );
-        println!();
-        println!("  Contacts:        {}", contact_list.len());
-        println!("  Total Messages:  {}", stats.total_messages);
-        println!("    Sent:          {}", stats.sent_count);
-        println!("    Received:      {}", stats.received_count);
-        println!();
-        println!(
-            "  {}",
-            "Start the daemon with `scm relay` for live connection stats.".dimmed()
-        );
+            for (peer_id, stat) in &stats {
+                let state_str = match stat.state {
+                    scmessenger_core::transport::health::ConnectionState::Connecting => "Connecting",
+                    scmessenger_core::transport::health::ConnectionState::Connected => "Connected",
+                    scmessenger_core::transport::health::ConnectionState::Disconnecting => "Disconnecting",
+                    scmessenger_core::transport::health::ConnectionState::Disconnected => "Disconnected",
+                    scmessenger_core::transport::health::ConnectionState::Failed => "Failed",
+                };
+                let state_colored = match state_str {
+                    "Connected" => state_str.green(),
+                    "Connecting" => state_str.yellow(),
+                    "Failed" => state_str.red(),
+                    _ => state_str.normal(),
+                };
+                let latency = format!("{}ms", stat.avg_latency_ms);
+                let sent_failed = format!("{}/{}", stat.messages_sent, stat.message_failures);
+                let bytes_sent_recv = format!("{}/{}", stat.bytes_sent, stat.bytes_received);
+
+                println!(
+                    "{:<52} {:<12} {:<10} {:<14} {:<20}",
+                    peer_id.to_string().dimmed(),
+                    state_colored,
+                    latency,
+                    sent_failed,
+                    bytes_sent_recv,
+                );
+            }
+
+            println!();
+            println!("{} {} peer(s) in the swarm stats.", "ℹ".dimmed(), stats.len());
+        }
     }
 
     Ok(())

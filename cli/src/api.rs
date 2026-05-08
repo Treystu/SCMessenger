@@ -55,6 +55,28 @@ pub struct GetPeersResponse {
     pub peers: Vec<PeerEntry>,
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct ApiConnectionStats {
+    pub peer_id: String,
+    pub state: String,
+    pub duration_ms: u64,
+    pub messages_sent: u64,
+    pub message_failures: u64,
+    pub bytes_sent: u64,
+    pub bytes_received: u64,
+    pub avg_latency_ms: u64,
+    pub last_activity: u64,
+    pub connection_attempts: u32,
+    pub successful_connections: u32,
+    pub connection_failures: u32,
+    pub current_address: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SwarmStatsResponse {
+    pub stats: Vec<ApiConnectionStats>,
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct GetHistoryRequest {
     pub peer_id: Option<String>,
@@ -217,6 +239,27 @@ pub async fn get_peers_via_api() -> Result<Vec<PeerEntry>> {
     let response: GetPeersResponse = serde_json::from_slice(&body_bytes)?;
 
     Ok(response.peers)
+}
+
+#[allow(dead_code)]
+pub async fn get_swarm_stats_via_api() -> Result<Vec<ApiConnectionStats>> {
+    use http_body_util::{BodyExt, Empty};
+    use hyper::body::Bytes;
+    use hyper_util::client::legacy::Client;
+    use hyper_util::rt::TokioExecutor;
+
+    let client = Client::builder(TokioExecutor::new()).build_http();
+
+    let req = hyper::Request::builder()
+        .method(Method::GET)
+        .uri(format!("http://{}/api/swarm/stats", API_ADDR))
+        .body(Empty::<Bytes>::new())?;
+
+    let resp = client.request(req).await?;
+    let body_bytes = resp.into_body().collect().await?.to_bytes();
+    let response: SwarmStatsResponse = serde_json::from_slice(&body_bytes)?;
+
+    Ok(response.stats)
 }
 
 #[allow(dead_code)]
@@ -532,6 +575,39 @@ async fn handle_get_peers(
     Ok(AxumJson(GetPeersResponse { peers }))
 }
 
+async fn handle_get_swarm_stats(
+    State(ctx): State<Arc<ApiContext>>,
+) -> Result<AxumJson<SwarmStatsResponse>, (StatusCode, String)> {
+    let raw_stats = ctx.core.get_all_connection_stats();
+    let stats = raw_stats.into_iter().map(|(peer_id, stat)| {
+        let state_str = match stat.state {
+            scmessenger_core::transport::health::ConnectionState::Connecting => "Connecting",
+            scmessenger_core::transport::health::ConnectionState::Connected => "Connected",
+            scmessenger_core::transport::health::ConnectionState::Disconnecting => "Disconnecting",
+            scmessenger_core::transport::health::ConnectionState::Disconnected => "Disconnected",
+            scmessenger_core::transport::health::ConnectionState::Failed => "Failed",
+        }.to_string();
+
+        ApiConnectionStats {
+            peer_id: peer_id.to_string(),
+            state: state_str,
+            duration_ms: stat.duration_ms,
+            messages_sent: stat.messages_sent,
+            message_failures: stat.message_failures,
+            bytes_sent: stat.bytes_sent,
+            bytes_received: stat.bytes_received,
+            avg_latency_ms: stat.avg_latency_ms,
+            last_activity: stat.last_activity,
+            connection_attempts: stat.connection_attempts,
+            successful_connections: stat.successful_connections,
+            connection_failures: stat.connection_failures,
+            current_address: stat.current_address.map(|addr| addr.to_string()),
+        }
+    }).collect();
+
+    Ok(AxumJson(SwarmStatsResponse { stats }))
+}
+
 async fn handle_get_listeners(
     State(ctx): State<Arc<ApiContext>>,
 ) -> Result<AxumJson<GetListenersResponse>, (StatusCode, String)> {
@@ -805,6 +881,7 @@ pub async fn start_api_server(ctx: ApiContext) -> Result<()> {
         .route("/api/send", post(handle_send_message))
         .route("/api/contacts", post(handle_add_contact))
         .route("/api/peers", get(handle_get_peers))
+        .route("/api/swarm/stats", get(handle_get_swarm_stats))
         .route("/api/listeners", get(handle_get_listeners))
         .route("/api/history", post(handle_get_history))
         .route("/api/external-address", get(handle_get_external_address))

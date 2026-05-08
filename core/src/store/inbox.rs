@@ -6,8 +6,9 @@ use crate::store::backend::StorageBackend;
 use crate::store::storage::StorageManager;
 
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::sync::Arc;
+use rustc_hash::FxHashSet;
 
 /// Maximum tracked message IDs (for deduplication)
 const MAX_SEEN_IDS: usize = 50_000;
@@ -32,8 +33,8 @@ pub struct ReceivedMessage {
 /// Storage backend for inbox
 enum InboxBackend {
     Memory {
-        seen_ids: HashSet<String>,
-        seen_order: Vec<String>,
+        seen_ids: FxHashSet<[u8; 32]>,
+        seen_order: Vec<[u8; 32]>,
         messages: HashMap<String, Vec<ReceivedMessage>>,
         total: usize,
     },
@@ -51,7 +52,7 @@ impl Inbox {
     pub fn new() -> Self {
         Self {
             backend: InboxBackend::Memory {
-                seen_ids: HashSet::new(),
+                seen_ids: FxHashSet::default(),
                 seen_order: Vec::new(),
                 messages: HashMap::new(),
                 total: 0,
@@ -90,12 +91,13 @@ impl Inbox {
 
     /// Check if a message ID has already been seen (duplicate)
     pub fn is_duplicate(&self, message_id: &str) -> bool {
+        let hash = *blake3::hash(message_id.as_bytes()).as_bytes();
         match &self.backend {
-            InboxBackend::Memory { seen_ids, .. } => seen_ids.contains(message_id),
+            InboxBackend::Memory { seen_ids, .. } => seen_ids.contains(&hash),
             InboxBackend::Persistent(db) => {
                 if let Ok(Some(bytes)) = db.get(SEEN_IDS_KEY) {
-                    if let Ok(seen_ids) = bincode::deserialize::<HashSet<String>>(&bytes) {
-                        return seen_ids.contains(message_id);
+                    if let Ok(seen_ids) = bincode::deserialize::<FxHashSet<[u8; 32]>>(&bytes) {
+                        return seen_ids.contains(&hash);
                     }
                 }
                 false
@@ -105,6 +107,7 @@ impl Inbox {
 
     /// Record a received message. Returns false if duplicate.
     pub fn receive(&mut self, msg: ReceivedMessage) -> bool {
+        let hash = *blake3::hash(msg.message_id.as_bytes()).as_bytes();
         let is_new = match &mut self.backend {
             InboxBackend::Memory {
                 seen_ids,
@@ -112,19 +115,19 @@ impl Inbox {
                 messages,
                 total,
             } => {
-                if seen_ids.contains(&msg.message_id) {
+                if seen_ids.contains(&hash) {
                     return false; // Duplicate
                 }
 
                 // Track for dedup
-                seen_ids.insert(msg.message_id.clone());
-                seen_order.push(msg.message_id.clone());
+                seen_ids.insert(hash);
+                seen_order.push(hash);
 
                 // Evict old IDs if at capacity
                 while seen_ids.len() > MAX_SEEN_IDS {
-                    if let Some(old_id) = seen_order.first().cloned() {
+                    if let Some(old_hash) = seen_order.first().cloned() {
                         seen_order.remove(0);
-                        seen_ids.remove(&old_id);
+                        seen_ids.remove(&old_hash);
                     }
                 }
 
@@ -139,26 +142,26 @@ impl Inbox {
             }
             InboxBackend::Persistent(db) => {
                 // Load seen IDs
-                let mut seen_ids: HashSet<String> = db
+                let mut seen_ids: FxHashSet<[u8; 32]> = db
                     .get(SEEN_IDS_KEY)
                     .ok()
                     .flatten()
                     .and_then(|bytes| bincode::deserialize(&bytes).ok())
                     .unwrap_or_default();
 
-                if seen_ids.contains(&msg.message_id) {
+                if seen_ids.contains(&hash) {
                     return false; // Duplicate
                 }
 
                 // Add to seen set
-                seen_ids.insert(msg.message_id.clone());
+                seen_ids.insert(hash);
 
                 // Evict if needed (simple approach: keep most recent)
                 if seen_ids.len() > MAX_SEEN_IDS {
                     // In a real impl, we'd track order. For now, just clear oldest randomly
                     let to_remove: Vec<_> = seen_ids.iter().take(1000).cloned().collect();
-                    for id in to_remove {
-                        seen_ids.remove(&id);
+                    for h in to_remove {
+                        seen_ids.remove(&h);
                     }
                 }
 
@@ -250,7 +253,7 @@ impl Inbox {
         match &self.backend {
             InboxBackend::Memory { messages, .. } => messages.len(),
             InboxBackend::Persistent(db) => {
-                let mut senders: HashSet<String> = HashSet::new();
+                let mut senders: FxHashSet<String> = FxHashSet::default();
                 if let Ok(results) = db.scan_prefix(MESSAGES_PREFIX) {
                     for (_, value) in results {
                         if let Ok(msg) = bincode::deserialize::<ReceivedMessage>(&value) {

@@ -34,6 +34,7 @@ async fn test_address_observation_between_peers() {
         alice_event_tx,
         None, // core_handle
         false,
+        None, // discovery_config
     )
     .await
     .expect("Failed to start Alice's swarm");
@@ -44,6 +45,7 @@ async fn test_address_observation_between_peers() {
         bob_event_tx,
         None, // core_handle
         false,
+        None, // discovery_config
     )
     .await
     .expect("Failed to start Bob's swarm");

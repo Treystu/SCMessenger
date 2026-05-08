@@ -38,6 +38,7 @@ uniffi_bindgen = { version = "0.31", optional = true }
 camino = { version = "1", optional = true }
 
 # Additional dependencies
+rustc-hash = "1.1.0"
 parking_lot = "0.12"
 web-time = "1.1"
 crc32fast = "1.3"
@@ -89,7 +90,7 @@ libp2p = { workspace = true, features = [
   "macros",
   "request-response",
   "cbor",
-] }
+ ] }
 ureq = "2"
 libc = "0.2"
 tokio-tungstenite = { workspace = true, features = ["handshake", "rustls-tls-webpki-roots"] }

@@ -68,6 +68,7 @@ async fn registration_protocol_accepts_valid_signed_registration_request() {
         receiver_tx,
         None,
         false,
+        None, // discovery_config
     )
     .await
     .expect("failed to start receiver swarm");
@@ -80,6 +81,7 @@ async fn registration_protocol_accepts_valid_signed_registration_request() {
         sender_tx,
         None,
         false,
+        None, // discovery_config
     )
     .await
     .expect("failed to start sender swarm");
@@ -124,6 +126,7 @@ async fn registration_protocol_rejects_malformed_identity_id_without_mutation() 
         receiver_tx,
         None,
         false,
+        None, // discovery_config
     )
     .await
     .expect("failed to start receiver swarm");
@@ -136,6 +139,7 @@ async fn registration_protocol_rejects_malformed_identity_id_without_mutation() 
         sender_tx,
         None,
         false,
+        None, // discovery_config
     )
     .await
     .expect("failed to start sender swarm");
@@ -187,6 +191,7 @@ async fn registration_protocol_rejects_tampered_signed_deregistration_request() 
         receiver_tx,
         None,
         false,
+        None, // discovery_config
     )
     .await
     .expect("failed to start receiver swarm");
@@ -199,6 +204,7 @@ async fn registration_protocol_rejects_tampered_signed_deregistration_request() 
         sender_tx,
         None,
         false,
+        None, // discovery_config
     )
     .await
     .expect("failed to start sender swarm");

@@ -73,7 +73,8 @@ impl RatchetSessionManager {
                 RatchetSession::init_as_sender(our_signing_key, their_identity_public_x25519)?;
             self.sessions.insert(peer_id.to_string(), session);
         }
-        Ok(self.sessions.get_mut(peer_id).unwrap())
+        // SAFETY: We just inserted the session above if it didn't exist
+        Ok(self.sessions.get_mut(peer_id).expect("session just inserted"))
     }
 
     /// Create a receiver session with the sender's identity key.
@@ -86,7 +87,8 @@ impl RatchetSessionManager {
         let session =
             RatchetSession::init_as_receiver(our_signing_key, sender_identity_public_x25519)?;
         self.sessions.insert(peer_id.to_string(), session);
-        Ok(self.sessions.get_mut(peer_id).unwrap())
+        // SAFETY: We just inserted the session above
+        Ok(self.sessions.get_mut(peer_id).expect("session just inserted"))
     }
 
     /// Get an existing session for a peer (returns None if no session exists).

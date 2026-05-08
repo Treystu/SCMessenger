@@ -85,7 +85,7 @@ async fn test_peer_address_discovery_with_live_swarm() {
     let (event_tx2, mut _event_rx2) = mpsc::channel(256);
 
     let _swarm_reflector: SwarmHandle =
-        start_swarm(keypair_reflector.clone(), None, event_tx1, None, false)
+        start_swarm(keypair_reflector.clone(), None, event_tx1, None, false, None)
             .await
             .expect("Failed to start reflector swarm");
 
@@ -106,7 +106,7 @@ async fn test_peer_address_discovery_with_live_swarm() {
     assert!(reflector_addr.is_some());
 
     let swarm_requester: SwarmHandle =
-        start_swarm(keypair_requester.clone(), None, event_tx2, None, false)
+        start_swarm(keypair_requester.clone(), None, event_tx2, None, false, None)
             .await
             .expect("Failed to start requester swarm");
 
@@ -150,19 +150,19 @@ async fn test_nat_traversal_with_live_swarms() {
     let (event_tx2, mut event_rx2) = mpsc::channel(256);
     let (event_tx3, mut _event_rx3) = mpsc::channel(256);
 
-    let _swarm1: SwarmHandle = start_swarm(keypair1.clone(), None, event_tx1, None, false)
+    let _swarm1: SwarmHandle = start_swarm(keypair1.clone(), None, event_tx1, None, false, None)
         .await
         .expect("Failed to start swarm1");
 
     tokio::time::sleep(Duration::from_millis(300)).await;
 
-    let _swarm2: SwarmHandle = start_swarm(keypair2.clone(), None, event_tx2, None, false)
+    let _swarm2: SwarmHandle = start_swarm(keypair2.clone(), None, event_tx2, None, false, None)
         .await
         .expect("Failed to start swarm2");
 
     tokio::time::sleep(Duration::from_millis(300)).await;
 
-    let swarm3: SwarmHandle = start_swarm(keypair3.clone(), None, event_tx3, None, false)
+    let swarm3: SwarmHandle = start_swarm(keypair3.clone(), None, event_tx3, None, false, None)
         .await
         .expect("Failed to start swarm3");
 
