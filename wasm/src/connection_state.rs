@@ -4,8 +4,8 @@
 // Solves the memory leak problem caused by .forget() on closures by storing
 // callbacks and cleaning them up on disconnect.
 
-use parking_lot::RwLock;
-use std::sync::Arc;
+use std::cell::RefCell;
+use std::rc::Rc;
 
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::closure::Closure;
@@ -231,13 +231,13 @@ impl Drop for ManagedRtcConnection {
 pub struct ConnectionManager {
     /// Active WebSocket connections by URL
     #[cfg(target_arch = "wasm32")]
-    websockets: Arc<RwLock<std::collections::HashMap<String, Arc<RwLock<ManagedWebSocket>>>>>,
+    websockets: Rc<RefCell<std::collections::HashMap<String, Rc<RefCell<ManagedWebSocket>>>>>,
     /// Active WebRTC peer connections by peer ID
     #[cfg(target_arch = "wasm32")]
     rtc_connections:
-        Arc<RwLock<std::collections::HashMap<String, Arc<RwLock<ManagedRtcConnection>>>>>,
+        Rc<RefCell<std::collections::HashMap<String, Rc<RefCell<ManagedRtcConnection>>>>>,
     /// Connection count for statistics
-    connection_count: Arc<RwLock<u64>>,
+    connection_count: Rc<RefCell<u64>>,
 }
 
 impl ConnectionManager {
@@ -245,30 +245,30 @@ impl ConnectionManager {
     pub fn new() -> Self {
         Self {
             #[cfg(target_arch = "wasm32")]
-            websockets: Arc::new(RwLock::new(std::collections::HashMap::new())),
+            websockets: Rc::new(RefCell::new(std::collections::HashMap::new())),
             #[cfg(target_arch = "wasm32")]
-            rtc_connections: Arc::new(RwLock::new(std::collections::HashMap::new())),
-            connection_count: Arc::new(RwLock::new(0)),
+            rtc_connections: Rc::new(RefCell::new(std::collections::HashMap::new())),
+            connection_count: Rc::new(RefCell::new(0)),
         }
     }
 
     /// Add a managed WebSocket connection
     #[cfg(target_arch = "wasm32")]
     pub fn add_websocket(&self, url: String, ws: ManagedWebSocket) {
-        let mut connections = self.websockets.write();
-        connections.insert(url, Arc::new(RwLock::new(ws)));
-        *self.connection_count.write() += 1;
+        let mut connections = self.websockets.borrow_mut();
+        connections.insert(url, Rc::new(RefCell::new(ws)));
+        *self.connection_count.borrow_mut() += 1;
     }
 
     /// Remove and close a WebSocket connection
     #[cfg(target_arch = "wasm32")]
     pub fn remove_websocket(&self, url: &str) {
-        let mut connections = self.websockets.write();
-        if let Some(ws_arc) = connections.remove(url) {
-            let mut ws = ws_arc.write();
+        let mut connections = self.websockets.borrow_mut();
+        if let Some(ws_rc) = connections.remove(url) {
+            let mut ws = ws_rc.borrow_mut();
             ws.close();
-            if *self.connection_count.read() > 0 {
-                *self.connection_count.write() -= 1;
+            if *self.connection_count.borrow() > 0 {
+                *self.connection_count.borrow_mut() -= 1;
             }
         }
     }
@@ -276,20 +276,20 @@ impl ConnectionManager {
     /// Add a managed WebRTC peer connection
     #[cfg(target_arch = "wasm32")]
     pub fn add_rtc_connection(&self, peer_id: String, rtc: ManagedRtcConnection) {
-        let mut connections = self.rtc_connections.write();
-        connections.insert(peer_id, Arc::new(RwLock::new(rtc)));
-        *self.connection_count.write() += 1;
+        let mut connections = self.rtc_connections.borrow_mut();
+        connections.insert(peer_id, Rc::new(RefCell::new(rtc)));
+        *self.connection_count.borrow_mut() += 1;
     }
 
     /// Remove and close an RTC peer connection
     #[cfg(target_arch = "wasm32")]
     pub fn remove_rtc_connection(&self, peer_id: &str) {
-        let mut connections = self.rtc_connections.write();
-        if let Some(rtc_arc) = connections.remove(peer_id) {
-            let mut rtc = rtc_arc.write();
+        let mut connections = self.rtc_connections.borrow_mut();
+        if let Some(rtc_rc) = connections.remove(peer_id) {
+            let mut rtc = rtc_rc.borrow_mut();
             rtc.close();
-            if *self.connection_count.read() > 0 {
-                *self.connection_count.write() -= 1;
+            if *self.connection_count.borrow() > 0 {
+                *self.connection_count.borrow_mut() -= 1;
             }
         }
     }
@@ -299,26 +299,26 @@ impl ConnectionManager {
         #[cfg(target_arch = "wasm32")]
         {
             // Close all WebSocket connections
-            let mut websockets = self.websockets.write();
-            for (_, ws_arc) in websockets.drain() {
-                let mut ws = ws_arc.write();
+            let mut websockets = self.websockets.borrow_mut();
+            for (_, ws_rc) in websockets.drain() {
+                let mut ws = ws_rc.borrow_mut();
                 ws.close();
             }
 
             // Close all RTC connections
-            let mut rtc_connections = self.rtc_connections.write();
-            for (_, rtc_arc) in rtc_connections.drain() {
-                let mut rtc = rtc_arc.write();
+            let mut rtc_connections = self.rtc_connections.borrow_mut();
+            for (_, rtc_rc) in rtc_connections.drain() {
+                let mut rtc = rtc_rc.borrow_mut();
                 rtc.close();
             }
         }
 
-        *self.connection_count.write() = 0;
+        *self.connection_count.borrow_mut() = 0;
     }
 
     /// Get total number of active connections
     pub fn connection_count(&self) -> u64 {
-        *self.connection_count.read()
+        *self.connection_count.borrow()
     }
 }
 

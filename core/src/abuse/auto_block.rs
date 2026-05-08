@@ -125,7 +125,10 @@ impl AutoBlockEngine {
             return AutoBlockResult {
                 should_block: false,
                 reason: None,
-                reputation_score: self.reputation_manager.get_enhanced_score(peer_id).overall_score(),
+                reputation_score: self
+                    .reputation_manager
+                    .get_enhanced_score(peer_id)
+                    .overall_score(),
                 spam_confidence: 0.0,
             };
         }
@@ -314,8 +317,10 @@ mod tests {
     #[test]
     fn test_disabled_auto_block() {
         let engine = make_engine();
-        let mut config = AutoBlockConfig::default();
-        config.enabled = false;
+        let config = AutoBlockConfig {
+            enabled: false,
+            ..Default::default()
+        };
         engine.update_config(config);
         let result = engine.evaluate("any_peer");
         assert!(!result.should_block);

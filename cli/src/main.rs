@@ -30,6 +30,14 @@ use scmessenger_core::IronCore;
 use std::collections::HashMap;
 use std::sync::Arc;
 
+/// Convert a Path to a string, returning an error if the path contains invalid UTF-8.
+/// This is safer than using .unwrap() which would panic on non-UTF-8 paths.
+fn path_to_string(path: &std::path::Path) -> Result<String> {
+    path.to_str()
+        .ok_or_else(|| anyhow::anyhow!("Path contains invalid UTF-8: {}", path.display()))
+        .map(|s| s.to_string())
+}
+
 fn load_or_create_headless_network_keypair(
     storage_path: &std::path::Path,
     core: &IronCore,
@@ -478,7 +486,7 @@ async fn cmd_init(name: Option<String>) -> Result<()> {
     println!("  {} Data directory: {}", "✓".green(), data_dir.display());
 
     let storage_path = data_dir.join("storage");
-    let core = IronCore::with_storage(storage_path.to_str().unwrap().to_string());
+    let core = IronCore::with_storage(path_to_string(&storage_path)?);
     core.grant_consent();
     core.initialize_identity()
         .context("Failed to initialize identity")?;
@@ -510,7 +518,7 @@ async fn cmd_identity(action: Option<IdentityAction>) -> Result<()> {
     let config = config::Config::load()?;
     let data_dir = config::Config::data_dir()?;
     let storage_path = data_dir.join("storage");
-    let core = IronCore::with_storage(storage_path.to_str().unwrap().to_string());
+    let core = IronCore::with_storage(path_to_string(&storage_path)?);
     core.grant_consent();
     core.initialize_identity()
         .context("Failed to load identity")?;
@@ -743,7 +751,7 @@ async fn cmd_contact(action: ContactAction) -> Result<()> {
             // Fallback to direct database access
             let data_dir = config::Config::data_dir()?;
             let storage_path = data_dir.join("storage");
-            let core = IronCore::with_storage(storage_path.to_str().unwrap().to_string());
+            let core = IronCore::with_storage(path_to_string(&storage_path)?);
             let contacts = core.contacts_store_manager();
 
             // UNIFIED ID FIX: derive canonical public_key_hex from libp2p Peer ID
@@ -788,7 +796,7 @@ async fn cmd_contact(action: ContactAction) -> Result<()> {
             // For other contact operations, use direct database access
             let data_dir = config::Config::data_dir()?;
             let storage_path = data_dir.join("storage");
-            let core = IronCore::with_storage(storage_path.to_str().unwrap().to_string());
+            let core = IronCore::with_storage(path_to_string(&storage_path)?);
             let contacts = core.contacts_store_manager();
 
             match action {
@@ -972,7 +980,7 @@ async fn cmd_config(action: ConfigAction) -> Result<()> {
         } => {
             let data_dir = config::Config::data_dir()?;
             let storage_path = data_dir.join("storage");
-            let core = IronCore::with_storage(storage_path.to_str().unwrap().to_string());
+            let core = IronCore::with_storage(path_to_string(&storage_path)?);
 
             let mut p: scmessenger_core::privacy::PrivacyConfig =
                 serde_json::from_str(&core.get_privacy_config())?;
@@ -1043,7 +1051,7 @@ async fn cmd_history(
 ) -> Result<()> {
     let data_dir = config::Config::data_dir()?;
     let storage_path = data_dir.join("storage");
-    let core = IronCore::with_storage(storage_path.to_str().unwrap().to_string());
+    let core = IronCore::with_storage(path_to_string(&storage_path)?);
     let history = core.history_store_manager();
 
     let messages = if let Some(query) = search_query {
@@ -1134,7 +1142,7 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
 
     let data_dir = config::Config::data_dir()?;
     let storage_path = data_dir.join("storage");
-    let core = IronCore::with_storage(storage_path.to_str().unwrap().to_string());
+    let core = IronCore::with_storage(path_to_string(&storage_path)?);
     core.grant_consent();
     core.initialize_identity()
         .context("Failed to load identity")?;
@@ -1235,13 +1243,12 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
     let (event_tx, mut event_rx) = tokio::sync::mpsc::channel(256);
 
     // Build discovery config from CLI config
-    let discovery_config = scmessenger_core::transport::DiscoveryConfig::new(
-        if config.enable_mdns {
+    let discovery_config =
+        scmessenger_core::transport::DiscoveryConfig::new(if config.enable_mdns {
             scmessenger_core::transport::DiscoveryMode::Open
         } else {
             scmessenger_core::transport::DiscoveryMode::Manual
-        },
-    );
+        });
 
     let swarm_handle = transport::start_swarm(
         network_keypair,
@@ -2097,9 +2104,7 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
 async fn cmd_relay(listen_addr: String, http_port: u16, node_name: Option<String>) -> Result<()> {
     let data_dir = config::Config::data_dir()?;
     let storage_path = data_dir.join("storage");
-    let core = Arc::new(IronCore::with_storage(
-        storage_path.to_str().unwrap().to_string(),
-    ));
+    let core = Arc::new(IronCore::with_storage(path_to_string(&storage_path)?));
     // Load existing identity (if any) so the relay can migrate its network key
     // from the IronCore identity, preserving the PeerId on first upgrade.
     let _ = core.initialize_identity();
@@ -2200,13 +2205,12 @@ async fn cmd_relay(listen_addr: String, http_port: u16, node_name: Option<String
         listen_addr.parse().context("Invalid listen multiaddr")?;
     let (event_tx, mut event_rx) = tokio::sync::mpsc::channel(256);
 
-    let discovery_config = scmessenger_core::transport::DiscoveryConfig::new(
-        if config.enable_mdns {
+    let discovery_config =
+        scmessenger_core::transport::DiscoveryConfig::new(if config.enable_mdns {
             scmessenger_core::transport::DiscoveryMode::Open
         } else {
             scmessenger_core::transport::DiscoveryMode::Manual
-        },
-    );
+        });
 
     let swarm_handle = transport::start_swarm(
         network_keypair,
@@ -2553,7 +2557,7 @@ async fn cmd_send_offline(recipient: String, message: String) -> Result<()> {
     // Fallback to offline mode (encrypt only, no actual send)
     let data_dir = config::Config::data_dir()?;
     let storage_path = data_dir.join("storage");
-    let core = IronCore::with_storage(storage_path.to_str().unwrap().to_string());
+    let core = IronCore::with_storage(path_to_string(&storage_path)?);
     core.initialize_identity()
         .context("Failed to load identity")?;
 
@@ -2622,7 +2626,6 @@ async fn cmd_send_offline(recipient: String, message: String) -> Result<()> {
     Ok(())
 }
 
-
 async fn cmd_discovery(action: DiscoveryAction) -> Result<()> {
     if !api::is_api_available().await {
         println!(
@@ -2688,11 +2691,10 @@ async fn cmd_discovery(action: DiscoveryAction) -> Result<()> {
     Ok(())
 }
 
-
 async fn cmd_status() -> Result<()> {
     let data_dir = config::Config::data_dir()?;
     let storage_path = data_dir.join("storage");
-    let core = IronCore::with_storage(storage_path.to_str().unwrap().to_string());
+    let core = IronCore::with_storage(path_to_string(&storage_path)?);
 
     let contacts = core.contacts_store_manager();
     let history = core.history_store_manager();
@@ -2795,7 +2797,7 @@ async fn cmd_status() -> Result<()> {
 async fn cmd_mark_sent(message_id: String) -> Result<()> {
     let data_dir = config::Config::data_dir()?;
     let storage_path = data_dir.join("storage");
-    let core = IronCore::with_storage(storage_path.to_str().unwrap().to_string());
+    let core = IronCore::with_storage(path_to_string(&storage_path)?);
     let removed = core.mark_message_sent(message_id.clone());
     if removed {
         println!(
@@ -2819,7 +2821,7 @@ async fn cmd_history_clear(yes: bool) -> Result<()> {
     }
     let data_dir = config::Config::data_dir()?;
     let storage_path = data_dir.join("storage");
-    let core = IronCore::with_storage(storage_path.to_str().unwrap().to_string());
+    let core = IronCore::with_storage(path_to_string(&storage_path)?);
     let history = core.history_store_manager();
     history.clear().map_err(|e| anyhow::anyhow!("{:?}", e))?;
     println!("{} Cleared all message history", "✓".green());
@@ -2829,7 +2831,7 @@ async fn cmd_history_clear(yes: bool) -> Result<()> {
 async fn cmd_history_enforce_retention(max_messages: u32) -> Result<()> {
     let data_dir = config::Config::data_dir()?;
     let storage_path = data_dir.join("storage");
-    let core = IronCore::with_storage(storage_path.to_str().unwrap().to_string());
+    let core = IronCore::with_storage(path_to_string(&storage_path)?);
     let history = core.history_store_manager();
     let pruned = history
         .enforce_retention(max_messages)
@@ -2846,7 +2848,7 @@ async fn cmd_history_enforce_retention(max_messages: u32) -> Result<()> {
 async fn cmd_history_prune_before(before_timestamp: u64) -> Result<()> {
     let data_dir = config::Config::data_dir()?;
     let storage_path = data_dir.join("storage");
-    let core = IronCore::with_storage(storage_path.to_str().unwrap().to_string());
+    let core = IronCore::with_storage(path_to_string(&storage_path)?);
     let history = core.history_store_manager();
     let pruned = history
         .prune_before(before_timestamp)
@@ -2863,7 +2865,7 @@ async fn cmd_history_prune_before(before_timestamp: u64) -> Result<()> {
 async fn cmd_block(action: BlockAction) -> Result<()> {
     let data_dir = config::Config::data_dir()?;
     let storage_path = data_dir.join("storage");
-    let core = IronCore::with_storage(storage_path.to_str().unwrap().to_string());
+    let core = IronCore::with_storage(path_to_string(&storage_path)?);
     core.initialize_identity()
         .context("Failed to load identity")?;
 
@@ -2969,7 +2971,7 @@ async fn cmd_block(action: BlockAction) -> Result<()> {
 async fn cmd_history_get(id: String) -> Result<()> {
     let data_dir = config::Config::data_dir()?;
     let storage_path = data_dir.join("storage");
-    let core = IronCore::with_storage(storage_path.to_str().unwrap().to_string());
+    let core = IronCore::with_storage(path_to_string(&storage_path)?);
     let history = core.history_store_manager();
 
     match history.get(id.clone()) {
@@ -3000,7 +3002,7 @@ async fn cmd_history_get(id: String) -> Result<()> {
 async fn cmd_history_stats() -> Result<()> {
     let data_dir = config::Config::data_dir()?;
     let storage_path = data_dir.join("storage");
-    let core = IronCore::with_storage(storage_path.to_str().unwrap().to_string());
+    let core = IronCore::with_storage(path_to_string(&storage_path)?);
     let history = core.history_store_manager();
     let stats = history.stats().map_err(|e| anyhow::anyhow!("{:?}", e))?;
 
@@ -3015,7 +3017,10 @@ async fn cmd_history_stats() -> Result<()> {
     if let Ok(contact_list) = contacts_mgr.list() {
         for contact in contact_list.iter().take(5) {
             let peer_id = &contact.peer_id;
-            let count = history.conversation(peer_id.clone(), u32::MAX).unwrap_or_default().len() as u64;
+            let count = history
+                .conversation(peer_id.clone(), u32::MAX)
+                .unwrap_or_default()
+                .len() as u64;
             let display = contact.nickname.as_deref().unwrap_or(peer_id);
             println!("  {} messages: {}", count, display);
         }
@@ -3027,7 +3032,7 @@ async fn cmd_history_stats() -> Result<()> {
 async fn cmd_history_count() -> Result<()> {
     let data_dir = config::Config::data_dir()?;
     let storage_path = data_dir.join("storage");
-    let core = IronCore::with_storage(storage_path.to_str().unwrap().to_string());
+    let core = IronCore::with_storage(path_to_string(&storage_path)?);
     let history = core.history_store_manager();
     println!("History count: {}", history.count());
     Ok(())
@@ -3036,7 +3041,7 @@ async fn cmd_history_count() -> Result<()> {
 async fn cmd_history_mark_delivered(id: String) -> Result<()> {
     let data_dir = config::Config::data_dir()?;
     let storage_path = data_dir.join("storage");
-    let core = IronCore::with_storage(storage_path.to_str().unwrap().to_string());
+    let core = IronCore::with_storage(path_to_string(&storage_path)?);
     let history = core.history_store_manager();
     history
         .mark_delivered(id.clone())
@@ -3052,7 +3057,7 @@ async fn cmd_history_mark_delivered(id: String) -> Result<()> {
 async fn cmd_history_clear_conversation(peer: String) -> Result<()> {
     let data_dir = config::Config::data_dir()?;
     let storage_path = data_dir.join("storage");
-    let core = IronCore::with_storage(storage_path.to_str().unwrap().to_string());
+    let core = IronCore::with_storage(path_to_string(&storage_path)?);
     let history = core.history_store_manager();
 
     // Try to resolve peer name to peer_id via contacts
@@ -3077,7 +3082,7 @@ async fn cmd_history_clear_conversation(peer: String) -> Result<()> {
 async fn cmd_history_delete(id: String) -> Result<()> {
     let data_dir = config::Config::data_dir()?;
     let storage_path = data_dir.join("storage");
-    let core = IronCore::with_storage(storage_path.to_str().unwrap().to_string());
+    let core = IronCore::with_storage(path_to_string(&storage_path)?);
     let history = core.history_store_manager();
     history
         .delete(id.clone())
@@ -3204,7 +3209,7 @@ async fn cmd_audit(action: AuditAction) -> Result<()> {
     let _config = config::Config::load()?;
     let data_dir = config::Config::data_dir()?;
     let storage_path = data_dir.join("storage");
-    let core = IronCore::with_storage(storage_path.to_str().unwrap().to_string());
+    let core = IronCore::with_storage(path_to_string(&storage_path)?);
 
     match action {
         AuditAction::Export { output } => {
@@ -3314,7 +3319,7 @@ async fn cmd_swarm_stats() -> Result<()> {
         let _config = config::Config::load()?;
         let data_dir = config::Config::data_dir()?;
         let storage_path = data_dir.join("storage");
-        let core = IronCore::with_storage(storage_path.to_str().unwrap().to_string());
+        let core = IronCore::with_storage(path_to_string(&storage_path)?);
 
         let contacts = core.contacts_store_manager();
         let history = core.history_store_manager();

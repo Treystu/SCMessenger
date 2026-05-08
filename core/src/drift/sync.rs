@@ -10,7 +10,55 @@ use super::frame::FrameType;
 use super::sketch::IBLT;
 use super::store::{MeshStore, MessageId, StoredEnvelope};
 use crate::drift::DriftError;
+use crate::error::MeshError;
 use bincode;
+
+/// Current sync protocol schema version
+pub const SYNC_SCHEMA_VERSION: u32 = 1;
+
+/// Versioned wrapper for sync messages to enable protocol evolution
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct VersionedSyncMessage {
+    /// Schema version for this message
+    pub schema_version: u32,
+    /// The actual sync message payload
+    pub payload: SyncMessage,
+}
+
+impl VersionedSyncMessage {
+    /// Create a new versioned sync message with the current schema version
+    pub fn new(payload: SyncMessage) -> Self {
+        Self {
+            schema_version: SYNC_SCHEMA_VERSION,
+            payload,
+        }
+    }
+
+    /// Validate that the message schema version matches our expected version
+    pub fn validate(&self) -> Result<(), MeshError> {
+        if self.schema_version != SYNC_SCHEMA_VERSION {
+            return Err(MeshError::VersionMismatch {
+                expected: SYNC_SCHEMA_VERSION,
+                received: self.schema_version,
+            });
+        }
+        Ok(())
+    }
+
+    /// Serialize VersionedSyncMessage to bytes using bincode
+    pub fn to_bytes(&self) -> Result<Vec<u8>, DriftError> {
+        bincode::serialize(self).map_err(|e| DriftError::DecompressionFailed(e.to_string()))
+    }
+
+    /// Deserialize and validate VersionedSyncMessage from bytes
+    pub fn from_bytes(data: &[u8]) -> Result<Self, DriftError> {
+        let msg: VersionedSyncMessage = bincode::deserialize(data)
+            .map_err(|e| DriftError::DecompressionFailed(e.to_string()))?;
+        msg.validate()
+            .map_err(|e| DriftError::DecompressionFailed(e.to_string()))?;
+        Ok(msg)
+    }
+}
 
 /// Sync protocol message types
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -20,6 +68,12 @@ pub enum SyncMessage {
         iblt_data: Vec<u8>,
         message_count: u32,
         sketch_capacity: u32,
+        /// Cryptographic proof of peer state (added in Task 2.2)
+        #[serde(default)]
+        peer_proof: String,
+        /// Timestamp of sync offer creation (added in Task 2.2)
+        #[serde(default)]
+        timestamp: u64,
     },
     /// Step 2: Responder sends their IBLT and messages initiator is missing
     SyncResponse {
@@ -138,6 +192,15 @@ impl SyncSession {
         let iblt_data = iblt.to_bytes()?;
         let sketch_capacity = iblt.cell_count() as u32;
 
+        // Generate cryptographic proof of our state
+        let peer_proof = store.generate_proof();
+
+        // Get current timestamp
+        let timestamp = web_time::SystemTime::now()
+            .duration_since(web_time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+
         self.our_iblt = Some(iblt);
         self.state = SyncState::AwaitingResponse;
 
@@ -145,6 +208,8 @@ impl SyncSession {
             iblt_data,
             message_count,
             sketch_capacity,
+            peer_proof,
+            timestamp,
         })
     }
 
@@ -441,16 +506,21 @@ mod tests {
             iblt_data: vec![1, 2, 3, 4, 5],
             message_count: 10,
             sketch_capacity: 30,
+            peer_proof: String::new(),
+            timestamp: 0,
         };
 
-        let bytes = offer.to_bytes().unwrap();
-        let restored = SyncMessage::from_bytes(&bytes).unwrap();
+        let versioned = VersionedSyncMessage::new(offer);
+        let bytes = versioned.to_bytes().unwrap();
+        let restored = VersionedSyncMessage::from_bytes(&bytes).unwrap();
 
-        match restored {
+        assert_eq!(restored.schema_version, SYNC_SCHEMA_VERSION);
+        match restored.payload {
             SyncMessage::SyncOffer {
                 iblt_data,
                 message_count,
                 sketch_capacity,
+                ..
             } => {
                 assert_eq!(iblt_data, vec![1, 2, 3, 4, 5]);
                 assert_eq!(message_count, 10);
@@ -466,6 +536,8 @@ mod tests {
             iblt_data: vec![],
             message_count: 0,
             sketch_capacity: 0,
+            peer_proof: String::new(),
+            timestamp: 0,
         };
 
         let response = SyncMessage::SyncResponse {

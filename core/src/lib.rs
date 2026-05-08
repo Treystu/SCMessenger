@@ -10,6 +10,7 @@ pub mod abuse;
 pub mod crypto;
 pub mod drift;
 pub mod dspy;
+pub mod error;
 pub mod identity;
 pub mod iron_core;
 pub mod message;
@@ -65,6 +66,9 @@ pub enum IronCoreError {
 }
 
 pub use crypto::{decrypt_message, encrypt_message};
+pub use error::{
+    MeshError, MeshResult, SerializationError, SerializationResult, TransportError, TransportResult,
+};
 pub use identity::IdentityManager;
 pub use message::{DeliveryStatus, Envelope, Message, MessageType, Receipt, TtlConfig};
 pub use notification::{

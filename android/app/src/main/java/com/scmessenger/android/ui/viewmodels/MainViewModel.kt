@@ -169,7 +169,7 @@ class MainViewModel @Inject constructor(
      * Issue #5: Added retry/verify loop to ensure _isReady reflects actual state
      * after identity creation (service may still be starting when first checked).
      */
-    fun createIdentity(nickname: String) {
+    fun createIdentity(nickname: String, salt: ByteArray? = null) {
         viewModelScope.launch(Dispatchers.IO) {
             _isCreatingIdentity.value = true
             _identityError.value = null
@@ -181,8 +181,8 @@ class MainViewModel @Inject constructor(
                     _isReady.value = false
                     return@launch
                 }
-                Timber.i("Creating identity for nickname: $trimmedNickname")
-                meshRepository.createIdentity()
+                Timber.i("Creating identity for nickname: $trimmedNickname with salt: ${salt != null}")
+                meshRepository.createIdentity(salt)
                 meshRepository.setNickname(trimmedNickname)
 
                 // Verify nickname persisted (defensive: catch silent Rust-core failures)

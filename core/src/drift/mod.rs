@@ -20,6 +20,7 @@ pub mod compress;
 pub mod envelope;
 pub mod frame;
 pub mod policy;
+pub mod rate_limit;
 pub mod relay;
 pub mod sketch;
 pub mod store;
@@ -37,13 +38,16 @@ pub async fn read_frame_with_timeout<R: tokio::io::AsyncReadExt + Unpin>(
     DriftFrame::read_with_timeout(reader).await
 }
 pub use policy::{DeviceState, PolicyEngine, PolicyError, RelayProfile};
+pub use rate_limit::SyncRateLimiter;
 pub use relay::{
     DropReason, MaintenanceReport, NetworkState, RelayConfig, RelayDecision, RelayEngine,
     RelayError,
 };
 pub use sketch::IBLT;
 pub use store::{MeshStore, MessageId, StoredEnvelope};
-pub use sync::{merge_envelopes, SyncMessage, SyncSession, SyncState};
+pub use sync::{
+    merge_envelopes, SyncMessage, SyncSession, SyncState, VersionedSyncMessage, SYNC_SCHEMA_VERSION,
+};
 
 use thiserror::Error;
 

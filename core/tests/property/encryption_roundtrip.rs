@@ -1,10 +1,10 @@
 // Property-based tests for encryption round-trip
 // Validates: Requirements 3.4, 13.4
 
-use proptest::prelude::*;
-use scmessenger_core::crypto::encrypt::{decrypt_message, encrypt_message};
 use ed25519_dalek::SigningKey;
+use proptest::prelude::*;
 use rand::RngCore;
+use scmessenger_core::crypto::encrypt::{decrypt_message, encrypt_message};
 use zeroize::Zeroize;
 
 /// Generate a random Ed25519 signing key for testing
@@ -31,15 +31,15 @@ proptest! {
         let sender_key = generate_keypair();
         let recipient_key = generate_keypair();
         let recipient_public = recipient_key.verifying_key().to_bytes();
-        
+
         // Encrypt
         let envelope = encrypt_message(&sender_key, &recipient_public, &plaintext)
             .expect("encryption should succeed");
-        
+
         // Decrypt
         let decrypted = decrypt_message(&recipient_key, &envelope)
             .expect("decryption should succeed");
-        
+
         // Property: Decrypted plaintext should match original
         prop_assert_eq!(plaintext, decrypted, "Round-trip encryption should preserve plaintext");
     }
@@ -54,16 +54,16 @@ proptest! {
     ) {
         // Skip if plaintexts are identical
         prop_assume!(plaintext1 != plaintext2);
-        
+
         let sender_key = generate_keypair();
         let recipient_key = generate_keypair();
         let recipient_public = recipient_key.verifying_key().to_bytes();
-        
+
         let envelope1 = encrypt_message(&sender_key, &recipient_public, &plaintext1)
             .expect("encryption should succeed");
         let envelope2 = encrypt_message(&sender_key, &recipient_public, &plaintext2)
             .expect("encryption should succeed");
-        
+
         // Property: Different plaintexts should produce different ciphertexts
         prop_assert_ne!(
             envelope1.ciphertext,
@@ -80,27 +80,27 @@ proptest! {
         let sender_key = generate_keypair();
         let recipient_key = generate_keypair();
         let recipient_public = recipient_key.verifying_key().to_bytes();
-        
+
         // Encrypt same plaintext twice
         let envelope1 = encrypt_message(&sender_key, &recipient_public, &plaintext)
             .expect("encryption should succeed");
         let envelope2 = encrypt_message(&sender_key, &recipient_public, &plaintext)
             .expect("encryption should succeed");
-        
+
         // Property: Nonces should be different (randomness)
         prop_assert_ne!(
             envelope1.nonce,
             envelope2.nonce,
             "Each encryption should use a unique random nonce"
         );
-        
+
         // Property: Ephemeral keys should be different
         prop_assert_ne!(
             envelope1.ephemeral_public_key,
             envelope2.ephemeral_public_key,
             "Each encryption should use a unique ephemeral keypair"
         );
-        
+
         // Property: Ciphertexts should be different
         prop_assert_ne!(
             envelope1.ciphertext,
@@ -118,14 +118,14 @@ proptest! {
         let recipient_key = generate_keypair();
         let wrong_key = generate_keypair();
         let recipient_public = recipient_key.verifying_key().to_bytes();
-        
+
         // Encrypt for recipient_key
         let envelope = encrypt_message(&sender_key, &recipient_public, &plaintext)
             .expect("encryption should succeed");
-        
+
         // Try to decrypt with wrong_key
         let result = decrypt_message(&wrong_key, &envelope);
-        
+
         // Property: Decryption should fail
         prop_assert!(result.is_err(), "Wrong recipient should not be able to decrypt");
     }
@@ -137,22 +137,22 @@ proptest! {
     fn test_tampered_ciphertext_fails(plaintext in arb_plaintext()) {
         // Skip empty plaintexts (no ciphertext to tamper)
         prop_assume!(!plaintext.is_empty());
-        
+
         let sender_key = generate_keypair();
         let recipient_key = generate_keypair();
         let recipient_public = recipient_key.verifying_key().to_bytes();
-        
+
         let mut envelope = encrypt_message(&sender_key, &recipient_public, &plaintext)
             .expect("encryption should succeed");
-        
+
         // Tamper with the last byte of ciphertext
         if let Some(byte) = envelope.ciphertext.last_mut() {
             *byte ^= 0xFF;
         }
-        
+
         // Try to decrypt tampered ciphertext
         let result = decrypt_message(&recipient_key, &envelope);
-        
+
         // Property: Decryption should fail (authenticated encryption detects tampering)
         prop_assert!(result.is_err(), "Tampered ciphertext should fail decryption");
     }
@@ -165,18 +165,18 @@ proptest! {
         let sender_key = generate_keypair();
         let recipient_key = generate_keypair();
         let recipient_public = recipient_key.verifying_key().to_bytes();
-        
+
         let mut envelope = encrypt_message(&sender_key, &recipient_public, &plaintext)
             .expect("encryption should succeed");
-        
+
         // Tamper with the nonce
         if let Some(byte) = envelope.nonce.last_mut() {
             *byte ^= 0xFF;
         }
-        
+
         // Try to decrypt with tampered nonce
         let result = decrypt_message(&recipient_key, &envelope);
-        
+
         // Property: Decryption should fail
         prop_assert!(result.is_err(), "Tampered nonce should fail decryption");
     }
@@ -190,16 +190,16 @@ proptest! {
         let recipient_key = generate_keypair();
         let attacker_key = generate_keypair();
         let recipient_public = recipient_key.verifying_key().to_bytes();
-        
+
         let mut envelope = encrypt_message(&sender_key, &recipient_public, &plaintext)
             .expect("encryption should succeed");
-        
+
         // Attacker tries to replace sender public key
         envelope.sender_public_key = attacker_key.verifying_key().to_bytes().to_vec();
-        
+
         // Try to decrypt with spoofed sender
         let result = decrypt_message(&recipient_key, &envelope);
-        
+
         // Property: Decryption should fail (AAD binding prevents sender spoofing)
         prop_assert!(result.is_err(), "Sender spoofing should fail decryption");
     }
@@ -212,15 +212,18 @@ fn test_empty_plaintext_roundtrip() {
     let sender_key = generate_keypair();
     let recipient_key = generate_keypair();
     let recipient_public = recipient_key.verifying_key().to_bytes();
-    
+
     let plaintext = b"";
-    
+
     let envelope = encrypt_message(&sender_key, &recipient_public, plaintext)
         .expect("encryption should succeed");
-    let decrypted = decrypt_message(&recipient_key, &envelope)
-        .expect("decryption should succeed");
-    
-    assert_eq!(plaintext.to_vec(), decrypted, "Empty plaintext should round-trip");
+    let decrypted = decrypt_message(&recipient_key, &envelope).expect("decryption should succeed");
+
+    assert_eq!(
+        plaintext.to_vec(),
+        decrypted,
+        "Empty plaintext should round-trip"
+    );
 }
 
 /// Property 9: Maximum size plaintext encryption
@@ -230,15 +233,14 @@ fn test_max_size_plaintext_roundtrip() {
     let sender_key = generate_keypair();
     let recipient_key = generate_keypair();
     let recipient_public = recipient_key.verifying_key().to_bytes();
-    
+
     // Test with 64KB plaintext
     let plaintext = vec![0x42u8; 65536];
-    
+
     let envelope = encrypt_message(&sender_key, &recipient_public, &plaintext)
         .expect("encryption should succeed");
-    let decrypted = decrypt_message(&recipient_key, &envelope)
-        .expect("decryption should succeed");
-    
+    let decrypted = decrypt_message(&recipient_key, &envelope).expect("decryption should succeed");
+
     assert_eq!(plaintext, decrypted, "Large plaintext should round-trip");
 }
 
@@ -249,18 +251,33 @@ fn test_envelope_structure() {
     let sender_key = generate_keypair();
     let recipient_key = generate_keypair();
     let recipient_public = recipient_key.verifying_key().to_bytes();
-    
+
     let plaintext = b"test message";
-    
+
     let envelope = encrypt_message(&sender_key, &recipient_public, plaintext)
         .expect("encryption should succeed");
-    
+
     // Validate envelope structure
-    assert_eq!(envelope.sender_public_key.len(), 32, "Sender public key should be 32 bytes");
-    assert_eq!(envelope.ephemeral_public_key.len(), 32, "Ephemeral public key should be 32 bytes");
-    assert_eq!(envelope.nonce.len(), 24, "Nonce should be 24 bytes (XChaCha20)");
-    assert!(!envelope.ciphertext.is_empty(), "Ciphertext should not be empty");
-    
+    assert_eq!(
+        envelope.sender_public_key.len(),
+        32,
+        "Sender public key should be 32 bytes"
+    );
+    assert_eq!(
+        envelope.ephemeral_public_key.len(),
+        32,
+        "Ephemeral public key should be 32 bytes"
+    );
+    assert_eq!(
+        envelope.nonce.len(),
+        24,
+        "Nonce should be 24 bytes (XChaCha20)"
+    );
+    assert!(
+        !envelope.ciphertext.is_empty(),
+        "Ciphertext should not be empty"
+    );
+
     // Ciphertext should be plaintext + 16 bytes (Poly1305 tag)
     assert_eq!(
         envelope.ciphertext.len(),

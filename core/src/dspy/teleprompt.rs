@@ -3,8 +3,8 @@
 //! This module implements teleprompter functionality for compiling
 //! and optimizing prompts for specific SCM scenarios using Golden Examples.
 
-use crate::dspy::signatures::blake3_hash;
 use crate::dspy::modules::{ModuleFactory, OptimizerPipeline};
+use crate::dspy::signatures::blake3_hash;
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Teleprompter Trait
@@ -63,6 +63,12 @@ pub struct BasicTeleprompter {
     golden_examples: Vec<String>,
 }
 
+impl Default for BasicTeleprompter {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl BasicTeleprompter {
     pub fn new() -> Self {
         Self {
@@ -74,13 +80,16 @@ impl BasicTeleprompter {
 
     /// Add golden examples for optimization
     pub fn add_golden_examples(&mut self, examples: &[&str]) {
-        self.golden_examples.extend(examples.iter().map(|s| s.to_string()));
+        self.golden_examples
+            .extend(examples.iter().map(|s| s.to_string()));
     }
 
     /// Compute a BLAKE3 integrity fingerprint for all loaded golden examples.
     /// Used to detect corruption or tampering of golden example data.
     pub fn golden_examples_fingerprint(&self) -> [u8; 32] {
-        let combined: Vec<u8> = self.golden_examples.iter()
+        let combined: Vec<u8> = self
+            .golden_examples
+            .iter()
             .flat_map(|s| s.as_bytes())
             .copied()
             .collect();
@@ -97,10 +106,12 @@ impl BasicTeleprompter {
             "coder" => Self::build_coder_prompt(),
             "verifier" => Self::build_verifier_prompt(),
             "auditor" => Self::build_auditor_prompt(),
-            _ => return Err(TeleprompterError::ValidationError(format!(
-                "Unknown signature type: {}",
-                signature_type
-            ))),
+            _ => {
+                return Err(TeleprompterError::ValidationError(format!(
+                    "Unknown signature type: {}",
+                    signature_type
+                )))
+            }
         };
 
         self.stats.total_compilations += 1;
@@ -124,7 +135,8 @@ Output format:
 2. Delegate tasks to specialists
 3. Integration points
 4. Verification criteria
-"#.to_string()
+"#
+        .to_string()
     }
 
     fn build_coder_prompt() -> String {
@@ -141,7 +153,8 @@ Output format:
 2. Implementation blocks with error handling
 3. Unit tests in #[cfg(test)] modules
 4. Documentation comments
-"#.to_string()
+"#
+        .to_string()
     }
 
     fn build_verifier_prompt() -> String {
@@ -160,7 +173,8 @@ Output format:
 2. Line-by-line feedback with fixes
 3. Compilation verification
 4. Summary report saved to file
-"#.to_string()
+"#
+        .to_string()
     }
 
     fn build_auditor_prompt() -> String {
@@ -180,12 +194,17 @@ Output format:
 2. Cryptographic validation
 3. Memory safety checklist
 4. Audit report saved to file
-"#.to_string()
+"#
+        .to_string()
     }
 }
 
 impl Teleprompter for BasicTeleprompter {
-    fn compile(&mut self, signature: &str, _examples: &[&str]) -> Result<String, TeleprompterError> {
+    fn compile(
+        &mut self,
+        signature: &str,
+        _examples: &[&str],
+    ) -> Result<String, TeleprompterError> {
         self.compile_for_signature(signature)
     }
 
@@ -277,7 +296,7 @@ mod tests {
 
     #[test]
     fn test_optimization_stats() {
-        let mut tp = BasicTeleprompter::new();
+        let tp = BasicTeleprompter::new();
         let stats = tp.get_stats();
         assert_eq!(stats.total_compilations, 0);
     }

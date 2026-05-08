@@ -1015,7 +1015,33 @@ impl IronCore {
         let keys = identity.keys().ok_or(IronCoreError::NotInitialized)?;
         let key_bytes = keys.to_bytes();
         let payload = hex::encode(&key_bytes);
-        crate::crypto::backup::encrypt_backup(&payload, &passphrase)
+        crate::crypto::backup::encrypt_backup(&payload, &passphrase, None)
+            .map_err(|_| IronCoreError::CryptoError)
+    }
+
+    pub fn export_identity_backup_with_salt(
+        &self,
+        passphrase: String,
+        salt: Option<Vec<u8>>,
+    ) -> Result<String, IronCoreError> {
+        let identity = self.identity.read();
+        let keys = identity.keys().ok_or(IronCoreError::NotInitialized)?;
+        let key_bytes = keys.to_bytes();
+        let payload = hex::encode(&key_bytes);
+
+        let salt_array = match salt {
+            Some(s) => {
+                if s.len() != 16 {
+                    return Err(IronCoreError::InvalidInput);
+                }
+                let mut arr = [0u8; 16];
+                arr.copy_from_slice(&s);
+                Some(arr)
+            }
+            None => None,
+        };
+
+        crate::crypto::backup::encrypt_backup(&payload, &passphrase, salt_array.as_ref())
             .map_err(|_| IronCoreError::CryptoError)
     }
 

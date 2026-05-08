@@ -3003,10 +3003,14 @@ open class MeshRepository(private val context: Context) {
         Timber.i("Restored identity from manually pasted backup payload")
     }
 
-    private fun persistIdentityBackup(core: uniffi.api.IronCore?) {
+    private fun persistIdentityBackup(core: uniffi.api.IronCore?, customSalt: ByteArray? = null) {
         val activeCore = core ?: return
         try {
-            val backup = activeCore.exportIdentityBackup("")
+            val backup = if (customSalt != null) {
+                activeCore.exportIdentityBackupWithSalt("", customSalt.toList())
+            } else {
+                activeCore.exportIdentityBackup("")
+            }
             // P0_ANDROID_010: Use commit() for synchronous write.
             // apply() is async and can lose the backup if the process is killed
             // before the disk write completes (e.g., during an ANR crash).
@@ -4129,7 +4133,7 @@ open class MeshRepository(private val context: Context) {
         }
     }
 
-    suspend fun createIdentity() {
+    suspend fun createIdentity(customSalt: ByteArray? = null) {
         kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
             try {
                 if (!ensureServiceInitialized() || ironCore == null) {
@@ -4143,7 +4147,7 @@ open class MeshRepository(private val context: Context) {
                 Timber.d("Calling ironCore.initializeIdentity()...")
                 ironCore?.initializeIdentity()
                 ensureLocalIdentityFederation()
-                persistIdentityBackup(ironCore)
+                persistIdentityBackup(ironCore, customSalt)
                 Timber.i("Identity created successfully")
                 // Identity is now available; bring up internet transport if it was deferred.
                 initializeAndStartSwarm()

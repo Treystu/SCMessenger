@@ -95,11 +95,11 @@ pub enum ClientIntent {
     },
     // ── Onion routing ──
     PrepareOnionMessage {
-        envelope_data: String, // hex-encoded
+        envelope_data: String,          // hex-encoded
         relay_public_keys_json: String, // JSON array of hex-encoded X25519 public keys
     },
     PeelOnionLayer {
-        onion_data: String, // hex-encoded
+        onion_data: String,       // hex-encoded
         relay_secret_key: String, // hex-encoded 32-byte X25519 secret key
     },
     // ── Ratchet session diagnostics ──

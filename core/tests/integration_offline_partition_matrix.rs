@@ -1,13 +1,10 @@
-use libp2p::PeerId;
-use scmessenger_core::store::backend::SledStorage;
-use scmessenger_core::store::relay_custody::{CustodyState, RelayCustodyStore};
-use scmessenger_core::store::{Outbox, QueuedMessage};
+use scmessenger_core::store::QueuedMessage;
 #[cfg(feature = "phase2_apis")]
 use scmessenger_core::transport::mesh_routing::{
     MultiPathDelivery, ROUTE_REASON_DIRECT_FIRST, ROUTE_REASON_RELAY_RECENCY_SUCCESS,
 };
-use std::sync::Arc;
 
+#[allow(dead_code)]
 fn now_secs() -> u64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -15,6 +12,7 @@ fn now_secs() -> u64 {
         .as_secs()
 }
 
+#[allow(dead_code)]
 fn queued_message(message_id: &str, recipient_id: &str) -> QueuedMessage {
     QueuedMessage {
         message_id: message_id.to_string(),

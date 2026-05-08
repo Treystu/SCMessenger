@@ -2165,6 +2165,7 @@ mod tests {
     fn for_local_peer_prefers_explicit_custody_dir_override() {
         let temp = tempfile::tempdir().unwrap();
         let base = temp.path().join("custody-base");
+        #[allow(clippy::disallowed_methods)]
         std::env::set_var("SCM_RELAY_CUSTODY_DIR", &base);
         let peer = "peer-override";
         let _store = RelayCustodyStore::for_local_peer(peer);

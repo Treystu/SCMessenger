@@ -51,8 +51,8 @@ mod tests {
 
         let envelope = alice
             .prepare_message(
-                &bob_pubkey,
-                "Hello from mobile!",
+                bob_pubkey,
+                "Hello from mobile!".to_string(),
                 scmessenger_core::MessageType::Text,
                 None,
             )

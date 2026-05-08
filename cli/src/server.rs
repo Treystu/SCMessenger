@@ -721,9 +721,10 @@ async fn handle_jsonrpc_request(
             if let Some(ref core) = ctx.core {
                 match hex::decode(&envelope_data) {
                     Ok(data) => match core.prepare_onion_message(data, relay_public_keys_json) {
-                        Ok(onion_bytes) => {
-                            rpc_result(id, serde_json::json!({"onionData": hex::encode(onion_bytes)}))
-                        }
+                        Ok(onion_bytes) => rpc_result(
+                            id,
+                            serde_json::json!({"onionData": hex::encode(onion_bytes)}),
+                        ),
                         Err(e) => rpc_error(
                             id,
                             JsonRpcErrorBody {
@@ -788,7 +789,7 @@ async fn handle_jsonrpc_request(
                     Ok(result) => rpc_result(
                         id,
                         serde_json::json!({
-                            "nextHop": result.next_hop.map(|h| hex::encode(h)),
+                            "nextHop": result.next_hop.map(hex::encode),
                             "remainingData": hex::encode(result.remaining_data),
                         }),
                     ),
@@ -877,7 +878,14 @@ async fn handle_jsonrpc_request(
                 let complete = core.routing_is_prefetch_complete();
                 rpc_result(id, serde_json::json!({"isPrefetchComplete": complete}))
             } else {
-                rpc_error(id, JsonRpcErrorBody { code: -32000, message: "Core not available".to_string(), data: None })
+                rpc_error(
+                    id,
+                    JsonRpcErrorBody {
+                        code: -32000,
+                        message: "Core not available".to_string(),
+                        data: None,
+                    },
+                )
             }
         }
         ClientIntent::RoutingIsPrefetchInProgress {} => {
@@ -885,7 +893,14 @@ async fn handle_jsonrpc_request(
                 let in_progress = core.routing_is_prefetch_in_progress();
                 rpc_result(id, serde_json::json!({"isPrefetchInProgress": in_progress}))
             } else {
-                rpc_error(id, JsonRpcErrorBody { code: -32000, message: "Core not available".to_string(), data: None })
+                rpc_error(
+                    id,
+                    JsonRpcErrorBody {
+                        code: -32000,
+                        message: "Core not available".to_string(),
+                        data: None,
+                    },
+                )
             }
         }
         ClientIntent::RoutingMarkRefreshFailed { hint } => {
@@ -905,16 +920,30 @@ async fn handle_jsonrpc_request(
                 core.routing_mark_refresh_failed(hint_bytes);
                 rpc_result(id, serde_json::json!({"marked": true}))
             } else {
-                rpc_error(id, JsonRpcErrorBody { code: -32000, message: "Core not available".to_string(), data: None })
+                rpc_error(
+                    id,
+                    JsonRpcErrorBody {
+                        code: -32000,
+                        message: "Core not available".to_string(),
+                        data: None,
+                    },
+                )
             }
         }
         ClientIntent::RoutingNextRefreshHint {} => {
             if let Some(ref core) = ctx.core {
                 let hint = core.routing_next_refresh_hint();
-                let hint_hex = hint.map(|h| hex::encode(h)).unwrap_or_default();
+                let hint_hex = hint.map(hex::encode).unwrap_or_default();
                 rpc_result(id, serde_json::json!({"hint": hint_hex}))
             } else {
-                rpc_error(id, JsonRpcErrorBody { code: -32000, message: "Core not available".to_string(), data: None })
+                rpc_error(
+                    id,
+                    JsonRpcErrorBody {
+                        code: -32000,
+                        message: "Core not available".to_string(),
+                        data: None,
+                    },
+                )
             }
         }
         ClientIntent::RoutingStartRefresh { hint } => {
@@ -934,7 +963,14 @@ async fn handle_jsonrpc_request(
                 core.routing_start_refresh(hint_bytes);
                 rpc_result(id, serde_json::json!({"started": true}))
             } else {
-                rpc_error(id, JsonRpcErrorBody { code: -32000, message: "Core not available".to_string(), data: None })
+                rpc_error(
+                    id,
+                    JsonRpcErrorBody {
+                        code: -32000,
+                        message: "Core not available".to_string(),
+                        data: None,
+                    },
+                )
             }
         }
     }

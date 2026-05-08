@@ -1,0 +1,398 @@
+// Axum-based server implementation for SCMessenger Control API
+// This file contains the new Axum 0.7 server implementation
+
+use anyhow::{Context, Result};
+use axum::{
+    extract::{Json as AxumJson, State},
+    http::{Method, StatusCode},
+    response::IntoResponse,
+    routing::{get, post},
+    Router,
+};
+use serde::{Deserialize, Serialize};
+use std::net::SocketAddr;
+use std::sync::Arc;
+use tower_http::cors::{Any, CorsLayer};
+
+use super::api::{
+    AddContactRequest, AddContactResponse, ConnectionPathStateResponse, DiscoveredPeer,
+    DiscoveryPeersResponse, DiscoveryStatusResponse, DriftStatusResponse,
+    GetExternalAddressResponse, GetHistoryRequest, GetHistoryResponse, GetListenersResponse,
+    GetPeersResponse, HistoryMessage, PeerEntry, SendMessageRequest, SendMessageResponse,
+    API_PORT,
+};
+
+#[derive(Clone)]
+pub struct ApiContext {
+    pub core: Arc<scmessenger_core::IronCore>,
+    pub swarm_handle: Arc<scmessenger_core::transport::SwarmHandle>,
+}
+
+// Axum handler functions
+
+async fn handle_send_message(
+    State(ctx): State<Arc<ApiContext>>,
+    AxumJson(request): AxumJson<SendMessageRequest>,
+) -> Result<AxumJson<SendMessageResponse>, (StatusCode, String)> {
+    let core = &ctx.core;
+    let contacts = core.contacts_store_manager();
+
+    let list = contacts.list().unwrap_or_default();
+    let contact = list
+        .into_iter()
+        .find(|c| c.peer_id == request.recipient || c.nickname.as_ref() == Some(&request.recipient))
+        .ok_or_else(|| (StatusCode::NOT_FOUND, "Contact not found".to_string()))?;
+
+    let peer_id = contact
+        .peer_id
+        .parse::<libp2p::PeerId>()
+        .map_err(|e| (StatusCode::BAD_REQUEST, format!("Invalid peer ID: {}", e)))?;
+
+    let prepared = core
+        .prepare_message_with_id(
+            contact.public_key.clone(),
+            request.message.clone(),
+            scmessenger_core::MessageType::Text,
+            None,
+        )
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to prepare message: {:?}", e)))?;
+
+    ctx.swarm_handle
+        .send_message(peer_id, prepared.envelope_data, None, None)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to send message: {:?}", e)))?;
+
+    Ok(AxumJson(SendMessageResponse {
+        success: true,
+        error: None,
+    }))
+}
+
+async fn handle_add_contact(
+    State(ctx): State<Arc<ApiContext>>,
+    AxumJson(request): AxumJson<AddContactRequest>,
+) -> Result<AxumJson<AddContactResponse>, (StatusCode, String)> {
+    let contacts = ctx.core.contacts_store_manager();
+
+    let mut contact =
+        scmessenger_core::store::Contact::new(request.peer_id.clone(), request.public_key);
+    if let Some(name) = request.name {
+        contact.nickname = Some(name);
+    }
+
+    contacts
+        .add(contact)
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to add contact: {:?}", e)))?;
+
+    Ok(AxumJson(AddContactResponse {
+        success: true,
+        error: None,
+    }))
+}
+
+async fn handle_get_peers(
+    State(ctx): State<Arc<ApiContext>>,
+) -> Result<AxumJson<GetPeersResponse>, (StatusCode, String)> {
+    let peers: Vec<PeerEntry> = ctx
+        .swarm_handle
+        .get_peers()
+        .await
+        .unwrap_or_default()
+        .into_iter()
+        .map(|p| {
+            let pid = p.to_string();
+            let reputation = ctx.core.get_peer_reputation(pid.clone());
+            PeerEntry {
+                peer_id: pid,
+                reputation,
+            }
+        })
+        .collect();
+
+    Ok(AxumJson(GetPeersResponse { peers }))
+}
+
+async fn handle_get_listeners(
+    State(ctx): State<Arc<ApiContext>>,
+) -> Result<AxumJson<GetListenersResponse>, (StatusCode, String)> {
+    let listeners = ctx
+        .swarm_handle
+        .get_listeners()
+        .await
+        .unwrap_or_default()
+        .into_iter()
+        .map(|addr| addr.to_string())
+        .collect();
+
+    Ok(AxumJson(GetListenersResponse { listeners }))
+}
+
+async fn handle_get_history(
+    State(ctx): State<Arc<ApiContext>>,
+    AxumJson(request): AxumJson<GetHistoryRequest>,
+) -> Result<AxumJson<GetHistoryResponse>, (StatusCode, String)> {
+    let history = ctx.core.history_store_manager();
+
+    let messages = if let Some(peer_id) = request.peer_id {
+        history
+            .conversation(peer_id, request.limit.unwrap_or(20) as u32)
+            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to get history: {:?}", e)))?
+    } else {
+        history
+            .recent(None, request.limit.unwrap_or(20) as u32)
+            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to get history: {:?}", e)))?
+    };
+
+    let history_messages: Vec<HistoryMessage> = messages
+        .into_iter()
+        .map(|m| HistoryMessage {
+            peer_id: m.peer_id,
+            content: m.content,
+            direction: match m.direction {
+                scmessenger_core::store::MessageDirection::Sent => "sent".to_string(),
+                scmessenger_core::store::MessageDirection::Received => "received".to_string(),
+            },
+            timestamp: m.timestamp,
+        })
+        .collect();
+
+    Ok(AxumJson(GetHistoryResponse {
+        messages: history_messages,
+    }))
+}
+
+async fn handle_get_external_address(
+    State(ctx): State<Arc<ApiContext>>,
+) -> Result<AxumJson<GetExternalAddressResponse>, (StatusCode, String)> {
+    let addresses = ctx
+        .swarm_handle
+        .get_external_addresses()
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to get external addresses: {}", e)))?;
+
+    Ok(AxumJson(GetExternalAddressResponse {
+        addresses: addresses.into_iter().map(|addr| addr.to_string()).collect(),
+    }))
+}
+
+async fn handle_get_connection_path_state(
+    State(ctx): State<Arc<ApiContext>>,
+) -> Result<AxumJson<ConnectionPathStateResponse>, (StatusCode, String)> {
+    let peers: Vec<String> = ctx
+        .swarm_handle
+        .get_peers()
+        .await
+        .unwrap_or_default()
+        .into_iter()
+        .map(|p| p.to_string())
+        .collect();
+    let listeners: Vec<String> = ctx
+        .swarm_handle
+        .get_listeners()
+        .await
+        .unwrap_or_default()
+        .into_iter()
+        .map(|p| p.to_string())
+        .collect();
+    let external_addrs: Vec<String> = ctx
+        .swarm_handle
+        .get_external_addresses()
+        .await
+        .unwrap_or_default()
+        .into_iter()
+        .map(|p| p.to_string())
+        .collect();
+
+    Ok(AxumJson(ConnectionPathStateResponse {
+        state: get_connection_path_state(&peers, &listeners, &external_addrs),
+    }))
+}
+
+async fn handle_export_diagnostics(
+    State(ctx): State<Arc<ApiContext>>,
+) -> Result<String, (StatusCode, String)> {
+    let peers: Vec<String> = ctx
+        .swarm_handle
+        .get_peers()
+        .await
+        .unwrap_or_default()
+        .into_iter()
+        .map(|p| p.to_string())
+        .collect();
+    let listeners: Vec<String> = ctx
+        .swarm_handle
+        .get_listeners()
+        .await
+        .unwrap_or_default()
+        .into_iter()
+        .map(|p| p.to_string())
+        .collect();
+    let external_addrs: Vec<String> = ctx
+        .swarm_handle
+        .get_external_addresses()
+        .await
+        .unwrap_or_default()
+        .into_iter()
+        .map(|p| p.to_string())
+        .collect();
+    let connection_path_state = get_connection_path_state(&peers, &listeners, &external_addrs);
+    let diagnostics = export_diagnostics(
+        &peers,
+        &listeners,
+        &external_addrs,
+        &connection_path_state,
+        &ctx.core,
+    );
+
+    Ok(diagnostics)
+}
+
+async fn handle_get_drift_status(
+    State(ctx): State<Arc<ApiContext>>,
+) -> Result<AxumJson<DriftStatusResponse>, (StatusCode, String)> {
+    Ok(AxumJson(DriftStatusResponse {
+        state: ctx.core.drift_network_state(),
+        store_size: ctx.core.drift_store_size(),
+    }))
+}
+
+async fn handle_get_discovery_status() -> Result<AxumJson<DiscoveryStatusResponse>, (StatusCode, String)> {
+    let cfg = crate::config::Config::load().unwrap_or_default();
+    Ok(AxumJson(DiscoveryStatusResponse {
+        mdns_enabled: cfg.enable_mdns,
+        ble_enabled: cfg.enable_ble,
+        wifi_aware_enabled: cfg.enable_wifi_aware,
+    }))
+}
+
+async fn handle_trigger_discovery_scan() -> Result<String, (StatusCode, String)> {
+    Ok("Scan triggered".to_string())
+}
+
+async fn handle_get_discovery_peers(
+    State(ctx): State<Arc<ApiContext>>,
+) -> Result<AxumJson<DiscoveryPeersResponse>, (StatusCode, String)> {
+    let mut discovered = Vec::new();
+
+    if let Ok(peers) = ctx.swarm_handle.get_peers().await {
+        for peer_id in peers {
+            let pid_str = peer_id.to_string();
+            let nickname = ctx
+                .core
+                .contacts_store_manager()
+                .get(pid_str.clone())
+                .ok()
+                .flatten()
+                .and_then(|c| c.nickname);
+
+            discovered.push(DiscoveredPeer {
+                peer_id: pid_str,
+                transport: "tcp/lan".to_string(),
+                nickname,
+            });
+        }
+    }
+
+    Ok(AxumJson(DiscoveryPeersResponse { peers: discovered }))
+}
+
+async fn handle_shutdown() -> impl IntoResponse {
+    tokio::spawn(async {
+        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+        std::process::exit(0);
+    });
+    (StatusCode::OK, "Stopping...")
+}
+
+fn get_connection_path_state(
+    peers: &[String],
+    listeners: &[String],
+    external_addrs: &[String],
+) -> String {
+    if peers.is_empty() {
+        return "Bootstrapping".to_string();
+    }
+    if !listeners.is_empty() {
+        return "DirectPreferred".to_string();
+    }
+    if !external_addrs.is_empty() {
+        return "RelayFallback".to_string();
+    }
+    "RelayOnly".to_string()
+}
+
+fn export_diagnostics(
+    peers: &[String],
+    listeners: &[String],
+    external_addrs: &[String],
+    connection_path_state: &str,
+    core: &scmessenger_core::IronCore,
+) -> String {
+    let history = core.history_store_manager();
+    let stats = history.stats().ok();
+    let payload = serde_json::json!({
+        "running": true,
+        "connection_path_state": connection_path_state,
+        "peers": peers,
+        "listeners": listeners,
+        "external_addrs": external_addrs,
+        "inbox_count": core.inbox_count(),
+        "outbox_count": core.outbox_count(),
+        "custody_audit_count": core.custody_audit_count(),
+        "drift": {
+            "state": core.drift_network_state(),
+            "store_size": core.drift_store_size(),
+        },
+        "history_stats": stats.as_ref().map(|s| serde_json::json!({
+            "total_messages": s.total_messages,
+            "sent_count": s.sent_count,
+            "received_count": s.received_count,
+            "undelivered_count": s.undelivered_count,
+        })),
+        "timestamp_ms": chrono::Utc::now().timestamp_millis(),
+    });
+    payload.to_string()
+}
+
+pub async fn start_api_server(ctx: ApiContext) -> Result<()> {
+    let ctx = Arc::new(ctx);
+    let addr = SocketAddr::from(([127, 0, 0, 1], API_PORT));
+
+    // Create CORS layer
+    let cors = CorsLayer::new()
+        .allow_origin(Any)
+        .allow_methods([Method::GET, Method::POST])
+        .allow_headers(Any);
+
+    // Build router with all routes
+    let app = Router::new()
+        .route("/api/send", post(handle_send_message))
+        .route("/api/contacts", post(handle_add_contact))
+        .route("/api/peers", get(handle_get_peers))
+        .route("/api/listeners", get(handle_get_listeners))
+        .route("/api/history", post(handle_get_history))
+        .route("/api/external-address", get(handle_get_external_address))
+        .route("/api/connection-path-state", get(handle_get_connection_path_state))
+        .route("/api/diagnostics", get(handle_export_diagnostics))
+        .route("/api/drift-status", get(handle_get_drift_status))
+        .route("/api/discovery/status", get(handle_get_discovery_status))
+        .route("/api/discovery/scan", post(handle_trigger_discovery_scan))
+        .route("/api/discovery/peers", get(handle_get_discovery_peers))
+        .route("/api/shutdown", post(handle_shutdown))
+        .layer(cors)
+        .with_state(ctx);
+
+    // Create TCP listener
+    let listener = tokio::net::TcpListener::bind(addr)
+        .await
+        .context("Failed to bind API server")?;
+
+    tracing::info!("Control API listening on {}", addr);
+
+    // Serve with axum
+    axum::serve(listener, app)
+        .await
+        .context("API server error")?;
+
+    Ok(())
+}

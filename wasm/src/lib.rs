@@ -7,12 +7,12 @@ pub mod transport;
 
 use anyhow::Error;
 use libp2p::{Multiaddr, PeerId};
-use parking_lot::Mutex;
 use scmessenger_core::{
     IdentityInfo, IronCore as RustIronCore, NotificationDecision, NotificationMessageContext,
     NotificationUiState, SignatureResult,
 };
-use std::sync::Arc;
+use std::cell::RefCell;
+use std::rc::Rc;
 use wasm_bindgen::prelude::*;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -193,19 +193,19 @@ pub enum IronCoreMode {
 
 #[wasm_bindgen]
 pub struct IronCore {
-    inner: Arc<RustIronCore>,
+    inner: std::sync::Arc<RustIronCore>,
     /// Buffer of successfully decoded messages waiting to be drained by JS.
-    rx_messages: Arc<Mutex<Vec<WasmMessage>>>,
+    rx_messages: Rc<RefCell<Vec<WasmMessage>>>,
     /// Active libp2p swarm handle for browser networking.
-    swarm_handle: Arc<Mutex<Option<scmessenger_core::transport::SwarmHandle>>>,
+    swarm_handle: Rc<RefCell<Option<scmessenger_core::transport::SwarmHandle>>>,
     /// Settings manager for persistence (uses localStorage path or in-memory).
     settings_manager: Option<MeshSettingsManager>,
     /// Cached in-memory settings for the current session.
-    settings: Arc<Mutex<MeshSettings>>,
+    settings: Rc<RefCell<MeshSettings>>,
     /// Operating mode: Full or Daemon
-    mode: Arc<Mutex<IronCoreMode>>,
+    mode: Rc<RefCell<IronCoreMode>>,
     /// Daemon socket URL for JSON-RPC communication (when in Daemon mode)
-    daemon_socket_url: Arc<Mutex<Option<String>>>,
+    daemon_socket_url: Rc<RefCell<Option<String>>>,
 }
 
 #[wasm_bindgen]
@@ -224,13 +224,13 @@ impl IronCore {
             ..MeshSettings::default()
         };
         let core = Self {
-            inner: Arc::new(RustIronCore::new()),
-            rx_messages: Arc::new(Mutex::new(Vec::new())),
-            swarm_handle: Arc::new(Mutex::new(None)),
+            inner: std::sync::Arc::new(RustIronCore::new()),
+            rx_messages: Rc::new(RefCell::new(Vec::new())),
+            swarm_handle: Rc::new(RefCell::new(None)),
             settings_manager: None,
-            settings: Arc::new(Mutex::new(defaults.clone())),
-            mode: Arc::new(Mutex::new(IronCoreMode::Full)),
-            daemon_socket_url: Arc::new(Mutex::new(None)),
+            settings: Rc::new(RefCell::new(defaults.clone())),
+            mode: Rc::new(RefCell::new(IronCoreMode::Full)),
+            daemon_socket_url: Rc::new(RefCell::new(None)),
         };
 
         // P1_CORE_001: Sync drift state
@@ -255,13 +255,13 @@ impl IronCore {
             ..MeshSettings::default()
         });
         let core = Self {
-            inner: Arc::new(RustIronCore::with_storage(storage_path)),
-            rx_messages: Arc::new(Mutex::new(Vec::new())),
-            swarm_handle: Arc::new(Mutex::new(None)),
+            inner: std::sync::Arc::new(RustIronCore::with_storage(storage_path)),
+            rx_messages: Rc::new(RefCell::new(Vec::new())),
+            swarm_handle: Rc::new(RefCell::new(None)),
             settings_manager: Some(manager),
-            settings: Arc::new(Mutex::new(loaded.clone())),
-            mode: Arc::new(Mutex::new(IronCoreMode::Full)),
-            daemon_socket_url: Arc::new(Mutex::new(None)),
+            settings: Rc::new(RefCell::new(loaded.clone())),
+            mode: Rc::new(RefCell::new(IronCoreMode::Full)),
+            daemon_socket_url: Rc::new(RefCell::new(None)),
         };
 
         // P1_CORE_001: Sync drift state
@@ -286,13 +286,13 @@ impl IronCore {
             ..MeshSettings::default()
         });
         let core = Self {
-            inner: Arc::new(RustIronCore::new()),
-            rx_messages: Arc::new(Mutex::new(Vec::new())),
-            swarm_handle: Arc::new(Mutex::new(None)),
+            inner: std::sync::Arc::new(RustIronCore::new()),
+            rx_messages: Rc::new(RefCell::new(Vec::new())),
+            swarm_handle: Rc::new(RefCell::new(None)),
             settings_manager: Some(manager),
-            settings: Arc::new(Mutex::new(loaded.clone())),
-            mode: Arc::new(Mutex::new(IronCoreMode::Full)),
-            daemon_socket_url: Arc::new(Mutex::new(None)),
+            settings: Rc::new(RefCell::new(loaded.clone())),
+            mode: Rc::new(RefCell::new(IronCoreMode::Full)),
+            daemon_socket_url: Rc::new(RefCell::new(None)),
         };
 
         // P1_CORE_001: Sync drift state
@@ -317,13 +317,13 @@ impl IronCore {
             ..MeshSettings::default()
         });
         Self {
-            inner: Arc::new(RustIronCore::new()),
-            rx_messages: Arc::new(Mutex::new(Vec::new())),
-            swarm_handle: Arc::new(Mutex::new(None)),
+            inner: std::sync::Arc::new(RustIronCore::new()),
+            rx_messages: Rc::new(RefCell::new(Vec::new())),
+            swarm_handle: Rc::new(RefCell::new(None)),
             settings_manager: Some(manager),
-            settings: Arc::new(Mutex::new(loaded)),
-            mode: Arc::new(Mutex::new(IronCoreMode::Full)),
-            daemon_socket_url: Arc::new(Mutex::new(None)),
+            settings: Rc::new(RefCell::new(loaded)),
+            mode: Rc::new(RefCell::new(IronCoreMode::Full)),
+            daemon_socket_url: Rc::new(RefCell::new(None)),
         }
     }
 
@@ -345,7 +345,7 @@ impl IronCore {
     #[wasm_bindgen(js_name = getIdentityInfo)]
     pub fn get_identity_info(&self) -> JsValue {
         let info = self.inner.get_identity_info();
-        serde_wasm_bindgen::to_value(&WasmIdentityInfo::from(info)).unwrap()
+        to_js_value_safe(&WasmIdentityInfo::from(info))
     }
 
     /// Set the operating mode for this IronCore instance.
@@ -355,30 +355,30 @@ impl IronCore {
     pub fn set_iron_core_mode(&self, mode: JsValue) -> Result<(), JsValue> {
         let new_mode: IronCoreMode = serde_wasm_bindgen::from_value(mode)
             .map_err(|e| js_value_from_str(&format!("Invalid mode: {}", e)))?;
-        *self.mode.lock() = new_mode;
+        *self.mode.borrow_mut() = new_mode;
         Ok(())
     }
 
     /// Get the current IronCore operating mode.
     #[wasm_bindgen(js_name = getIronCoreMode)]
     pub fn get_iron_core_mode(&self) -> JsValue {
-        let mode = *self.mode.lock();
-        serde_wasm_bindgen::to_value(&mode).unwrap()
+        let mode = *self.mode.borrow();
+        to_js_value_safe(&mode)
     }
 
     /// Set the daemon WebSocket socket URL for JSON-RPC communication.
     /// This is required when operating in Daemon mode.
     #[wasm_bindgen(js_name = setDaemonSocketUrl)]
     pub fn set_daemon_socket_url(&self, url: String) {
-        *self.daemon_socket_url.lock() = Some(url);
+        *self.daemon_socket_url.borrow_mut() = Some(url);
     }
 
     /// Get the current daemon socket URL.
     #[wasm_bindgen(js_name = getDaemonSocketUrl)]
     pub fn get_daemon_socket_url(&self) -> JsValue {
-        let url = self.daemon_socket_url.lock();
+        let url = self.daemon_socket_url.borrow();
         match url.as_ref() {
-            Some(u) => serde_wasm_bindgen::to_value(&u).unwrap(),
+            Some(u) => to_js_value_safe(&u),
             None => JsValue::NULL,
         }
     }
@@ -389,9 +389,9 @@ impl IronCore {
     #[wasm_bindgen(js_name = initializeIdentity)]
     pub fn initialize_identity(&self) -> Result<(), JsValue> {
         // Clone values to avoid borrowing issues
-        let mode = *self.mode.lock();
+        let mode = *self.mode.borrow();
         if mode == IronCoreMode::Daemon {
-            let url = self.daemon_socket_url.lock().clone();
+            let url = self.daemon_socket_url.borrow().clone();
             let daemon_url = url.as_deref().unwrap_or("unknown");
             return Err(js_value_from_str(&format!(
                 "Identity initialization refused: IronCore is in Daemon mode. \
@@ -415,7 +415,7 @@ impl IronCore {
     /// This fetches the identity from the local CLI daemon via JSON-RPC.
     #[wasm_bindgen(js_name = initializeIdentityFromDaemon)]
     pub async fn initialize_identity_from_daemon(&self) -> Result<(), JsValue> {
-        let mode = *self.mode.lock();
+        let mode = *self.mode.borrow();
 
         if mode != IronCoreMode::Daemon {
             return Err(js_value_from_str(
@@ -424,7 +424,7 @@ impl IronCore {
         }
 
         // Clone the URL to avoid borrowing issues
-        let url_clone = self.daemon_socket_url.lock().clone();
+        let url_clone = self.daemon_socket_url.borrow().clone();
         let Some(daemon_url) = url_clone.as_ref() else {
             return Err(js_value_from_str(
                 "No daemon socket URL set. Call setDaemonSocketUrl() first.",
@@ -450,11 +450,11 @@ impl IronCore {
     /// In Daemon mode, this may return a placeholder until the daemon provides identity.
     #[wasm_bindgen(js_name = getIdentityFromDaemon)]
     pub fn get_identity_from_daemon(&self) -> Result<JsValue, JsValue> {
-        let mode = *self.mode.lock();
+        let mode = *self.mode.borrow();
 
         if mode == IronCoreMode::Daemon {
             // Clone the URL to avoid borrowing issues
-            let url_clone = self.daemon_socket_url.lock().clone();
+            let url_clone = self.daemon_socket_url.borrow().clone();
             // In daemon mode, identity info should come from the daemon.
             // Return a placeholder indicating we need to wait for daemon identity.
             let daemon_url = url_clone.as_deref().unwrap_or("unknown");
@@ -475,7 +475,7 @@ impl IronCore {
     pub fn sign_data(&self, data: Vec<u8>) -> Result<JsValue, JsValue> {
         self.inner
             .sign_data(data)
-            .map(|sig| serde_wasm_bindgen::to_value(&WasmSignatureResult::from(sig)).unwrap())
+            .map(|sig| to_js_value_safe(&WasmSignatureResult::from(sig)))
             .map_err(|e| js_value_from_str(&format!("{}", e)))
     }
 
@@ -502,8 +502,8 @@ impl IronCore {
         recipient_public_key_hex: String,
         text: String,
     ) -> Result<Vec<u8>, JsValue> {
-        let mode = *self.mode.lock();
-        let url = self.daemon_socket_url.lock().clone();
+        let mode = *self.mode.borrow();
+        let url = self.daemon_socket_url.borrow().clone();
 
         if mode == IronCoreMode::Daemon {
             let daemon_url = url.as_deref().unwrap_or("unknown");
@@ -520,7 +520,7 @@ impl IronCore {
             )));
         }
 
-        ensure_mesh_participation_enabled(self.settings.lock().relay_enabled)?;
+        ensure_mesh_participation_enabled(self.settings.borrow().relay_enabled)?;
         self.inner
             .prepare_message(
                 recipient_public_key_hex,
@@ -534,18 +534,17 @@ impl IronCore {
 
     #[wasm_bindgen(js_name = receiveMessage)]
     pub fn receive_message(&self, envelope_bytes: Vec<u8>) -> Result<JsValue, JsValue> {
-        ensure_mesh_participation_enabled(self.settings.lock().relay_enabled)?;
+        ensure_mesh_participation_enabled(self.settings.borrow().relay_enabled)?;
         self.inner
             .receive_message(envelope_bytes)
             .map(|msg| {
-                serde_wasm_bindgen::to_value(&WasmMessage {
+                to_js_value_safe(&WasmMessage {
                     id: msg.id.clone(),
                     sender_id: msg.sender_id.clone(),
                     sender_peer_id: None,
                     text: msg.text_content(),
                     timestamp: msg.timestamp,
                 })
-                .unwrap()
             })
             .map_err(|e| js_value_from_str(&format!("{}", e)))
     }
@@ -574,10 +573,10 @@ impl IronCore {
     pub async fn start_swarm(&self, bootstrap_addrs: JsValue) -> Result<(), JsValue> {
         let bootstrap_addrs = parse_bootstrap_addrs(bootstrap_addrs)?;
         start_swarm_runtime(
-            Arc::clone(&self.inner),
-            Arc::clone(&self.rx_messages),
-            Arc::clone(&self.settings),
-            Arc::clone(&self.swarm_handle),
+            std::sync::Arc::clone(&self.inner),
+            Rc::clone(&self.rx_messages),
+            Rc::clone(&self.settings),
+            Rc::clone(&self.swarm_handle),
             bootstrap_addrs,
         )
         .await
@@ -586,7 +585,7 @@ impl IronCore {
     /// Stop libp2p swarm networking for the browser client.
     #[wasm_bindgen(js_name = stopSwarm)]
     pub async fn stop_swarm(&self) -> Result<(), JsValue> {
-        let maybe_handle = self.swarm_handle.lock().take();
+        let maybe_handle = self.swarm_handle.borrow_mut().take();
         if let Some(handle) = maybe_handle {
             handle
                 .shutdown()
@@ -603,7 +602,7 @@ impl IronCore {
         peer_id: String,
         envelope_bytes: Vec<u8>,
     ) -> Result<(), JsValue> {
-        ensure_mesh_participation_enabled(self.settings.lock().relay_enabled)?;
+        ensure_mesh_participation_enabled(self.settings.borrow().relay_enabled)?;
 
         let peer_id: PeerId = peer_id
             .parse()
@@ -611,7 +610,7 @@ impl IronCore {
 
         let handle = self
             .swarm_handle
-            .lock()
+            .borrow()
             .clone()
             .ok_or_else(|| js_value_from_str("Swarm is not running"))?;
 
@@ -626,7 +625,7 @@ impl IronCore {
     pub async fn get_peers(&self) -> Result<JsValue, JsValue> {
         let handle = self
             .swarm_handle
-            .lock()
+            .borrow()
             .clone()
             .ok_or_else(|| js_value_from_str("Swarm is not running"))?;
 
@@ -645,7 +644,7 @@ impl IronCore {
     pub async fn get_external_addresses(&self) -> Result<JsValue, JsValue> {
         let handle = self
             .swarm_handle
-            .lock()
+            .borrow()
             .clone()
             .ok_or_else(|| js_value_from_str("Swarm is not running"))?;
 
@@ -662,7 +661,7 @@ impl IronCore {
 
     #[wasm_bindgen(js_name = getConnectionPathState)]
     pub async fn get_connection_path_state(&self) -> Result<String, JsValue> {
-        let maybe_handle = self.swarm_handle.lock().clone();
+        let maybe_handle = self.swarm_handle.borrow().clone();
         let Some(handle) = maybe_handle else {
             return Ok("Disconnected".to_string());
         };
@@ -688,9 +687,9 @@ impl IronCore {
 
     #[wasm_bindgen(js_name = exportDiagnostics)]
     pub async fn export_diagnostics(&self) -> Result<String, JsValue> {
-        // Clone the handle out of the lock before any await so the MutexGuard
+        // Clone the handle out of the lock before any await so the RefCell borrow
         // is not held across the suspension point.
-        let handle_opt = self.swarm_handle.lock().clone();
+        let handle_opt = self.swarm_handle.borrow().clone();
         let peers = if let Some(handle) = handle_opt {
             handle
                 .get_peers()
@@ -708,7 +707,7 @@ impl IronCore {
             "peers": peers,
             "inbox_count": self.inbox_count(),
             "outbox_count": self.outbox_count(),
-            "relay_enabled": self.settings.lock().relay_enabled,
+            "relay_enabled": self.settings.borrow().relay_enabled,
             "timestamp_ms": js_sys::Date::now(),
         });
 
@@ -722,7 +721,7 @@ impl IronCore {
     pub async fn subscribe_topic(&self, topic: String) -> Result<(), JsValue> {
         let handle = self
             .swarm_handle
-            .lock()
+            .borrow()
             .clone()
             .ok_or_else(|| js_value_from_str("Swarm is not running"))?;
 
@@ -740,7 +739,7 @@ impl IronCore {
     pub async fn unsubscribe_topic(&self, topic: String) -> Result<(), JsValue> {
         let handle = self
             .swarm_handle
-            .lock()
+            .borrow()
             .clone()
             .ok_or_else(|| js_value_from_str("Swarm is not running"))?;
 
@@ -758,7 +757,7 @@ impl IronCore {
     pub async fn publish_topic(&self, topic: String, data: Vec<u8>) -> Result<(), JsValue> {
         let handle = self
             .swarm_handle
-            .lock()
+            .borrow()
             .clone()
             .ok_or_else(|| js_value_from_str("Swarm is not running"))?;
 
@@ -778,7 +777,7 @@ impl IronCore {
     pub async fn dial(&self, multiaddr: String) -> Result<(), JsValue> {
         let handle = self
             .swarm_handle
-            .lock()
+            .borrow()
             .clone()
             .ok_or_else(|| js_value_from_str("Swarm is not running"))?;
 
@@ -798,7 +797,7 @@ impl IronCore {
     pub async fn send_to_all_peers(&self, data: Vec<u8>) -> Result<(), JsValue> {
         let handle = self
             .swarm_handle
-            .lock()
+            .borrow()
             .clone()
             .ok_or_else(|| js_value_from_str("Swarm is not running"))?;
 
@@ -838,7 +837,7 @@ impl IronCore {
     pub async fn get_listeners(&self) -> Result<JsValue, JsValue> {
         let handle = self
             .swarm_handle
-            .lock()
+            .borrow()
             .clone()
             .ok_or_else(|| js_value_from_str("Swarm is not running"))?;
 
@@ -912,7 +911,8 @@ impl IronCore {
         let config: scmessenger_core::privacy::PrivacyConfig =
             serde_wasm_bindgen::from_value(js_config)
                 .map_err(|e| JsValue::from_str(&e.to_string()))?;
-        let json = serde_json::to_string(&config).unwrap();
+        let json = serde_json::to_string(&config)
+            .map_err(|e| JsValue::from_str(&format!("JSON serialization error: {}", e)))?;
         self.inner
             .set_privacy_config(json)
             .map_err(|e| JsValue::from_str(&format!("{:?}", e)))
@@ -954,10 +954,10 @@ impl IronCore {
             .map_err(|e| js_value_from_str(&format!("Invalid relay URL: {}", e)))?;
 
         start_swarm_runtime(
-            Arc::clone(&self.inner),
-            Arc::clone(&self.rx_messages),
-            Arc::clone(&self.settings),
-            Arc::clone(&self.swarm_handle),
+            std::sync::Arc::clone(&self.inner),
+            Rc::clone(&self.rx_messages),
+            Rc::clone(&self.settings),
+            Rc::clone(&self.swarm_handle),
             vec![relay_multiaddr],
         )
         .await
@@ -973,7 +973,7 @@ impl IronCore {
     /// across successive calls.
     #[wasm_bindgen(js_name = drainReceivedMessages)]
     pub fn drain_received_messages(&self) -> js_sys::Array {
-        let mut buf = self.rx_messages.lock();
+        let mut buf = self.rx_messages.borrow_mut();
         let drained: Vec<WasmMessage> = buf.drain(..).collect();
         drop(buf);
 
@@ -991,8 +991,8 @@ impl IronCore {
     /// Return the current MeshSettings as a JS object.
     #[wasm_bindgen(js_name = getSettings)]
     pub fn get_settings(&self) -> JsValue {
-        let s = self.settings.lock();
-        serde_wasm_bindgen::to_value(&WasmMeshSettings::from(s.clone())).unwrap()
+        let s = self.settings.borrow();
+        to_js_value_safe(&WasmMeshSettings::from(s.clone()))
     }
 
     /// Apply a partial or full settings update from JS.
@@ -1009,7 +1009,7 @@ impl IronCore {
                 .map_err(|e| js_value_from_str(&format!("Failed to save settings: {:?}", e)))?;
         }
 
-        *self.settings.lock() = settings.clone();
+        *self.settings.borrow_mut() = settings.clone();
 
         // P1_CORE_001: Sync drift protocol state with relay toggle
         if settings.relay_enabled {
@@ -1024,7 +1024,7 @@ impl IronCore {
     /// Return the default settings for the Web platform.
     #[wasm_bindgen(js_name = getDefaultSettings)]
     pub fn get_default_settings(&self) -> JsValue {
-        serde_wasm_bindgen::to_value(&WasmMeshSettings::from(MeshSettings {
+        to_js_value_safe(&WasmMeshSettings::from(MeshSettings {
             battery_floor: 0,
             ble_enabled: false,
             wifi_aware_enabled: false,
@@ -1032,7 +1032,6 @@ impl IronCore {
             internet_enabled: true,
             ..MeshSettings::default()
         }))
-        .unwrap()
     }
 
     #[wasm_bindgen(js_name = classifyNotification)]
@@ -1045,7 +1044,7 @@ impl IronCore {
             .map_err(|e| js_value_from_str(&format!("Invalid notification message: {}", e)))?;
         let ui_state: WasmNotificationUiState = serde_wasm_bindgen::from_value(js_ui_state)
             .map_err(|e| js_value_from_str(&format!("Invalid notification UI state: {}", e)))?;
-        let settings: scmessenger_core::MeshSettings = self.settings.lock().clone().into();
+        let settings: scmessenger_core::MeshSettings = self.settings.borrow().clone().into();
         let decision = self
             .inner
             .classify_notification(message.into(), ui_state.into(), settings);
@@ -1118,7 +1117,7 @@ impl IronCore {
         recipient_public_key_hex: String,
         text: String,
     ) -> Result<JsValue, JsValue> {
-        ensure_mesh_participation_enabled(self.settings.lock().relay_enabled)?;
+        ensure_mesh_participation_enabled(self.settings.borrow().relay_enabled)?;
         self.inner
             .prepare_message_with_id(
                 recipient_public_key_hex,
@@ -1127,11 +1126,10 @@ impl IronCore {
                 None,
             )
             .map(|p| {
-                serde_wasm_bindgen::to_value(&WasmPreparedMessage {
+                to_js_value_safe(&WasmPreparedMessage {
                     message_id: p.message_id,
                     envelope_data: p.envelope_data,
                 })
-                .unwrap()
             })
             .map_err(|e| js_value_from_str(&format!("{}", e)))
     }
@@ -1335,12 +1333,11 @@ impl IronCore {
     #[wasm_bindgen(js_name = getRegistrationState)]
     pub fn get_registration_state(&self, identity_id: String) -> JsValue {
         let info = self.inner.get_registration_state(identity_id);
-        serde_wasm_bindgen::to_value(&WasmRegistrationStateInfo {
+        to_js_value_safe(&WasmRegistrationStateInfo {
             state: info.state,
             device_id: info.device_id,
             seniority_timestamp: info.seniority_timestamp,
         })
-        .unwrap()
     }
 
     // ── DSPy Integrity ────────────────────────────────────────────────────
@@ -1427,7 +1424,7 @@ impl WasmContactManager {
             .inner
             .get(peer_id)
             .map_err(|e| js_value_from_str(&format!("{:?}", e)))?;
-        Ok(serde_wasm_bindgen::to_value(&contact).unwrap())
+        Ok(to_js_value_safe(&contact))
     }
 
     #[wasm_bindgen(js_name = remove)]
@@ -1445,7 +1442,7 @@ impl WasmContactManager {
             .map_err(|e| js_value_from_str(&format!("{:?}", e)))?;
         let array = js_sys::Array::new();
         for item in list {
-            array.push(&serde_wasm_bindgen::to_value(&item).unwrap());
+            array.push(&to_js_value_safe(&item));
         }
         Ok(array)
     }
@@ -1475,7 +1472,7 @@ impl WasmContactManager {
             .map_err(|e| js_value_from_str(&format!("{:?}", e)))?;
         let array = js_sys::Array::new();
         for item in results {
-            array.push(&serde_wasm_bindgen::to_value(&item).unwrap());
+            array.push(&to_js_value_safe(&item));
         }
         Ok(array)
     }
@@ -1552,7 +1549,7 @@ impl WasmHistoryManager {
             .map_err(|e| js_value_from_str(&format!("{:?}", e)))?;
         let array = js_sys::Array::new();
         for rec in records {
-            array.push(&serde_wasm_bindgen::to_value(&rec).unwrap());
+            array.push(&to_js_value_safe(&rec));
         }
         Ok(array)
     }
@@ -1565,7 +1562,7 @@ impl WasmHistoryManager {
             .map_err(|e| js_value_from_str(&format!("{:?}", e)))?;
         let array = js_sys::Array::new();
         for rec in records {
-            array.push(&serde_wasm_bindgen::to_value(&rec).unwrap());
+            array.push(&to_js_value_safe(&rec));
         }
         Ok(array)
     }
@@ -1589,7 +1586,7 @@ impl WasmHistoryManager {
             received_count: stats.received_count,
             undelivered_count: stats.undelivered_count,
         };
-        Ok(serde_wasm_bindgen::to_value(&payload).unwrap())
+        Ok(to_js_value_safe(&payload))
     }
 
     #[wasm_bindgen(js_name = count)]
@@ -1618,7 +1615,7 @@ impl WasmHistoryManager {
             .inner
             .get(id)
             .map_err(|e| js_value_from_str(&format!("{:?}", e)))?;
-        Ok(serde_wasm_bindgen::to_value(&record).unwrap())
+        Ok(to_js_value_safe(&record))
     }
 
     /// Search message history by query string.
@@ -1630,7 +1627,7 @@ impl WasmHistoryManager {
             .map_err(|e| js_value_from_str(&format!("{:?}", e)))?;
         let array = js_sys::Array::new();
         for rec in records {
-            array.push(&serde_wasm_bindgen::to_value(&rec).unwrap());
+            array.push(&to_js_value_safe(&rec));
         }
         Ok(array)
     }
@@ -1677,6 +1674,12 @@ fn js_value_from_str(message: &str) -> JsValue {
         let _ = message;
         JsValue::NULL
     }
+}
+
+/// Safely convert a serializable value to JsValue, returning JsValue::NULL on error.
+/// This prevents panics from serde_wasm_bindgen::to_value() failures.
+fn to_js_value_safe<T: serde::Serialize>(value: &T) -> JsValue {
+    serde_wasm_bindgen::to_value(value).unwrap_or(JsValue::NULL)
 }
 
 fn parse_bootstrap_addrs(value: JsValue) -> Result<Vec<String>, JsValue> {
@@ -1751,13 +1754,13 @@ fn ensure_mesh_participation_enabled(relay_enabled: bool) -> Result<(), JsValue>
 }
 
 async fn start_swarm_runtime(
-    inner: Arc<RustIronCore>,
-    rx_messages: Arc<Mutex<Vec<WasmMessage>>>,
-    settings: Arc<Mutex<MeshSettings>>,
-    swarm_handle: Arc<Mutex<Option<scmessenger_core::transport::SwarmHandle>>>,
+    inner: std::sync::Arc<RustIronCore>,
+    rx_messages: Rc<RefCell<Vec<WasmMessage>>>,
+    settings: Rc<RefCell<MeshSettings>>,
+    swarm_handle: Rc<RefCell<Option<scmessenger_core::transport::SwarmHandle>>>,
     bootstrap_addrs: Vec<String>,
 ) -> Result<(), JsValue> {
-    if swarm_handle.lock().is_some() {
+    if swarm_handle.borrow().is_some() {
         return Err(js_value_from_str("Swarm is already running"));
     }
 
@@ -1787,16 +1790,17 @@ async fn start_swarm_runtime(
             None,
             bootstrap_multiaddrs,
             None,
-            Some(Arc::downgrade(&inner)),
+            Some(std::sync::Arc::downgrade(&inner)),
             headless_mode,
+            None, // discovery_config
         )
         .await
         .map_err(|e: anyhow::Error| js_value_from_str(&format!("Failed to start swarm: {}", e)))?;
 
-    *swarm_handle.lock() = Some(handle);
+    *swarm_handle.borrow_mut() = Some(handle);
 
-    let swarm_handle_for_loop: Arc<Mutex<Option<scmessenger_core::transport::SwarmHandle>>> =
-        Arc::clone(&swarm_handle);
+    let swarm_handle_for_loop: Rc<RefCell<Option<scmessenger_core::transport::SwarmHandle>>> =
+        Rc::clone(&swarm_handle);
     wasm_bindgen_futures::spawn_local(async move {
         while let Some(event) = event_rx.recv().await {
             match event {
@@ -1804,14 +1808,14 @@ async fn start_swarm_runtime(
                     peer_id,
                     envelope_data,
                 } => {
-                    if !settings.lock().relay_enabled {
+                    if !settings.borrow().relay_enabled {
                         tracing::debug!("Dropping swarm inbound frame: relay toggle OFF");
                         continue;
                     }
 
                     match inner.receive_message(envelope_data) {
                         Ok(msg) => {
-                            rx_messages.lock().push(WasmMessage {
+                            rx_messages.borrow_mut().push(WasmMessage {
                                 id: msg.id.clone(),
                                 sender_id: msg.sender_id.clone(),
                                 sender_peer_id: Some(peer_id.to_string()),
@@ -1857,7 +1861,7 @@ async fn start_swarm_runtime(
             }
         }
 
-        *swarm_handle_for_loop.lock() = None;
+        *swarm_handle_for_loop.borrow_mut() = None;
         tracing::info!("WASM swarm event loop terminated");
     });
 

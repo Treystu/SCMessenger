@@ -6,8 +6,8 @@
 
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
-use std::sync::Arc;
-use parking_lot::RwLock;
+use std::cell::RefCell;
+use std::rc::Rc;
 
 /// Storage eviction policy
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -86,11 +86,11 @@ impl StoredMessage {
 pub struct WasmStorage {
     config: StorageConfig,
     /// Messages indexed by message ID
-    messages: Arc<RwLock<HashMap<String, StoredMessage>>>,
+    messages: Rc<RefCell<HashMap<String, StoredMessage>>>,
     /// Messages ordered by timestamp for FIFO eviction
-    insertion_order: Arc<RwLock<VecDeque<String>>>,
+    insertion_order: Rc<RefCell<VecDeque<String>>>,
     /// Messages indexed by recipient hint for quick lookup
-    by_recipient_hint: Arc<RwLock<HashMap<String, Vec<String>>>>,
+    by_recipient_hint: Rc<RefCell<HashMap<String, Vec<String>>>>,
 }
 
 impl WasmStorage {
@@ -98,21 +98,21 @@ impl WasmStorage {
     pub fn new(config: StorageConfig) -> Self {
         Self {
             config,
-            messages: Arc::new(RwLock::new(HashMap::new())),
-            insertion_order: Arc::new(RwLock::new(VecDeque::new())),
-            by_recipient_hint: Arc::new(RwLock::new(HashMap::new())),
+            messages: Rc::new(RefCell::new(HashMap::new())),
+            insertion_order: Rc::new(RefCell::new(VecDeque::new())),
+            by_recipient_hint: Rc::new(RefCell::new(HashMap::new())),
         }
     }
 
     /// Store a message
     pub fn store_message(&self, message: StoredMessage) -> Result<(), String> {
-        let mut messages = self.messages.write();
+        let mut messages = self.messages.borrow_mut();
 
         // Check if we need to evict
         if messages.len() >= self.config.max_messages {
             drop(messages); // Release write lock
             self.evict_oldest()?;
-            messages = self.messages.write(); // Re-acquire lock
+            messages = self.messages.borrow_mut(); // Re-acquire lock
         }
 
         let message_id = message.id.clone();
@@ -122,13 +122,13 @@ impl WasmStorage {
 
         // Update insertion order
         {
-            let mut order = self.insertion_order.write();
+            let mut order = self.insertion_order.borrow_mut();
             order.push_back(message_id.clone());
         }
 
         // Update recipient hint index
         if let Some(hint) = recipient_hint {
-            let mut by_hint = self.by_recipient_hint.write();
+            let mut by_hint = self.by_recipient_hint.borrow_mut();
             by_hint
                 .entry(hint)
                 .or_insert_with(Vec::new)
@@ -140,14 +140,14 @@ impl WasmStorage {
 
     /// Get a message by ID
     pub fn get_message(&self, id: &str) -> Option<StoredMessage> {
-        self.messages.read().get(id).cloned()
+        self.messages.borrow().get(id).cloned()
     }
 
     /// Get all messages for a recipient hint
     pub fn get_messages_for_hint(&self, hint: &str) -> Vec<StoredMessage> {
-        let by_hint = self.by_recipient_hint.read();
+        let by_hint = self.by_recipient_hint.borrow();
         if let Some(ids) = by_hint.get(hint) {
-            let messages = self.messages.read();
+            let messages = self.messages.borrow();
             ids.iter()
                 .filter_map(|id| messages.get(id).cloned())
                 .collect()
@@ -159,7 +159,7 @@ impl WasmStorage {
     /// Get all messages
     pub fn get_all_messages(&self) -> Vec<StoredMessage> {
         self.messages
-            .read()
+            .borrow()
             .values()
             .cloned()
             .collect()
@@ -168,7 +168,7 @@ impl WasmStorage {
     /// Get all unread messages
     pub fn get_unread_messages(&self) -> Vec<StoredMessage> {
         self.messages
-            .read()
+            .borrow()
             .values()
             .filter(|m| !m.read)
             .cloned()
@@ -177,7 +177,7 @@ impl WasmStorage {
 
     /// Mark a message as read
     pub fn mark_as_read(&self, id: &str) -> Result<(), String> {
-        let mut messages = self.messages.write();
+        let mut messages = self.messages.borrow_mut();
         if let Some(msg) = messages.get_mut(id) {
             msg.read = true;
             Ok(())
@@ -188,17 +188,17 @@ impl WasmStorage {
 
     /// Delete a message by ID
     pub fn delete_message(&self, id: &str) -> Result<(), String> {
-        let mut messages = self.messages.write();
+        let mut messages = self.messages.borrow_mut();
         if let Some(msg) = messages.remove(id) {
             // Remove from insertion order
             {
-                let mut order = self.insertion_order.write();
+                let mut order = self.insertion_order.borrow_mut();
                 order.retain(|x| x != id);
             }
 
             // Remove from recipient hint index
             if let Some(hint) = msg.recipient_hint {
-                let mut by_hint = self.by_recipient_hint.write();
+                let mut by_hint = self.by_recipient_hint.borrow_mut();
                 if let Some(ids) = by_hint.get_mut(&hint) {
                     ids.retain(|x| x != id);
                 }
@@ -212,22 +212,22 @@ impl WasmStorage {
 
     /// Get message count
     pub fn message_count(&self) -> usize {
-        self.messages.read().len()
+        self.messages.borrow().len()
     }
 
     /// Evict oldest message based on policy
     fn evict_oldest(&self) -> Result<(), String> {
         match self.config.eviction_policy {
             EvictionPolicy::OldestFirst => {
-                let mut order = self.insertion_order.write();
+                let mut order = self.insertion_order.borrow_mut();
                 if let Some(oldest_id) = order.pop_front() {
                     drop(order); // Release lock before deleting
-                    let mut messages = self.messages.write();
+                    let mut messages = self.messages.borrow_mut();
                     if let Some(msg) = messages.remove(&oldest_id) {
                         // Clean up indexes
                         if let Some(hint) = msg.recipient_hint {
                             drop(messages); // Release lock
-                            let mut by_hint = self.by_recipient_hint.write();
+                            let mut by_hint = self.by_recipient_hint.borrow_mut();
                             if let Some(ids) = by_hint.get_mut(&hint) {
                                 ids.retain(|x| x != &oldest_id);
                             }
@@ -241,7 +241,7 @@ impl WasmStorage {
                 }
             }
             EvictionPolicy::UnknownSendersFirst => {
-                let messages = self.messages.read();
+                let messages = self.messages.borrow();
                 let mut candidates: Vec<_> = messages
                     .iter()
                     .filter(|(_, m)| m.sender_id == "unknown")
@@ -256,14 +256,14 @@ impl WasmStorage {
                     self.delete_message(&id)
                 } else {
                     // Fall back to oldest first if no unknown senders
-                    let mut order = self.insertion_order.write();
+                    let mut order = self.insertion_order.borrow_mut();
                     if let Some(oldest_id) = order.pop_front() {
                         drop(order);
-                        let mut messages = self.messages.write();
+                        let mut messages = self.messages.borrow_mut();
                         if let Some(msg) = messages.remove(&oldest_id) {
                             if let Some(hint) = msg.recipient_hint {
                                 drop(messages);
-                                let mut by_hint = self.by_recipient_hint.write();
+                                let mut by_hint = self.by_recipient_hint.borrow_mut();
                                 if let Some(ids) = by_hint.get_mut(&hint) {
                                     ids.retain(|x| x != &oldest_id);
                                 }
@@ -282,7 +282,7 @@ impl WasmStorage {
 
     /// Export full storage state to JSON (for persistence)
     pub fn export_state(&self) -> Result<String, String> {
-        let messages = self.messages.read();
+        let messages = self.messages.borrow();
         let state: Vec<StoredMessage> = messages.values().cloned().collect();
         serde_json::to_string(&state).map_err(|e| format!("Serialization error: {}", e))
     }
@@ -293,9 +293,9 @@ impl WasmStorage {
             serde_json::from_str(json).map_err(|e| format!("Deserialization error: {}", e))?;
 
         // Clear existing state
-        self.messages.write().clear();
-        self.insertion_order.write().clear();
-        self.by_recipient_hint.write().clear();
+        self.messages.borrow_mut().clear();
+        self.insertion_order.borrow_mut().clear();
+        self.by_recipient_hint.borrow_mut().clear();
 
         // Re-import messages
         for message in state {
@@ -307,9 +307,9 @@ impl WasmStorage {
 
     /// Clear all messages
     pub fn clear(&self) {
-        self.messages.write().clear();
-        self.insertion_order.write().clear();
-        self.by_recipient_hint.write().clear();
+        self.messages.borrow_mut().clear();
+        self.insertion_order.borrow_mut().clear();
+        self.by_recipient_hint.borrow_mut().clear();
     }
 }
 

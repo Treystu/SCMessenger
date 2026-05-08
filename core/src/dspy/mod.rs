@@ -12,10 +12,10 @@
 //! - Teleprompters: Automatic prompt optimization against Golden Examples
 
 // Re-export DSPy bindings (generated from Python module via UniFFI)
-pub mod signatures;
 pub mod modules;
+pub mod signatures;
 pub mod teleprompt;
 
-pub use signatures::*;
 pub use modules::*;
+pub use signatures::*;
 pub use teleprompt::*;

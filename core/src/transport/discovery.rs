@@ -25,12 +25,13 @@ pub enum BeaconError {
 /// Discovery mode controls how this node advertises and finds peers.
 ///
 /// Each mode provides different tradeoffs between discoverability and privacy.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 pub enum DiscoveryMode {
     /// Full mDNS + Identify. Fast discovery, zero privacy.
     ///
     /// Use for development, trusted LANs, and initial bootstrapping.
     /// Broadcasts PeerId, IP, port, and protocol IDs to everyone on the LAN.
+    #[default]
     Open,
 
     /// No mDNS broadcast. Manual peer addition only.
@@ -55,12 +56,6 @@ pub enum DiscoveryMode {
     Silent,
 }
 
-impl Default for DiscoveryMode {
-    fn default() -> Self {
-        DiscoveryMode::Open
-    }
-}
-
 impl DiscoveryMode {
     /// Check if this mode allows mDNS broadcasting
     pub fn allows_mdns(&self) -> bool {
@@ -69,7 +64,10 @@ impl DiscoveryMode {
 
     /// Check if this mode allows Identify protocol
     pub fn allows_identify(&self) -> bool {
-        matches!(self, DiscoveryMode::Open | DiscoveryMode::Manual | DiscoveryMode::DarkBLE { .. })
+        matches!(
+            self,
+            DiscoveryMode::Open | DiscoveryMode::Manual | DiscoveryMode::DarkBLE { .. }
+        )
     }
 
     /// Check if Identify should be advertised to unknown peers
@@ -299,8 +297,8 @@ mod tests {
         let group_key = [0x42u8; 32];
         let node_pk = [0xaa; 32];
 
-        let encrypted = create_encrypted_beacon(&group_key, &node_pk)
-            .expect("Encryption should succeed");
+        let encrypted =
+            create_encrypted_beacon(&group_key, &node_pk).expect("Encryption should succeed");
 
         let decrypted = decrypt_beacon(&group_key, &encrypted)
             .expect("Decryption should succeed with correct key");
@@ -315,14 +313,11 @@ mod tests {
         let wrong_key = [0x99u8; 32];
         let node_pk = [0xaa; 32];
 
-        let encrypted = create_encrypted_beacon(&group_key, &node_pk)
-            .expect("Encryption should succeed");
+        let encrypted =
+            create_encrypted_beacon(&group_key, &node_pk).expect("Encryption should succeed");
 
         let result = decrypt_beacon(&wrong_key, &encrypted);
-        assert!(
-            result.is_err(),
-            "Decryption with wrong key should fail"
-        );
+        assert!(result.is_err(), "Decryption with wrong key should fail");
     }
 
     #[test]
@@ -350,15 +345,11 @@ mod tests {
         };
 
         let json = serde_json::to_string(&config).expect("Should serialize");
-        let recovered: DiscoveryConfig =
-            serde_json::from_str(&json).expect("Should deserialize");
+        let recovered: DiscoveryConfig = serde_json::from_str(&json).expect("Should deserialize");
 
         assert_eq!(recovered.mode, config.mode);
         assert_eq!(recovered.advertise_protocols, config.advertise_protocols);
-        assert_eq!(
-            recovered.accept_unknown_peers,
-            config.accept_unknown_peers
-        );
+        assert_eq!(recovered.accept_unknown_peers, config.accept_unknown_peers);
     }
 
     #[test]
@@ -366,29 +357,25 @@ mod tests {
         // Test Open
         let open = DiscoveryMode::Open;
         let json = serde_json::to_string(&open).expect("Should serialize");
-        let _recovered: DiscoveryMode =
-            serde_json::from_str(&json).expect("Should deserialize");
+        let _recovered: DiscoveryMode = serde_json::from_str(&json).expect("Should deserialize");
 
         // Test Manual
         let manual = DiscoveryMode::Manual;
         let json = serde_json::to_string(&manual).expect("Should serialize");
-        let _recovered: DiscoveryMode =
-            serde_json::from_str(&json).expect("Should deserialize");
+        let _recovered: DiscoveryMode = serde_json::from_str(&json).expect("Should deserialize");
 
         // Test DarkBLE
         let darkble = DiscoveryMode::DarkBLE {
             group_key: [0xffu8; 32],
         };
         let json = serde_json::to_string(&darkble).expect("Should serialize");
-        let recovered: DiscoveryMode =
-            serde_json::from_str(&json).expect("Should deserialize");
+        let recovered: DiscoveryMode = serde_json::from_str(&json).expect("Should deserialize");
         assert!(matches!(recovered, DiscoveryMode::DarkBLE { .. }));
 
         // Test Silent
         let silent = DiscoveryMode::Silent;
         let json = serde_json::to_string(&silent).expect("Should serialize");
-        let _recovered: DiscoveryMode =
-            serde_json::from_str(&json).expect("Should deserialize");
+        let _recovered: DiscoveryMode = serde_json::from_str(&json).expect("Should deserialize");
     }
 
     #[test]
@@ -403,9 +390,7 @@ mod tests {
         assert!(manual.allows_identify());
         assert!(manual.advertises_identify());
 
-        let darkble = DiscoveryMode::DarkBLE {
-            group_key: [0; 32],
-        };
+        let darkble = DiscoveryMode::DarkBLE { group_key: [0; 32] };
         assert!(!darkble.allows_mdns());
         assert!(darkble.allows_identify());
         assert!(!darkble.advertises_identify());
@@ -433,17 +418,15 @@ mod tests {
         let node_pk = [0xaa; 32];
 
         // Create two beacons (they might be in different epochs depending on timing)
-        let beacon1 = create_encrypted_beacon(&group_key, &node_pk)
-            .expect("First encryption should succeed");
+        let beacon1 =
+            create_encrypted_beacon(&group_key, &node_pk).expect("First encryption should succeed");
         let beacon2 = create_encrypted_beacon(&group_key, &node_pk)
             .expect("Second encryption should succeed");
 
         // Beacons might be identical if in same epoch, different if in different epoch
         // Both should decrypt successfully with the same key
-        let payload1 = decrypt_beacon(&group_key, &beacon1)
-            .expect("Should decrypt first beacon");
-        let payload2 = decrypt_beacon(&group_key, &beacon2)
-            .expect("Should decrypt second beacon");
+        let payload1 = decrypt_beacon(&group_key, &beacon1).expect("Should decrypt first beacon");
+        let payload2 = decrypt_beacon(&group_key, &beacon2).expect("Should decrypt second beacon");
 
         // Both should have valid payloads
         assert_eq!(payload1.flags, 0);

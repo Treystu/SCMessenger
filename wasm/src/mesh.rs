@@ -6,8 +6,8 @@
 
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
-use std::sync::Arc;
-use parking_lot::RwLock;
+use std::cell::RefCell;
+use std::rc::Rc;
 
 use crate::storage::{StoredMessage, WasmStorage, StorageConfig};
 use crate::transport::{WasmTransport, WasmTransportConfig, TransportState};
@@ -67,13 +67,13 @@ pub struct RelayStats {
 /// Full mesh participant node for WASM environments
 pub struct WasmMeshNode {
     config: MeshConfig,
-    state: Arc<RwLock<MeshNodeState>>,
+    state: Rc<RefCell<MeshNodeState>>,
     transport: Arc<WasmTransport>,
     storage: Arc<WasmStorage>,
-    peers: Arc<RwLock<HashMap<String, PeerInfo>>>,
-    relay_stats: Arc<RwLock<HashMap<String, RelayStats>>>,
-    message_queue: Arc<RwLock<VecDeque<StoredMessage>>>,
-    sync_in_progress: Arc<RwLock<bool>>,
+    peers: Rc<RefCell<HashMap<String, PeerInfo>>>,
+    relay_stats: Rc<RefCell<HashMap<String, RelayStats>>>,
+    message_queue: Rc<RefCell<VecDeque<StoredMessage>>>,
+    sync_in_progress: Rc<RefCell<bool>>,
 }
 
 impl WasmMeshNode {
@@ -104,19 +104,19 @@ impl WasmMeshNode {
 
         Self {
             config,
-            state: Arc::new(RwLock::new(MeshNodeState::Stopped)),
+            state: Rc::new(RefCell::new(MeshNodeState::Stopped)),
             transport: Arc::new(WasmTransport::new(transport_config)),
             storage: Arc::new(WasmStorage::new(storage_config)),
-            peers: Arc::new(RwLock::new(HashMap::new())),
-            relay_stats: Arc::new(RwLock::new(relay_stats)),
-            message_queue: Arc::new(RwLock::new(VecDeque::new())),
-            sync_in_progress: Arc::new(RwLock::new(false)),
+            peers: Rc::new(RefCell::new(HashMap::new())),
+            relay_stats: Rc::new(RefCell::new(relay_stats)),
+            message_queue: Rc::new(RefCell::new(VecDeque::new())),
+            sync_in_progress: Rc::new(RefCell::new(false)),
         }
     }
 
     /// Start the mesh node
     pub fn start(&self) -> Result<(), String> {
-        let mut state = self.state.write();
+        let mut state = self.state.borrow_mut();
         if *state != MeshNodeState::Stopped {
             return Err(format!("Cannot start from state {:?}", state));
         }
@@ -127,7 +127,7 @@ impl WasmMeshNode {
         // Initialize transport
         self.transport.start()?;
 
-        let mut state = self.state.write();
+        let mut state = self.state.borrow_mut();
         *state = MeshNodeState::Running;
 
         Ok(())
@@ -135,25 +135,25 @@ impl WasmMeshNode {
 
     /// Stop the mesh node gracefully
     pub fn stop(&self) {
-        let mut state = self.state.write();
+        let mut state = self.state.borrow_mut();
         *state = MeshNodeState::Stopping;
         drop(state);
 
         // Gracefully close all connections
         self.transport.stop();
 
-        let mut state = self.state.write();
+        let mut state = self.state.borrow_mut();
         *state = MeshNodeState::Stopped;
     }
 
     /// Get current node state
     pub fn state(&self) -> MeshNodeState {
-        *self.state.read()
+        *self.state.borrow()
     }
 
     /// Send a message to a recipient
     pub fn send_message(&self, recipient_hint: Option<String>, payload: Vec<u8>) -> Result<String, String> {
-        let state = self.state.read();
+        let state = self.state.borrow();
         if *state != MeshNodeState::Running && *state != MeshNodeState::Syncing {
             return Err(format!("Node not running: {:?}", state));
         }
@@ -173,7 +173,7 @@ impl WasmMeshNode {
         self.storage.store_message(message.clone())?;
 
         // Queue for transmission
-        self.message_queue.write().push_back(message);
+        self.message_queue.borrow_mut().push_back(message);
 
         Ok(message_id)
     }
@@ -185,14 +185,14 @@ impl WasmMeshNode {
 
     /// Synchronize with relay servers
     pub fn sync_with_relay(&self) -> Result<(), String> {
-        let mut sync_in_progress = self.sync_in_progress.write();
+        let mut sync_in_progress = self.sync_in_progress.borrow_mut();
         if *sync_in_progress {
             return Err("Sync already in progress".to_string());
         }
         *sync_in_progress = true;
         drop(sync_in_progress);
 
-        let mut state = self.state.write();
+        let mut state = self.state.borrow_mut();
         let was_running = *state == MeshNodeState::Running;
         if was_running {
             *state = MeshNodeState::Syncing;
@@ -202,11 +202,11 @@ impl WasmMeshNode {
         let result = self.perform_sync();
 
         if was_running {
-            let mut state = self.state.write();
+            let mut state = self.state.borrow_mut();
             *state = MeshNodeState::Running;
         }
 
-        let mut sync_in_progress = self.sync_in_progress.write();
+        let mut sync_in_progress = self.sync_in_progress.borrow_mut();
         *sync_in_progress = false;
 
         result
@@ -233,7 +233,7 @@ impl WasmMeshNode {
 
     fn push_to_relay(&self) -> Result<(), String> {
         let messages = {
-            let mut queue = self.message_queue.write();
+            let mut queue = self.message_queue.borrow_mut();
             let mut to_send = Vec::new();
             while let Some(msg) = queue.pop_front() {
                 to_send.push(msg);
@@ -249,7 +249,7 @@ impl WasmMeshNode {
     }
 
     fn update_relay_stats(&self) {
-        let mut stats = self.relay_stats.write();
+        let mut stats = self.relay_stats.borrow_mut();
         let now = web_time::SystemTime::now()
             .duration_since(web_time::UNIX_EPOCH)
             .map(|d| d.as_secs())
@@ -267,7 +267,7 @@ impl WasmMeshNode {
 
     /// Get peer information
     pub fn get_peers(&self) -> Vec<PeerInfo> {
-        self.peers.read().values().cloned().collect()
+        self.peers.borrow().values().cloned().collect()
     }
 
     /// Register a new peer connection
@@ -286,19 +286,19 @@ impl WasmMeshNode {
             messages_received: 0,
         };
 
-        self.peers.write().insert(peer_id, peer_info);
+        self.peers.borrow_mut().insert(peer_id, peer_info);
         Ok(())
     }
 
     /// Unregister a peer connection
     pub fn unregister_peer(&self, peer_id: &str) {
         self.transport.remove_peer(peer_id);
-        self.peers.write().remove(peer_id);
+        self.peers.borrow_mut().remove(peer_id);
     }
 
     /// Get relay statistics
     pub fn get_relay_stats(&self) -> Vec<RelayStats> {
-        self.relay_stats.read().values().cloned().collect()
+        self.relay_stats.borrow().values().cloned().collect()
     }
 
     /// Get node configuration
@@ -313,7 +313,7 @@ impl WasmMeshNode {
 
     /// Get message queue length
     pub fn message_queue_len(&self) -> usize {
-        self.message_queue.read().len()
+        self.message_queue.borrow().len()
     }
 
     /// Get stored message count
@@ -324,8 +324,8 @@ impl WasmMeshNode {
     /// Export all state (for debugging/persistence)
     pub fn export_state(&self) -> Result<String, String> {
         let storage_json = self.storage.export_state()?;
-        let peers = self.peers.read();
-        let stats = self.relay_stats.read();
+        let peers = self.peers.borrow();
+        let stats = self.relay_stats.borrow();
 
         let export = serde_json::json!({
             "node_id": self.config.node_id,
@@ -342,7 +342,7 @@ impl WasmMeshNode {
     }
 }
 
-// NOTE: We can't derive Clone because Arc<RwLock<>> with non-Clone types makes Clone impossible
+// NOTE: We can't derive Clone because Rc<RefCell<>> with non-Clone types makes Clone impossible
 impl std::fmt::Debug for WasmMeshNode {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("WasmMeshNode")
@@ -455,7 +455,7 @@ mod tests {
         let node = WasmMeshNode::new(config);
         node.start().unwrap();
 
-        let sync_guard = node.sync_in_progress.write();
+        let sync_guard = node.sync_in_progress.borrow_mut();
         *sync_guard.clone() = true;
         drop(sync_guard);
 

@@ -6,6 +6,7 @@ pub mod bootstrap;
 pub mod capability;
 pub mod circuit_breaker;
 pub mod diagnostics;
+pub mod discovery;
 pub mod health;
 pub mod internet;
 pub mod manager;
@@ -21,7 +22,6 @@ pub mod routing;
 pub mod swarm;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod websocket;
-pub mod discovery;
 
 pub use behaviour::{
     DeregistrationPayload, DeregistrationRequest, IronCoreBehaviour, LedgerExchangeRequest,
@@ -37,6 +37,7 @@ pub use circuit_breaker::{
 pub use diagnostics::{
     get_network_diagnostics_report, NetworkDiagnosticsReport, PeerConnectionSummary,
 };
+pub use discovery::{DiscoveryConfig, DiscoveryMode};
 pub use health::{
     ConnectionState, ConnectionStats, GlobalTransportMetrics, TransportHealthMonitor,
 };
@@ -54,6 +55,7 @@ pub use reflection::{
 };
 pub use relay_health::{RelayDiscovery, RelayFallback, RelayMetrics};
 pub use reputation::{AbuseReputationManager, AbuseSignal, PeerAbuseStats, ReputationScore};
+pub use routing::EnhancedReputationScore;
 pub use routing::{
     adaptive_ttl::{ActivityHistory, AdaptiveTTLManager},
     engine::{
@@ -70,8 +72,6 @@ pub use routing::{
     smart_retry::{calculate_next_attempt, BackoffStrategy, DeliveryTrigger},
     timeout_budget::{BudgetSummary, DiscoveryPhase, TimeoutBudget},
 };
-pub use routing::EnhancedReputationScore;
-pub use discovery::{DiscoveryConfig, DiscoveryMode};
 pub use swarm::{
     start_swarm, start_swarm_with_config, SwarmCommand, SwarmEvent2 as SwarmEvent, SwarmHandle,
 };

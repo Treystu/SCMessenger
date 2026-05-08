@@ -210,8 +210,8 @@ impl ContactList {
 fn current_timestamp() -> u64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
-        .as_secs()
+        .map(|d| d.as_secs())
+        .unwrap_or(0) // Fallback to 0 if system clock is before Unix epoch
 }
 
 #[cfg(test)]

@@ -1355,7 +1355,10 @@ impl SwarmHandle {
     pub async fn list_endpoints(&self, peer_id: PeerId) -> Result<Vec<Multiaddr>> {
         let (reply_tx, mut reply_rx) = mpsc::channel(1);
         self.command_tx
-            .send(SwarmCommand::ListEndpoints { peer_id, reply: reply_tx })
+            .send(SwarmCommand::ListEndpoints {
+                peer_id,
+                reply: reply_tx,
+            })
             .await
             .map_err(|_| anyhow::anyhow!("Swarm task not running"))?;
 
@@ -1370,7 +1373,11 @@ impl SwarmHandle {
     pub async fn register_endpoint(&self, peer_id: PeerId, addr: Multiaddr) -> Result<()> {
         let (reply_tx, mut reply_rx) = mpsc::channel(1);
         self.command_tx
-            .send(SwarmCommand::RegisterEndpoint { peer_id, addr, reply: reply_tx })
+            .send(SwarmCommand::RegisterEndpoint {
+                peer_id,
+                addr,
+                reply: reply_tx,
+            })
             .await
             .map_err(|_| anyhow::anyhow!("Swarm task not running"))?;
 
@@ -1386,7 +1393,11 @@ impl SwarmHandle {
     pub async fn touch_endpoint(&self, peer_id: PeerId, addr: Multiaddr) -> Result<()> {
         let (reply_tx, mut reply_rx) = mpsc::channel(1);
         self.command_tx
-            .send(SwarmCommand::TouchEndpoint { peer_id, addr, reply: reply_tx })
+            .send(SwarmCommand::TouchEndpoint {
+                peer_id,
+                addr,
+                reply: reply_tx,
+            })
             .await
             .map_err(|_| anyhow::anyhow!("Swarm task not running"))?;
 
@@ -1402,7 +1413,11 @@ impl SwarmHandle {
     pub async fn unregister_endpoint(&self, peer_id: PeerId, addr: Multiaddr) -> Result<()> {
         let (reply_tx, mut reply_rx) = mpsc::channel(1);
         self.command_tx
-            .send(SwarmCommand::UnregisterEndpoint { peer_id, addr, reply: reply_tx })
+            .send(SwarmCommand::UnregisterEndpoint {
+                peer_id,
+                addr,
+                reply: reply_tx,
+            })
             .await
             .map_err(|_| anyhow::anyhow!("Swarm task not running"))?;
 
@@ -1418,7 +1433,11 @@ impl SwarmHandle {
     pub async fn update_keepalive(&self, peer_id: PeerId, interval_secs: u64) -> Result<()> {
         let (reply_tx, mut reply_rx) = mpsc::channel(1);
         self.command_tx
-            .send(SwarmCommand::UpdateKeepalive { peer_id, interval_secs, reply: reply_tx })
+            .send(SwarmCommand::UpdateKeepalive {
+                peer_id,
+                interval_secs,
+                reply: reply_tx,
+            })
             .await
             .map_err(|_| anyhow::anyhow!("Swarm task not running"))?;
 
@@ -4651,10 +4670,7 @@ pub async fn start_swarm_with_config(
 #[cfg(not(target_arch = "wasm32"))]
 use futures::StreamExt;
 use libp2p::identify;
-#[cfg(all(
-    not(target_arch = "wasm32"),
-    not(target_os = "android")
-))]
+#[cfg(all(not(target_arch = "wasm32"), not(target_os = "android")))]
 use libp2p::mdns;
 use libp2p::{gossipsub, request_response};
 

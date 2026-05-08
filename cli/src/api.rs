@@ -4,12 +4,17 @@
 // Other CLI commands can send requests to this API instead of accessing the database directly
 
 use anyhow::{Context, Result};
-use hyper::service::{make_service_fn, service_fn};
-use hyper::{Body, Method, Request, Response, Server, StatusCode};
+use axum::{
+    extract::{Json as AxumJson, State},
+    http::{Method, StatusCode},
+    response::{IntoResponse, Response as AxumResponse},
+    routing::{get, post},
+    Router,
+};
 use serde::{Deserialize, Serialize};
-use std::convert::Infallible;
 use std::net::SocketAddr;
 use std::sync::Arc;
+use tower_http::cors::{Any, CorsLayer};
 
 pub const API_PORT: u16 = 9876;
 pub const API_ADDR: &str = "127.0.0.1:9876";
@@ -117,21 +122,27 @@ pub async fn is_api_available() -> bool {
 // Client functions for CLI commands
 
 pub async fn send_message_via_api(recipient: &str, message: &str) -> Result<()> {
-    let client = hyper::Client::new();
+    use http_body_util::{BodyExt, Empty, Full};
+    use hyper::body::Bytes;
+    use hyper_util::client::legacy::Client;
+    use hyper_util::rt::TokioExecutor;
+
+    let client = Client::builder(TokioExecutor::new()).build_http();
+
     let req_body = SendMessageRequest {
         recipient: recipient.to_string(),
         message: message.to_string(),
     };
 
     let json = serde_json::to_string(&req_body)?;
-    let req = Request::builder()
+    let req = hyper::Request::builder()
         .method(Method::POST)
         .uri(format!("http://{}/api/send", API_ADDR))
         .header("content-type", "application/json")
-        .body(Body::from(json))?;
+        .body(Full::new(Bytes::from(json)))?;
 
     let resp = client.request(req).await?;
-    let body_bytes = hyper::body::to_bytes(resp.into_body()).await?;
+    let body_bytes = resp.into_body().collect().await?.to_bytes();
     let response: SendMessageResponse = serde_json::from_slice(&body_bytes)?;
 
     if response.success {
@@ -151,7 +162,13 @@ pub async fn add_contact_via_api(
     public_key: &str,
     name: Option<String>,
 ) -> Result<()> {
-    let client = hyper::Client::new();
+    use http_body_util::{BodyExt, Full};
+    use hyper::body::Bytes;
+    use hyper_util::client::legacy::Client;
+    use hyper_util::rt::TokioExecutor;
+
+    let client = Client::builder(TokioExecutor::new()).build_http();
+
     let req_body = AddContactRequest {
         peer_id: peer_id.to_string(),
         public_key: public_key.to_string(),
@@ -159,14 +176,14 @@ pub async fn add_contact_via_api(
     };
 
     let json = serde_json::to_string(&req_body)?;
-    let req = Request::builder()
+    let req = hyper::Request::builder()
         .method(Method::POST)
         .uri(format!("http://{}/api/contacts", API_ADDR))
         .header("content-type", "application/json")
-        .body(Body::from(json))?;
+        .body(Full::new(Bytes::from(json)))?;
 
     let resp = client.request(req).await?;
-    let body_bytes = hyper::body::to_bytes(resp.into_body()).await?;
+    let body_bytes = resp.into_body().collect().await?.to_bytes();
     let response: AddContactResponse = serde_json::from_slice(&body_bytes)?;
 
     if response.success {
@@ -183,14 +200,20 @@ pub async fn add_contact_via_api(
 
 #[allow(dead_code)]
 pub async fn get_peers_via_api() -> Result<Vec<PeerEntry>> {
-    let client = hyper::Client::new();
-    let req = Request::builder()
+    use http_body_util::{BodyExt, Empty};
+    use hyper::body::Bytes;
+    use hyper_util::client::legacy::Client;
+    use hyper_util::rt::TokioExecutor;
+
+    let client = Client::builder(TokioExecutor::new()).build_http();
+
+    let req = hyper::Request::builder()
         .method(Method::GET)
         .uri(format!("http://{}/api/peers", API_ADDR))
-        .body(Body::empty())?;
+        .body(Empty::<Bytes>::new())?;
 
     let resp = client.request(req).await?;
-    let body_bytes = hyper::body::to_bytes(resp.into_body()).await?;
+    let body_bytes = resp.into_body().collect().await?.to_bytes();
     let response: GetPeersResponse = serde_json::from_slice(&body_bytes)?;
 
     Ok(response.peers)
@@ -201,18 +224,24 @@ pub async fn get_history_via_api(
     peer_id: Option<String>,
     limit: Option<usize>,
 ) -> Result<Vec<HistoryMessage>> {
-    let client = hyper::Client::new();
+    use http_body_util::{BodyExt, Full};
+    use hyper::body::Bytes;
+    use hyper_util::client::legacy::Client;
+    use hyper_util::rt::TokioExecutor;
+
+    let client = Client::builder(TokioExecutor::new()).build_http();
+
     let req_body = GetHistoryRequest { peer_id, limit };
 
     let json = serde_json::to_string(&req_body)?;
-    let req = Request::builder()
+    let req = hyper::Request::builder()
         .method(Method::POST)
         .uri(format!("http://{}/api/history", API_ADDR))
         .header("content-type", "application/json")
-        .body(Body::from(json))?;
+        .body(Full::new(Bytes::from(json)))?;
 
     let resp = client.request(req).await?;
-    let body_bytes = hyper::body::to_bytes(resp.into_body()).await?;
+    let body_bytes = resp.into_body().collect().await?.to_bytes();
     let response: GetHistoryResponse = serde_json::from_slice(&body_bytes)?;
 
     Ok(response.messages)
@@ -220,17 +249,23 @@ pub async fn get_history_via_api(
 
 #[allow(dead_code)]
 pub async fn get_external_address_via_api() -> Result<Vec<String>> {
-    let client = hyper::Client::new();
-    let req = Request::builder()
+    use http_body_util::{BodyExt, Empty};
+    use hyper::body::Bytes;
+    use hyper_util::client::legacy::Client;
+    use hyper_util::rt::TokioExecutor;
+
+    let client = Client::builder(TokioExecutor::new()).build_http();
+
+    let req = hyper::Request::builder()
         .method(Method::GET)
         .uri(format!("http://{}/api/external-address", API_ADDR))
-        .body(Body::empty())?;
+        .body(Empty::<Bytes>::new())?;
 
     let resp = client.request(req).await?;
 
     // Check HTTP status before attempting to parse
     let status = resp.status();
-    let body_bytes = hyper::body::to_bytes(resp.into_body()).await?;
+    let body_bytes = resp.into_body().collect().await?.to_bytes();
 
     if !status.is_success() {
         let error_body = String::from_utf8_lossy(&body_bytes);
@@ -244,62 +279,92 @@ pub async fn get_external_address_via_api() -> Result<Vec<String>> {
 }
 
 pub async fn get_listeners_via_api() -> Result<Vec<String>> {
-    let client = hyper::Client::new();
-    let req = Request::builder()
+    use http_body_util::{BodyExt, Empty};
+    use hyper::body::Bytes;
+    use hyper_util::client::legacy::Client;
+    use hyper_util::rt::TokioExecutor;
+
+    let client = Client::builder(TokioExecutor::new()).build_http();
+
+    let req = hyper::Request::builder()
         .method(Method::GET)
         .uri(format!("http://{}/api/listeners", API_ADDR))
-        .body(Body::empty())?;
+        .body(Empty::<Bytes>::new())?;
 
     let resp = client.request(req).await?;
-    let body_bytes = hyper::body::to_bytes(resp.into_body()).await?;
+    let body_bytes = resp.into_body().collect().await?.to_bytes();
     let response: GetListenersResponse = serde_json::from_slice(&body_bytes)?;
     Ok(response.listeners)
 }
 
 pub async fn get_connection_path_state_via_api() -> Result<String> {
-    let client = hyper::Client::new();
-    let req = Request::builder()
+    use http_body_util::{BodyExt, Empty};
+    use hyper::body::Bytes;
+    use hyper_util::client::legacy::Client;
+    use hyper_util::rt::TokioExecutor;
+
+    let client = Client::builder(TokioExecutor::new()).build_http();
+
+    let req = hyper::Request::builder()
         .method(Method::GET)
         .uri(format!("http://{}/api/connection-path-state", API_ADDR))
-        .body(Body::empty())?;
+        .body(Empty::<Bytes>::new())?;
 
     let resp = client.request(req).await?;
-    let body_bytes = hyper::body::to_bytes(resp.into_body()).await?;
+    let body_bytes = resp.into_body().collect().await?.to_bytes();
     let response: ConnectionPathStateResponse = serde_json::from_slice(&body_bytes)?;
     Ok(response.state)
 }
 pub async fn get_drift_state_via_api() -> Result<DriftStatusResponse> {
-    let client = hyper::Client::new();
-    let req = Request::builder()
+    use http_body_util::{BodyExt, Empty};
+    use hyper::body::Bytes;
+    use hyper_util::client::legacy::Client;
+    use hyper_util::rt::TokioExecutor;
+
+    let client = Client::builder(TokioExecutor::new()).build_http();
+
+    let req = hyper::Request::builder()
         .method(Method::GET)
         .uri(format!("http://{}/api/drift-status", API_ADDR))
-        .body(Body::empty())?;
+        .body(Empty::<Bytes>::new())?;
 
     let resp = client.request(req).await?;
-    let body_bytes = hyper::body::to_bytes(resp.into_body()).await?;
+    let body_bytes = resp.into_body().collect().await?.to_bytes();
     let response: DriftStatusResponse = serde_json::from_slice(&body_bytes)?;
     Ok(response)
 }
 
 pub async fn get_discovery_status() -> Result<DiscoveryStatusResponse> {
-    let client = hyper::Client::new();
-    let req = Request::builder()
+    use http_body_util::{BodyExt, Empty};
+    use hyper::body::Bytes;
+    use hyper_util::client::legacy::Client;
+    use hyper_util::rt::TokioExecutor;
+
+    let client = Client::builder(TokioExecutor::new()).build_http();
+
+    let req = hyper::Request::builder()
         .method(Method::GET)
         .uri(format!("http://{}/api/discovery/status", API_ADDR))
-        .body(Body::empty())?;
+        .body(Empty::<Bytes>::new())?;
 
     let resp = client.request(req).await?;
-    let body_bytes = hyper::body::to_bytes(resp.into_body()).await?;
+    let body_bytes = resp.into_body().collect().await?.to_bytes();
     let response: DiscoveryStatusResponse = serde_json::from_slice(&body_bytes)?;
     Ok(response)
 }
 
 pub async fn trigger_discovery_scan() -> Result<()> {
-    let client = hyper::Client::new();
-    let req = Request::builder()
+    use http_body_util::{BodyExt, Empty};
+    use hyper::body::Bytes;
+    use hyper_util::client::legacy::Client;
+    use hyper_util::rt::TokioExecutor;
+
+    let client = Client::builder(TokioExecutor::new()).build_http();
+
+    let req = hyper::Request::builder()
         .method(Method::POST)
         .uri(format!("http://{}/api/discovery/scan", API_ADDR))
-        .body(Body::empty())?;
+        .body(Empty::<Bytes>::new())?;
 
     let resp = client.request(req).await?;
     if !resp.status().is_success() {
@@ -309,140 +374,121 @@ pub async fn trigger_discovery_scan() -> Result<()> {
 }
 
 pub async fn get_discovery_peers() -> Result<Vec<DiscoveredPeer>> {
-    let client = hyper::Client::new();
-    let req = Request::builder()
+    use http_body_util::{BodyExt, Empty};
+    use hyper::body::Bytes;
+    use hyper_util::client::legacy::Client;
+    use hyper_util::rt::TokioExecutor;
+
+    let client = Client::builder(TokioExecutor::new()).build_http();
+
+    let req = hyper::Request::builder()
         .method(Method::GET)
         .uri(format!("http://{}/api/discovery/peers", API_ADDR))
-        .body(Body::empty())?;
+        .body(Empty::<Bytes>::new())?;
 
     let resp = client.request(req).await?;
-    let body_bytes = hyper::body::to_bytes(resp.into_body()).await?;
+    let body_bytes = resp.into_body().collect().await?.to_bytes();
     let response: DiscoveryPeersResponse = serde_json::from_slice(&body_bytes)?;
     Ok(response.peers)
 }
 
 pub async fn export_diagnostics_via_api() -> Result<String> {
-    let client = hyper::Client::new();
-    let req = Request::builder()
+    use http_body_util::{BodyExt, Empty};
+    use hyper::body::Bytes;
+    use hyper_util::client::legacy::Client;
+    use hyper_util::rt::TokioExecutor;
+
+    let client = Client::builder(TokioExecutor::new()).build_http();
+
+    let req = hyper::Request::builder()
         .method(Method::GET)
         .uri(format!("http://{}/api/diagnostics", API_ADDR))
-        .body(Body::empty())?;
+        .body(Empty::<Bytes>::new())?;
 
     let resp = client.request(req).await?;
-    let body_bytes = hyper::body::to_bytes(resp.into_body()).await?;
+    let body_bytes = resp.into_body().collect().await?.to_bytes();
     String::from_utf8(body_bytes.to_vec()).context("Diagnostics response was not UTF-8")
 }
 
 // Server implementation
 
+#[derive(Clone)]
 pub struct ApiContext {
     pub core: Arc<scmessenger_core::IronCore>,
     pub swarm_handle: Arc<scmessenger_core::transport::SwarmHandle>,
 }
 
 pub async fn stop_node_via_api() -> Result<()> {
-    let client = hyper::Client::new();
-    let req = Request::builder()
+    use http_body_util::{BodyExt, Empty};
+    use hyper::body::Bytes;
+    use hyper_util::client::legacy::Client;
+    use hyper_util::rt::TokioExecutor;
+
+    let client = Client::builder(TokioExecutor::new()).build_http();
+
+    let req = hyper::Request::builder()
         .method(Method::POST)
         .uri(format!("http://{}/api/shutdown", API_ADDR))
-        .body(Body::empty())?;
+        .body(Empty::<Bytes>::new())?;
 
     let _res = client.request(req).await?;
     Ok(())
 }
 
-async fn handle_request(
-    req: Request<Body>,
-    ctx: Arc<ApiContext>,
-) -> Result<Response<Body>, Infallible> {
-    let response = match (req.method(), req.uri().path()) {
-        (&Method::POST, "/api/send") => handle_send_message(req, ctx).await,
-        (&Method::POST, "/api/contacts") => handle_add_contact(req, ctx).await,
-        (&Method::GET, "/api/peers") => handle_get_peers(req, ctx).await,
-        (&Method::GET, "/api/listeners") => handle_get_listeners(req, ctx).await,
-        (&Method::POST, "/api/history") => handle_get_history(req, ctx).await,
-        (&Method::GET, "/api/external-address") => handle_get_external_address(req, ctx).await,
-        (&Method::GET, "/api/connection-path-state") => {
-            handle_get_connection_path_state(req, ctx).await
-        }
-        (&Method::GET, "/api/diagnostics") => handle_export_diagnostics(req, ctx).await,
-        (&Method::GET, "/api/drift-status") => handle_get_drift_status(req, ctx).await,
-        (&Method::GET, "/api/discovery/status") => handle_get_discovery_status(req, ctx).await,
-        (&Method::POST, "/api/discovery/scan") => handle_trigger_discovery_scan(req, ctx).await,
-        (&Method::GET, "/api/discovery/peers") => handle_get_discovery_peers(req, ctx).await,
-        (&Method::POST, "/api/shutdown") => {
-            // Spawn a task to exit after a brief delay to allow response to send
-            tokio::spawn(async {
-                tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
-                std::process::exit(0);
-            });
-            Ok(Response::builder()
-                .status(StatusCode::OK)
-                .body(Body::from("Stopping..."))
-                .unwrap())
-        }
-        _ => Ok(Response::builder()
-            .status(StatusCode::NOT_FOUND)
-            .body(Body::from("Not found"))
-            .unwrap()),
-    };
+// Axum handler functions
 
-    Ok(response.unwrap_or_else(|e| {
-        Response::builder()
-            .status(StatusCode::INTERNAL_SERVER_ERROR)
-            .body(Body::from(format!("Error: {}", e)))
-            .unwrap()
-    }))
-}
-
-async fn handle_send_message(req: Request<Body>, ctx: Arc<ApiContext>) -> Result<Response<Body>> {
-    let body_bytes = hyper::body::to_bytes(req.into_body()).await?;
-    let request: SendMessageRequest = serde_json::from_slice(&body_bytes)?;
-
-    // Core handle
+async fn handle_send_message(
+    State(ctx): State<Arc<ApiContext>>,
+    AxumJson(request): AxumJson<SendMessageRequest>,
+) -> Result<AxumJson<SendMessageResponse>, (StatusCode, String)> {
     let core = &ctx.core;
     let contacts = core.contacts_store_manager();
 
-    // Find contact
-    // Note: find_contact needs the contact list, but it's a CLI-specific helper.
-    // We'll update it or do a manual lookup.
     let list = contacts.list().unwrap_or_default();
     let contact = list
         .into_iter()
         .find(|c| c.peer_id == request.recipient || c.nickname.as_ref() == Some(&request.recipient))
-        .ok_or_else(|| anyhow::anyhow!("Contact not found"))?;
+        .ok_or_else(|| (StatusCode::NOT_FOUND, "Contact not found".to_string()))?;
 
-    // Parse peer ID
-    let peer_id = contact.peer_id.parse::<libp2p::PeerId>()?;
+    let peer_id = contact
+        .peer_id
+        .parse::<libp2p::PeerId>()
+        .map_err(|e| (StatusCode::BAD_REQUEST, format!("Invalid peer ID: {}", e)))?;
 
-    // Prepare and send message.
-    // Uses prepare_message_with_id to trigger Core's auto-save to history.
-    let prepared = core.prepare_message_with_id(
-        contact.public_key.clone(),
-        request.message.clone(),
-        scmessenger_core::MessageType::Text,
-        None,
-    )?;
+    let prepared = core
+        .prepare_message_with_id(
+            contact.public_key.clone(),
+            request.message.clone(),
+            scmessenger_core::MessageType::Text,
+            None,
+        )
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Failed to prepare message: {:?}", e),
+            )
+        })?;
 
     ctx.swarm_handle
         .send_message(peer_id, prepared.envelope_data, None, None)
-        .await?;
+        .await
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Failed to send message: {:?}", e),
+            )
+        })?;
 
-    let response = SendMessageResponse {
+    Ok(AxumJson(SendMessageResponse {
         success: true,
         error: None,
-    };
-
-    Ok(Response::builder()
-        .status(StatusCode::OK)
-        .header("content-type", "application/json")
-        .body(Body::from(serde_json::to_string(&response)?))?)
+    }))
 }
 
-async fn handle_add_contact(req: Request<Body>, ctx: Arc<ApiContext>) -> Result<Response<Body>> {
-    let body_bytes = hyper::body::to_bytes(req.into_body()).await?;
-    let request: AddContactRequest = serde_json::from_slice(&body_bytes)?;
-
+async fn handle_add_contact(
+    State(ctx): State<Arc<ApiContext>>,
+    AxumJson(request): AxumJson<AddContactRequest>,
+) -> Result<AxumJson<AddContactResponse>, (StatusCode, String)> {
     let contacts = ctx.core.contacts_store_manager();
 
     let mut contact =
@@ -451,22 +497,22 @@ async fn handle_add_contact(req: Request<Body>, ctx: Arc<ApiContext>) -> Result<
         contact.nickname = Some(name);
     }
 
-    contacts
-        .add(contact)
-        .map_err(|e| anyhow::anyhow!("{:?}", e))?;
+    contacts.add(contact).map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Failed to add contact: {:?}", e),
+        )
+    })?;
 
-    let response = AddContactResponse {
+    Ok(AxumJson(AddContactResponse {
         success: true,
         error: None,
-    };
-
-    Ok(Response::builder()
-        .status(StatusCode::OK)
-        .header("content-type", "application/json")
-        .body(Body::from(serde_json::to_string(&response)?))?)
+    }))
 }
 
-async fn handle_get_peers(_req: Request<Body>, ctx: Arc<ApiContext>) -> Result<Response<Body>> {
+async fn handle_get_peers(
+    State(ctx): State<Arc<ApiContext>>,
+) -> Result<AxumJson<GetPeersResponse>, (StatusCode, String)> {
     let peers: Vec<PeerEntry> = ctx
         .swarm_handle
         .get_peers()
@@ -483,15 +529,12 @@ async fn handle_get_peers(_req: Request<Body>, ctx: Arc<ApiContext>) -> Result<R
         })
         .collect();
 
-    let response = GetPeersResponse { peers };
-
-    Ok(Response::builder()
-        .status(StatusCode::OK)
-        .header("content-type", "application/json")
-        .body(Body::from(serde_json::to_string(&response)?))?)
+    Ok(AxumJson(GetPeersResponse { peers }))
 }
 
-async fn handle_get_listeners(_req: Request<Body>, ctx: Arc<ApiContext>) -> Result<Response<Body>> {
+async fn handle_get_listeners(
+    State(ctx): State<Arc<ApiContext>>,
+) -> Result<AxumJson<GetListenersResponse>, (StatusCode, String)> {
     let listeners = ctx
         .swarm_handle
         .get_listeners()
@@ -501,27 +544,33 @@ async fn handle_get_listeners(_req: Request<Body>, ctx: Arc<ApiContext>) -> Resu
         .map(|addr| addr.to_string())
         .collect();
 
-    let response = GetListenersResponse { listeners };
-    Ok(Response::builder()
-        .status(StatusCode::OK)
-        .header("content-type", "application/json")
-        .body(Body::from(serde_json::to_string(&response)?))?)
+    Ok(AxumJson(GetListenersResponse { listeners }))
 }
 
-async fn handle_get_history(req: Request<Body>, ctx: Arc<ApiContext>) -> Result<Response<Body>> {
-    let body_bytes = hyper::body::to_bytes(req.into_body()).await?;
-    let request: GetHistoryRequest = serde_json::from_slice(&body_bytes)?;
-
+async fn handle_get_history(
+    State(ctx): State<Arc<ApiContext>>,
+    AxumJson(request): AxumJson<GetHistoryRequest>,
+) -> Result<AxumJson<GetHistoryResponse>, (StatusCode, String)> {
     let history = ctx.core.history_store_manager();
 
     let messages = if let Some(peer_id) = request.peer_id {
         history
             .conversation(peer_id, request.limit.unwrap_or(20) as u32)
-            .map_err(|e| anyhow::anyhow!("{:?}", e))?
+            .map_err(|e| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("Failed to get history: {:?}", e),
+                )
+            })?
     } else {
         history
             .recent(None, request.limit.unwrap_or(20) as u32)
-            .map_err(|e| anyhow::anyhow!("{:?}", e))?
+            .map_err(|e| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("Failed to get history: {:?}", e),
+                )
+            })?
     };
 
     let history_messages: Vec<HistoryMessage> = messages
@@ -537,40 +586,28 @@ async fn handle_get_history(req: Request<Body>, ctx: Arc<ApiContext>) -> Result<
         })
         .collect();
 
-    let response = GetHistoryResponse {
+    Ok(AxumJson(GetHistoryResponse {
         messages: history_messages,
-    };
-
-    Ok(Response::builder()
-        .status(StatusCode::OK)
-        .header("content-type", "application/json")
-        .body(Body::from(serde_json::to_string(&response)?))?)
+    }))
 }
 
 async fn handle_get_external_address(
-    _req: Request<Body>,
-    ctx: Arc<ApiContext>,
-) -> Result<Response<Body>> {
-    // Get external addresses from swarm
-    let addresses = match ctx.swarm_handle.get_external_addresses().await {
-        Ok(addresses) => addresses,
-        Err(e) => {
-            let body = format!("Failed to get external addresses: {}", e);
-            return Ok(Response::builder()
-                .status(StatusCode::INTERNAL_SERVER_ERROR)
-                .header("content-type", "text/plain; charset=utf-8")
-                .body(Body::from(body))?);
-        }
-    };
+    State(ctx): State<Arc<ApiContext>>,
+) -> Result<AxumJson<GetExternalAddressResponse>, (StatusCode, String)> {
+    let addresses = ctx
+        .swarm_handle
+        .get_external_addresses()
+        .await
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Failed to get external addresses: {}", e),
+            )
+        })?;
 
-    let response = GetExternalAddressResponse {
+    Ok(AxumJson(GetExternalAddressResponse {
         addresses: addresses.into_iter().map(|addr| addr.to_string()).collect(),
-    };
-
-    Ok(Response::builder()
-        .status(StatusCode::OK)
-        .header("content-type", "application/json")
-        .body(Body::from(serde_json::to_string(&response)?))?)
+    }))
 }
 
 fn get_connection_path_state(
@@ -624,9 +661,8 @@ fn export_diagnostics(
 }
 
 async fn handle_get_connection_path_state(
-    _req: Request<Body>,
-    ctx: Arc<ApiContext>,
-) -> Result<Response<Body>> {
+    State(ctx): State<Arc<ApiContext>>,
+) -> Result<AxumJson<ConnectionPathStateResponse>, (StatusCode, String)> {
     let peers: Vec<String> = ctx
         .swarm_handle
         .get_peers()
@@ -652,20 +688,14 @@ async fn handle_get_connection_path_state(
         .map(|p| p.to_string())
         .collect();
 
-    let response = ConnectionPathStateResponse {
+    Ok(AxumJson(ConnectionPathStateResponse {
         state: get_connection_path_state(&peers, &listeners, &external_addrs),
-    };
-
-    Ok(Response::builder()
-        .status(StatusCode::OK)
-        .header("content-type", "application/json")
-        .body(Body::from(serde_json::to_string(&response)?))?)
+    }))
 }
 
 async fn handle_export_diagnostics(
-    _req: Request<Body>,
-    ctx: Arc<ApiContext>,
-) -> Result<Response<Body>> {
+    State(ctx): State<Arc<ApiContext>>,
+) -> Result<String, (StatusCode, String)> {
     let peers: Vec<String> = ctx
         .swarm_handle
         .get_peers()
@@ -699,67 +729,37 @@ async fn handle_export_diagnostics(
         &ctx.core,
     );
 
-    Ok(Response::builder()
-        .status(StatusCode::OK)
-        .header("content-type", "application/json")
-        .body(Body::from(diagnostics))?)
+    Ok(diagnostics)
 }
 
 async fn handle_get_drift_status(
-    _req: Request<Body>,
-    ctx: Arc<ApiContext>,
-) -> Result<Response<Body>> {
-    let response = DriftStatusResponse {
+    State(ctx): State<Arc<ApiContext>>,
+) -> Result<AxumJson<DriftStatusResponse>, (StatusCode, String)> {
+    Ok(AxumJson(DriftStatusResponse {
         state: ctx.core.drift_network_state(),
         store_size: ctx.core.drift_store_size(),
-    };
-
-    Ok(Response::builder()
-        .status(StatusCode::OK)
-        .header("content-type", "application/json")
-        .body(Body::from(serde_json::to_string(&response)?))?)
+    }))
 }
 
 async fn handle_get_discovery_status(
-    _req: Request<Body>,
-    _ctx: Arc<ApiContext>,
-) -> Result<Response<Body>> {
-    // Discovery status is driven by Config.
-    // In a real implementation, we might check runtime state in TransportManager.
+) -> Result<AxumJson<DiscoveryStatusResponse>, (StatusCode, String)> {
     let cfg = crate::config::Config::load().unwrap_or_default();
-    let response = DiscoveryStatusResponse {
+    Ok(AxumJson(DiscoveryStatusResponse {
         mdns_enabled: cfg.enable_mdns,
         ble_enabled: cfg.enable_ble,
         wifi_aware_enabled: cfg.enable_wifi_aware,
-    };
-
-    Ok(Response::builder()
-        .status(StatusCode::OK)
-        .header("content-type", "application/json")
-        .body(Body::from(serde_json::to_string(&response)?))?)
+    }))
 }
 
-async fn handle_trigger_discovery_scan(
-    _req: Request<Body>,
-    _ctx: Arc<ApiContext>,
-) -> Result<Response<Body>> {
-    // For now, this is a placeholder as scanning is usually background/continuous
-    // or triggered via specific transport commands.
-    Ok(Response::builder()
-        .status(StatusCode::OK)
-        .body(Body::from("Scan triggered"))?)
+async fn handle_trigger_discovery_scan() -> Result<String, (StatusCode, String)> {
+    Ok("Scan triggered".to_string())
 }
 
 async fn handle_get_discovery_peers(
-    _req: Request<Body>,
-    ctx: Arc<ApiContext>,
-) -> Result<Response<Body>> {
-    // This lists peers discovered via local transports.
-    // We can filter the connection ledger or check the Swarm's observed addresses.
+    State(ctx): State<Arc<ApiContext>>,
+) -> Result<AxumJson<DiscoveryPeersResponse>, (StatusCode, String)> {
     let mut discovered = Vec::new();
 
-    // Strategy: List all known peers and their transports.
-    // For now, we'll return connected peers as a proxy for "recently discovered".
     if let Ok(peers) = ctx.swarm_handle.get_peers().await {
         for peer_id in peers {
             let pid_str = peer_id.to_string();
@@ -773,34 +773,65 @@ async fn handle_get_discovery_peers(
 
             discovered.push(DiscoveredPeer {
                 peer_id: pid_str,
-                transport: "tcp/lan".to_string(), // Placeholder for real transport type
+                transport: "tcp/lan".to_string(),
                 nickname,
             });
         }
     }
 
-    let response = DiscoveryPeersResponse { peers: discovered };
+    Ok(AxumJson(DiscoveryPeersResponse { peers: discovered }))
+}
 
-    Ok(Response::builder()
-        .status(StatusCode::OK)
-        .header("content-type", "application/json")
-        .body(Body::from(serde_json::to_string(&response)?))?)
+async fn handle_shutdown() -> impl IntoResponse {
+    tokio::spawn(async {
+        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+        std::process::exit(0);
+    });
+    (StatusCode::OK, "Stopping...")
 }
 
 pub async fn start_api_server(ctx: ApiContext) -> Result<()> {
     let ctx = Arc::new(ctx);
     let addr = SocketAddr::from(([127, 0, 0, 1], API_PORT));
 
-    let make_svc = make_service_fn(move |_conn| {
-        let ctx = ctx.clone();
-        async move { Ok::<_, Infallible>(service_fn(move |req| handle_request(req, ctx.clone()))) }
-    });
+    // Create CORS layer
+    let cors = CorsLayer::new()
+        .allow_origin(tower_http::cors::Any)
+        .allow_methods([Method::GET, Method::POST])
+        .allow_headers(tower_http::cors::Any);
 
-    let server = Server::bind(&addr).serve(make_svc);
+    // Build router with all routes
+    let app = Router::new()
+        .route("/api/send", post(handle_send_message))
+        .route("/api/contacts", post(handle_add_contact))
+        .route("/api/peers", get(handle_get_peers))
+        .route("/api/listeners", get(handle_get_listeners))
+        .route("/api/history", post(handle_get_history))
+        .route("/api/external-address", get(handle_get_external_address))
+        .route(
+            "/api/connection-path-state",
+            get(handle_get_connection_path_state),
+        )
+        .route("/api/diagnostics", get(handle_export_diagnostics))
+        .route("/api/drift-status", get(handle_get_drift_status))
+        .route("/api/discovery/status", get(handle_get_discovery_status))
+        .route("/api/discovery/scan", post(handle_trigger_discovery_scan))
+        .route("/api/discovery/peers", get(handle_get_discovery_peers))
+        .route("/api/shutdown", post(handle_shutdown))
+        .layer(cors)
+        .with_state(ctx);
+
+    // Create TCP listener
+    let listener = tokio::net::TcpListener::bind(addr)
+        .await
+        .context("Failed to bind API server")?;
 
     tracing::info!("Control API listening on {}", addr);
 
-    server.await.context("API server error")?;
+    // Serve with axum
+    axum::serve(listener, app)
+        .await
+        .context("API server error")?;
 
     Ok(())
 }

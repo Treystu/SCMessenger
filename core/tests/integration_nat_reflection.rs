@@ -26,7 +26,7 @@ async fn test_two_node_address_reflection() {
     let (event_tx1, mut event_rx1) = mpsc::channel(256);
     let (event_tx2, mut _event_rx2) = mpsc::channel(256);
 
-    let _swarm1: SwarmHandle = start_swarm(keypair1, None, event_tx1, None, false)
+    let _swarm1: SwarmHandle = start_swarm(keypair1, None, event_tx1, None, false, None)
         .await
         .expect("Failed to start swarm1");
 
@@ -47,7 +47,7 @@ async fn test_two_node_address_reflection() {
     assert!(listen_addr.is_some(), "Node 1 should be listening");
     let node1_addr = listen_addr.unwrap();
 
-    let swarm2: SwarmHandle = start_swarm(keypair2, None, event_tx2, None, false)
+    let swarm2: SwarmHandle = start_swarm(keypair2, None, event_tx2, None, false, None)
         .await
         .expect("Failed to start swarm2");
 
@@ -248,7 +248,7 @@ async fn test_multiple_address_reflections() {
     let (event_tx1, mut event_rx1) = mpsc::channel(256);
     let (event_tx2, mut _event_rx2) = mpsc::channel(256);
 
-    let _swarm1: SwarmHandle = start_swarm(keypair1, None, event_tx1, None, false)
+    let _swarm1: SwarmHandle = start_swarm(keypair1, None, event_tx1, None, false, None)
         .await
         .expect("Failed to start swarm1");
 
@@ -268,7 +268,7 @@ async fn test_multiple_address_reflections() {
 
     assert!(addr1.is_some());
 
-    let swarm2: SwarmHandle = start_swarm(keypair2, None, event_tx2, None, false)
+    let swarm2: SwarmHandle = start_swarm(keypair2, None, event_tx2, None, false, None)
         .await
         .expect("Failed to start swarm2");
 
@@ -301,7 +301,7 @@ async fn test_address_reflection_timeout() {
     let (event_tx1, mut event_rx1) = mpsc::channel(256);
     let (event_tx2, mut _event_rx2) = mpsc::channel(256);
 
-    let swarm1: SwarmHandle = start_swarm(keypair1, None, event_tx1, None, false)
+    let swarm1: SwarmHandle = start_swarm(keypair1, None, event_tx1, None, false, None)
         .await
         .expect("Failed to start swarm1");
 
@@ -319,7 +319,7 @@ async fn test_address_reflection_timeout() {
     .await
     .ok();
 
-    let swarm2: SwarmHandle = start_swarm(keypair2, None, event_tx2, None, false)
+    let swarm2: SwarmHandle = start_swarm(keypair2, None, event_tx2, None, false, None)
         .await
         .expect("Failed to start swarm2");
 

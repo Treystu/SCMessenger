@@ -12,8 +12,8 @@
 // - relay: NAT traversal — all nodes are mandatory relays
 // - ledger_exchange: automatic peer list sharing for aggressive discovery
 
-use super::reflection::{AddressReflectionRequest, AddressReflectionResponse};
 use super::discovery::DiscoveryConfig;
+use super::reflection::{AddressReflectionRequest, AddressReflectionResponse};
 use crate::identity::IdentityKeys;
 #[cfg(all(not(target_arch = "wasm32"), not(target_os = "android")))]
 use libp2p::mdns;

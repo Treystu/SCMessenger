@@ -16,7 +16,6 @@
 use std::collections::HashMap;
 use web_time::{Duration, Instant};
 
-
 /// A simple bloom filter implementation for peer unreachability
 ///
 /// Uses a bit vector with k hash functions. False positives are possible
@@ -326,7 +325,8 @@ impl NegativeCache {
     pub fn prune_below_confidence(&mut self, min_confirmations: f64) -> usize {
         let threshold = min_confirmations.ceil() as u32;
         let before = self.entries.len();
-        self.entries.retain(|_, entry| entry.confirmation_count >= threshold);
+        self.entries
+            .retain(|_, entry| entry.confirmation_count >= threshold);
         let removed = before - self.entries.len();
         self.stats.expired_count += removed as u64;
         removed

@@ -2,7 +2,9 @@
 // Validates: Requirements 3.5, 13.1
 
 use proptest::prelude::*;
-use scmessenger_core::message::types::{DeliveryStatus, Envelope, Message, MessageType, Receipt, SignedEnvelope};
+use scmessenger_core::message::types::{
+    DeliveryStatus, Envelope, Message, MessageType, Receipt, SignedEnvelope,
+};
 
 // Strategy for generating arbitrary MessageType
 fn arb_message_type() -> impl Strategy<Value = MessageType> {
@@ -27,29 +29,31 @@ fn arb_delivery_status() -> impl Strategy<Value = DeliveryStatus> {
 // Strategy for generating arbitrary Message
 fn arb_message() -> impl Strategy<Value = Message> {
     (
-        any::<String>(),                    // id
-        any::<String>(),                    // sender_id
-        any::<String>(),                    // recipient_id
-        arb_message_type(),                 // message_type
+        any::<String>(),                             // id
+        any::<String>(),                             // sender_id
+        any::<String>(),                             // recipient_id
+        arb_message_type(),                          // message_type
         prop::collection::vec(any::<u8>(), 0..1024), // payload (0-1024 bytes)
-        any::<u64>(),                       // timestamp
+        any::<u64>(),                                // timestamp
     )
-        .prop_map(|(id, sender_id, recipient_id, message_type, payload, timestamp)| Message {
-            id,
-            sender_id,
-            recipient_id,
-            message_type,
-            payload,
-            timestamp,
-        })
+        .prop_map(
+            |(id, sender_id, recipient_id, message_type, payload, timestamp)| Message {
+                id,
+                sender_id,
+                recipient_id,
+                message_type,
+                payload,
+                timestamp,
+            },
+        )
 }
 
 // Strategy for generating arbitrary Receipt
 fn arb_receipt() -> impl Strategy<Value = Receipt> {
     (
-        any::<String>(),        // message_id
-        arb_delivery_status(),  // status
-        any::<u64>(),           // timestamp
+        any::<String>(),       // message_id
+        arb_delivery_status(), // status
+        any::<u64>(),          // timestamp
     )
         .prop_map(|(message_id, status, timestamp)| Receipt {
             message_id,
@@ -61,12 +65,12 @@ fn arb_receipt() -> impl Strategy<Value = Receipt> {
 // Strategy for generating arbitrary Envelope
 fn arb_envelope() -> impl Strategy<Value = Envelope> {
     (
-        prop::collection::vec(any::<u8>(), 32..33),  // sender_public_key (32 bytes)
-        prop::collection::vec(any::<u8>(), 32..33),  // ephemeral_public_key (32 bytes)
-        prop::collection::vec(any::<u8>(), 24..25),  // nonce (24 bytes)
+        prop::collection::vec(any::<u8>(), 32..33), // sender_public_key (32 bytes)
+        prop::collection::vec(any::<u8>(), 32..33), // ephemeral_public_key (32 bytes)
+        prop::collection::vec(any::<u8>(), 24..25), // nonce (24 bytes)
         prop::collection::vec(any::<u8>(), 0..2048), // ciphertext (0-2048 bytes)
         prop::option::of(prop::collection::vec(any::<u8>(), 32..33)), // ratchet_dh_public
-        prop::option::of(any::<u32>()),              // ratchet_message_number
+        prop::option::of(any::<u32>()),             // ratchet_message_number
     )
         .prop_map(
             |(
@@ -93,7 +97,10 @@ fn arb_signed_envelope() -> impl Strategy<Value = SignedEnvelope> {
         arb_envelope(),
         prop::collection::vec(any::<u8>(), 64..65), // signature (64 bytes)
     )
-        .prop_map(|(envelope, signature)| SignedEnvelope { envelope, signature })
+        .prop_map(|(envelope, signature)| SignedEnvelope {
+            envelope,
+            signature,
+        })
 }
 
 proptest! {
@@ -104,16 +111,16 @@ proptest! {
     fn test_message_serialization_roundtrip(msg in arb_message()) {
         // Serialize
         let encoded = bincode::serialize(&msg).expect("serialization should succeed");
-        
+
         // Deserialize
         let decoded: Message = bincode::deserialize(&encoded).expect("deserialization should succeed");
-        
+
         // Re-serialize
         let re_encoded = bincode::serialize(&decoded).expect("re-serialization should succeed");
-        
+
         // Property: Bytes should be identical
         prop_assert_eq!(encoded, re_encoded, "Round-trip serialization should produce identical bytes");
-        
+
         // Additional checks: Fields should match
         prop_assert_eq!(msg.id, decoded.id);
         prop_assert_eq!(msg.sender_id, decoded.sender_id);
@@ -130,16 +137,16 @@ proptest! {
     fn test_receipt_serialization_roundtrip(receipt in arb_receipt()) {
         // Serialize
         let encoded = bincode::serialize(&receipt).expect("serialization should succeed");
-        
+
         // Deserialize
         let decoded: Receipt = bincode::deserialize(&encoded).expect("deserialization should succeed");
-        
+
         // Re-serialize
         let re_encoded = bincode::serialize(&decoded).expect("re-serialization should succeed");
-        
+
         // Property: Bytes should be identical
         prop_assert_eq!(encoded, re_encoded, "Round-trip serialization should produce identical bytes");
-        
+
         // Additional checks: Fields should match
         prop_assert_eq!(receipt.message_id, decoded.message_id);
         prop_assert_eq!(receipt.timestamp, decoded.timestamp);
@@ -152,16 +159,16 @@ proptest! {
     fn test_envelope_serialization_roundtrip(envelope in arb_envelope()) {
         // Serialize
         let encoded = bincode::serialize(&envelope).expect("serialization should succeed");
-        
+
         // Deserialize
         let decoded: Envelope = bincode::deserialize(&encoded).expect("deserialization should succeed");
-        
+
         // Re-serialize
         let re_encoded = bincode::serialize(&decoded).expect("re-serialization should succeed");
-        
+
         // Property: Bytes should be identical
         prop_assert_eq!(encoded, re_encoded, "Round-trip serialization should produce identical bytes");
-        
+
         // Additional checks: Fields should match
         prop_assert_eq!(envelope.sender_public_key, decoded.sender_public_key);
         prop_assert_eq!(envelope.ephemeral_public_key, decoded.ephemeral_public_key);
@@ -178,16 +185,16 @@ proptest! {
     fn test_signed_envelope_serialization_roundtrip(signed_envelope in arb_signed_envelope()) {
         // Serialize
         let encoded = bincode::serialize(&signed_envelope).expect("serialization should succeed");
-        
+
         // Deserialize
         let decoded: SignedEnvelope = bincode::deserialize(&encoded).expect("deserialization should succeed");
-        
+
         // Re-serialize
         let re_encoded = bincode::serialize(&decoded).expect("re-serialization should succeed");
-        
+
         // Property: Bytes should be identical
         prop_assert_eq!(encoded, re_encoded, "Round-trip serialization should produce identical bytes");
-        
+
         // Additional checks: Signature should match
         prop_assert_eq!(signed_envelope.signature, decoded.signature);
     }
@@ -210,10 +217,10 @@ proptest! {
             payload: vec![], // Empty payload
             timestamp,
         };
-        
+
         let encoded = bincode::serialize(&msg).expect("serialization should succeed");
         let decoded: Message = bincode::deserialize(&encoded).expect("deserialization should succeed");
-        
+
         prop_assert!(decoded.payload.is_empty(), "Empty payload should remain empty");
     }
 
@@ -229,10 +236,10 @@ proptest! {
             payload,
             timestamp: 0,
         };
-        
+
         let encoded = bincode::serialize(&msg).expect("serialization should succeed");
         let decoded: Message = bincode::deserialize(&encoded).expect("deserialization should succeed");
-        
+
         prop_assert_eq!(msg.payload.len(), decoded.payload.len(), "Large payload size should be preserved");
     }
 }

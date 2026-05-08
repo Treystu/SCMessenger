@@ -180,7 +180,7 @@ mod tests {
         let sig = ArchitectSignature::new(
             "Implement onion routing",
             &["latency < 100ms", "backward compatible"],
-            "Function with path construction"
+            "Function with path construction",
         );
 
         let json = serde_json::to_string(&sig).unwrap();

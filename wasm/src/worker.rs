@@ -5,8 +5,8 @@
 // and receive notifications even when the tab is not in the foreground.
 
 use serde::{Deserialize, Serialize};
-use std::sync::Arc;
-use parking_lot::RwLock;
+use std::cell::RefCell;
+use std::rc::Rc;
 
 /// Background sync configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -50,8 +50,8 @@ pub struct PushNotificationPayload {
 #[derive(Debug, Clone)]
 pub struct PushNotificationHandler {
     config: BackgroundSyncConfig,
-    notification_queue: Arc<RwLock<Vec<PushNotificationPayload>>>,
-    last_sync_time: Arc<RwLock<u64>>,
+    notification_queue: Rc<RefCell<Vec<PushNotificationPayload>>>,
+    last_sync_time: Rc<RefCell<u64>>,
 }
 
 impl PushNotificationHandler {
@@ -59,15 +59,15 @@ impl PushNotificationHandler {
     pub fn new(config: BackgroundSyncConfig) -> Self {
         Self {
             config,
-            notification_queue: Arc::new(RwLock::new(Vec::new())),
-            last_sync_time: Arc::new(RwLock::new(0)),
+            notification_queue: Rc::new(RefCell::new(Vec::new())),
+            last_sync_time: Rc::new(RefCell::new(0)),
         }
     }
 
     /// Handle incoming push notification
     pub fn on_push_event(&self, payload: PushNotificationPayload) -> Result<(), String> {
         // Queue the notification for processing
-        self.notification_queue.write().push(payload.clone());
+        self.notification_queue.borrow_mut().push(payload.clone());
 
         // In a real implementation with web-sys, this would:
         // 1. Call self.clients.matchAll() to find open clients
@@ -79,17 +79,17 @@ impl PushNotificationHandler {
 
     /// Get queued notifications
     pub fn get_notifications(&self) -> Vec<PushNotificationPayload> {
-        self.notification_queue.read().clone()
+        self.notification_queue.borrow().clone()
     }
 
     /// Clear notifications after processing
     pub fn clear_notifications(&self) {
-        self.notification_queue.write().clear();
+        self.notification_queue.borrow_mut().clear();
     }
 
     /// Get time of last sync
     pub fn last_sync(&self) -> u64 {
-        *self.last_sync_time.read()
+        *self.last_sync_time.borrow()
     }
 
     /// Update last sync time
@@ -99,7 +99,7 @@ impl PushNotificationHandler {
             .map(|d| d.as_millis() as u64)
             .unwrap_or(0);
 
-        *self.last_sync_time.write() = now;
+        *self.last_sync_time.borrow_mut() = now;
     }
 
     /// Check if enough time has passed for another sync
@@ -118,9 +118,9 @@ impl PushNotificationHandler {
 #[derive(Debug)]
 pub struct ServiceWorkerBridge {
     config: BackgroundSyncConfig,
-    registration_status: Arc<RwLock<ServiceWorkerStatus>>,
-    sync_handler: Arc<RwLock<Option<Arc<dyn SyncHandler>>>>,
-    notification_handler: Arc<RwLock<Option<Arc<dyn NotificationHandler>>>>,
+    registration_status: Rc<RefCell<ServiceWorkerStatus>>,
+    sync_handler: Rc<RefCell<Option<Arc<dyn SyncHandler>>>>,
+    notification_handler: Rc<RefCell<Option<Arc<dyn NotificationHandler>>>>,
 }
 
 /// Service worker registration status
@@ -150,15 +150,15 @@ impl ServiceWorkerBridge {
     pub fn new(config: BackgroundSyncConfig) -> Self {
         Self {
             config,
-            registration_status: Arc::new(RwLock::new(ServiceWorkerStatus::NotRegistered)),
-            sync_handler: Arc::new(RwLock::new(None)),
-            notification_handler: Arc::new(RwLock::new(None)),
+            registration_status: Rc::new(RefCell::new(ServiceWorkerStatus::NotRegistered)),
+            sync_handler: Rc::new(RefCell::new(None)),
+            notification_handler: Rc::new(RefCell::new(None)),
         }
     }
 
     /// Register the service worker
     pub fn register(&self, script_url: &str) -> Result<(), String> {
-        let mut status = self.registration_status.write();
+        let mut status = self.registration_status.borrow_mut();
         if *status != ServiceWorkerStatus::NotRegistered {
             return Err(format!("Cannot register from status {:?}", status));
         }
@@ -171,21 +171,21 @@ impl ServiceWorkerBridge {
         //     // Handle registration
         // })
 
-        let mut status = self.registration_status.write();
+        let mut status = self.registration_status.borrow_mut();
         *status = ServiceWorkerStatus::Registered;
         Ok(())
     }
 
     /// Unregister the service worker
     pub fn unregister(&self) -> Result<(), String> {
-        let mut status = self.registration_status.write();
+        let mut status = self.registration_status.borrow_mut();
         *status = ServiceWorkerStatus::NotRegistered;
         Ok(())
     }
 
     /// Register for background sync
     pub fn register_sync(&self) -> Result<(), String> {
-        let status = self.registration_status.read();
+        let status = self.registration_status.borrow();
         if *status != ServiceWorkerStatus::Registered {
             return Err(format!(
                 "Service worker not registered: {:?}",
@@ -202,17 +202,17 @@ impl ServiceWorkerBridge {
 
     /// Set sync event handler
     pub fn set_sync_handler(&self, handler: Arc<dyn SyncHandler>) {
-        *self.sync_handler.write() = Some(handler);
+        *self.sync_handler.borrow_mut() = Some(handler);
     }
 
     /// Set notification event handler
     pub fn set_notification_handler(&self, handler: Arc<dyn NotificationHandler>) {
-        *self.notification_handler.write() = Some(handler);
+        *self.notification_handler.borrow_mut() = Some(handler);
     }
 
     /// Handle sync event (called by service worker)
     pub fn on_sync_event(&self) -> Result<(), String> {
-        let handler = self.sync_handler.read();
+        let handler = self.sync_handler.borrow();
         match handler.as_ref() {
             Some(h) => h.on_sync(),
             None => Err("No sync handler registered".to_string()),
@@ -221,7 +221,7 @@ impl ServiceWorkerBridge {
 
     /// Handle notification event (called by service worker)
     pub fn on_notification_event(&self, payload: PushNotificationPayload) -> Result<(), String> {
-        let handler = self.notification_handler.read();
+        let handler = self.notification_handler.borrow();
         match handler.as_ref() {
             Some(h) => h.on_notification(payload),
             None => Err("No notification handler registered".to_string()),
@@ -230,7 +230,7 @@ impl ServiceWorkerBridge {
 
     /// Get current registration status
     pub fn status(&self) -> ServiceWorkerStatus {
-        *self.registration_status.read()
+        *self.registration_status.borrow()
     }
 
     /// Get configuration

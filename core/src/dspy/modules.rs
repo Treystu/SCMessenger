@@ -127,6 +127,7 @@ impl DSPyModule for ChainOfThought {
 /// Multi-hop recall module for retrieving and combining information
 pub struct MultiHopRecall {
     metadata: ModuleMetadata,
+    #[allow(dead_code)]
     max_hops: usize,
 }
 
@@ -155,7 +156,9 @@ impl DSPyModule for MultiHopRecall {
 
     fn execute(&self, input: &Self::Input) -> Result<Self::Output, DSPyError> {
         if input.is_empty() {
-            return Err(DSPyError::ValidationError("Query cannot be empty".to_string()));
+            return Err(DSPyError::ValidationError(
+                "Query cannot be empty".to_string(),
+            ));
         }
         self.recall(input)
     }
@@ -176,6 +179,7 @@ impl DSPyModule for MultiHopRecall {
 /// Optimizer pipeline with self-correction loop
 pub struct OptimizerPipeline {
     metadata: ModuleMetadata,
+    #[allow(dead_code)]
     stages: Vec<String>,
 }
 
@@ -279,7 +283,7 @@ mod tests {
 
     #[test]
     fn test_multihop_recall() {
-        let mut multihop = MultiHopRecall::new("codebase_search", 3);
+        let multihop = MultiHopRecall::new("codebase_search", 3);
         assert!(multihop.validate_input(&"query".to_string()));
         assert!(!multihop.validate_input(&"".to_string()));
     }

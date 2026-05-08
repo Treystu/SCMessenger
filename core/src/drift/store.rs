@@ -187,6 +187,41 @@ impl MeshStore {
         before - self.messages.len()
     }
 
+    /// Generate a cryptographic proof of the current mesh state.
+    ///
+    /// This proof is a deterministic hash of all message IDs in the store,
+    /// used to verify that a peer's sync offer matches their actual state.
+    /// The proof prevents spoofing attacks where a malicious peer claims
+    /// to have messages they don't actually possess.
+    ///
+    /// The proof is computed as:
+    /// blake3(sorted_message_ids)
+    ///
+    /// Returns a hex-encoded string of the blake3 hash.
+    pub fn generate_proof(&self) -> String {
+        let mut hasher = blake3::Hasher::new();
+
+        // Hash message IDs in sorted order for determinism
+        let mut ids = self.message_ids();
+        ids.sort();
+
+        for id in ids {
+            hasher.update(&id);
+        }
+
+        hex::encode(hasher.finalize().as_bytes())
+    }
+
+    /// Verify a peer's proof against our expected proof.
+    ///
+    /// This is used when receiving a sync offer to ensure the peer
+    /// actually has the messages they claim to have.
+    ///
+    /// Returns true if the proof matches, false otherwise.
+    pub fn verify_proof(&self, proof: &str) -> bool {
+        self.generate_proof() == proof
+    }
+
     /// Evict lowest-priority messages when over budget
     fn evict_if_over_budget(&mut self) {
         while self.messages.len() > self.max_messages {

@@ -22,7 +22,9 @@
 
 use scmessenger_core::wasm_support::rpc::{JsonRpcNotification, JsonRpcRequest, JsonRpcResponse};
 #[cfg(target_arch = "wasm32")]
-use std::sync::Arc;
+use std::cell::RefCell;
+#[cfg(target_arch = "wasm32")]
+use std::rc::Rc;
 
 // ── Request formatters ────────────────────────────────────────────────────
 
@@ -273,13 +275,13 @@ pub struct DaemonBridge {
     next_id: std::sync::atomic::AtomicU64,
     /// Pending requests keyed by JSON-RPC id, awaiting a response.
     #[cfg(target_arch = "wasm32")]
-    pending: Arc<parking_lot::Mutex<std::collections::HashMap<u64, ResponseCallback>>>,
+    pending: Rc<RefCell<std::collections::HashMap<u64, ResponseCallback>>>,
     /// Notification callback invoked on each server push.
     #[cfg(target_arch = "wasm32")]
-    on_notification: Arc<parking_lot::Mutex<Option<NotificationCallback>>>,
+    on_notification: Rc<RefCell<Option<NotificationCallback>>>,
     /// Live WebSocket handle (held so the browser object is not GC'd).
     #[cfg(target_arch = "wasm32")]
-    socket: Arc<parking_lot::Mutex<Option<web_sys::WebSocket>>>,
+    socket: Rc<RefCell<Option<web_sys::WebSocket>>>,
     #[cfg(target_arch = "wasm32")]
     url_clone: String,
 }
@@ -294,11 +296,11 @@ impl DaemonBridge {
             url: url.clone(),
             next_id: std::sync::atomic::AtomicU64::new(1),
             #[cfg(target_arch = "wasm32")]
-            pending: Arc::new(parking_lot::Mutex::new(std::collections::HashMap::new())),
+            pending: Rc::new(RefCell::new(std::collections::HashMap::new())),
             #[cfg(target_arch = "wasm32")]
-            on_notification: Arc::new(parking_lot::Mutex::new(None)),
+            on_notification: Rc::new(RefCell::new(None)),
             #[cfg(target_arch = "wasm32")]
-            socket: Arc::new(parking_lot::Mutex::new(None)),
+            socket: Rc::new(RefCell::new(None)),
             #[cfg(target_arch = "wasm32")]
             url_clone: url,
         }
@@ -311,7 +313,7 @@ impl DaemonBridge {
     /// a time — calling this again replaces the previous one.
     #[cfg(target_arch = "wasm32")]
     pub fn on_notification(&self, cb: NotificationCallback) {
-        *self.on_notification.lock() = Some(cb);
+        *self.on_notification.borrow_mut() = Some(cb);
     }
 
     #[cfg(not(target_arch = "wasm32"))]
@@ -340,50 +342,49 @@ impl DaemonBridge {
         onopen.forget();
 
         // ── onmessage ──
-        let pending_map = Arc::clone(&self.pending);
-        let notif_cb = Arc::clone(&self.on_notification);
-        let onmessage =
-            Closure::wrap(Box::new(move |event: MessageEvent| {
-                let text = match event.data().as_string() {
-                    Some(s) => s,
-                    None => {
-                        tracing::warn!("Daemon bridge received non-text frame; ignored");
-                        return;
-                    }
-                };
+        let pending_map = Rc::clone(&self.pending);
+        let notif_cb = Rc::clone(&self.on_notification);
+        let onmessage = Closure::wrap(Box::new(move |event: MessageEvent| {
+            let text = match event.data().as_string() {
+                Some(s) => s,
+                None => {
+                    tracing::warn!("Daemon bridge received non-text frame; ignored");
+                    return;
+                }
+            };
 
-                // Try parsing as a JSON-RPC response (has `id`).
-                if let Ok(resp) = serde_json::from_str::<JsonRpcResponse>(&text) {
-                    if let Some(ref id_val) = resp.id {
-                        if let Some(id_num) = id_val.as_u64() {
-                            let cb = pending_map.lock().remove(&id_num);
-                            if let Some(cb) = cb {
-                                cb(
-                                    id_val.clone(),
-                                    resp.result,
-                                    resp.error.map(|e| {
-                                        serde_json::json!({"code": e.code, "message": e.message})
-                                    }),
-                                );
-                                return;
-                            }
+            // Try parsing as a JSON-RPC response (has `id`).
+            if let Ok(resp) = serde_json::from_str::<JsonRpcResponse>(&text) {
+                if let Some(ref id_val) = resp.id {
+                    if let Some(id_num) = id_val.as_u64() {
+                        let cb = pending_map.borrow_mut().remove(&id_num);
+                        if let Some(cb) = cb {
+                            cb(
+                                id_val.clone(),
+                                resp.result,
+                                resp.error.map(
+                                    |e| serde_json::json!({"code": e.code, "message": e.message}),
+                                ),
+                            );
+                            return;
                         }
                     }
                 }
+            }
 
-                // Try parsing as a JSON-RPC notification (no `id`).
-                if let Ok(notif) = serde_json::from_str::<JsonRpcNotification>(&text) {
-                    if let Some(ref cb) = *notif_cb.lock() {
-                        cb(notif.method, notif.params);
-                    }
-                    return;
+            // Try parsing as a JSON-RPC notification (no `id`).
+            if let Ok(notif) = serde_json::from_str::<JsonRpcNotification>(&text) {
+                if let Some(ref cb) = *notif_cb.borrow() {
+                    cb(notif.method, notif.params);
                 }
+                return;
+            }
 
-                tracing::warn!(
-                    "Daemon bridge received unrecognized frame: {}",
-                    &text[..text.len().min(200)]
-                );
-            }) as Box<dyn FnMut(MessageEvent)>);
+            tracing::warn!(
+                "Daemon bridge received unrecognized frame: {}",
+                &text[..text.len().min(200)]
+            );
+        }) as Box<dyn FnMut(MessageEvent)>);
         ws.set_onmessage(Some(onmessage.as_ref().unchecked_ref()));
         onmessage.forget();
 

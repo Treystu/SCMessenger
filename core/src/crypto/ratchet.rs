@@ -523,7 +523,7 @@ mod tests {
     #[test]
     fn test_ratchet_key_zeroizes() {
         let key = RatchetKey::from_bytes([0xAB; 32]);
-        let bytes = key.as_bytes().clone();
+        let bytes = *key.as_bytes();
         drop(key);
         assert_eq!(bytes.len(), 32);
     }

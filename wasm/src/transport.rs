@@ -10,10 +10,10 @@
 // APIs via wasm-bindgen, with mock implementations for testing in non-WASM environments.
 
 use futures::channel::mpsc::{self, UnboundedReceiver, UnboundedSender};
-use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
+use std::cell::RefCell;
 use std::collections::HashMap;
-use std::sync::Arc;
+use std::rc::Rc;
 
 /// Transport state enum
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -93,9 +93,9 @@ impl std::fmt::Debug for WebSocketRelayInner {
 pub struct WebSocketRelay {
     url: String,
     /// Shared inner state — also captured by the event closures on WASM.
-    inner: Arc<RwLock<WebSocketRelayInner>>,
+    inner: Rc<RefCell<WebSocketRelayInner>>,
     /// Buffer for messages queued while the socket is not yet open.
-    send_buffer: Arc<RwLock<Vec<Vec<u8>>>>,
+    send_buffer: Rc<RefCell<Vec<Vec<u8>>>>,
 }
 
 impl WebSocketRelay {
@@ -103,13 +103,13 @@ impl WebSocketRelay {
     pub fn new(url: String) -> Self {
         Self {
             url,
-            inner: Arc::new(RwLock::new(WebSocketRelayInner {
+            inner: Rc::new(RefCell::new(WebSocketRelayInner {
                 state: TransportState::Disconnected,
                 #[cfg(target_arch = "wasm32")]
                 socket: None,
                 ingress_tx: None,
             })),
-            send_buffer: Arc::new(RwLock::new(Vec::new())),
+            send_buffer: Rc::new(RefCell::new(Vec::new())),
         }
     }
 
@@ -126,7 +126,7 @@ impl WebSocketRelay {
     /// ordering is clearer).
     pub fn subscribe(&self) -> UnboundedReceiver<Vec<u8>> {
         let (tx, rx) = mpsc::unbounded::<Vec<u8>>();
-        self.inner.write().ingress_tx = Some(tx);
+        self.inner.borrow_mut().ingress_tx = Some(tx);
         rx
     }
 
@@ -140,13 +140,13 @@ impl WebSocketRelay {
     /// synchronous successful connection.
     pub fn connect(&self) -> Result<(), String> {
         {
-            let state = self.inner.read().state;
+            let state = self.inner.borrow().state;
             if state == TransportState::Connected || state == TransportState::Connecting {
                 return Err("Already connected or connecting".to_string());
             }
         }
 
-        self.inner.write().state = TransportState::Connecting;
+        self.inner.borrow_mut().state = TransportState::Connecting;
 
         #[cfg(target_arch = "wasm32")]
         {
@@ -162,19 +162,19 @@ impl WebSocketRelay {
 
             // --- onopen ---
             // Transitions state to Connected and flushes any buffered sends.
-            let inner_open = Arc::clone(&self.inner);
-            let buffer_open = Arc::clone(&self.send_buffer);
+            let inner_open = Rc::clone(&self.inner);
+            let buffer_open = Rc::clone(&self.send_buffer);
             let onopen = Closure::wrap(Box::new(move |_: web_sys::Event| {
                 tracing::info!("WebSocket connection opened to {}", self.url);
-                inner_open.write().state = TransportState::Connected;
+                inner_open.borrow_mut().state = TransportState::Connected;
 
                 // Flush messages that were queued before the socket finished opening.
                 let pending: Vec<Vec<u8>> = {
-                    let mut buf = buffer_open.write();
+                    let mut buf = buffer_open.borrow_mut();
                     std::mem::take(&mut *buf)
                 };
                 if !pending.is_empty() {
-                    let guard = inner_open.read();
+                    let guard = inner_open.borrow();
                     if let Some(sock) = guard.socket.as_ref() {
                         for msg in pending {
                             if let Err(e) = sock.send_with_u8_array(&msg) {
@@ -196,7 +196,7 @@ impl WebSocketRelay {
             // closure does not capture the entire `Arc<RwLock<>>`. If no
             // subscriber has called `subscribe()` yet, frames are logged and
             // dropped.
-            let inner_msg = Arc::clone(&self.inner);
+            let inner_msg = Rc::clone(&self.inner);
             let onmessage = Closure::wrap(Box::new(move |event: MessageEvent| {
                 match event.data().dyn_into::<js_sys::ArrayBuffer>() {
                     Ok(ab) => {
@@ -205,7 +205,7 @@ impl WebSocketRelay {
                         // Clone the sender under a short read lock, then release
                         // the lock before calling unbounded_send so we do not
                         // hold it across any potential allocation.
-                        let tx_opt = inner_msg.read().ingress_tx.clone();
+                        let tx_opt = inner_msg.borrow().ingress_tx.clone();
                         match tx_opt {
                             Some(tx) => {
                                 if let Err(e) = tx.unbounded_send(data) {
@@ -238,16 +238,16 @@ impl WebSocketRelay {
             onmessage.forget();
 
             // --- onerror ---
-            let inner_err = Arc::clone(&self.inner);
+            let inner_err = Rc::clone(&self.inner);
             let onerror = Closure::wrap(Box::new(move |event: ErrorEvent| {
                 tracing::error!("WebSocket error for {}: {}", self.url, event.message());
-                inner_err.write().state = TransportState::Error;
+                inner_err.borrow_mut().state = TransportState::Error;
             }) as Box<dyn FnMut(ErrorEvent)>);
             ws.set_onerror(Some(onerror.as_ref().unchecked_ref()));
             onerror.forget();
 
             // --- onclose ---
-            let inner_close = Arc::clone(&self.inner);
+            let inner_close = Rc::clone(&self.inner);
             let onclose = Closure::wrap(Box::new(move |event: CloseEvent| {
                 tracing::info!(
                     "WebSocket closed for {}: code={} reason={}",
@@ -255,13 +255,13 @@ impl WebSocketRelay {
                     event.code(),
                     event.reason()
                 );
-                inner_close.write().state = TransportState::Disconnected;
+                inner_close.borrow_mut().state = TransportState::Disconnected;
             }) as Box<dyn FnMut(CloseEvent)>);
             ws.set_onclose(Some(onclose.as_ref().unchecked_ref()));
             onclose.forget();
 
             // Store the socket handle so it is not dropped.
-            self.inner.write().socket = Some(ws);
+            self.inner.borrow_mut().socket = Some(ws);
 
             tracing::info!("WebSocket connecting to {}", self.url);
             // State stays Connecting until onopen fires.
@@ -271,7 +271,7 @@ impl WebSocketRelay {
         {
             // Non-WASM: simulate an immediate successful connection for tests.
             tracing::info!("WebSocket simulation: connected to {}", self.url);
-            self.inner.write().state = TransportState::Connected;
+            self.inner.borrow_mut().state = TransportState::Connected;
         }
 
         Ok(())
@@ -286,14 +286,14 @@ impl WebSocketRelay {
     ///
     /// On non-WASM the call is a no-op (returns `Ok` if logically connected).
     pub fn send_envelope(&self, data: &[u8]) -> Result<(), String> {
-        let state = self.inner.read().state;
+        let state = self.inner.borrow().state;
         match state {
             TransportState::Disconnected | TransportState::Error => {
                 return Err(format!("Cannot send: transport is {:?}", state));
             }
             TransportState::Connecting => {
                 // Queue for delivery once onopen fires.
-                self.send_buffer.write().push(data.to_vec());
+                self.send_buffer.borrow_mut().push(data.to_vec());
                 return Ok(());
             }
             TransportState::Connected => {}
@@ -301,7 +301,7 @@ impl WebSocketRelay {
 
         #[cfg(target_arch = "wasm32")]
         {
-            let guard = self.inner.read();
+            let guard = self.inner.borrow();
             match guard.socket.as_ref() {
                 Some(ws) => {
                     ws.send_with_u8_array(data)
@@ -328,14 +328,14 @@ impl WebSocketRelay {
 
     /// Get current connection state.
     pub fn state(&self) -> TransportState {
-        self.inner.read().state
+        self.inner.borrow().state
     }
 
     /// Close the WebSocket and mark as disconnected.
     pub fn disconnect(&self) {
         #[cfg(target_arch = "wasm32")]
         {
-            let mut guard = self.inner.write();
+            let mut guard = self.inner.borrow_mut();
             if let Some(ws) = guard.socket.take() {
                 // close() with default code 1000 = normal closure.
                 if let Err(e) = ws.close() {
@@ -347,7 +347,7 @@ impl WebSocketRelay {
 
         #[cfg(not(target_arch = "wasm32"))]
         {
-            self.inner.write().state = TransportState::Disconnected;
+            self.inner.borrow_mut().state = TransportState::Disconnected;
         }
     }
 }
@@ -417,22 +417,22 @@ struct WebRtcInner {
 /// without conditional compilation at every call site.
 #[derive(Clone)]
 pub struct WebRtcTransport {
-    inner: Arc<RwLock<WebRtcInner>>,
+    inner: Rc<RefCell<WebRtcInner>>,
     /// Live `RtcPeerConnection` handle — kept here so the browser object is
     /// not GC'd while the transport is alive.
     #[cfg(target_arch = "wasm32")]
-    peer_conn: Arc<web_sys::RtcPeerConnection>,
+    peer_conn: std::sync::Arc<web_sys::RtcPeerConnection>,
     /// Outbound `RtcDataChannel` created by `new()` (offerer side).  `None`
     /// on the answerer side until `ondatachannel` fires.
     #[cfg(target_arch = "wasm32")]
-    data_channel: Arc<RwLock<Option<web_sys::RtcDataChannel>>>,
+    data_channel: Rc<RefCell<Option<web_sys::RtcDataChannel>>>,
 }
 
 impl std::fmt::Debug for WebRtcTransport {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("WebRtcTransport")
-            .field("state", &self.inner.read().state)
-            .field("has_local_sdp", &self.inner.read().local_sdp.is_some())
+            .field("state", &self.inner.borrow().state)
+            .field("has_local_sdp", &self.inner.borrow().local_sdp.is_some())
             .finish()
     }
 }
@@ -456,26 +456,26 @@ impl WebRtcTransport {
             let peer_conn = web_sys::RtcPeerConnection::new_with_configuration(&config)
                 .map_err(|e| format!("RtcPeerConnection::new: {:?}", e))?;
 
-            let inner = Arc::new(RwLock::new(WebRtcInner {
+            let inner = Rc::new(RefCell::new(WebRtcInner {
                 state: TransportState::Connecting,
                 ingress_tx: None,
                 local_sdp: None,
                 ice_candidates: Vec::new(),
             }));
 
-            let data_channel_store: Arc<RwLock<Option<web_sys::RtcDataChannel>>> =
-                Arc::new(RwLock::new(None));
+            let data_channel_store: Rc<RefCell<Option<web_sys::RtcDataChannel>>> =
+                Rc::new(RefCell::new(None));
 
             // --- Create the outbound "drift" data channel (offerer side) ---
             let dc = peer_conn.create_data_channel("drift");
 
             // Wire dc.onopen → mark state Connected.
             {
-                let inner_open = Arc::clone(&inner);
+                let inner_open = Rc::clone(&inner);
                 let onopen =
                     wasm_bindgen::closure::Closure::wrap(Box::new(move |_: web_sys::Event| {
                         tracing::info!("WebRTC DataChannel open");
-                        inner_open.write().state = TransportState::Connected;
+                        inner_open.borrow_mut().state = TransportState::Connected;
                     })
                         as Box<dyn FnMut(web_sys::Event)>);
                 dc.set_onopen(Some(onopen.as_ref().unchecked_ref()));
@@ -484,11 +484,11 @@ impl WebRtcTransport {
 
             // Wire dc.onclose → mark state Disconnected.
             {
-                let inner_close = Arc::clone(&inner);
+                let inner_close = Rc::clone(&inner);
                 let onclose =
                     wasm_bindgen::closure::Closure::wrap(Box::new(move |_: web_sys::Event| {
                         tracing::info!("WebRTC DataChannel closed");
-                        inner_close.write().state = TransportState::Disconnected;
+                        inner_close.borrow_mut().state = TransportState::Disconnected;
                     })
                         as Box<dyn FnMut(web_sys::Event)>);
                 dc.set_onclose(Some(onclose.as_ref().unchecked_ref()));
@@ -497,11 +497,11 @@ impl WebRtcTransport {
 
             // Wire dc.onerror → mark state Error.
             {
-                let inner_err = Arc::clone(&inner);
+                let inner_err = Rc::clone(&inner);
                 let onerror =
                     wasm_bindgen::closure::Closure::wrap(Box::new(move |e: web_sys::Event| {
                         tracing::error!("WebRTC DataChannel error: {:?}", e);
-                        inner_err.write().state = TransportState::Error;
+                        inner_err.borrow_mut().state = TransportState::Error;
                     })
                         as Box<dyn FnMut(web_sys::Event)>);
                 dc.set_onerror(Some(onerror.as_ref().unchecked_ref()));
@@ -510,7 +510,7 @@ impl WebRtcTransport {
 
             // Wire dc.onmessage → forward bytes to ingress channel.
             {
-                let inner_msg = Arc::clone(&inner);
+                let inner_msg = Rc::clone(&inner);
                 let onmessage = wasm_bindgen::closure::Closure::wrap(Box::new(
                     move |evt: web_sys::MessageEvent| match evt
                         .data()
@@ -519,7 +519,7 @@ impl WebRtcTransport {
                         Ok(ab) => {
                             let bytes = js_sys::Uint8Array::new(&ab).to_vec();
                             let byte_len = bytes.len();
-                            let tx_opt = inner_msg.read().ingress_tx.clone();
+                            let tx_opt = inner_msg.borrow().ingress_tx.clone();
                             match tx_opt {
                                 Some(tx) => {
                                     if let Err(e) = tx.unbounded_send(bytes) {
@@ -556,26 +556,26 @@ impl WebRtcTransport {
             }
 
             // Store the channel handle.
-            *data_channel_store.write() = Some(dc);
+            *data_channel_store.borrow_mut() = Some(dc);
 
             // --- ondatachannel: accept inbound channels from the remote peer ---
             // This fires on the answerer side when the offerer's data channel
             // arrives.  We replace our stored channel with the inbound one and
             // wire the same set of callbacks.
             {
-                let inner_dc = Arc::clone(&inner);
-                let dc_store = Arc::clone(&data_channel_store);
+                let inner_dc = Rc::clone(&inner);
+                let dc_store = Rc::clone(&data_channel_store);
                 let ondatachannel = wasm_bindgen::closure::Closure::wrap(Box::new(
                     move |evt: web_sys::RtcDataChannelEvent| {
                         let inbound_dc = evt.channel();
                         tracing::info!("WebRTC inbound DataChannel received");
 
                         // onopen
-                        let inner_open2 = Arc::clone(&inner_dc);
+                        let inner_open2 = Rc::clone(&inner_dc);
                         let onopen2 = wasm_bindgen::closure::Closure::wrap(Box::new(
                             move |_: web_sys::Event| {
                                 tracing::info!("Inbound WebRTC DataChannel open");
-                                inner_open2.write().state = TransportState::Connected;
+                                inner_open2.borrow_mut().state = TransportState::Connected;
                             },
                         )
                             as Box<dyn FnMut(web_sys::Event)>);
@@ -583,7 +583,7 @@ impl WebRtcTransport {
                         onopen2.forget();
 
                         // onmessage
-                        let inner_msg2 = Arc::clone(&inner_dc);
+                        let inner_msg2 = Rc::clone(&inner_dc);
                         let onmessage2 = wasm_bindgen::closure::Closure::wrap(Box::new(
                             move |evt: web_sys::MessageEvent| match evt
                                 .data()
@@ -591,7 +591,7 @@ impl WebRtcTransport {
                             {
                                 Ok(ab) => {
                                     let bytes = js_sys::Uint8Array::new(&ab).to_vec();
-                                    let tx_opt = inner_msg2.read().ingress_tx.clone();
+                                    let tx_opt = inner_msg2.borrow().ingress_tx.clone();
                                     if let Some(tx) = tx_opt {
                                         let _ = tx.unbounded_send(bytes);
                                     }
@@ -604,7 +604,7 @@ impl WebRtcTransport {
                         onmessage2.forget();
 
                         // Store inbound channel, replacing the offerer placeholder.
-                        *dc_store.write() = Some(inbound_dc);
+                        *dc_store.borrow_mut() = Some(inbound_dc);
                     },
                 )
                     as Box<dyn FnMut(web_sys::RtcDataChannelEvent)>);
@@ -619,7 +619,7 @@ impl WebRtcTransport {
             // signalling channel to the remote peer, which applies them with
             // `add_ice_candidate()`.
             {
-                let inner_ice = Arc::clone(&inner);
+                let inner_ice = Rc::clone(&inner);
                 let onicecandidate = wasm_bindgen::closure::Closure::wrap(Box::new(
                     move |evt: web_sys::RtcPeerConnectionIceEvent| {
                         if let Some(candidate) = evt.candidate() {
@@ -631,7 +631,7 @@ impl WebRtcTransport {
                                 .and_then(|s| s.as_string());
                             if let Some(json) = candidate_json {
                                 tracing::debug!("WebRTC ICE candidate gathered");
-                                inner_ice.write().ice_candidates.push(json);
+                                inner_ice.borrow_mut().ice_candidates.push(json);
                             } else {
                                 tracing::warn!(
                                     "WebRTC ICE candidate stringify failed; candidate dropped"
@@ -679,8 +679,8 @@ impl WebRtcTransport {
         {
             use wasm_bindgen_futures::JsFuture;
 
-            let pc = Arc::clone(&self.peer_conn);
-            let inner = Arc::clone(&self.inner);
+            let pc = Rc::clone(&self.peer_conn);
+            let inner = Rc::clone(&self.inner);
 
             wasm_bindgen_futures::spawn_local(async move {
                 // Step 1 — create_offer() → JS Promise → RtcSessionDescriptionInit-like object.
@@ -688,7 +688,7 @@ impl WebRtcTransport {
                     Ok(v) => v,
                     Err(e) => {
                         tracing::error!("create_offer failed: {:?}", e);
-                        inner.write().state = TransportState::Error;
+                        inner.borrow_mut().state = TransportState::Error;
                         return;
                     }
                 };
@@ -704,7 +704,7 @@ impl WebRtcTransport {
                     Some(s) => s,
                     None => {
                         tracing::error!("create_offer: SDP field missing or not a string");
-                        inner.write().state = TransportState::Error;
+                        inner.borrow_mut().state = TransportState::Error;
                         return;
                     }
                 };
@@ -717,7 +717,7 @@ impl WebRtcTransport {
                 // Step 4 — set_local_description → JS Promise.
                 if let Err(e) = JsFuture::from(pc.set_local_description(&desc_init)).await {
                     tracing::error!("set_local_description failed: {:?}", e);
-                    inner.write().state = TransportState::Error;
+                    inner.borrow_mut().state = TransportState::Error;
                     return;
                 }
 
@@ -728,7 +728,7 @@ impl WebRtcTransport {
                     r#"{{"type":"offer","sdp":{}}}"#,
                     serde_json::to_string(&sdp_str).unwrap_or_else(|_| "\"\"".to_string())
                 );
-                inner.write().local_sdp = Some(sdp_json);
+                inner.borrow_mut().local_sdp = Some(sdp_json);
                 tracing::info!("WebRTC offer: local description set; SDP ready for signalling");
             });
 
@@ -749,7 +749,7 @@ impl WebRtcTransport {
     ///
     /// Send this string to the remote peer via your signalling channel.
     pub fn get_local_sdp(&self) -> Option<String> {
-        self.inner.read().local_sdp.clone()
+        self.inner.borrow().local_sdp.clone()
     }
 
     /// Complete the offerer-side WebRTC handshake by applying the remote
@@ -768,8 +768,8 @@ impl WebRtcTransport {
     pub fn set_remote_answer(&self, sdp_json: &str) -> Result<(), String> {
         #[cfg(target_arch = "wasm32")]
         {
-            let pc = Arc::clone(&self.peer_conn);
-            let inner = Arc::clone(&self.inner);
+            let pc = Rc::clone(&self.peer_conn);
+            let inner = Rc::clone(&self.inner);
             let sdp = sdp_json.to_string();
 
             wasm_bindgen_futures::spawn_local(async move {
@@ -797,7 +797,7 @@ impl WebRtcTransport {
                     Ok(_) => tracing::info!("WebRTC remote answer set successfully"),
                     Err(e) => {
                         tracing::warn!("set_remote_description(answer) failed: {:?}", e);
-                        inner.write().state = TransportState::Error;
+                        inner.borrow_mut().state = TransportState::Error;
                     }
                 }
             });
@@ -826,8 +826,8 @@ impl WebRtcTransport {
     pub fn set_remote_offer(&self, sdp_json: &str) -> Result<(), String> {
         #[cfg(target_arch = "wasm32")]
         {
-            let pc = Arc::clone(&self.peer_conn);
-            let inner = Arc::clone(&self.inner);
+            let pc = Rc::clone(&self.peer_conn);
+            let inner = Rc::clone(&self.inner);
             let sdp = sdp_json.to_string();
 
             wasm_bindgen_futures::spawn_local(async move {
@@ -853,7 +853,7 @@ impl WebRtcTransport {
                     Ok(_) => tracing::info!("WebRTC remote offer set; call create_answer() next"),
                     Err(e) => {
                         tracing::warn!("set_remote_description(offer) failed: {:?}", e);
-                        inner.write().state = TransportState::Error;
+                        inner.borrow_mut().state = TransportState::Error;
                     }
                 }
             });
@@ -881,8 +881,8 @@ impl WebRtcTransport {
         {
             use wasm_bindgen_futures::JsFuture;
 
-            let pc = Arc::clone(&self.peer_conn);
-            let inner = Arc::clone(&self.inner);
+            let pc = Rc::clone(&self.peer_conn);
+            let inner = Rc::clone(&self.inner);
 
             wasm_bindgen_futures::spawn_local(async move {
                 // Step 1 — create_answer() → JS Promise.
@@ -890,7 +890,7 @@ impl WebRtcTransport {
                     Ok(v) => v,
                     Err(e) => {
                         tracing::error!("create_answer failed: {:?}", e);
-                        inner.write().state = TransportState::Error;
+                        inner.borrow_mut().state = TransportState::Error;
                         return;
                     }
                 };
@@ -906,7 +906,7 @@ impl WebRtcTransport {
                     Some(s) => s,
                     None => {
                         tracing::error!("create_answer: SDP field missing or not a string");
-                        inner.write().state = TransportState::Error;
+                        inner.borrow_mut().state = TransportState::Error;
                         return;
                     }
                 };
@@ -918,7 +918,7 @@ impl WebRtcTransport {
 
                 if let Err(e) = JsFuture::from(pc.set_local_description(&desc_init)).await {
                     tracing::error!("set_local_description(answer) failed: {:?}", e);
-                    inner.write().state = TransportState::Error;
+                    inner.borrow_mut().state = TransportState::Error;
                     return;
                 }
 
@@ -927,7 +927,7 @@ impl WebRtcTransport {
                     r#"{{"type":"answer","sdp":{}}}"#,
                     serde_json::to_string(&sdp_str).unwrap_or_else(|_| "\"\"".to_string())
                 );
-                inner.write().local_sdp = Some(sdp_json);
+                inner.borrow_mut().local_sdp = Some(sdp_json);
                 tracing::info!("WebRTC answer: local description set; SDP ready for signalling");
             });
 
@@ -951,7 +951,7 @@ impl WebRtcTransport {
     /// The internal buffer is cleared on each call so repeated polling yields
     /// only new candidates.
     pub fn get_ice_candidates(&self) -> Vec<String> {
-        let mut guard = self.inner.write();
+        let mut guard = self.inner.borrow_mut();
         std::mem::take(&mut guard.ice_candidates)
     }
 
@@ -972,7 +972,7 @@ impl WebRtcTransport {
         {
             use wasm_bindgen::JsCast;
 
-            let pc = Arc::clone(&self.peer_conn);
+            let pc = Rc::clone(&self.peer_conn);
             let cand_str = candidate_json.to_string();
 
             wasm_bindgen_futures::spawn_local(async move {
@@ -1016,7 +1016,7 @@ impl WebRtcTransport {
     pub fn send(&self, data: &[u8]) -> Result<(), String> {
         #[cfg(target_arch = "wasm32")]
         {
-            let guard = self.data_channel.read();
+            let guard = self.data_channel.borrow();
             let dc = guard
                 .as_ref()
                 .ok_or_else(|| "DataChannel not available".to_string())?;
@@ -1042,13 +1042,13 @@ impl WebRtcTransport {
     /// theoretical, but the ordering is clearer).
     pub fn subscribe(&self) -> UnboundedReceiver<Vec<u8>> {
         let (tx, rx) = mpsc::unbounded::<Vec<u8>>();
-        self.inner.write().ingress_tx = Some(tx);
+        self.inner.borrow_mut().ingress_tx = Some(tx);
         rx
     }
 
     /// Current transport state.
     pub fn state(&self) -> TransportState {
-        self.inner.read().state
+        self.inner.borrow().state
     }
 
     /// Close the peer connection and release all resources.
@@ -1056,9 +1056,9 @@ impl WebRtcTransport {
         #[cfg(target_arch = "wasm32")]
         {
             self.peer_conn.close();
-            *self.data_channel.write() = None;
+            *self.data_channel.borrow_mut() = None;
         }
-        self.inner.write().state = TransportState::Disconnected;
+        self.inner.borrow_mut().state = TransportState::Disconnected;
     }
 }
 
@@ -1066,18 +1066,18 @@ impl WebRtcTransport {
 #[derive(Debug, Clone)]
 pub struct WebRtcPeer {
     peer_id: String,
-    transport: Option<Arc<WebRtcTransport>>,
-    state: Arc<RwLock<TransportState>>,
+    transport: Option<std::sync::Arc<WebRtcTransport>>,
+    state: Rc<RefCell<TransportState>>,
 }
 
 impl WebRtcPeer {
     /// Create a new WebRTC peer connection
     pub fn new(peer_id: String) -> Self {
-        let transport = WebRtcTransport::new().ok().map(Arc::new);
+        let transport = WebRtcTransport::new().ok().map(std::sync::Arc::new);
         Self {
             peer_id,
             transport,
-            state: Arc::new(RwLock::new(TransportState::Disconnected)),
+            state: Rc::new(RefCell::new(TransportState::Disconnected)),
         }
     }
 
@@ -1100,7 +1100,7 @@ impl WebRtcPeer {
     /// Compatibility hook kept for existing call sites.
     pub fn on_data_channel_open(&self) {
         if let Some(transport) = &self.transport {
-            *self.state.write() = transport.state();
+            *self.state.borrow_mut() = transport.state();
         }
     }
 
@@ -1117,7 +1117,7 @@ impl WebRtcPeer {
         if let Some(transport) = &self.transport {
             transport.state()
         } else {
-            *self.state.read()
+            *self.state.borrow()
         }
     }
 
@@ -1131,7 +1131,7 @@ impl WebRtcPeer {
         if let Some(transport) = &self.transport {
             transport.close();
         }
-        *self.state.write() = TransportState::Disconnected;
+        *self.state.borrow_mut() = TransportState::Disconnected;
     }
 }
 
@@ -1139,9 +1139,9 @@ impl WebRtcPeer {
 #[derive(Debug)]
 pub struct WasmTransport {
     config: WasmTransportConfig,
-    relays: Arc<RwLock<HashMap<String, WebSocketRelay>>>,
-    peers: Arc<RwLock<HashMap<String, WebRtcPeer>>>,
-    state: Arc<RwLock<TransportState>>,
+    relays: Rc<RefCell<HashMap<String, WebSocketRelay>>>,
+    peers: Rc<RefCell<HashMap<String, WebRtcPeer>>>,
+    state: Rc<RefCell<TransportState>>,
 }
 
 impl WasmTransport {
@@ -1149,15 +1149,15 @@ impl WasmTransport {
     pub fn new(config: WasmTransportConfig) -> Self {
         Self {
             config,
-            relays: Arc::new(RwLock::new(HashMap::new())),
-            peers: Arc::new(RwLock::new(HashMap::new())),
-            state: Arc::new(RwLock::new(TransportState::Disconnected)),
+            relays: Rc::new(RefCell::new(HashMap::new())),
+            peers: Rc::new(RefCell::new(HashMap::new())),
+            state: Rc::new(RefCell::new(TransportState::Disconnected)),
         }
     }
 
     /// Initialize transport and connect to relays
     pub fn start(&self) -> Result<(), String> {
-        let mut state = self.state.write();
+        let mut state = self.state.borrow_mut();
         if *state == TransportState::Connected {
             return Err("Already started".to_string());
         }
@@ -1166,7 +1166,7 @@ impl WasmTransport {
 
         // Connect to all configured relay servers
         {
-            let mut relays = self.relays.write();
+            let mut relays = self.relays.borrow_mut();
             for relay_url in &self.config.relay_urls {
                 let relay = WebSocketRelay::new(relay_url.clone());
                 relay.connect().ok(); // Ignore connection errors, will retry
@@ -1180,46 +1180,46 @@ impl WasmTransport {
 
     /// Stop transport and close all connections
     pub fn stop(&self) {
-        let relays = self.relays.read();
+        let relays = self.relays.borrow();
         for relay in relays.values() {
             relay.disconnect();
         }
 
-        let peers = self.peers.read();
+        let peers = self.peers.borrow();
         for peer in peers.values() {
             peer.close();
         }
 
-        let mut state = self.state.write();
+        let mut state = self.state.borrow_mut();
         *state = TransportState::Disconnected;
     }
 
     /// Get current transport state
     pub fn state(&self) -> TransportState {
-        *self.state.read()
+        *self.state.borrow()
     }
 
     /// Add a WebRTC peer connection
     pub fn add_peer(&self, peer_id: String) -> Result<(), String> {
-        let peers = self.peers.read();
+        let peers = self.peers.borrow();
         if peers.len() >= self.config.max_peers {
             return Err("Maximum peers reached".to_string());
         }
         drop(peers); // Release read lock
 
         let peer = WebRtcPeer::new(peer_id.clone());
-        self.peers.write().insert(peer_id, peer);
+        self.peers.borrow_mut().insert(peer_id, peer);
         Ok(())
     }
 
     /// Get a peer by ID
     pub fn get_peer(&self, peer_id: &str) -> Option<WebRtcPeer> {
-        self.peers.read().get(peer_id).cloned()
+        self.peers.borrow().get(peer_id).cloned()
     }
 
     /// Remove a peer connection
     pub fn remove_peer(&self, peer_id: &str) {
-        if let Some(peer) = self.peers.write().remove(peer_id) {
+        if let Some(peer) = self.peers.borrow_mut().remove(peer_id) {
             peer.close();
         }
     }
@@ -1227,7 +1227,7 @@ impl WasmTransport {
     /// Get number of connected peers
     pub fn peer_count(&self) -> usize {
         self.peers
-            .read()
+            .borrow()
             .values()
             .filter(|p| p.state() == TransportState::Connected)
             .count()
@@ -1236,7 +1236,7 @@ impl WasmTransport {
     /// Get number of relay connections
     pub fn relay_count(&self) -> usize {
         self.relays
-            .read()
+            .borrow()
             .values()
             .filter(|r| r.state() == TransportState::Connected)
             .count()
@@ -1244,7 +1244,7 @@ impl WasmTransport {
 
     /// Send data to a specific peer
     pub fn send_to_peer(&self, peer_id: &str, data: &[u8]) -> Result<(), String> {
-        let peers = self.peers.read();
+        let peers = self.peers.borrow();
         let peer = peers
             .get(peer_id)
             .ok_or_else(|| format!("Peer {} not found", peer_id))?;
@@ -1253,7 +1253,7 @@ impl WasmTransport {
 
     /// Broadcast data to all relay servers
     pub fn broadcast_via_relays(&self, data: &[u8]) -> Result<(), String> {
-        let relays = self.relays.read();
+        let relays = self.relays.borrow();
         let mut errors = Vec::new();
 
         for relay in relays.values() {
@@ -1291,7 +1291,7 @@ mod tests {
         // the corresponding sender so the onmessage callback can forward frames.
         let relay = WebSocketRelay::new("wss://relay.test".to_string());
         let _rx = relay.subscribe();
-        assert!(relay.inner.read().ingress_tx.is_some());
+        assert!(relay.inner.borrow().ingress_tx.is_some());
     }
 
     #[test]
@@ -1304,7 +1304,7 @@ mod tests {
         // rx1's sender was replaced; the old channel is now terminated.
         // The new receiver is still open (sender lives in inner).
         drop(rx1);
-        assert!(relay.inner.read().ingress_tx.is_some());
+        assert!(relay.inner.borrow().ingress_tx.is_some());
     }
 
     #[test]

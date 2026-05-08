@@ -280,6 +280,7 @@ async fn test_multiport_swarm_integration() {
         None,       // storage_path
         None,       // core_handle
         false,      // headless
+        None,       // discovery_config
     )
     .await;
 

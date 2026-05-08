@@ -62,6 +62,7 @@ fun OnboardingScreen(
     var nickname by remember { mutableStateOf("") }
     var hasAcceptedConsent by remember { mutableStateOf(false) }
     var consentChecked by remember { mutableStateOf(false) }
+    var touchEntropySalt by remember { mutableStateOf<ByteArray?>(null) }
 
     LaunchedEffect(isReady) {
         if (isReady) {
@@ -214,7 +215,10 @@ fun OnboardingScreen(
                     
                     OutlinedTextField(
                         value = nickname,
-                        onValueChange = { nickname = it },
+                        onValueChange = { 
+                            nickname = it 
+                            touchEntropySalt = null // Reset salt when nickname changes
+                        },
                         label = { Text("Your nickname") },
                         placeholder = { Text("e.g. christy") },
                         singleLine = true,
@@ -227,14 +231,23 @@ fun OnboardingScreen(
                             .imePadding()
                     )
 
+                    if (nickname.trim().isNotEmpty()) {
+                        Spacer(modifier = Modifier.height(16.dp))
+                        com.scmessenger.android.ui.components.EntropyCanvas(
+                            onEntropyComplete = { salt ->
+                                touchEntropySalt = salt
+                            }
+                        )
+                    }
+
                     Spacer(modifier = Modifier.height(12.dp))
 
                     Button(
                         onClick = {
                             viewModel.clearIdentityError()
-                            viewModel.createIdentity(nickname)
+                            viewModel.createIdentity(nickname, touchEntropySalt)
                         },
-                        enabled = nickname.trim().isNotEmpty(),
+                        enabled = nickname.trim().isNotEmpty() && touchEntropySalt != null,
                         modifier = Modifier.fillMaxWidth().height(56.dp)
                     ) {
                         Text("Generate Identity")
