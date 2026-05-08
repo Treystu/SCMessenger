@@ -30,6 +30,7 @@ import timber.log.Timber
 import java.util.Collections
 import java.util.concurrent.atomic.AtomicInteger
 import javax.inject.Inject
+import com.scmessenger.android.data.PreferencesRepository
 
 /**
  * Foreground service maintaining mesh network connectivity.
@@ -52,6 +53,9 @@ class MeshForegroundService : Service() {
 
     @Inject
     lateinit var platformBridge: AndroidPlatformBridge
+
+    @Inject
+    lateinit var preferencesRepository: PreferencesRepository
 
     @Volatile private var isRunning = false
     private val connectedPeers: MutableSet<String> = Collections.synchronizedSet(mutableSetOf())
@@ -243,6 +247,25 @@ class MeshForegroundService : Service() {
                     durationMs = performanceMonitor.getServiceUptimeMs()
                 )
 
+                // Reactive VPN service lifecycle binding
+                launch {
+                    preferencesRepository.vpnModeEnabled.collect { enabled ->
+                        if (enabled && isRunning) {
+                            val vpnIntent = Intent(this@MeshForegroundService, MeshVpnService::class.java).apply {
+                                action = MeshVpnService.ACTION_START
+                            }
+                            startService(vpnIntent)
+                            Timber.i("MeshVpnService started dynamically via Settings toggle")
+                        } else {
+                            val vpnIntent = Intent(this@MeshForegroundService, MeshVpnService::class.java).apply {
+                                action = MeshVpnService.ACTION_STOP
+                            }
+                            startService(vpnIntent)
+                            Timber.i("MeshVpnService stopped dynamically via Settings toggle")
+                        }
+                    }
+                }
+
                 Timber.i("Mesh service started successfully - ANR watchdog active")
             } catch (e: Exception) {
                 Timber.e(e, "Failed to start mesh service")
@@ -351,6 +374,12 @@ class MeshForegroundService : Service() {
                 title = "Mesh Service Stopped",
                 message = "Mesh network is now inactive"
             )
+
+            // Stop VPN service if running
+            val vpnIntent = Intent(this@MeshForegroundService, MeshVpnService::class.java).apply {
+                action = MeshVpnService.ACTION_STOP
+            }
+            startService(vpnIntent)
 
             // Clean up
             withContext(Dispatchers.Default) {

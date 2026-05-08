@@ -62,12 +62,12 @@ pub struct IronCoreBehaviour {
     /// LAN peer discovery — wrapped in Toggle so it can be disabled in
     /// environments without multicast support (containers, CI, cloud VMs).
     /// On Android, NsdManager is used instead (see MdnsServiceDiscovery.kt).
-    #[cfg(not(target_arch = "wasm32"))]
+    #[cfg(all(not(target_arch = "wasm32"), not(target_os = "android")))]
     pub mdns: Toggle<mdns::tokio::Behaviour>,
     /// Peer identification — advertises relay capability
     pub identify: identify::Behaviour,
     /// UPnP port mapping
-    #[cfg(not(target_arch = "wasm32"))]
+    #[cfg(all(not(target_arch = "wasm32"), not(target_os = "android")))]
     pub upnp: upnp::tokio::Behaviour,
 }
 

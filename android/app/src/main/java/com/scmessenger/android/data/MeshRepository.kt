@@ -3372,20 +3372,44 @@ open class MeshRepository(private val context: Context) {
             return
         }
 
-        val canonical = canonicalId(contact.peerId)
-        val finalContact = if (canonical != contact.peerId) {
+        // Idempotent upsert unique constraint check: match existing contact by public key
+        val existingWithKey = try {
+            contactManager?.list()?.firstOrNull {
+                it.publicKey?.trim()?.lowercase() == trimmedKey.lowercase()
+            }
+        } catch (_: Exception) { null }
+
+        val finalContact = if (existingWithKey != null) {
+            Timber.i("Idempotent contact upsert: peer ${contact.peerId} matches existing contact ${existingWithKey.peerId} by public key")
             uniffi.api.Contact(
-                peerId = canonical,
-                nickname = contact.nickname,
-                localNickname = contact.localNickname,
-                publicKey = contact.publicKey,
-                addedAt = contact.addedAt,
-                lastSeen = contact.lastSeen,
-                notes = contact.notes,
-                lastKnownDeviceId = contact.lastKnownDeviceId
+                peerId = existingWithKey.peerId,
+                nickname = contact.nickname ?: existingWithKey.nickname,
+                localNickname = contact.localNickname ?: existingWithKey.localNickname,
+                publicKey = existingWithKey.publicKey,
+                addedAt = existingWithKey.addedAt,
+                lastSeen = if (contact.lastSeen != null) {
+                    val currentLastSeen = existingWithKey.lastSeen ?: 0u
+                    if (contact.lastSeen!! > currentLastSeen) contact.lastSeen else currentLastSeen
+                } else existingWithKey.lastSeen,
+                notes = contact.notes ?: existingWithKey.notes,
+                lastKnownDeviceId = contact.lastKnownDeviceId ?: existingWithKey.lastKnownDeviceId
             )
         } else {
-            contact
+            val canonical = canonicalId(contact.peerId)
+            if (canonical != contact.peerId) {
+                uniffi.api.Contact(
+                    peerId = canonical,
+                    nickname = contact.nickname,
+                    localNickname = contact.localNickname,
+                    publicKey = contact.publicKey,
+                    addedAt = contact.addedAt,
+                    lastSeen = contact.lastSeen,
+                    notes = contact.notes,
+                    lastKnownDeviceId = contact.lastKnownDeviceId
+                )
+            } else {
+                contact
+            }
         }
 
         contactManager?.add(finalContact)
@@ -3396,7 +3420,7 @@ open class MeshRepository(private val context: Context) {
             publicKey = finalContact.publicKey,
             nickname = finalContact.nickname
         )
-        Timber.d("Contact added: $canonical")
+        Timber.d("Contact added/updated: ${finalContact.peerId}")
     }
 
     fun getContact(peerId: String): uniffi.api.Contact? {

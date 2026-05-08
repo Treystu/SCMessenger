@@ -20,6 +20,11 @@ import com.scmessenger.android.ui.components.LabeledCopyableText
 import com.scmessenger.android.ui.components.TruncatedCopyableText
 import com.scmessenger.android.ui.components.WarningBanner
 import com.scmessenger.android.ui.viewmodels.SettingsViewModel
+import android.net.VpnService
+import android.app.Activity
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.ui.platform.LocalContext
 
 /**
  * Power Settings screen - AutoAdjust engine and battery management.
@@ -41,6 +46,17 @@ fun PowerSettingsScreen(
     val currentProfile by viewModel.adjustmentProfile.collectAsState()
     val error by viewModel.error.collectAsState()
     val settings by viewModel.settings.collectAsState()
+
+    val context = LocalContext.current
+    val vpnModeEnabled by viewModel.vpnMode.collectAsState(initial = false)
+
+    val vpnLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            viewModel.setVpnMode(true)
+        }
+    }
 
     var bleScanInterval by remember { mutableStateOf(2000u) }
     var relayMaxPerHour by remember { mutableStateOf(200u) }
@@ -246,6 +262,24 @@ fun PowerSettingsScreen(
                             viewModel.updateBatteryFloor(it.toInt().toUByte())
                         },
                         valueLabel = "${currentSettings.batteryFloor}%"
+                    )
+
+                    SwitchSetting(
+                        title = "Background Tunnel (VPN)",
+                        description = "Keeps connection alive in the background using an idle, local loop. Consumes no network data.",
+                        checked = vpnModeEnabled,
+                        onCheckedChange = { enabled ->
+                            if (enabled) {
+                                val intent = VpnService.prepare(context)
+                                if (intent != null) {
+                                    vpnLauncher.launch(intent)
+                                } else {
+                                    viewModel.setVpnMode(true)
+                                }
+                            } else {
+                                viewModel.setVpnMode(false)
+                            }
+                        }
                     )
 
                     InfoCard(

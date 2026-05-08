@@ -14,13 +14,18 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.google.mlkit.vision.barcode.common.Barcode
+import com.google.mlkit.vision.codescanner.GmsBarcodeScannerOptions
+import com.google.mlkit.vision.codescanner.GmsBarcodeScanning
 import com.scmessenger.android.ui.viewmodels.MainViewModel
+import timber.log.Timber
 
 @OptIn(com.google.accompanist.permissions.ExperimentalPermissionsApi::class)
 @Composable
@@ -346,16 +351,48 @@ private fun ImportContactDialog(
     onImport: () -> Unit,
     onDismiss: () -> Unit
 ) {
+    val context = LocalContext.current
+    var qrScanError by remember { mutableStateOf<String?>(null) }
+
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Import Contact") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(
-                    text = "Paste the identity JSON shared by your contact.",
+                    text = "Paste the identity JSON shared by your contact, or scan their QR code.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+                
+                Button(
+                    onClick = {
+                        val options = GmsBarcodeScannerOptions.Builder()
+                            .setBarcodeFormats(Barcode.FORMAT_QR_CODE)
+                            .build()
+                        val scanner = GmsBarcodeScanning.getClient(context, options)
+                        scanner.startScan()
+                            .addOnSuccessListener { barcode ->
+                                val rawValue = barcode.rawValue
+                                if (rawValue.isNullOrBlank()) {
+                                    qrScanError = "QR code was empty. Please try again."
+                                } else {
+                                    onImportCodeChange(rawValue)
+                                    qrScanError = null
+                                }
+                            }
+                            .addOnFailureListener { e ->
+                                Timber.w(e, "Onboarding QR scan failed")
+                                qrScanError = "Unable to scan QR code. Please try again."
+                            }
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Scan QR Code")
+                }
+
+                Spacer(modifier = Modifier.height(4.dp))
+
                 OutlinedTextField(
                     value = importCode,
                     onValueChange = onImportCodeChange,
@@ -372,7 +409,9 @@ private fun ImportContactDialog(
                         )
                     }
                 )
-                importError?.let { error ->
+                
+                val errorText = importError ?: qrScanError
+                errorText?.let { error ->
                     Text(
                         text = error,
                         style = MaterialTheme.typography.bodySmall,
