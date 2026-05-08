@@ -3007,7 +3007,7 @@ open class MeshRepository(private val context: Context) {
         val activeCore = core ?: return
         try {
             val backup = if (customSalt != null) {
-                activeCore.exportIdentityBackupWithSalt("", customSalt.toList())
+                activeCore.exportIdentityBackupWithSalt("", customSalt)
             } else {
                 activeCore.exportIdentityBackup("")
             }

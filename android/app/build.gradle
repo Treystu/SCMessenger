@@ -242,6 +242,7 @@ task buildRustAndroid {
                 workingDir '../../'
                 // Ensure 16KB page alignment for Android 15+ compatibility
                 environment "RUSTFLAGS", "-C link-arg=-Wl,-z,max-page-size=16384"
+                environment "CARGO_INCREMENTAL", "0"
 
                 if (sdkDir) environment "ANDROID_HOME", sdkDir
                 if (ndkDir && file(ndkDir).exists()) environment "ANDROID_NDK_HOME", ndkDir
@@ -295,6 +296,7 @@ task generateUniFFIBindings {
         exec {
             workingDir '../../'
             environment "RUSTFLAGS", ""
+            environment "CARGO_INCREMENTAL", "0"
             if (isWindows && msysUcrtBin) {
                 environment "PATH", "${msysUcrtBin};${System.getenv('PATH')}"
                 commandLine 'cmd', '/c', 'cargo build --target x86_64-pc-windows-gnu -p scmessenger-mobile'
@@ -307,6 +309,7 @@ task generateUniFFIBindings {
             workingDir '../../core'
             // Unset RUSTFLAGS to avoid Android-specific linker flags affecting the generator build
             environment "RUSTFLAGS", ""
+            environment "CARGO_INCREMENTAL", "0"
 
             if (isWindows && msysUcrtBin) {
                 environment "PATH", "${msysUcrtBin};${System.getenv('PATH')}"
