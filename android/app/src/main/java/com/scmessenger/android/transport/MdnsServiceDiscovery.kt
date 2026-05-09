@@ -22,12 +22,14 @@ class MdnsServiceDiscovery(
     private val context: Context,
     private val onPeerDiscovered: (peerId: String) -> Unit,
     private val onDataReceived: (peerId: String, data: ByteArray) -> Unit,
-    private val onLanPeerResolved: ((peerId: String, host: String, port: Int) -> Unit)? = null
+    private val onLanPeerResolved: ((peerId: String, host: String, port: Int) -> Unit)? = null,
+    private val getLocalPeerId: (() -> String?)? = null
 ) {
     private var nsdManager: NsdManager? = null
     private var registrationListener: NsdManager.RegistrationListener? = null
     private var discoveryListener: NsdManager.DiscoveryListener? = null
     private var resolveListener: NsdManager.ResolveListener? = null
+    private var multicastLock: android.net.wifi.WifiManager.MulticastLock? = null
 
     @Volatile private var isRunning = false
     @Volatile private var isRegistered = false
@@ -43,7 +45,7 @@ class MdnsServiceDiscovery(
 
     // Service type must match libp2p-mdns default (_p2p._udp.) so Rust peers discover us.
     // Android's NsdManager appends .local. automatically -- do not include it here.
-    private val serviceType = "_p2p._udp."
+    private val serviceType = "_ipfs-discovery._udp"
     private val serviceName = "SCMessenger"
     private val servicePort = 9001 // Must match the actual libp2p swarm listen port (startSwarm /ip4/0.0.0.0/tcp/9001)
 
@@ -81,7 +83,9 @@ class MdnsServiceDiscovery(
         Timber.d("mDNS service found: ${serviceInfo.serviceName} type: ${serviceInfo.serviceType}")
 
         // Only process services of our type
-        if (serviceInfo.serviceType == serviceType || serviceInfo.serviceType.equals("$serviceType.", ignoreCase = true)) {
+        val typeStripped = serviceInfo.serviceType.trimEnd('.')
+        val targetStripped = serviceType.trimEnd('.')
+        if (typeStripped.equals(targetStripped, ignoreCase = true)) {
             resolveService(serviceInfo)
         }
     }
@@ -280,6 +284,19 @@ class MdnsServiceDiscovery(
         }
 
         try {
+            val wifiManager = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as? android.net.wifi.WifiManager
+            if (wifiManager != null) {
+                multicastLock = wifiManager.createMulticastLock("scmessenger_mdns_lock").apply {
+                    setReferenceCounted(true)
+                    acquire()
+                }
+                Timber.i("mDNS Wifi MulticastLock acquired")
+            }
+        } catch (e: Exception) {
+            Timber.w("Failed to acquire Wifi MulticastLock: ${e.message}")
+        }
+
+        try {
             nsdManager = context.getSystemService(Context.NSD_SERVICE) as? NsdManager
             if (nsdManager == null) {
                 Timber.e("NsdManager not available")
@@ -313,6 +330,18 @@ class MdnsServiceDiscovery(
         isRunning = false
 
         try {
+            multicastLock?.let {
+                if (it.isHeld) {
+                    it.release()
+                    Timber.i("mDNS Wifi MulticastLock released")
+                }
+            }
+            multicastLock = null
+        } catch (e: Exception) {
+            Timber.w("Failed to release Wifi MulticastLock: ${e.message}")
+        }
+
+        try {
             // Stop discovery
             if (isDiscovering) {
                 discoveryListener?.let { nsdManager?.stopServiceDiscovery(it) }
@@ -338,17 +367,22 @@ class MdnsServiceDiscovery(
      * Register our mDNS service for discovery by other devices.
      */
     private fun registerService() {
+        val localId = getLocalPeerId?.invoke()
         val serviceInfo = NsdServiceInfo().apply {
-            serviceName = this@MdnsServiceDiscovery.serviceName
+            serviceName = if (!localId.isNullOrBlank()) localId else this@MdnsServiceDiscovery.serviceName
             serviceType = this@MdnsServiceDiscovery.serviceType
             port = servicePort
             // Add service data to identify this as an SCMessenger device
             setAttribute("version", "1.0")
             setAttribute("service", "scmessenger")
-            // Advertise the libp2p peer-id in TXT so resolvers can construct
-            // the full /p2p/ multiaddr without an extra handshake round-trip.
-            // Note: the actual peer-id should be set from the active identity
-            // before registration; this is a best-effort placeholder.
+            
+            // Set peer ID attributes so other peers (like Windows CLI) can discover us and associate our IP with our peer ID
+            if (!localId.isNullOrBlank()) {
+                setAttribute("peer-id", localId)
+                setAttribute("p2p", localId)
+                setAttribute("dnsaddr", "/ip4/0.0.0.0/tcp/$servicePort/p2p/$localId")
+                Timber.i("mDNS advertising TXT peer-id: $localId")
+            }
         }
 
         registrationListener = object : NsdManager.RegistrationListener {

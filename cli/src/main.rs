@@ -1625,9 +1625,15 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
 
                             // IDENTIFY: Peer identity confirmed — update ledger
                             SwarmEvent::PeerIdentified { peer_id, listen_addrs, .. } => {
-                                let mut l = ledger_rx.lock().await;
-                                for addr in &listen_addrs {
-                                    l.record_connection(&addr.to_string(), &peer_id.to_string());
+                                let entries = {
+                                    let mut l = ledger_rx.lock().await;
+                                    for addr in &listen_addrs {
+                                        l.record_connection(&addr.to_string(), &peer_id.to_string());
+                                    }
+                                    l.to_shared_entries()
+                                };
+                                if let Err(e) = swarm_handle.share_ledger(peer_id, entries).await {
+                                    tracing::warn!("Failed to share ledger with identified peer {}: {}", peer_id, e);
                                 }
                             }
 

@@ -826,6 +826,19 @@ open class MeshRepository(private val context: Context) {
                 onDataReceived = { peerId, data, transport ->
                     // TransportManager data is handled by MeshService via onDataReceived
                     meshService?.onDataReceived(peerId, data)
+                },
+                onLanAddressResolved = { multiaddr ->
+                    repoScope.launch {
+                        try {
+                            swarmBridge?.dial(multiaddr)
+                            Timber.i("Successfully dialed discovered LAN peer $multiaddr via SwarmBridge")
+                        } catch (e: Exception) {
+                            Timber.w("Failed to dial discovered LAN peer $multiaddr: ${e.message}")
+                        }
+                    }
+                },
+                getLocalPeerId = {
+                    ironCore?.getIdentityInfo()?.libp2pPeerId
                 }
             )
 

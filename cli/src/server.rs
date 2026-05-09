@@ -372,6 +372,30 @@ async fn handle_jsonrpc_request(
             }
             rpc_result(id, payload)
         }
+        ClientIntent::InitializeIdentity {} => {
+            if let Some(ref core) = ctx.core {
+                match core.initialize_identity() {
+                    Ok(()) => rpc_result(id, serde_json::json!({"initialized": true})),
+                    Err(e) => rpc_error(
+                        id,
+                        JsonRpcErrorBody {
+                            code: -32000,
+                            message: format!("Failed to initialize identity: {:?}", e),
+                            data: None,
+                        },
+                    ),
+                }
+            } else {
+                rpc_error(
+                    id,
+                    JsonRpcErrorBody {
+                        code: -32000,
+                        message: "Core not available".to_string(),
+                        data: None,
+                    },
+                )
+            }
+        }
         ClientIntent::SendMessage {
             recipient,
             message,

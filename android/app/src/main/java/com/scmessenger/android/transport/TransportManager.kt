@@ -25,10 +25,12 @@ import uniffi.api.AdjustmentProfile
  * 3. WiFi Direct for established connections (if available)
  * 4. Internet/libp2p for long-range (handled by SwarmBridge)
  */
-class TransportManager(
+class TransportManager @JvmOverloads constructor(
     private val context: Context,
     private val onPeerDiscovered: (peerId: String, transport: TransportType) -> Unit,
-    private val onDataReceived: (peerId: String, data: ByteArray, transport: TransportType) -> Unit
+    private val onDataReceived: (peerId: String, data: ByteArray, transport: TransportType) -> Unit,
+    private val onLanAddressResolved: ((multiaddr: String) -> Unit)? = null,
+    private val getLocalPeerId: (() -> String?)? = null
 ) {
 
     // Transport health monitor for health-aware transport selection
@@ -120,9 +122,15 @@ class TransportManager(
             },
             onLanPeerResolved = { peerId, host, port ->
                 Timber.i("mDNS LAN peer resolved: $peerId at $host:$port — feeding to SwarmBridge")
-                // The resolved LAN address will be dialed via SwarmBridge's libp2p swarm
+                val multiaddr = if (peerId.startsWith("12D3Koo")) {
+                    "/ip4/$host/tcp/$port/p2p/$peerId"
+                } else {
+                    "/ip4/$host/tcp/$port"
+                }
+                onLanAddressResolved?.invoke(multiaddr)
                 onPeerDiscovered(peerId, TransportType.TCP_MDNS)
-            }
+            },
+            getLocalPeerId = getLocalPeerId
         )
         mdnsDiscovery?.start()
 

@@ -97,7 +97,7 @@ impl Chain {
 
     /// Advance the chain: derive a message key and update the chain key.
     /// Returns the message key for this step.
-    fn next_message_key(&mut self) -> RatchetKey {
+    pub(crate) fn next_message_key(&mut self) -> RatchetKey {
         let msg_key = derive_key_with_info(&self.chain_key, b"message-key");
         self.chain_key = derive_key_with_info(&self.chain_key, b"chain-key");
         self.index += 1;

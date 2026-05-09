@@ -1,5 +1,9 @@
 # SCMessenger Core Architecture Guide
 
+Status: Active
+Last updated: 2026-05-09
+
+
 ## 📊 System Topology & Design Principles
 
 SCMessenger is a high-performance, sovereign, and decentralized mesh messaging engine built on top of a Rust core library (`scmessenger-core`) with platform adaptors (Android, iOS, CLI, WASM).
@@ -37,6 +41,6 @@ For browser environments, `WasmStorage` in `wasm/src/storage.rs` enforces hard-c
 
 ## 🗃️ Workspace Crate Map
 
-- **[scmessenger-core](file:///c:/Users/kanal/Documents/Github/SCMessenger/core)**: Cryptographic state, identity derivation, outbox queues, and IBLT-based set synchronization.
-- **[scmessenger-cli](file:///c:/Users/kanal/Documents/Github/SCMessenger/cli)**: Axum 0.7-powered daemon and CLI management shell.
-- **[scmessenger-wasm](file:///c:/Users/kanal/Documents/Github/SCMessenger/wasm)**: Thin web client adaptors optimized for browser sandboxes.
+- **[scmessenger-core](../core)**: Cryptographic state, identity derivation, outbox queues, and IBLT-based set synchronization.
+- **[scmessenger-cli](../cli)**: Axum 0.7-powered daemon and CLI management shell.
+- **[scmessenger-wasm](../wasm)**: Thin web client adaptors optimized for browser sandboxes.

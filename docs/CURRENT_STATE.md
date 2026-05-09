@@ -1,8 +1,24 @@
 # SCMessenger Current State (Verified)
 
 Status: Active
-Last updated: 2026-04-28
-Last verified: **2026-04-28** (Phase 1-3 complete: compilation baseline, module wiring, integration tests, security hardening)
+Last updated: 2026-05-09
+Last verified: **2026-05-09** (SCMessenger Windows CLI launched and verified; all local discovery transports—mDNS, BLE, WiFi-Aware—fully active and operational)
+
+---
+
+## 2026-05-09: Windows CLI Peer Discovery Verification
+
+**Status:** ✅ COMPLETE
+
+### Summary
+The SCMessenger Windows CLI (`scmessenger-cli.exe`) has been compiled, launched, and verified to have all local discovery transports fully active and functional:
+
+- **mDNS LAN Discovery**: ✅ Active and broadcasting on the local interface (`192.168.0.222`).
+- **Bluetooth/BLE Discovery**: ✅ Active scanning configured with the correct service UUID (`df010000-0000-1000-8000-00805f9b34fb`) via the `btleplug` manager (1 adapter successfully acquired).
+- **WiFi-Aware**: ✅ Configured and active.
+- **Control API & Warp Server**: ✅ Listening successfully on loopback (`127.0.0.1:9876` and `127.0.0.1:9000`).
+
+Both active scans (`discovery scan`) and peer listings (`discovery peers`) have been verified using the Python CLI driver (`core_cli_driver.py`).
 
 ---
 

@@ -216,7 +216,7 @@ Same 8 tasks as above (duplicate batch file). Process once, mark both done.
 
 ## SPRINT 6: CLI + WASM Wiring
 **Todo files**: `BATCH_CLI_WASM.md`, `task_cli_swarm_stats.md`
-**Status**: [ ] PENDING
+**Status**: [x] COMPLETED
 **Build gate**: `$env:CARGO_INCREMENTAL=0; cargo check -p scmessenger-cli`
 **~LOC**: 150
 

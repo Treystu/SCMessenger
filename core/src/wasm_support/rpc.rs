@@ -58,6 +58,7 @@ pub enum ClientIntent {
     ScanPeers {},
     GetTopology {},
     GetIdentity {},
+    InitializeIdentity {},
     // ── Contacts ──
     GetContacts {},
     AddContact {
@@ -174,6 +175,7 @@ pub fn parse_intent(req: &JsonRpcRequest) -> Result<ClientIntent, JsonRpcErrorBo
         "scan_peers" => Ok(ClientIntent::ScanPeers {}),
         "get_topology" => Ok(ClientIntent::GetTopology {}),
         "get_identity" => Ok(ClientIntent::GetIdentity {}),
+        "initialize_identity" => Ok(ClientIntent::InitializeIdentity {}),
         // ── Contacts ──
         "get_contacts" => Ok(ClientIntent::GetContacts {}),
         "add_contact" => {

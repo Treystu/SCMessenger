@@ -22,7 +22,7 @@ use uuid::Uuid;
 use crate::server::{UiEvent, UiOutbound};
 
 /// SCM GATT primary service UUID (must match `core/src/transport/ble/gatt.rs`).
-const GATT_SERVICE_UUID: u128 = 0xDF01_0000_0000_1000_8000_0080_5F9B_34FB;
+const GATT_SERVICE_UUID: u128 = 0x0000_DF01_0000_1000_8000_0080_5F9B_34FB;
 
 fn scm_service_uuid() -> Uuid {
     Uuid::from_u128(GATT_SERVICE_UUID)

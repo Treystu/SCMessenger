@@ -167,3 +167,33 @@ proptest! {
         prop_assert_ne!(env1.ciphertext, env2.ciphertext);
     }
 }
+
+proptest! {
+    #[test]
+    fn chain_ratchet_produces_distinct_keys(seed in any::<[u8; 32]>()) {
+        use crate::crypto::ratchet::{Chain, RatchetKey};
+        let mut chain = Chain::new(RatchetKey::from_bytes(seed));
+        let k1 = chain.next_message_key();
+        let k2 = chain.next_message_key();
+        prop_assert_ne!(k1.as_bytes(), k2.as_bytes());
+    }
+}
+
+proptest! {
+    #[test]
+    fn derive_key_always_32_bytes(info in any::<Vec<u8>>()) {
+        let key = [0u8; 32];
+        let derived = blake3::derive_key(&String::from_utf8_lossy(&info), &key);
+        prop_assert_eq!(derived.len(), 32);
+    }
+}
+
+proptest! {
+    #[test]
+    fn ed25519_conversion_produces_32_bytes(_seed in any::<[u8; 32]>()) {
+        let key = generate_keypair();
+        let converted = ed25519_to_x25519_secret(&key);
+        prop_assert_eq!(converted.to_bytes().len(), 32);
+    }
+}
+

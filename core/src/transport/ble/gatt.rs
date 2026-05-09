@@ -8,7 +8,7 @@ use std::collections::VecDeque;
 use thiserror::Error;
 
 /// GATT service UUID (0xDF01)
-pub const GATT_SERVICE_UUID: u128 = 0xDF01_0000_0000_1000_8000_00805F9B34FB;
+pub const GATT_SERVICE_UUID: u128 = 0x0000_DF01_0000_1000_8000_00805F9B34FB;
 
 /// Maximum GATT characteristic write size (protocol limitation)
 pub const MAX_CHARACTERISTIC_SIZE: usize = 512;
