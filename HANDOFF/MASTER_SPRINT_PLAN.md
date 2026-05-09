@@ -27,7 +27,7 @@
 
 ## SPRINT 1: Core Rust — IronCore Entrypoints
 **Todo file**: `BATCH_CORE_RUST_WIRING_C4_SUB02.md` (67KB, largest batch)
-**Status**: [ ] PENDING
+**Status**: [x] COMPLETED
 **Build gate**: `$env:CARGO_INCREMENTAL=0; cargo check --workspace`
 **~LOC**: 200
 

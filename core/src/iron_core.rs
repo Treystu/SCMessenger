@@ -201,6 +201,9 @@ pub struct IronCore {
 
     /// Security audit pipeline for cryptographic and protocol verification.
     pub(crate) security_audit_pipeline: Arc<crate::dspy::modules::OptimizerPipeline>,
+
+    /// Active runtime privacy configuration.
+    pub(crate) privacy_config: Arc<RwLock<crate::privacy::PrivacyConfig>>,
 }
 
 impl Default for IronCore {
@@ -279,6 +282,7 @@ impl IronCore {
             peer_exchange_manager: Arc::new(RwLock::new(PeerExchangeManager::new())),
             ratchet_sessions,
             security_audit_pipeline,
+            privacy_config: Arc::new(RwLock::new(crate::privacy::PrivacyConfig::default())),
         }
     }
 
@@ -359,6 +363,7 @@ impl IronCore {
             peer_exchange_manager: Arc::new(RwLock::new(PeerExchangeManager::new())),
             ratchet_sessions: Arc::new(RwLock::new(RatchetSessionManager::new())),
             security_audit_pipeline,
+            privacy_config: Arc::new(RwLock::new(crate::privacy::PrivacyConfig::default())),
         }
     }
 
@@ -439,6 +444,7 @@ impl IronCore {
             peer_exchange_manager: Arc::new(RwLock::new(PeerExchangeManager::new())),
             ratchet_sessions: Arc::new(RwLock::new(RatchetSessionManager::new())),
             security_audit_pipeline,
+            privacy_config: Arc::new(RwLock::new(crate::privacy::PrivacyConfig::default())),
         }
     }
 
@@ -449,12 +455,14 @@ impl IronCore {
             return Err(IronCoreError::AlreadyRunning);
         }
         *running = true;
+        self.drift_activate();
         tracing::info!("IronCore started");
         Ok(())
     }
 
     /// Stop the core gracefully.
     pub fn stop(&self) {
+        self.drift_deactivate();
         *self.running.write() = false;
         tracing::info!("IronCore stopped");
     }
@@ -575,7 +583,18 @@ impl IronCore {
 
         let envelope = encrypt_message(&keys.signing_key, &recipient_pk, &message_bytes)
             .map_err(|_| IronCoreError::CryptoError)?;
-        let envelope_data = encode_envelope(&envelope).map_err(|_| IronCoreError::Internal)?;
+        let mut envelope_data = encode_envelope(&envelope).map_err(|_| IronCoreError::Internal)?;
+
+        if self.privacy_config().onion_routing_enabled {
+            let relays = self.swarm_get_best_relays(3);
+            if !relays.is_empty() {
+                if let Ok(relays_json) = serde_json::to_string(&relays) {
+                    if let Ok(onion_bytes) = self.prepare_onion_message(envelope_data.clone(), relays_json) {
+                        envelope_data = onion_bytes;
+                    }
+                }
+            }
+        }
 
         let _ = self.outbox.write().enqueue(QueuedMessage {
             message_id: message_id.clone(),
@@ -1162,8 +1181,9 @@ impl IronCore {
     // -----------------------------------------------------------------------
 
     pub fn set_privacy_config(&self, json: String) -> Result<(), IronCoreError> {
-        let _config: crate::privacy::PrivacyConfig =
+        let config: crate::privacy::PrivacyConfig =
             serde_json::from_str(&json).map_err(|_| IronCoreError::InvalidInput)?;
+        *self.privacy_config.write() = config;
         tracing::info!("Privacy config updated");
         Ok(())
     }
@@ -1231,6 +1251,8 @@ impl IronCore {
 
         // Clean up stale connection stats from the health monitor.
         self.transport_manager.write().tick();
+
+        let _ = self.validate_audit_chain();
 
         Ok(())
     }
@@ -1695,9 +1717,14 @@ impl IronCore {
                 "phase_elapsed_ms": budget.phase_elapsed.as_millis(),
                 "exhausted": budget.is_exhausted,
             });
+            payload["drift_network_state"] = serde_json::json!(self.drift_network_state());
+            payload["drift_store_size"] = serde_json::json!(self.drift_store_size());
             serde_json::to_string(&payload).unwrap_or_else(|_| "{}".to_string())
         } else {
-            "{}".to_string()
+            let mut payload = serde_json::json!({});
+            payload["drift_network_state"] = serde_json::json!(self.drift_network_state());
+            payload["drift_store_size"] = serde_json::json!(self.drift_store_size());
+            serde_json::to_string(&payload).unwrap_or_else(|_| "{}".to_string())
         }
     }
 
@@ -2085,7 +2112,7 @@ impl IronCore {
         )
     }
     pub fn privacy_config(&self) -> crate::privacy::PrivacyConfig {
-        crate::privacy::PrivacyConfig::default()
+        self.privacy_config.read().clone()
     }
     pub fn make_routing_decision(
         &self,
