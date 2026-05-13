@@ -1,7 +1,62 @@
 # SCMessenger Remaining Work Tracking
 
 Status: Active
-Last updated: 2026-04-29
+Last updated: 2026-05-13 (MASTER AUDIT by deepseek-v4-pro:cloud)
+
+---
+
+## 2026-05-13 MASTER AUDIT: V-Gate Clearance Findings
+
+**Status:** AUDIT COMPLETE — V-Gate CLEARED with findings below
+
+### Premature Done/ Movement (10 files carry incomplete status)
+These files were moved to `HANDOFF/done/` but still contain unresolved work. They must NOT be considered complete:
+
+| File | Status in Body | Actual State |
+|------|---------------|--------------|
+| `P0_IDENTITY_001_Unified_ID_System.md` | "todo" | Incomplete — ID unification not done |
+| `P0_CORE_001_Drift_Protocol_Completion.md` | "Open" | Incomplete — Drift not wired to production |
+| `phase_3_security_hardening.md` | "NOT STARTED" | Incomplete — adversarial review not done |
+| `phase_5_prerelease_verification.md` | "NOT STARTED" | Incomplete — gatekeeper review not done |
+| `BATCH_S1_T1_FIX_ANDROID_BUILD.md` | "[ ] TODO" | Incomplete — Android build task |
+| `FOR_BETA_SWEEP_B2_CORE_TRANSPORT_ROUTING.md` | "Open" | Incomplete — B2 sweep not done |
+| `P0_WASM_002_THIN_CLIENT_COMPLETION.md` | "In Progress" | Partial — BLE peripheral stub, bridge incomplete |
+| `IN_PROGRESS_P0_NETWORK_001_BOOTSTRAP_FALLBACK_IMPLEMENTATION.md` | "IN_PROGRESS" | Phases 1-5 done, 6-7 not started |
+| `P0_TRANSPORT_001_CLI_Android_LAN_Unification.md` | Incomplete | Acceptance criteria unchecked |
+| `phase_2_platform_clients.md` | "PARTIAL" | Android blocked, iOS not verified |
+
+### Newly Discovered Gaps (from FINAL_WIRING_AUDIT + V2)
+
+**P0 — Google Play Readiness:**
+- [ ] Deprecated API usage with `@Suppress("DEPRECATION")` at targetSdk=35 (6 sites in mDNS, BLE, WiFi Direct)
+- [ ] Missing `foregroundServiceType="dataSync"` in AndroidManifest.xml (required if background sync)
+
+**P1 — Feature Incomplete:**
+- [ ] WASM thin client supports only 4 JSON-RPC methods (missing contacts, settings, history, blocking)
+- [ ] 3 IronCore placeholder methods: `export_logs()` returns empty, `record_log()` trace-only, `update_disk_stats()` no-op
+- [ ] No network type debounce in `NetworkDetector.kt` (transport flapping risk)
+- [ ] Nickname DataStore fallback never pushes back to Rust Core in `SettingsViewModel.kt`
+- [ ] Multi-device blocking not implemented (`blocked.rs` device-ID pairing)
+- [ ] MeshVpnService disabled by default in AndroidManifest (`android:enabled="false"`)
+
+**P2 — Technical Debt:**
+- [ ] 3 hardcoded "Unknown" strings in Android UI (not in strings.xml)
+- [ ] 14 `IllegalStateException` throw sites in MeshRepository.kt (crash-prone guard clauses)
+- [ ] Duplicate notification channel creation (NotificationHelper + MeshForegroundService)
+
+### Current Build State (from git status 2026-05-13)
+- Uncommitted changes: `SwarmHeartbeat.ps1` (migrated to ollama cloud routing), `TaskGovernor.ps1` (migrated to ollama launch)
+- Untracked: `API_EFFICIENCY_LEDGER.md`
+- 1 task in-flight: `HANDOFF/IN_PROGRESS/BATCH_RUST_GROUPB_DSPY_MODULES.md`
+- `.claude/process_cache/13134` and `13284` deleted (process cleanup)
+
+### Todo/ Audit Results
+- `task_epic_wiring_draft.md` → REJECTED (unresolved `[USER: INSERT...]` placeholder)
+- `task_fire_drill_audit.md` → VALIDATED (git status check still needed; repo has uncommitted changes)
+- `ORCHESTRATOR_SESSION.md` → MOVED to `HANDOFF/` root (reference material, not a task)
+
+---
+
 
 ---
 

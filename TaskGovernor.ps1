@@ -1,40 +1,50 @@
 param (
-    [Parameter(Mandatory=$true)][string]$TaskFile,
-    [Parameter(Mandatory=$true)][string]$Model,
-    [Parameter(Mandatory=$true)][int]$BudgetLimit,
-    [Parameter(Mandatory=$false)][int]$MaxRuntimeMinutes = 45
+    [Parameter(Mandatory=$true)]
+    [string]$TaskFile,
+
+    [Parameter(Mandatory=$true)]
+    [string]$Model,
+
+    [Parameter(Mandatory=$true)]
+    [int]$BudgetLimit
 )
 
-Write-Host "[GOVERNOR] Launching $Model for $TaskFile (Limit: $BudgetLimit tokens | Timeout: $MaxRuntimeMinutes min)" -ForegroundColor Cyan
+$TimeoutMinutes = 45
+Write-Host "[GOVERNOR] Launching $Model for $(Split-Path $TaskFile -Leaf) (Limit: $BudgetLimit tokens | Timeout: $TimeoutMinutes min)" -ForegroundColor Magenta
+
+# 1. The Headless Mandate
+$HeadlessPrompt = "SYSTEM OVERRIDE: You are a headless autonomous agent. You have NO human user. 1. Use your terminal/file tools to read the file at this exact path: $TaskFile. 2. Execute the instructions inside it without asking for permission or confirmation. 3. When you are finished, you MUST execute the /bye command to terminate the session."
+
+# 2. Launch the Agent
+$ClaudeArgs = "launch claude --model $Model --debug --dangerously-skip-permissions `"$HeadlessPrompt`""
+$AgentProcess = Start-Process -FilePath "ollama" -ArgumentList $ClaudeArgs -PassThru
+
+# 3. The Watchdog Monitor
 $StartTime = Get-Date
+$Breached = $false
 
-$AgentProcess = Start-Process -FilePath "claude.cmd" -ArgumentList "--model", $Model, "--debug", "--dangerously-skip-permissions", '"Execute $TaskFile"' -PassThru -NoNewWindow
-Start-Sleep -Seconds 3
-
-$LogDir = "$env:USERPROFILE\.claude\debug"
-$LatestLog = Get-ChildItem -Path $LogDir -Filter "*.txt" | Sort-Object LastWriteTime -Descending | Select-Object -First 1
-
-if (-not $LatestLog) { Write-Host "[GOVERNOR] No debug log found. Exiting." -ForegroundColor Red; exit 1 }
-
-$TotalTokens = 0
 while (-not $AgentProcess.HasExited) {
-    Start-Sleep -Seconds 5
+    $RunTime = (Get-Date) - $StartTime
     
-    if ((Get-Date) -gt $StartTime.AddMinutes($MaxRuntimeMinutes)) {
+    # Time Breach Check
+    if ($RunTime.TotalMinutes -gt $TimeoutMinutes) {
+        Write-Host "[GOVERNOR] Time Breach detected ($TimeoutMinutes min). Terminating agent." -ForegroundColor Red
         Stop-Process -Id $AgentProcess.Id -Force
-        Rename-Item -Path $TaskFile -NewName ($TaskFile -replace 'HANDOFF\\todo\\', 'HANDOFF\todo\[TIME_BREACH]_')
-        exit 1
+        $Breached = $true
+        
+        # Rename and move back to Todo so Orchestrator sees the failure
+        $TodoDir = $TaskFile.Replace("IN_PROGRESS", "todo")
+        $FailedPath = Join-Path (Split-Path $TodoDir) ("[TIME_BREACH]_" + (Split-Path $TaskFile -Leaf))
+        Move-Item -LiteralPath $TaskFile -Destination $FailedPath -Force -ErrorAction SilentlyContinue
+        break
     }
-
-    $LogContent = Get-Content $LatestLog.FullName -Raw
-    $In = ([regex]::Matches($LogContent, '"input_tokens"\s*:\s*(\d+)') | ForEach-Object { [int]$_.Groups[1].Value } | Measure-Object -Sum).Sum
-    $Out = ([regex]::Matches($LogContent, '"output_tokens"\s*:\s*(\d+)') | ForEach-Object { [int]$_.Groups[1].Value } | Measure-Object -Sum).Sum
-    $TotalTokens = $In + $Out
-
-    if ($TotalTokens -gt $BudgetLimit) {
-        Stop-Process -Id $AgentProcess.Id -Force
-        Rename-Item -Path $TaskFile -NewName ($TaskFile -replace 'HANDOFF\\todo\\', 'HANDOFF\todo\[BUDGET_BREACH]_')
-        exit 1
-    }
+    
+    Start-Sleep -Seconds 10
 }
-Write-Host "[GOVERNOR] Agent completed natively. Tokens: $TotalTokens." -ForegroundColor Green
+
+# 4. Successful Completion Handoff
+if (-not $Breached) {
+    Write-Host "[GOVERNOR] Agent session ended normally. Moving task to done/." -ForegroundColor Green
+    $DonePath = $TaskFile.Replace("IN_PROGRESS", "done")
+    Move-Item -LiteralPath $TaskFile -Destination $DonePath -Force -ErrorAction SilentlyContinue
+}
