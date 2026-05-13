@@ -409,7 +409,7 @@ impl DaemonBridge {
         ws.set_onclose(Some(onclose.as_ref().unchecked_ref()));
         onclose.forget();
 
-        *self.socket.lock() = Some(ws);
+        *self.socket.borrow_mut() = Some(ws);
         tracing::info!("Daemon bridge connecting to {}", self.url);
         Ok(())
     }
@@ -444,9 +444,9 @@ impl DaemonBridge {
         let payload = serde_json::to_string(&req)
             .map_err(|e| format!("Failed to serialize request: {}", e))?;
 
-        self.pending.lock().insert(id, cb);
+        self.pending.borrow_mut().insert(id, cb);
 
-        let guard = self.socket.lock();
+        let guard = self.socket.borrow();
         let sock = guard
             .as_ref()
             .ok_or_else(|| "WebSocket not connected — call connect() first".to_string())?;
@@ -479,7 +479,7 @@ impl DaemonBridge {
     /// Cancel a pending request by ID (the callback will not fire).
     #[cfg(target_arch = "wasm32")]
     pub fn cancel_request(&self, id: u64) {
-        self.pending.lock().remove(&id);
+        self.pending.borrow_mut().remove(&id);
     }
 
     #[cfg(not(target_arch = "wasm32"))]
@@ -488,8 +488,8 @@ impl DaemonBridge {
     /// Close the WebSocket and drop all pending callbacks.
     #[cfg(target_arch = "wasm32")]
     pub fn disconnect(&self) {
-        self.pending.lock().clear();
-        let mut guard = self.socket.lock();
+        self.pending.borrow_mut().clear();
+        let mut guard = self.socket.borrow_mut();
         if let Some(ws) = guard.take() {
             if let Err(e) = ws.close() {
                 tracing::warn!("Daemon bridge close error: {:?}", e);
@@ -505,7 +505,7 @@ impl DaemonBridge {
     /// True if a WebSocket handle is held (connected or connecting).
     #[cfg(target_arch = "wasm32")]
     pub fn is_connected(&self) -> bool {
-        self.socket.lock().is_some()
+        self.socket.borrow().is_some()
     }
 
     #[cfg(not(target_arch = "wasm32"))]

@@ -14,6 +14,7 @@ use serde::{Deserialize, Serialize};
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
+use std::sync::Arc;
 
 /// Transport state enum
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -679,7 +680,7 @@ impl WebRtcTransport {
         {
             use wasm_bindgen_futures::JsFuture;
 
-            let pc = Rc::clone(&self.peer_conn);
+            let pc = Arc::clone(&self.peer_conn);
             let inner = Rc::clone(&self.inner);
 
             wasm_bindgen_futures::spawn_local(async move {
@@ -768,7 +769,7 @@ impl WebRtcTransport {
     pub fn set_remote_answer(&self, sdp_json: &str) -> Result<(), String> {
         #[cfg(target_arch = "wasm32")]
         {
-            let pc = Rc::clone(&self.peer_conn);
+            let pc = Arc::clone(&self.peer_conn);
             let inner = Rc::clone(&self.inner);
             let sdp = sdp_json.to_string();
 
@@ -826,7 +827,7 @@ impl WebRtcTransport {
     pub fn set_remote_offer(&self, sdp_json: &str) -> Result<(), String> {
         #[cfg(target_arch = "wasm32")]
         {
-            let pc = Rc::clone(&self.peer_conn);
+            let pc = Arc::clone(&self.peer_conn);
             let inner = Rc::clone(&self.inner);
             let sdp = sdp_json.to_string();
 
@@ -881,7 +882,7 @@ impl WebRtcTransport {
         {
             use wasm_bindgen_futures::JsFuture;
 
-            let pc = Rc::clone(&self.peer_conn);
+            let pc = Arc::clone(&self.peer_conn);
             let inner = Rc::clone(&self.inner);
 
             wasm_bindgen_futures::spawn_local(async move {
@@ -972,7 +973,7 @@ impl WebRtcTransport {
         {
             use wasm_bindgen::JsCast;
 
-            let pc = Rc::clone(&self.peer_conn);
+            let pc = Arc::clone(&self.peer_conn);
             let cand_str = candidate_json.to_string();
 
             wasm_bindgen_futures::spawn_local(async move {

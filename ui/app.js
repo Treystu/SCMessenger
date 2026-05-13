@@ -3,7 +3,6 @@
 // Wires EVERY available WASM API: IronCore, ContactManager, HistoryManager
 
 const DEFAULT_BOOTSTRAP = [
-  "/ip4/127.0.0.1/tcp/9001/ws/p2p/12D3KooWP3RGmGgRNtqGsfBCZgu8Wzao6qSsqYzLeLRmkqBdf5Ag",
   "/ip4/34.135.34.73/tcp/9001/ws/p2p/12D3KooWETatHYo4xt9aufXEEDce719fyMEB7KmXJga1SYVUikaw",
   "/ip4/104.28.216.43/tcp/9010/ws/p2p/12D3KooWHpmuhytgzLcM4nj1hZvN5b4crB1wka3LCNfKRCd7yHj9",
 ];

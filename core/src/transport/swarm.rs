@@ -3774,7 +3774,7 @@ pub async fn start_swarm_with_config(
             )?
             .with_relay_client(libp2p::noise::Config::new, libp2p::yamux::Config::default)?
             .with_behaviour(|key, relay_client| {
-                IronCoreBehaviour::new(key, relay_client, false)
+                IronCoreBehaviour::new(key, relay_client, headless, discovery_config)
                     .expect("Failed to create network behaviour")
             })?
             .with_swarm_config(|cfg| {

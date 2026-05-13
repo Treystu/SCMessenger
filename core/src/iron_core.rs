@@ -1407,7 +1407,6 @@ impl IronCore {
     /// Get the signable data for an invite token.
     /// Returns the serialized token data (without signature) suitable for
     /// Ed25519 signing.
-    #[cfg(not(target_arch = "wasm32"))]
     pub fn invite_get_signable_data(&self, token_bytes: Vec<u8>) -> Result<Vec<u8>, IronCoreError> {
         let token: crate::relay::invite::InviteToken =
             bincode::deserialize(&token_bytes).map_err(|_e| IronCoreError::Internal)?;
@@ -1825,11 +1824,15 @@ impl IronCore {
     /// Register a routing path for a peer.
     /// Records the path in the multipath delivery manager (Phase 2) and
     /// notes message activity for adaptive TTL tracking.
-    pub fn routing_register_path(&self, peer_id_hex: String, _path_id: u64, _latency_ms: u64) {
+    pub fn routing_register_path(&self, peer_id_hex: String, path_id: u64, latency_ms: u64) {
         if let Some(engine) = self.routing_engine.write().as_mut() {
             engine.record_message_activity(&peer_id_hex);
             #[cfg(feature = "phase2_apis")]
             engine.multipath_register_path(peer_id_hex.clone(), path_id, latency_ms);
+        }
+        #[cfg(not(feature = "phase2_apis"))]
+        {
+            let _ = (path_id, latency_ms);
         }
     }
 

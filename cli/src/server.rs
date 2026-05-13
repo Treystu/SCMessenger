@@ -209,7 +209,13 @@ pub async fn start(
             })
         });
 
-    let routes = landing.or(ws_route);
+    // Static route for /ui — serves the web app
+    let ui_route = warp::path("ui").and(warp::fs::dir("ui"));
+
+    // Static route for /wasm — serves built WASM assets used by the UI
+    let wasm_route = warp::path("wasm").and(warp::fs::dir("wasm"));
+
+    let routes = landing.or(ws_route).or(ui_route).or(wasm_route);
 
     // Bind and serve on 127.0.0.1 only (local bridge, never exposed to network).
     let bound_addr: std::net::SocketAddr = ([127, 0, 0, 1], port).into();

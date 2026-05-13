@@ -2081,9 +2081,10 @@ open class MeshRepository(private val context: Context) {
                     Timber.w(e, "Swarm transport failed to initialize; core service remains active")
                 }
 
-                // Start all transports via TransportManager
+                // Start all transports via TransportManager, gating mDNS by internetEnabled setting
                 try {
-                    transportManager?.startAll()
+                    val settings = loadSettings()
+                    transportManager?.startAll(enableMdns = settings.internetEnabled)
                 } catch (e: Exception) {
                     Timber.w(e, "TransportManager startAll failed; continuing with individual transports")
                 }
@@ -4889,15 +4890,16 @@ open class MeshRepository(private val context: Context) {
             }
         }
 
-        // Apply Internet settings (Swarm)
+        // Apply Internet settings (Swarm + TCP/mDNS)
         if (settings.internetEnabled != currentSettings.internetEnabled) {
             if (settings.internetEnabled) {
                 // Internet transport is handled by SwarmBridge, started via initializeAndStartSwarm
-                // For now, we just log the change
-                Timber.d("Internet transport enabled via settings")
+                transportManager?.enableTransport(TransportType.TCP_MDNS)
+                Timber.d("Internet transport (and mDNS LAN) enabled via settings")
             } else {
                 // Internet transport is handled by SwarmBridge, shutdown via stopMeshService
-                Timber.d("Internet transport disabled via settings")
+                transportManager?.disableTransport(TransportType.TCP_MDNS)
+                Timber.d("Internet transport (and mDNS LAN) disabled via settings")
             }
         }
     }
@@ -8597,7 +8599,8 @@ open class MeshRepository(private val context: Context) {
      * Wired from TransportManager.startAll.
      */
     fun startAllTransports() {
-        transportManager?.startAll()
+        val settings = loadSettings()
+        transportManager?.startAll(enableMdns = settings.internetEnabled)
     }
 
     /**

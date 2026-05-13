@@ -45,7 +45,7 @@ class MdnsServiceDiscovery(
 
     // Service type must match libp2p-mdns default (_p2p._udp.) so Rust peers discover us.
     // Android's NsdManager appends .local. automatically -- do not include it here.
-    private val serviceType = "_ipfs-discovery._udp"
+    private val serviceType = "_p2p._udp"
     private val serviceName = "SCMessenger"
     private val servicePort = 9001 // Must match the actual libp2p swarm listen port (startSwarm /ip4/0.0.0.0/tcp/9001)
 

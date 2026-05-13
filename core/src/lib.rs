@@ -24,8 +24,7 @@ pub mod store;
 pub mod transport;
 pub mod wasm_support;
 
-// Relay module requires quinn which is not available on WASM
-#[cfg(not(target_arch = "wasm32"))]
+// Relay module — submodules containing platform-specific implementations are gated internally.
 pub mod relay;
 
 // Mobile bridge modules

@@ -163,14 +163,12 @@ pub async fn run_ble_central_ingress(
         };
 
         let svc = scm_service_uuid();
-        let filter = ScanFilter {
-            services: vec![svc],
-        };
+        let filter = ScanFilter::default(); // Use default empty filter for Windows compatibility
         if let Err(e) = adapter.start_scan(filter).await {
             tracing::warn!("BLE start_scan failed: {}", e);
             return;
         }
-        tracing::info!("BLE scan active (filtered to SCM service {})", svc);
+        tracing::info!("BLE scan active (wide open, manually filtering to SCM service {})", svc);
 
         let mut events = match adapter.events().await {
             Ok(e) => e,
@@ -183,19 +181,26 @@ pub async fn run_ble_central_ingress(
         let tracked: Arc<Mutex<HashSet<String>>> = Arc::new(Mutex::new(HashSet::new()));
 
         while let Some(evt) = events.next().await {
-            let CentralEvent::ServicesAdvertisement { id, services } = evt else {
-                continue;
+            tracing::debug!("BLE central event received: {:?}", evt);
+            
+            // Extract the peripheral ID from ANY variant that contains it
+            let id = match &evt {
+                CentralEvent::DeviceDiscovered(id) => id.clone(),
+                CentralEvent::DeviceUpdated(id) => id.clone(),
+                CentralEvent::ManufacturerDataAdvertisement { id, .. } => id.clone(),
+                CentralEvent::ServiceDataAdvertisement { id, .. } => id.clone(),
+                CentralEvent::ServicesAdvertisement { id, .. } => id.clone(),
+                _ => continue,
             };
-            if !services.contains(&svc) {
-                continue;
-            }
 
+            // Throttle processing per device so we aren't checking properties 100x per second
             let id_key = format!("{:?}", id);
             {
                 let mut guard = tracked.lock().await;
                 if guard.contains(&id_key) {
-                    continue;
+                    continue; // Busy connecting or actively tracked
                 }
+                // We'll lock it while we investigate, and release if investigation fails
                 guard.insert(id_key.clone());
             }
 
@@ -207,12 +212,44 @@ pub async fn run_ble_central_ingress(
                 }
             };
 
+            // In a background task, query properties so we don't block the main event stream
             let core_c = Arc::clone(&core);
             let ui_c = ui_tx.clone();
             let track = Arc::clone(&tracked);
             let key = id_key.clone();
+            let target_svc = svc;
+
             tokio::spawn(async move {
-                subscribe_ingress_for_peripheral(peripheral, core_c, ui_c).await;
+                let mut is_match = false;
+
+                // 1. Quick check if events gave us immediate evidence
+                match &evt {
+                    CentralEvent::ServicesAdvertisement { services, .. } => {
+                        if services.contains(&target_svc) { is_match = true; }
+                    }
+                    CentralEvent::ServiceDataAdvertisement { service_data, .. } => {
+                        if service_data.contains_key(&target_svc) { is_match = true; }
+                    }
+                    _ => {}
+                }
+
+                // 2. Explicit property poll if event variant was generic
+                if !is_match {
+                    if let Ok(Some(props)) = peripheral.properties().await {
+                        if props.services.contains(&target_svc) {
+                            is_match = true;
+                        } else if props.service_data.contains_key(&target_svc) {
+                            is_match = true;
+                        }
+                    }
+                }
+
+                if is_match {
+                    tracing::info!("BLE found matching peripheral: {}", key);
+                    subscribe_ingress_for_peripheral(peripheral, core_c, ui_c).await;
+                }
+                
+                // Release tracking lock after we are finished so it can be rediscovered later if disconnected
                 track.lock().await.remove(&key);
             });
         }

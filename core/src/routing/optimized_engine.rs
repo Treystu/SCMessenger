@@ -109,9 +109,7 @@ impl OptimizedRoutingEngine {
         // and use alternatives from the multipath manager.
         #[cfg(feature = "phase2_apis")]
         {
-            let peer_id_int =
-                u64::from_be_bytes(recipient_hint[..8].try_into().unwrap_or([0u8; 8]));
-            let active = self.multipath.active_paths(peer_id_int);
+            let active = self.multipath.active_paths(recipient_hint);
             if let Some(primary_path) = active.first() {
                 if primary_path.active {
                     let alternatives: Vec<NextHop> = active
@@ -119,7 +117,7 @@ impl OptimizedRoutingEngine {
                         .skip(1)
                         .filter(|p| p.active)
                         .map(|p| NextHop::GlobalRoute {
-                            next_hop_id: p.peer_id.to_be_bytes(),
+                            next_hop_id: p.peer_id,
                             total_hops: 1,
                         })
                         .collect();
@@ -127,7 +125,7 @@ impl OptimizedRoutingEngine {
                         message_id: *message_id,
                         recipient_hint: *recipient_hint,
                         primary: NextHop::GlobalRoute {
-                            next_hop_id: primary_path.peer_id.to_be_bytes(),
+                            next_hop_id: primary_path.peer_id,
                             total_hops: 1,
                         },
                         alternatives,
@@ -301,16 +299,16 @@ impl OptimizedRoutingEngine {
         self.negative_cache.clear_unreachable(peer_id);
     }
 
-    /// Get active multipath delivery paths for a peer.
+    /// Get active multipath delivery paths for a recipient hint.
     /// Returns an empty list when Phase 2 APIs are not enabled.
     #[cfg(feature = "phase2_apis")]
-    pub fn active_paths(&self, peer_id: u64) -> Vec<&super::multipath::DeliveryPath> {
-        self.multipath.active_paths(peer_id)
+    pub fn active_paths(&self, hint: &[u8; 4]) -> Vec<&super::multipath::DeliveryPath> {
+        self.multipath.active_paths(hint)
     }
 
-    /// Get active multipath delivery paths for a peer (stub when Phase 2 not enabled).
+    /// Get active multipath delivery paths for a recipient hint (stub when Phase 2 not enabled).
     #[cfg(not(feature = "phase2_apis"))]
-    pub fn active_paths(&self, _peer_id: u64) -> Vec<()> {
+    pub fn active_paths(&self, _hint: &[u8; 4]) -> Vec<()> {
         Vec::new()
     }
 
@@ -408,18 +406,28 @@ impl OptimizedRoutingEngine {
     #[cfg(feature = "phase2_apis")]
     pub fn multipath_register_path(&mut self, peer_id_hex: String, path_id: u64, latency_ms: u64) {
         use super::multipath::DeliveryPath;
-        let peer_id_hash = {
-            let bytes = hex::decode(&peer_id_hex).unwrap_or_default();
-            let arr: [u8; 8] = bytes[..8].try_into().unwrap_or([0u8; 8]);
-            u64::from_le_bytes(arr)
+        let bytes = hex::decode(&peer_id_hex).unwrap_or_default();
+        let peer_id: [u8; 32] = if bytes.len() >= 32 {
+            bytes[..32].try_into().unwrap_or([0u8; 32])
+        } else {
+            let mut arr = [0u8; 32];
+            arr[..bytes.len()].copy_from_slice(&bytes);
+            arr
         };
+        // Derive the 4-byte recipient hint from the peer ID (first 4 bytes of blake3 hash)
+        let hint: [u8; 4] = blake3::hash(&peer_id).as_bytes()[0..4]
+            .try_into()
+            .unwrap_or([0u8; 4]);
         let path = DeliveryPath {
             path_id,
-            peer_id: peer_id_hash,
+            peer_id,
             estimated_latency_ms: latency_ms,
             active: true,
+            score: 75.0,
+            attempt_count: 0,
+            success_count: 0,
         };
-        self.multipath.register_path(peer_id_hash, path);
+        self.multipath.register_path(hint, path);
     }
 }
 

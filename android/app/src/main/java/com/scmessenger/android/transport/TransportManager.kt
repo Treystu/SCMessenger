@@ -89,7 +89,7 @@ class TransportManager @JvmOverloads constructor(
     /**
      * Start all enabled transports.
      */
-    fun startAll() {
+    fun startAll(enableMdns: Boolean = true) {
         if (isRunning) {
             Timber.w("TransportManager already running")
             return
@@ -110,31 +110,46 @@ class TransportManager @JvmOverloads constructor(
         wifiDirect?.start()
 
         // Start mDNS LAN discovery (cross-platform: discovers Windows/macOS/iOS peers)
-        mdnsDiscovery = MdnsServiceDiscovery(
-            context,
-            onPeerDiscovered = { peerId ->
-                Timber.d("mDNS peer discovered: $peerId")
-                activeTransports[TransportType.TCP_MDNS] = true
-                onPeerDiscovered(peerId, TransportType.TCP_MDNS)
-            },
-            onDataReceived = { peerId, data ->
-                onDataReceived(peerId, data, TransportType.TCP_MDNS)
-            },
-            onLanPeerResolved = { peerId, host, port ->
-                Timber.i("mDNS LAN peer resolved: $peerId at $host:$port — feeding to SwarmBridge")
-                val multiaddr = if (peerId.startsWith("12D3Koo")) {
-                    "/ip4/$host/tcp/$port/p2p/$peerId"
-                } else {
-                    "/ip4/$host/tcp/$port"
-                }
-                onLanAddressResolved?.invoke(multiaddr)
-                onPeerDiscovered(peerId, TransportType.TCP_MDNS)
-            },
-            getLocalPeerId = getLocalPeerId
-        )
-        mdnsDiscovery?.start()
+        if (enableMdns) {
+            val discovery = getOrCreateMdns()
+            discovery.start()
+            Timber.i("All transports started (including mDNS LAN discovery)")
+        } else {
+            Timber.i("All transports started (mDNS/LAN disabled as requested)")
+        }
+    }
 
-        Timber.i("All transports started (including mDNS LAN discovery)")
+    /**
+     * Helper to centralized creation of MdnsServiceDiscovery with correct callbacks.
+     */
+    private fun getOrCreateMdns(): MdnsServiceDiscovery {
+        var mdns = mdnsDiscovery
+        if (mdns == null) {
+            mdns = MdnsServiceDiscovery(
+                context,
+                onPeerDiscovered = { peerId ->
+                    Timber.d("mDNS peer discovered: $peerId")
+                    activeTransports[TransportType.TCP_MDNS] = true
+                    onPeerDiscovered(peerId, TransportType.TCP_MDNS)
+                },
+                onDataReceived = { peerId, data ->
+                    onDataReceived(peerId, data, TransportType.TCP_MDNS)
+                },
+                onLanPeerResolved = { peerId, host, port ->
+                    Timber.i("mDNS LAN peer resolved: $peerId at $host:$port — feeding to SwarmBridge")
+                    val multiaddr = if (peerId.startsWith("12D3Koo")) {
+                        "/ip4/$host/tcp/$port/p2p/$peerId"
+                    } else {
+                        "/ip4/$host/tcp/$port"
+                    }
+                    onLanAddressResolved?.invoke(multiaddr)
+                    onPeerDiscovered(peerId, TransportType.TCP_MDNS)
+                },
+                getLocalPeerId = getLocalPeerId
+            )
+            mdnsDiscovery = mdns
+        }
+        return mdns
     }
 
     /**
@@ -421,19 +436,8 @@ class TransportManager @JvmOverloads constructor(
                 // Handled separately by SwarmBridge
             }
             TransportType.TCP_MDNS -> {
-                if (mdnsDiscovery == null) {
-                    mdnsDiscovery = MdnsServiceDiscovery(
-                        context,
-                        onPeerDiscovered = { peerId ->
-                            activeTransports[TransportType.TCP_MDNS] = true
-                            onPeerDiscovered(peerId, TransportType.TCP_MDNS)
-                        },
-                        onDataReceived = { peerId, data ->
-                            onDataReceived(peerId, data, TransportType.TCP_MDNS)
-                        }
-                    )
-                }
-                mdnsDiscovery?.start()
+                val discovery = getOrCreateMdns()
+                discovery.start()
             }
         }
     }

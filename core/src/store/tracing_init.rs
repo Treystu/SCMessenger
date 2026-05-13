@@ -20,6 +20,7 @@ use tracing_subscriber::{fmt, layer::SubscriberExt, util::SubscriberInitExt, Env
 /// ```json
 /// {"timestamp":"2026-03-24T23:00:00Z","level":"INFO","message_id":"abc-123","event":"outbox_enqueue",...}
 /// ```
+#[cfg(not(target_arch = "wasm32"))]
 pub fn init_file_tracing(log_directory: &str) -> Result<(), Box<dyn std::error::Error>> {
     let log_path = Path::new(log_directory);
 
@@ -60,5 +61,11 @@ pub fn init_file_tracing(log_directory: &str) -> Result<(), Box<dyn std::error::
         format = "json"
     );
 
+    Ok(())
+}
+
+#[cfg(target_arch = "wasm32")]
+pub fn init_file_tracing(_log_directory: &str) -> Result<(), Box<dyn std::error::Error>> {
+    // File logging is not supported on WASM target; rely on console_error_panic_hook or js tracing instead.
     Ok(())
 }
