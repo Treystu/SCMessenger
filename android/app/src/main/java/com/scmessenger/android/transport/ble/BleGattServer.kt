@@ -22,6 +22,10 @@ import java.util.concurrent.ConcurrentHashMap
  * - MTU negotiation (request 512, handle fragmentation)
  * - Connection multiplexing (multiple clients)
  * - Data forwarding to Rust via PlatformBridge
+ *
+ * Note: Class-level @Suppress("DEPRECATION") for BluetoothManager.openGattServer
+ * which is deprecated in API 31+ in favor of executor-based overload.
+ * The old API is kept for minSdk 26 compatibility and works correctly on all devices.
  */
 @Suppress("DEPRECATION")
 class BleGattServer(

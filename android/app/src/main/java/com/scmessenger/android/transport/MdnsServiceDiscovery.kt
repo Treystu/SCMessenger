@@ -122,8 +122,13 @@ class MdnsServiceDiscovery(
      * Extracts peer identity from TXT records and adds to mesh.
      */
     fun onServiceResolved(resolvedInfo: NsdServiceInfo) {
-        @Suppress("DEPRECATION")
-        Timber.d("mDNS service resolved: ${resolvedInfo.serviceName} at ${resolvedInfo.host}:${resolvedInfo.port}")
+        // Host is deprecated in API 33; use hostAddresses instead
+        val hostAddress = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            resolvedInfo.hostAddresses.firstOrNull()?.hostAddress
+        } else {
+            resolvedInfo.host?.hostAddress
+        }
+        Timber.d("mDNS service resolved: ${resolvedInfo.serviceName} at ${hostAddress ?: "unknown"}:${resolvedInfo.port}")
 
         // Track the resolved peer
         discoveredPeers[resolvedInfo.serviceName] = resolvedInfo
@@ -154,10 +159,10 @@ class MdnsServiceDiscovery(
 
         // Build LAN address for SwarmBridge dial:
         // Extract host from resolved service (API-level aware)
+        // host is deprecated in API 33; use hostAddresses instead
         val host = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
             resolvedInfo.hostAddresses.firstOrNull()?.hostAddress
         } else {
-            @Suppress("DEPRECATION")
             resolvedInfo.host?.hostAddress
         }
         val port = resolvedInfo.port
@@ -447,16 +452,10 @@ class MdnsServiceDiscovery(
      * libp2p multiaddr so SwarmBridge can dial it directly.
      */
     private fun resolveService(serviceInfo: NsdServiceInfo) {
-        resolveListener = object : NsdManager.ResolveListener {
-            override fun onResolveFailed(serviceInfo: NsdServiceInfo, errorCode: Int) {
-                this@MdnsServiceDiscovery.onResolveFailed(serviceInfo, errorCode)
-            }
-
-            override fun onServiceResolved(resolvedInfo: NsdServiceInfo) {
-                this@MdnsServiceDiscovery.onServiceResolved(resolvedInfo)
-            }
-        }
-
+        // resolveService with Listener is deprecated in API 33; requires Executor overload
+        // The Executor overload requires Handler.getExecutor() which needs API 28+
+        // Since we target minSdk 26, we use the legacy API for backwards compatibility
+        // The legacy API works correctly on all target devices (API 26+)
         @Suppress("DEPRECATION")
         nsdManager?.resolveService(serviceInfo, resolveListener)
     }

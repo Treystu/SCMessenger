@@ -1,33 +1,27 @@
-Write-Host "[SWARM HEARTBEAT] Booting State-Locked Governor..." -ForegroundColor Cyan
+Write-Host "[SWARM HEARTBEAT] Booting Immortal OS Governor..." -ForegroundColor Cyan
 
 $BaseDir = $PSScriptRoot
 $DoneDir = Join-Path $BaseDir "HANDOFF\done"
 $TodoDir = Join-Path $BaseDir "HANDOFF\todo"
 $InProgressDir = Join-Path $BaseDir "HANDOFF\IN_PROGRESS"
 
-# Ensure all state directories exist
+# Ensure directories exist
 foreach ($dir in @($DoneDir, $TodoDir, $InProgressDir)) {
     if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
 }
-
-$WorkerPIDs = @()
 
 while ($true) {
     try {
         Write-Host "--- PULSE $(Get-Date -Format 'HH:mm:ss') ---" -ForegroundColor DarkGray
         
-        # 1. Clean up dead worker PIDs
-        $ActiveWorkers = @()
-        foreach ($wPid in $WorkerPIDs) {
-            if (Get-Process -Id $wPid -ErrorAction SilentlyContinue) {
-                $ActiveWorkers += $wPid
-            }
-        }
-        $WorkerPIDs = $ActiveWorkers
-        $WorkerCount = $WorkerPIDs.Count
+        # 1. DETECT ACTIVE WORKERS (By searching command lines for our script name)
+        $ActiveWorkers = @(Get-CimInstance Win32_Process -Filter "CommandLine LIKE '%TaskGovernor.ps1%'" -ErrorAction SilentlyContinue)
+        $WorkerCount = $ActiveWorkers.Count
 
-        # 2. Check orchestrators
-        $OrchRunning = @(Get-Process -Name "claude" -ErrorAction SilentlyContinue).Count
+        # 2. DETECT ACTIVE ORCHESTRATORS (By searching command lines for the specific model)
+        $ActiveOrchs = @(Get-CimInstance Win32_Process -Filter "CommandLine LIKE '%deepseek-v4-pro:cloud%'" -ErrorAction SilentlyContinue)
+        $OrchRunning = $ActiveOrchs.Count
+        
         $TotalSlotsUsed = $WorkerCount + $OrchRunning
         
         $DoneTasks = @(Get-ChildItem -LiteralPath $DoneDir -Filter "*.md" -ErrorAction SilentlyContinue)
@@ -35,7 +29,7 @@ while ($true) {
         
         Write-Host "State -> Done: $($DoneTasks.Count) | Pending: $($PendingTasks.Count) | Workers: $WorkerCount | Orchestrators: $OrchRunning" -ForegroundColor DarkGray
 
-        # LOGIC: Launch Workers
+        # LOGIC: Launch Workers (Max 3 slots)
         if ($PendingTasks.Count -gt 0 -and $TotalSlotsUsed -lt 3 -and $OrchRunning -eq 0) {
             $NextTask = $PendingTasks[0]
             $Content = Get-Content -LiteralPath $NextTask.FullName -TotalCount 20 -ErrorAction SilentlyContinue
@@ -44,35 +38,35 @@ while ($true) {
             $Budget = ($Content -match "Budget:\s*(\d+)") -replace "Budget:\s*",""
             
             if ($Model) {
-                if (-not $Budget) { $Budget = 6000 }
-                Write-Host "[HEARTBEAT] Slot free! Locking $($NextTask.Name) to IN_PROGRESS..." -ForegroundColor Cyan
+                $Budget = if ($Budget) { $Budget } else { 6000 }
+                Write-Host "[HEARTBEAT] Locking $($NextTask.Name) and launching Worker..." -ForegroundColor Cyan
                 
-                # STATE LOCK: Move file to IN_PROGRESS
                 $InProgressPath = Join-Path $InProgressDir $NextTask.Name
                 Move-Item -LiteralPath $NextTask.FullName -Destination $InProgressPath -Force
                 
-                $GovArgs = "-ExecutionPolicy Bypass -File `".\TaskGovernor.ps1`" -TaskFile `"$InProgressPath`" -Model `"$Model`" -BudgetLimit $Budget"
-                
-                # LAUNCH & CAPTURE
-                $NewWorker = Start-Process -FilePath "powershell.exe" -ArgumentList $GovArgs -WindowStyle Normal -PassThru
-                $WorkerPIDs += $NewWorker.Id
+                # TOTAL DETACHMENT: Launch via cmd /c start so the exit signal never reaches PowerShell
+                $GovCmd = "powershell -ExecutionPolicy Bypass -File `"$BaseDir\TaskGovernor.ps1`" -TaskFile `"$InProgressPath`" -Model `"$Model`" -BudgetLimit $Budget"
+                Start-Process "cmd.exe" -ArgumentList "/c start `"$($NextTask.Name)`" $GovCmd" -WindowStyle Hidden
                 
                 Start-Sleep -Seconds 5
                 continue
             }
         }
 
-        # LOGIC: Launch Orchestrator
-        $NeedsOrchestration = ($PendingTasks.Count -eq 0) -or ($DoneTasks.Count -gt 0)
-        if ($NeedsOrchestration -and $OrchRunning -eq 0 -and $WorkerCount -lt 3) {
+        # LOGIC: Launch Orchestrator (DeepSeek V4 Pro)
+        # We only wake the orchestrator if there is actual work to clean up or a gap to fill
+        $NeedsOrchestration = ($PendingTasks.Count -eq 0 -and $InProgressDir.Count -eq 0) -or ($DoneTasks.Count -gt 0)
+        if ($NeedsOrchestration -and $OrchRunning -eq 0 -and $WorkerCount -eq 0) {
             Write-Host "[HEARTBEAT] Waking DeepSeek Orchestrator..." -ForegroundColor Yellow
             
-            $OrchArgs = "launch claude --model deepseek-v4-pro:cloud -- --debug --dangerously-skip-permissions `"Execute your stateless Hit-and-Run protocol.`""
+            $OrchMandate = "SYSTEM OVERRIDE: You are a headless OS-integrated router. 1. Read HANDOFF/done, update docs, validate HANDOFF/todo (add [VALIDATED]_ prefix). 2. You are FORBIDDEN from using bash scripts. 3. Close immediately when done."
+            $OrchArgs = "ollama launch claude --model deepseek-v4-pro:cloud --dangerously-skip-permissions -p `"$OrchMandate`""
             
-            Start-Process -FilePath "ollama" -ArgumentList $OrchArgs -WindowStyle Normal
+            # TOTAL DETACHMENT
+            Start-Process "cmd.exe" -ArgumentList "/c start `"ORCHESTRATOR`" $OrchArgs" -WindowStyle Hidden
             
-            Write-Host "[HEARTBEAT] Orchestrator spawned in new window. Waiting 30s..." -ForegroundColor DarkYellow
-            Start-Sleep -Seconds 30 
+            Write-Host "[HEARTBEAT] Orchestrator dispatched. Waiting for cycle..." -ForegroundColor DarkYellow
+            Start-Sleep -Seconds 45 
         }
 
     } catch {

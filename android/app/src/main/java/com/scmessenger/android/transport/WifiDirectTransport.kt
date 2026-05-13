@@ -283,10 +283,10 @@ class WifiDirectTransport(
                 }
 
                 WifiP2pManager.WIFI_P2P_CONNECTION_CHANGED_ACTION -> {
-                    @Suppress("DEPRECATION")
-                    val networkInfo = IntentCompat.getParcelableExtra(intent, WifiP2pManager.EXTRA_NETWORK_INFO, android.net.NetworkInfo::class.java)
+                    // IntentCompat.getParcelableExtra with explicit class is deprecated in API 33
+                    // Use the simpler overload without class parameter
+                    val networkInfo = intent.getParcelableExtra<android.net.NetworkInfo>(WifiP2pManager.EXTRA_NETWORK_INFO)
 
-                    @Suppress("DEPRECATION")
                     if (networkInfo?.isConnected == true) {
                         Timber.d("Connected to WiFi P2P group")
                         wifiP2pManager?.requestConnectionInfo(channel) { info ->

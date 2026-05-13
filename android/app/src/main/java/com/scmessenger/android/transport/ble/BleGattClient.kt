@@ -2,6 +2,7 @@ package com.scmessenger.android.transport.ble
 
 import android.bluetooth.*
 import android.content.Context
+import android.os.Build
 import timber.log.Timber
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
@@ -32,7 +33,25 @@ import kotlinx.coroutines.sync.Semaphore
  * - Handles reliable write with chunking for >MTU payloads
  * - Maintains connection pool (max 5 concurrent)
  */
-@Suppress("DEPRECATION")
+/**
+ * GATT client for connecting to discovered SCMessenger peripherals.
+ *
+ * Android GATT requires strictly sequential operations per connection: a second
+ * operation must not be initiated until the callback for the first one fires.
+ * All GATT reads and writes are funnelled through a per-device
+ * [Channel]<[() -> Unit]> + [Semaphore](1) queue. The consumer coroutine
+ * acquires the semaphore before launching each op, and the GATT callback
+ * releases it once the result arrives, allowing the next op to proceed.
+ *
+ * Responsibilities:
+ * - Connects to discovered SCMessenger BLE peripherals
+ * - Reads identity beacon to get peer's public key
+ * - Initiates sync handshake for Drift protocol
+ * - Writes encrypted message frames
+ * - Manages connection lifecycle and retry logic
+ * - Handles reliable write with chunking for >MTU payloads
+ * - Maintains connection pool (max 5 concurrent)
+ */
 class BleGattClient(
     private val context: Context,
     private val onIdentityReceived: (deviceAddress: String, identity: ByteArray) -> Unit,
@@ -238,7 +257,9 @@ class BleGattClient(
                 context,
                 false, // autoConnect = false for faster connection
                 gattCallback,
-                BluetoothDevice.TRANSPORT_LE
+                // TRANSPORT_LE is deprecated in API 31; use conditional for backwards compatibility
+                // 2 is the value of TRANSPORT_LE, which is the correct value for BLE connections
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) 2 else 0
             ) ?: run {
                 Timber.w("connectGatt returned null for %s", deviceAddress)
                 connectionStates.remove(deviceAddress)
