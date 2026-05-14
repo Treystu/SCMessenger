@@ -12,9 +12,10 @@ $Script:StaleThresholdMinutes = 60
 $Script:OrchCooldownSeconds   = 120
 
 # Runtime state
-$Script:LastOrchLaunch           = [datetime]::MinValue
-$Script:OrchCompletedCurrentCycle = $false
-$Script:PrevDoneCount             = 0
+$Script:LastOrchLaunch              = [datetime]::MinValue
+$Script:OrchCompletedCurrentCycle    = $false
+$Script:PrevDoneCount                = 0
+$Script:WakeOrchestratorForTriage    = $false
 
 function Write-HeartbeatLog {
     param([string]$Level, [string]$Message)
@@ -94,7 +95,16 @@ function Invoke-DispatchWorker {
         $budget = if ($budgetLine -match ":\s*(\d+)") { [int]$matches[1] } else { 3600 }
 
         if (-not $model) {
-            Write-HeartbeatLog "WARN" "Task $($TaskFile.Name) has no Model header - skipping"
+            Write-HeartbeatLog "WARN" "Task $($TaskFile.Name) has no Model header - triaging"
+            $triagedName = "[NEEDS_TRIAGE]_$($TaskFile.Name)"
+            $triagedPath = Join-Path $Script:TodoDir $triagedName
+            try {
+                Rename-Item -LiteralPath $TaskFile.FullName -NewName $triagedName -ErrorAction Stop
+                Write-HeartbeatLog "INFO" "Renamed malformed task to $triagedName"
+                $Script:WakeOrchestratorForTriage = $true
+            } catch {
+                Write-HeartbeatLog "ERROR" "Failed to rename malformed task $($TaskFile.Name): $($_.Exception.Message)"
+            }
             return $false
         }
 
@@ -136,13 +146,14 @@ SYSTEM OVERRIDE: Headless Orchestrator Agent.
 YOUR JOB:
 1. Read HANDOFF/done/ for newly completed tasks since your last scan. Update REMAINING_WORK_TRACKING.md and any affected canonical docs (DOCUMENTATION.md, docs/CURRENT_STATE.md) to reflect completed work.
 2. Read HANDOFF/IN_PROGRESS/ for stale tasks (LastWriteTime > 60 min ago). If found, move them back to HANDOFF/todo/ with [STALE]_ prefix.
-3. Read HANDOFF/todo/ for unvalidated tasks (missing [VALIDATED]_ prefix). Validate each: check if the target code still needs work. Add [VALIDATED]_ prefix to validated tasks. Reject false positives (already-wired, test-only, golden-strings).
-4. Read REMAINING_WORK_TRACKING.md and HANDOFF/backlog/. If remaining work exists not yet in HANDOFF/todo/, create new task files with proper headers:
+3. Read HANDOFF/todo/ for [NEEDS_TRIAGE]_ prefixed tasks. For each, read the file, add the missing # MODEL: and # BUDGET: headers, remove the [NEEDS_TRIAGE]_ prefix, and ensure the [VALIDATED]_ prefix is present.
+4. Read HANDOFF/todo/ for unvalidated tasks (missing [VALIDATED]_ prefix). Validate each: check if the target code still needs work. Add [VALIDATED]_ prefix to validated tasks. Reject false positives (already-wired, test-only, golden-strings).
+5. Read REMAINING_WORK_TRACKING.md and HANDOFF/backlog/. If remaining work exists not yet in HANDOFF/todo/, create new task files with proper headers:
    # MODEL: <appropriate model from routing table>
    # BUDGET: <seconds based on task complexity>
    # TARGET: <file path>
    Prefix files with [VALIDATED]_ to signal readiness.
-5. Assign models per CLAUDE.md routing table:
+6. Assign models per CLAUDE.md routing table:
    - Rust core/identity/crypto/transport/store -> glm-5.1:cloud
    - Crypto/math/security audit -> deepseek-v3.2:cloud
    - Android/Kotlin -> qwen3-coder-next:cloud
@@ -151,13 +162,13 @@ YOUR JOB:
    - Quick fix/lint/CI -> gemini-3-flash-preview:cloud
    - Architecture/planning -> deepseek-v4-pro:cloud
    - Code review merge gate -> kimi-k2-thinking:cloud
-6. Set budget per task:
+7. Set budget per task:
    - Micro tasks (lint, format, single-line): 300s
    - Small tasks (single function, test): 900s
    - Medium tasks (multi-file wiring, platform): 1800s
    - Large tasks (module implementation, refactor): 3600s
    - Architecture/review tasks: 5400s
-7. Write HANDOFF/ORCHESTRATOR_STATUS.md containing exactly:
+8. Write HANDOFF/ORCHESTRATOR_STATUS.md containing exactly:
    STATUS=completed (or STATUS=ALL_DONE if genuinely nothing remains)
    TASKS_CREATED=N
    TASKS_VALIDATED=N
@@ -256,21 +267,27 @@ function Invoke-HeartbeatPulse {
         }
     }
 
-    # Phase 5: Launch orchestrator (only when all workers idle)
-    if ($workerCount -eq 0 -and -not $orchRunning) {
+    # Phase 5: Launch orchestrator (when all workers idle, or triage needed)
+    if (-not $orchRunning) {
         $needsOrch = $false
         $orchReason = ""
 
-        if ($fileState.HasNewDone) {
+        if ($Script:WakeOrchestratorForTriage) {
             $needsOrch = $true
-            $orchReason = "new completions detected in done/"
-        } elseif ($staleTasks.Count -gt 0) {
-            $needsOrch = $true
-            $orchReason = "$($staleTasks.Count) stale task(s) in IN_PROGRESS need reclamation"
-        } elseif ($fileState.PendingCount -eq 0 -and $fileState.InProgressCount -eq 0) {
-            if (-not $Script:OrchCompletedCurrentCycle) {
+            $orchReason = "malformed task(s) need triage in todo/"
+            $Script:WakeOrchestratorForTriage = $false
+        } elseif ($workerCount -eq 0) {
+            if ($fileState.HasNewDone) {
                 $needsOrch = $true
-                $orchReason = "queue drained, checking for remaining work in backlog"
+                $orchReason = "new completions detected in done/"
+            } elseif ($staleTasks.Count -gt 0) {
+                $needsOrch = $true
+                $orchReason = "$($staleTasks.Count) stale task(s) in IN_PROGRESS need reclamation"
+            } elseif ($fileState.PendingCount -eq 0 -and $fileState.InProgressCount -eq 0) {
+                if (-not $Script:OrchCompletedCurrentCycle) {
+                    $needsOrch = $true
+                    $orchReason = "queue drained, checking for remaining work in backlog"
+                }
             }
         }
 

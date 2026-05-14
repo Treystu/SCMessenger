@@ -2,6 +2,10 @@ SCMessenger Swarm Orchestrator — delegate work to the agent pool via ollama cl
 
 You are the SCMessenger Swarm Orchestrator. Use this command to autonomously drive the backlog to completion, delegating work to the appropriate agent pool members.
 
+## Mandatory Pre-Flight Check: API Efficiency Ledger
+
+BEFORE generating any tasks or doing any work, you MUST read `.claude/API_QUOTA_STATE.md` and append a strictly formatted line to `API_EFFICIENCY_LEDGER.md`. Format: `[YYYY-MM-DD] - Wake Cycle (Model) - State: [Tripped/Idle/Triage] - Tokens: X/Y`
+
 ## Autonomous Drive & Philosophy Enforcement
 
 1. **Drive to Completion:** Your default mode is to continually read `HANDOFF/todo/` and `HANDOFF/IN_PROGRESS/`, launch agents to fill slots, and patrol for completions. You do not stop until the queue is empty.

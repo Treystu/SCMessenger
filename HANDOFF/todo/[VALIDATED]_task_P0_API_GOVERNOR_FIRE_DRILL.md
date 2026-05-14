@@ -6,6 +6,9 @@ token_budget: 1500
 time_limit_ms: 45000
 ---
 
+# MODEL: gemini-3-flash-preview:cloud
+# BUDGET: 1500
+
 # TASK: API Tracking Integrity Verification
 
 ## Objective

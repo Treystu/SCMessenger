@@ -28,6 +28,27 @@ fn make_message_id(id: u8) -> [u8; 16] {
     [id; 16]
 }
 
+/// Helper: compute the hint for a peer ID using the same derivation
+/// the routing engine uses (blake3 hash, first 4 bytes).
+fn peer_hint(peer_id: &PeerId) -> [u8; 4] {
+    blake3::hash(peer_id).as_bytes()[0..4].try_into().unwrap_or([0u8; 4])
+}
+
+/// Helper: register a peer in the local cell and set its reachable hints
+/// so the routing engine can find it by hint.
+fn register_peer_with_hint(
+    engine: &mut OptimizedRoutingEngine,
+    peer_id: PeerId,
+    transport: TransportType,
+    hints: Vec<[u8; 4]>,
+) {
+    engine.base_engine_mut().local_cell_mut().peer_seen(peer_id, transport);
+    engine
+        .base_engine_mut()
+        .local_cell_mut()
+        .update_peer_hints(&peer_id, hints);
+}
+
 /// Verify that the OptimizedRoutingEngine can be created with a local peer ID
 /// and produces valid routing decisions.
 #[test]
@@ -51,7 +72,7 @@ fn test_routing_engine_creation_and_basic_decision() {
     );
 }
 
-/// Verify that when a peer is seen in the local cell,
+/// Verify that when a peer is seen in the local cell with reachable hints,
 /// the routing engine produces a Direct route for that peer.
 #[test]
 fn test_direct_route_when_peer_known() {
@@ -59,19 +80,13 @@ fn test_direct_route_when_peer_known() {
     let local_hint = make_hint(1);
     let mut engine = OptimizedRoutingEngine::new(local_id, local_hint);
 
-    // Register a peer in the local cell with a BLE transport
+    // Register a peer in the local cell with reachable hints
     let peer_id = make_peer_id(2);
-    engine
-        .base_engine_mut()
-        .local_cell_mut()
-        .peer_seen(peer_id, TransportType::BLE);
+    let hint = peer_hint(&peer_id);
+    register_peer_with_hint(&mut engine, peer_id, TransportType::BLE, vec![hint]);
 
-    // The peer's hint should route directly
-    let peer_hint = blake3::hash(&peer_id).as_bytes()[0..4]
-        .try_into()
-        .unwrap_or([0u8; 4]);
     let msg_id = make_message_id(1);
-    let decision = engine.route_message_optimized(&peer_hint, &msg_id, 50, 1000);
+    let decision = engine.route_message_optimized(&hint, &msg_id, 50, 1000);
 
     assert!(
         matches!(decision.primary, NextHop::Direct { .. }),
@@ -82,8 +97,7 @@ fn test_direct_route_when_peer_known() {
 }
 
 /// Verify that transport quality scoring influences routing decisions.
-/// A peer seen on QUIC should have the same initial reliability as one on BLE,
-/// but the transport type should be recorded in the NextHop.
+/// A peer seen on QUIC should have the transport type recorded in the NextHop.
 #[test]
 fn test_transport_type_in_routing_decision() {
     let local_id = make_peer_id(1);
@@ -92,16 +106,11 @@ fn test_transport_type_in_routing_decision() {
 
     // Register a peer on QUIC transport
     let peer_quic = make_peer_id(10);
-    engine
-        .base_engine_mut()
-        .local_cell_mut()
-        .peer_seen(peer_quic, TransportType::QUIC);
+    let hint_quic = peer_hint(&peer_quic);
+    register_peer_with_hint(&mut engine, peer_quic, TransportType::QUIC, vec![hint_quic]);
 
-    let peer_hint = blake3::hash(&peer_quic).as_bytes()[0..4]
-        .try_into()
-        .unwrap_or([0u8; 4]);
     let msg_id = make_message_id(1);
-    let decision = engine.route_message_optimized(&peer_hint, &msg_id, 50, 1000);
+    let decision = engine.route_message_optimized(&hint_quic, &msg_id, 50, 1000);
 
     if let NextHop::Direct { transport, .. } = decision.primary {
         assert_eq!(
@@ -118,15 +127,10 @@ fn test_transport_type_in_routing_decision() {
 
     // Register a peer on BLE transport
     let peer_ble = make_peer_id(20);
-    engine
-        .base_engine_mut()
-        .local_cell_mut()
-        .peer_seen(peer_ble, TransportType::BLE);
+    let hint_ble = peer_hint(&peer_ble);
+    register_peer_with_hint(&mut engine, peer_ble, TransportType::BLE, vec![hint_ble]);
 
-    let peer_hint = blake3::hash(&peer_ble).as_bytes()[0..4]
-        .try_into()
-        .unwrap_or([0u8; 4]);
-    let decision = engine.route_message_optimized(&peer_hint, &msg_id, 50, 1000);
+    let decision = engine.route_message_optimized(&hint_ble, &msg_id, 50, 1000);
 
     if let NextHop::Direct { transport, .. } = decision.primary {
         assert_eq!(
@@ -150,20 +154,15 @@ fn test_reliability_update_affects_confidence() {
     let local_hint = make_hint(1);
     let mut engine = OptimizedRoutingEngine::new(local_id, local_hint);
 
-    // Register a peer
+    // Register a peer with reachable hints
     let peer_id = make_peer_id(2);
-    engine
-        .base_engine_mut()
-        .local_cell_mut()
-        .peer_seen(peer_id, TransportType::TCP);
+    let hint = peer_hint(&peer_id);
+    register_peer_with_hint(&mut engine, peer_id, TransportType::TCP, vec![hint]);
 
-    let peer_hint = blake3::hash(&peer_id).as_bytes()[0..4]
-        .try_into()
-        .unwrap_or([0u8; 4]);
     let msg_id = make_message_id(1);
 
     // Initial reliability: should be 0.5 (default)
-    let decision_before = engine.route_message_optimized(&peer_hint, &msg_id, 50, 1000);
+    let decision_before = engine.route_message_optimized(&hint, &msg_id, 50, 1000);
     let initial_confidence = decision_before.confidence;
 
     // Update reliability: success increases score
@@ -172,7 +171,7 @@ fn test_reliability_update_affects_confidence() {
         .local_cell_mut()
         .update_reliability(&peer_id, true);
 
-    let decision_after = engine.route_message_optimized(&peer_hint, &msg_id, 50, 1000);
+    let decision_after = engine.route_message_optimized(&hint, &msg_id, 50, 1000);
     assert!(
         decision_after.confidence >= initial_confidence,
         "Confidence should not decrease after success: before={}, after={}",
@@ -194,7 +193,7 @@ fn test_reliability_update_affects_confidence() {
         .local_cell_mut()
         .update_reliability(&peer_id, false);
 
-    let decision_after_failures = engine.route_message_optimized(&peer_hint, &msg_id, 50, 1000);
+    let decision_after_failures = engine.route_message_optimized(&hint, &msg_id, 50, 1000);
     assert!(
         decision_after_failures.confidence < decision_after.confidence,
         "Confidence should decrease after failures: after_success={}, after_failures={}",
@@ -204,53 +203,42 @@ fn test_reliability_update_affects_confidence() {
 }
 
 /// Verify that negative cache blocks routing to unreachable peers.
-/// After recording a peer as unreachable, routing should fall back to StoreAndCarry.
+/// After recording a peer as unreachable via its hint prefix, routing
+/// should fall back to StoreAndCarry for that hint.
 #[test]
 fn test_negative_cache_blocks_routing() {
     let local_id = make_peer_id(1);
     let local_hint = make_hint(1);
     let mut engine = OptimizedRoutingEngine::new(local_id, local_hint);
 
-    // Register a peer in local cell
+    // Register a peer in local cell with reachable hints
     let peer_id = make_peer_id(2);
-    engine
-        .base_engine_mut()
-        .local_cell_mut()
-        .peer_seen(peer_id, TransportType::QUIC);
+    let hint = peer_hint(&peer_id);
+    register_peer_with_hint(&mut engine, peer_id, TransportType::QUIC, vec![hint]);
 
-    let peer_hint = blake3::hash(&peer_id).as_bytes()[0..4]
-        .try_into()
-        .unwrap_or([0u8; 4]);
     let msg_id = make_message_id(1);
 
     // Should route directly before marking unreachable
-    let decision_before = engine.route_message_optimized(&peer_hint, &msg_id, 50, 1000);
+    let decision_before = engine.route_message_optimized(&hint, &msg_id, 50, 1000);
     assert!(
         matches!(decision_before.primary, NextHop::Direct { .. }),
-        "Should route directly before negative cache entry"
+        "Should route directly before negative cache entry, got {:?}",
+        decision_before.primary
     );
 
-    // Record peer as unreachable
-    engine.record_unreachable_peer(&hex::encode(peer_id));
+    // Record peer as unreachable using the hint prefix (matching how
+    // route_message_optimized looks up peers in the negative cache)
+    let hint_str = hex::encode(hint);
+    engine.record_unreachable_peer(&hint_str);
 
-    // The negative cache uses the hint prefix for lookup, so we need to check
-    // with the hex-encoded hint. The route_message_optimized converts recipient_hint
-    // to a peer_id_str using hex::encode of the hint bytes. This tests the P0
-    // negative cache optimization.
-    // Note: The exact match depends on how the negative cache stores/retrieves
-    // entries. The key point is that the engine should still produce a routing
-    // decision (not panic).
-    let decision_after = engine.route_message_optimized(&peer_hint, &msg_id, 50, 1000);
-    // The negative cache check uses hex::encode(recipient_hint), not the full peer ID.
-    // Since we recorded the full peer ID but the lookup is by hint, the exact
-    // behavior depends on the prefix match. The key test is that the engine
-    // doesn't crash and produces a valid decision.
+    // After recording unreachable, routing should fall back
+    let decision_after = engine.route_message_optimized(&hint, &msg_id, 50, 1000);
     assert!(
         matches!(
             decision_after.primary,
-            NextHop::Direct { .. } | NextHop::StoreAndCarry | NextHop::RouteDiscovery { .. }
+            NextHop::StoreAndCarry | NextHop::RouteDiscovery { .. }
         ),
-        "Should produce valid decision after negative cache entry, got {:?}",
+        "Expected StoreAndCarry or RouteDiscovery after negative cache entry, got {:?}",
         decision_after.primary
     );
 }
@@ -265,10 +253,8 @@ fn test_gateway_routing_decision() {
 
     // Register a gateway peer
     let gateway_id = make_peer_id(5);
-    engine
-        .base_engine_mut()
-        .local_cell_mut()
-        .peer_seen(gateway_id, TransportType::TCP);
+    let gw_hint = peer_hint(&gateway_id);
+    register_peer_with_hint(&mut engine, gateway_id, TransportType::TCP, vec![gw_hint]);
     engine
         .base_engine_mut()
         .local_cell_mut()
@@ -283,12 +269,10 @@ fn test_gateway_routing_decision() {
         avg_reliability: 0.9,
         timestamp: 1000,
     };
-    engine.base_engine_mut().neighborhood_mut().update_gateway(
-        gateway_id,
-        cell_summary,
-        2, // hops
-        TransportType::TCP,
-    );
+    engine
+        .base_engine_mut()
+        .neighborhood_mut()
+        .update_gateway(gateway_id, cell_summary, 2, TransportType::TCP);
 
     let msg_id = make_message_id(1);
     let decision = engine.route_message_optimized(&target_hint, &msg_id, 50, 1000);
@@ -403,7 +387,10 @@ fn test_discovery_phase_advancement() {
 
     // Initially not in discovery
     assert!(!engine.is_discovery_in_progress());
-    assert_eq!(engine.current_discovery_phase(), DiscoveryPhase::LocalCache);
+    assert_eq!(
+        engine.current_discovery_phase(),
+        DiscoveryPhase::LocalCache
+    );
 
     // Start discovery by making a routing decision
     let target_hint = make_hint(42);
@@ -424,7 +411,7 @@ fn test_discovery_phase_advancement() {
 }
 
 /// Verify multi-transport routing: when a peer is known on multiple
-/// transports, the routing engine should prefer the higher-quality transport.
+/// transports, the routing engine should still produce a valid Direct route.
 #[test]
 fn test_multi_transport_peer_routing() {
     let local_id = make_peer_id(1);
@@ -433,20 +420,15 @@ fn test_multi_transport_peer_routing() {
 
     // Register the same peer on multiple transports
     let peer_id = make_peer_id(2);
-    engine
-        .base_engine_mut()
-        .local_cell_mut()
-        .peer_seen(peer_id, TransportType::BLE);
+    let hint = peer_hint(&peer_id);
+    register_peer_with_hint(&mut engine, peer_id, TransportType::BLE, vec![hint]);
     engine
         .base_engine_mut()
         .local_cell_mut()
         .peer_seen(peer_id, TransportType::QUIC);
 
-    let peer_hint = blake3::hash(&peer_id).as_bytes()[0..4]
-        .try_into()
-        .unwrap_or([0u8; 4]);
     let msg_id = make_message_id(1);
-    let decision = engine.route_message_optimized(&peer_hint, &msg_id, 50, 1000);
+    let decision = engine.route_message_optimized(&hint, &msg_id, 50, 1000);
 
     // Should produce a valid routing decision
     assert!(
@@ -508,14 +490,15 @@ fn test_clear_unreachable_restores_routing() {
 
     // Record a peer as unreachable
     engine.record_unreachable_peer("dead_peer");
-    assert!(engine.negative_cache_stats().entry_count > 0);
+    let stats = engine.negative_cache_stats();
+    assert!(stats.entry_count > 0);
 
     // Clear the unreachable status
     engine.clear_unreachable_peer("dead_peer");
 
-    // Negative cache should now have fewer entries (or the specific one removed)
+    // After clearing, the negative cache should not block this peer
+    // (the entry count may not decrease immediately due to bloom filter semantics)
     let stats_after = engine.negative_cache_stats();
-    // The exact count depends on whether cleanup runs, but clearing should not panic
     assert!(
         stats_after.negative_checks >= 0,
         "Negative cache should be accessible after clearing"
@@ -538,9 +521,9 @@ fn test_evaluate_all_tracked_pruning() {
     // Evaluate all tracked (should prune expired negative cache entries)
     let pruned = engine.evaluate_all_tracked();
     // No entries should be pruned immediately (they haven't expired yet)
-    assert!(
-        pruned >= 0,
-        "evaluate_all_tracked should return a valid count"
+    assert_eq!(
+        pruned, 0,
+        "No entries should be pruned immediately after recording"
     );
 }
 
@@ -552,22 +535,28 @@ fn test_can_reach_destination() {
     let local_hint = make_hint(1);
     let mut engine = OptimizedRoutingEngine::new(local_id, local_hint);
 
-    // Unknown peer should not be reachable (not in local cell, not in negative cache)
-    // Actually, can_reach_destination returns true if the peer is NOT in the negative cache
-    // OR is in the local cell. An unknown peer might be reachable (negative cache is
-    // only for definitely-unreachable peers).
-    let unknown_reachable = engine.can_reach_destination(&hex::encode(make_peer_id(99)));
-
-    // Register a peer
+    // Register a peer with reachable hints matching the derivation
+    // that can_reach_destination uses (first 4 bytes of the peer ID).
     let peer_id = make_peer_id(2);
-    engine
-        .base_engine_mut()
-        .local_cell_mut()
-        .peer_seen(peer_id, TransportType::TCP);
-    let known_reachable = engine.can_reach_destination(&hex::encode(peer_id));
-    assert!(known_reachable, "Known peer should be reachable");
+    let derived_hint_hex = &hex::encode(peer_id)[..8];
+    let derived_hint_bytes = hex::decode(derived_hint_hex).unwrap_or_default();
+    let derived_hint: [u8; 4] = derived_hint_bytes.try_into().unwrap_or([0u8; 4]);
 
-    // An unknown peer might or might not be reachable depending on negative cache
-    // The key point is that a known peer IS reachable
-    assert!(known_reachable);
+    // Register the peer with reachable hints matching the derived hint
+    register_peer_with_hint(&mut engine, peer_id, TransportType::TCP, vec![derived_hint]);
+
+    let peer_hex = hex::encode(peer_id);
+    let known_reachable = engine.can_reach_destination(&peer_hex);
+    assert!(
+        known_reachable,
+        "Known peer with reachable hints should be reachable, got false"
+    );
+
+    // An unknown peer should not be reachable (not in local cell)
+    let unknown_hex = hex::encode(make_peer_id(99));
+    let unknown_reachable = engine.can_reach_destination(&unknown_hex);
+    assert!(
+        !unknown_reachable,
+        "Unknown peer without reachable hints should not be reachable, got true"
+    );
 }
