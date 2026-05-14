@@ -288,7 +288,9 @@ open class MeshRepository(private val context: Context) {
         context,
         com.scmessenger.android.network.NetworkDiagnostics(context),
         com.scmessenger.android.network.NetworkTypeDetector(context),
-        networkFailureMetrics
+        networkFailureMetrics,
+        networkDetector,
+        relayCircuitBreaker
     )
 
     // Core & Network (lazy init)

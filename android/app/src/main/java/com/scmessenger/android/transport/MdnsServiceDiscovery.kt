@@ -30,6 +30,22 @@ class MdnsServiceDiscovery(
     private var registrationListener: NsdManager.RegistrationListener? = null
     private var discoveryListener: NsdManager.DiscoveryListener? = null
     private var resolveListener: NsdManager.ResolveListener? = null
+
+    // Initialize resolveListener on demand (after API 26)
+    private fun getResolveListener(): NsdManager.ResolveListener {
+        if (resolveListener == null) {
+            resolveListener = object : NsdManager.ResolveListener {
+                override fun onResolveFailed(serviceInfo: NsdServiceInfo, errorCode: Int) {
+                    this@MdnsServiceDiscovery.onResolveFailed(serviceInfo, errorCode)
+                }
+
+                override fun onServiceResolved(resolvedInfo: NsdServiceInfo) {
+                    this@MdnsServiceDiscovery.onServiceResolved(resolvedInfo)
+                }
+            }
+        }
+        return resolveListener!!
+    }
     private var multicastLock: android.net.wifi.WifiManager.MulticastLock? = null
 
     @Volatile private var isRunning = false
@@ -455,14 +471,14 @@ class MdnsServiceDiscovery(
     private fun resolveService(serviceInfo: NsdServiceInfo) {
         // resolveService with Listener is deprecated in API 33; requires Executor overload
         // Use SDK version gate to support minSdk 26 while avoiding deprecation warnings on API 33+
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            // API 23+ has Handler.getExecutor(), use Executor overload
-            nsdManager?.resolveService(serviceInfo, handler.executor, resolveListener)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            // API 26+ has Context.getMainExecutor(), use Executor overload
+            nsdManager?.resolveService(serviceInfo, context.getMainExecutor(), getResolveListener())
         } else {
-            // Legacy API for API < 23 (minSdk 26, so this is never reached at runtime)
+            // Legacy API for API < 26 (minSdk 26, so this is never reached at runtime)
             // Kept for completeness but will not be called
             @Suppress("DEPRECATION")
-            nsdManager?.resolveService(serviceInfo, resolveListener)
+            nsdManager?.resolveService(serviceInfo, getResolveListener())
         }
     }
 

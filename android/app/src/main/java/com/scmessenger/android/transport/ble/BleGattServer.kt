@@ -80,15 +80,9 @@ class BleGattServer(
         }
 
         try {
-            // Use SDK version gate to support minSdk 26 while avoiding deprecation warnings on API 31+
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                // API 31+ has executor-based overload
-                gattServer = bluetoothManager?.openGattServer(context, ContextCompat.getMainExecutor(context), gattServerCallback)
-            } else {
-                // Legacy API for API < 31
-                @Suppress("DEPRECATION")
-                gattServer = bluetoothManager?.openGattServer(context, gattServerCallback)
-            }
+            // openGattServer signature is consistent across all API versions
+            // The callback handles execution context internally
+            gattServer = bluetoothManager?.openGattServer(context, gattServerCallback)
 
             if (gattServer == null) {
                 Timber.e("Failed to open GATT server")

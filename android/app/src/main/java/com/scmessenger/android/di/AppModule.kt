@@ -3,6 +3,12 @@ package com.scmessenger.android.di
 import android.content.Context
 import com.scmessenger.android.data.MeshRepository
 import com.scmessenger.android.data.PreferencesRepository
+import com.scmessenger.android.network.DiagnosticsReporter
+import com.scmessenger.android.network.NetworkDiagnostics
+import com.scmessenger.android.network.NetworkTypeDetector
+import com.scmessenger.android.transport.NetworkDetector
+import com.scmessenger.android.utils.CircuitBreaker
+import com.scmessenger.android.utils.NetworkFailureMetrics
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -16,6 +22,7 @@ import javax.inject.Singleton
  * This module provides:
  * - MeshRepository: Interface to Rust core via UniFFI
  * - PreferencesRepository: Android preferences storage
+ * - Network-related diagnostics and reporting
  */
 @Module
 @InstallIn(SingletonComponent::class)
@@ -35,5 +42,61 @@ object AppModule {
         @ApplicationContext context: Context
     ): PreferencesRepository {
         return PreferencesRepository(context)
+    }
+
+    @Provides
+    @Singleton
+    fun provideNetworkDiagnostics(
+        @ApplicationContext context: Context
+    ): NetworkDiagnostics {
+        return NetworkDiagnostics(context)
+    }
+
+    @Provides
+    @Singleton
+    fun provideNetworkTypeDetector(
+        @ApplicationContext context: Context
+    ): NetworkTypeDetector {
+        return NetworkTypeDetector(context)
+    }
+
+    @Provides
+    @Singleton
+    fun provideNetworkDetector(
+        @ApplicationContext context: Context
+    ): NetworkDetector {
+        return NetworkDetector(context)
+    }
+
+    @Provides
+    @Singleton
+    fun provideCircuitBreaker(): CircuitBreaker {
+        return CircuitBreaker()
+    }
+
+    @Provides
+    @Singleton
+    fun provideNetworkFailureMetrics(): NetworkFailureMetrics {
+        return NetworkFailureMetrics()
+    }
+
+    @Provides
+    @Singleton
+    fun provideDiagnosticsReporter(
+        @ApplicationContext context: Context,
+        networkDiagnostics: NetworkDiagnostics,
+        networkTypeDetector: NetworkTypeDetector,
+        failureMetrics: NetworkFailureMetrics,
+        networkDetector: NetworkDetector,
+        circuitBreaker: CircuitBreaker
+    ): DiagnosticsReporter {
+        return DiagnosticsReporter(
+            context,
+            networkDiagnostics,
+            networkTypeDetector,
+            failureMetrics,
+            networkDetector,
+            circuitBreaker
+        )
     }
 }
