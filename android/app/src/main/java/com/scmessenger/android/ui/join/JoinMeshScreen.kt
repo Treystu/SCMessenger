@@ -425,7 +425,7 @@ private suspend fun parseAndJoin(
 
     } catch (e: Exception) {
         Timber.e(e, "Failed to parse and join")
-        onError(e.message ?: stringResource(com.scmessenger.android.R.string.unknown_error))
+        onError(e.message ?: "Unknown error")
     }
 }
 
