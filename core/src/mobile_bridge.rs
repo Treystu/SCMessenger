@@ -510,6 +510,15 @@ impl MeshService {
                                 core_guard.clone()
                             };
 
+                            // Extract both the Weak<IronCore> and routing engine handle before
+                            // iron_core_handle is consumed by the closure below.
+                            let routing_engine_handle = iron_core_handle.as_ref()
+                                .map(|c| c.routing_engine_handle())
+                                .unwrap_or_else(crate::transport::swarm::default_routing_engine_handle);
+                            let core_weak = iron_core_handle.map(|c| {
+                                Arc::downgrade(&c)
+                            });
+
                             match crate::transport::start_swarm_with_config(
                                 libp2p_keys,
                                 listen_multiaddr,
@@ -517,11 +526,10 @@ impl MeshService {
                                 None,
                                 Vec::new(),
                                 service_storage_path,
-                                iron_core_handle.map(|c| {
-                                    Arc::downgrade(&c)
-                                }),
+                                core_weak,
                                 headless_mode,
                                 None, // Use default discovery config (Open/mDNS enabled)
+                                routing_engine_handle,
                             )
                             .await
                             {

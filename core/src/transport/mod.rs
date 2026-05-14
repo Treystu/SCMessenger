@@ -73,5 +73,6 @@ pub use routing::{
     timeout_budget::{BudgetSummary, DiscoveryPhase, TimeoutBudget},
 };
 pub use swarm::{
-    start_swarm, start_swarm_with_config, SwarmCommand, SwarmEvent2 as SwarmEvent, SwarmHandle,
+    default_routing_engine_handle, start_swarm, start_swarm_with_config, SwarmCommand,
+    SwarmEvent2 as SwarmEvent, SwarmHandle,
 };

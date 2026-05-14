@@ -1819,6 +1819,7 @@ async fn start_swarm_runtime(
             Some(std::sync::Arc::downgrade(&inner)),
             headless_mode,
             None, // discovery_config
+            scmessenger_core::transport::default_routing_engine_handle(),
         )
         .await
         .map_err(|e: anyhow::Error| js_value_from_str(&format!("Failed to start swarm: {}", e)))?;

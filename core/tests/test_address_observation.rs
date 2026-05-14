@@ -35,6 +35,7 @@ async fn test_address_observation_between_peers() {
         None, // core_handle
         false,
         None, // discovery_config
+        scmessenger_core::transport::default_routing_engine_handle(),
     )
     .await
     .expect("Failed to start Alice's swarm");
@@ -46,6 +47,7 @@ async fn test_address_observation_between_peers() {
         None, // core_handle
         false,
         None, // discovery_config
+        scmessenger_core::transport::default_routing_engine_handle(),
     )
     .await
     .expect("Failed to start Bob's swarm");

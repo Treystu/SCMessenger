@@ -33,7 +33,7 @@ use super::multiport::{self, BindResult, MultiPortConfig};
 use super::observation::{AddressObserver, ConnectionTracker};
 use super::reflection::{AddressReflectionRequest, AddressReflectionService};
 use super::routing::{
-    engine::{NextHop, RoutingDecision},
+    engine::{NextHop, RoutingDecision, RoutingLayer},
     local::TransportType as RoutingTransportType,
     optimized_engine::OptimizedRoutingEngine,
     smart_retry::{calculate_next_attempt, BackoffStrategy},
@@ -49,7 +49,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::hash::Hash;
 use std::net::SocketAddr;
-use std::sync::Weak;
+use std::sync::{Arc, Weak};
 use tokio::sync::mpsc;
 use web_time::SystemTime;
 #[cfg(not(target_arch = "wasm32"))]
@@ -671,94 +671,171 @@ fn transport_type_to_routing_transport(mode: kad::Mode) -> RoutingTransportType 
     }
 }
 
-/// Convert routing engine decision to ranked routes for dispatch
+/// Convert routing engine decision to ranked routes for dispatch.
+///
+/// Uses confidence scores from the routing engine and transport quality
+/// heuristics to compute realistic relay_success_score values instead of
+/// static constants.
 #[cfg(not(target_arch = "wasm32"))]
 fn routing_decision_to_ranked_routes(
     decision: &RoutingDecision,
     target_peer: &PeerId,
     multi_path_delivery: &mut MultiPathDelivery,
 ) -> Vec<RankedRoute> {
+    /// Map a RoutingLayer + confidence to a transport-quality score.
+    /// Direct local peers score highest; global routes and store-and-carry
+    /// progressively lower. The confidence from the routing engine acts as
+    /// a multiplier so the mesh can adapt to changing conditions.
+    fn transport_quality_score(layer: RoutingLayer, confidence: f64) -> f64 {
+        let base = match layer {
+            RoutingLayer::Local => 0.95,
+            RoutingLayer::Neighborhood => 0.80,
+            RoutingLayer::Global => 0.65,
+            RoutingLayer::StoreAndCarry => 0.40,
+        };
+        // Blend base quality with engine confidence (0.0-1.0).
+        // When confidence is high the score approaches base; when low it
+        // degrades proportionally, ensuring the mesh never trusts an
+        // unverified route at face value.
+        base * (0.5 + 0.5 * confidence)
+    }
+
     let mut routes = Vec::new();
 
     match &decision.primary {
-        NextHop::Direct {
-            peer_id: _,
-            transport: _,
-        } => {
-            // Direct route - use target peer directly
+        NextHop::Direct { peer_id: _, transport } => {
+            // Direct route -- use target peer directly
+            let mut score = transport_quality_score(decision.decided_by, decision.confidence);
+            // Factor transport type into score: BLE < WiFi < TCP < QUIC
+            let transport_bonus = match transport {
+                RoutingTransportType::QUIC => 0.15,
+                RoutingTransportType::TCP => 0.10,
+                RoutingTransportType::WiFiAware | RoutingTransportType::WiFiDirect => 0.05,
+                RoutingTransportType::BLE => 0.0,
+            };
+            score = (score + transport_bonus).min(1.0);
             routes.push(RankedRoute {
                 path: vec![*target_peer],
                 reason_code: "DIRECT_FROM_ROUTING_ENGINE",
                 recipient_recency: 0,
-                relay_success_score: 1.0,
+                relay_success_score: score,
                 latest_success_order: 0,
             });
         }
-        NextHop::Gateway { gateway_id, .. } => {
+        NextHop::Gateway { gateway_id, transport, hops_remaining } => {
             // Route via gateway
             let gateway_peer = PeerId::from_bytes(gateway_id).ok();
             if let Some(gw) = gateway_peer {
+                let mut score = transport_quality_score(decision.decided_by, decision.confidence);
+                // Gateway reliability degrades slightly with each hop remaining
+                let hop_penalty = (*hops_remaining as f64) * 0.05;
+                score = (score - hop_penalty).max(0.1);
+                let transport_bonus = match transport {
+                    RoutingTransportType::QUIC => 0.15,
+                    RoutingTransportType::TCP => 0.10,
+                    RoutingTransportType::WiFiAware | RoutingTransportType::WiFiDirect => 0.05,
+                    RoutingTransportType::BLE => 0.0,
+                };
+                score = (score + transport_bonus).min(1.0);
                 routes.push(RankedRoute {
                     path: vec![gw, *target_peer],
                     reason_code: "GATEWAY_FROM_ROUTING_ENGINE",
                     recipient_recency: 0,
-                    relay_success_score: 0.8,
+                    relay_success_score: score,
                     latest_success_order: 0,
                 });
             }
         }
-        NextHop::GlobalRoute { next_hop_id, .. } => {
+        NextHop::GlobalRoute { next_hop_id, total_hops } => {
             // Route via global route
             let next_hop = PeerId::from_bytes(next_hop_id).ok();
             if let Some(hop) = next_hop {
+                let base_score = transport_quality_score(decision.decided_by, decision.confidence);
+                // Global routes degrade with total hops
+                let hop_penalty = (*total_hops as f64) * 0.05;
+                let score = (base_score - hop_penalty).max(0.1);
                 routes.push(RankedRoute {
                     path: vec![hop, *target_peer],
                     reason_code: "GLOBAL_ROUTE_FROM_ROUTING_ENGINE",
                     recipient_recency: 0,
-                    relay_success_score: 0.7,
+                    relay_success_score: score,
                     latest_success_order: 0,
                 });
             }
         }
         NextHop::StoreAndCarry => {
-            // Fallback: direct to target
+            // Fallback: direct to target with low confidence
+            let score = transport_quality_score(decision.decided_by, decision.confidence);
             routes.push(RankedRoute {
                 path: vec![*target_peer],
                 reason_code: "STORE_AND_CARRY",
                 recipient_recency: 0,
-                relay_success_score: 0.5,
+                relay_success_score: score,
                 latest_success_order: 0,
             });
         }
         NextHop::RouteDiscovery { .. } => {
-            // Route discovery requested - fall back to multi_path_delivery
+            // Route discovery requested -- fall back to multi_path_delivery
             return multi_path_delivery.ranked_routes(target_peer, 3);
         }
     }
 
-    // Add alternative routes if available
+    // Add alternative routes if available, scored lower than primary
     for alt in &decision.alternatives {
         match alt {
-            NextHop::Direct { peer_id, .. } => {
+            NextHop::Direct { peer_id, transport } => {
                 let alt_peer = PeerId::from_bytes(peer_id).ok();
                 if let Some(p) = alt_peer {
+                    let mut score = transport_quality_score(decision.decided_by, decision.confidence) * 0.9;
+                    let transport_bonus = match transport {
+                        RoutingTransportType::QUIC => 0.15,
+                        RoutingTransportType::TCP => 0.10,
+                        RoutingTransportType::WiFiAware | RoutingTransportType::WiFiDirect => 0.05,
+                        RoutingTransportType::BLE => 0.0,
+                    };
+                    score = (score + transport_bonus).min(1.0);
                     routes.push(RankedRoute {
                         path: vec![p],
                         reason_code: "ALT_DIRECT_FROM_ROUTING_ENGINE",
                         recipient_recency: 0,
-                        relay_success_score: 0.9,
+                        relay_success_score: score,
                         latest_success_order: 0,
                     });
                 }
             }
-            NextHop::Gateway { gateway_id, .. } => {
+            NextHop::Gateway { gateway_id, transport, hops_remaining } => {
                 let gw = PeerId::from_bytes(gateway_id).ok();
                 if let Some(g) = gw {
+                    let mut score = transport_quality_score(decision.decided_by, decision.confidence) * 0.9;
+                    let hop_penalty = (*hops_remaining as f64) * 0.05;
+                    score = (score - hop_penalty).max(0.1);
+                    let transport_bonus = match transport {
+                        RoutingTransportType::QUIC => 0.15,
+                        RoutingTransportType::TCP => 0.10,
+                        RoutingTransportType::WiFiAware | RoutingTransportType::WiFiDirect => 0.05,
+                        RoutingTransportType::BLE => 0.0,
+                    };
+                    score = (score + transport_bonus).min(1.0);
                     routes.push(RankedRoute {
                         path: vec![g, *target_peer],
                         reason_code: "ALT_GATEWAY_FROM_ROUTING_ENGINE",
                         recipient_recency: 0,
-                        relay_success_score: 0.7,
+                        relay_success_score: score,
+                        latest_success_order: 0,
+                    });
+                }
+            }
+            NextHop::GlobalRoute { next_hop_id, total_hops } => {
+                let next_hop = PeerId::from_bytes(next_hop_id).ok();
+                if let Some(hop) = next_hop {
+                    let base_score = transport_quality_score(decision.decided_by, decision.confidence) * 0.9;
+                    let hop_penalty = (*total_hops as f64) * 0.05;
+                    let score = (base_score - hop_penalty).max(0.1);
+                    routes.push(RankedRoute {
+                        path: vec![hop, *target_peer],
+                        reason_code: "ALT_GLOBAL_ROUTE_FROM_ROUTING_ENGINE",
+                        recipient_recency: 0,
+                        relay_success_score: score,
                         latest_success_order: 0,
                     });
                 }
@@ -1562,6 +1639,13 @@ impl SwarmHandle {
     }
 }
 
+/// Create a default (empty) routing engine handle for use by callers that
+/// don't have an IronCore instance (e.g. CLI, WASM). The handle will be
+/// seeded with the local peer ID when the swarm starts.
+pub fn default_routing_engine_handle() -> Arc<parking_lot::RwLock<Option<OptimizedRoutingEngine>>> {
+    Arc::new(parking_lot::RwLock::new(None))
+}
+
 /// Build and start the libp2p swarm, returning a handle for communication.
 ///
 /// This spawns a tokio task that runs the swarm event loop.
@@ -1576,6 +1660,7 @@ pub async fn start_swarm(
     core_handle: Option<Weak<crate::IronCore>>,
     headless: bool,
     discovery_config: Option<DiscoveryConfig>,
+    routing_engine_handle: Arc<parking_lot::RwLock<Option<OptimizedRoutingEngine>>>,
 ) -> Result<SwarmHandle> {
     start_swarm_with_config(
         keypair,
@@ -1587,6 +1672,7 @@ pub async fn start_swarm(
         core_handle,
         headless,
         discovery_config,
+        routing_engine_handle,
     )
     .await
 }
@@ -1607,6 +1693,7 @@ pub async fn start_swarm_with_config(
     core_handle: Option<Weak<crate::IronCore>>,
     headless: bool,
     discovery_config: Option<DiscoveryConfig>,
+    routing_engine_handle: Arc<parking_lot::RwLock<Option<OptimizedRoutingEngine>>>,
 ) -> Result<SwarmHandle> {
     #[cfg(not(target_arch = "wasm32"))]
     {
@@ -1776,15 +1863,21 @@ pub async fn start_swarm_with_config(
         let mut bootstrap_capability = BootstrapCapability::new();
 
         // Mycorrhizal Routing Engine (Layer 1-3)
-        // Convert libp2p PeerId to routing module's [u8; 32] format
-        // libp2p PeerId for Ed25519 keys: 38 bytes (0x00, 0x24, 0x08, 0x01, 0x12, 0x20, then 32-byte key)
-        // We extract just the 32-byte public key portion
+        // Use the shared routing engine handle from IronCore so the swarm and
+        // the public API share the same engine state. If the engine has not been
+        // initialized yet (identity not yet created), seed it with the local
+        // peer ID so routing can begin immediately.
         let local_peer_id_bytes_raw = local_peer_id.to_bytes();
         let local_peer_id_bytes: [u8; 32] = extract_peer_id_bytes(&local_peer_id_bytes_raw);
         let local_hint = blake3::hash(&local_peer_id_bytes).as_bytes()[0..4]
             .try_into()
             .expect("blake3 hash should be at least 4 bytes");
-        let mut routing_engine = OptimizedRoutingEngine::new(local_peer_id_bytes, local_hint);
+        {
+            let mut guard = routing_engine_handle.write();
+            if guard.is_none() {
+                *guard = Some(OptimizedRoutingEngine::new(local_peer_id_bytes, local_hint));
+            }
+        }
 
         // Track pending message deliveries
         let mut pending_messages: HashMap<String, PendingMessage> = HashMap::new();
@@ -1883,6 +1976,9 @@ pub async fn start_swarm_with_config(
             let mut reported_peer_info: HashMap<PeerId, (String, Vec<Multiaddr>)> = HashMap::new();
             let mut reported_peer_discoveries: std::collections::HashSet<PeerId> =
                 std::collections::HashSet::new();
+
+            // Mycorrhizal routing: periodic optimization tick (every 30s)
+            let mut routing_optimization_interval = tokio::time::interval(Duration::from_secs(30));
 
             // Check for pending relay reconnects frequently
             let mut relay_reconnect_interval = tokio::time::interval(Duration::from_secs(5));
@@ -1995,6 +2091,28 @@ pub async fn start_swarm_with_config(
                                 &mut pending_custody_dispatches,
                                 RELAY_MAX_INFLIGHT_DISPATCHES,
                                 "periodic_pull",
+                            );
+                        }
+                    }
+
+                    // Mycorrhizal routing: periodic optimization tick
+                    _ = routing_optimization_interval.tick() => {
+                        let now_secs = web_time::SystemTime::now()
+                            .duration_since(web_time::UNIX_EPOCH)
+                            .unwrap_or_default()
+                            .as_secs();
+                        let mut guard = routing_engine_handle.write();
+                        if let Some(ref mut engine) = guard.as_mut() {
+                            let maintenance = engine.tick(now_secs);
+                            let neg = &maintenance.negative_cache_stats;
+                            tracing::debug!(
+                                "[ROUTING] Optimization tick: neg_cache({} entries, {} cleaned), \
+                                 ttl({} cleaned), budget({:?} elapsed, {:?} phase)",
+                                neg.entry_count,
+                                maintenance.negative_cache_entries_cleaned,
+                                maintenance.adaptive_ttl_entries_cleaned,
+                                maintenance.timeout_budget_summary.elapsed,
+                                maintenance.timeout_budget_summary.current_phase,
                             );
                         }
                     }
@@ -2281,9 +2399,17 @@ pub async fn start_swarm_with_config(
                                                     // PHASE 5: Track successful delivery
                                                     let latency_ms = pending.attempt_start.elapsed().unwrap_or_default().as_millis() as u64;
                                                     multi_path_delivery.record_success(&message_id, vec![pending.target_peer], latency_ms);
-                                                    // Mycorrhizal routing: record activity for adaptive TTL
-                                                    routing_engine.record_message_activity(&pending.target_peer.to_string());
-                                                    tracing::info!("✓ Message delivered successfully to {} ({}ms)", pending.target_peer, latency_ms);
+                                                    // Mycorrhizal routing: record activity for adaptive TTL and update reliability
+                                                    {
+                                                        let mut guard = routing_engine_handle.write();
+                                                        if let Some(ref mut engine) = guard.as_mut() {
+                                                            engine.record_message_activity(&pending.target_peer.to_string());
+                                                            // Update peer reliability score on successful delivery
+                                                            let peer_bytes = extract_peer_id_bytes(&pending.target_peer.to_bytes());
+                                                            engine.base_engine_mut().local_cell_mut().update_reliability(&peer_bytes, true);
+                                                        }
+                                                    }
+                                                    tracing::info!("[OK] Message delivered successfully to {} ({}ms)", pending.target_peer, latency_ms);
                                                     let _ = pending.reply_tx.send(Ok(())).await;
                                                 } else {
                                                     // Message rejected, trigger retry
@@ -2322,8 +2448,15 @@ pub async fn start_swarm_with_config(
                                         );
                                         multi_path_delivery
                                             .record_failure(&message_id, vec![pending.target_peer]);
-                                        // Mycorrhizal routing: record unreachable in negative cache
-                                        routing_engine.record_unreachable_peer(&pending.target_peer.to_string());
+                                        // Mycorrhizal routing: record unreachable in negative cache and downgrade reliability
+                                        {
+                                            let mut guard = routing_engine_handle.write();
+                                            if let Some(ref mut engine) = guard.as_mut() {
+                                                engine.record_unreachable_peer(&pending.target_peer.to_string());
+                                                let peer_bytes = extract_peer_id_bytes(&pending.target_peer.to_bytes());
+                                                engine.base_engine_mut().local_cell_mut().update_reliability(&peer_bytes, false);
+                                            }
+                                        }
                                         pending_messages.insert(message_id, pending);
                                     }
                                 }
@@ -3102,10 +3235,15 @@ pub async fn start_swarm_with_config(
                                 // mode as the transport type basis since identity requires a
                                 // server-capable connection.
                                 let transport_type = transport_type_to_routing_transport(kad::Mode::Server);
-                                routing_engine.base_engine_mut().local_cell_mut().peer_seen(
-                                    peer_id_bytes,
-                                    transport_type,
-                                );
+                                {
+                                    let mut guard = routing_engine_handle.write();
+                                    if let Some(ref mut engine) = guard.as_mut() {
+                                        engine.base_engine_mut().local_cell_mut().peer_seen(
+                                            peer_id_bytes,
+                                            transport_type,
+                                        );
+                                    }
+                                }
                                 // Update routing engine with peer hints from identify info
                                 // (peers announce what hints they can reach)
 
@@ -3157,7 +3295,12 @@ pub async fn start_swarm_with_config(
                                     multi_path_delivery.add_relay(peer_id);
                                     // Mycorrhizal routing: mark relay-capable peer as gateway
                                     let gw_bytes = extract_peer_id_bytes(&peer_id.to_bytes());
-                                    routing_engine.base_engine_mut().local_cell_mut().mark_as_gateway(&gw_bytes, true);
+                                    {
+                                        let mut guard = routing_engine_handle.write();
+                                        if let Some(ref mut engine) = guard.as_mut() {
+                                            engine.base_engine_mut().local_cell_mut().mark_as_gateway(&gw_bytes, true);
+                                        }
+                                    }
 
                                     // P0.5B: Register a circuit relay reservation with this relay.
                                     // Guard: only register ONCE per relay peer — identify fires every 60s
@@ -3465,15 +3608,30 @@ pub async fn start_swarm_with_config(
                                     .expect("blake3 hash should be at least 4 bytes");
 
                                 // Route message using mycorrhizal routing engine
-                                let routing_decision = routing_engine.route_message_optimized(
-                                    &hint,
-                                    &message_id.as_bytes()[0..16].try_into().unwrap_or([0u8; 16]),
-                                    50, // default priority
-                                    SystemTime::now()
-                                        .duration_since(UNIX_EPOCH)
-                                        .unwrap_or_default()
-                                        .as_secs(),
-                                );
+                                let routing_decision = {
+                                    let mut guard = routing_engine_handle.write();
+                                    if let Some(ref mut engine) = guard.as_mut() {
+                                        engine.route_message_optimized(
+                                            &hint,
+                                            &message_id.as_bytes()[0..16].try_into().unwrap_or([0u8; 16]),
+                                            50, // default priority
+                                            SystemTime::now()
+                                                .duration_since(UNIX_EPOCH)
+                                                .unwrap_or_default()
+                                                .as_secs(),
+                                        )
+                                    } else {
+                                        // Fallback: no routing engine available, use store-and-carry
+                                        RoutingDecision {
+                                            message_id: message_id.as_bytes()[0..16].try_into().unwrap_or([0u8; 16]),
+                                            recipient_hint: hint,
+                                            primary: NextHop::StoreAndCarry,
+                                            alternatives: vec![],
+                                            decided_by: RoutingLayer::StoreAndCarry,
+                                            confidence: 0.0,
+                                        }
+                                    }
+                                };
 
                                 // Convert routing decision to ranked routes for dispatch
                                 let routes = routing_decision_to_ranked_routes(

@@ -281,6 +281,7 @@ async fn test_multiport_swarm_integration() {
         None,       // core_handle
         false,      // headless
         None,       // discovery_config
+        scmessenger_core::transport::default_routing_engine_handle(),
     )
     .await;
 

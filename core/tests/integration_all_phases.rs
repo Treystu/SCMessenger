@@ -60,6 +60,7 @@ async fn test_all_six_phases_integrated() {
         None, // core_handle
         false,
         None, // discovery_config
+        scmessenger_core::transport::default_routing_engine_handle(),
     )
     .await
     .expect("Failed to start Alice");
@@ -96,6 +97,7 @@ async fn test_all_six_phases_integrated() {
         None, // core_handle
         false,
         None, // discovery_config
+        scmessenger_core::transport::default_routing_engine_handle(),
     )
     .await
     .expect("Failed to start Bob");
@@ -287,6 +289,7 @@ async fn test_message_retry_on_failure() {
         None, // core_handle
         false,
         None, // discovery_config
+        scmessenger_core::transport::default_routing_engine_handle(),
     )
     .await
     .expect("Failed to start Alice");
@@ -373,6 +376,7 @@ async fn test_relay_protocol() {
         None, // core_handle
         false,
         None, // discovery_config
+        scmessenger_core::transport::default_routing_engine_handle(),
     )
     .await
     .expect("Failed to start Alice");
@@ -388,6 +392,7 @@ async fn test_relay_protocol() {
         None, // core_handle
         false,
         None, // discovery_config
+        scmessenger_core::transport::default_routing_engine_handle(),
     )
     .await
     .expect("Failed to start Bob");
@@ -403,6 +408,7 @@ async fn test_relay_protocol() {
         None, // core_handle
         false,
         None, // discovery_config
+        scmessenger_core::transport::default_routing_engine_handle(),
     )
     .await
     .expect("Failed to start Charlie");

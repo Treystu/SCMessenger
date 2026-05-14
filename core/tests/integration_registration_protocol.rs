@@ -69,6 +69,7 @@ async fn registration_protocol_accepts_valid_signed_registration_request() {
         None,
         false,
         None, // discovery_config
+        scmessenger_core::transport::default_routing_engine_handle(),
     )
     .await
     .expect("failed to start receiver swarm");
@@ -82,6 +83,7 @@ async fn registration_protocol_accepts_valid_signed_registration_request() {
         None,
         false,
         None, // discovery_config
+        scmessenger_core::transport::default_routing_engine_handle(),
     )
     .await
     .expect("failed to start sender swarm");
@@ -127,6 +129,7 @@ async fn registration_protocol_rejects_malformed_identity_id_without_mutation() 
         None,
         false,
         None, // discovery_config
+        scmessenger_core::transport::default_routing_engine_handle(),
     )
     .await
     .expect("failed to start receiver swarm");
@@ -140,6 +143,7 @@ async fn registration_protocol_rejects_malformed_identity_id_without_mutation() 
         None,
         false,
         None, // discovery_config
+        scmessenger_core::transport::default_routing_engine_handle(),
     )
     .await
     .expect("failed to start sender swarm");
@@ -192,6 +196,7 @@ async fn registration_protocol_rejects_tampered_signed_deregistration_request() 
         None,
         false,
         None, // discovery_config
+        scmessenger_core::transport::default_routing_engine_handle(),
     )
     .await
     .expect("failed to start receiver swarm");
@@ -205,6 +210,7 @@ async fn registration_protocol_rejects_tampered_signed_deregistration_request() 
         None,
         false,
         None, // discovery_config
+        scmessenger_core::transport::default_routing_engine_handle(),
     )
     .await
     .expect("failed to start sender swarm");

@@ -1257,6 +1257,7 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
         None,
         false,
         Some(discovery_config),
+        transport::default_routing_engine_handle(),
     )
     .await?;
 
@@ -2225,6 +2226,7 @@ async fn cmd_relay(listen_addr: String, http_port: u16, node_name: Option<String
         None,
         true,
         Some(discovery_config),
+        transport::default_routing_engine_handle(),
     )
     .await?;
     println!("{} P2P swarm started on {}", "✓".green(), listen_addr);
