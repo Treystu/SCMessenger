@@ -225,7 +225,7 @@ impl IronCore {
         let blocked_for_auto_block = CoreBlockedManager::new(backend.clone());
         let inbox = Inbox::new();
         let outbox = Outbox::new();
-        let storage_manager = StorageManager::new(history_manager.clone(), log_mgr.clone());
+        let storage_manager = StorageManager::new(backend.clone(), history_manager.clone(), log_mgr.clone());
         let spam_detector =
             SpamDetectionEngine::new_heuristics_only(SpamDetectionConfig::default());
         let abuse_mgr = EnhancedAbuseReputationManager::new(1000, spam_detector);
@@ -302,7 +302,7 @@ impl IronCore {
         let blocked_for_auto_block = CoreBlockedManager::new(backend.clone());
         let inbox = Inbox::new();
         let outbox = Outbox::new();
-        let storage_manager = StorageManager::new(history_manager.clone(), log_mgr.clone());
+        let storage_manager = StorageManager::new(backend.clone(), history_manager.clone(), log_mgr.clone());
         let spam_detector =
             SpamDetectionEngine::new_heuristics_only(SpamDetectionConfig::default());
         let abuse_mgr = EnhancedAbuseReputationManager::new(1000, spam_detector);
@@ -383,7 +383,7 @@ impl IronCore {
         let blocked_for_auto_block = CoreBlockedManager::new(backend.clone());
         let inbox = Inbox::new();
         let outbox = Outbox::new();
-        let storage_manager = StorageManager::new(history_manager.clone(), log_mgr.clone());
+        let storage_manager = StorageManager::new(backend.clone(), history_manager.clone(), log_mgr.clone());
         let spam_detector =
             SpamDetectionEngine::new_heuristics_only(SpamDetectionConfig::default());
         let abuse_mgr = EnhancedAbuseReputationManager::new(1000, spam_detector);
@@ -1261,6 +1261,10 @@ impl IronCore {
         self.storage_manager
             .read()
             .update_disk_stats(total_bytes, free_bytes);
+    }
+
+    pub fn get_disk_stats(&self) -> crate::store::DiskStats {
+        self.storage_manager.read().get_disk_stats()
     }
 
     pub fn record_log(&self, line: String) {
@@ -3031,5 +3035,73 @@ impl IronCore {
     pub fn update_keepalive(&self, _peer_id: String, _interval_secs: u64) -> Result<(), String> {
         // TODO: Wire through SwarmHandle when transport bridge supports async commands
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_record_and_export_logs() {
+        let core = IronCore::new();
+
+        // Record multiple log lines
+        core.record_log("first log entry".to_string());
+        core.record_log("second log entry".to_string());
+        core.record_log("first log entry".to_string()); // duplicate
+
+        let exported = core.export_logs().unwrap();
+        let logs: Vec<serde_json::Value> = serde_json::from_str(&exported).unwrap();
+        assert_eq!(logs.len(), 2, "should have 2 unique log entries");
+
+        // Find each entry and verify delta counts
+        let first = logs.iter().find(|l| l["content"] == "first log entry").unwrap();
+        assert_eq!(first["deltas"].as_array().unwrap().len(), 2,
+            "first log entry should have 2 deltas (recorded twice)");
+
+        let second = logs.iter().find(|l| l["content"] == "second log entry").unwrap();
+        assert_eq!(second["deltas"].as_array().unwrap().len(), 1,
+            "second log entry should have 1 delta");
+    }
+
+    #[test]
+    fn test_export_logs_empty() {
+        let core = IronCore::new();
+        let exported = core.export_logs().unwrap();
+        assert_eq!(exported, "[]", "empty log store should export []");
+    }
+
+    #[test]
+    fn test_update_disk_stats_with_app_data() {
+        let core = IronCore::new();
+
+        // Before updating, stats should be default zeros
+        let stats = core.get_disk_stats();
+        assert_eq!(stats.total_bytes, 0);
+        assert_eq!(stats.free_bytes, 0);
+
+        // Record some data so the backend has content
+        core.record_log("disk stats test entry".to_string());
+
+        core.update_disk_stats(10_000_000, 5_000_000);
+        let stats = core.get_disk_stats();
+        assert_eq!(stats.total_bytes, 10_000_000);
+        assert_eq!(stats.free_bytes, 5_000_000);
+        assert!(stats.app_data_bytes > 0,
+            "app_data_bytes should be > 0 after recording data");
+    }
+
+    #[test]
+    fn test_record_log_persistence() {
+        let core = IronCore::new();
+
+        core.record_log("persistent entry".to_string());
+
+        // Verify data appears in export
+        let exported = core.export_logs().unwrap();
+        let logs: Vec<serde_json::Value> = serde_json::from_str(&exported).unwrap();
+        assert_eq!(logs.len(), 1);
+        assert_eq!(logs[0]["content"], "persistent entry");
     }
 }

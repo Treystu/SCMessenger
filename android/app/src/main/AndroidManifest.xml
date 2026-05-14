@@ -107,6 +107,8 @@
             android:foregroundServiceType="connectedDevice|dataSync" />
         
         <!-- Optional: VPN Service for persistent connection -->
+        <!-- NOTE: android:enabled="false" by default as VPN requires explicit user consent -->
+        <!-- via system VPN dialog before the service can be bound. See MeshVpnService.kt. -->
         <service
             android:name=".service.MeshVpnService"
             android:enabled="false"

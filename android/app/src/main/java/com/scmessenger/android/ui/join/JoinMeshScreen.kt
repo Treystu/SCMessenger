@@ -8,6 +8,7 @@ import androidx.compose.material.icons.filled.Error
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
@@ -105,10 +106,14 @@ fun JoinMeshScreen(
             }
 
             JoinState.ERROR -> {
-                ErrorView(errorMessage ?: "Unknown error", onRetry = {
-                    joinState = JoinState.SCANNING
-                    errorMessage = null
-                }, onCancel = onCancel)
+                ErrorView(
+                    errorMessage ?: stringResource(com.scmessenger.android.R.string.unknown_error),
+                    onRetry = {
+                        joinState = JoinState.SCANNING
+                        errorMessage = null
+                    },
+                    onCancel = onCancel
+                )
             }
         }
     }
@@ -420,7 +425,7 @@ private suspend fun parseAndJoin(
 
     } catch (e: Exception) {
         Timber.e(e, "Failed to parse and join")
-        onError(e.message ?: "Unknown error")
+        onError(e.message ?: stringResource(com.scmessenger.android.R.string.unknown_error))
     }
 }
 

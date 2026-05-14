@@ -19,4 +19,8 @@
     <string name="unknown_contact">Unknown</string>
     <string name="unknown_transport">Unknown</string>
     <string name="unknown_network_type">Unknown</string>
+
+    <!-- Error messages -->
+    <string name="unknown_error">Unknown error</string>
+    <string name="unknown_peer">Unknown Peer</string>
 </resources>

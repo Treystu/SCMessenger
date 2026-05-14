@@ -57,7 +57,7 @@ class NetworkDetector @Inject constructor(
     private var pendingNetworkType: NetworkType? = null
 
     /** Hysteresis: minimum stable period before committing a network type change (ms) */
-    private val networkStabilityMs = 5000L
+    private val networkStabilityMs = 500L
 
     /** Whether we've detected a cellular network (including restricted) that likely blocks non-standard ports */
     val isCellularNetwork: Boolean

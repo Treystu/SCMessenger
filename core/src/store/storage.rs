@@ -1,3 +1,4 @@
+use crate::store::backend::StorageBackend;
 use crate::store::history::HistoryManager;
 use crate::store::logs::LogManager;
 use crate::IronCoreError;
@@ -8,6 +9,7 @@ use std::sync::Arc;
 pub struct DiskStats {
     pub total_bytes: u64,
     pub free_bytes: u64,
+    pub app_data_bytes: u64,
 }
 
 /// P0_SECURITY_001: Configurable retention policies for message history.
@@ -48,15 +50,21 @@ impl RetentionConfig {
 
 pub struct StorageManager {
     stats: RwLock<DiskStats>,
+    backend: Arc<dyn StorageBackend>,
     history: Arc<HistoryManager>,
     logs: Arc<LogManager>,
     pub retention: RetentionConfig,
 }
 
 impl StorageManager {
-    pub fn new(history: Arc<HistoryManager>, logs: Arc<LogManager>) -> Self {
+    pub fn new(
+        backend: Arc<dyn StorageBackend>,
+        history: Arc<HistoryManager>,
+        logs: Arc<LogManager>,
+    ) -> Self {
         Self {
             stats: RwLock::new(DiskStats::default()),
+            backend,
             history,
             logs,
             retention: RetentionConfig::default(),
@@ -64,12 +72,14 @@ impl StorageManager {
     }
 
     pub fn with_retention(
+        backend: Arc<dyn StorageBackend>,
         history: Arc<HistoryManager>,
         logs: Arc<LogManager>,
         retention: RetentionConfig,
     ) -> Self {
         Self {
             stats: RwLock::new(DiskStats::default()),
+            backend,
             history,
             logs,
             retention,
@@ -77,11 +87,26 @@ impl StorageManager {
     }
 
     pub fn update_disk_stats(&self, total: u64, free: u64) {
+        let app_data = self
+            .backend
+            .approximate_size()
+            .unwrap_or(0);
+
         let mut stats = self.stats.write();
         stats.total_bytes = total;
         stats.free_bytes = free;
+        stats.app_data_bytes = app_data;
 
-        tracing::debug!("Disk stats updated: free {} / total {}", free, total);
+        tracing::debug!(
+            "Disk stats updated: free {} / total {}, app_data {}",
+            free,
+            total,
+            app_data
+        );
+    }
+
+    pub fn get_disk_stats(&self) -> DiskStats {
+        self.stats.read().clone()
     }
 
     /// Perform maintenance to enforce retention policies and ensure free disk space.
@@ -168,17 +193,35 @@ mod tests {
     fn make_storage_manager() -> StorageManager {
         let backend = Arc::new(MemoryStorage::new());
         let history = Arc::new(HistoryManager::new(backend.clone()));
-        let logs = Arc::new(LogManager::new(backend));
-        StorageManager::new(history, logs)
+        let logs = Arc::new(LogManager::new(backend.clone()));
+        StorageManager::new(backend, history, logs)
     }
 
     #[test]
     fn test_update_disk_stats() {
         let mgr = make_storage_manager();
         mgr.update_disk_stats(1_000_000, 500_000);
-        let stats = mgr.stats.read().clone();
+        let stats = mgr.get_disk_stats();
         assert_eq!(stats.total_bytes, 1_000_000);
         assert_eq!(stats.free_bytes, 500_000);
+    }
+
+    #[test]
+    fn test_update_disk_stats_queries_app_data_size() {
+        let backend = Arc::new(MemoryStorage::new());
+        let history = Arc::new(HistoryManager::new(backend.clone()));
+        let logs = Arc::new(LogManager::new(backend.clone()));
+        let mgr = StorageManager::new(backend.clone(), history, logs);
+
+        // Write data through the log manager so the backend has content
+        logs.record_log("test log entry for size measurement".to_string());
+        logs.flush().unwrap();
+
+        mgr.update_disk_stats(1_000_000, 500_000);
+        let stats = mgr.get_disk_stats();
+        assert_eq!(stats.total_bytes, 1_000_000);
+        assert_eq!(stats.free_bytes, 500_000);
+        assert!(stats.app_data_bytes > 0, "app_data_bytes should reflect backend store size");
     }
 
     #[test]
@@ -208,6 +251,7 @@ mod tests {
         let stats = DiskStats::default();
         assert_eq!(stats.total_bytes, 0);
         assert_eq!(stats.free_bytes, 0);
+        assert_eq!(stats.app_data_bytes, 0);
     }
 
     #[test]
@@ -258,7 +302,7 @@ mod tests {
 
         // Retain only messages from the last 30 days (2592000 seconds)
         let retention = RetentionConfig::new(0, 30);
-        let mgr = StorageManager::with_retention(history.clone(), logs, retention);
+        let mgr = StorageManager::with_retention(backend.clone(), history.clone(), logs, retention);
         mgr.perform_maintenance().unwrap();
 
         // Old message should be pruned, recent should remain

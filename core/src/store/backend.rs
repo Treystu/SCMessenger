@@ -13,6 +13,7 @@ pub trait StorageBackend: Send + Sync {
     fn scan_prefix(&self, prefix: &[u8]) -> Result<ScanResult, String>;
     fn count_prefix(&self, prefix: &[u8]) -> Result<usize, String>;
     fn flush(&self) -> Result<(), String>;
+    fn approximate_size(&self) -> Result<u64, String>;
 }
 
 /// In-memory storage useful for testing and temporary WASM execution
@@ -77,6 +78,12 @@ impl StorageBackend for MemoryStorage {
     fn flush(&self) -> Result<(), String> {
         Ok(())
     }
+
+    fn approximate_size(&self) -> Result<u64, String> {
+        let data = self.data.read().unwrap();
+        let size: u64 = data.iter().map(|(k, v)| (k.len() + v.len()) as u64).sum();
+        Ok(size)
+    }
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -130,6 +137,10 @@ impl StorageBackend for SledStorage {
     fn flush(&self) -> Result<(), String> {
         self.db.flush().map_err(|e| e.to_string())?;
         Ok(())
+    }
+
+    fn approximate_size(&self) -> Result<u64, String> {
+        self.db.size_on_disk().map_err(|e| e.to_string())
     }
 }
 
@@ -288,5 +299,11 @@ impl StorageBackend for IndexedDbStorage {
 
     fn flush(&self) -> Result<(), String> {
         Ok(())
+    }
+
+    fn approximate_size(&self) -> Result<u64, String> {
+        let data = self.data.read().unwrap();
+        let size: u64 = data.iter().map(|(k, v)| (k.len() + v.len()) as u64).sum();
+        Ok(size)
     }
 }

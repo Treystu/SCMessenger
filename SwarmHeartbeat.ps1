@@ -221,12 +221,14 @@ function Invoke-HeartbeatPulse {
     $workerCount    = Get-ActiveWorkerCount
     $orchRunning    = Get-OrchestratorRunning
     $staleTasks     = Get-StaleInProgressTasks
-    $totalSlotsUsed = $workerCount + (if ($orchRunning) { 1 } else { 0 })
+    $orchSlots = if ($orchRunning) { 1 } else { 0 }
+    $totalSlotsUsed = $workerCount + $orchSlots
     $slotsFree      = $Script:MaxConcurrentSlots - $totalSlotsUsed
+    $orchLabel      = if ($orchRunning) { "Y" } else { "N" }
 
     Write-HeartbeatLog "INFO" ("State -> Done: {0} | Pending: {1} | InProg: {2} | Stale: {3} | Workers: {4}/{5} free | Orch: {6}" -f
         $fileState.DoneCount, $fileState.PendingCount, $fileState.InProgressCount,
-        $staleTasks.Count, $workerCount, $slotsFree, (if ($orchRunning) { "Y" } else { "N" }))
+        $staleTasks.Count, $workerCount, $slotsFree, $orchLabel)
 
     $Script:PrevDoneCount = $fileState.DoneCount
 
@@ -244,7 +246,8 @@ function Invoke-HeartbeatPulse {
 
     # Phase 4: Launch worker (at most 1 per pulse)
     if ($fileState.PendingCount -gt 0 -and $slotsFree -gt 0) {
-        $slotsForWorkers = $Script:MaxConcurrentSlots - (if ($orchRunning) { 1 } else { 0 })
+        $orchSlots = if ($orchRunning) { 1 } else { 0 }
+        $slotsForWorkers = $Script:MaxConcurrentSlots - $orchSlots
         if ($workerCount -lt $slotsForWorkers) {
             $task = $fileState.PendingTasks | Select-Object -First 1
             if ($task) {

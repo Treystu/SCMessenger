@@ -63,7 +63,7 @@ function Invoke-AgentWithBudget {
     param([string]$TaskFilePath)
 
     $cmd = New-ClaudeCommand -Model $Script:Model
-    $prompt = "SYSTEM OVERRIDE: Read and execute all instructions in $TaskFilePath. Do not ask for help. When finished, output TASK COMPLETE and exit."
+    $prompt = "SYSTEM OVERRIDE: Read and execute all instructions in $TaskFilePath. Do not ask for help. CRITICAL: Do NOT move, rename, or relocate the task file -- the governor handles file movement. When finished, output TASK COMPLETE and exit."
 
     $startTime = Get-Date
     $budgetSeconds = $Script:BudgetLimit
@@ -150,26 +150,31 @@ function Invoke-Governor {
 
     $result = Invoke-AgentWithBudget -TaskFilePath $taskFilePath
 
-    try {
-        if ($result.TimedOut) {
-            $destName = "[TIME_BREACH]_$taskFileName"
-            $destPath = Join-Path $todoDir $destName
-            Write-GovernorLog "WARN" "RESULT: TIMEOUT -> $destPath"
+    # Determine destination based on result
+    if ($result.TimedOut) {
+        $destName = "[TIME_BREACH]_$taskFileName"
+        $destPath = Join-Path $todoDir $destName
+        $destLabel = "TIMEOUT"
+    } elseif ($result.ExitCode -eq 0) {
+        $destPath = Join-Path $doneDir $taskFileName
+        $destLabel = "SUCCESS"
+    } else {
+        $destName = "[FAILED]_$taskFileName"
+        $destPath = Join-Path $todoDir $destName
+        $destLabel = "FAILED (exit=$($result.ExitCode))"
+    }
+
+    # Move the task file (agent may have already moved it per CLAUDE.md)
+    if (Test-Path -LiteralPath $taskFilePath) {
+        try {
             Move-Item -LiteralPath $taskFilePath -Destination $destPath -Force -ErrorAction Stop
-        } elseif ($result.ExitCode -eq 0) {
-            $destPath = Join-Path $doneDir $taskFileName
-            Write-GovernorLog "INFO" "RESULT: SUCCESS -> $destPath"
-            Move-Item -LiteralPath $taskFilePath -Destination $destPath -Force -ErrorAction Stop
-        } else {
-            $destName = "[FAILED]_$taskFileName"
-            $destPath = Join-Path $todoDir $destName
-            Write-GovernorLog "ERROR" "RESULT: FAILED (exit=$($result.ExitCode)) -> $destPath"
-            Move-Item -LiteralPath $taskFilePath -Destination $destPath -Force -ErrorAction Stop
+            Write-GovernorLog "INFO" "RESULT: $destLabel -> $destPath"
+        } catch {
+            Write-GovernorLog "ERROR" "HANDOFF MOVE FAILED: $($_.Exception.Message)"
+            exit 3
         }
-    } catch {
-        Write-GovernorLog "ERROR" "HANDOFF MOVE FAILED: $($_.Exception.Message)"
-        Write-GovernorLog "ERROR" "Task file remains at: $taskFilePath"
-        exit 3
+    } else {
+        Write-GovernorLog "INFO" "RESULT: $destLabel (agent already moved file; expected target: $destPath)"
     }
 
     exit $result.ExitCode
