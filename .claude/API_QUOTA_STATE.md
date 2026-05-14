@@ -1,7 +1,7 @@
 ﻿# OLLAMA CLOUD TELEMETRY DATA
-*Last Updated: 05/13/2026 23:01:42*
+*Last Updated: 05/14/2026 12:48:11*
 
-* **5-Hour Usage:** 87.3% (resets in ~180 min)
-* **7-Day Usage:** 52%
+* **5-Hour Usage:** 4.8% (resets in ~240 min)
+* **7-Day Usage:** 55.4%
 
 **SYSTEM STATUS:** NORMAL

@@ -88,6 +88,7 @@ if ($success) {
     if (-not $Quiet) {
         Write-Host "[SUCCESS] Session: $sessionUsed% | Weekly: $weeklyUsed% | Reset: $resetNote" -ForegroundColor Green
     }
+    exit 0
 } else {
     # Write error state to JSON
     $errSession = if ($sessionMatch.Success) { [double]$sessionMatch.Groups[1].Value } else { $null }
@@ -107,4 +108,5 @@ if ($success) {
     if (-not $Quiet) {
         Write-Host "[ERROR] Scrape failed: $errReason" -ForegroundColor Red
     }
+    exit 1
 }

@@ -291,8 +291,22 @@ impl RelayAbuseGuardrails {
 }
 
 /// Check if envelope data is a valid DriftFrame and return its type
-fn get_drift_frame_type(envelope_data: &[u8]) -> Option<DriftFrame> {
-    DriftFrame::from_bytes(envelope_data).ok()
+/// Wrap envelope data in a DriftFrame::Data for transport.
+/// This adds a 7-byte transport header (2-byte length, 1-byte type, 4-byte CRC32)
+/// for integrity verification and type discrimination on the receiving end.
+fn wrap_in_drift_frame(envelope_data: &[u8]) -> Vec<u8> {
+    let frame = DriftFrame {
+        frame_type: crate::drift::FrameType::Data,
+        payload: envelope_data.to_vec(),
+    };
+    match frame.to_bytes() {
+        Ok(bytes) => bytes,
+        Err(_) => {
+            // Fallback: if framing fails (e.g. payload too large), send raw
+            tracing::warn!("DriftFrame wrapping failed, sending raw envelope data");
+            envelope_data.to_vec()
+        }
+    }
 }
 
 impl DeliveryConvergenceMarker {
@@ -637,11 +651,14 @@ fn dispatch_ranked_route(
     recipient_identity_id: Option<&str>,
     intended_device_id: Option<&str>,
 ) {
+    // Wrap envelope in DriftFrame for transport integrity (CRC32 + length prefix)
+    let framed_data = wrap_in_drift_frame(envelope_data);
+
     if route.path.len() == 1 {
         let request_id = swarm.behaviour_mut().messaging.send_request(
             &target_peer,
             MessageRequest {
-                envelope_data: envelope_data.to_vec(),
+                envelope_data: framed_data.clone(),
             },
         );
         request_to_message.insert(request_id, message_id.to_string());
@@ -649,7 +666,7 @@ fn dispatch_ranked_route(
         let relay_peer = route.path[0];
         let relay_request = RelayRequest {
             destination_peer: target_peer.to_bytes(),
-            envelope_data: envelope_data.to_vec(),
+            envelope_data: framed_data,
             message_id: message_id.to_string(),
             recipient_identity_id: recipient_identity_id.map(|s| s.to_string()),
             intended_device_id: intended_device_id.map(|s| s.to_string()),
@@ -1065,7 +1082,7 @@ fn dispatch_pending_custody_for_peer(
         let request_id = swarm.behaviour_mut().messaging.send_request(
             &destination_peer,
             MessageRequest {
-                envelope_data: custody.envelope_data.clone(),
+                envelope_data: wrap_in_drift_frame(&custody.envelope_data),
             },
         );
         tracing::info!(
@@ -2297,14 +2314,21 @@ pub async fn start_swarm_with_config(
                                             }
                                         }
 
-                                        // Check if this is a DriftFrame for optimized handling
-                                        if let Some(drift_frame) = get_drift_frame_type(&request.envelope_data) {
-                                            tracing::debug!(
-                                                "📦 Received DriftFrame type: {:?} from {}",
-                                                drift_frame.frame_type,
-                                                peer
-                                            );
-                                        }
+                                        // Check if this is a DriftFrame and unwrap the payload
+                                        let envelope_payload = match DriftFrame::from_bytes(&request.envelope_data) {
+                                            Ok(frame) => {
+                                                tracing::debug!(
+                                                    "Received DriftFrame type: {:?} from {}",
+                                                    frame.frame_type,
+                                                    peer
+                                                );
+                                                frame.payload
+                                            }
+                                            Err(_) => {
+                                                // Not a DriftFrame — legacy format, use as-is
+                                                request.envelope_data.clone()
+                                            }
+                                        };
 
                                         // Check if sender is blocked before processing message
                                         let sender_blocked = if let Some(core_handle) = core_handle.as_ref().and_then(|w| w.upgrade()) {
@@ -2327,7 +2351,7 @@ pub async fn start_swarm_with_config(
                                         // Received a message from a peer
                                         let _ = event_tx.send(SwarmEvent2::MessageReceived {
                                             peer_id: peer,
-                                            envelope_data: request.envelope_data,
+                                            envelope_data: envelope_payload,
                                         }).await;
 
                                         // Send acceptance response
@@ -3481,12 +3505,12 @@ pub async fn start_swarm_with_config(
                                 if let Some(join_msg) = peer_broadcaster.create_peer_joined_message(&peer_id) {
                                     if let Ok(join_bytes) = join_msg.to_bytes() {
                                         for other_peer in peer_broadcaster.get_peers_except(&peer_id) {
-                                            let envelope_data = join_bytes.clone();
+                                            let framed = wrap_in_drift_frame(&join_bytes);
                                             let _request_id = swarm.behaviour_mut().messaging.send_request(
                                                 &other_peer,
-                                                MessageRequest { envelope_data },
+                                                MessageRequest { envelope_data: framed },
                                             );
-                                            tracing::debug!("📢 Broadcast PeerJoined({}) to {}", peer_id, other_peer);
+                                            tracing::debug!("Broadcast PeerJoined({}) to {}", peer_id, other_peer);
                                         }
                                     }
                                 }
@@ -3494,11 +3518,12 @@ pub async fn start_swarm_with_config(
                                 // Send full peer list to newly connected peer
                                 let list_msg = peer_broadcaster.create_peer_list_response();
                                 if let Ok(list_bytes) = list_msg.to_bytes() {
+                                    let framed = wrap_in_drift_frame(&list_bytes);
                                     let _request_id = swarm.behaviour_mut().messaging.send_request(
                                         &peer_id,
-                                        MessageRequest { envelope_data: list_bytes },
+                                        MessageRequest { envelope_data: framed },
                                     );
-                                    tracing::info!("📋 Sent peer list ({} peers) to {}", peer_broadcaster.peer_count(), peer_id);
+                                    tracing::info!("Sent peer list ({} peers) to {}", peer_broadcaster.peer_count(), peer_id);
                                 }
 
                                 if reported_peer_discoveries.insert(peer_id) {
@@ -3559,11 +3584,12 @@ pub async fn start_swarm_with_config(
                                 let left_msg = crate::transport::PeerBroadcaster::create_peer_left_message(&peer_id);
                                 if let Ok(left_bytes) = left_msg.to_bytes() {
                                     for other_peer in peer_broadcaster.get_peers_except(&peer_id) {
+                                        let framed = wrap_in_drift_frame(&left_bytes);
                                         let _request_id = swarm.behaviour_mut().messaging.send_request(
                                             &other_peer,
-                                            MessageRequest { envelope_data: left_bytes.clone() },
+                                            MessageRequest { envelope_data: framed },
                                         );
-                                        tracing::debug!("📢 Broadcast PeerLeft({}) to {}", peer_id, other_peer);
+                                        tracing::debug!("Broadcast PeerLeft({}) to {}", peer_id, other_peer);
                                     }
                                 }
                                 peer_broadcaster.peer_disconnected(&peer_id);
@@ -3706,10 +3732,11 @@ pub async fn start_swarm_with_config(
                             SwarmCommand::SendMessage { peer_id, envelope_data, recipient_identity_id, intended_device_id, reply } => {
                                 // WASM: Simple direct send without complex routing
                                 let message_id = format!("{}-{}", peer_id, SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis());
+                                let framed = wrap_in_drift_frame(&envelope_data);
                                 let request_id = swarm.behaviour_mut().messaging.send_request(
                                     &peer_id,
                                     MessageRequest {
-                                        envelope_data: envelope_data.clone(),
+                                        envelope_data: framed,
                                     },
                                 );
                                 pending_messages.insert(message_id.clone(), PendingMessage {
@@ -4090,9 +4117,10 @@ pub async fn start_swarm_with_config(
 
                         match command {
                             SwarmCommand::SendMessage { peer_id, envelope_data, reply, .. } => {
+                                let framed = wrap_in_drift_frame(&envelope_data);
                                 let request_id = swarm.behaviour_mut().messaging.send_request(
                                     &peer_id,
-                                    MessageRequest { envelope_data },
+                                    MessageRequest { envelope_data: framed },
                                 );
                                 pending_direct_replies.insert(request_id, reply);
                             }
@@ -4254,9 +4282,18 @@ pub async fn start_swarm_with_config(
                                                 continue;
                                             }
 
+                                            // Unwrap DriftFrame if present, otherwise use raw data (legacy)
+                                            let envelope_payload = match DriftFrame::from_bytes(&request.envelope_data) {
+                                                Ok(frame) => {
+                                                    tracing::debug!("Received DriftFrame type: {:?} from {}", frame.frame_type, peer);
+                                                    frame.payload
+                                                }
+                                                Err(_) => request.envelope_data.clone(),
+                                            };
+
                                             let _ = event_tx.send(SwarmEvent2::MessageReceived {
                                                 peer_id: peer,
-                                                envelope_data: request.envelope_data,
+                                                envelope_data: envelope_payload,
                                             }).await;
 
                                             let _ = swarm.behaviour_mut().messaging.send_response(

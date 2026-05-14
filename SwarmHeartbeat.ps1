@@ -113,8 +113,9 @@ function Get-SwarmFileState {
     $failedFiles  = @(Get-ChildItem -LiteralPath $Script:TodoDir -Filter "[FAILED]_*.md" -ErrorAction SilentlyContinue)
     $staleFiles   = @(Get-ChildItem -LiteralPath $Script:TodoDir -Filter "[STALE]_*.md" -ErrorAction SilentlyContinue)
 
-    $activeSlots  = Get-ActiveSlotCount
-    $orphanInProg = ($inProgFiles.Count -gt 0) -and ($activeSlots.TotalUsed -eq 0)
+    # Compute orphan status without Get-ActiveSlotCount (which has leak-detection logging)
+    # Orphan: IN_PROGRESS files exist but no active slots of any kind
+    $orphanInProg = ($inProgFiles.Count -gt 0) -and ((Get-ClaudeProcessCount) -eq 0) -and ((Get-ActiveWorkerCount) -eq 0) -and (-not (Get-OrchestratorRunning))
 
     $state = @{
         DoneCount          = $doneFiles.Count
@@ -247,7 +248,7 @@ function Invoke-QuotaRefresh {
 
     try {
         $result = & "$scraperPath" -Quiet 2>&1
-        if ($LASTEXITCODE -ne 0 -and $LASTEXITCODE) {
+        if ($LASTEXITCODE -ne 0) {
             Write-HeartbeatLog "WARN" "Scraper exited with code $LASTEXITCODE -- will use cached data"
             return $false
         }
@@ -529,14 +530,24 @@ function Invoke-DispatchWorker {
             & "$BaseDir\TaskGovernor.ps1" -TaskFile $TaskFile -Model $Model -BudgetLimit $BudgetLimit -QuotaContextJson $qcJson
         }
 
-        # Write PID file for cross-check tracking after a short delay for process spawn
+        # Capture PID for cross-check tracking after process spawn
         $agentName = [System.IO.Path]::GetFileNameWithoutExtension($TaskFile.Name)
         $agentDir = Join-Path $Script:BaseDir ".claude\agents\$agentName"
         $null = New-Item -ItemType Directory -Path $agentDir -Force
-        # PID will be resolved by Get-TrackedAgentCount via claude.exe parent-child correlation
-        # For now, record the dispatch timestamp for staleness checks
+        # Record dispatch timestamp for staleness checks
         $dispatchMarker = Join-Path $agentDir "dispatched_at"
         Get-Date -Format "o" | Out-File -LiteralPath $dispatchMarker -Encoding utf8 -ErrorAction SilentlyContinue
+        # Give the job a moment to spawn ollama, then capture child claude.exe PID
+        try {
+            Start-Sleep -Milliseconds 500
+            $claudeProcs = @(Get-Process -Name "claude" -ErrorAction SilentlyContinue | Sort-Object StartTime -Descending)
+            if ($claudeProcs.Count -gt 0) {
+                $pidFile = Join-Path $agentDir "pid"
+                $claudeProcs[0].Id | Out-File -LiteralPath $pidFile -Encoding utf8 -ErrorAction SilentlyContinue
+            }
+        } catch {
+            # PID tracking is best-effort
+        }
 
         Write-HeartbeatLog "INFO" "Worker dispatched: job=$jobName file=$($TaskFile.Name)"
         return $true

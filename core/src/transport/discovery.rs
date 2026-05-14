@@ -54,12 +54,28 @@ pub enum DiscoveryMode {
     /// Maximum stealth — invisible on the network.
     /// Must establish all connections manually via explicit addresses.
     Silent,
+
+    /// LAN-only discovery using UDP broadcast. No mDNS.
+    ///
+    /// Uses simple UDP broadcast on the local network to discover peers.
+    /// This is a fallback for environments where mDNS is not available.
+    /// The broadcast uses a well-known port (9001) and includes the peer's
+    /// public key and peer ID in the beacon payload.
+    LanOnly {
+        /// Broadcast interval in seconds
+        broadcast_interval: u64,
+    },
 }
 
 impl DiscoveryMode {
     /// Check if this mode allows mDNS broadcasting
     pub fn allows_mdns(&self) -> bool {
         matches!(self, DiscoveryMode::Open)
+    }
+
+    /// Check if this mode allows UDP broadcast for LAN discovery
+    pub fn allows_lan_broadcast(&self) -> bool {
+        matches!(self, DiscoveryMode::LanOnly { .. })
     }
 
     /// Check if this mode allows Identify protocol
@@ -376,6 +392,12 @@ mod tests {
         let silent = DiscoveryMode::Silent;
         let json = serde_json::to_string(&silent).expect("Should serialize");
         let _recovered: DiscoveryMode = serde_json::from_str(&json).expect("Should deserialize");
+
+        // Test LanOnly
+        let lan_only = DiscoveryMode::LanOnly { broadcast_interval: 30 };
+        let json = serde_json::to_string(&lan_only).expect("Should serialize");
+        let recovered: DiscoveryMode = serde_json::from_str(&json).expect("Should deserialize");
+        assert!(matches!(recovered, DiscoveryMode::LanOnly { .. }));
     }
 
     #[test]
@@ -399,6 +421,16 @@ mod tests {
         assert!(!silent.allows_mdns());
         assert!(!silent.allows_identify());
         assert!(!silent.advertises_identify());
+        assert!(!silent.allows_lan_broadcast());
+    }
+
+    #[test]
+    fn test_discovery_mode_lan_only() {
+        let lan_only = DiscoveryMode::LanOnly { broadcast_interval: 30 };
+        assert!(!lan_only.allows_mdns());
+        assert!(!lan_only.allows_identify());
+        assert!(!lan_only.advertises_identify());
+        assert!(lan_only.allows_lan_broadcast());
     }
 
     #[test]
