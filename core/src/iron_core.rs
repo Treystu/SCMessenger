@@ -702,6 +702,27 @@ impl IronCore {
             .map(|set| set.into_iter().collect())
     }
 
+    /// Register a device ID for a peer in the block device registry.
+    /// If the peer is blocked, the device is automatically blocked too.
+    pub fn register_blocked_device(
+        &self,
+        peer_id: String,
+        device_id: String,
+    ) -> Result<(), IronCoreError> {
+        self.blocked_manager
+            .write()
+            .register_device_id(&peer_id, &device_id)?;
+        Ok(())
+    }
+
+    /// Get all known device IDs registered for a blocked peer.
+    pub fn get_blocked_peer_devices(
+        &self,
+        peer_id: String,
+    ) -> Result<Vec<String>, IronCoreError> {
+        self.blocked_manager.read().get_known_devices(&peer_id)
+    }
+
     /// Get the peer reputation score.
     pub fn get_peer_reputation(&self, peer_id: String) -> f64 {
         self.abuse_manager.read().get_score(&peer_id).value()
@@ -961,6 +982,19 @@ impl IronCore {
         device_id: Option<String>,
         reason: Option<String>,
     ) -> Result<(), IronCoreError> {
+        // Register known device IDs from the contact before blocking
+        if let Some(contact) = self.contacts_manager.get(peer_id.clone()).ok().flatten() {
+            if let Some(ref did) = contact.last_known_device_id {
+                let _ = self
+                    .blocked_manager
+                    .write()
+                    .register_device_id(&peer_id, did);
+            }
+        }
+        if let Some(ref did) = device_id {
+            let _ = self.blocked_manager.write().register_device_id(&peer_id, did);
+        }
+
         let blocked = crate::store::blocked::BlockedIdentity::new(peer_id);
         let blocked = if let Some(did) = device_id {
             crate::store::blocked::BlockedIdentity {
@@ -1393,6 +1427,8 @@ impl IronCore {
 
     /// Update the last known device ID for a contact.
     /// Validates the device ID format (UUID) and persists the change.
+    /// Also registers the device in the block device registry so that if
+    /// the peer is already blocked, the new device is auto-blocked.
     /// Pass `None` to clear the device ID.
     pub fn contact_update_last_known_device_id(
         &self,
@@ -1401,7 +1437,17 @@ impl IronCore {
     ) -> Result<(), IronCoreError> {
         self.contact_manager
             .read()
-            .update_last_known_device_id(peer_id, device_id)
+            .update_last_known_device_id(peer_id.clone(), device_id.clone())?;
+
+        // Register the device ID in the block registry for multi-device blocking.
+        // If the peer is blocked, the device is automatically blocked too.
+        if let Some(ref did) = device_id {
+            let _ = self
+                .blocked_manager
+                .write()
+                .register_device_id(&peer_id, did);
+        }
+        Ok(())
     }
 
     // -----------------------------------------------------------------------
@@ -2021,7 +2067,7 @@ impl IronCore {
             IronCoreError::Internal
         })?;
 
-        // Check blocked status
+        // Check blocked status (peer-level and device-specific)
         let is_blocked_and_deleted = self
             .blocked_manager
             .read()
@@ -2031,10 +2077,18 @@ impl IronCore {
             return Err(IronCoreError::Blocked);
         }
 
+        // Also check device-specific blocks using the sender's last known device ID
+        let sender_device_id = self
+            .contacts_manager
+            .get(message.sender_id.clone())
+            .ok()
+            .flatten()
+            .and_then(|c| c.last_known_device_id);
+
         let is_blocked = self
             .blocked_manager
             .read()
-            .is_blocked(&message.sender_id, None)
+            .is_blocked(&message.sender_id, sender_device_id.as_deref())
             .unwrap_or(false);
 
         // Record in inbox and history

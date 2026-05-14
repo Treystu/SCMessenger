@@ -1373,6 +1373,17 @@ impl IronCore {
         self.inner.update_disk_stats(total_bytes, free_bytes);
     }
 
+    /// Get current disk usage statistics.
+    #[wasm_bindgen(js_name = getDiskStats)]
+    pub fn get_disk_stats(&self) -> JsValue {
+        let stats = self.inner.get_disk_stats();
+        let obj = js_sys::Object::new();
+        js_sys::Reflect::set(&obj, &js_sys::JsString::from("totalBytes"), &js_sys::Number::from(stats.total_bytes as f64)).ok();
+        js_sys::Reflect::set(&obj, &js_sys::JsString::from("freeBytes"), &js_sys::Number::from(stats.free_bytes as f64)).ok();
+        js_sys::Reflect::set(&obj, &js_sys::JsString::from("appDataBytes"), &js_sys::Number::from(stats.app_data_bytes as f64)).ok();
+        obj.into()
+    }
+
     /// Record a log line into the core log manager.
     #[wasm_bindgen(js_name = recordLog)]
     pub fn record_log(&self, line: String) {

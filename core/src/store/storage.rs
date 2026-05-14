@@ -3,9 +3,11 @@ use crate::store::history::HistoryManager;
 use crate::store::logs::LogManager;
 use crate::IronCoreError;
 use parking_lot::RwLock;
+use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[cfg_attr(not(target_arch = "wasm32"), derive(uniffi::Record))]
 pub struct DiskStats {
     pub total_bytes: u64,
     pub free_bytes: u64,
@@ -211,7 +213,7 @@ mod tests {
         let backend = Arc::new(MemoryStorage::new());
         let history = Arc::new(HistoryManager::new(backend.clone()));
         let logs = Arc::new(LogManager::new(backend.clone()));
-        let mgr = StorageManager::new(backend.clone(), history, logs);
+        let mgr = StorageManager::new(backend.clone(), history, logs.clone());
 
         // Write data through the log manager so the backend has content
         logs.record_log("test log entry for size measurement".to_string());
@@ -265,7 +267,7 @@ mod tests {
     fn test_maintenance_with_retention_time_based() {
         let backend = Arc::new(MemoryStorage::new());
         let history = Arc::new(HistoryManager::new(backend.clone()));
-        let logs = Arc::new(LogManager::new(backend));
+        let logs = Arc::new(LogManager::new(backend.clone()));
 
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
