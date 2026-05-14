@@ -1,37 +1,185 @@
 param (
-    [Parameter(Mandatory=$true)] [string]$TaskFile,
-    [Parameter(Mandatory=$true)] [string]$Model,
-    [Parameter(Mandatory=$true)] [int]$BudgetLimit
+    [Parameter(Mandatory=$true)]
+    [ValidateScript({ Test-Path -LiteralPath $_ -PathType Leaf })]
+    [string]$TaskFile,
+
+    [Parameter(Mandatory=$true)]
+    [string]$Model,
+
+    [Parameter(Mandatory=$false)]
+    [int]$BudgetLimit = 3600
 )
 
-$TimeoutMinutes = 45
-Write-Host "[GOVERNOR] Launching $Model for $(Split-Path $TaskFile -Leaf)" -ForegroundColor Magenta
+$ErrorActionPreference = "Stop"
 
-# Headless Mandate with -p (auto-exit)
-$HeadlessPrompt = "SYSTEM OVERRIDE: Use your tools to read $TaskFile, execute all instructions, and summarize. Do not ask for help."
-$ClaudeArgs = "launch claude --model $Model --dangerously-skip-permissions -p `"$HeadlessPrompt`""
-
-# Launch and Wait
-$AgentProcess = Start-Process -FilePath "ollama" -ArgumentList $ClaudeArgs -PassThru -WindowStyle Normal
-
-$StartTime = Get-Date
-$Breached = $false
-
-while (-not $AgentProcess.HasExited) {
-    if (((Get-Date) - $StartTime).TotalMinutes -gt $TimeoutMinutes) {
-        Write-Host "[GOVERNOR] Timeout. Killing agent." -ForegroundColor Red
-        Stop-Process -Id $AgentProcess.Id -Force
-        $Breached = $true
-        
-        $FailedPath = Join-Path (Split-Path ($TaskFile.Replace("IN_PROGRESS", "todo"))) ("[TIME_BREACH]_" + (Split-Path $TaskFile -Leaf))
-        Move-Item -LiteralPath $TaskFile -Destination $FailedPath -Force
-        break
-    }
-    Start-Sleep -Seconds 10
+function Write-GovernorLog {
+    param([string]$Level, [string]$Message)
+    $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss.fff"
+    "[$timestamp][GOVERNOR][$Level] $Message"
 }
 
-if (-not $Breached) {
-    Write-Host "[GOVERNOR] Success. Moving to done/." -ForegroundColor Green
-    $DonePath = $TaskFile.Replace("IN_PROGRESS", "done")
-    Move-Item -LiteralPath $TaskFile -Destination $DonePath -Force
+function Read-TaskHeaders {
+    param([string]$FilePath)
+    $headers = @{
+        Model    = $Script:Model
+        Budget   = $Script:BudgetLimit
+        Target   = ""
+        Fallback = ""
+        Agent    = ""
+    }
+    try {
+        $lines = Get-Content -LiteralPath $FilePath -TotalCount 50 -ErrorAction Stop
+        foreach ($line in $lines) {
+            if ($line -match "^#\s*(MODEL|Model)\s*:\s*(.+)")   { $headers.Model    = $matches[2].Trim() }
+            if ($line -match "^#\s*(BUDGET|Budget)\s*:\s*(\d+)") { $headers.Budget   = [int]$matches[2] }
+            if ($line -match "^#\s*TARGET\s*:\s*(.+)")          { $headers.Target   = $matches[1].Trim() }
+            if ($line -match "^#\s*FALLBACK\s*:\s*(.+)")        { $headers.Fallback = $matches[1].Trim() }
+            if ($line -match "^#\s*AGENT\s*:\s*(.+)")           { $headers.Agent    = $matches[1].Trim() }
+        }
+    } catch {
+        Write-GovernorLog "ERROR" "Failed to read task headers: $($_.Exception.Message)"
+    }
+    if ($headers.Budget -ne $Script:BudgetLimit -and $Script:BudgetLimit -eq 3600) {
+        $Script:BudgetLimit = $headers.Budget
+    }
+    $Script:Model = $headers.Model
+    return $headers
+}
+
+function New-ClaudeCommand {
+    param([string]$Model)
+    $args = @(
+        "launch",
+        "claude",
+        "--model", $Model,
+        "--",
+        "--dangerously-skip-permissions",
+        "--print"
+    )
+    return @{ Exe = "ollama"; Args = $args }
+}
+
+function Invoke-AgentWithBudget {
+    param([string]$TaskFilePath)
+
+    $cmd = New-ClaudeCommand -Model $Script:Model
+    $prompt = "SYSTEM OVERRIDE: Read and execute all instructions in $TaskFilePath. Do not ask for help. When finished, output TASK COMPLETE and exit."
+
+    $startTime = Get-Date
+    $budgetSeconds = $Script:BudgetLimit
+    $warnThreshold = [math]::Floor($budgetSeconds * 0.80)
+    $warned = $false
+    $timedOut = $false
+
+    Write-GovernorLog "INFO" "Starting agent: model=$($Script:Model) budget=${budgetSeconds}s task=$TaskFilePath"
+
+    $psi = New-Object System.Diagnostics.ProcessStartInfo
+    $psi.FileName = $cmd.Exe
+    $psi.Arguments = $cmd.Args -join " "
+    $psi.UseShellExecute = $false
+    $psi.RedirectStandardInput = $true
+    $psi.RedirectStandardOutput = $true
+    $psi.RedirectStandardError = $true
+    $psi.CreateNoWindow = $true
+
+    $process = New-Object System.Diagnostics.Process
+    $process.StartInfo = $psi
+    $process.Start() | Out-Null
+
+    $process.StandardInput.WriteLine($prompt)
+    $process.StandardInput.Close()
+
+    while (-not $process.HasExited) {
+        $elapsed = ((Get-Date) - $startTime).TotalSeconds
+
+        if (-not $process.StandardOutput.EndOfStream) {
+            $line = $process.StandardOutput.ReadLine()
+            if ($line) { Write-Output $line }
+        }
+
+        if (-not $warned -and $elapsed -ge $warnThreshold) {
+            $warned = $true
+            Write-GovernorLog "WARN" "BUDGET WARNING: ${elapsed}s / ${budgetSeconds}s elapsed (80% threshold)"
+        }
+
+        if ($elapsed -ge $budgetSeconds) {
+            Write-GovernorLog "ERROR" "BUDGET BREACH: ${elapsed}s >= ${budgetSeconds}s -- force-killing agent"
+            $timedOut = $true
+            try {
+                Stop-Process -Id $process.Id -Force -ErrorAction Stop
+                Start-Sleep -Milliseconds 500
+                Get-CimInstance Win32_Process -Filter "ParentProcessId = $($process.Id)" -ErrorAction SilentlyContinue |
+                    ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+            } catch {
+                Write-GovernorLog "ERROR" "Force kill failed: $($_.Exception.Message)"
+            }
+            break
+        }
+
+        Start-Sleep -Milliseconds 500
+    }
+
+    $process.WaitForExit(5000) | Out-Null
+    $exitCode = $process.ExitCode
+    $elapsedTotal = [math]::Round(((Get-Date) - $startTime).TotalSeconds, 1)
+
+    Write-GovernorLog "INFO" "Agent exit: code=$exitCode elapsed=${elapsedTotal}s timeout=$timedOut"
+
+    return @{
+        ExitCode = $exitCode
+        Elapsed  = $elapsedTotal
+        TimedOut = $timedOut
+    }
+}
+
+function Invoke-Governor {
+    $taskFilePath = $Script:TaskFile
+    $taskFileName = Split-Path $taskFilePath -Leaf
+    $handoffRoot   = Split-Path (Split-Path $taskFilePath -Parent) -Parent
+    $todoDir       = Join-Path $handoffRoot "todo"
+    $doneDir       = Join-Path $handoffRoot "done"
+
+    Write-GovernorLog "INFO" "Governor engaged: task=$taskFileName model=$($Script:Model) budget=$($Script:BudgetLimit)"
+
+    $headers = Read-TaskHeaders -FilePath $taskFilePath
+
+    if ($headers.Model -ne $Script:Model) {
+        Write-GovernorLog "INFO" "Task file overrides model: $($headers.Model)"
+        $Script:Model = $headers.Model
+    }
+
+    $result = Invoke-AgentWithBudget -TaskFilePath $taskFilePath
+
+    try {
+        if ($result.TimedOut) {
+            $destName = "[TIME_BREACH]_$taskFileName"
+            $destPath = Join-Path $todoDir $destName
+            Write-GovernorLog "WARN" "RESULT: TIMEOUT -> $destPath"
+            Move-Item -LiteralPath $taskFilePath -Destination $destPath -Force -ErrorAction Stop
+        } elseif ($result.ExitCode -eq 0) {
+            $destPath = Join-Path $doneDir $taskFileName
+            Write-GovernorLog "INFO" "RESULT: SUCCESS -> $destPath"
+            Move-Item -LiteralPath $taskFilePath -Destination $destPath -Force -ErrorAction Stop
+        } else {
+            $destName = "[FAILED]_$taskFileName"
+            $destPath = Join-Path $todoDir $destName
+            Write-GovernorLog "ERROR" "RESULT: FAILED (exit=$($result.ExitCode)) -> $destPath"
+            Move-Item -LiteralPath $taskFilePath -Destination $destPath -Force -ErrorAction Stop
+        }
+    } catch {
+        Write-GovernorLog "ERROR" "HANDOFF MOVE FAILED: $($_.Exception.Message)"
+        Write-GovernorLog "ERROR" "Task file remains at: $taskFilePath"
+        exit 3
+    }
+
+    exit $result.ExitCode
+}
+
+# === MAIN ===
+try {
+    Invoke-Governor
+} catch {
+    Write-GovernorLog "FATAL" "Unhandled exception: $($_.Exception.Message)"
+    Write-GovernorLog "FATAL" "Stack trace: $($_.ScriptStackTrace)"
+    exit 2
 }
