@@ -328,7 +328,7 @@ impl BlockedManager {
         device_id: &str,
     ) -> Result<bool, IronCoreError> {
         let mut devices = self.get_known_devices(peer_id)?;
-        if devices.contains(device_id) {
+        if devices.contains(&device_id.to_string()) {
             return Ok(false); // Already registered
         }
         devices.push(device_id.to_string());
@@ -348,9 +348,10 @@ impl BlockedManager {
                     .as_ref()
                     .map(|b| b.blocked_at)
                     .unwrap_or_else(current_timestamp),
-                reason: peer_block.and_then(|b| b.reason),
+                reason: peer_block.as_ref().and_then(|b| b.reason.clone()),
                 notes: None,
                 is_deleted: peer_block
+                    .as_ref()
                     .map(|b| b.is_deleted)
                     .unwrap_or(false),
             };
@@ -611,30 +612,73 @@ mod tests {
     }
 
     #[test]
-    fn test_unblock_single_device_preserves_peer_block() {
+    fn test_unblock_single_device_when_no_peer_block() {
+        // When only a device-specific block exists (no peer-level block),
+        // unblocking that device should make the device unblocked.
         let backend = Arc::new(MemoryStorage::new());
         let manager = BlockedManager::new(backend);
 
-        let peer_id = "peer-partial-unblock";
+        let peer_id = "peer-dev-only-unblock";
         let device_a = "device-a";
         let device_b = "device-b";
 
-        // Register devices and block peer
+        // Register devices
+        manager.register_device_id(peer_id, device_a).unwrap();
+        manager.register_device_id(peer_id, device_b).unwrap();
+
+        // Block only device_a (not the whole peer)
+        manager
+            .block(
+                BlockedIdentity::new(peer_id.to_string())
+                    .with_device_id(device_a.to_string()),
+            )
+            .unwrap();
+
+        // device_a is blocked, device_b and peer are NOT blocked
+        assert!(manager.is_blocked(peer_id, Some(device_a)).unwrap());
+        assert!(!manager.is_blocked(peer_id, Some(device_b)).unwrap());
+        assert!(!manager.is_blocked(peer_id, None).unwrap());
+
+        // Unblock device_a
+        manager
+            .unblock(peer_id.to_string(), Some(device_a.to_string()))
+            .unwrap();
+
+        // Now device_a is not blocked either
+        assert!(!manager.is_blocked(peer_id, Some(device_a)).unwrap());
+        assert!(!manager.is_blocked(peer_id, None).unwrap());
+
+        // device_b was never blocked
+        assert!(!manager.is_blocked(peer_id, Some(device_b)).unwrap());
+    }
+
+    #[test]
+    fn test_peer_level_block_overrides_device_unblock() {
+        // When a peer-level block exists, unblocking a specific device
+        // does NOT make the device accessible because the peer-level block
+        // covers all devices. To selectively unblock a device, the caller
+        // must first unblock the peer entirely, then block individual devices.
+        let backend = Arc::new(MemoryStorage::new());
+        let manager = BlockedManager::new(backend);
+
+        let peer_id = "peer-full-block";
+        let device_a = "device-a";
+        let device_b = "device-b";
+
         manager.register_device_id(peer_id, device_a).unwrap();
         manager.register_device_id(peer_id, device_b).unwrap();
         manager
             .block(BlockedIdentity::new(peer_id.to_string()))
             .unwrap();
 
-        // Unblock only device_a
+        // Attempt to unblock just device_a while peer-level block exists
         manager
             .unblock(peer_id.to_string(), Some(device_a.to_string()))
             .unwrap();
 
-        // Peer-level block still active (device_b still blocked)
+        // Peer-level block still active: all devices remain blocked
         assert!(manager.is_blocked(peer_id, None).unwrap());
-        assert!(!manager.is_blocked(peer_id, Some(device_a)).unwrap());
-        // device_b still blocked via peer-level block
+        assert!(manager.is_blocked(peer_id, Some(device_a)).unwrap());
         assert!(manager.is_blocked(peer_id, Some(device_b)).unwrap());
     }
 

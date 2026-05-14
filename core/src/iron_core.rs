@@ -770,7 +770,17 @@ impl IronCore {
     // -----------------------------------------------------------------------
 
     /// Notify the core that a peer was discovered.
+    /// Blocked peers (peer-level or any known device) are silently ignored.
     pub fn notify_peer_discovered(&self, peer_id: String) {
+        // Suppress discovery notifications for blocked peers
+        if self
+            .blocked_manager
+            .read()
+            .is_blocked(&peer_id, None)
+            .unwrap_or(false)
+        {
+            return;
+        }
         if let Some(delegate) = self.delegate.read().as_ref() {
             delegate.on_peer_discovered(peer_id.clone());
         }
@@ -983,7 +993,7 @@ impl IronCore {
         reason: Option<String>,
     ) -> Result<(), IronCoreError> {
         // Register known device IDs from the contact before blocking
-        if let Some(contact) = self.contacts_manager.get(peer_id.clone()).ok().flatten() {
+        if let Some(contact) = self.contact_manager.read().get(peer_id.clone()).ok().flatten() {
             if let Some(ref did) = contact.last_known_device_id {
                 let _ = self
                     .blocked_manager
@@ -1033,6 +1043,16 @@ impl IronCore {
         _device_id: Option<String>,
         reason: Option<String>,
     ) -> Result<(), IronCoreError> {
+        // Register known devices before block_and_delete so they get auto-blocked
+        if let Some(contact) = self.contact_manager.read().get(peer_id.clone()).ok().flatten() {
+            if let Some(ref did) = contact.last_known_device_id {
+                let _ = self
+                    .blocked_manager
+                    .write()
+                    .register_device_id(&peer_id, did);
+            }
+        }
+
         self.blocked_manager
             .write()
             .block_and_delete(peer_id.clone(), reason)?;
@@ -2079,7 +2099,8 @@ impl IronCore {
 
         // Also check device-specific blocks using the sender's last known device ID
         let sender_device_id = self
-            .contacts_manager
+            .contact_manager
+            .read()
             .get(message.sender_id.clone())
             .ok()
             .flatten()

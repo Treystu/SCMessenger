@@ -1,6 +1,7 @@
 // Blocked identities bridge for mobile platforms (Android/iOS)
 //
 // Exposes BlockedManager through UniFFI for cross-platform blocking functionality.
+// Includes device-ID pairing for multi-device blocking.
 
 use crate::store::blocked::{
     BlockedIdentity as CoreBlockedIdentity, BlockedManager as CoreBlockedManager,
@@ -66,17 +67,17 @@ impl BlockedManager {
         }
     }
 
-    /// Block a peer ID
+    /// Block a peer ID (also blocks all known device IDs for that peer)
     pub fn block(&self, blocked: BlockedIdentity) -> Result<(), IronCoreError> {
         self.inner.block(blocked.into())
     }
 
-    /// Unblock a peer ID
+    /// Unblock a peer ID (also unblocks all device IDs if device_id is None)
     pub fn unblock(&self, peer_id: String, device_id: Option<String>) -> Result<(), IronCoreError> {
         self.inner.unblock(peer_id, device_id)
     }
 
-    /// Check if a peer is blocked
+    /// Check if a peer is blocked (checks device-specific then peer-level)
     pub fn is_blocked(
         &self,
         peer_id: String,
@@ -97,7 +98,7 @@ impl BlockedManager {
         }
     }
 
-    /// List all blocked identities
+    /// List all blocked identities (peer-level and device-specific)
     pub fn list(&self) -> Result<Vec<BlockedIdentity>, IronCoreError> {
         let core_list = self.inner.list()?;
         Ok(core_list.into_iter().map(BlockedIdentity::from).collect())
@@ -106,6 +107,26 @@ impl BlockedManager {
     /// Get count of blocked identities
     pub fn count(&self) -> Result<u32, IronCoreError> {
         self.inner.count().map(|c| c as u32)
+    }
+
+    /// Register a device ID as belonging to a peer.
+    /// If the peer is blocked, the device is automatically blocked.
+    pub fn register_device_id(
+        &self,
+        peer_id: String,
+        device_id: String,
+    ) -> Result<bool, IronCoreError> {
+        self.inner.register_device_id(&peer_id, &device_id)
+    }
+
+    /// Get all known device IDs registered for a peer.
+    pub fn get_known_devices(&self, peer_id: String) -> Result<Vec<String>, IronCoreError> {
+        self.inner.get_known_devices(&peer_id)
+    }
+
+    /// Check if a specific device of a peer is blocked.
+    pub fn is_device_blocked(&self, peer_id: String, device_id: String) -> Result<bool, IronCoreError> {
+        self.inner.is_device_blocked(&peer_id, &device_id)
     }
 }
 
