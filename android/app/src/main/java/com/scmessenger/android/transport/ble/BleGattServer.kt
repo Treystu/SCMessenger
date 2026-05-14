@@ -9,6 +9,7 @@ import androidx.core.content.ContextCompat
 import timber.log.Timber
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.Executor
 
 /**
  * GATT server implementing SCMessenger BLE service.
@@ -23,11 +24,10 @@ import java.util.concurrent.ConcurrentHashMap
  * - Connection multiplexing (multiple clients)
  * - Data forwarding to Rust via PlatformBridge
  *
- * Note: Class-level @Suppress("DEPRECATION") for BluetoothManager.openGattServer
- * which is deprecated in API 31+ in favor of executor-based overload.
- * The old API is kept for minSdk 26 compatibility and works correctly on all devices.
+ * Note: openGattServer is deprecated in API 31+ in favor of executor-based overload.
+ * The executor-based API requires API 31+, so we use SDK version gating for backwards
+ * compatibility with minSdk 26. The legacy API path is kept for older devices.
  */
-@Suppress("DEPRECATION")
 class BleGattServer(
     private val context: Context,
     private val onDataReceived: (peerId: String, data: ByteArray) -> Unit
@@ -80,7 +80,15 @@ class BleGattServer(
         }
 
         try {
-            gattServer = bluetoothManager?.openGattServer(context, gattServerCallback)
+            // Use SDK version gate to support minSdk 26 while avoiding deprecation warnings on API 31+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                // API 31+ has executor-based overload
+                gattServer = bluetoothManager?.openGattServer(context, ContextCompat.getMainExecutor(context), gattServerCallback)
+            } else {
+                // Legacy API for API < 31
+                @Suppress("DEPRECATION")
+                gattServer = bluetoothManager?.openGattServer(context, gattServerCallback)
+            }
 
             if (gattServer == null) {
                 Timber.e("Failed to open GATT server")

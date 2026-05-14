@@ -1,10 +1,14 @@
+# MODEL: qwen3-coder-next:cloud
+# BUDGET: 1440
+
 # Task: Deduplicate Notification Channel Creation
 
 **Priority:** P1
-**Model:** gemma4:31b:cloud
-**Budget:** 4000
+**Model:** qwen3-coder-next:cloud
+**Budget:** 1440
 **Assigned to:** worker
 **Created:** 2026-05-13
+**Status:** FAILED — prematurely moved to done/ without code changes. MeshForegroundService.kt still calls createNotificationChannel() redundantly.
 **Source:** MASTER AUDIT 2026-05-13 (P1 Android Hardening, sub-task 3)
 
 ## Summary

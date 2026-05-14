@@ -1,3 +1,6 @@
+# MODEL: qwen3-coder-next:cloud
+# BUDGET: 2400
+
 # Phase 2: Platform Clients
 
 **Priority:** P1

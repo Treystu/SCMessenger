@@ -30,12 +30,15 @@ import androidx.compose.ui.unit.dp
 import com.scmessenger.android.R
 import com.scmessenger.android.network.DiagnosticsReporter
 import com.scmessenger.android.network.DiagnosticsReporter.NetworkDiagnosticsReport
+import com.scmessenger.android.utils.CircuitBreaker
+import com.scmessenger.android.transport.FallbackTransport
 
 /**
- * P0_ANDROID_007: User-facing network diagnostics dialog.
+ * P0_ANDROID_007 / P0_NETWORK_001 Phase 7: User-facing network diagnostics dialog.
  *
- * Shows connectivity test results, relay status, and actionable
- * recommendations when the user taps the network status indicator.
+ * Shows connectivity test results, relay status, transport priority, circuit breaker
+ * states, port probe results, and actionable recommendations when the user taps the
+ * network status indicator.
  */
 @Composable
 fun NetworkStatusDialog(
@@ -49,7 +52,7 @@ fun NetworkStatusDialog(
         try {
             report = diagnosticsReporter.generateReport()
         } catch (e: Exception) {
-            // Silently fail — diagnostics should never crash the UI
+            // Silently fail -- diagnostics should never crash the UI
         }
     }
 
@@ -84,6 +87,57 @@ fun NetworkStatusDialog(
                         value = if (report!!.hasInternet) "Connected" else "Disconnected",
                         isGood = report!!.hasInternet
                     )
+
+                    // P0_NETWORK_001 Phase 7: Transport Priority
+                    if (report!!.transportPriority.isNotEmpty()) {
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+                        Text("Transport Priority:", style = MaterialTheme.typography.labelMedium)
+                        val transportStr = report!!.transportPriority.joinToString(" > ") {
+                            formatTransport(it)
+                        }
+                        Text(transportStr, style = MaterialTheme.typography.bodySmall)
+                    }
+
+                    // P0_NETWORK_001 Phase 7: Port Probe Results
+                    if (report!!.portProbeResults.isNotEmpty()) {
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+                        Text("Port Probe:", style = MaterialTheme.typography.labelMedium)
+                        report!!.portProbeResults.forEach { (hostPort, reachable) ->
+                            val label = if (reachable) "open" else "blocked"
+                            val isGood = reachable
+                            DiagnosticRow(
+                                label = hostPort,
+                                value = label,
+                                isGood = isGood
+                            )
+                        }
+                    }
+
+                    // P0_NETWORK_001 Phase 7: Circuit Breaker States
+                    if (report!!.circuitBreakerEntries.isNotEmpty()) {
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+                        Text("Circuit Breakers:", style = MaterialTheme.typography.labelMedium)
+                        report!!.circuitBreakerEntries.forEach { entry ->
+                            val stateLabel = when (entry.state) {
+                                CircuitBreaker.CircuitState.CLOSED -> "OK"
+                                CircuitBreaker.CircuitState.OPEN -> "BLOCKED"
+                                CircuitBreaker.CircuitState.HALF_OPEN -> "PROBING"
+                            }
+                            val isGood = entry.state == CircuitBreaker.CircuitState.CLOSED
+                            DiagnosticRow(
+                                label = entry.address,
+                                value = stateLabel,
+                                isGood = isGood
+                            )
+                            if (entry.lastFailureReason != null) {
+                                Text(
+                                    "  ${entry.lastFailureReason}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.error
+                                )
+                            }
+                        }
+                    }
 
                     // DNS Results
                     val failedDns = report!!.dnsResults.filterValues { !it }.keys
@@ -166,4 +220,14 @@ private fun formatNetworkType(type: com.scmessenger.android.transport.NetworkTyp
     com.scmessenger.android.transport.NetworkType.VPN -> "VPN"
     com.scmessenger.android.transport.NetworkType.BLUETOOTH -> "Bluetooth"
     com.scmessenger.android.transport.NetworkType.UNKNOWN -> stringResource(R.string.unknown_network_type)
+}
+
+private fun formatTransport(transport: FallbackTransport): String {
+    return when (transport) {
+        FallbackTransport.QUIC -> "QUIC:${transport.defaultPort}"
+        FallbackTransport.TCP -> "TCP:${transport.defaultPort}"
+        FallbackTransport.TCP_STANDARD -> "TCP:443"
+        FallbackTransport.WEBSOCKET_WS -> "WS:${transport.defaultPort}"
+        FallbackTransport.WEBSOCKET_WSS -> "WSS:${transport.defaultPort}"
+    }
 }

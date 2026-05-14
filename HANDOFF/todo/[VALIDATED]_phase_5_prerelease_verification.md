@@ -1,3 +1,6 @@
+# MODEL: kimi-k2-thinking:cloud
+# BUDGET: 3600
+
 # Phase 5: Pre-Release Verification (Gatekeeper Review)
 
 **Priority:** P0 (Release gate)

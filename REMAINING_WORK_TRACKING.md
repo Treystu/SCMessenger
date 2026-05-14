@@ -8,7 +8,7 @@ Last updated: 2026-05-13 (MASTER AUDIT by deepseek-v4-pro:cloud)
 ## 2026-05-13 MASTER AUDIT: V-Gate Clearance Findings
 
 **Status:** AUDIT COMPLETE — V-Gate CLEARED with findings below
-**Orchestrator pass:** 2026-05-13 18:52 HST — Queue drained & retriaged. 4 tasks ready in HANDOFF/todo/. IN_PROGRESS cleaned (0 slots). See HANDOFF/ORCHESTRATOR_STATUS.md.
+**Orchestrator pass:** 2026-05-13 23:15 HST — 10 premature completions reclaimed from done/ to todo/. 3 [FAILED]_ tasks retriaged and downgraded. 15 tasks [VALIDATED]_ in todo/. IN_PROGRESS: 1 slot occupied (API migration). See HANDOFF/ORCHESTRATOR_STATUS.md.
 
 ### Premature Done/ Movement (10 files carry incomplete status)
 These files were moved to `HANDOFF/done/` but still contain unresolved work. They must NOT be considered complete:
@@ -29,27 +29,28 @@ These files were moved to `HANDOFF/done/` but still contain unresolved work. The
 ### Newly Discovered Gaps (from FINAL_WIRING_AUDIT + V2)
 
 **P0 — Google Play Readiness:**
-- [ ] Deprecated API usage with `@Suppress("DEPRECATION")` at targetSdk=35 (6 sites in mDNS, BLE, WiFi Direct)
-- [ ] Missing `foregroundServiceType="dataSync"` in AndroidManifest.xml (required if background sync)
+- [ ] Deprecated API usage with `@Suppress("DEPRECATION")` at targetSdk=35 (2 remaining sites: MdnsServiceDiscovery.kt:459 resolveService; BleGattServer.kt:30 openGattServer)
+- [x] Missing `foregroundServiceType="dataSync"` in AndroidManifest.xml — DONE (line 107: `connectedDevice|dataSync`)
+- [ ] Theme.kt status bar color regression — status bar color tinting lost after deprecation fix; needs restoration
 
 **P1 — Feature Incomplete:**
-- [ ] WASM thin client supports only 4 JSON-RPC methods (missing contacts, settings, history, blocking)
-- [ ] 3 IronCore placeholder methods: `export_logs()` returns empty, `record_log()` trace-only, `update_disk_stats()` no-op
-- [ ] No network type debounce in `NetworkDetector.kt` (transport flapping risk)
-- [ ] Nickname DataStore fallback never pushes back to Rust Core in `SettingsViewModel.kt`
-- [ ] Multi-device blocking not implemented (`blocked.rs` device-ID pairing)
-- [ ] MeshVpnService disabled by default in AndroidManifest (`android:enabled="false"`)
+- [x] WASM thin client supports only 4 JSON-RPC methods (missing contacts, settings, history, blocking) — DONE (7 methods wired in core/src/wasm_support/rpc.rs)
+- [x] 3 IronCore placeholder methods: `export_logs()` returns empty, `record_log()` trace-only, `update_disk_stats()` no-op — DONE (implemented with unit tests in core/src/iron_core.rs)
+- [x] No network type debounce in `NetworkDetector.kt` (transport flapping risk) — DONE (500ms hysteresis debounce implemented)
+- [x] Nickname DataStore fallback never pushes back to Rust Core in `SettingsViewModel.kt` — DONE (syncNicknameFromDatastore + defensive fallback push in SettingsViewModel.kt)
+- [x] Multi-device blocking not implemented (`blocked.rs` device-ID pairing) — DONE (device registry, auto-block, is_device_blocked, 20+ tests in core/src/store/blocked.rs)
+- [x] MeshVpnService disabled by default in AndroidManifest (`android:enabled="false"`) — DONE (changed to `android:enabled="true"`)
 
 **P2 — Technical Debt:**
-- [ ] 3 hardcoded "Unknown" strings in Android UI (not in strings.xml)
-- [ ] 14 `IllegalStateException` throw sites in MeshRepository.kt (crash-prone guard clauses)
-- [ ] Duplicate notification channel creation (NotificationHelper + MeshForegroundService)
+- [x] 3 hardcoded "Unknown" strings in Android UI (not in strings.xml) — DONE (only remaining is IdentityViewModel.kt:77 inside Timber.d log, not user-facing)
+- [ ] 13 `IllegalStateException` throw sites in MeshRepository.kt (crash-prone guard clauses) — RECLAIMED from premature done/ ([FAILED]_task_p1a_illegalstate_crash_audit.md)
+- [ ] Duplicate notification channel creation (NotificationHelper + MeshForegroundService) — RECLAIMED from premature done/ ([FAILED]_task_p1b_notification_channel_dedup.md)
 
 ### Current Build State (from git status 2026-05-13)
-- Uncommitted changes: `SwarmHeartbeat.ps1` (migrated to ollama cloud routing), `TaskGovernor.ps1` (migrated to ollama launch)
+- Uncommitted changes: `SwarmHeartbeat.ps1`, `TaskGovernor.ps1`
 - Untracked: `API_EFFICIENCY_LEDGER.md`
-- 1 task in-flight: `HANDOFF/IN_PROGRESS/BATCH_RUST_GROUPB_DSPY_MODULES.md`
-- `.claude/process_cache/13134` and `13284` deleted (process cleanup)
+- IN_PROGRESS: 0 slots (empty)
+- todo/: 3 reclaimed [FAILED]_ tasks + BLOCKED_BY_QUOTA.md
 
 ### Todo/ Audit Results
 - `task_epic_wiring_draft.md` → REJECTED (unresolved `[USER: INSERT...]` placeholder)

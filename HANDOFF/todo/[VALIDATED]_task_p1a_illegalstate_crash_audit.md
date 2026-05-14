@@ -1,10 +1,14 @@
+# MODEL: qwen3-coder-next:cloud
+# BUDGET: 2880
+
 # Task: Audit and Harden IllegalStateException Crash Sites in MeshRepository.kt
 
 **Priority:** P1
 **Model:** qwen3-coder-next:cloud
-**Budget:** 8000
+**Budget:** 2880
 **Assigned to:** implementer
 **Created:** 2026-05-13
+**Status:** FAILED — prematurely moved to done/ without code changes. MeshRepository.kt still has 13 IllegalStateException throw sites.
 **Source:** MASTER AUDIT 2026-05-13 (P1 Android Hardening, sub-task 2)
 
 ## Summary

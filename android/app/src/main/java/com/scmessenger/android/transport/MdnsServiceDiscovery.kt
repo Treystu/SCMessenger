@@ -6,6 +6,7 @@ import android.net.nsd.NsdServiceInfo
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import androidx.core.content.ContextCompat
 import timber.log.Timber
 import java.util.concurrent.ConcurrentHashMap
 
@@ -453,11 +454,16 @@ class MdnsServiceDiscovery(
      */
     private fun resolveService(serviceInfo: NsdServiceInfo) {
         // resolveService with Listener is deprecated in API 33; requires Executor overload
-        // The Executor overload requires Handler.getExecutor() which needs API 28+
-        // Since we target minSdk 26, we use the legacy API for backwards compatibility
-        // The legacy API works correctly on all target devices (API 26+)
-        @Suppress("DEPRECATION")
-        nsdManager?.resolveService(serviceInfo, resolveListener)
+        // Use SDK version gate to support minSdk 26 while avoiding deprecation warnings on API 33+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            // API 23+ has Handler.getExecutor(), use Executor overload
+            nsdManager?.resolveService(serviceInfo, handler.executor, resolveListener)
+        } else {
+            // Legacy API for API < 23 (minSdk 26, so this is never reached at runtime)
+            // Kept for completeness but will not be called
+            @Suppress("DEPRECATION")
+            nsdManager?.resolveService(serviceInfo, resolveListener)
+        }
     }
 
     /**

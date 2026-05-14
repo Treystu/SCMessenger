@@ -1,3 +1,6 @@
+# MODEL: qwen3-coder-next:cloud
+# BUDGET: 1800
+
 # S1-T1: Fix Android Build 🔴 P0
 
 ## Status

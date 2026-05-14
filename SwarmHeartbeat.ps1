@@ -12,9 +12,11 @@ $Script:OrchModelHeavy        = "qwen3-coder-next:cloud"
 $Script:OrchFallbackModel     = "kimi-k2.6:cloud"
 $Script:StaleThresholdMinutes = 60
 $Script:OrchCooldownSeconds   = 120
-$Script:QuotaCheckInterval    = 30
+$Script:ScraperIntervalMinutes = 5
+$Script:ScraperStaleMinutes    = 5
 
 # Runtime state
+$Script:LastScraperRun               = [datetime]::MinValue
 $Script:LastOrchLaunch              = [datetime]::MinValue
 $Script:OrchCompletedCurrentCycle    = $false
 $Script:PrevDoneCount                = 0
@@ -22,7 +24,9 @@ $Script:WakeOrchestratorForTriage    = $false
 $Script:PulseCount                   = 0
 $Script:OrchCycleCount               = 0
 $Script:CurrentQuotaTier             = 1
-$Script:Tier4Active                  = $false
+$Script:CurrentPhaseName             = "HEAVY-LIFT"
+$Script:OrchModelTier                = "qwen3-coder:480b:cloud"
+$Script:WorkerModelAllowList         = @()
 $Script:MaxBudgetOverride            = 0
 $Script:LastOrchModelDispatched      = ""
 $Script:LastOrchReasonDispatched     = ""
@@ -57,17 +61,48 @@ function Get-ClaudeProcessCount {
     return $claudeProcs.Count
 }
 
+function Get-TrackedAgentCount {
+    $agentsDir = Join-Path $Script:BaseDir ".claude\agents"
+    if (-not (Test-Path $agentsDir)) { return 0 }
+
+    $tracked = 0
+    $agentDirs = Get-ChildItem -LiteralPath $agentsDir -Directory -ErrorAction SilentlyContinue
+    foreach ($dir in $agentDirs) {
+        $pidFile = Join-Path $dir.FullName "pid"
+        if (Test-Path $pidFile) {
+            try {
+                $pid = [int](Get-Content -LiteralPath $pidFile -Raw -ErrorAction Stop).Trim()
+                $proc = Get-Process -Id $pid -ErrorAction SilentlyContinue
+                if ($proc) { $tracked++ }
+            } catch {
+                # Stale PID file -- ignore
+            }
+        }
+    }
+    return $tracked
+}
+
 function Get-ActiveSlotCount {
-    $workerCount  = Get-ActiveWorkerCount
-    $claudeCount  = Get-ClaudeProcessCount
-    $orchRunning  = Get-OrchestratorRunning
-    $orchSlots    = if ($orchRunning) { 1 } else { 0 }
+    $workerCount       = Get-ActiveWorkerCount
+    $claudeCount       = Get-ClaudeProcessCount
+    $trackedCount      = Get-TrackedAgentCount
+    $orchRunning       = Get-OrchestratorRunning
+    $orchSlots         = if ($orchRunning) { 1 } else { 0 }
+
+    # PID cross-check: claude.exe is master indicator; PID files are supplementary
+    if ($claudeCount -gt ($trackedCount + $orchSlots)) {
+        Write-HeartbeatLog "WARN" "claude.exe leak detected: OS reports $claudeCount claude.exe but only $trackedCount tracked by swarm (+$orchSlots orch slot). Possible orphaned agent processes."
+    } elseif ($claudeCount -lt ($workerCount + $orchSlots)) {
+        Write-HeartbeatLog "DEBUG" "$workerCount worker job(s) pending process spawn (claude=$claudeCount tracked=$trackedCount orch=$orchSlots)"
+    }
+
     return @{
-        WorkerJobs   = $workerCount
-        ClaudeProcs  = $claudeCount
-        OrchSlots    = $orchSlots
-        TotalUsed    = [math]::Max($workerCount, $claudeCount) + $orchSlots
-        SlotsFree    = $Script:MaxConcurrentSlots - ([math]::Max($workerCount, $claudeCount) + $orchSlots)
+        WorkerJobs    = $workerCount
+        ClaudeProcs   = $claudeCount
+        TrackedAgents = $trackedCount
+        OrchSlots     = $orchSlots
+        TotalUsed     = [math]::Max($workerCount, $claudeCount) + $orchSlots
+        SlotsFree     = $Script:MaxConcurrentSlots - ([math]::Max($workerCount, $claudeCount) + $orchSlots)
     }
 }
 
@@ -122,28 +157,105 @@ function Test-OllamaReachable {
 # === QUOTA GOVERNOR ===
 
 function Read-QuotaState {
-    $quotaFile = Join-Path $Script:BaseDir ".claude\API_QUOTA_STATE.md"
-    if (-not (Test-Path $quotaFile)) {
-        Write-HeartbeatLog "WARN" "API_QUOTA_STATE.md not found; defaulting to Tier 1"
-        return @{ FiveHour = 0; SevenDay = 0; Tier = 1 }
+    $fiveHour    = 0
+    $sevenDay    = 0
+    $resetMins   = $null
+
+    # Prefer structured JSON if available (written by OllamaQuotaScraper.ps1)
+    $jsonFile = Join-Path $Script:BaseDir ".claude\quota_state.json"
+    if (Test-Path $jsonFile) {
+        try {
+            $json = Get-Content -Raw -LiteralPath $jsonFile -ErrorAction Stop | ConvertFrom-Json
+            if ($json.status -eq "ok") {
+                $fiveHour  = [double]$json.fiveHour
+                $sevenDay  = [double]$json.sevenDay
+                $resetMins = $json.resetMinutes
+            }
+        } catch {
+            Write-HeartbeatLog "DEBUG" "quota_state.json parse failed, falling back to markdown"
+        }
+    }
+
+    # Fallback: parse markdown file (legacy format)
+    if ($fiveHour -eq 0 -and $sevenDay -eq 0) {
+        $quotaFile = Join-Path $Script:BaseDir ".claude\API_QUOTA_STATE.md"
+        if (Test-Path $quotaFile) {
+            try {
+                $content = Get-Content -LiteralPath $quotaFile -Raw -ErrorAction Stop
+                if ($content -match "5-Hour Usage.*?([\d\.]+)%") { $fiveHour = [double]$matches[1] }
+                if ($content -match "7-Day Usage.*?([\d\.]+)%")  { $sevenDay = [double]$matches[1] }
+                if ($content -match "resets?\s+in\s+~?(\d+)\s*min") { $resetMins = [int]$matches[1] }
+            } catch {
+                Write-HeartbeatLog "ERROR" "Failed to read quota markdown: $($_.Exception.Message)"
+            }
+        } else {
+            Write-HeartbeatLog "WARN" "No quota state file found; defaulting to Tier 1"
+        }
+    }
+
+    # 6-tier phased execution: match task weight to quota abundance
+    # HARDLOCK (Tier 6) if either 5-hour or 7-day exceeds 99.5%
+    if ($fiveHour -gt 99.5 -or $sevenDay -gt 99.5) {
+        $tier = 6
+    } elseif ($fiveHour -gt 90) {
+        $tier = 5
+    } elseif ($fiveHour -gt 75) {
+        $tier = 4
+    } elseif ($fiveHour -gt 50) {
+        $tier = 3
+    } elseif ($fiveHour -gt 25) {
+        $tier = 2
+    } else {
+        $tier = 1
+    }
+
+    return @{ FiveHour = $fiveHour; SevenDay = $sevenDay; Tier = $tier; ResetMinutes = $resetMins }
+}
+
+function Invoke-QuotaRefresh {
+    # Check if quota data is fresh enough
+    $jsonFile = Join-Path $Script:BaseDir ".claude\quota_state.json"
+    if (Test-Path $jsonFile) {
+        try {
+            $json = Get-Content -Raw -LiteralPath $jsonFile -ErrorAction Stop | ConvertFrom-Json
+            if ($json.timestamp) {
+                $lastUpdate = [datetime]::Parse($json.timestamp)
+                $ageMinutes = ((Get-Date) - $lastUpdate).TotalMinutes
+                if ($ageMinutes -lt $Script:ScraperStaleMinutes) {
+                    Write-HeartbeatLog "DEBUG" "Quota data is fresh ($([math]::Round($ageMinutes,1))min old) -- skipping scrape"
+                    return $true
+                }
+            }
+        } catch {}
+    }
+
+    # Also check cooldown to avoid scraping too aggressively
+    $sinceLast = ((Get-Date) - $Script:LastScraperRun).TotalMinutes
+    if ($sinceLast -lt $Script:ScraperIntervalMinutes) {
+        Write-HeartbeatLog "DEBUG" "Scraper cooldown active ($([math]::Round($sinceLast,1))min since last run)"
+        return $true
+    }
+
+    Write-HeartbeatLog "INFO" "Refreshing quota data via OllamaQuotaScraper.ps1..."
+    $Script:LastScraperRun = Get-Date
+
+    $scraperPath = Join-Path $Script:BaseDir "OllamaQuotaScraper.ps1"
+    if (-not (Test-Path $scraperPath)) {
+        Write-HeartbeatLog "ERROR" "OllamaQuotaScraper.ps1 not found at $scraperPath"
+        return $false
     }
 
     try {
-        $content = Get-Content -LiteralPath $quotaFile -Raw -ErrorAction Stop
-        $fiveHour = 0; $sevenDay = 0
-        if ($content -match "5-Hour Usage.*?([\d\.]+)%") { $fiveHour = [double]$matches[1] }
-        if ($content -match "7-Day Usage.*?([\d\.]+)%")  { $sevenDay = [double]$matches[1] }
-
-        # Determine tier based on 5-hour usage per orchestrate.md thresholds
-        $tier = 1
-        if ($fiveHour -gt 92)      { $tier = 4 }
-        elseif ($fiveHour -gt 75)  { $tier = 3 }
-        elseif ($fiveHour -gt 50)  { $tier = 2 }
-
-        return @{ FiveHour = $fiveHour; SevenDay = $sevenDay; Tier = $tier }
+        $result = & "$scraperPath" -Quiet 2>&1
+        if ($LASTEXITCODE -ne 0 -and $LASTEXITCODE) {
+            Write-HeartbeatLog "WARN" "Scraper exited with code $LASTEXITCODE -- will use cached data"
+            return $false
+        }
+        Write-HeartbeatLog "INFO" "Quota refresh complete"
+        return $true
     } catch {
-        Write-HeartbeatLog "ERROR" "Failed to read quota state: $($_.Exception.Message)"
-        return @{ FiveHour = 0; SevenDay = 0; Tier = 1 }
+        Write-HeartbeatLog "WARN" "Quota refresh failed: $($_.Exception.Message) -- will use cached data"
+        return $false
     }
 }
 
@@ -157,33 +269,59 @@ function Invoke-QuotaGovernor {
     }
 
     switch ($quota.Tier) {
+        6 {
+            $Script:MaxConcurrentSlots    = 0
+            $Script:OrchCooldownSeconds   = 9999
+            $Script:MaxBudgetOverride     = 0
+            $Script:CurrentPhaseName      = "HARDLOCK"
+            $Script:OrchModelTier         = $null
+            $Script:WorkerModelAllowList  = @()
+            Write-HeartbeatLog "ERROR" "HARDLOCK ACTIVE: 5hr=$($quota.FiveHour)% 7d=$($quota.SevenDay)%. ZERO dispatch. Polling until reset."
+        }
+        5 {
+            $Script:MaxConcurrentSlots    = 1
+            $Script:OrchCooldownSeconds   = 600
+            $Script:MaxBudgetOverride     = 300
+            $Script:CurrentPhaseName      = "MICRO"
+            $Script:OrchModelTier         = "gemini-3-flash-preview:cloud"
+            $Script:WorkerModelAllowList  = @("gemini-3-flash-preview:cloud")
+            Write-HeartbeatLog "WARN" "MICRO PHASE: Single-slot, gemini-flash only, max budget 300s, P0/defer-only"
+        }
         4 {
-            $Script:MaxConcurrentSlots = 1
-            $Script:OrchCooldownSeconds = 600
-            $Script:MaxBudgetOverride = 600
-            $Script:Tier4Active = $true
-            Write-HeartbeatLog "WARN" "Tier 4 ACTIVE: Single-slot, triage-only, max budget 600s, P0 only"
+            $Script:MaxConcurrentSlots    = 2
+            $Script:OrchCooldownSeconds   = 300
+            $Script:MaxBudgetOverride     = 900
+            $Script:CurrentPhaseName      = "LIGHT"
+            $Script:OrchModelTier         = "deepseek-v4-flash:cloud"
+            $Script:WorkerModelAllowList  = @("gemma4:31b:cloud", "gemini-3-flash-preview:cloud")
+            Write-HeartbeatLog "WARN" "LIGHT PHASE: 2-slot, docs/tests/lint/bindings only, max budget 900s"
         }
         3 {
-            $Script:MaxConcurrentSlots = 2
-            $Script:OrchCooldownSeconds = 300
-            $Script:MaxBudgetOverride = 1800
-            $Script:Tier4Active = $false
-            Write-HeartbeatLog "WARN" "Tier 3 ACTIVE: Mid-tier models only, max budget 1800s"
+            $Script:MaxConcurrentSlots    = 2
+            $Script:OrchCooldownSeconds   = 180
+            $Script:MaxBudgetOverride     = 1800
+            $Script:CurrentPhaseName      = "MIXED"
+            $Script:OrchModelTier         = "deepseek-v4-flash:cloud"
+            $Script:WorkerModelAllowList  = @("qwen3-coder-next:cloud", "gemma4:31b:cloud")
+            Write-HeartbeatLog "INFO" "MIXED PHASE: 2-slot, smaller features/validation/testing, max budget 1800s"
         }
         2 {
-            $Script:MaxConcurrentSlots = 2
-            $Script:OrchCooldownSeconds = 180
-            $Script:MaxBudgetOverride = 3600
-            $Script:Tier4Active = $false
-            Write-HeartbeatLog "INFO" "Tier 2 ACTIVE: Mixed tier, batch micro-tasks"
+            $Script:MaxConcurrentSlots    = 3
+            $Script:OrchCooldownSeconds   = 120
+            $Script:MaxBudgetOverride     = 5400
+            $Script:CurrentPhaseName      = "EXECUTE"
+            $Script:OrchModelTier         = "kimi-k2.6:cloud"
+            $Script:WorkerModelAllowList  = @("glm-5.1:cloud", "qwen3-coder-next:cloud")
+            Write-HeartbeatLog "INFO" "EXECUTE PHASE: 3-slot, major feature implementation, max budget 5400s"
         }
         default {
-            $Script:MaxConcurrentSlots = 3
-            $Script:OrchCooldownSeconds = 120
-            $Script:MaxBudgetOverride = 0
-            $Script:Tier4Active = $false
-            Write-HeartbeatLog "INFO" "Tier 1 ACTIVE: Full speed, flagship models"
+            $Script:MaxConcurrentSlots    = 3
+            $Script:OrchCooldownSeconds   = 120
+            $Script:MaxBudgetOverride     = 0
+            $Script:CurrentPhaseName      = "HEAVY-LIFT"
+            $Script:OrchModelTier         = "qwen3-coder:480b:cloud"
+            $Script:WorkerModelAllowList  = @()
+            Write-HeartbeatLog "INFO" "HEAVY-LIFT PHASE: 3-slot, flagship models, no budget cap. Token-heavy work: multi-file wiring, architecture, deep planning."
         }
     }
 }
@@ -193,26 +331,38 @@ function Invoke-QuotaGovernor {
 function Select-OrchestratorModel {
     param([string]$Reason)
 
-    # At quota Tier 4, force triage model regardless of reason
-    if ($Script:CurrentQuotaTier -ge 4) {
-        Write-HeartbeatLog "INFO" "Orchestrator model forced to triage (quota Tier $($Script:CurrentQuotaTier))"
-        return @{ Model = $Script:OrchModelTriage; MandateType = "triage" }
+    # HARDLOCK: no orchestrator dispatch allowed
+    if ($Script:CurrentQuotaTier -ge 6) {
+        Write-HeartbeatLog "ERROR" "Orchestrator dispatch blocked: HARDLOCK active"
+        return $null
     }
 
-    # At quota Tier 3, use standard model for everything
+    # Use the tier-assigned orchestrator model
+    $model = $Script:OrchModelTier
+    if (-not $model) {
+        $model = $Script:OrchModelStandard
+    }
+
+    # At MICRO phase (Tier 5), force triage model regardless
+    if ($Script:CurrentQuotaTier -ge 5) {
+        Write-HeartbeatLog "INFO" "Orchestrator model: $model (quota phase: $($Script:CurrentPhaseName))"
+        return @{ Model = $model; MandateType = "micro" }
+    }
+
+    # At LIGHT/MIXED (Tier 3-4), use tier-assigned model
     if ($Script:CurrentQuotaTier -ge 3) {
-        return @{ Model = $Script:OrchModelStandard; MandateType = "standard" }
+        return @{ Model = $model; MandateType = "standard" }
     }
 
-    # Tier 1-2: select based on reason complexity
+    # EXECUTE/HEAVY-LIFT (Tier 1-2): select based on reason complexity
     if ($Reason -match "malformed|triage|NEEDS_TRIAGE") {
         return @{ Model = $Script:OrchModelTriage; MandateType = "triage" }
     }
     elseif ($Reason -match "backlog|drained|remaining") {
-        return @{ Model = $Script:OrchModelHeavy; MandateType = "heavy" }
+        return @{ Model = $model; MandateType = "heavy" }
     }
     else {
-        return @{ Model = $Script:OrchModelStandard; MandateType = "standard" }
+        return @{ Model = $model; MandateType = "standard" }
     }
 }
 
@@ -302,6 +452,12 @@ function Write-EfficiencyLedger {
 function Invoke-DispatchWorker {
     param([System.IO.FileInfo]$TaskFile)
 
+    # HARDLOCK gate: refuse all dispatch at Tier 6
+    if ($Script:CurrentQuotaTier -ge 6) {
+        Write-HeartbeatLog "WARN" "HARDLOCK: refusing worker dispatch for $($TaskFile.Name)"
+        return $false
+    }
+
     try {
         $content = Get-Content -LiteralPath $TaskFile.FullName -TotalCount 30 -ErrorAction Stop
         $modelLine  = ($content | Where-Object { $_ -match "^#\s*(MODEL|Model):" } | Select-Object -First 1)
@@ -326,8 +482,27 @@ function Invoke-DispatchWorker {
 
         # Quota-aware budget clamping
         if ($Script:MaxBudgetOverride -gt 0 -and $budget -gt $Script:MaxBudgetOverride) {
-            Write-HeartbeatLog "WARN" "Budget clamped: ${budget}s -> ${Script:MaxBudgetOverride}s (quota tier $($Script:CurrentQuotaTier))"
+            Write-HeartbeatLog "WARN" "Budget clamped: ${budget}s -> ${Script:MaxBudgetOverride}s (phase: $($Script:CurrentPhaseName))"
             $budget = $Script:MaxBudgetOverride
+        }
+
+        # Worker model allowlist enforcement (Tier 3+)
+        if ($Script:WorkerModelAllowList.Count -gt 0) {
+            $modelBase = $model -replace ':cloud$', ''
+            $allowed = $false
+            foreach ($allowedModel in $Script:WorkerModelAllowList) {
+                $allowedBase = $allowedModel -replace ':cloud$', ''
+                if ($model -eq $allowedModel -or $modelBase -eq $allowedBase) {
+                    $allowed = $true
+                    break
+                }
+            }
+            if (-not $allowed) {
+                Write-HeartbeatLog "WARN" "Worker model $model not in allowlist for phase $($Script:CurrentPhaseName). Allowlist: $($Script:WorkerModelAllowList -join ', ')"
+                # Downgrade to first allowed model
+                $model = $Script:WorkerModelAllowList[0]
+                Write-HeartbeatLog "INFO" "Downgraded worker model to $model"
+            }
         }
 
         Write-HeartbeatLog "INFO" "Dispatching Worker for $($TaskFile.Name) -> model=$model budget=${budget}s"
@@ -335,12 +510,34 @@ function Invoke-DispatchWorker {
         $inProgressPath = Join-Path $Script:InProgDir $TaskFile.Name
         Move-Item -LiteralPath $TaskFile.FullName -Destination $inProgressPath -Force -ErrorAction Stop
 
-        $jobName = "Worker_" + (Get-Date -Format "HHmmss")
-        $job = Start-Job -Name $jobName -ArgumentList $inProgressPath, $model, $budget, $Script:BaseDir -ScriptBlock {
-            param($TaskFile, $Model, $BudgetLimit, $BaseDir)
-            Set-Location $BaseDir
-            & "$BaseDir\TaskGovernor.ps1" -TaskFile $TaskFile -Model $Model -BudgetLimit $BudgetLimit
+        # Build quota context for TaskGovernor
+        $quotaState = Read-QuotaState
+        $quotaContext = @{
+            FiveHour      = $quotaState.FiveHour
+            SevenDay      = $quotaState.SevenDay
+            Phase         = $Script:CurrentPhaseName
+            Tier          = $Script:CurrentQuotaTier
+            Budget        = $budget
+            ResetMinutes  = if ($quotaState.ResetMinutes) { $quotaState.ResetMinutes } else { "?" }
         }
+
+        $jobName = "Worker_" + (Get-Date -Format "HHmmss")
+        $job = Start-Job -Name $jobName -ArgumentList $inProgressPath, $model, $budget, $Script:BaseDir, $quotaContext -ScriptBlock {
+            param($TaskFile, $Model, $BudgetLimit, $BaseDir, $QuotaContext)
+            Set-Location $BaseDir
+            $qcJson = ($QuotaContext | ConvertTo-Json -Compress)
+            & "$BaseDir\TaskGovernor.ps1" -TaskFile $TaskFile -Model $Model -BudgetLimit $BudgetLimit -QuotaContextJson $qcJson
+        }
+
+        # Write PID file for cross-check tracking after a short delay for process spawn
+        $agentName = [System.IO.Path]::GetFileNameWithoutExtension($TaskFile.Name)
+        $agentDir = Join-Path $Script:BaseDir ".claude\agents\$agentName"
+        $null = New-Item -ItemType Directory -Path $agentDir -Force
+        # PID will be resolved by Get-TrackedAgentCount via claude.exe parent-child correlation
+        # For now, record the dispatch timestamp for staleness checks
+        $dispatchMarker = Join-Path $agentDir "dispatched_at"
+        Get-Date -Format "o" | Out-File -LiteralPath $dispatchMarker -Encoding utf8 -ErrorAction SilentlyContinue
+
         Write-HeartbeatLog "INFO" "Worker dispatched: job=$jobName file=$($TaskFile.Name)"
         return $true
     } catch {
@@ -349,10 +546,150 @@ function Invoke-DispatchWorker {
     }
 }
 
+# === ORCHESTRATOR MANDATE GENERATOR ===
+
+function New-OrchestratorMandate {
+    param(
+        [int]$Tier,
+        [string]$Phase,
+        [double]$FiveHour,
+        [double]$SevenDay,
+        [int]$Slots,
+        [int]$MaxBudget,
+        [string[]]$WorkerModels
+    )
+
+    $quotaLine = "QUOTA: 5hr=$FiveHour% 7d=$SevenDay% | Phase: $Phase | Slots: $Slots"
+    if ($MaxBudget -gt 0) {
+        $quotaLine += " | Max budget: ${MaxBudget}s"
+    } else {
+        $quotaLine += " | Budget: unlimited"
+    }
+
+    $workerModelLine = if ($WorkerModels.Count -gt 0) { "Allowed worker models: $($WorkerModels -join ', ')" } else { "Any flagship model allowed for workers" }
+
+    switch ($Tier) {
+        1 {
+            return @"
+$quotaLine
+$workerModelLine
+
+Quota is abundant. Prioritize token-heavy work that is most efficient with flagship
+models -- multi-file wiring, architecture changes, deep planning, complex integrations.
+Also create detailed, well-scoped task files that small models can execute in later
+phases. Route aggressively: heavy models for heavy work, but don't waste large models
+on tasks a small model could handle. Queue ambitious work now while budget is unlimited.
+
+STANDARD ORCHESTRATOR DUTIES:
+1. Read HANDOFF/done/ for newly completed tasks. Update REMAINING_WORK_TRACKING.md.
+2. Read HANDOFF/IN_PROGRESS/ for stale tasks (>60 min). Reclaim to todo/ with [STALE]_ prefix.
+3. Read HANDOFF/todo/ for [FAILED]_ tasks. Downgrade model, reduce budget 40%, re-validate.
+4. Read HANDOFF/todo/ for [STALE]_ tasks. Re-validate, restore [VALIDATED]_ prefix.
+5. Read HANDOFF/todo/ for [NEEDS_TRIAGE]_ tasks. Add # MODEL: and # BUDGET: headers.
+6. Validate unvalidated tasks. Add [VALIDATED]_ prefix or reject.
+7. Create new task files from REMAINING_WORK_TRACKING.md gaps with proper headers.
+8. Assign models per routing table. Set budgets based on complexity.
+9. Write HANDOFF/ORCHESTRATOR_STATUS.md with STATUS=completed.
+
+CRITICAL: You MANAGE the queue. Do NOT write application code. Exit after writing status file.
+RETRY CONSTRAINT: Failed tasks MUST downgrade model. Never escalate. Failed on smallest = UNRESOLVABLE.
+"@
+        }
+        2 {
+            return @"
+$quotaLine
+$workerModelLine
+
+Standard orchestrator duties. Dispatch implementation tasks per CLAUDE.md routing table.
+Prefer queuing any remaining heavy-lift work now -- the window for flagship models is
+closing. Start routing docs/tests/lint to smaller models.
+
+STANDARD ORCHESTRATOR DUTIES:
+1. Read HANDOFF/done/ for newly completed tasks. Update REMAINING_WORK_TRACKING.md.
+2. Read HANDOFF/IN_PROGRESS/ for stale tasks (>60 min). Reclaim to todo/ with [STALE]_ prefix.
+3. Read HANDOFF/todo/ for [FAILED]_ tasks. Downgrade model, reduce budget 40%, re-validate.
+4. Read HANDOFF/todo/ for [STALE]_ tasks. Re-validate, restore [VALIDATED]_ prefix.
+5. Read HANDOFF/todo/ for [NEEDS_TRIAGE]_ tasks. Add # MODEL: and # BUDGET: headers.
+6. Validate unvalidated tasks. Add [VALIDATED]_ prefix or reject.
+7. Create new task files from REMAINING_WORK_TRACKING.md gaps with proper headers.
+8. Assign models per routing table. Set budgets based on complexity.
+9. Write HANDOFF/ORCHESTRATOR_STATUS.md with STATUS=completed.
+
+CRITICAL: You MANAGE the queue. Do NOT write application code. Exit after writing status file.
+RETRY CONSTRAINT: Failed tasks MUST downgrade model. Never escalate. Failed on smallest = UNRESOLVABLE.
+"@
+        }
+        3 {
+            return @"
+$quotaLine
+$workerModelLine
+
+Standard orchestrator duties. Dispatch implementation tasks. Avoid large multi-file
+refactors. Route validation/testing/docs to smaller models. Budgets clamped to ${MaxBudget}s.
+
+STANDARD ORCHESTRATOR DUTIES: (same as above -- scan, triage, validate, create, route)
+Write HANDOFF/ORCHESTRATOR_STATUS.md with STATUS=completed when done.
+CRITICAL: You MANAGE the queue. Do NOT write application code. Exit after writing status file.
+"@
+        }
+        4 {
+            return @"
+$quotaLine
+$workerModelLine
+
+Quota is tight. Only create/dispatch tasks executable by gemma4:31b or
+gemini-3-flash-preview: docs, tests, lint, bindings, P0 fixes. Defer ALL feature
+work and medium+ refactors to next quota window. Break remaining cleanup into
+small chunks (<=${MaxBudget}s each).
+
+ORCHESTRATOR DUTIES (abbreviated):
+1. Scan done/, IN_PROGRESS/, todo/.
+2. Triage [FAILED]_ and [STALE]_ tasks -- downgrade aggressively.
+3. Create ONLY small-model tasks (docs/tests/lint/bindings/P0).
+4. DEFER everything else.
+5. Write HANDOFF/ORCHESTRATOR_STATUS.md with STATUS=completed.
+CRITICAL: Exit after writing status file. Do NOT write application code.
+"@
+        }
+        5 {
+            return @"
+$quotaLine
+$workerModelLine
+
+Quota is critically low. ONLY create/dispatch micro-tasks for gemini-3-flash-preview:
+P0 fixes, lint, single-line changes. Budget capped at ${MaxBudget}s. ALL other work
+MUST be deferred to next quota window. PARTIAL COMPLETION IS ACCEPTABLE.
+
+ORCHESTRATOR DUTIES (micro only):
+1. Quick scan of done/ and todo/.
+2. Create ONLY gemini-3-flash-preview tasks <= ${MaxBudget}s.
+3. Defer everything else.
+4. Write HANDOFF/ORCHESTRATOR_STATUS.md with STATUS=completed.
+CRITICAL: Exit after writing status file. Do NOT initiate any work requiring >${MaxBudget}s.
+"@
+        }
+        default {
+            return @"
+$quotaLine
+$workerModelLine
+
+HARDLOCK -- this mandate should never be dispatched. If you see this, the heartbeat
+governor has failed. Exit immediately without doing any work.
+"@
+        }
+    }
+}
+
 # === ORCHESTRATOR DISPATCH ===
 
 function Invoke-DispatchOrchestrator {
     param([string]$Reason)
+
+    # HARDLOCK gate: refuse all dispatch at Tier 6
+    if ($Script:CurrentQuotaTier -ge 6) {
+        Write-HeartbeatLog "WARN" "HARDLOCK: refusing orchestrator dispatch (reason: $Reason)"
+        return $false
+    }
 
     $now = Get-Date
     if (($now - $Script:LastOrchLaunch).TotalSeconds -lt $Script:OrchCooldownSeconds) {
@@ -362,60 +699,24 @@ function Invoke-DispatchOrchestrator {
 
     # Select tier-appropriate model
     $orchSelection = Select-OrchestratorModel -Reason $Reason
+    if (-not $orchSelection) {
+        Write-HeartbeatLog "ERROR" "Orchestrator model selection returned null -- dispatch blocked"
+        return $false
+    }
     $selectedModel = $orchSelection.Model
 
-    Write-HeartbeatLog "INFO" "Dispatching Orchestrator (reason: $Reason, model: $selectedModel)"
+    Write-HeartbeatLog "INFO" "Dispatching Orchestrator (reason: $Reason, model: $selectedModel, phase: $($Script:CurrentPhaseName))"
     $Script:LastOrchLaunch = $now
     $Script:OrchCompletedCurrentCycle = $false
     $Script:LastOrchModelDispatched = $selectedModel
     $Script:LastOrchReasonDispatched = $Reason
 
-    $mandate = @'
-SYSTEM OVERRIDE: Headless Orchestrator Agent.
-
-YOUR JOB:
-1. Read HANDOFF/done/ for newly completed tasks since your last scan. Update REMAINING_WORK_TRACKING.md and any affected canonical docs (DOCUMENTATION.md, docs/CURRENT_STATE.md) to reflect completed work.
-2. Read HANDOFF/IN_PROGRESS/ for stale tasks (LastWriteTime > 60 min ago). If found, move them back to HANDOFF/todo/ with [STALE]_ prefix.
-3. Read HANDOFF/todo/ for [FAILED]_ prefixed tasks. For each: read the file, assess if the task is still relevant. If relevant: DOWNGRADE the model — ALWAYS use a SMALLER model than the one that failed. Replace # MODEL: with the next model DOWN in the hierarchy: deepseek-v4-pro -> deepseek-v3.2 -> qwen3-coder-next -> gemini-3-flash-preview. If the task already failed on the smallest model, move it to HANDOFF/done/ with [UNRESOLVABLE]_ prefix. Reduce budget by 40%. Strip [FAILED]_ prefix, ensure [VALIDATED]_ prefix. If no longer relevant (already done, superseded): move to HANDOFF/done/ with [SUPERSEDED]_ prefix and a note explaining why.
-4. Read HANDOFF/todo/ for [STALE]_ prefixed tasks. For each: re-validate that the target code still needs work, update # MODEL: and # BUDGET: if needed, strip the [STALE]_ prefix, and ensure [VALIDATED]_ prefix is present.
-5. Read HANDOFF/todo/ for [NEEDS_TRIAGE]_ prefixed tasks. For each, read the file, add the missing # MODEL: and # BUDGET: headers, remove the [NEEDS_TRIAGE]_ prefix, and ensure the [VALIDATED]_ prefix is present.
-6. Read HANDOFF/todo/ for unvalidated tasks (missing [VALIDATED]_ prefix). Validate each: check if the target code still needs work. Add [VALIDATED]_ prefix to validated tasks. Reject false positives (already-wired, test-only, golden-strings).
-7. Read REMAINING_WORK_TRACKING.md and HANDOFF/backlog/. If remaining work exists not yet in HANDOFF/todo/, create new task files with proper headers:
-   # MODEL: <appropriate model from routing table>
-   # BUDGET: <seconds based on task complexity>
-   # TARGET: <file path>
-   Prefix files with [VALIDATED]_ to signal readiness.
-8. Assign models per CLAUDE.md routing table:
-   - Rust core/identity/crypto/transport/store -> glm-5.1:cloud
-   - Crypto/math/security audit -> deepseek-v3.2:cloud
-   - Android/Kotlin -> qwen3-coder-next:cloud
-   - iOS/Swift -> glm-5.1:cloud
-   - Tests/docs/bindings -> gemma4:31b:cloud
-   - Quick fix/lint/CI -> gemini-3-flash-preview:cloud
-   - Architecture/planning -> deepseek-v4-pro:cloud
-   - Code review merge gate -> kimi-k2-thinking:cloud
-9. Set budget per task:
-   - Micro tasks (lint, format, single-line): 300s
-   - Small tasks (single function, test): 900s
-   - Medium tasks (multi-file wiring, platform): 1800s
-   - Large tasks (module implementation, refactor): 3600s
-   - Architecture/review tasks: 5400s
-10. Write HANDOFF/ORCHESTRATOR_STATUS.md containing exactly:
-   STATUS=completed (or STATUS=ALL_DONE if genuinely nothing remains)
-   TASKS_CREATED=N
-   TASKS_VALIDATED=N
-   STALE_RECLAIMED=N
-   FAILED_RETRIAGED=N
-   STALE_RETRIAGED=N
-   COMPLETED_AT=<timestamp>
-   NOTES=<any blockers or observations>
-
-CRITICAL: You MANAGE the queue. Do NOT write application code (.rs, .kt, .swift, .ts). Exit immediately after writing your status file.
-
-RETRY CONSTRAINT: Failed tasks MUST use a model with FEWER parameters than the one that failed. Never escalate. Hierarchy: deepseek-v4-pro:cloud (1.6T) -> deepseek-v3.2:cloud (688B) -> qwen3-coder-next:cloud (81B) -> gemini-3-flash-preview:cloud (lightweight). Failed on smallest = UNRESOLVABLE.
-
-QUOTA CONTEXT: The swarm heartbeat will provide current quota tier information. Use your judgment to determine how aggressively to conserve — when in doubt, prefer smaller models and tighter budgets. You have full autonomy to decide slot allocation and task prioritization within the constraints of the tier.
-'@
+    # Read live quota data for mandate injection
+    $quota = Read-QuotaState
+    $mandate = New-OrchestratorMandate -Tier $Script:CurrentQuotaTier -Phase $Script:CurrentPhaseName `
+        -FiveHour $quota.FiveHour -SevenDay $quota.SevenDay `
+        -Slots $Script:MaxConcurrentSlots -MaxBudget $Script:MaxBudgetOverride `
+        -WorkerModels $Script:WorkerModelAllowList
 
     $orchWorkDir = Join-Path $Script:BaseDir ".claude\agents\orchestrator"
     $null = New-Item -ItemType Directory -Path $orchWorkDir -Force
@@ -429,14 +730,17 @@ QUOTA CONTEXT: The swarm heartbeat will provide current quota tier information. 
         Remove-Item $statusFile -Force -ErrorAction SilentlyContinue
     }
 
-    # Write mandate to file and pipe via stdin — avoids PowerShell argument-length /
-    # character-escaping corruption that breaks -p (matches launch_agent.sh pattern).
+    # Write mandate to file and pipe via stdin
     try {
         $mandate | Out-File -LiteralPath $promptFile -Encoding utf8 -ErrorAction Stop
     } catch {
         Write-HeartbeatLog "ERROR" "Failed to write orchestrator prompt file: $($_.Exception.Message)"
         return $false
     }
+
+    # Write PID marker for slot tracking
+    $dispatchMarker = Join-Path $orchWorkDir "dispatched_at"
+    Get-Date -Format "o" | Out-File -LiteralPath $dispatchMarker -Encoding utf8 -ErrorAction SilentlyContinue
 
     $job = Start-Job -Name "Orchestrator" -ArgumentList $promptFile, $logFile, $stderrFile, $Script:BaseDir, $selectedModel -ScriptBlock {
         param($PromptFile, $LogFile, $StderrFile, $BaseDir, $Model)
@@ -445,8 +749,63 @@ QUOTA CONTEXT: The swarm heartbeat will provide current quota tier information. 
             & ollama launch claude --model $Model -- --dangerously-skip-permissions --print `
                 >> $LogFile 2>> $StderrFile
     }
-    Write-HeartbeatLog "INFO" "Orchestrator job started (prompt=$(($mandate.Length)) chars, model=$selectedModel, log=$logFile)"
+    # Record orchestrator job PID for cross-check
+    $orchPidFile = Join-Path $orchWorkDir "pid"
+    try {
+        # Give the job a moment to spawn, then capture child process PID
+        Start-Sleep -Milliseconds 500
+        $claudeProcs = @(Get-Process -Name "claude" -ErrorAction SilentlyContinue | Sort-Object StartTime -Descending)
+        if ($claudeProcs.Count -gt 0) {
+            $claudeProcs[0].Id | Out-File -LiteralPath $orchPidFile -Encoding utf8 -ErrorAction SilentlyContinue
+        }
+    } catch {
+        # PID tracking is best-effort
+    }
+
+    Write-HeartbeatLog "INFO" "Orchestrator job started (mandate=$(($mandate.Length)) chars, model=$selectedModel, log=$logFile)"
     return $true
+}
+
+function Invoke-CleanupOrphanJava {
+    # Kill OpenJDK/Java processes that have no parent claude.exe process
+    # These are abandoned ollama CLI JVMs from completed/failed agent runs
+    $killed = 0
+    try {
+        $javaProcs = @(Get-Process -Name "java" -ErrorAction SilentlyContinue)
+        if ($javaProcs.Count -eq 0) { return 0 }
+
+        $claudePids = @{}
+        $claudeProcs = @(Get-Process -Name "claude" -ErrorAction SilentlyContinue)
+        foreach ($cp in $claudeProcs) { $claudePids[$cp.Id] = $true }
+
+        foreach ($jp in $javaProcs) {
+            # Check if this java process has a claude.exe parent
+            $hasClaudeParent = $false
+            try {
+                $parentId = (Get-CimInstance Win32_Process -Filter "ProcessId = $($jp.Id)" -ErrorAction SilentlyContinue).ParentProcessId
+                if ($parentId -and $claudePids.ContainsKey($parentId)) {
+                    $hasClaudeParent = $true
+                }
+            } catch {}
+
+            if (-not $hasClaudeParent) {
+                try {
+                    Stop-Process -Id $jp.Id -Force -ErrorAction Stop
+                    Write-HeartbeatLog "INFO" "Killed orphan java PID=$($jp.Id) (WS=$([math]::Round($jp.WorkingSet64/1MB,1))MB)"
+                    $killed++
+                } catch {
+                    Write-HeartbeatLog "WARN" "Could not kill orphan java PID=$($jp.Id): $($_.Exception.Message)"
+                }
+            }
+        }
+    } catch {
+        Write-HeartbeatLog "ERROR" "Orphan java cleanup error: $($_.Exception.Message)"
+    }
+
+    if ($killed -gt 0) {
+        Write-HeartbeatLog "INFO" "Java cleanup: $killed orphan process(es) terminated"
+    }
+    return $killed
 }
 
 # === SWARM COMPLETE CHECK ===
@@ -519,10 +878,9 @@ function Invoke-HeartbeatPulse {
     Write-HeartbeatLog "DEBUG" "=== PULSE $(Get-Date -Format 'HH:mm:ss') ==="
     $Script:PulseCount++
 
-    # Re-evaluate quota every N pulses to avoid file thrash
-    if ($Script:PulseCount % $Script:QuotaCheckInterval -eq 0) {
-        Invoke-QuotaGovernor
-    }
+    # Refresh quota from ollama.com (with cooldown), then re-evaluate every pulse
+    Invoke-QuotaRefresh
+    Invoke-QuotaGovernor
 
     # Phase 1: Cleanup completed jobs
     $completedJobs = Get-Job -State Completed -ErrorAction SilentlyContinue
@@ -563,6 +921,9 @@ function Invoke-HeartbeatPulse {
         Remove-Job -Job $j -Force -ErrorAction SilentlyContinue
     }
 
+    # Phase 1b: Clean up abandoned Java processes from completed jobs
+    Invoke-CleanupOrphanJava
+
     # Phase 2: Scan file system
     $fileState      = Get-SwarmFileState
     $slotState      = Get-ActiveSlotCount
@@ -573,11 +934,11 @@ function Invoke-HeartbeatPulse {
     $slotsFree      = $slotState.SlotsFree
     $orchLabel      = if ($orchRunning) { "Y" } else { "N" }
     $orphanLabel    = if ($fileState.OrphanInProgress) { "ORPHAN" } else { "ok" }
-    $tierLabel      = "T$($Script:CurrentQuotaTier)"
+    $trackedCount   = $slotState.TrackedAgents
 
-    Write-HeartbeatLog "INFO" ("State -> Done: {0} | Pending: {1} | InProg: {2} | Failed/Stale: {3} | StaleInProg: {4} | Slots: jobs={5} claude={6} free={7} orphan={8} tier={9} | Orch: {10}" -f
+    Write-HeartbeatLog "INFO" ("State -> Done: {0} | Pending: {1} | InProg: {2} | Failed/Stale: {3} | StaleInProg: {4} | Slots: jobs={5} claude={6} tracked={7} free={8} orphan={9} phase={10} | Orch: {11}" -f
         $fileState.DoneCount, $fileState.PendingCount, $fileState.InProgressCount,
-        $fileState.FailedOrStaleCount, $staleTasks.Count, $workerCount, $claudeCount, $slotsFree, $orphanLabel, $tierLabel, $orchLabel)
+        $fileState.FailedOrStaleCount, $staleTasks.Count, $workerCount, $claudeCount, $trackedCount, $slotsFree, $orphanLabel, $Script:CurrentPhaseName, $orchLabel)
 
     $Script:PrevDoneCount = $fileState.DoneCount
 
@@ -603,11 +964,11 @@ function Invoke-HeartbeatPulse {
         $orchSlots = if ($orchRunning) { 1 } else { 0 }
         $slotsForWorkers = $Script:MaxConcurrentSlots - $orchSlots
         if (([math]::Max($workerCount, $claudeCount)) -lt $slotsForWorkers) {
-            # At Tier 4, only dispatch P0 tasks
-            if ($Script:Tier4Active) {
-                $task = $fileState.PendingTasks | Where-Object { $_.Name -match "p0|P0|BLOCKED_BY_QUOTA" } | Select-Object -First 1
+            # At MICRO phase (Tier 5), only dispatch P0/emergency tasks
+            if ($Script:CurrentQuotaTier -ge 5) {
+                $task = $fileState.PendingTasks | Where-Object { $_.Name -match "p0|P0|BLOCKED_BY_QUOTA|EMERGENCY" } | Select-Object -First 1
                 if (-not $task) {
-                    Write-HeartbeatLog "DEBUG" "Tier 4: no P0 tasks available to dispatch"
+                    Write-HeartbeatLog "DEBUG" "$($Script:CurrentPhaseName): no P0 tasks available to dispatch"
                 }
             } else {
                 $task = $fileState.PendingTasks | Select-Object -First 1
@@ -619,13 +980,13 @@ function Invoke-HeartbeatPulse {
     }
 
     # Phase 6: Launch orchestrator (when all workers idle, failed/stale need triage, or periodic)
-    # HARD GATE: orchestrator consumes 1 slot. Never dispatch if all slots are full —
+    # HARD GATE: orchestrator consumes 1 slot. Never dispatch if all slots are full --
     # that would exceed MaxConcurrentSlots (claude.exe count = workers + orchestrator).
     if (-not $orchRunning) {
         $needsOrch = $false
         $orchReason = ""
 
-        # Slot-aware dispatch paths (workers may be running — check capacity first)
+        # Slot-aware dispatch paths (workers may be running -- check capacity first)
         if ($Script:WakeOrchestratorForTriage) {
             if ($slotsFree -gt 0) {
                 $needsOrch = $true
@@ -641,7 +1002,7 @@ function Invoke-HeartbeatPulse {
                 Write-HeartbeatLog "DEBUG" "Deferring orchestrator: $($fileState.FailedOrStaleCount) failed/stale tasks need triage but no free slots (workers=$workerCount claude=$claudeCount)"
             }
         } elseif (([math]::Max($workerCount, $claudeCount)) -eq 0) {
-            # All workers idle — slots are guaranteed available
+            # All workers idle -- slots are guaranteed available
             if ($fileState.HasNewDone) {
                 $needsOrch = $true
                 $orchReason = "new completions detected in done/"
@@ -665,10 +1026,8 @@ function Invoke-HeartbeatPulse {
 
 function Invoke-HeartbeatBoot {
     Write-HeartbeatLog "INFO" "============================================"
-    Write-HeartbeatLog "INFO" "SCMessenger Swarm Heartbeat v3.0 BOOTING"
+    Write-HeartbeatLog "INFO" "SCMessenger Swarm Heartbeat v4.0 BOOTING"
     Write-HeartbeatLog "INFO" "Base: $($Script:BaseDir)"
-    Write-HeartbeatLog "INFO" "Max Concurrent Slots: $($Script:MaxConcurrentSlots)"
-    Write-HeartbeatLog "INFO" "Orch Models: triage=$($Script:OrchModelTriage) standard=$($Script:OrchModelStandard) heavy=$($Script:OrchModelHeavy)"
     Write-HeartbeatLog "INFO" "Poll Interval: $($Script:PollIntervalSeconds)s"
     Write-HeartbeatLog "INFO" "============================================"
 
@@ -692,25 +1051,30 @@ function Invoke-HeartbeatBoot {
     }
     Write-HeartbeatLog "INFO" "Ollama service reachable at localhost:11434"
 
-    # Phase 3: Remove stale completion flag from prior run
+    # Phase 3: Refresh quota data, then initialize governor before banner
+    Invoke-QuotaRefresh
+    Invoke-QuotaGovernor
+    Write-HeartbeatLog "INFO" "Max Concurrent Slots: $($Script:MaxConcurrentSlots) | Phase: $($Script:CurrentPhaseName) | Orch Model: $($Script:OrchModelTier)"
+
+    # Phase 4: Remove stale completion flag from prior run
     if (Test-Path $Script:CompleteFlag) {
         Remove-Item $Script:CompleteFlag -Force -ErrorAction SilentlyContinue
         Write-HeartbeatLog "INFO" "Removed previous SWARM_COMPLETE flag"
     }
 
-    # Phase 4: Seed initial file counts
+    # Phase 5: Seed initial file counts
     $initial = Get-SwarmFileState
     $Script:PrevDoneCount = $initial.DoneCount
     Write-HeartbeatLog "INFO" "Initial state -- Done: $($initial.DoneCount) | Pending: $($initial.PendingCount) | InProg: $($initial.InProgressCount) | Failed/Stale: $($initial.FailedOrStaleCount) | Orphan: $($initial.OrphanInProgress)"
 
-    # Phase 5: Clean up orphaned PS jobs from prior session
+    # Phase 6: Clean up orphaned PS jobs from prior session
     Get-Job | Remove-Job -Force -ErrorAction SilentlyContinue
     Write-HeartbeatLog "INFO" "Cleaned up orphaned PowerShell jobs"
 
-    # Phase 6: Cleanup stale worktrees from prior sessions
+    # Phase 7: Cleanup stale worktrees from prior sessions
     Invoke-CleanupStaleWorktrees
 
-    # Phase 7: Config drift detection (informational only — heartbeat is authority)
+    # Phase 8: Config drift detection (informational only -- heartbeat is authority)
     $poolConfig = Join-Path $Script:BaseDir ".claude\agent_pool.json"
     if (Test-Path $poolConfig) {
         try {
@@ -724,14 +1088,11 @@ function Invoke-HeartbeatBoot {
         }
     }
 
-    # Phase 8: Kill abandoned processes from prior session (IN_PROGRESS tasks but no agents)
+    # Phase 9: Kill abandoned processes from prior session (IN_PROGRESS tasks but no agents)
     if ($initial.OrphanInProgress) {
         Write-HeartbeatLog "WARN" "Boot-time orphan detected: $($initial.InProgressCount) IN_PROGRESS task(s) with no active agents"
         $null = Invoke-CleanupOrphanProcesses -InProgressCount $initial.InProgressCount
     }
-
-    # Phase 9: Initialize quota governor
-    Invoke-QuotaGovernor
 
     Write-HeartbeatLog "INFO" "Boot complete. Entering main dispatch loop."
 }

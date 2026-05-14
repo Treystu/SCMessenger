@@ -7,7 +7,10 @@ param (
     [string]$Model,
 
     [Parameter(Mandatory=$false)]
-    [int]$BudgetLimit = 3600
+    [int]$BudgetLimit = 3600,
+
+    [Parameter(Mandatory=$false)]
+    [string]$QuotaContextJson = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -63,7 +66,29 @@ function Invoke-AgentWithBudget {
     param([string]$TaskFilePath)
 
     $cmd = New-ClaudeCommand -Model $Script:Model
-    $prompt = "SYSTEM OVERRIDE: Read and execute all instructions in $TaskFilePath. Do not ask for help. CRITICAL: Do NOT move, rename, or relocate the task file -- the governor handles file movement. When finished, output TASK COMPLETE and exit."
+
+    # Build prompt with optional quota context
+    $quotaBlock = ""
+    if ($Script:QuotaContextJson -and $Script:QuotaContextJson.Trim() -ne "") {
+        try {
+            $qc = $Script:QuotaContextJson | ConvertFrom-Json
+            $quotaBlock = @"
+
+QUOTA CONTEXT (from SwarmHeartbeat at dispatch time):
+  5-Hour Usage: $($qc.FiveHour)% (resets in ~$($qc.ResetMinutes) min)
+  7-Day Usage: $($qc.SevenDay)%
+  Active Phase: $($qc.Phase) (Tier $($qc.Tier) — HARDLOCK at 99.5%)
+  Your Budget: $($qc.Budget)s
+PARTIAL COMPLETION IS ACCEPTABLE. If you cannot finish within budget, write what
+you completed and mark remaining work with [REMAINING] comments. Exit cleanly.
+
+"@
+        } catch {
+            # JSON parse failed — skip quota block silently
+        }
+    }
+
+    $prompt = "${quotaBlock}SYSTEM OVERRIDE: Read and execute all instructions in $TaskFilePath. Do not ask for help. CRITICAL: Do NOT move, rename, or relocate the task file -- the governor handles file movement. When finished, output TASK COMPLETE and exit."
 
     $startTime = Get-Date
     $budgetSeconds = $Script:BudgetLimit

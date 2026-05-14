@@ -1,3 +1,6 @@
+# MODEL: deepseek-v4-pro:cloud
+# BUDGET: 2400
+
 # [FOR BETA - SWEEP] Batch 2: Core Transport & Routing State Analysis
 
 **Priority:** P1 (Next Batch Gate)

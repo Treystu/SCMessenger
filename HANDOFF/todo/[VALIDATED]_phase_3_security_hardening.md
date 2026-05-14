@@ -1,3 +1,6 @@
+# MODEL: deepseek-v3.2:cloud
+# BUDGET: 4800
+
 # Phase 3: Security Hardening (Adversarial Review)
 
 **Priority:** P0 (Security-critical)

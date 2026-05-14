@@ -102,7 +102,9 @@ fun DiagnosticsScreen(
                 context = context,
                 networkDiagnostics = com.scmessenger.android.network.NetworkDiagnostics(context),
                 networkTypeDetector = com.scmessenger.android.network.NetworkTypeDetector(context),
-                failureMetrics = com.scmessenger.android.utils.NetworkFailureMetrics()
+                failureMetrics = com.scmessenger.android.utils.NetworkFailureMetrics(),
+                networkDetector = com.scmessenger.android.transport.NetworkDetector(context),
+                circuitBreaker = com.scmessenger.android.utils.CircuitBreaker()
             ),
             onDismiss = { showNetworkDiagnostics = false },
             onRetryBootstrap = {
@@ -200,6 +202,41 @@ fun DiagnosticsScreen(
                             text = "Internet: ${report.hasInternet}, Network: ${report.networkType}",
                             style = MaterialTheme.typography.bodySmall
                         )
+                        // P0_NETWORK_001 Phase 7: Transport priority
+                        if (report.transportPriority.isNotEmpty()) {
+                            val transportStr = report.transportPriority.joinToString(" > ") {
+                                "${it.scheme}:${it.defaultPort}"
+                            }
+                            Text(
+                                text = "Transport: $transportStr",
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+                        // P0_NETWORK_001 Phase 7: Port probe results summary
+                        if (report.portProbeResults.isNotEmpty()) {
+                            val reachable = report.portProbeResults.filterValues { it }.size
+                            val blocked = report.portProbeResults.filterValues { !it }.size
+                            Text(
+                                text = "Port Probe: $reachable reachable, $blocked blocked",
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+                        // P0_NETWORK_001 Phase 7: Circuit breaker summary
+                        if (report.circuitBreakerEntries.isNotEmpty()) {
+                            val openCount = report.circuitBreakerEntries.count {
+                                it.state == com.scmessenger.android.utils.CircuitBreaker.CircuitState.OPEN
+                            }
+                            val halfOpenCount = report.circuitBreakerEntries.count {
+                                it.state == com.scmessenger.android.utils.CircuitBreaker.CircuitState.HALF_OPEN
+                            }
+                            val closedCount = report.circuitBreakerEntries.count {
+                                it.state == com.scmessenger.android.utils.CircuitBreaker.CircuitState.CLOSED
+                            }
+                            Text(
+                                text = "Circuits: $closedCount OK, $openCount blocked, $halfOpenCount probing",
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
                         report.relayResults.forEach { (relay, reachable) ->
                             Text(
                                 text = "Relay $relay: ${if (reachable) "Reachable" else "Unreachable"}",
