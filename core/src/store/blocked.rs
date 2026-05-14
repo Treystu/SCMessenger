@@ -127,7 +127,8 @@ impl BlockedManager {
                     is_deleted: blocked.is_deleted,
                 };
                 let dkey = device_blocked.storage_key();
-                let dvalue = serde_json::to_vec(&device_blocked).map_err(|_| IronCoreError::Internal)?;
+                let dvalue =
+                    serde_json::to_vec(&device_blocked).map_err(|_| IronCoreError::Internal)?;
                 self.backend
                     .put(dkey.as_bytes(), &dvalue)
                     .map_err(|_| IronCoreError::StorageError)?;
@@ -350,10 +351,7 @@ impl BlockedManager {
                     .unwrap_or_else(current_timestamp),
                 reason: peer_block.as_ref().and_then(|b| b.reason.clone()),
                 notes: None,
-                is_deleted: peer_block
-                    .as_ref()
-                    .map(|b| b.is_deleted)
-                    .unwrap_or(false),
+                is_deleted: peer_block.as_ref().map(|b| b.is_deleted).unwrap_or(false),
             };
             let dkey = blocked.storage_key();
             let dvalue = serde_json::to_vec(&blocked).map_err(|_| IronCoreError::Internal)?;
@@ -628,10 +626,7 @@ mod tests {
 
         // Block only device_a (not the whole peer)
         manager
-            .block(
-                BlockedIdentity::new(peer_id.to_string())
-                    .with_device_id(device_a.to_string()),
-            )
+            .block(BlockedIdentity::new(peer_id.to_string()).with_device_id(device_a.to_string()))
             .unwrap();
 
         // device_a is blocked, device_b and peer are NOT blocked
@@ -734,10 +729,7 @@ mod tests {
 
         // Step 2: User blocks the contact
         manager
-            .block(
-                BlockedIdentity::new(peer_id.to_string())
-                    .with_reason("spam".to_string()),
-            )
+            .block(BlockedIdentity::new(peer_id.to_string()).with_reason("spam".to_string()))
             .unwrap();
 
         // All known devices are blocked
@@ -771,10 +763,7 @@ mod tests {
 
         // Block only device_a (not the whole peer)
         manager
-            .block(
-                BlockedIdentity::new(peer_id.to_string())
-                    .with_device_id(device_a.to_string()),
-            )
+            .block(BlockedIdentity::new(peer_id.to_string()).with_device_id(device_a.to_string()))
             .unwrap();
 
         // device_a is blocked, device_b and peer are NOT blocked

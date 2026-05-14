@@ -3268,7 +3268,10 @@ async fn cmd_swarm_stats() -> Result<()> {
         match api::get_swarm_stats_via_api().await {
             Ok(stats) => {
                 if stats.is_empty() {
-                    println!("{}", "No active peer connections in the swarm stats.".yellow());
+                    println!(
+                        "{}",
+                        "No active peer connections in the swarm stats.".yellow()
+                    );
                     println!();
                     println!("  Start the mesh node with: {}", "scm relay".dimmed());
                     println!(
@@ -3280,7 +3283,10 @@ async fn cmd_swarm_stats() -> Result<()> {
                         "{:<52} {:<12} {:<10} {:<14} {:<20}",
                         "Peer ID", "State", "Latency", "Sent/Failed", "Bytes Sent/Recv"
                     );
-                    println!("{:-<52} {:-<12} {:-<10} {:-<14} {:-<20}", "", "", "", "", "");
+                    println!(
+                        "{:-<52} {:-<12} {:-<10} {:-<14} {:-<20}",
+                        "", "", "", "", ""
+                    );
 
                     for peer in &stats {
                         let state_colored = match peer.state.as_str() {
@@ -3290,8 +3296,10 @@ async fn cmd_swarm_stats() -> Result<()> {
                             _ => peer.state.normal(),
                         };
                         let latency = format!("{}ms", peer.avg_latency_ms);
-                        let sent_failed = format!("{}/{}", peer.messages_sent, peer.message_failures);
-                        let bytes_sent_recv = format!("{}/{}", peer.bytes_sent, peer.bytes_received);
+                        let sent_failed =
+                            format!("{}/{}", peer.messages_sent, peer.message_failures);
+                        let bytes_sent_recv =
+                            format!("{}/{}", peer.bytes_sent, peer.bytes_received);
 
                         println!(
                             "{:<52} {:<12} {:<10} {:<14} {:<20}",
@@ -3304,7 +3312,11 @@ async fn cmd_swarm_stats() -> Result<()> {
                     }
 
                     println!();
-                    println!("{} {} peer(s) in the swarm stats.", "ℹ".dimmed(), stats.len());
+                    println!(
+                        "{} {} peer(s) in the swarm stats.",
+                        "ℹ".dimmed(),
+                        stats.len()
+                    );
                 }
             }
             Err(e) => {
@@ -3333,7 +3345,10 @@ async fn cmd_swarm_stats() -> Result<()> {
         let stats = core.get_all_connection_stats();
 
         if stats.is_empty() {
-            println!("{}", "No active peer connections in the swarm stats.".yellow());
+            println!(
+                "{}",
+                "No active peer connections in the swarm stats.".yellow()
+            );
             println!();
             println!("  Start the mesh node with: {}", "scm relay".dimmed());
             println!(
@@ -3345,14 +3360,23 @@ async fn cmd_swarm_stats() -> Result<()> {
                 "{:<52} {:<12} {:<10} {:<14} {:<20}",
                 "Peer ID", "State", "Latency", "Sent/Failed", "Bytes Sent/Recv"
             );
-            println!("{:-<52} {:-<12} {:-<10} {:-<14} {:-<20}", "", "", "", "", "");
+            println!(
+                "{:-<52} {:-<12} {:-<10} {:-<14} {:-<20}",
+                "", "", "", "", ""
+            );
 
             for (peer_id, stat) in &stats {
                 let state_str = match stat.state {
-                    scmessenger_core::transport::health::ConnectionState::Connecting => "Connecting",
+                    scmessenger_core::transport::health::ConnectionState::Connecting => {
+                        "Connecting"
+                    }
                     scmessenger_core::transport::health::ConnectionState::Connected => "Connected",
-                    scmessenger_core::transport::health::ConnectionState::Disconnecting => "Disconnecting",
-                    scmessenger_core::transport::health::ConnectionState::Disconnected => "Disconnected",
+                    scmessenger_core::transport::health::ConnectionState::Disconnecting => {
+                        "Disconnecting"
+                    }
+                    scmessenger_core::transport::health::ConnectionState::Disconnected => {
+                        "Disconnected"
+                    }
                     scmessenger_core::transport::health::ConnectionState::Failed => "Failed",
                 };
                 let state_colored = match state_str {
@@ -3376,7 +3400,11 @@ async fn cmd_swarm_stats() -> Result<()> {
             }
 
             println!();
-            println!("{} {} peer(s) in the swarm stats.", "ℹ".dimmed(), stats.len());
+            println!(
+                "{} {} peer(s) in the swarm stats.",
+                "ℹ".dimmed(),
+                stats.len()
+            );
         }
     }
 

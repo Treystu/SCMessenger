@@ -168,7 +168,10 @@ pub async fn run_ble_central_ingress(
             tracing::warn!("BLE start_scan failed: {}", e);
             return;
         }
-        tracing::info!("BLE scan active (wide open, manually filtering to SCM service {})", svc);
+        tracing::info!(
+            "BLE scan active (wide open, manually filtering to SCM service {})",
+            svc
+        );
 
         let mut events = match adapter.events().await {
             Ok(e) => e,
@@ -182,7 +185,7 @@ pub async fn run_ble_central_ingress(
 
         while let Some(evt) = events.next().await {
             tracing::debug!("BLE central event received: {:?}", evt);
-            
+
             // Extract the peripheral ID from ANY variant that contains it
             let id = match &evt {
                 CentralEvent::DeviceDiscovered(id) => id.clone(),
@@ -225,10 +228,14 @@ pub async fn run_ble_central_ingress(
                 // 1. Quick check if events gave us immediate evidence
                 match &evt {
                     CentralEvent::ServicesAdvertisement { services, .. } => {
-                        if services.contains(&target_svc) { is_match = true; }
+                        if services.contains(&target_svc) {
+                            is_match = true;
+                        }
                     }
                     CentralEvent::ServiceDataAdvertisement { service_data, .. } => {
-                        if service_data.contains_key(&target_svc) { is_match = true; }
+                        if service_data.contains_key(&target_svc) {
+                            is_match = true;
+                        }
                     }
                     _ => {}
                 }
@@ -248,7 +255,7 @@ pub async fn run_ble_central_ingress(
                     tracing::info!("BLE found matching peripheral: {}", key);
                     subscribe_ingress_for_peripheral(peripheral, core_c, ui_c).await;
                 }
-                
+
                 // Release tracking lock after we are finished so it can be rediscovered later if disconnected
                 track.lock().await.remove(&key);
             });

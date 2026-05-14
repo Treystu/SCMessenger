@@ -196,4 +196,3 @@ proptest! {
         prop_assert_eq!(converted.to_bytes().len(), 32);
     }
 }
-

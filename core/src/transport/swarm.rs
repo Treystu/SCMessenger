@@ -3756,6 +3756,7 @@ pub async fn start_swarm_with_config(
         use futures::{FutureExt, StreamExt};
         use libp2p::core::{muxing::StreamMuxerBox, upgrade::Version};
 
+        let _ = routing_engine_handle;
         let local_peer_id = keypair.public().to_peer_id();
 
         // Browser transport: websocket-websys + Noise + Yamux, then relay client support.

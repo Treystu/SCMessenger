@@ -32,12 +32,7 @@ const MIN_DATA_LEN: usize = NONCE_LEN + TAG_LEN;
 /// Derive a 32-byte key from passphrase using PBKDF2-HMAC-SHA256 and a provided salt.
 fn derive_key(passphrase: &str, salt: &[u8]) -> Result<[u8; KEY_LEN], IronCoreError> {
     let mut key = [0u8; KEY_LEN];
-    pbkdf2_hmac::<Sha256>(
-        passphrase.as_bytes(),
-        salt,
-        PBKDF2_ITERATIONS,
-        &mut key,
-    );
+    pbkdf2_hmac::<Sha256>(passphrase.as_bytes(), salt, PBKDF2_ITERATIONS, &mut key);
 
     Ok(key)
 }
@@ -137,7 +132,8 @@ pub fn decrypt_backup(encrypted_hex: &str, passphrase: &str) -> Result<String, I
         let salt = blake3::hash(passphrase.as_bytes());
         let key = derive_key(passphrase, salt.as_bytes())?;
 
-        let cipher = XChaCha20Poly1305::new_from_slice(&key).map_err(|_| IronCoreError::CryptoError)?;
+        let cipher =
+            XChaCha20Poly1305::new_from_slice(&key).map_err(|_| IronCoreError::CryptoError)?;
         let nonce = XNonce::from_slice(nonce_bytes);
 
         let plaintext = cipher

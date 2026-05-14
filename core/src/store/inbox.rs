@@ -5,10 +5,10 @@
 use crate::store::backend::StorageBackend;
 use crate::store::storage::StorageManager;
 
+use rustc_hash::FxHashSet;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
-use rustc_hash::FxHashSet;
 
 /// Maximum tracked message IDs (for deduplication)
 const MAX_SEEN_IDS: usize = 50_000;

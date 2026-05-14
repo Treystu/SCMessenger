@@ -1378,9 +1378,24 @@ impl IronCore {
     pub fn get_disk_stats(&self) -> JsValue {
         let stats = self.inner.get_disk_stats();
         let obj = js_sys::Object::new();
-        js_sys::Reflect::set(&obj, &js_sys::JsString::from("totalBytes"), &js_sys::Number::from(stats.total_bytes as f64)).ok();
-        js_sys::Reflect::set(&obj, &js_sys::JsString::from("freeBytes"), &js_sys::Number::from(stats.free_bytes as f64)).ok();
-        js_sys::Reflect::set(&obj, &js_sys::JsString::from("appDataBytes"), &js_sys::Number::from(stats.app_data_bytes as f64)).ok();
+        js_sys::Reflect::set(
+            &obj,
+            &js_sys::JsString::from("totalBytes"),
+            &js_sys::Number::from(stats.total_bytes as f64),
+        )
+        .ok();
+        js_sys::Reflect::set(
+            &obj,
+            &js_sys::JsString::from("freeBytes"),
+            &js_sys::Number::from(stats.free_bytes as f64),
+        )
+        .ok();
+        js_sys::Reflect::set(
+            &obj,
+            &js_sys::JsString::from("appDataBytes"),
+            &js_sys::Number::from(stats.app_data_bytes as f64),
+        )
+        .ok();
         obj.into()
     }
 

@@ -125,7 +125,11 @@ impl BlockedManager {
     }
 
     /// Check if a specific device of a peer is blocked.
-    pub fn is_device_blocked(&self, peer_id: String, device_id: String) -> Result<bool, IronCoreError> {
+    pub fn is_device_blocked(
+        &self,
+        peer_id: String,
+        device_id: String,
+    ) -> Result<bool, IronCoreError> {
         self.inner.is_device_blocked(&peer_id, &device_id)
     }
 }

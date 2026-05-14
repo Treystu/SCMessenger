@@ -107,7 +107,11 @@ impl MultiPathDelivery {
             .get(hint)
             .map(|paths| paths.iter().filter(|p| p.active).collect())
             .unwrap_or_default();
-        result.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
+        result.sort_by(|a, b| {
+            b.score
+                .partial_cmp(&a.score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
         result
     }
 

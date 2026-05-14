@@ -89,10 +89,7 @@ impl StorageManager {
     }
 
     pub fn update_disk_stats(&self, total: u64, free: u64) {
-        let app_data = self
-            .backend
-            .approximate_size()
-            .unwrap_or(0);
+        let app_data = self.backend.approximate_size().unwrap_or(0);
 
         let mut stats = self.stats.write();
         stats.total_bytes = total;
@@ -223,7 +220,10 @@ mod tests {
         let stats = mgr.get_disk_stats();
         assert_eq!(stats.total_bytes, 1_000_000);
         assert_eq!(stats.free_bytes, 500_000);
-        assert!(stats.app_data_bytes > 0, "app_data_bytes should reflect backend store size");
+        assert!(
+            stats.app_data_bytes > 0,
+            "app_data_bytes should reflect backend store size"
+        );
     }
 
     #[test]

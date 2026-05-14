@@ -579,31 +579,39 @@ async fn handle_get_swarm_stats(
     State(ctx): State<Arc<ApiContext>>,
 ) -> Result<AxumJson<SwarmStatsResponse>, (StatusCode, String)> {
     let raw_stats = ctx.core.get_all_connection_stats();
-    let stats = raw_stats.into_iter().map(|(peer_id, stat)| {
-        let state_str = match stat.state {
-            scmessenger_core::transport::health::ConnectionState::Connecting => "Connecting",
-            scmessenger_core::transport::health::ConnectionState::Connected => "Connected",
-            scmessenger_core::transport::health::ConnectionState::Disconnecting => "Disconnecting",
-            scmessenger_core::transport::health::ConnectionState::Disconnected => "Disconnected",
-            scmessenger_core::transport::health::ConnectionState::Failed => "Failed",
-        }.to_string();
+    let stats = raw_stats
+        .into_iter()
+        .map(|(peer_id, stat)| {
+            let state_str = match stat.state {
+                scmessenger_core::transport::health::ConnectionState::Connecting => "Connecting",
+                scmessenger_core::transport::health::ConnectionState::Connected => "Connected",
+                scmessenger_core::transport::health::ConnectionState::Disconnecting => {
+                    "Disconnecting"
+                }
+                scmessenger_core::transport::health::ConnectionState::Disconnected => {
+                    "Disconnected"
+                }
+                scmessenger_core::transport::health::ConnectionState::Failed => "Failed",
+            }
+            .to_string();
 
-        ApiConnectionStats {
-            peer_id: peer_id.to_string(),
-            state: state_str,
-            duration_ms: stat.duration_ms,
-            messages_sent: stat.messages_sent,
-            message_failures: stat.message_failures,
-            bytes_sent: stat.bytes_sent,
-            bytes_received: stat.bytes_received,
-            avg_latency_ms: stat.avg_latency_ms,
-            last_activity: stat.last_activity,
-            connection_attempts: stat.connection_attempts,
-            successful_connections: stat.successful_connections,
-            connection_failures: stat.connection_failures,
-            current_address: stat.current_address.map(|addr| addr.to_string()),
-        }
-    }).collect();
+            ApiConnectionStats {
+                peer_id: peer_id.to_string(),
+                state: state_str,
+                duration_ms: stat.duration_ms,
+                messages_sent: stat.messages_sent,
+                message_failures: stat.message_failures,
+                bytes_sent: stat.bytes_sent,
+                bytes_received: stat.bytes_received,
+                avg_latency_ms: stat.avg_latency_ms,
+                last_activity: stat.last_activity,
+                connection_attempts: stat.connection_attempts,
+                successful_connections: stat.successful_connections,
+                connection_failures: stat.connection_failures,
+                current_address: stat.current_address.map(|addr| addr.to_string()),
+            }
+        })
+        .collect();
 
     Ok(AxumJson(SwarmStatsResponse { stats }))
 }

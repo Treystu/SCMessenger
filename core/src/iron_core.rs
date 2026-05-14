@@ -225,7 +225,8 @@ impl IronCore {
         let blocked_for_auto_block = CoreBlockedManager::new(backend.clone());
         let inbox = Inbox::new();
         let outbox = Outbox::new();
-        let storage_manager = StorageManager::new(backend.clone(), history_manager.clone(), log_mgr.clone());
+        let storage_manager =
+            StorageManager::new(backend.clone(), history_manager.clone(), log_mgr.clone());
         let spam_detector =
             SpamDetectionEngine::new_heuristics_only(SpamDetectionConfig::default());
         let abuse_mgr = EnhancedAbuseReputationManager::new(1000, spam_detector);
@@ -302,7 +303,8 @@ impl IronCore {
         let blocked_for_auto_block = CoreBlockedManager::new(backend.clone());
         let inbox = Inbox::new();
         let outbox = Outbox::new();
-        let storage_manager = StorageManager::new(backend.clone(), history_manager.clone(), log_mgr.clone());
+        let storage_manager =
+            StorageManager::new(backend.clone(), history_manager.clone(), log_mgr.clone());
         let spam_detector =
             SpamDetectionEngine::new_heuristics_only(SpamDetectionConfig::default());
         let abuse_mgr = EnhancedAbuseReputationManager::new(1000, spam_detector);
@@ -383,7 +385,8 @@ impl IronCore {
         let blocked_for_auto_block = CoreBlockedManager::new(backend.clone());
         let inbox = Inbox::new();
         let outbox = Outbox::new();
-        let storage_manager = StorageManager::new(backend.clone(), history_manager.clone(), log_mgr.clone());
+        let storage_manager =
+            StorageManager::new(backend.clone(), history_manager.clone(), log_mgr.clone());
         let spam_detector =
             SpamDetectionEngine::new_heuristics_only(SpamDetectionConfig::default());
         let abuse_mgr = EnhancedAbuseReputationManager::new(1000, spam_detector);
@@ -498,12 +501,16 @@ impl IronCore {
             let mut engine = self.drift_engine.write();
             *engine = Some(RelayEngine::new(&pk_bytes, RelayConfig::default()));
 
-            // Initialize routing engine with identity-derived peer id and hint
+            // Initialize routing engine with identity-derived peer id and hint.
+            // If the swarm has already seeded the engine (via start_swarm_with_config),
+            // keep it — the shared engine is already in use for message dispatch.
             let hint = blake3::hash(&pk_bytes).as_bytes()[0..4]
                 .try_into()
                 .unwrap_or([0u8; 4]);
             let mut routing = self.routing_engine.write();
-            *routing = Some(OptimizedRoutingEngine::new(pk_bytes, hint));
+            if routing.is_none() {
+                *routing = Some(OptimizedRoutingEngine::new(pk_bytes, hint));
+            }
 
             // Initialize relay bootstrap manager
             #[cfg(not(target_arch = "wasm32"))]
@@ -589,7 +596,9 @@ impl IronCore {
             let relays = self.swarm_get_best_relays(3);
             if !relays.is_empty() {
                 if let Ok(relays_json) = serde_json::to_string(&relays) {
-                    if let Ok(onion_bytes) = self.prepare_onion_message(envelope_data.clone(), relays_json) {
+                    if let Ok(onion_bytes) =
+                        self.prepare_onion_message(envelope_data.clone(), relays_json)
+                    {
                         envelope_data = onion_bytes;
                     }
                 }
@@ -716,10 +725,7 @@ impl IronCore {
     }
 
     /// Get all known device IDs registered for a blocked peer.
-    pub fn get_blocked_peer_devices(
-        &self,
-        peer_id: String,
-    ) -> Result<Vec<String>, IronCoreError> {
+    pub fn get_blocked_peer_devices(&self, peer_id: String) -> Result<Vec<String>, IronCoreError> {
         self.blocked_manager.read().get_known_devices(&peer_id)
     }
 
@@ -993,7 +999,13 @@ impl IronCore {
         reason: Option<String>,
     ) -> Result<(), IronCoreError> {
         // Register known device IDs from the contact before blocking
-        if let Some(contact) = self.contact_manager.read().get(peer_id.clone()).ok().flatten() {
+        if let Some(contact) = self
+            .contact_manager
+            .read()
+            .get(peer_id.clone())
+            .ok()
+            .flatten()
+        {
             if let Some(ref did) = contact.last_known_device_id {
                 let _ = self
                     .blocked_manager
@@ -1002,7 +1014,10 @@ impl IronCore {
             }
         }
         if let Some(ref did) = device_id {
-            let _ = self.blocked_manager.write().register_device_id(&peer_id, did);
+            let _ = self
+                .blocked_manager
+                .write()
+                .register_device_id(&peer_id, did);
         }
 
         let blocked = crate::store::blocked::BlockedIdentity::new(peer_id);
@@ -1044,7 +1059,13 @@ impl IronCore {
         reason: Option<String>,
     ) -> Result<(), IronCoreError> {
         // Register known devices before block_and_delete so they get auto-blocked
-        if let Some(contact) = self.contact_manager.read().get(peer_id.clone()).ok().flatten() {
+        if let Some(contact) = self
+            .contact_manager
+            .read()
+            .get(peer_id.clone())
+            .ok()
+            .flatten()
+        {
             if let Some(ref did) = contact.last_known_device_id {
                 let _ = self
                     .blocked_manager
@@ -3131,13 +3152,25 @@ mod tests {
         assert_eq!(logs.len(), 2, "should have 2 unique log entries");
 
         // Find each entry and verify delta counts
-        let first = logs.iter().find(|l| l["content"] == "first log entry").unwrap();
-        assert_eq!(first["deltas"].as_array().unwrap().len(), 2,
-            "first log entry should have 2 deltas (recorded twice)");
+        let first = logs
+            .iter()
+            .find(|l| l["content"] == "first log entry")
+            .unwrap();
+        assert_eq!(
+            first["deltas"].as_array().unwrap().len(),
+            2,
+            "first log entry should have 2 deltas (recorded twice)"
+        );
 
-        let second = logs.iter().find(|l| l["content"] == "second log entry").unwrap();
-        assert_eq!(second["deltas"].as_array().unwrap().len(), 1,
-            "second log entry should have 1 delta");
+        let second = logs
+            .iter()
+            .find(|l| l["content"] == "second log entry")
+            .unwrap();
+        assert_eq!(
+            second["deltas"].as_array().unwrap().len(),
+            1,
+            "second log entry should have 1 delta"
+        );
     }
 
     #[test]
@@ -3163,8 +3196,10 @@ mod tests {
         let stats = core.get_disk_stats();
         assert_eq!(stats.total_bytes, 10_000_000);
         assert_eq!(stats.free_bytes, 5_000_000);
-        assert!(stats.app_data_bytes > 0,
-            "app_data_bytes should be > 0 after recording data");
+        assert!(
+            stats.app_data_bytes > 0,
+            "app_data_bytes should be > 0 after recording data"
+        );
     }
 
     #[test]
