@@ -156,6 +156,12 @@ class NetworkDetector @Inject constructor(
             return
         }
 
+        // Log when a rapid transition is suppressed by debounce
+        if (pendingNetworkType != null && pendingNetworkType != type) {
+            Timber.d("Network debounce: suppressing rapid transition from %s to %s (pending: %s)",
+                pendingNetworkType, type, type)
+        }
+
         // Debounce: only commit after the network type has been stable for networkStabilityMs
         pendingNetworkType = type
         debounceJob?.cancel()

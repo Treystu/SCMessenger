@@ -179,12 +179,35 @@ YOUR JOB:
 CRITICAL: You MANAGE the queue. Do NOT write application code (.rs, .kt, .swift, .ts). Exit immediately after writing your status file.
 '@
 
-    $job = Start-Job -Name "Orchestrator" -ArgumentList $mandate, $Script:BaseDir, $Script:OrchModel -ScriptBlock {
-        param($Mandate, $BaseDir, $Model)
-        Set-Location $BaseDir
-        & ollama launch claude --model $Model -- --dangerously-skip-permissions --print -p $Mandate *>&1 | Out-Null
+    $orchWorkDir = Join-Path $Script:BaseDir ".claude\agents\orchestrator"
+    $null = New-Item -ItemType Directory -Path $orchWorkDir -Force
+    $promptFile = Join-Path $orchWorkDir "prompt.txt"
+    $logFile    = Join-Path $orchWorkDir "agent.log"
+    $stderrFile = Join-Path $orchWorkDir "stderr.log"
+    $statusFile = Join-Path $Script:BaseDir "HANDOFF\ORCHESTRATOR_STATUS.md"
+
+    # Remove stale status from prior runs so we can detect fresh output
+    if (Test-Path $statusFile) {
+        Remove-Item $statusFile -Force -ErrorAction SilentlyContinue
     }
-    Write-HeartbeatLog "INFO" "Orchestrator job started"
+
+    # Write mandate to file and pipe via stdin — avoids PowerShell argument-length /
+    # character-escaping corruption that breaks -p (matches launch_agent.sh pattern).
+    try {
+        $mandate | Out-File -LiteralPath $promptFile -Encoding utf8 -ErrorAction Stop
+    } catch {
+        Write-HeartbeatLog "ERROR" "Failed to write orchestrator prompt file: $($_.Exception.Message)"
+        return $false
+    }
+
+    $job = Start-Job -Name "Orchestrator" -ArgumentList $promptFile, $logFile, $stderrFile, $Script:BaseDir, $Script:OrchModel -ScriptBlock {
+        param($PromptFile, $LogFile, $StderrFile, $BaseDir, $Model)
+        Set-Location $BaseDir
+        Get-Content -Raw -LiteralPath $PromptFile |
+            & ollama launch claude --model $Model -- --dangerously-skip-permissions --print `
+                >> $LogFile 2>> $StderrFile
+    }
+    Write-HeartbeatLog "INFO" "Orchestrator job started (prompt=$(($mandate.Length)) chars, log=$logFile)"
     return $true
 }
 
@@ -215,12 +238,29 @@ function Invoke-HeartbeatPulse {
         if ($j.Name -eq "Orchestrator") {
             $Script:OrchCompletedCurrentCycle = $true
             Write-HeartbeatLog "INFO" "Orchestrator job completed"
+
+            # Dump stderr tail for diagnostics (no longer hidden by Out-Null)
+            $stderrFile = Join-Path $Script:BaseDir ".claude\agents\orchestrator\stderr.log"
+            if ((Test-Path $stderrFile) -and ((Get-Item $stderrFile).Length -gt 0)) {
+                $stderrTail = Get-Content -LiteralPath $stderrFile -Tail 5 -ErrorAction SilentlyContinue
+                if ($stderrTail) {
+                    Write-HeartbeatLog "DEBUG" "Orch stderr (last 5 lines):"
+                    foreach ($line in $stderrTail) { Write-HeartbeatLog "DEBUG" "  | $line" }
+                }
+            }
+
             $orchStatusFile = Join-Path $Script:BaseDir "HANDOFF\ORCHESTRATOR_STATUS.md"
             if (Test-Path $orchStatusFile) {
                 $statusContent = Get-Content $orchStatusFile -Raw -ErrorAction SilentlyContinue
+                Write-HeartbeatLog "INFO" "Orchestrator status written:"
+                foreach ($line in ($statusContent -split "`n" | Where-Object { $_ -match '\S' })) {
+                    Write-HeartbeatLog "INFO" "  $($line.Trim())"
+                }
                 if ($statusContent -match "STATUS=ALL_DONE") {
                     Write-HeartbeatLog "INFO" "Orchestrator reports ALL_DONE - swarm may be complete"
                 }
+            } else {
+                Write-HeartbeatLog "WARN" "Orchestrator completed but did NOT write ORCHESTRATOR_STATUS.md"
             }
         }
         Receive-Job -Job $j 2>$null | Out-Null

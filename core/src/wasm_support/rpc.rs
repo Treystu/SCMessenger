@@ -85,7 +85,9 @@ pub enum ClientIntent {
         #[serde(default)]
         limit: Option<usize>,
     },
+    ClearHistory {},
     // ── Blocking ──
+    ListBlocked {},
     BlockPeer {
         peer_id: String,
         #[serde(default)]
@@ -256,7 +258,9 @@ pub fn parse_intent(req: &JsonRpcRequest) -> Result<ClientIntent, JsonRpcErrorBo
                 .map(|n| n as usize);
             Ok(ClientIntent::GetConversation { peer_id, limit })
         }
+        "clear_history" => Ok(ClientIntent::ClearHistory {}),
         // ── Blocking ──
+        "list_blocked" => Ok(ClientIntent::ListBlocked {}),
         "block_peer" => {
             let peer_id = req
                 .params

@@ -3745,6 +3745,58 @@ open class MeshRepository(private val context: Context) {
         }
     }
 
+    /**
+     * Sync nickname from DataStore fallback to Rust Core.
+     *
+     * Called when Rust Core becomes available and we need to push any locally-cached
+     * nickname that was stored before the Rust Core was initialized.
+     *
+     * This is the P1_ANDROID_020 fix: ensures federated nickname in the mesh
+     * doesn't remain stale when DataStore has a cached value.
+     *
+     * The nickname is stored in the DataStore file "app_preferences" under the key "identity_nickname".
+     * We read this directly from the SharedPreferences backup file that DataStore creates.
+     */
+    fun syncNicknameFromDatastore() {
+        // Read the nickname from the DataStore backup file
+        // DataStore stores preferences in a protobuf file, but also maintains
+        // a SharedPreferences backup file at "app_preferences.xml"
+        val prefs = context.getSharedPreferences("app_preferences", Context.MODE_PRIVATE)
+        val cachedNickname = prefs.getString("identity_nickname", null)
+
+        if (cachedNickname.isNullOrBlank()) {
+            Timber.d("syncNicknameFromDatastore: No nickname in DataStore")
+            return
+        }
+
+        // Check if IronCore is available
+        val core = ironCore ?: run {
+            Timber.d("syncNicknameFromDatastore: IronCore not yet initialized, skipping")
+            return
+        }
+
+        // Get current identity info to check if we already have this nickname
+        val currentInfo = core.getIdentityInfo()
+        if (currentInfo?.nickname == cachedNickname) {
+            Timber.d("syncNicknameFromDatastore: Nickname already synced: %s", cachedNickname)
+            return
+        }
+
+        // Push the cached nickname to Rust Core
+        Timber.i("syncNicknameFromDatastore: Pushing DataStore nickname to IronCore: %s", cachedNickname)
+        try {
+            core.setNickname(cachedNickname.trim())
+            Timber.i("syncNicknameFromDatastore: Successfully pushed nickname to IronCore")
+            // Update the cache as well
+            val info = core.getIdentityInfo()
+            if (info != null && info.initialized) {
+                cacheIdentityFields(info)
+            }
+        } catch (e: Exception) {
+            Timber.e(e, "syncNicknameFromDatastore: Failed to push nickname to IronCore")
+        }
+    }
+
     fun setLocalNickname(peerId: String, nickname: String?) {
         try {
             contactManager?.setLocalNickname(peerId, nickname)

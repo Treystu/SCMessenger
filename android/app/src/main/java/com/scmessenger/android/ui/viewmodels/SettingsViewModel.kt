@@ -196,6 +196,9 @@ class SettingsViewModel @Inject constructor(
                     lastServiceState != uniffi.api.ServiceState.RUNNING) {
                     Timber.d("SettingsViewModel: service -> RUNNING, force-refreshing identity")
                     loadIdentityInternal(forceRefresh = true)
+                    // P1_ANDROID_020: Sync nickname from DataStore fallback to Rust Core
+                    Timber.d("SettingsViewModel: syncing nickname from DataStore fallback to Rust Core")
+                    meshRepository.syncNicknameFromDatastore()
                 }
                 lastServiceState = state
             }
