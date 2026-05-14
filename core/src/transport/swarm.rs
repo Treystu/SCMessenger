@@ -703,7 +703,10 @@ fn routing_decision_to_ranked_routes(
     let mut routes = Vec::new();
 
     match &decision.primary {
-        NextHop::Direct { peer_id: _, transport } => {
+        NextHop::Direct {
+            peer_id: _,
+            transport,
+        } => {
             // Direct route -- use target peer directly
             let mut score = transport_quality_score(decision.decided_by, decision.confidence);
             // Factor transport type into score: BLE < WiFi < TCP < QUIC
@@ -722,7 +725,11 @@ fn routing_decision_to_ranked_routes(
                 latest_success_order: 0,
             });
         }
-        NextHop::Gateway { gateway_id, transport, hops_remaining } => {
+        NextHop::Gateway {
+            gateway_id,
+            transport,
+            hops_remaining,
+        } => {
             // Route via gateway
             let gateway_peer = PeerId::from_bytes(gateway_id).ok();
             if let Some(gw) = gateway_peer {
@@ -746,7 +753,10 @@ fn routing_decision_to_ranked_routes(
                 });
             }
         }
-        NextHop::GlobalRoute { next_hop_id, total_hops } => {
+        NextHop::GlobalRoute {
+            next_hop_id,
+            total_hops,
+        } => {
             // Route via global route
             let next_hop = PeerId::from_bytes(next_hop_id).ok();
             if let Some(hop) = next_hop {
@@ -786,7 +796,8 @@ fn routing_decision_to_ranked_routes(
             NextHop::Direct { peer_id, transport } => {
                 let alt_peer = PeerId::from_bytes(peer_id).ok();
                 if let Some(p) = alt_peer {
-                    let mut score = transport_quality_score(decision.decided_by, decision.confidence) * 0.9;
+                    let mut score =
+                        transport_quality_score(decision.decided_by, decision.confidence) * 0.9;
                     let transport_bonus = match transport {
                         RoutingTransportType::QUIC => 0.15,
                         RoutingTransportType::TCP => 0.10,
@@ -803,10 +814,15 @@ fn routing_decision_to_ranked_routes(
                     });
                 }
             }
-            NextHop::Gateway { gateway_id, transport, hops_remaining } => {
+            NextHop::Gateway {
+                gateway_id,
+                transport,
+                hops_remaining,
+            } => {
                 let gw = PeerId::from_bytes(gateway_id).ok();
                 if let Some(g) = gw {
-                    let mut score = transport_quality_score(decision.decided_by, decision.confidence) * 0.9;
+                    let mut score =
+                        transport_quality_score(decision.decided_by, decision.confidence) * 0.9;
                     let hop_penalty = (*hops_remaining as f64) * 0.05;
                     score = (score - hop_penalty).max(0.1);
                     let transport_bonus = match transport {
@@ -825,10 +841,14 @@ fn routing_decision_to_ranked_routes(
                     });
                 }
             }
-            NextHop::GlobalRoute { next_hop_id, total_hops } => {
+            NextHop::GlobalRoute {
+                next_hop_id,
+                total_hops,
+            } => {
                 let next_hop = PeerId::from_bytes(next_hop_id).ok();
                 if let Some(hop) = next_hop {
-                    let base_score = transport_quality_score(decision.decided_by, decision.confidence) * 0.9;
+                    let base_score =
+                        transport_quality_score(decision.decided_by, decision.confidence) * 0.9;
                     let hop_penalty = (*total_hops as f64) * 0.05;
                     let score = (base_score - hop_penalty).max(0.1);
                     routes.push(RankedRoute {

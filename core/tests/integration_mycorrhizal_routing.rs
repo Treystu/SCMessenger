@@ -31,7 +31,9 @@ fn make_message_id(id: u8) -> [u8; 16] {
 /// Helper: compute the hint for a peer ID using the same derivation
 /// the routing engine uses (blake3 hash, first 4 bytes).
 fn peer_hint(peer_id: &PeerId) -> [u8; 4] {
-    blake3::hash(peer_id).as_bytes()[0..4].try_into().unwrap_or([0u8; 4])
+    blake3::hash(peer_id).as_bytes()[0..4]
+        .try_into()
+        .unwrap_or([0u8; 4])
 }
 
 /// Helper: register a peer in the local cell and set its reachable hints
@@ -42,7 +44,10 @@ fn register_peer_with_hint(
     transport: TransportType,
     hints: Vec<[u8; 4]>,
 ) {
-    engine.base_engine_mut().local_cell_mut().peer_seen(peer_id, transport);
+    engine
+        .base_engine_mut()
+        .local_cell_mut()
+        .peer_seen(peer_id, transport);
     engine
         .base_engine_mut()
         .local_cell_mut()
@@ -269,10 +274,12 @@ fn test_gateway_routing_decision() {
         avg_reliability: 0.9,
         timestamp: 1000,
     };
-    engine
-        .base_engine_mut()
-        .neighborhood_mut()
-        .update_gateway(gateway_id, cell_summary, 2, TransportType::TCP);
+    engine.base_engine_mut().neighborhood_mut().update_gateway(
+        gateway_id,
+        cell_summary,
+        2,
+        TransportType::TCP,
+    );
 
     let msg_id = make_message_id(1);
     let decision = engine.route_message_optimized(&target_hint, &msg_id, 50, 1000);
@@ -387,10 +394,7 @@ fn test_discovery_phase_advancement() {
 
     // Initially not in discovery
     assert!(!engine.is_discovery_in_progress());
-    assert_eq!(
-        engine.current_discovery_phase(),
-        DiscoveryPhase::LocalCache
-    );
+    assert_eq!(engine.current_discovery_phase(), DiscoveryPhase::LocalCache);
 
     // Start discovery by making a routing decision
     let target_hint = make_hint(42);

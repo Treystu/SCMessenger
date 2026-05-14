@@ -26,9 +26,17 @@ async fn test_two_node_address_reflection() {
     let (event_tx1, mut event_rx1) = mpsc::channel(256);
     let (event_tx2, mut _event_rx2) = mpsc::channel(256);
 
-    let _swarm1: SwarmHandle = start_swarm(keypair1, None, event_tx1, None, false, None, scmessenger_core::transport::default_routing_engine_handle())
-        .await
-        .expect("Failed to start swarm1");
+    let _swarm1: SwarmHandle = start_swarm(
+        keypair1,
+        None,
+        event_tx1,
+        None,
+        false,
+        None,
+        scmessenger_core::transport::default_routing_engine_handle(),
+    )
+    .await
+    .expect("Failed to start swarm1");
 
     tokio::time::sleep(Duration::from_millis(500)).await;
 
@@ -47,9 +55,17 @@ async fn test_two_node_address_reflection() {
     assert!(listen_addr.is_some(), "Node 1 should be listening");
     let node1_addr = listen_addr.unwrap();
 
-    let swarm2: SwarmHandle = start_swarm(keypair2, None, event_tx2, None, false, None, scmessenger_core::transport::default_routing_engine_handle())
-        .await
-        .expect("Failed to start swarm2");
+    let swarm2: SwarmHandle = start_swarm(
+        keypair2,
+        None,
+        event_tx2,
+        None,
+        false,
+        None,
+        scmessenger_core::transport::default_routing_engine_handle(),
+    )
+    .await
+    .expect("Failed to start swarm2");
 
     tokio::time::sleep(Duration::from_millis(500)).await;
 
@@ -164,21 +180,45 @@ async fn test_nat_traversal_with_live_swarms() {
     let (event_tx2, mut event_rx2) = mpsc::channel(256);
     let (event_tx3, mut _event_rx3) = mpsc::channel(256);
 
-    let _swarm1: SwarmHandle = start_swarm(keypair1.clone(), None, event_tx1, None, false, None, scmessenger_core::transport::default_routing_engine_handle())
-        .await
-        .expect("Failed to start swarm1");
+    let _swarm1: SwarmHandle = start_swarm(
+        keypair1.clone(),
+        None,
+        event_tx1,
+        None,
+        false,
+        None,
+        scmessenger_core::transport::default_routing_engine_handle(),
+    )
+    .await
+    .expect("Failed to start swarm1");
 
     tokio::time::sleep(Duration::from_millis(300)).await;
 
-    let _swarm2: SwarmHandle = start_swarm(keypair2.clone(), None, event_tx2, None, false, None, scmessenger_core::transport::default_routing_engine_handle())
-        .await
-        .expect("Failed to start swarm2");
+    let _swarm2: SwarmHandle = start_swarm(
+        keypair2.clone(),
+        None,
+        event_tx2,
+        None,
+        false,
+        None,
+        scmessenger_core::transport::default_routing_engine_handle(),
+    )
+    .await
+    .expect("Failed to start swarm2");
 
     tokio::time::sleep(Duration::from_millis(300)).await;
 
-    let swarm3: SwarmHandle = start_swarm(keypair3.clone(), None, event_tx3, None, false, None, scmessenger_core::transport::default_routing_engine_handle())
-        .await
-        .expect("Failed to start swarm3");
+    let swarm3: SwarmHandle = start_swarm(
+        keypair3.clone(),
+        None,
+        event_tx3,
+        None,
+        false,
+        None,
+        scmessenger_core::transport::default_routing_engine_handle(),
+    )
+    .await
+    .expect("Failed to start swarm3");
 
     tokio::time::sleep(Duration::from_millis(500)).await;
 
@@ -262,9 +302,17 @@ async fn test_multiple_address_reflections() {
     let (event_tx1, mut event_rx1) = mpsc::channel(256);
     let (event_tx2, mut _event_rx2) = mpsc::channel(256);
 
-    let _swarm1: SwarmHandle = start_swarm(keypair1, None, event_tx1, None, false, None, scmessenger_core::transport::default_routing_engine_handle())
-        .await
-        .expect("Failed to start swarm1");
+    let _swarm1: SwarmHandle = start_swarm(
+        keypair1,
+        None,
+        event_tx1,
+        None,
+        false,
+        None,
+        scmessenger_core::transport::default_routing_engine_handle(),
+    )
+    .await
+    .expect("Failed to start swarm1");
 
     tokio::time::sleep(Duration::from_millis(500)).await;
 
@@ -282,9 +330,17 @@ async fn test_multiple_address_reflections() {
 
     assert!(addr1.is_some());
 
-    let swarm2: SwarmHandle = start_swarm(keypair2, None, event_tx2, None, false, None, scmessenger_core::transport::default_routing_engine_handle())
-        .await
-        .expect("Failed to start swarm2");
+    let swarm2: SwarmHandle = start_swarm(
+        keypair2,
+        None,
+        event_tx2,
+        None,
+        false,
+        None,
+        scmessenger_core::transport::default_routing_engine_handle(),
+    )
+    .await
+    .expect("Failed to start swarm2");
 
     tokio::time::sleep(Duration::from_millis(500)).await;
 
@@ -315,9 +371,17 @@ async fn test_address_reflection_timeout() {
     let (event_tx1, mut event_rx1) = mpsc::channel(256);
     let (event_tx2, mut _event_rx2) = mpsc::channel(256);
 
-    let swarm1: SwarmHandle = start_swarm(keypair1, None, event_tx1, None, false, None, scmessenger_core::transport::default_routing_engine_handle())
-        .await
-        .expect("Failed to start swarm1");
+    let swarm1: SwarmHandle = start_swarm(
+        keypair1,
+        None,
+        event_tx1,
+        None,
+        false,
+        None,
+        scmessenger_core::transport::default_routing_engine_handle(),
+    )
+    .await
+    .expect("Failed to start swarm1");
 
     tokio::time::sleep(Duration::from_millis(500)).await;
 
@@ -333,9 +397,17 @@ async fn test_address_reflection_timeout() {
     .await
     .ok();
 
-    let swarm2: SwarmHandle = start_swarm(keypair2, None, event_tx2, None, false, None, scmessenger_core::transport::default_routing_engine_handle())
-        .await
-        .expect("Failed to start swarm2");
+    let swarm2: SwarmHandle = start_swarm(
+        keypair2,
+        None,
+        event_tx2,
+        None,
+        false,
+        None,
+        scmessenger_core::transport::default_routing_engine_handle(),
+    )
+    .await
+    .expect("Failed to start swarm2");
 
     tokio::time::sleep(Duration::from_millis(500)).await;
 

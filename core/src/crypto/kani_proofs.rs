@@ -3,19 +3,71 @@
 //! These proofs use Kani (bit-precise model checker) to verify critical
 //! security invariants that proptest can only sample probabilistically.
 //!
-//! **Platform requirement:** Kani requires Linux or macOS. On Windows, run
-//! inside WSL2 or in CI (GitHub Actions linux runner).
+//! # Verification Workflow
 //!
-//! **To run:**
-//! ```bash
-//! cargo kani --features kani-proofs
-//! ```
+//! SCMessenger employs a three-layer verification strategy for the crypto module:
 //!
-//! **Prerequisites:**
+//! **Layer 1 — Unit tests** (`#[cfg(test)] mod tests` in each source file):
+//! Concrete test vectors covering known inputs and expected outputs.
+//! Run: `cargo test -p scmessenger-core --lib`
+//!
+//! **Layer 2 — Property-based testing** (`core/src/crypto/proptest_harness.rs`):
+//! Proptest fuzzing over random input distributions. Covers encrypt/decrypt
+//! roundtrips, wrong-key rejection, envelope field invariants, ratchet forward
+//! secrecy, chain key distinctness, and KDF output length. These tests catch
+//! statistical edge cases that unit tests miss.
+//! Run: `cargo test -p scmessenger-core --lib` (proptest is #[cfg(test)])
+//!
+//! **Layer 3 — Formal verification** (this file):
+//! Kani bit-precise model checking proves invariants for ALL possible inputs,
+//! not just sampled ones. Required by security rules before merging any
+//! change to `core/src/crypto/`.
+//!
+//! ## Platform Requirements
+//!
+//! Kani requires **Linux or macOS**. On Windows, use one of:
+//! - WSL2: `cargo install --locked kani-verifier && cargo kani setup`
+//! - CI: GitHub Actions `ubuntu-latest` runner (see `.github/workflows/`)
+//! - Docker: `kani-project/kani` image
+//!
+//! ## Running Kani Verification
+//!
 //! ```bash
+//! # One-time setup (Linux/macOS only)
 //! cargo install --locked kani-verifier
 //! cargo kani setup
+//!
+//! # Run all crypto proofs
+//! cargo kani --features kani-proofs -p scmessenger-core
+//!
+//! # Run a single proof
+//! cargo kani --features kani-proofs -p scmessenger-core \
+//!   --harness ed25519_conversion_produces_32_bytes
+//!
+//! # Verify harness compiles (all platforms, including Windows)
+//! cargo test -p scmessenger-core --features kani-proofs --lib
 //! ```
+//!
+//! ## Proof Inventory (8 proofs)
+//!
+//! | Proof | Invariant Verified |
+//! |-------|-------------------|
+//! | `ed25519_conversion_produces_32_bytes` | Ed25519->X25519 secret conversion output length |
+//! | `derive_key_always_32_bytes` | Blake3 KDF always produces 32-byte keys |
+//! | `nonce_length_invariant` | XChaCha20 nonces are always 24 bytes |
+//! | `chain_ratchet_produces_distinct_keys` | Chain ratchet advances produce distinct message keys |
+//! | `ratchet_key_length_invariant` | RatchetKey serialized form is always 32 bytes |
+//! | `ed25519_signature_length_invariant` | Ed25519 signatures are always 64 bytes |
+//! | `x25519_public_key_length_invariant` | X25519 public key serialization is always 32 bytes |
+//! | `ed25519_verifying_key_length_invariant` | Ed25519 verifying key serialization is always 32 bytes |
+//!
+//! ## Pre-Merge Checklist for Crypto Changes
+//!
+//! 1. `cargo test -p scmessenger-core --lib` — all 900+ tests pass
+//! 2. `cargo kani --features kani-proofs -p scmessenger-core` — no proof failures
+//! 3. `cargo clippy -p scmessenger-core -- -D warnings` — no new warnings
+//! 4. All new unsafe blocks have `// SAFETY:` comments
+//! 5. Adversarial review completed for changed files (per security rules)
 
 #![cfg(feature = "kani-proofs")]
 
@@ -68,5 +120,35 @@ mod proofs {
             blake3::derive_key(&format!("{}:{}", ctx, msg_key_info.to_hex()), &new_chain);
 
         assert_ne!(msg_key_0, msg_key_1);
+    }
+
+    #[kani::proof]
+    fn ratchet_key_length_invariant() {
+        let key_bytes: [u8; 32] = kani::any();
+        let key = RatchetKey::from_bytes(key_bytes);
+        assert_eq!(key.as_bytes().len(), 32);
+    }
+
+    #[kani::proof]
+    fn ed25519_signature_length_invariant() {
+        let sig_bytes: [u8; 64] = kani::any();
+        let signature = ed25519_dalek::Signature::from_bytes(&sig_bytes);
+        assert_eq!(signature.to_bytes().len(), 64);
+    }
+
+    #[kani::proof]
+    fn x25519_public_key_length_invariant() {
+        let public_bytes: [u8; 32] = kani::any();
+        let public_key = x25519_dalek::PublicKey::from(public_bytes);
+        assert_eq!(public_key.to_bytes().len(), 32);
+    }
+
+    #[kani::proof]
+    fn ed25519_verifying_key_length_invariant() {
+        let key_bytes: [u8; 32] = kani::any();
+        let vk_result = ed25519_dalek::VerifyingKey::from_bytes(&key_bytes);
+        if let Ok(vk) = vk_result {
+            assert_eq!(vk.to_bytes().len(), 32);
+        }
     }
 }

@@ -119,6 +119,9 @@ kani-proofs = []
 phase2_apis = []
 test-utils = []
 
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(kani)'] }
+
 [[bin]]
 name = "gen_kotlin"
 path = "src/bin/gen_kotlin.rs"

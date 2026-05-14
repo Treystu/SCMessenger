@@ -1,6 +1,6 @@
 {
   "version": "2.2",
-  "max_concurrent": 2,
+  "max_concurrent": 3,
   "default_agent": "orchestrator",
   "launch_mode": "cli_only",
   "agents": [

@@ -83,15 +83,31 @@ async fn offline_recipient_receives_after_reconnect_without_sender_resend() {
     let recipient_peer_id = recipient_key.public().to_peer_id();
 
     let (relay_tx, mut relay_rx) = mpsc::channel(256);
-    let relay_handle = start_swarm(relay_key, None, relay_tx, None, false, None, scmessenger_core::transport::default_routing_engine_handle())
-        .await
-        .expect("failed to start relay");
+    let relay_handle = start_swarm(
+        relay_key,
+        None,
+        relay_tx,
+        None,
+        false,
+        None,
+        scmessenger_core::transport::default_routing_engine_handle(),
+    )
+    .await
+    .expect("failed to start relay");
     let relay_addr = wait_for_tcp_listener(&mut relay_rx, Duration::from_secs(10)).await;
 
     let (sender_tx, mut sender_rx) = mpsc::channel(256);
-    let sender_handle = start_swarm(sender_key, None, sender_tx, None, false, None, scmessenger_core::transport::default_routing_engine_handle())
-        .await
-        .expect("failed to start sender");
+    let sender_handle = start_swarm(
+        sender_key,
+        None,
+        sender_tx,
+        None,
+        false,
+        None,
+        scmessenger_core::transport::default_routing_engine_handle(),
+    )
+    .await
+    .expect("failed to start sender");
     let _sender_addr = wait_for_tcp_listener(&mut sender_rx, Duration::from_secs(10)).await;
 
     let relay_full_addr: Multiaddr = format!("{}/p2p/{}", relay_addr, relay_peer_id)
@@ -124,9 +140,17 @@ async fn offline_recipient_receives_after_reconnect_without_sender_resend() {
 
     // Recipient reconnects later and should receive the message without sender resend.
     let (recipient_tx, mut recipient_rx) = mpsc::channel(256);
-    let recipient_handle = start_swarm(recipient_key, None, recipient_tx, None, false, None, scmessenger_core::transport::default_routing_engine_handle())
-        .await
-        .expect("failed to start recipient");
+    let recipient_handle = start_swarm(
+        recipient_key,
+        None,
+        recipient_tx,
+        None,
+        false,
+        None,
+        scmessenger_core::transport::default_routing_engine_handle(),
+    )
+    .await
+    .expect("failed to start recipient");
     let _recipient_addr = wait_for_tcp_listener(&mut recipient_rx, Duration::from_secs(10)).await;
 
     recipient_handle

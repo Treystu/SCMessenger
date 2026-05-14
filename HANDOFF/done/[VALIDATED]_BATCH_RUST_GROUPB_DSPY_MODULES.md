@@ -2,7 +2,8 @@
 # AGENT: implementer
 # MODEL: qwen3-coder-next:cloud
 # FALLBACK: glm-5.1:cloud
-# TARGET FILES: core/src/dspy/modules.rs, core/src/dspy/signatures.rs
+# BUDGET: 1800
+# TARGET: core/src/dspy/modules.rs, core/src/dspy/signatures.rs
 
 1. **build_security_audit_pipeline** — Wire into IronCore initialization and relay custody verification.
 2. **create_multihop** — Wire into relay multi-hop routing and transport manager path selection.

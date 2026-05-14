@@ -1003,6 +1003,67 @@ async fn handle_jsonrpc_request(
                 )
             }
         }
+        // ── DSPy modules ──
+        ClientIntent::ClearHistory {} => {
+            if let Some(ref core) = ctx.core {
+                match core.clear_history() {
+                    Ok(()) => rpc_result(id, serde_json::json!({"cleared": true})),
+                    Err(e) => rpc_error(
+                        id,
+                        JsonRpcErrorBody {
+                            code: -32000,
+                            message: format!("Failed to clear history: {:?}", e),
+                            data: None,
+                        },
+                    ),
+                }
+            } else {
+                rpc_error(
+                    id,
+                    JsonRpcErrorBody {
+                        code: -32000,
+                        message: "Core not available".to_string(),
+                        data: None,
+                    },
+                )
+            }
+        }
+        ClientIntent::ListBlocked {} => {
+            if let Some(ref core) = ctx.core {
+                match core.list_blocked() {
+                    Ok(blocked) => {
+                        let list: Vec<serde_json::Value> = blocked
+                            .into_iter()
+                            .map(|b| {
+                                serde_json::json!({
+                                    "peerId": b.peer_id,
+                                    "reason": b.reason,
+                                    "blockedAt": b.blocked_at,
+                                })
+                            })
+                            .collect();
+                        rpc_result(id, serde_json::json!({"blocked": list}))
+                    }
+                    Err(e) => rpc_error(
+                        id,
+                        JsonRpcErrorBody {
+                            code: -32000,
+                            message: format!("Failed to list blocked: {:?}", e),
+                            data: None,
+                        },
+                    ),
+                }
+            } else {
+                rpc_error(
+                    id,
+                    JsonRpcErrorBody {
+                        code: -32000,
+                        message: "Core not available".to_string(),
+                        data: None,
+                    },
+                )
+            }
+        }
     }
 }
 

@@ -54,7 +54,6 @@ class NetworkDetector @Inject constructor(
     /** Debounce: coroutine scope for timed network state transitions */
     private val debounceScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private var debounceJob: Job? = null
-    private var pendingNetworkType: NetworkType? = null
 
     /** Hysteresis: minimum stable period before committing a network type change (ms) */
     private val networkStabilityMs = 500L
@@ -100,13 +99,13 @@ class NetworkDetector @Inject constructor(
 
         val callback = object : ConnectivityManager.NetworkCallback() {
             override fun onAvailable(network: Network) {
-                detectNetworkType(network)
+                scheduleNetworkRedetection()
             }
 
             override fun onLost(network: Network) {
                 networkCapabilities.remove(network)
                 Timber.d("Network lost: %s", network)
-                redetectCurrentNetwork()
+                scheduleNetworkRedetection()
             }
 
             override fun onCapabilitiesChanged(
@@ -114,15 +113,15 @@ class NetworkDetector @Inject constructor(
                 capabilities: NetworkCapabilities
             ) {
                 networkCapabilities[network] = capabilities
-                detectNetworkType(network)
+                scheduleNetworkRedetection()
             }
         }
 
         connectivityManager.registerNetworkCallback(request, callback)
         networkCallback = callback
 
-        // Detect current network immediately
-        redetectCurrentNetwork()
+        // Detect current network with debounce
+        scheduleNetworkRedetection()
 
         Timber.i("NetworkDetector monitoring started")
     }
@@ -137,69 +136,61 @@ class NetworkDetector @Inject constructor(
         networkCallback = null
         debounceJob?.cancel()
         debounceJob = null
-        pendingNetworkType = null
         Timber.i("NetworkDetector monitoring stopped")
     }
 
+
     /**
-     * Detect the type of the active network.
-     * Applies a 5-second hysteresis/debounce to prevent violent oscillations
-     * (e.g. WIFI → CELLULAR → WIFI flaps) from resetting circuit breakers
-     * and severing local peer discovery on every transient network event.
+     * Schedule network redetection with debounce to prevent rapid flapping.
+     * All network change callbacks (onAvailable, onLost, onCapabilitiesChanged)
+     * go through this method to ensure only the final settled network type
+     * after the stability period gets propagated.
      */
-    private fun detectNetworkType(network: Network) {
-        val capabilities = connectivityManager.getNetworkCapabilities(network) ?: return
-        val type = classifyNetworkType(capabilities)
+    private fun scheduleNetworkRedetection() {
+        Timber.d("Network change detected, scheduling redetection with %dms debounce", networkStabilityMs)
 
-        // If the type hasn't changed, skip entirely
-        if (type == _networkType.value) {
-            return
-        }
-
-        // Log when a rapid transition is suppressed by debounce
-        if (pendingNetworkType != null && pendingNetworkType != type) {
-            Timber.d("Network debounce: suppressing rapid transition from %s to %s (pending: %s)",
-                pendingNetworkType, type, type)
-        }
-
-        // Debounce: only commit after the network type has been stable for networkStabilityMs
-        pendingNetworkType = type
         debounceJob?.cancel()
         debounceJob = debounceScope.launch {
-            val candidateType = type
             delay(networkStabilityMs)
-
-            // Only apply if the candidate is still the most recent pending type
-            if (pendingNetworkType == candidateType && candidateType != _networkType.value) {
-                val previousType = _networkType.value
-                _networkType.value = candidateType
-
-                // If cellular (including restricted), populate blocked ports
-                if (candidateType == NetworkType.CELLULAR || candidateType == NetworkType.CELLULAR_RESTRICTED) {
-                    _blockedPorts.value = commonlyBlockedPorts
-                    Timber.w("Cellular network detected (%s) after %dms stability — blocking ports: %s",
-                        candidateType, networkStabilityMs, commonlyBlockedPorts)
-                } else {
-                    _blockedPorts.value = emptySet()
-                }
-
-                Timber.i("Network type committed: %s → %s (stable for %dms), blocked ports: %s",
-                    previousType, candidateType, networkStabilityMs, _blockedPorts.value)
-            }
+            redetectCurrentNetworkLocked()
         }
     }
 
     /**
      * Re-detect the current active network (e.g., after network loss).
+     * Internal version without debounce - only call after stability period.
      */
-    private fun redetectCurrentNetwork() {
+    private fun redetectCurrentNetworkLocked() {
         val activeNetwork = connectivityManager.activeNetwork
         if (activeNetwork != null) {
-            detectNetworkType(activeNetwork)
+            val capabilities = connectivityManager.getNetworkCapabilities(activeNetwork)
+            if (capabilities != null) {
+                val type = classifyNetworkType(capabilities)
+                updateNetworkType(type)
+            }
         } else {
             _networkType.value = NetworkType.UNKNOWN
             _blockedPorts.value = emptySet()
         }
+    }
+
+    /**
+     * Update the network type and blocked ports state.
+     */
+    private fun updateNetworkType(newType: NetworkType) {
+        val previousType = _networkType.value
+        _networkType.value = newType
+
+        if (newType == NetworkType.CELLULAR || newType == NetworkType.CELLULAR_RESTRICTED) {
+            _blockedPorts.value = commonlyBlockedPorts
+            Timber.w("Cellular network detected (%s) after %dms stability — blocking ports: %s",
+                newType, networkStabilityMs, commonlyBlockedPorts)
+        } else {
+            _blockedPorts.value = emptySet()
+        }
+
+        Timber.i("Network type updated: %s → %s (stable for %dms), blocked ports: %s",
+            previousType, newType, networkStabilityMs, _blockedPorts.value)
     }
 
     /**

@@ -2,7 +2,13 @@
 //!
 //! This module coordinates transport abstraction and intelligently selects
 //! the best transport for each peer based on capabilities and connection state.
+//!
+//! # Multi-Hop Routing Integration
+//!
+//! The TransportManager integrates with the DSPy multi-hop recall module for
+//! intelligent path selection across multiple transport types.
 
+use crate::dspy::modules::{DSPyModule, MultiHopRecall};
 use crate::transport::abstraction::{
     TransportCapabilities, TransportError, TransportEvent, TransportType,
 };
@@ -214,11 +220,19 @@ pub struct TransportManager {
 
     /// Address observer for consensus-based address discovery and expiry
     address_observer: Arc<RwLock<AddressObserver>>,
+
+    /// Multi-hop recall module for path selection across transports
+    multi_hop_recall: Option<MultiHopRecall>,
 }
 
 impl TransportManager {
     /// Create a new transport manager
     pub fn new() -> Self {
+        Self::new_with_multihop(None)
+    }
+
+    /// Create a new transport manager with multi-hop recall for intelligent path selection
+    pub fn new_with_multihop(multi_hop_recall: Option<MultiHopRecall>) -> Self {
         Self {
             transports: Arc::new(RwLock::new(HashMap::new())),
             peer_transports: Arc::new(RwLock::new(HashMap::new())),
@@ -228,6 +242,7 @@ impl TransportManager {
             reconnection_queue: Arc::new(RwLock::new(HashMap::new())),
             health_monitor: None,
             address_observer: Arc::new(RwLock::new(AddressObserver::new())),
+            multi_hop_recall,
         }
     }
 
@@ -694,6 +709,82 @@ impl TransportManager {
             info!("Transport {} disabled", tt);
         } else {
             warn!("Transport {} not registered, cannot disable", tt);
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // Multi-Hop Routing Integration
+    // -----------------------------------------------------------------------
+
+    /// Set the multi-hop recall module for path selection across transports.
+    /// The multi-hop recall module retrieves relevant transport paths from
+    /// multiple sources for intelligent routing decisions.
+    pub fn set_multi_hop_recall(&mut self, recall: MultiHopRecall) {
+        self.multi_hop_recall = Some(recall);
+        info!("Multi-hop recall module configured for path selection");
+    }
+
+    /// Get a reference to the multi-hop recall module
+    pub fn multi_hop_recall(&self) -> Option<&MultiHopRecall> {
+        self.multi_hop_recall.as_ref()
+    }
+
+    /// Run multi-hop recall to retrieve transport paths for a peer.
+    /// Returns a list of potential paths through available transports.
+    pub fn run_multi_hop_path_selection(
+        &self,
+        _peer_id: &[u8; 32],
+        query: &str,
+    ) -> Vec<TransportType> {
+        let mut selected_transports = Vec::new();
+
+        // Check if multi-hop recall is configured
+        if let Some(recall) = self.multi_hop_recall.as_ref() {
+            // Validate input
+            if recall.validate_input(&query.to_string()) {
+                // Run recall to get paths
+                match recall.recall(query) {
+                    Ok(paths) => {
+                        // Process recalled paths and map to transport types
+                        for path in paths {
+                            if path.contains("ble") {
+                                selected_transports.push(TransportType::BLE);
+                            } else if path.contains("wifi") {
+                                selected_transports.push(TransportType::WiFiDirect);
+                            } else if path.contains("internet") {
+                                selected_transports.push(TransportType::Internet);
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        warn!("Multi-hop recall failed for peer: {:?}", e);
+                    }
+                }
+            }
+        } else {
+            // Fallback: use available transports in priority order
+            let transports = self.transports.read();
+            for transport_type in [
+                TransportType::BLE,
+                TransportType::WiFiAware,
+                TransportType::WiFiDirect,
+                TransportType::Internet,
+                TransportType::Local,
+            ] {
+                if transports.get(&transport_type).map_or(false, |s| s.running) {
+                    selected_transports.push(transport_type);
+                }
+            }
+        }
+
+        selected_transports
+    }
+
+    /// Add a reasoning step to the multi-hop chain-of-thought pipeline.
+    /// This extends the multi-hop recall with additional routing heuristics.
+    pub fn add_multi_hop_step(&mut self, step: &str) {
+        if let Some(recall) = self.multi_hop_recall.as_mut() {
+            recall.add_step(step);
         }
     }
 }

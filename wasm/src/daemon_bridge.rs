@@ -197,16 +197,16 @@ pub fn format_get_conversation(
     serde_json::to_string(&req)
 }
 
-    /// Build a `clear_history` JSON-RPC request string.
-    pub fn format_clear_history(id: impl serde::Serialize) -> Result<String, serde_json::Error> {
-        let req = JsonRpcRequest {
-            jsonrpc: "2.0".into(),
-            id: Some(serde_json::to_value(id)?),
-            method: "clear_history".into(),
-            params: serde_json::json!({}),
-        };
-        serde_json::to_string(&req)
-    }
+/// Build a `clear_history` JSON-RPC request string.
+pub fn format_clear_history(id: impl serde::Serialize) -> Result<String, serde_json::Error> {
+    let req = JsonRpcRequest {
+        jsonrpc: "2.0".into(),
+        id: Some(serde_json::to_value(id)?),
+        method: "clear_history".into(),
+        params: serde_json::json!({}),
+    };
+    serde_json::to_string(&req)
+}
 
 // ── Blocking ──
 

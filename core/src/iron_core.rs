@@ -1100,6 +1100,23 @@ impl IronCore {
         self.blocked_manager.read().count().map(|c| c as u32)
     }
 
+    /// Clear all message history.
+    pub fn clear_history(&self) -> Result<(), IronCoreError> {
+        self.history_manager.clear()
+    }
+
+    /// Get the list of all blocked identities.
+    /// Returns the bridge type for UniFFI compatibility.
+    pub fn list_blocked(
+        &self,
+    ) -> Result<Vec<crate::blocked_bridge::BlockedIdentity>, IronCoreError> {
+        let core_blocked = self.blocked_manager.read().list()?;
+        Ok(core_blocked
+            .into_iter()
+            .map(|b| crate::blocked_bridge::BlockedIdentity::from(b))
+            .collect())
+    }
+
     // -----------------------------------------------------------------------
     // Identity backup export/import
     // -----------------------------------------------------------------------

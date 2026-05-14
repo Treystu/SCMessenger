@@ -129,6 +129,8 @@ pub struct MultiHopRecall {
     metadata: ModuleMetadata,
     #[allow(dead_code)]
     max_hops: usize,
+    /// Steps for chain-of-thought reasoning in multi-hop routing
+    steps: Vec<String>,
 }
 
 impl MultiHopRecall {
@@ -140,7 +142,14 @@ impl MultiHopRecall {
                 cached: true,
             },
             max_hops,
+            steps: Vec::new(),
         }
+    }
+
+    /// Add a reasoning step to the multi-hop chain-of-thought pipeline.
+    /// Each step represents a heuristic or rule for path selection across transports.
+    pub fn add_step(&mut self, step: &str) {
+        self.steps.push(step.to_string());
     }
 
     pub fn recall(&self, _query: &str) -> Result<Vec<String>, DSPyError> {
