@@ -20,7 +20,7 @@ use crate::abuse::EnhancedAbuseReputationManager;
 use crate::crypto::{decrypt_message, encrypt_message, session_manager::RatchetSessionManager};
 use crate::drift::{MeshStore, NetworkState, RelayConfig, RelayEngine};
 use crate::identity::IdentityManager;
-use crate::message::{decode_envelope, decode_message, encode_envelope, Message};
+use crate::message::{decode_envelope, decode_message, Message};
 use crate::notification::NotificationEndpointRegistry;
 use crate::observability::{AuditEventType, AuditLog as AuditLogType};
 use crate::privacy::{
@@ -204,6 +204,9 @@ pub struct IronCore {
 
     /// Active runtime privacy configuration.
     pub(crate) privacy_config: Arc<RwLock<crate::privacy::PrivacyConfig>>,
+
+    /// Drift policy engine — adapts relay aggressiveness from device state.
+    policy_engine: Arc<RwLock<crate::drift::PolicyEngine>>,
 }
 
 impl Default for IronCore {
@@ -284,6 +287,7 @@ impl IronCore {
             ratchet_sessions,
             security_audit_pipeline,
             privacy_config: Arc::new(RwLock::new(crate::privacy::PrivacyConfig::default())),
+            policy_engine: Arc::new(RwLock::new(crate::drift::PolicyEngine::new())),
         }
     }
 
@@ -366,6 +370,7 @@ impl IronCore {
             ratchet_sessions: Arc::new(RwLock::new(RatchetSessionManager::new())),
             security_audit_pipeline,
             privacy_config: Arc::new(RwLock::new(crate::privacy::PrivacyConfig::default())),
+            policy_engine: Arc::new(RwLock::new(crate::drift::PolicyEngine::new())),
         }
     }
 
@@ -448,6 +453,7 @@ impl IronCore {
             ratchet_sessions: Arc::new(RwLock::new(RatchetSessionManager::new())),
             security_audit_pipeline,
             privacy_config: Arc::new(RwLock::new(crate::privacy::PrivacyConfig::default())),
+            policy_engine: Arc::new(RwLock::new(crate::drift::PolicyEngine::new())),
         }
     }
 
@@ -590,7 +596,17 @@ impl IronCore {
 
         let envelope = encrypt_message(&keys.signing_key, &recipient_pk, &message_bytes)
             .map_err(|_| IronCoreError::CryptoError)?;
-        let mut envelope_data = encode_envelope(&envelope).map_err(|_| IronCoreError::Internal)?;
+
+        // Convert legacy Envelope to DriftEnvelope with proper signing,
+        // recipient hint, and LZ4 compression for payloads above threshold.
+        let drift_env = crate::drift::DriftEnvelope::from_legacy_envelope(
+            envelope,
+            message_id.clone(),
+            recipient_pk,
+            &keys.signing_key,
+        )
+        .map_err(|_| IronCoreError::Internal)?;
+        let mut envelope_data = drift_env.to_bytes().map_err(|_| IronCoreError::Internal)?;
 
         if self.privacy_config().onion_routing_enabled {
             let relays = self.swarm_get_best_relays(3);
@@ -918,6 +934,12 @@ impl IronCore {
 
     pub fn get_device_id(&self) -> Option<String> {
         self.identity.read().device_id()
+    }
+
+    /// Derive the libp2p Peer ID from the local identity's Ed25519 public key.
+    /// Returns None if identity is not initialized.
+    pub fn get_libp2p_peer_id(&self) -> Option<String> {
+        self.identity.read().keys().and_then(|k| k.to_libp2p_peer_id().ok())
     }
 
     pub fn get_seniority_timestamp(&self) -> Option<u64> {
@@ -1285,12 +1307,53 @@ impl IronCore {
     // -----------------------------------------------------------------------
 
     /// Resolve any identifier format to the canonical public_key_hex.
+    ///
+    /// Accepts three formats:
+    /// 1. Ed25519 public key hex (64 hex chars, valid curve point) — returned as-is.
+    /// 2. Blake3 identity_id (64 hex chars, NOT a valid Ed25519 point) — resolved
+    ///    by searching contacts for a matching identity_id.
+    /// 3. libp2p Peer ID (base58, e.g. "12D3Koo...") — public key extracted.
     pub fn resolve_identity(&self, any_id: String) -> Result<String, IronCoreError> {
-        // If already 64 hex chars, return as-is (it's a public key hex)
-        if any_id.len() == 64 && any_id.chars().all(|c| c.is_ascii_hexdigit()) {
-            return Ok(any_id.to_lowercase());
+        let trimmed = any_id.trim().to_lowercase();
+
+        // If 64 hex chars, determine whether it's a public key or a Blake3 identity_id.
+        if trimmed.len() == 64 && trimmed.chars().all(|c| c.is_ascii_hexdigit()) {
+            // Check if it's a valid Ed25519 public key (point on the curve).
+            if let Ok(bytes) = hex::decode(&trimmed) {
+                if bytes.len() == 32 {
+                    if let Ok(arr) = <[u8; 32]>::try_from(bytes.as_slice()) {
+                        if ed25519_dalek::VerifyingKey::from_bytes(&arr).is_ok() {
+                            // Valid Ed25519 public key — return as-is.
+                            return Ok(trimmed);
+                        }
+                    }
+                }
+            }
+
+            // Not a valid Ed25519 key — likely a Blake3 identity_id.
+            // Search contacts for a match.
+            if let Ok(contacts) = self.contact_manager.read().list() {
+                for contact in contacts {
+                    let contact_id = blake3::hash(contact.public_key.as_bytes());
+                    let contact_id_hex = hex::encode(contact_id.as_bytes());
+                    if contact_id_hex == trimmed {
+                        return Ok(contact.public_key.to_lowercase());
+                    }
+                }
+            }
+
+            // Check if it matches our own identity_id.
+            let my_id = self.identity.read().identity_id();
+            if let Some(ref id) = my_id {
+                if id.to_lowercase() == trimmed {
+                    return self.identity.read().keys().map(|k| k.public_key_hex()).ok_or_else(|| IronCoreError::NotInitialized);
+                }
+            }
+
+            return Err(IronCoreError::InvalidInput);
         }
-        // Otherwise try to parse as PeerId and extract the key
+
+        // Otherwise try to parse as PeerId and extract the key.
         self.extract_public_key_from_peer_id(any_id)
     }
 
@@ -2814,6 +2877,46 @@ impl IronCore {
         if let Some(ref mut engine) = *self.drift_engine.write() {
             engine.apply_policy_config(config);
         }
+    }
+
+    /// Update device state and propagate the resulting relay config
+    /// to the drift relay engine. The PolicyEngine computes scan intervals
+    /// and relay budgets from battery/charging/wifi/motion signals.
+    pub fn update_device_state(
+        &self,
+        battery_percent: u8,
+        is_charging: bool,
+        has_wifi: bool,
+        is_moving: bool,
+    ) -> crate::drift::RelayProfile {
+        let state = crate::drift::DeviceState {
+            battery_percent,
+            is_charging,
+            has_wifi,
+            is_moving,
+            timestamp: web_time::SystemTime::now()
+                .duration_since(web_time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs(),
+        };
+        let mut engine = self.policy_engine.write();
+        let profile = engine.update_device_state(&state);
+        let config = engine.to_relay_config();
+        drop(engine);
+
+        // Propagate relay config to the drift engine if active
+        self.drift_apply_policy(config);
+        profile
+    }
+
+    /// Get the current relay config derived from device state policy.
+    pub fn get_policy_relay_config(&self) -> RelayConfig {
+        self.policy_engine.read().to_relay_config()
+    }
+
+    /// Get the current policy profile (for diagnostics).
+    pub fn current_relay_profile(&self) -> crate::drift::RelayProfile {
+        self.policy_engine.read().current_profile()
     }
 
     /// Set cover traffic parameters on the drift relay engine.

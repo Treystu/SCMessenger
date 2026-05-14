@@ -115,6 +115,11 @@ impl WasmMeshNode {
         (peer_id, pub_key, nickname)
     }
 
+    /// Derive the libp2p Peer ID from the local identity's Ed25519 public key.
+    pub fn get_libp2p_peer_id(&self) -> String {
+        self.identity_keys.public().to_peer_id().to_string()
+    }
+
     /// Set nickname
     pub fn set_nickname(&self, name: String) {
         *self.nickname.write() = Some(name);

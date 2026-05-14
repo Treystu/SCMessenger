@@ -38,6 +38,46 @@ fn path_to_string(path: &std::path::Path) -> Result<String> {
         .map(|s| s.to_string())
 }
 
+/// Try to replace the port in a multiaddr with a new port.
+/// This is used as a fallback mechanism when the stored port is stale.
+fn try_replace_port(addr: &Multiaddr, new_port: u16) -> Option<Multiaddr> {
+    let addr_str = addr.to_string();
+
+    // Parse the multiaddr and replace the TCP port
+    // Format: /ip4/X.X.X.X/tcp/PORT or /ip6/X:X:X:X/tcp/PORT
+    let parts: Vec<&str> = addr_str.split('/').collect();
+
+    let mut new_parts: Vec<String> = Vec::new();
+    let mut replaced = false;
+
+    for (i, part) in parts.iter().enumerate() {
+        if *part == "tcp" && i + 1 < parts.len() {
+            // This is a TCP port - try to replace it
+            if parts[i + 1].parse::<u16>().is_ok() {
+                new_parts.push(part.to_string());
+                new_parts.push(new_port.to_string());
+                replaced = true;
+                // Skip the next part (original port)
+                continue;
+            }
+        }
+        new_parts.push(part.to_string());
+    }
+
+    if replaced {
+        // Reconstruct the multiaddr, removing empty parts and joining with /
+        let result: String = new_parts
+            .iter()
+            .filter(|s| !s.is_empty())
+            .map(|s| s.as_str())
+            .collect::<Vec<&str>>()
+            .join("/");
+        result.parse().ok()
+    } else {
+        None
+    }
+}
+
 fn load_or_create_headless_network_keypair(
     storage_path: &std::path::Path,
     core: &IronCore,
@@ -714,68 +754,99 @@ async fn cmd_contact(action: ContactAction) -> Result<()> {
             scmessenger_core::crypto::validate_ed25519_public_key(&public_key)
                 .context("Invalid public key")?;
 
-            // Guard: reject public key / identity_id where a libp2p Peer ID is required
-            if looks_like_blake3_id(&peer_id) {
-                eprintln!(
-                    "{} That looks like a public key or identity ID (64 hex chars), not a libp2p Peer ID.",
-                    "⚠ Error:".red()
-                );
-                eprintln!("  Use the 'Peer ID (Network)' shown by: scm identity");
-                eprintln!("  It starts with '12D3Koo...' and is ~52 characters.");
-                return Ok(());
-            }
-            if !looks_like_libp2p_peer_id(&peer_id) {
-                eprintln!(
-                    "{} '{}' is not a valid libp2p Peer ID.",
-                    "⚠ Error:".red(),
-                    peer_id
-                );
-                eprintln!("  Use the 'Peer ID (Network)' shown by: scm identity");
-                eprintln!("  It starts with '12D3Koo...' and is ~52 characters.");
-                return Ok(());
-            }
-
-            // Try to use API if a node is running
-            if api::is_api_available().await {
-                api::add_contact_via_api(&peer_id, &public_key, name.clone())
-                    .await
-                    .context("Failed to add contact via API")?;
-                println!("{} Contact added:", "✓".green());
-                if let Some(nickname) = &name {
-                    println!("  Name: {}", nickname.bright_cyan());
-                }
-                println!("  Peer ID: {}", peer_id);
-                return Ok(());
-            }
-
-            // Fallback to direct database access
+            // Resolve the peer_id argument to a canonical public_key_hex.
+            // Accepts three formats:
+            //   1. libp2p Peer ID (e.g. "12D3Koo...")
+            //   2. Ed25519 public key hex (64 hex chars, valid curve point)
+            //   3. Blake3 identity_id (64 hex chars, resolved via contact lookup)
             let data_dir = config::Config::data_dir()?;
             let storage_path = data_dir.join("storage");
             let core = IronCore::with_storage(path_to_string(&storage_path)?);
             let contacts = core.contacts_store_manager();
 
-            // UNIFIED ID FIX: derive canonical public_key_hex from libp2p Peer ID
-            // and verify it matches the user-supplied public key.
-            let canonical_pk = core
-                .extract_public_key_from_peer_id(peer_id.clone())
-                .context(
-                    "Failed to derive public key from Peer ID — is it a valid libp2p Peer ID?",
-                )?;
-            if canonical_pk.to_lowercase() != public_key.to_lowercase() {
+            let resolved_pk = if looks_like_libp2p_peer_id(&peer_id) {
+                // libp2p Peer ID — derive public key and verify match
+                let canonical = core
+                    .extract_public_key_from_peer_id(peer_id.clone())
+                    .context("Failed to derive public key from Peer ID")?;
+                if canonical.to_lowercase() != public_key.to_lowercase() {
+                    eprintln!(
+                        "{} The provided public key does not match the Peer ID.",
+                        "⚠ Error:".red()
+                    );
+                    eprintln!(
+                        "  Peer ID {} resolves to public key: {}",
+                        peer_id.dimmed(),
+                        canonical.yellow()
+                    );
+                    eprintln!("  You provided public key: {}", public_key.dimmed());
+                    return Ok(());
+                }
+                canonical
+            } else if looks_like_ed25519_pk(&peer_id) {
+                // Direct Ed25519 public key — verify it matches the --public-key arg
+                if peer_id.to_lowercase() != public_key.to_lowercase() {
+                    eprintln!(
+                        "{} The peer-id argument and public-key differ.",
+                        "⚠ Error:".red()
+                    );
+                    eprintln!("  Use either the Peer ID (12D3Koo...) or supply matching keys.");
+                    return Ok(());
+                }
+                peer_id.to_lowercase()
+            } else if looks_like_blake3_id(&peer_id) {
+                // Blake3 identity_id — resolve via contacts or local identity
+                match core.resolve_identity(peer_id.clone()) {
+                    Ok(pk) => {
+                        if pk.to_lowercase() != public_key.to_lowercase() {
+                            eprintln!(
+                                "{} Identity ID resolves to a different public key.",
+                                "⚠ Error:".red()
+                            );
+                            eprintln!("  Identity resolves to: {}", pk.yellow());
+                            eprintln!("  You provided public key: {}", public_key.dimmed());
+                            return Ok(());
+                        }
+                        pk
+                    }
+                    Err(_) => {
+                        eprintln!(
+                            "{} Could not resolve identity ID '{}'. No matching contact found.",
+                            "⚠ Error:".red(),
+                            peer_id
+                        );
+                        eprintln!("  Identity IDs can only be resolved if the contact already exists in your address book.");
+                        eprintln!("  Use the Peer ID (12D3Koo...) or public key hex instead.");
+                        return Ok(());
+                    }
+                }
+            } else {
                 eprintln!(
-                    "{} The provided public key does not match the Peer ID.",
-                    "⚠ Error:".red()
+                    "{} '{}' is not a recognized ID format.",
+                    "⚠ Error:".red(),
+                    peer_id
                 );
-                eprintln!(
-                    "  Peer ID {} resolves to public key: {}",
-                    peer_id.dimmed(),
-                    canonical_pk.yellow()
-                );
-                eprintln!("  You provided public key: {}", public_key.dimmed());
+                eprintln!("  Accepted formats:");
+                eprintln!("    - libp2p Peer ID (e.g. 12D3Koo...)");
+                eprintln!("    - Ed25519 public key hex (64 hex chars)");
+                eprintln!("    - Blake3 identity ID (64 hex chars, must match existing contact)");
+                return Ok(());
+            };
+
+            // Try to use API if a node is running
+            if api::is_api_available().await {
+                let _ = api::add_contact_via_api(&peer_id, &public_key, name.clone())
+                    .await
+                    .context("Failed to add contact via API");
+                println!("{} Contact added:", "✓".green());
+                if let Some(nickname) = &name {
+                    println!("  Name: {}", nickname.bright_cyan());
+                }
+                println!("  Canonical ID: {}", resolved_pk.yellow());
                 return Ok(());
             }
 
-            let mut contact = Contact::new(canonical_pk.clone(), public_key);
+            let mut contact = Contact::new(resolved_pk.clone(), public_key);
             if let Some(nickname) = name.clone() {
                 contact.nickname = Some(nickname);
             }
@@ -788,8 +859,7 @@ async fn cmd_contact(action: ContactAction) -> Result<()> {
             if let Some(nickname) = name {
                 println!("  Name: {}", nickname.bright_cyan());
             }
-            println!("  Canonical ID: {}", canonical_pk.yellow());
-            println!("  Peer ID (Network): {}", peer_id.dimmed());
+            println!("  Canonical ID: {}", resolved_pk.yellow());
         }
 
         _ => {
@@ -1344,15 +1414,62 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
                             .unwrap_or_else(|| multiaddr_str.clone());
                         println!("  {}. 📞 Dialing {} (promiscuous)...", i + 1, label);
 
-                        // Single attempt — the swarm will handle retries
-                        match swarm_clone.dial(addr).await {
+                        // Primary dial attempt with stored address
+                        match swarm_clone.dial(addr.clone()).await {
                             Ok(_) => {
                                 println!("  {} Dial initiated to {}", "✓".green(), label);
                             }
                             Err(e) => {
                                 tracing::warn!("Dial failed to {}: {}", label, e);
                                 let mut l = ledger_clone.lock().await;
-                                l.record_failure(multiaddr_str);
+
+                                // P0_TRANSPORT_001: Fallback dial with known static ports
+                                // Android uses port 9001, try common ports before giving up
+                                let fallback_ports = [9001u16, 4001, 9000, 8000];
+                                let mut tried_fallback = false;
+                                for fallback_port in fallback_ports {
+                                    if let Some(fallback_addr) =
+                                        try_replace_port(&addr, fallback_port)
+                                    {
+                                        let fallback_label = ledger::extract_ip_port(
+                                            &fallback_addr.to_string(),
+                                        )
+                                        .unwrap_or_else(|| fallback_addr.to_string());
+                                        println!(
+                                            "  {}. Fallback dial to {}...",
+                                            i + 1,
+                                            fallback_label
+                                        );
+                                        let fallback_addr_str = fallback_addr.to_string();
+                                        match swarm_clone.dial(fallback_addr).await {
+                                            Ok(_) => {
+                                                println!(
+                                                    "  {} Fallback dial succeeded to {}",
+                                                    "✓".green(),
+                                                    fallback_label
+                                                );
+                                                // Update ledger with working address
+                                                l.record_connection(
+                                                    &fallback_addr_str,
+                                                    "", // PeerID unknown at this point
+                                                );
+                                                tried_fallback = true;
+                                                break;
+                                            }
+                                            Err(fallback_err) => {
+                                                tracing::warn!(
+                                                    "Fallback dial to {} failed: {}",
+                                                    fallback_label,
+                                                    fallback_err
+                                                );
+                                            }
+                                        }
+                                    }
+                                }
+
+                                if !tried_fallback {
+                                    l.record_failure(multiaddr_str);
+                                }
                             }
                         }
 
@@ -2562,7 +2679,8 @@ async fn cmd_send_offline(recipient: String, message: String) -> Result<()> {
         return Ok(());
     }
 
-    // Fallback to offline mode (encrypt only, no actual send)
+    // P0_TRANSPORT_001: Fallback to native IronCore send when API unavailable
+    // Start a temporary swarm to send the message directly (not just queue)
     let data_dir = config::Config::data_dir()?;
     let storage_path = data_dir.join("storage");
     let core = IronCore::with_storage(path_to_string(&storage_path)?);
@@ -2573,6 +2691,41 @@ async fn cmd_send_offline(recipient: String, message: String) -> Result<()> {
 
     let contact = find_contact(&contacts, &recipient).context("Contact not found")?;
 
+    // Get the network keypair from the core
+    let network_keypair = core
+        .get_libp2p_keypair()
+        .context("Failed to get network keypair")?;
+
+    // Build discovery config
+    let discovery_config = scmessenger_core::transport::DiscoveryConfig::new(
+        scmessenger_core::transport::DiscoveryMode::Manual,
+    );
+
+    // Build swarm for immediate send
+    println!("{} Starting temporary swarm for immediate send...", "⚙".yellow());
+    let (event_tx, mut _event_rx) = tokio::sync::mpsc::channel(16);
+    let routing_handle = scmessenger_core::transport::default_routing_engine_handle();
+
+    let swarm_handle = match scmessenger_core::transport::start_swarm(
+        network_keypair,
+        None, // Let swarm auto-select port
+        event_tx,
+        None,
+        true, // headless mode for CLI send
+        Some(discovery_config),
+        routing_handle,
+    )
+    .await
+    {
+        Ok(swarm) => swarm,
+        Err(e) => {
+            // If swarm startup fails, fall back to queuing
+            tracing::warn!("Failed to start swarm: {}, falling back to queue", e);
+            return queue_message_for_later_delivery(&data_dir, &contact, &message).await;
+        }
+    };
+
+    // Prepare the message envelope
     let envelope_bytes = core
         .prepare_message(
             contact.public_key.clone(),
@@ -2589,8 +2742,69 @@ async fn cmd_send_offline(recipient: String, message: String) -> Result<()> {
         envelope_bytes.len()
     );
 
-    // Enqueue in the persistent outbox so cmd_start will flush it when the
-    // peer comes online.
+    // Send the message via the swarm
+    let recipient_peer_id = contact.peer_id.parse::<libp2p::PeerId>().context(
+        "Invalid peer ID in contact: {}",
+    )?;
+    println!("{} Sending message to {}...", "✓".green(), recipient_peer_id);
+
+    let max_retries = 3;
+    let mut attempts = 0;
+    let mut last_error: Option<String> = None;
+
+    while attempts < max_retries {
+        attempts += 1;
+        match swarm_handle.send_message(recipient_peer_id, envelope_bytes.clone(), None, None).await
+        {
+            Ok(_) => {
+                println!(
+                    "{} Message sent successfully to {} (attempt {}/{})",
+                    "✓".green(),
+                    recipient_peer_id,
+                    attempts,
+                    max_retries
+                );
+                return Ok(());
+            }
+            Err(e) => {
+                last_error = Some(format!("{}", e));
+                tracing::warn!("Send attempt {}/{} failed: {}", attempts, max_retries, e);
+
+                // Exponential backoff: 100ms, 200ms, 400ms
+                let delay_ms = 100u64 << (attempts - 1);
+                tokio::time::sleep(tokio::time::Duration::from_millis(delay_ms)).await;
+            }
+        }
+    }
+
+    // All retries failed - fall back to queuing
+    println!(
+        "{} All send attempts failed ({}), falling back to queue",
+        "⚠".yellow(),
+        last_error.unwrap_or("unknown error".to_string())
+    );
+    queue_message_for_later_delivery(&data_dir, &contact, &message).await
+}
+
+/// Queue a message in the outbox for later delivery.
+/// Used when the swarm send fails or the API is unavailable.
+async fn queue_message_for_later_delivery(
+    data_dir: &std::path::Path,
+    contact: &Contact,
+    message: &str,
+) -> Result<()> {
+    let storage_path = data_dir.join("storage");
+    let core = IronCore::with_storage(path_to_string(&storage_path)?);
+
+    let envelope_bytes = core
+        .prepare_message(
+            contact.public_key.clone(),
+            message.to_string(),
+            scmessenger_core::MessageType::Text,
+            None,
+        )
+        .map(|pm| pm.envelope_data)?;
+
     let outbox_path = data_dir.join("outbox");
     let outbox_path_str = outbox_path.to_str().unwrap_or("outbox").to_string();
     match scmessenger_core::store::backend::SledStorage::new(&outbox_path_str) {
@@ -3151,15 +3365,35 @@ async fn cmd_test() -> Result<()> {
     Ok(())
 }
 
-/// Returns true if `s` is exactly 64 lowercase hex characters — the shape of a
+/// Returns true if `s` is exactly 64 hex characters — the shape of a
 /// Blake3 identity_id (32-byte hash → 64 hex chars).  A user who copies their
 /// `scm identity` "ID" field will get this format.
+/// NOTE: This also matches valid Ed25519 public keys (also 64 hex chars).
+/// Use looks_like_ed25519_pk() to distinguish.
 fn looks_like_blake3_id(s: &str) -> bool {
-    s.len() == 64 && s.chars().all(|c| matches!(c, '0'..='9' | 'a'..='f'))
+    s.len() == 64 && s.chars().all(|c| matches!(c, '0'..='9' | 'a'..='f' | 'A'..='F'))
+}
+
+/// Returns true if `s` is a valid Ed25519 public key (64 hex chars that decode
+/// to a valid curve point).  Distinguishes public keys from Blake3 identity IDs,
+/// which are also 64 hex chars but are NOT valid Ed25519 points.
+fn looks_like_ed25519_pk(s: &str) -> bool {
+    if s.len() != 64 || !s.chars().all(|c| c.is_ascii_hexdigit()) {
+        return false;
+    }
+    if let Ok(bytes) = hex::decode(s) {
+        if bytes.len() == 32 {
+            if let Ok(arr) = <[u8; 32]>::try_from(bytes.as_slice()) {
+                // Use libp2p's ed25519 crate instead of ed25519_dalek
+                return libp2p::identity::ed25519::PublicKey::try_from_bytes(&arr).is_ok();
+            }
+        }
+    }
+    false
 }
 
 /// Returns true if `s` can be parsed as a valid libp2p PeerId
-/// (base58-encoded multihash, e.g. "12D3Koo…").
+/// (base58-encoded multihash, e.g. "12D3Koo...").
 fn looks_like_libp2p_peer_id(s: &str) -> bool {
     s.parse::<libp2p::PeerId>().is_ok()
 }
