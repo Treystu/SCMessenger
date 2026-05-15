@@ -148,6 +148,75 @@ wasm-pack test --headless --firefox
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/docs_sync_check.ps1
 ```
 
+## API Quota Awareness (CRITICAL)
+
+Every agent in the SCMessenger swarm operates under Ollama Cloud API quotas
+with a rolling 5-hour and 7-day window. You MUST check and respect API usage
+state before making decisions about model selection, task sizing, and
+parallelism.
+
+### 5-Minute Staleness Rule
+
+The file `.claude/quota_state.json` is the canonical source of truth. Its
+`timestamp` field records when quota data was last scraped from ollama.com.
+**Never trust quota data older than 5 minutes.** If the timestamp is over
+5 minutes old, the data may not reflect current API state and you must trigger
+a forced refresh before acting on it.
+
+To force-refresh quota data:
+```bash
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./OllamaQuotaScraper.ps1 -Quiet
+```
+
+The system uses a **lazy-refresh-on-read pattern**: quota is checked when
+someone reads `quota_state.json`, not on a timer. If you are reading the file
+directly (not through the swarm launcher), always check the `timestamp` field
+first.
+
+### 6-Tier Quota Governor
+
+The swarm operates under a 6-tier phased execution system derived from the
+`fiveHour` percentage in `quota_state.json`:
+
+| Tier | Phase | 5-Hour | Slots | Max Budget | Behavior |
+|------|-------|--------|-------|------------|----------|
+| 1 | HEAVY-LIFT | <= 25% | 3 | unlimited | Flagship models, multi-file wiring, architecture, deep planning |
+| 2 | EXECUTE | <= 50% | 3 | 5400s | Major feature implementation, standard dispatch |
+| 3 | MIXED | <= 75% | 2 | 1800s | Smaller features, validation, testing. Avoid large refactors |
+| 4 | LIGHT | <= 90% | 2 | 900s | Docs, tests, lint, bindings, P0 fixes only |
+| 5 | MICRO | <= 99.5% | 1 | 300s | Single-line changes, P0/emergency fixes. Defer everything else |
+| 6 | HARDLOCK | > 99.5% | 0 | 0 | ZERO dispatch until quota window resets |
+
+HARDLOCK triggers when EITHER `fiveHour` OR `sevenDay` exceeds 99.5%. Do not
+only check `fiveHour` -- either window at 99.5%+ blocks all dispatch.
+
+### Quota-Aware Agent Behavior
+
+When you are launched as a worker agent, your prompt includes an auto-injected
+QUOTA CONTEXT block containing:
+- Current 5-hour and 7-day usage percentages
+- Approximate minutes until the 5-hour window resets
+- Your assigned token/time budget
+
+You MUST:
+- Read the QUOTA CONTEXT block before beginning any work
+- Stay within your assigned budget
+- Accept partial completion: if you cannot finish within budget, write what
+  you completed, mark remaining work with `[REMAINING]` comments, and exit
+  cleanly
+- Never silently exceed your budget
+
+When you are the orchestrator, your mandate already includes the current phase,
+slot limits, and budget caps. Route tasks according to the tier table above.
+
+### Detecting Stale Quota Data from Agent Context
+
+If your QUOTA CONTEXT block was injected at dispatch time but you have been
+running for several minutes, the data may be stale. Compare the injected
+percentages against a fresh read of `.claude/quota_state.json`. If the
+discrepancy is large enough to change the tier, adjust your behavior
+accordingly -- this may mean exiting early if quota has tightened.
+
 ## Windows-Specific Notes
 
 - **Git Bash path:** On Windows, all shell scripts MUST be invoked with the full path to Git Bash: `"C:\Program Files\Git\bin\bash.exe" <script>` or `bash` if already inside the Git Bash shell. Do NOT rely on `bash` being in PATH from PowerShell/CMD.

@@ -244,8 +244,32 @@ function Read-QuotaState {
     $sevenDay    = 0
     $resetMins   = $null
 
-    # Prefer structured JSON if available (written by OllamaQuotaScraper.ps1)
+    # Lazy-refresh-on-read: if quota_state.json exists but the timestamp is
+    # older than ScraperStaleMinutes, trigger a forced re-scrape before reading.
+    # This ensures any consumer of quota data (even outside the main pulse loop)
+    # automatically gets fresh state. Within the pulse loop, Invoke-QuotaRefresh
+    # already handles the primary refresh cycle with its own cooldown, so the
+    # lazy-refresh here is a safety net.
     $jsonFile = Join-Path $Script:BaseDir ".claude\quota_state.json"
+    if (Test-Path $jsonFile) {
+        try {
+            $checkJson = Get-Content -Raw -LiteralPath $jsonFile -ErrorAction Stop | ConvertFrom-Json
+            if ($checkJson.timestamp) {
+                $lastUpdate = [datetime]::Parse($checkJson.timestamp)
+                $ageMinutes = ((Get-Date) - $lastUpdate).TotalMinutes
+                if ($ageMinutes -ge $Script:ScraperStaleMinutes) {
+                    Write-HeartbeatLog "DEBUG" "Read-QuotaState: data is stale ($([math]::Round($ageMinutes,1))min >= $($Script:ScraperStaleMinutes)min) -- triggering lazy refresh"
+                    Invoke-QuotaRefresh
+                }
+            }
+        } catch {}
+    } elseif (-not (Test-Path (Join-Path $Script:BaseDir ".claude\API_QUOTA_STATE.md"))) {
+        Write-HeartbeatLog "DEBUG" "Read-QuotaState: no quota files exist -- triggering initial fetch"
+        Invoke-QuotaRefresh
+    }
+
+    # Prefer structured JSON if available (written by OllamaQuotaScraper.ps1)
+    # Re-read in case lazy-refresh above just updated the file
     if (Test-Path $jsonFile) {
         try {
             $json = Get-Content -Raw -LiteralPath $jsonFile -ErrorAction Stop | ConvertFrom-Json
@@ -1211,16 +1235,19 @@ function Invoke-HeartbeatBoot {
 }
 
 # === REGISTER CTRL+C HANDLER ===
-$null = [Console]::CancelKeyPress.Add({
-    Write-Host "`n[SHUTDOWN] Ctrl+C received. Signaling graceful shutdown (press again to force)..." -ForegroundColor Yellow
-    if ($Script:ShutdownRequested) {
-        Write-Host "[SHUTDOWN] Second Ctrl+C -- forcing immediate exit." -ForegroundColor Red
-        $_.Cancel = $false
-        return
-    }
-    $Script:ShutdownRequested = $true
-    $_.Cancel = $true
-})
+# Only available when PowerShell has an interactive console; silent no-op otherwise
+if ($null -ne [Console]::CancelKeyPress) {
+    $null = [Console]::CancelKeyPress.Add({
+        Write-Host "`n[SHUTDOWN] Ctrl+C received. Signaling graceful shutdown (press again to force)..." -ForegroundColor Yellow
+        if ($Script:ShutdownRequested) {
+            Write-Host "[SHUTDOWN] Second Ctrl+C -- forcing immediate exit." -ForegroundColor Red
+            $_.Cancel = $false
+            return
+        }
+        $Script:ShutdownRequested = $true
+        $_.Cancel = $true
+    })
+}
 
 # === MAIN ===
 try {

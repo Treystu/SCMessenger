@@ -7,6 +7,7 @@ set -euo pipefail
 # Source cross-platform process helpers
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/../.claude/scripts/process_alive.sh"
+source "$SCRIPT_DIR/../.claude/scripts/quota_lib.sh"
 
 # Reliable cross-platform process kill.
 # PowerShell Stop-Process is the ONLY method that reliably kills claude.exe on Windows.
@@ -284,6 +285,31 @@ start_agent() {
     # Separate stderr to avoid Windows STATUS_BREAKPOINT (0x80000003) corrupting the log.
     # Write prompt to file and pipe via stdin to avoid Windows command-line argument length limit.
     export CARGO_INCREMENTAL=0
+
+    # Lazy-refresh quota state before building the agent prompt.
+    # If quota_state.json is fresh (< 5 min old) this is a no-op.
+    lazy_quota_refresh
+    eval $(get_quota_context)
+
+    # Prepend QUOTA CONTEXT block so every agent sees current API usage.
+    local QUOTA_BLOCK="
+QUOTA CONTEXT (auto-injected by launch_agent.sh):
+  5-Hour Usage: ${QUOTA_FIVE_HOUR}% (resets in ~${QUOTA_RESET_MINUTES} min)
+  7-Day Usage: ${QUOTA_SEVEN_DAY}%
+  Quota Status: ${QUOTA_STATUS}
+
+CRITICAL: If the above data was scraped more than 5 minutes ago, trigger a
+forced re-check by running:
+  powershell -NoProfile -ExecutionPolicy Bypass -File ./OllamaQuotaScraper.ps1 -Quiet
+Do NOT make quota-dependent decisions on stale data.
+
+PARTIAL COMPLETION IS ACCEPTABLE. If you cannot finish within budget, write what
+you completed and mark remaining work with [REMAINING] comments. Exit cleanly.
+
+"
+
+    AGENT_PROMPT="${QUOTA_BLOCK}${AGENT_PROMPT}"
+
     echo "$AGENT_PROMPT" > "$AGENT_WORK_DIR/prompt.txt"
     cat "$AGENT_WORK_DIR/prompt.txt" | ollama launch claude --model "$AGENT_MODEL" \
         -- --dangerously-skip-permissions --print \

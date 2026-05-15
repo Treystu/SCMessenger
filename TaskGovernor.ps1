@@ -85,8 +85,14 @@ function Invoke-AgentWithBudget {
 QUOTA CONTEXT (from SwarmHeartbeat at dispatch time):
   5-Hour Usage: $($qc.FiveHour)% (resets in ~$($qc.ResetMinutes) min)
   7-Day Usage: $($qc.SevenDay)%
-  Active Phase: $($qc.Phase) (Tier $($qc.Tier) - HARDLOCK at 99.5%)
+  Active Phase: $($qc.Phase) (Tier $($qc.Tier) -- HARDLOCK at 99.5%)
   Your Budget: $($qc.Budget)s
+
+NOTE: If the above data was scraped more than 5 minutes ago, trigger a forced
+re-check by running:
+  powershell -NoProfile -File OllamaQuotaScraper.ps1 -Quiet
+Do NOT make quota-dependent decisions on stale data.
+
 PARTIAL COMPLETION IS ACCEPTABLE. If you cannot finish within budget, write what
 you completed and mark remaining work with [REMAINING] comments. Exit cleanly.
 

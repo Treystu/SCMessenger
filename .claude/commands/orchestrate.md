@@ -4,7 +4,7 @@ You are the SCMessenger Swarm Orchestrator. Use this command to autonomously dri
 
 ## Mandatory Pre-Flight Check: API Efficiency Ledger
 
-BEFORE generating any tasks or doing any work, you MUST read `.claude/API_QUOTA_STATE.md` and append a strictly formatted line to `API_EFFICIENCY_LEDGER.md`. Format: `[YYYY-MM-DD] - Wake Cycle (Model) - State: [Tripped/Idle/Triage] - Tokens: X/Y`
+BEFORE generating any tasks or doing any work, you MUST read `.claude/quota_state.json` and append a strictly formatted line to `API_EFFICIENCY_LEDGER.md`. Format: `[YYYY-MM-DD] - Wake Cycle (Model) - State: [Tripped/Idle/Triage] - Tokens: X/Y`
 
 ## Autonomous Drive & Philosophy Enforcement
 
@@ -35,24 +35,51 @@ BEFORE generating any tasks or doing any work, you MUST read `.claude/API_QUOTA_
 
 **Post-completion verification**: When `pool patrol` detects a completed agent, it verifies actual code changes via `git diff`. If an agent moved a task file to done/ without making code changes, the task is **automatically re-queued** to todo/.
 
-# 🛑 CRITICAL SYSTEM OVERRIDE: DYNAMIC QUOTA GOVERNOR 🛑
-You are operating under rolling API limits. Your goal is to hit exactly 99.9% of the 7-day window by the end of the week, without ever triggering a 429 crash on the 5-hour window.
+# CRITICAL SYSTEM OVERRIDE: 6-TIER DYNAMIC QUOTA GOVERNOR
+You are operating under rolling API limits (5-hour and 7-day windows). The
+lazy-refresh-on-read pattern in `SwarmHeartbeat.ps1` and the bash quota_lib.sh
+ensures quota data is never more than 5 minutes old when read.
 
 **Step 1: Just-In-Time (JIT) Polling**
-At the start of EVERY loop, BEFORE spawning sub-agents, you must synchronously check quota:
-`bash .claude/orchestrator_manager.sh quota-scraper` (Windows: `"C:\Program Files\Git\bin\bash.exe" .claude/orchestrator_manager.sh quota-scraper`)
-This runs the scraper with a 5-minute cache — avoids redundant HTTP scrapes when quota state hasn't changed.
-After it completes, read `.claude/API_QUOTA_STATE.md`.
+At the start of EVERY loop, BEFORE spawning sub-agents, synchronously check quota:
+`bash .claude/orchestrator_manager.sh quota-scraper`
+After it completes, read `.claude/quota_state.json`. Check the `timestamp` field:
+if the data is over 5 minutes old, trigger a forced re-scrape before proceeding.
 
-**Step 2: Dynamic Task Routing (The Stamina Bar)**
-Evaluate the telemetry and route tasks based on these strict tiers:
+**Step 2: 6-Tier Dynamic Task Routing**
+Evaluate `fiveHour` and `sevenDay` from `quota_state.json` and route tasks based
+on these strict tiers. This is the same tier system that drives
+`SwarmHeartbeat.ps1`:
 
-* **TIER 1 (Vanguard Mode):** [5-Hour < 50% AND 7-Day behind pace]. MAXIMUM PARALLELISM. You may freely use the native `<Agent>` tool to spawn parallel clones of yourself for massive, context-heavy tasks. You may also use the bash script for external heavyweight models.
-* **TIER 2 (Cruise Control):** [5-Hour between 50% - 75%]. Normal operations. **DO NOT use the native `<Agent>` tool.** It burns too much quota. You MUST use the bash script to spawn standard, targeted cloud coders from the routing table.
-* **TIER 3 (Cloud Conservation):** [5-Hour between 75% - 92%]. API limits approaching. **DO NOT use the native `<Agent>` tool.** You MUST use the bash script to step down to lower-tier/faster cloud models for smaller tasks (isolated bug fixes, straightforward refactors).
-* **TIER 4 (Local Scavenger/Balancer):** [5-Hour > 92%]. Cloud exhausted. **DO NOT use the native `<Agent>` tool.** You MUST use the bash script to route ONLY perfectly scoped, single-file micro-tasks (linting, documentation, simple unit tests) exclusively to the local `qwen2.5-coder:7b` model.
+- **TIER 1 -- HEAVY-LIFT** [fiveHour <= 25%]: 3 slots, no budget cap. Use flagship
+  models (`qwen3-coder:480b:cloud`, `glm-5.1:cloud`) for multi-file wiring,
+  architecture, deep planning, and complex integrations. The native `<Agent>` tool
+  is permitted in this tier only. Queue ambitious work now while budget is unlimited.
 
-*Acknowledge:* Output a "Dynamic Pacing Assessment" detailing your current Tier and what size tasks you are actively routing based on the telemetry.
+- **TIER 2 -- EXECUTE** [fiveHour <= 50%]: 3 slots, 5400s max budget. Major feature
+  implementation with standard model selection. Prefer queuing remaining heavy-lift
+  work now -- the window for flagship models is closing. Start routing docs/tests/lint
+  to smaller models.
+
+- **TIER 3 -- MIXED** [fiveHour <= 75%]: 2 slots, 1800s max budget. Smaller features,
+  validation, testing. Avoid large multi-file refactors. Route validation/testing/docs
+  to smaller models. Budgets clamped.
+
+- **TIER 4 -- LIGHT** [fiveHour <= 90%]: 2 slots, 900s max budget. Docs, tests, lint,
+  bindings, P0 fixes only. Defer ALL feature work and medium+ refactors to next quota
+  window. Use `gemma4:31b:cloud` or `gemini-3-flash-preview:cloud`.
+
+- **TIER 5 -- MICRO** [fiveHour <= 99.5%]: 1 slot, 300s max budget. ONLY single-line
+  changes and P0 emergency fixes via `gemini-3-flash-preview:cloud`. ALL other work
+  MUST be deferred. Partial completion is acceptable.
+
+- **TIER 6 -- HARDLOCK** [fiveHour > 99.5% OR sevenDay > 99.5%]: 0 slots, ZERO
+  dispatch until the next quota window reset. Poll only. Do not launch any agents.
+
+HARDLOCK triggers when EITHER the 5-hour or 7-day window exceeds 99.5%.
+
+*Acknowledge:* Output a "Dynamic Pacing Assessment" detailing your current Tier,
+threshold values, and what size tasks you are actively routing based on telemetry.
 
 ## Agent Routing Table
 

@@ -26,6 +26,7 @@ if [ -z "$PYTHON" ]; then
 fi
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/scripts/process_alive.sh"
+source "$SCRIPT_DIR/scripts/quota_lib.sh"
 
 # Reliable cross-platform process kill.
 # PowerShell Stop-Process is the ONLY method that reliably kills claude.exe on Windows.
@@ -206,30 +207,11 @@ cleanup_orphaned_agent_dirs() {
     fi
 }
 
-# Quota scraper with 5-minute cache.
-# Avoids redundant HTTP scrapes when quota state hasn't had time to change.
-QUOTA_CACHE_FILE=".claude/quota_cache_timestamp"
-QUOTA_CACHE_TTL=300  # 5 minutes in seconds
-
+# Quota scraper with 5-minute lazy-refresh cache.
+# Delegates to shared quota_lib.sh for staleness check and scraping.
+# Uses quota_state.json timestamp as the cache key (no separate cache file).
 run_quota_scraper() {
-    local now=$(date +%s)
-    local cache_age=999999
-
-    if [ -f "$QUOTA_CACHE_FILE" ]; then
-        local cached=$(cat "$QUOTA_CACHE_FILE" 2>/dev/null)
-        if [[ "$cached" =~ ^[0-9]+$ ]]; then
-            cache_age=$((now - cached))
-        fi
-    fi
-
-    if [ "$cache_age" -lt "$QUOTA_CACHE_TTL" ] && [ -f ".claude/API_QUOTA_STATE.md" ]; then
-        echo "QUOTA_CACHE: Using cached quota state (age: ${cache_age}s, TTL: ${QUOTA_CACHE_TTL}s)"
-        return 0
-    fi
-
-    echo "QUOTA_CACHE: Cache expired or missing (age: ${cache_age}s), running scraper..."
-    powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./OllamaQuotaScraper.ps1
-    echo "$now" > "$QUOTA_CACHE_FILE"
+    lazy_quota_refresh
 }
 
 count_active_agents() {
@@ -591,6 +573,14 @@ EOF
         # Record start time for timeout tracking
         mkdir -p "$AGENT_ROOT/$agent_id"
         echo "$(date +%s)" > "$AGENT_ROOT/$agent_id/start_time"
+
+        # Ensure quota state is fresh before CLI agent dispatch.
+        # launch_agent.sh also calls lazy_quota_refresh internally (no-op if fresh).
+        lazy_quota_refresh
+        if [ -f ".claude/quota_state.json" ]; then
+            eval $(get_quota_context)
+            echo "QUOTA at launch: 5hr=${QUOTA_FIVE_HOUR}% 7d=${QUOTA_SEVEN_DAY}% reset=${QUOTA_RESET_MINUTES}min status=${QUOTA_STATUS}"
+        fi
 
         if ! ./scripts/launch_agent.sh "$model" "$agent_id" "$task_file" start 2>/dev/null; then
             if [ -n "$fallback_model" ]; then
@@ -1255,9 +1245,10 @@ pool_patrol() {
     fi
 
     # Phase 5: Batch micro-tasks if in conservation mode
-    local five_hour_usage=$(grep "5-Hour Usage" .claude/API_QUOTA_STATE.md | cut -d':' -f2 | tr -d '%' | tr -d ' ')
-    if [ -n "$five_hour_usage" ] && [ "$(echo "$five_hour_usage > 75" | bc -l 2>/dev/null || echo "0")" -eq 1 ]; then
-        echo "PATROL: High quota usage detected ($five_hour_usage%). Consolidating micro-tasks..."
+    eval $(get_quota_context) 2>/dev/null
+    local five_hour_usage="${QUOTA_FIVE_HOUR:-0}"
+    if [ -n "$five_hour_usage" ] && [ "$five_hour_usage" != "?" ] && [ "$(echo "$five_hour_usage > 75" | bc -l 2>/dev/null || echo "0")" -eq 1 ]; then
+        echo "PATROL: High quota usage detected (${five_hour_usage}%). Consolidating micro-tasks..."
         python3 .claude/scripts/batch_micro_tasks.py 2>/dev/null || python .claude/scripts/batch_micro_tasks.py 2>/dev/null || py -3 .claude/scripts/batch_micro_tasks.py 2>/dev/null || true
     fi
 

@@ -43,8 +43,10 @@ fun SCMessengerTheme(
     if (!view.isInEditMode) {
         SideEffect {
             val window = (view.context as Activity).window
-            // statusBarColor is deprecated in API 30; use WindowCompat for modern approach
-            // The old API still works but is deprecated, so we use the compatible method
+            // statusBarColor is deprecated in API 30; the API 35 deprecation has no direct replacement
+            // but the color tint is functionally required for Android Play Readiness
+            @Suppress("DEPRECATION")
+            window.statusBarColor = colorScheme.primary.toArgb()
             WindowCompat.setDecorFitsSystemWindows(window, false)
             WindowCompat.getInsetsController(window, view).apply {
                 isAppearanceLightStatusBars = !darkTheme
