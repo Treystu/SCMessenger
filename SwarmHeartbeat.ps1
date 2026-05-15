@@ -14,6 +14,7 @@ $Script:StaleThresholdMinutes = 60
 $Script:OrchCooldownSeconds   = 120
 $Script:ScraperIntervalMinutes = 5
 $Script:ScraperStaleMinutes    = 5
+$Script:ModelAllowlistStaleMinutes = 5
 
 # Runtime state
 $Script:LastScraperRun               = [datetime]::MinValue
@@ -30,6 +31,11 @@ $Script:WorkerModelAllowList         = @()
 $Script:MaxBudgetOverride            = 0
 $Script:LastOrchModelDispatched      = ""
 $Script:LastOrchReasonDispatched     = ""
+$Script:ShutdownRequested            = $false
+$Script:CachedClaudeCount            = $null
+$Script:CachedClaudeTimestamp        = [datetime]::MinValue
+$Script:LastModelAllowlistRefresh    = [datetime]::MinValue
+$Script:DynamicModelAllowList        = @()
 
 function Write-HeartbeatLog {
     param([string]$Level, [string]$Message)
@@ -57,11 +63,42 @@ function Get-OrchestratorRunning {
 }
 
 function Get-ClaudeProcessCount {
-    $claudeProcs = @(Get-Process -Name "claude" -ErrorAction SilentlyContinue)
-    return $claudeProcs.Count
+    $now = Get-Date
+    # Cache for 3 seconds to avoid redundant costly cross-process calls within a single pulse
+    if ($Script:CachedClaudeCount -ne $null -and ($now - $Script:CachedClaudeTimestamp).TotalSeconds -lt 3) {
+        return $Script:CachedClaudeCount
+    }
+
+    $job = Start-Job -ScriptBlock {
+        @(Get-Process -Name "claude" -ErrorAction SilentlyContinue).Count
+    }
+    $null = Wait-Job -Job $job -Timeout 5
+    if ($job.State -eq 'Completed') {
+        $result = Receive-Job -Job $job
+        Remove-Job -Job $job -Force -ErrorAction SilentlyContinue
+        $Script:CachedClaudeCount = $result
+        $Script:CachedClaudeTimestamp = $now
+        return $result
+    } else {
+        Remove-Job -Job $job -Force -ErrorAction SilentlyContinue
+        Write-HeartbeatLog "WARN" "Get-Process for claude.exe timed out (5s) -- using cached or default value"
+        if ($Script:CachedClaudeCount -ne $null) { return $Script:CachedClaudeCount }
+        return 0
+    }
 }
 
 function Get-TrackedAgentCount {
+    $workerCount = Get-ActiveWorkerCount
+    $claudeCount = Get-ClaudeProcessCount
+
+    # When worker jobs are active, claude.exe IS the swarm agent.
+    # Each worker spawns via "ollama launch claude" which creates claude.exe.
+    # PID-file tracking is supplementary; claude.exe is the canonical indicator.
+    if ($workerCount -gt 0) {
+        return $claudeCount
+    }
+
+    # No active workers: fall back to PID-file tracking for orphan/stale detection
     $agentsDir = Join-Path $Script:BaseDir ".claude\agents"
     if (-not (Test-Path $agentsDir)) { return 0 }
 
@@ -135,7 +172,20 @@ function Get-StaleInProgressTasks {
     try {
         $inProgFiles = Get-ChildItem -LiteralPath $Script:InProgDir -Filter "*.md" -ErrorAction SilentlyContinue
         foreach ($f in $inProgFiles) {
-            if ($f.LastWriteTime -lt $cutoff) {
+            # Use dispatched_at marker as canonical timestamp; Move-Item preserves
+            # the original file's LastWriteTime which may be hours old, causing
+            # freshly-dispatched tasks to be misdetected as stale.
+            $agentName = [System.IO.Path]::GetFileNameWithoutExtension($f.Name)
+            $dispatchMarker = Join-Path $Script:BaseDir ".claude\agents\$agentName\dispatched_at"
+            $refTime = $f.LastWriteTime
+            if (Test-Path $dispatchMarker) {
+                try {
+                    $refTime = [datetime]::Parse((Get-Content -LiteralPath $dispatchMarker -Raw -ErrorAction Stop).Trim())
+                } catch {
+                    # Fall back to file time if marker is unreadable
+                }
+            }
+            if ($refTime -lt $cutoff) {
                 $staleTaskFiles += $f
             }
         }
@@ -152,6 +202,38 @@ function Test-OllamaReachable {
     } catch {
         Write-HeartbeatLog "ERROR" "Ollama service not reachable at localhost:11434"
         return $false
+    }
+}
+
+function Invoke-RefreshModelAllowlist {
+    $now = Get-Date
+    $sinceLast = ($now - $Script:LastModelAllowlistRefresh).TotalMinutes
+    if ($sinceLast -lt $Script:ModelAllowlistStaleMinutes -and $Script:DynamicModelAllowList.Count -gt 0) {
+        Write-HeartbeatLog "DEBUG" "Model allowlist is fresh ($([math]::Round($sinceLast,1))min old, $($Script:DynamicModelAllowList.Count) models) -- skipping fetch"
+        return $Script:DynamicModelAllowList
+    }
+
+    Write-HeartbeatLog "INFO" "Fetching available models from ollama.com/api/tags..."
+    $Script:LastModelAllowlistRefresh = $now
+
+    try {
+        $response = Invoke-RestMethod -Uri "https://ollama.com/api/tags" -TimeoutSec 15 -ErrorAction Stop
+        $models = @($response.models | ForEach-Object { "$($_.name):cloud" })
+
+        if ($models.Count -eq 0) {
+            Write-HeartbeatLog "WARN" "ollama.com/api/tags returned 0 models -- using cached list"
+            return $Script:DynamicModelAllowList
+        }
+
+        $Script:DynamicModelAllowList = $models
+        Write-HeartbeatLog "INFO" "Refreshed model allowlist: $($models.Count) models available from ollama.com"
+        return $models
+    } catch {
+        Write-HeartbeatLog "ERROR" "Failed to fetch model allowlist from ollama.com: $($_.Exception.Message)"
+        if ($Script:DynamicModelAllowList.Count -gt 0) {
+            Write-HeartbeatLog "WARN" "Using cached allowlist ($($Script:DynamicModelAllowList.Count) models)"
+        }
+        return $Script:DynamicModelAllowList
     }
 }
 
@@ -276,7 +358,6 @@ function Invoke-QuotaGovernor {
             $Script:MaxBudgetOverride     = 0
             $Script:CurrentPhaseName      = "HARDLOCK"
             $Script:OrchModelTier         = $null
-            $Script:WorkerModelAllowList  = @()
             Write-HeartbeatLog "ERROR" "HARDLOCK ACTIVE: 5hr=$($quota.FiveHour)% 7d=$($quota.SevenDay)%. ZERO dispatch. Polling until reset."
         }
         5 {
@@ -284,27 +365,24 @@ function Invoke-QuotaGovernor {
             $Script:OrchCooldownSeconds   = 600
             $Script:MaxBudgetOverride     = 300
             $Script:CurrentPhaseName      = "MICRO"
-            $Script:OrchModelTier         = "gemini-3-flash-preview:cloud"
-            $Script:WorkerModelAllowList  = @("gemini-3-flash-preview:cloud")
-            Write-HeartbeatLog "WARN" "MICRO PHASE: Single-slot, gemini-flash only, max budget 300s, P0/defer-only"
+            $Script:OrchModelTier         = "deepseek-v4-pro:cloud"
+            Write-HeartbeatLog "WARN" "MICRO PHASE: Single-slot, max budget 300s, P0/defer-only. Orchestrator: deepseek-v4-pro"
         }
         4 {
             $Script:MaxConcurrentSlots    = 2
             $Script:OrchCooldownSeconds   = 300
             $Script:MaxBudgetOverride     = 900
             $Script:CurrentPhaseName      = "LIGHT"
-            $Script:OrchModelTier         = "deepseek-v4-flash:cloud"
-            $Script:WorkerModelAllowList  = @("gemma4:31b:cloud", "gemini-3-flash-preview:cloud")
-            Write-HeartbeatLog "WARN" "LIGHT PHASE: 2-slot, docs/tests/lint/bindings only, max budget 900s"
+            $Script:OrchModelTier         = "deepseek-v4-pro:cloud"
+            Write-HeartbeatLog "WARN" "LIGHT PHASE: 2-slot, docs/tests/lint/bindings only, max budget 900s. Orchestrator: deepseek-v4-pro"
         }
         3 {
             $Script:MaxConcurrentSlots    = 2
             $Script:OrchCooldownSeconds   = 180
             $Script:MaxBudgetOverride     = 1800
             $Script:CurrentPhaseName      = "MIXED"
-            $Script:OrchModelTier         = "deepseek-v4-flash:cloud"
-            $Script:WorkerModelAllowList  = @("qwen3-coder-next:cloud", "gemma4:31b:cloud")
-            Write-HeartbeatLog "INFO" "MIXED PHASE: 2-slot, smaller features/validation/testing, max budget 1800s"
+            $Script:OrchModelTier         = "deepseek-v4-pro:cloud"
+            Write-HeartbeatLog "INFO" "MIXED PHASE: 2-slot, smaller features/validation/testing, max budget 1800s. Orchestrator: deepseek-v4-pro"
         }
         2 {
             $Script:MaxConcurrentSlots    = 3
@@ -312,7 +390,6 @@ function Invoke-QuotaGovernor {
             $Script:MaxBudgetOverride     = 5400
             $Script:CurrentPhaseName      = "EXECUTE"
             $Script:OrchModelTier         = "kimi-k2.6:cloud"
-            $Script:WorkerModelAllowList  = @("glm-5.1:cloud", "qwen3-coder-next:cloud")
             Write-HeartbeatLog "INFO" "EXECUTE PHASE: 3-slot, major feature implementation, max budget 5400s"
         }
         default {
@@ -321,9 +398,22 @@ function Invoke-QuotaGovernor {
             $Script:MaxBudgetOverride     = 0
             $Script:CurrentPhaseName      = "HEAVY-LIFT"
             $Script:OrchModelTier         = "qwen3-coder:480b:cloud"
-            $Script:WorkerModelAllowList  = @()
             Write-HeartbeatLog "INFO" "HEAVY-LIFT PHASE: 3-slot, flagship models, no budget cap. Token-heavy work: multi-file wiring, architecture, deep planning."
         }
+    }
+
+    # Resolve worker model allowlist from dynamic source (ollama.com/api/tags).
+    # Hardlock: empty list. Tier 5 (MICRO): minimal safe list to avoid burning
+    # critically-scarce quota on heavy models. All other tiers: full dynamic list.
+    if ($quota.Tier -ge 6) {
+        $Script:WorkerModelAllowList = @()
+    } elseif ($quota.Tier -ge 5) {
+        $Script:WorkerModelAllowList = @("gemini-3-flash-preview:cloud")
+    } elseif ($Script:DynamicModelAllowList.Count -gt 0) {
+        $Script:WorkerModelAllowList = $Script:DynamicModelAllowList
+    } else {
+        # Bootstrap: dynamic list hasn't loaded yet, allow anything
+        $Script:WorkerModelAllowList = @()
     }
 }
 
@@ -891,6 +981,7 @@ function Invoke-HeartbeatPulse {
 
     # Refresh quota from ollama.com (with cooldown), then re-evaluate every pulse
     Invoke-QuotaRefresh
+    Invoke-RefreshModelAllowlist
     Invoke-QuotaGovernor
 
     # Phase 1: Cleanup completed jobs
@@ -928,7 +1019,16 @@ function Invoke-HeartbeatPulse {
                 Write-HeartbeatLog "WARN" "Orchestrator completed but did NOT write ORCHESTRATOR_STATUS.md"
             }
         }
-        Receive-Job -Job $j 2>$null | Out-Null
+        $jobOutput = Receive-Job -Job $j 2>$null
+        if ($jobOutput) {
+            Write-HeartbeatLog "DEBUG" "--- Output from $($j.Name) ---"
+            foreach ($line in $jobOutput) {
+                if ($line -is [string] -and $line.Trim() -ne "") {
+                    Write-HeartbeatLog "DEBUG" "  | $($line.Trim())"
+                }
+            }
+            Write-HeartbeatLog "DEBUG" "--- End $($j.Name) ---"
+        }
         Remove-Job -Job $j -Force -ErrorAction SilentlyContinue
     }
 
@@ -1030,7 +1130,8 @@ function Invoke-HeartbeatPulse {
 
         if ($needsOrch) {
             Invoke-DispatchOrchestrator -Reason $orchReason
-            Start-Sleep -Seconds 5
+            # Brief yield so the PS job scheduler can pick up the orchestrator job
+            Start-Sleep -Milliseconds 500
         }
     }
 }
@@ -1062,10 +1163,11 @@ function Invoke-HeartbeatBoot {
     }
     Write-HeartbeatLog "INFO" "Ollama service reachable at localhost:11434"
 
-    # Phase 3: Refresh quota data, then initialize governor before banner
+    # Phase 3: Refresh quota data and model allowlist, then initialize governor before banner
     Invoke-QuotaRefresh
+    Invoke-RefreshModelAllowlist
     Invoke-QuotaGovernor
-    Write-HeartbeatLog "INFO" "Max Concurrent Slots: $($Script:MaxConcurrentSlots) | Phase: $($Script:CurrentPhaseName) | Orch Model: $($Script:OrchModelTier)"
+    Write-HeartbeatLog "INFO" "Max Concurrent Slots: $($Script:MaxConcurrentSlots) | Phase: $($Script:CurrentPhaseName) | Orch Model: $($Script:OrchModelTier) | Allowed Models: $($Script:WorkerModelAllowList.Count)"
 
     # Phase 4: Remove stale completion flag from prior run
     if (Test-Path $Script:CompleteFlag) {
@@ -1108,14 +1210,46 @@ function Invoke-HeartbeatBoot {
     Write-HeartbeatLog "INFO" "Boot complete. Entering main dispatch loop."
 }
 
-# === MAIN ===
-Invoke-HeartbeatBoot
-while ($true) {
-    try {
-        Invoke-HeartbeatPulse
-    } catch {
-        Write-HeartbeatLog "ERROR" "UNHANDLED EXCEPTION in pulse: $($_.Exception.Message)"
-        Write-HeartbeatLog "ERROR" "Stack trace: $($_.ScriptStackTrace)"
+# === REGISTER CTRL+C HANDLER ===
+$null = [Console]::CancelKeyPress.Add({
+    Write-Host "`n[SHUTDOWN] Ctrl+C received. Signaling graceful shutdown (press again to force)..." -ForegroundColor Yellow
+    if ($Script:ShutdownRequested) {
+        Write-Host "[SHUTDOWN] Second Ctrl+C -- forcing immediate exit." -ForegroundColor Red
+        $_.Cancel = $false
+        return
     }
-    Start-Sleep -Seconds $Script:PollIntervalSeconds
+    $Script:ShutdownRequested = $true
+    $_.Cancel = $true
+})
+
+# === MAIN ===
+try {
+    Invoke-HeartbeatBoot
+    while (-not $Script:ShutdownRequested) {
+        try {
+            Invoke-HeartbeatPulse
+        } catch {
+            Write-HeartbeatLog "ERROR" "UNHANDLED EXCEPTION in pulse: $($_.Exception.Message)"
+            Write-HeartbeatLog "ERROR" "Stack trace: $($_.ScriptStackTrace)"
+        }
+        # Sleep in small increments so Ctrl+C is responsive
+        if ($Script:ShutdownRequested) { break }
+        $sleepEnd = (Get-Date).AddSeconds($Script:PollIntervalSeconds)
+        while (-not $Script:ShutdownRequested -and (Get-Date) -lt $sleepEnd) {
+            Start-Sleep -Milliseconds 250
+        }
+    }
+} finally {
+    Write-Host "`n=== SWARM SHUTDOWN ===" -ForegroundColor Yellow
+    Write-Host "Stopping all PS jobs..." -ForegroundColor Cyan
+    Get-Job | ForEach-Object {
+        try { Stop-Job -Job $_ -ErrorAction SilentlyContinue } catch {}
+        try { Remove-Job -Job $_ -Force -ErrorAction SilentlyContinue } catch {}
+    }
+    Write-Host "Killing remaining claude.exe processes..." -ForegroundColor Cyan
+    $claudeProcs = @(Get-Process -Name "claude" -ErrorAction SilentlyContinue)
+    foreach ($p in $claudeProcs) {
+        try { Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue } catch {}
+    }
+    Write-Host "Swarm shutdown complete." -ForegroundColor Green
 }

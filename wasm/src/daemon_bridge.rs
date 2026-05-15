@@ -25,6 +25,8 @@ use scmessenger_core::wasm_support::rpc::{JsonRpcNotification, JsonRpcRequest, J
 use std::cell::RefCell;
 #[cfg(target_arch = "wasm32")]
 use std::rc::Rc;
+#[cfg(target_arch = "wasm32")]
+use wasm_bindgen_futures::spawn_local;
 
 // ── Request formatters ────────────────────────────────────────────────────
 
@@ -292,6 +294,22 @@ pub type NotificationCallback = Box<dyn Fn(String, serde_json::Value)>;
 /// const resp = await bridge.request("get_identity", {});
 /// console.log(resp.result);
 /// ```
+/// Connection state for the daemon bridge
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg(target_arch = "wasm32")]
+pub enum BridgeState {
+    /// Not yet connected
+    Disconnected,
+    /// Currently connecting
+    Connecting,
+    /// Connected and operational
+    Connected,
+    /// Connection lost, reconnecting
+    Reconnecting,
+    /// Permanently closed
+    Closed,
+}
+
 pub struct DaemonBridge {
     url: String,
     next_id: std::sync::atomic::AtomicU64,
@@ -306,6 +324,18 @@ pub struct DaemonBridge {
     socket: Rc<RefCell<Option<web_sys::WebSocket>>>,
     #[cfg(target_arch = "wasm32")]
     url_clone: String,
+    /// Reconnection state and configuration
+    #[cfg(target_arch = "wasm32")]
+    reconnection_state: Rc<RefCell<BridgeState>>,
+    /// Maximum reconnection attempts before giving up
+    #[cfg(target_arch = "wasm32")]
+    max_reconnect_attempts: std::sync::atomic::AtomicU32,
+    /// Current reconnection attempt count
+    #[cfg(target_arch = "wasm32")]
+    reconnect_attempts: std::sync::atomic::AtomicU32,
+    /// Reconnection interval in milliseconds (exponential backoff base)
+    #[cfg(target_arch = "wasm32")]
+    reconnect_interval_ms: std::sync::atomic::AtomicU64,
 }
 
 impl DaemonBridge {
@@ -325,7 +355,45 @@ impl DaemonBridge {
             socket: Rc::new(RefCell::new(None)),
             #[cfg(target_arch = "wasm32")]
             url_clone: url,
+            #[cfg(target_arch = "wasm32")]
+            reconnection_state: Rc::new(RefCell::new(BridgeState::Disconnected)),
+            #[cfg(target_arch = "wasm32")]
+            max_reconnect_attempts: std::sync::atomic::AtomicU32::new(5),
+            #[cfg(target_arch = "wasm32")]
+            reconnect_attempts: std::sync::atomic::AtomicU32::new(0),
+            #[cfg(target_arch = "wasm32")]
+            reconnect_interval_ms: std::sync::atomic::AtomicU64::new(1000),
         }
+    }
+
+    /// Configure maximum reconnection attempts.
+    #[cfg(target_arch = "wasm32")]
+    pub fn set_max_reconnect_attempts(&self, max: u32) {
+        self.max_reconnect_attempts.store(max, std::sync::atomic::Ordering::SeqCst);
+    }
+
+    /// Configure base reconnection interval (milliseconds, exponential backoff).
+    #[cfg(target_arch = "wasm32")]
+    pub fn set_reconnect_interval_ms(&self, interval_ms: u64) {
+        self.reconnect_interval_ms.store(interval_ms, std::sync::atomic::Ordering::SeqCst);
+    }
+
+    /// Get current reconnection state.
+    #[cfg(target_arch = "wasm32")]
+    pub fn state(&self) -> BridgeState {
+        *self.reconnection_state.borrow()
+    }
+
+    /// True if the bridge is connected and operational.
+    #[cfg(target_arch = "wasm32")]
+    pub fn is_connected(&self) -> bool {
+        self.state() == BridgeState::Connected
+    }
+
+    /// True if the bridge is connected and operational (desktop stub).
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn is_connected(&self) -> bool {
+        false
     }
 
     /// Register a callback for server-push notifications.
@@ -346,26 +414,44 @@ impl DaemonBridge {
     /// Registers `onopen`, `onmessage`, `onerror`, and `onclose` event
     /// handlers. Inbound text frames are parsed as JSON-RPC responses or
     /// notifications and dispatched to the registered callbacks.
+    /// On connection loss, automatically attempts reconnection with exponential backoff.
     #[cfg(target_arch = "wasm32")]
     pub fn connect(&self) -> Result<(), String> {
         use wasm_bindgen::closure::Closure;
         use wasm_bindgen::JsCast;
         use web_sys::{CloseEvent, ErrorEvent, MessageEvent, WebSocket};
 
+        // Set connecting state
+        *self.reconnection_state.borrow_mut() = BridgeState::Connecting;
+
+        // Get reconnect config values to avoid borrowing issues in closures
+        let reconnect_interval = self.reconnect_interval_ms.load(std::sync::atomic::Ordering::SeqCst);
+        let max_reconnect_attempts = self.max_reconnect_attempts.load(std::sync::atomic::Ordering::SeqCst);
+
         let ws = WebSocket::new(&self.url)
             .map_err(|e| format!("Failed to create WebSocket: {:?}", e))?;
 
+        let state_for_handlers = Rc::clone(&self.reconnection_state);
+        let socket_for_handlers = Rc::clone(&self.socket);
+        let reconnect_attempts = Rc::clone(&self.reconnect_attempts);
+        let max_attempts = self.max_reconnect_attempts.clone();
+        let interval = self.reconnect_interval_ms.clone();
+        let pending_for_handlers = Rc::clone(&self.pending);
+        let notif_cb_for_handlers = Rc::clone(&self.on_notification);
+        let url_clone_for_handlers = self.url_clone.clone();
+        let url_for_log = self.url.clone();
+
         // ── onopen ──
-        let url_log = self.url.clone();
+        let onopen_url = url_for_log.clone();
         let onopen = Closure::wrap(Box::new(move |_: web_sys::Event| {
-            tracing::info!("Daemon bridge connected to {}", url_log);
+            tracing::info!("Daemon bridge connected to {}", onopen_url);
+            *state_for_handlers.borrow_mut() = BridgeState::Connected;
+            reconnect_attempts.store(0, std::sync::atomic::Ordering::SeqCst);
         }) as Box<dyn FnMut(web_sys::Event)>);
         ws.set_onopen(Some(onopen.as_ref().unchecked_ref()));
         onopen.forget();
 
         // ── onmessage ──
-        let pending_map = Rc::clone(&self.pending);
-        let notif_cb = Rc::clone(&self.on_notification);
         let onmessage = Closure::wrap(Box::new(move |event: MessageEvent| {
             let text = match event.data().as_string() {
                 Some(s) => s,
@@ -379,7 +465,7 @@ impl DaemonBridge {
             if let Ok(resp) = serde_json::from_str::<JsonRpcResponse>(&text) {
                 if let Some(ref id_val) = resp.id {
                     if let Some(id_num) = id_val.as_u64() {
-                        let cb = pending_map.borrow_mut().remove(&id_num);
+                        let cb = pending_for_handlers.borrow_mut().remove(&id_num);
                         if let Some(cb) = cb {
                             cb(
                                 id_val.clone(),
@@ -396,7 +482,7 @@ impl DaemonBridge {
 
             // Try parsing as a JSON-RPC notification (no `id`).
             if let Ok(notif) = serde_json::from_str::<JsonRpcNotification>(&text) {
-                if let Some(ref cb) = *notif_cb.borrow() {
+                if let Some(ref cb) = *notif_cb_for_handlers.borrow() {
                     cb(notif.method, notif.params);
                 }
                 return;
@@ -411,22 +497,168 @@ impl DaemonBridge {
         onmessage.forget();
 
         // ── onerror ──
-        let url_err = self.url.clone();
+        let onerror_url = url_for_log.clone();
+        let onerror_reconnect_state = Rc::clone(&state_for_handlers);
         let onerror = Closure::wrap(Box::new(move |event: ErrorEvent| {
-            tracing::error!("Daemon bridge error for {}: {}", url_err, event.message());
+            let msg = event.message();
+            tracing::error!("Daemon bridge error for {}: {}", onerror_url, msg);
+            // Set reconnecting state to trigger reconnection on close
+            *onerror_reconnect_state.borrow_mut() = BridgeState::Reconnecting;
         }) as Box<dyn FnMut(ErrorEvent)>);
         ws.set_onerror(Some(onerror.as_ref().unchecked_ref()));
         onerror.forget();
 
         // ── onclose ──
-        let url_close = self.url.clone();
+        let onclose_url = url_for_log.clone();
+        let onclose_reconnect_state = Rc::clone(&state_for_handlers);
+        let onclose_socket = Rc::clone(&socket_for_handlers);
+        let onclose_reconnect_attempts = Rc::clone(&reconnect_attempts);
+        let onclose_max_attempts = max_attempts;
+        let onclose_interval = interval;
         let onclose = Closure::wrap(Box::new(move |event: CloseEvent| {
+            let code = event.code();
+            let reason = event.reason();
             tracing::info!(
                 "Daemon bridge closed for {}: code={} reason={}",
-                url_close,
-                event.code(),
-                event.reason()
+                onclose_url,
+                code,
+                reason
             );
+
+            // Try to reconnect if not permanently closed and within attempts
+            let current_state = *onclose_reconnect_state.borrow();
+            if current_state != BridgeState::Closed {
+                let attempts = onclose_reconnect_attempts.load(std::sync::atomic::Ordering::SeqCst);
+                let max = onclose_max_attempts.load(std::sync::atomic::Ordering::SeqCst);
+
+                if attempts < max {
+                    let next_interval = onclose_interval.load(std::sync::atomic::Ordering::SeqCst);
+                    let next_interval = next_interval * (2u64.pow(attempts)); // exponential backoff
+
+                    *onclose_reconnect_state.borrow_mut() = BridgeState::Reconnecting;
+                    onclose_reconnect_attempts.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+
+                    // Schedule reconnection after delay
+                    let url_for_reconnect = onclose_url.clone();
+                    let socket_for_reconnect = Rc::clone(&onclose_socket);
+                    let state_for_reconnect = Rc::clone(&onclose_reconnect_state);
+                    let attempts_for_reconnect = onclose_reconnect_attempts.clone();
+                    let max_for_reconnect = onclose_max_attempts.clone();
+                    let interval_for_reconnect = onclose_interval.clone();
+                    let pending_for_reconnect = Rc::clone(&pending_for_handlers);
+                    let notif_cb_for_reconnect = Rc::clone(&notif_cb_for_handlers);
+
+                    spawn_local(async move {
+                        wasm_bindgen_futures::js_sys::Promise::new(&mut |resolve, _reject| {
+                            let timeout_id = wasm_bindgen::JsValue::from(
+                                wasm_bindgen::JsValue::UNDEFINED,
+                            );
+                            // Use setTimeout via js_sys
+                            let window = wasm_bindgen::JsValue::UNDEFINED;
+                            let _ = wasm_bindgen::JsValue::from(
+                                wasm_bindgen::JsCast::dyn_ref::<wasm_bindgen::JsCast>(&window)
+                                    .unwrap()
+                                    .dyn_into::<wasm_bindgen::js_sys::global::Window>()
+                                    .unwrap(),
+                            );
+                        })
+                        .map_err(|_| {
+                            tracing::error!("Failed to schedule reconnection");
+                        });
+
+                        // Simple setTimeout via js_sys
+                        let window = js_sys::global();
+                        let cb = Closure::wrap(Box::new(move || {
+                            tracing::info!(
+                                "Attempting reconnection to {} (attempt {}/{})",
+                                url_for_reconnect,
+                                attempts + 1,
+                                max
+                            );
+                            *state_for_reconnect.borrow_mut() = BridgeState::Connecting;
+
+                            if let Ok(ws) = WebSocket::new(&url_for_reconnect) {
+                                // onopen
+                                let onopen_reconnect = Closure::wrap(Box::new(move |_| {
+                                    tracing::info!("Reconnection successful");
+                                    *state_for_reconnect.borrow_mut() = BridgeState::Connected;
+                                    attempts_for_reconnect.store(0, std::sync::atomic::Ordering::SeqCst);
+                                }) as Box<dyn FnMut(web_sys::Event)>);
+                                ws.set_onopen(Some(onopen_reconnect.as_ref().unchecked_ref()));
+                                onopen_reconnect.forget();
+
+                                // onmessage
+                                let onmessage_reconnect = Closure::wrap(Box::new(move |event: MessageEvent| {
+                                    let text = match event.data().as_string() {
+                                        Some(s) => s,
+                                        None => return,
+                                    };
+                                    if let Ok(resp) = serde_json::from_str::<JsonRpcResponse>(&text) {
+                                        if let Some(ref id_val) = resp.id {
+                                            if let Some(id_num) = id_val.as_u64() {
+                                                let cb = pending_for_reconnect.borrow_mut().remove(&id_num);
+                                                if let Some(cb) = cb {
+                                                    cb(id_val.clone(), resp.result, resp.error.map(|e| serde_json::json!({"code": e.code, "message": e.message})));
+                                                }
+                                                return;
+                                            }
+                                        }
+                                    }
+                                    if let Ok(notif) = serde_json::from_str::<JsonRpcNotification>(&text) {
+                                        if let Some(ref cb) = *notif_cb_for_reconnect.borrow() {
+                                            cb(notif.method, notif.params);
+                                        }
+                                    }
+                                }) as Box<dyn FnMut(MessageEvent)>);
+                                ws.set_onmessage(Some(onmessage_reconnect.as_ref().unchecked_ref()));
+                                onmessage_reconnect.forget();
+
+                                // onerror
+                                let onerror_reconnect = Closure::wrap(Box::new(move |_: ErrorEvent| {
+                                    tracing::error!("Reconnection error");
+                                    *state_for_reconnect.borrow_mut() = BridgeState::Reconnecting;
+                                }) as Box<dyn FnMut(ErrorEvent)>);
+                                ws.set_onerror(Some(onerror_reconnect.as_ref().unchecked_ref()));
+                                onerror_reconnect.forget();
+
+                                // onclose
+                                let onclose_reconnect = Closure::wrap(Box::new(move |event: CloseEvent| {
+                                    tracing::info!(
+                                        "Reconnection closed: code={} reason={}",
+                                        event.code(),
+                                        event.reason()
+                                    );
+                                    *state_for_reconnect.borrow_mut() = BridgeState::Reconnecting;
+                                }) as Box<dyn FnMut(CloseEvent)>);
+                                ws.set_onclose(Some(onclose_reconnect.as_ref().unchecked_ref()));
+                                onclose_reconnect.forget();
+
+                                *socket_for_reconnect.borrow_mut() = Some(ws);
+                            } else {
+                                tracing::error!("Failed to create WebSocket for reconnection");
+                                // Schedule another reconnect attempt
+                            }
+                        }) as Box<dyn FnMut()>);
+
+                        // Schedule the callback with setTimeout
+                        let _ = window
+                            .dyn_ref::<wasm_bindgen::js_sys::global::Window>()
+                            .unwrap()
+                            .set_timeout_with_callback_and_timeout_and_arguments_0(
+                                cb.as_ref().unchecked_ref(),
+                                next_interval as i32,
+                            );
+                        cb.forget();
+                    });
+                } else {
+                    tracing::warn!(
+                        "Max reconnection attempts ({}) reached for {}",
+                        max,
+                        onclose_url
+                    );
+                    *onclose_reconnect_state.borrow_mut() = BridgeState::Closed;
+                }
+            }
         }) as Box<dyn FnMut(CloseEvent)>);
         ws.set_onclose(Some(onclose.as_ref().unchecked_ref()));
         onclose.forget();
@@ -510,6 +742,7 @@ impl DaemonBridge {
     /// Close the WebSocket and drop all pending callbacks.
     #[cfg(target_arch = "wasm32")]
     pub fn disconnect(&self) {
+        *self.reconnection_state.borrow_mut() = BridgeState::Closed;
         self.pending.borrow_mut().clear();
         let mut guard = self.socket.borrow_mut();
         if let Some(ws) = guard.take() {
@@ -522,17 +755,6 @@ impl DaemonBridge {
     #[cfg(not(target_arch = "wasm32"))]
     pub fn disconnect(&self) {
         tracing::info!("Daemon bridge simulation: disconnected");
-    }
-
-    /// True if a WebSocket handle is held (connected or connecting).
-    #[cfg(target_arch = "wasm32")]
-    pub fn is_connected(&self) -> bool {
-        self.socket.borrow().is_some()
-    }
-
-    #[cfg(not(target_arch = "wasm32"))]
-    pub fn is_connected(&self) -> bool {
-        true
     }
 }
 

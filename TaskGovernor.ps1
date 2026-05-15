@@ -18,7 +18,15 @@ $ErrorActionPreference = "Stop"
 function Write-GovernorLog {
     param([string]$Level, [string]$Message)
     $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss.fff"
-    "[$timestamp][GOVERNOR][$Level] $Message"
+    $line = "[$timestamp][GOVERNOR][$Level] $Message"
+    # Write-Host goes directly to host console, bypassing job output buffering
+    switch ($Level) {
+        "ERROR" { Write-Host $line -ForegroundColor Red }
+        "WARN"  { Write-Host $line -ForegroundColor Yellow }
+        "INFO"  { Write-Host $line -ForegroundColor Cyan }
+        "DEBUG" { Write-Host $line -ForegroundColor DarkGray }
+        default { Write-Host $line }
+    }
 }
 
 function Read-TaskHeaders {
@@ -77,14 +85,14 @@ function Invoke-AgentWithBudget {
 QUOTA CONTEXT (from SwarmHeartbeat at dispatch time):
   5-Hour Usage: $($qc.FiveHour)% (resets in ~$($qc.ResetMinutes) min)
   7-Day Usage: $($qc.SevenDay)%
-  Active Phase: $($qc.Phase) (Tier $($qc.Tier) — HARDLOCK at 99.5%)
+  Active Phase: $($qc.Phase) (Tier $($qc.Tier) - HARDLOCK at 99.5%)
   Your Budget: $($qc.Budget)s
 PARTIAL COMPLETION IS ACCEPTABLE. If you cannot finish within budget, write what
 you completed and mark remaining work with [REMAINING] comments. Exit cleanly.
 
 "@
         } catch {
-            # JSON parse failed — skip quota block silently
+            # JSON parse failed - skip quota block silently
         }
     }
 
@@ -107,53 +115,145 @@ you completed and mark remaining work with [REMAINING] comments. Exit cleanly.
     $psi.RedirectStandardError = $true
     $psi.CreateNoWindow = $true
 
-    $process = New-Object System.Diagnostics.Process
-    $process.StartInfo = $psi
-    $process.Start() | Out-Null
+    $process = $null
+    $eventJobs = @()
+    $outputList = New-Object System.Collections.ArrayList
+    $stderrList = New-Object System.Collections.ArrayList
+    $syncLock   = New-Object System.Object
 
-    $process.StandardInput.WriteLine($prompt)
-    $process.StandardInput.Close()
+    try {
+        $process = New-Object System.Diagnostics.Process
+        $process.StartInfo = $psi
+        $process.Start() | Out-Null
 
-    while (-not $process.HasExited) {
-        $elapsed = ((Get-Date) - $startTime).TotalSeconds
+        $process.StandardInput.WriteLine($prompt)
+        $process.StandardInput.Close()
 
-        if (-not $process.StandardOutput.EndOfStream) {
-            $line = $process.StandardOutput.ReadLine()
-            if ($line) { Write-Output $line }
+        # Register async event handlers for non-blocking output reading
+        # Event actions run in child runspaces - MessageData passes shared .NET objects
+        $evtOut = Register-ObjectEvent -InputObject $process -EventName "OutputDataReceived" `
+            -MessageData @{ List = $outputList; Lock = $syncLock } `
+            -Action {
+                $data = $EventArgs.Data
+                if ($null -ne $data) {
+                    [System.Threading.Monitor]::Enter($Event.MessageData.Lock)
+                    try { $null = $Event.MessageData.List.Add($data) }
+                    finally { [System.Threading.Monitor]::Exit($Event.MessageData.Lock) }
+                }
+            }
+        $eventJobs += $evtOut
+
+        $evtErr = Register-ObjectEvent -InputObject $process -EventName "ErrorDataReceived" `
+            -MessageData @{ List = $stderrList; Lock = $syncLock } `
+            -Action {
+                $data = $EventArgs.Data
+                if ($null -ne $data) {
+                    [System.Threading.Monitor]::Enter($Event.MessageData.Lock)
+                    try { $null = $Event.MessageData.List.Add($data) }
+                    finally { [System.Threading.Monitor]::Exit($Event.MessageData.Lock) }
+                }
+            }
+        $eventJobs += $evtErr
+
+        # Begin async reads AFTER registering handlers
+        $process.BeginOutputReadLine()
+        $process.BeginErrorReadLine()
+
+        # Polling loop: drain output, enforce budget, check for exit
+        while (-not $process.HasExited) {
+            $elapsed = ((Get-Date) - $startTime).TotalSeconds
+
+            # Drain accumulated output lines
+            [System.Threading.Monitor]::Enter($syncLock)
+            try {
+                for ($i = 0; $i -lt $outputList.Count; $i++) {
+                    Write-Output $outputList[$i]
+                }
+                $outputList.Clear()
+                for ($i = 0; $i -lt $stderrList.Count; $i++) {
+                    Write-Output "[STDERR] $($stderrList[$i])"
+                }
+                $stderrList.Clear()
+            } finally {
+                [System.Threading.Monitor]::Exit($syncLock)
+            }
+
+            # Budget warning at 80%
+            if (-not $warned -and $elapsed -ge $warnThreshold) {
+                $warned = $true
+                Write-GovernorLog "WARN" "BUDGET WARNING: $([math]::Round($elapsed,1))s / ${budgetSeconds}s elapsed (80% threshold)"
+            }
+
+            # Budget breach: kill process tree
+            if ($elapsed -ge $budgetSeconds) {
+                Write-GovernorLog "ERROR" "BUDGET BREACH: $([math]::Round($elapsed,1))s >= ${budgetSeconds}s -- force-killing agent"
+                $timedOut = $true
+                try {
+                    Stop-Process -Id $process.Id -Force -ErrorAction Stop
+                    Start-Sleep -Milliseconds 500
+                    Get-CimInstance Win32_Process -Filter "ParentProcessId = $($process.Id)" `
+                        -ErrorAction SilentlyContinue |
+                        ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+                } catch {
+                    Write-GovernorLog "ERROR" "Force kill failed: $($_.Exception.Message)"
+                }
+                break
+            }
+
+            Start-Sleep -Milliseconds 500
         }
 
-        if (-not $warned -and $elapsed -ge $warnThreshold) {
-            $warned = $true
-            Write-GovernorLog "WARN" "BUDGET WARNING: ${elapsed}s / ${budgetSeconds}s elapsed (80% threshold)"
+        # Flush any output that arrived after process exit or during kill
+        Start-Sleep -Milliseconds 300
+        [System.Threading.Monitor]::Enter($syncLock)
+        try {
+            for ($i = 0; $i -lt $outputList.Count; $i++) {
+                Write-Output $outputList[$i]
+            }
+            $outputList.Clear()
+            for ($i = 0; $i -lt $stderrList.Count; $i++) {
+                Write-Output "[STDERR] $($stderrList[$i])"
+            }
+            $stderrList.Clear()
+        } finally {
+            [System.Threading.Monitor]::Exit($syncLock)
         }
 
-        if ($elapsed -ge $budgetSeconds) {
-            Write-GovernorLog "ERROR" "BUDGET BREACH: ${elapsed}s >= ${budgetSeconds}s -- force-killing agent"
-            $timedOut = $true
+        $process.WaitForExit(5000) | Out-Null
+        $exitCode = $process.ExitCode
+        $elapsedTotal = [math]::Round(((Get-Date) - $startTime).TotalSeconds, 1)
+
+        Write-GovernorLog "INFO" "Agent exit: code=$exitCode elapsed=${elapsedTotal}s timeout=$timedOut"
+
+        return @{
+            ExitCode = $exitCode
+            Elapsed  = $elapsedTotal
+            TimedOut = $timedOut
+        }
+    } finally {
+        # Cancel async reads
+        try { $process.CancelOutputRead() } catch {}
+        try { $process.CancelErrorRead() } catch {}
+
+        # Unregister event subscribers
+        foreach ($j in $eventJobs) {
+            Unregister-Event -SourceIdentifier $j.Name -ErrorAction SilentlyContinue
+            Remove-Job -Job $j -Force -ErrorAction SilentlyContinue
+        }
+
+        # Ensure child process tree is dead
+        if ($process -and -not $process.HasExited) {
             try {
                 Stop-Process -Id $process.Id -Force -ErrorAction Stop
                 Start-Sleep -Milliseconds 500
-                Get-CimInstance Win32_Process -Filter "ParentProcessId = $($process.Id)" -ErrorAction SilentlyContinue |
+                Get-CimInstance Win32_Process -Filter "ParentProcessId = $($process.Id)" `
+                    -ErrorAction SilentlyContinue |
                     ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
             } catch {
-                Write-GovernorLog "ERROR" "Force kill failed: $($_.Exception.Message)"
+                Write-GovernorLog "WARN" "Process cleanup in finally failed: $($_.Exception.Message)"
             }
-            break
         }
-
-        Start-Sleep -Milliseconds 500
-    }
-
-    $process.WaitForExit(5000) | Out-Null
-    $exitCode = $process.ExitCode
-    $elapsedTotal = [math]::Round(((Get-Date) - $startTime).TotalSeconds, 1)
-
-    Write-GovernorLog "INFO" "Agent exit: code=$exitCode elapsed=${elapsedTotal}s timeout=$timedOut"
-
-    return @{
-        ExitCode = $exitCode
-        Elapsed  = $elapsedTotal
-        TimedOut = $timedOut
+        if ($process) { $process.Dispose() }
     }
 }
 

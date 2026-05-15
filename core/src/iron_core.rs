@@ -2163,6 +2163,24 @@ impl IronCore {
     pub fn dspy_build_rust_feature_pipeline(&self) -> crate::dspy::modules::OptimizerPipeline {
         crate::dspy::modules::ModuleFactory::build_rust_feature_pipeline()
     }
+    /// Get the list of all blocked identities (WASM version).
+    /// Returns store::blocked::BlockedIdentity directly for WASM targets.
+    #[cfg(target_arch = "wasm32")]
+    pub fn list_blocked_wasm(
+        &self,
+    ) -> Result<Vec<crate::store::blocked::BlockedIdentity>, IronCoreError> {
+        self.blocked_manager.read().list()
+    }
+
+    /// List blocked peers (WASM version).
+    /// Returns store::blocked::BlockedIdentity directly for WASM targets.
+    #[cfg(target_arch = "wasm32")]
+    pub fn list_blocked_peers_wasm(
+        &self,
+    ) -> Result<Vec<crate::store::blocked::BlockedIdentity>, IronCoreError> {
+        self.blocked_manager.read().list()
+    }
+
     pub fn get_libp2p_keypair(&self) -> Result<libp2p::identity::Keypair, IronCoreError> {
         let identity = self.identity.read();
         let keys = identity.keys().ok_or(IronCoreError::NotInitialized)?;

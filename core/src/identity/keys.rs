@@ -196,15 +196,15 @@ mod tests {
     fn test_libp2p_peer_id_derivation() {
         // Deriving Peer ID from identity keys should produce a valid base58 Peer ID
         let keys = IdentityKeys::generate();
-        let peer_id = keys.to_libp2p_peer_id().expect("Peer ID derivation should succeed");
+        let peer_id = keys
+            .to_libp2p_peer_id()
+            .expect("Peer ID derivation should succeed");
 
         // Peer ID must start with "12D3Koo" (Ed25519 identity multihash prefix)
         assert!(
             peer_id.starts_with("12D3Koo"),
             "Ed25519 Peer ID should start with '12D3Koo', got: {}",
-            &peer_id[..12.min(peer_id.len())
-                .try_into()
-                .unwrap_or(usize::MAX)]
+            &peer_id[..12.min(peer_id.len()).try_into().unwrap_or(usize::MAX)]
         );
 
         // Peer ID must be parseable as a valid libp2p PeerId
@@ -236,7 +236,10 @@ mod tests {
         let keys = IdentityKeys::generate();
         let peer_id_1 = keys.to_libp2p_peer_id().unwrap();
         let peer_id_2 = keys.to_libp2p_peer_id().unwrap();
-        assert_eq!(peer_id_1, peer_id_2, "Peer ID derivation must be deterministic");
+        assert_eq!(
+            peer_id_1, peer_id_2,
+            "Peer ID derivation must be deterministic"
+        );
     }
 
     #[test]
@@ -246,7 +249,10 @@ mod tests {
         let keys_b = IdentityKeys::generate();
         let peer_id_a = keys_a.to_libp2p_peer_id().unwrap();
         let peer_id_b = keys_b.to_libp2p_peer_id().unwrap();
-        assert_ne!(peer_id_a, peer_id_b, "Different keypairs must yield different Peer IDs");
+        assert_ne!(
+            peer_id_a, peer_id_b,
+            "Different keypairs must yield different Peer IDs"
+        );
     }
 
     #[test]
@@ -259,7 +265,11 @@ mod tests {
         // Parse the Peer ID and extract the public key bytes
         let parsed: libp2p::PeerId = peer_id.parse().expect("Peer ID must be parseable");
         let mh = parsed.as_ref();
-        assert_eq!(mh.code(), 0, "Ed25519 Peer IDs use identity multihash (code 0)");
+        assert_eq!(
+            mh.code(),
+            0,
+            "Ed25519 Peer IDs use identity multihash (code 0)"
+        );
 
         let pk = libp2p::identity::PublicKey::try_decode_protobuf(mh.digest())
             .expect("Must decode public key from Peer ID");

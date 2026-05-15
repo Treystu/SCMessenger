@@ -394,7 +394,9 @@ mod tests {
         let _recovered: DiscoveryMode = serde_json::from_str(&json).expect("Should deserialize");
 
         // Test LanOnly
-        let lan_only = DiscoveryMode::LanOnly { broadcast_interval: 30 };
+        let lan_only = DiscoveryMode::LanOnly {
+            broadcast_interval: 30,
+        };
         let json = serde_json::to_string(&lan_only).expect("Should serialize");
         let recovered: DiscoveryMode = serde_json::from_str(&json).expect("Should deserialize");
         assert!(matches!(recovered, DiscoveryMode::LanOnly { .. }));
@@ -426,7 +428,9 @@ mod tests {
 
     #[test]
     fn test_discovery_mode_lan_only() {
-        let lan_only = DiscoveryMode::LanOnly { broadcast_interval: 30 };
+        let lan_only = DiscoveryMode::LanOnly {
+            broadcast_interval: 30,
+        };
         assert!(!lan_only.allows_mdns());
         assert!(!lan_only.allows_identify());
         assert!(!lan_only.advertises_identify());

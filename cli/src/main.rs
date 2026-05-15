@@ -1431,10 +1431,9 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
                                     if let Some(fallback_addr) =
                                         try_replace_port(&addr, fallback_port)
                                     {
-                                        let fallback_label = ledger::extract_ip_port(
-                                            &fallback_addr.to_string(),
-                                        )
-                                        .unwrap_or_else(|| fallback_addr.to_string());
+                                        let fallback_label =
+                                            ledger::extract_ip_port(&fallback_addr.to_string())
+                                                .unwrap_or_else(|| fallback_addr.to_string());
                                         println!(
                                             "  {}. Fallback dial to {}...",
                                             i + 1,
@@ -2702,7 +2701,10 @@ async fn cmd_send_offline(recipient: String, message: String) -> Result<()> {
     );
 
     // Build swarm for immediate send
-    println!("{} Starting temporary swarm for immediate send...", "⚙".yellow());
+    println!(
+        "{} Starting temporary swarm for immediate send...",
+        "⚙".yellow()
+    );
     let (event_tx, mut _event_rx) = tokio::sync::mpsc::channel(16);
     let routing_handle = scmessenger_core::transport::default_routing_engine_handle();
 
@@ -2743,10 +2745,15 @@ async fn cmd_send_offline(recipient: String, message: String) -> Result<()> {
     );
 
     // Send the message via the swarm
-    let recipient_peer_id = contact.peer_id.parse::<libp2p::PeerId>().context(
-        "Invalid peer ID in contact: {}",
-    )?;
-    println!("{} Sending message to {}...", "✓".green(), recipient_peer_id);
+    let recipient_peer_id = contact
+        .peer_id
+        .parse::<libp2p::PeerId>()
+        .context("Invalid peer ID in contact: {}")?;
+    println!(
+        "{} Sending message to {}...",
+        "✓".green(),
+        recipient_peer_id
+    );
 
     let max_retries = 3;
     let mut attempts = 0;
@@ -2754,7 +2761,9 @@ async fn cmd_send_offline(recipient: String, message: String) -> Result<()> {
 
     while attempts < max_retries {
         attempts += 1;
-        match swarm_handle.send_message(recipient_peer_id, envelope_bytes.clone(), None, None).await
+        match swarm_handle
+            .send_message(recipient_peer_id, envelope_bytes.clone(), None, None)
+            .await
         {
             Ok(_) => {
                 println!(
@@ -3371,7 +3380,9 @@ async fn cmd_test() -> Result<()> {
 /// NOTE: This also matches valid Ed25519 public keys (also 64 hex chars).
 /// Use looks_like_ed25519_pk() to distinguish.
 fn looks_like_blake3_id(s: &str) -> bool {
-    s.len() == 64 && s.chars().all(|c| matches!(c, '0'..='9' | 'a'..='f' | 'A'..='F'))
+    s.len() == 64
+        && s.chars()
+            .all(|c| matches!(c, '0'..='9' | 'a'..='f' | 'A'..='F'))
 }
 
 /// Returns true if `s` is a valid Ed25519 public key (64 hex chars that decode

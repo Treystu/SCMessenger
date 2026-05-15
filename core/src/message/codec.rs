@@ -6,10 +6,10 @@
 // it falls back to legacy bincode for backward compatibility with older nodes.
 
 use super::types::{Envelope, Message};
-use anyhow::{bail, Result};
-use crate::drift::{DriftEnvelope, EnvelopeType};
 use crate::drift::envelope::COMPRESSION_THRESHOLD;
 use crate::drift::DRIFT_VERSION;
+use crate::drift::{DriftEnvelope, EnvelopeType};
+use anyhow::{bail, Result};
 
 /// Maximum encoded message size: 256 KB
 /// This prevents memory exhaustion from malicious oversized messages.
@@ -162,7 +162,7 @@ fn encode_drift_envelope(envelope: &Envelope) -> Result<Vec<u8>> {
         version: DRIFT_VERSION,
         envelope_type: EnvelopeType::EncryptedMessage,
         compressed,
-        message_id: [0u8; 16], // Will be filled by prepare_message_internal
+        message_id: [0u8; 16],    // Will be filled by prepare_message_internal
         recipient_hint: [0u8; 4], // Will be filled by prepare_message_internal
         created_at: web_time::SystemTime::now()
             .duration_since(web_time::UNIX_EPOCH)
