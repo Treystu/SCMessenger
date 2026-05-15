@@ -47,18 +47,18 @@ class MeshRepositoryTest {
     }
 
     @Test
-    fun `requireMeshParticipationEnabled allows enabled settings`() {
-        MeshRepository.requireMeshParticipationEnabled(meshSettings(true))
-    }
-
-    @Test(expected = IllegalStateException::class)
-    fun `requireMeshParticipationEnabled throws for disabled settings`() {
-        MeshRepository.requireMeshParticipationEnabled(meshSettings(false))
+    fun `checkMeshParticipationEnabled allows enabled settings`() {
+        assertTrue(MeshRepository.checkMeshParticipationEnabled(meshSettings(true)))
     }
 
     @Test
-    fun `requireMeshParticipationEnabled allows null settings by default`() {
-        MeshRepository.requireMeshParticipationEnabled(null)
+    fun `checkMeshParticipationEnabled handles disabled settings`() {
+        assertFalse(MeshRepository.checkMeshParticipationEnabled(meshSettings(false)))
+    }
+
+    @Test
+    fun `checkMeshParticipationEnabled allows null settings by default`() {
+        assertTrue(MeshRepository.checkMeshParticipationEnabled(null))
     }
 
     @Test
@@ -82,31 +82,23 @@ class MeshRepositoryTest {
     }
 
     @Test
-    fun `require helper allows null settings consistently across repeated calls`() {
+    fun `checkMeshParticipationEnabled helper allows null settings consistently across repeated calls`() {
         repeat(3) {
-            val result = kotlin.runCatching {
-                MeshRepository.requireMeshParticipationEnabled(null)
-            }
-            assertTrue(result.isSuccess)
+            assertTrue(MeshRepository.checkMeshParticipationEnabled(null))
         }
     }
 
     @Test
-    fun `require helper never throws for enabled settings across repeated calls`() {
+    fun `checkMeshParticipationEnabled never throws for enabled settings across repeated calls`() {
         val settings = meshSettings(relayEnabled = true)
         repeat(10) {
-            MeshRepository.requireMeshParticipationEnabled(settings)
+            assertTrue(MeshRepository.checkMeshParticipationEnabled(settings))
         }
     }
 
     @Test
-    fun `error message for disabled participation is descriptive`() {
-        val err = kotlin.runCatching {
-            MeshRepository.requireMeshParticipationEnabled(meshSettings(false))
-        }.exceptionOrNull()
-
-        assertTrue(err is IllegalStateException)
-        assertTrue(err?.message?.contains("mesh participation is disabled") == true)
+    fun `checkMeshParticipationEnabled returns false for disabled participation`() {
+        assertFalse(MeshRepository.checkMeshParticipationEnabled(meshSettings(false)))
     }
 
     @Test

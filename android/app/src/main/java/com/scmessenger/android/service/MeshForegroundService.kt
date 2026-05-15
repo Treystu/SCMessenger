@@ -411,8 +411,6 @@ class MeshForegroundService : Service() {
     }
 
     private fun createNotification(): Notification {
-        createNotificationChannel()
-
         val notificationIntent = Intent(this, MainActivity::class.java)
         val pendingIntent = PendingIntent.getActivity(
             this,
@@ -648,21 +646,6 @@ class MeshForegroundService : Service() {
         return null
     }
 
-    private fun createNotificationChannel() {
-        val channel = NotificationChannel(
-            CHANNEL_ID,
-            getString(R.string.mesh_service_channel_name),
-            NotificationManager.IMPORTANCE_LOW
-        ).apply {
-            description = getString(R.string.mesh_service_channel_description)
-            setShowBadge(false)
-        }
-
-        val notificationManager = getSystemService(NotificationManager::class.java)
-        notificationManager.createNotificationChannel(channel)
-    }
-
-    // Wire onBind into service binding — supports local service binding for health monitoring
     override fun onBind(intent: Intent?): IBinder? {
         // Wire isServiceHealthy check into onBind for binder clients
         if (serviceHealthMonitor.isServiceHealthy()) {
@@ -690,7 +673,7 @@ class MeshForegroundService : Service() {
     }
 
     companion object {
-        private const val CHANNEL_ID = "mesh_service_channel"
+        private const val CHANNEL_ID = "mesh_status"
         private const val NOTIFICATION_ID = 1001
 
         const val ACTION_START = "com.scmessenger.android.service.START"

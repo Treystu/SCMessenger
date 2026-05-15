@@ -14,6 +14,7 @@ use serde::{Deserialize, Serialize};
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
+#[cfg(target_arch = "wasm32")]
 use std::sync::Arc;
 
 /// Transport state enum

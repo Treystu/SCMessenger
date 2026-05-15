@@ -423,7 +423,7 @@ impl DaemonBridge {
         *self.reconnection_state.borrow_mut() = BridgeState::Connecting;
 
         // Get reconnect config values to avoid borrowing issues in closures
-        let reconnect_interval = self.reconnect_interval_ms.load(std::sync::atomic::Ordering::SeqCst);
+        let _reconnect_interval = self.reconnect_interval_ms.load(std::sync::atomic::Ordering::SeqCst);
         let _max_reconnect_attempts = self.max_reconnect_attempts.load(std::sync::atomic::Ordering::SeqCst);
 
         let ws = WebSocket::new(&self.url)
@@ -436,7 +436,7 @@ impl DaemonBridge {
         let state_for_onopen = Rc::clone(&self.reconnection_state);
         let state_for_onerror = Rc::clone(&self.reconnection_state);
         let state_for_onclose = Rc::clone(&self.reconnection_state);
-        let socket_for_handlers = Rc::clone(&self.socket);
+        let _socket_for_handlers = Rc::clone(&self.socket);
         let socket_for_onclose = Rc::clone(&self.socket);
         let pending_for_onmessage = Rc::clone(&self.pending);
         let pending_for_onclose = Rc::clone(&self.pending);
@@ -562,7 +562,7 @@ impl DaemonBridge {
                         onopen_reconnect.forget();
 
                         // onmessage
-                        let state_for_onmessage = Rc::clone(&state_for_reconnect);
+                        let _state_for_onmessage = Rc::clone(&state_for_reconnect);
                         let pending_for_onmessage = Rc::clone(&pending_for_reconnect);
                         let notif_cb_for_onmessage = Rc::clone(&notif_cb_for_reconnect);
                         let onmessage_reconnect = Closure::wrap(Box::new(move |event: MessageEvent| {
