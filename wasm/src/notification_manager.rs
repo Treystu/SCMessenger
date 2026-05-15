@@ -6,7 +6,7 @@ use std::rc::Rc;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsValue;
 #[cfg(target_arch = "wasm32")]
-use web_sys::{window, Document, Element, HtmlElement, Node, Storage};
+use web_sys::{window, Element, HtmlElement, Node, Storage};
 
 /// Notification permission state
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]

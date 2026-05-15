@@ -263,12 +263,12 @@ function Read-QuotaState {
                 }
             }
         } catch {}
-    } elseif (-not (Test-Path (Join-Path $Script:BaseDir ".claude\API_QUOTA_STATE.md"))) {
-        Write-HeartbeatLog "DEBUG" "Read-QuotaState: no quota files exist -- triggering initial fetch"
+    } else {
+        Write-HeartbeatLog "DEBUG" "Read-QuotaState: no quota_state.json exists -- triggering initial fetch"
         Invoke-QuotaRefresh
     }
 
-    # Prefer structured JSON if available (written by OllamaQuotaScraper.ps1)
+    # Read structured JSON (single source of truth, written by OllamaQuotaScraper.ps1)
     # Re-read in case lazy-refresh above just updated the file
     if (Test-Path $jsonFile) {
         try {
@@ -277,27 +277,14 @@ function Read-QuotaState {
                 $fiveHour  = [double]$json.fiveHour
                 $sevenDay  = [double]$json.sevenDay
                 $resetMins = $json.resetMinutes
+            } else {
+                Write-HeartbeatLog "WARN" "quota_state.json status=$($json.status): $($json.error)"
             }
         } catch {
-            Write-HeartbeatLog "DEBUG" "quota_state.json parse failed, falling back to markdown"
+            Write-HeartbeatLog "ERROR" "quota_state.json parse failed: $($_.Exception.Message)"
         }
-    }
-
-    # Fallback: parse markdown file (legacy format)
-    if ($fiveHour -eq 0 -and $sevenDay -eq 0) {
-        $quotaFile = Join-Path $Script:BaseDir ".claude\API_QUOTA_STATE.md"
-        if (Test-Path $quotaFile) {
-            try {
-                $content = Get-Content -LiteralPath $quotaFile -Raw -ErrorAction Stop
-                if ($content -match "5-Hour Usage.*?([\d\.]+)%") { $fiveHour = [double]$matches[1] }
-                if ($content -match "7-Day Usage.*?([\d\.]+)%")  { $sevenDay = [double]$matches[1] }
-                if ($content -match "resets?\s+in\s+~?(\d+)\s*min") { $resetMins = [int]$matches[1] }
-            } catch {
-                Write-HeartbeatLog "ERROR" "Failed to read quota markdown: $($_.Exception.Message)"
-            }
-        } else {
-            Write-HeartbeatLog "WARN" "No quota state file found; defaulting to Tier 1"
-        }
+    } else {
+        Write-HeartbeatLog "WARN" "No quota_state.json found; defaulting to Tier 1"
     }
 
     # 6-tier phased execution: match task weight to quota abundance
@@ -1268,15 +1255,24 @@ try {
     }
 } finally {
     Write-Host "`n=== SWARM SHUTDOWN ===" -ForegroundColor Yellow
-    Write-Host "Stopping all PS jobs..." -ForegroundColor Cyan
-    Get-Job | ForEach-Object {
+
+    # Count running agents before touching anything
+    $runningClaude = @(Get-Process -Name "claude" -ErrorAction SilentlyContinue).Count
+    $runningWorkers = @(Get-Job -State Running -ErrorAction SilentlyContinue | Where-Object { $_.Name -like "Worker_*" }).Count
+
+    # Clean up non-worker PS jobs only (orchestrator, stale)
+    Get-Job -ErrorAction SilentlyContinue | Where-Object { $_.Name -notlike "Worker_*" } | ForEach-Object {
         try { Stop-Job -Job $_ -ErrorAction SilentlyContinue } catch {}
         try { Remove-Job -Job $_ -Force -ErrorAction SilentlyContinue } catch {}
     }
-    Write-Host "Killing remaining claude.exe processes..." -ForegroundColor Cyan
-    $claudeProcs = @(Get-Process -Name "claude" -ErrorAction SilentlyContinue)
-    foreach ($p in $claudeProcs) {
-        try { Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue } catch {}
+
+    Write-Host "Heartbeat loop stopped. No further tasks will be dispatched." -ForegroundColor Cyan
+    if ($runningWorkers -gt 0) {
+        Write-Host "[ACTIVE] $runningWorkers worker PS job(s) and $runningClaude claude.exe process(es) still running." -ForegroundColor Green
+        Write-Host "[ACTIVE] Agents will complete independently. Re-run SwarmHeartbeat.ps1 later to resume orchestration." -ForegroundColor Green
+    } elseif ($runningClaude -gt 0) {
+        Write-Host "[ACTIVE] $runningClaude claude.exe process(es) still running (detached). They will complete independently." -ForegroundColor Green
+    } else {
+        Write-Host "No active agents. Clean shutdown." -ForegroundColor Green
     }
-    Write-Host "Swarm shutdown complete." -ForegroundColor Green
 }

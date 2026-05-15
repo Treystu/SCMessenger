@@ -100,6 +100,7 @@ live_logcat.log
 diagnostic_snapshots/
 .aider*
 WASM_latest.md
+debug_ollama.html
 
 # SCMessenger Agent Swarm Exhaust
 scmessenger_swarm/.venv/
@@ -132,6 +133,9 @@ DerivedData/
 # Claude Code agent runtime (PID files, logs, per-agent configs)
 .claude/agents/
 **/.claude/agents/
+
+# Claude Code process cache
+.claude/process_cache/
 
 # Claude Code scheduled tasks runtime lock
 .claude/scheduled_tasks.lock

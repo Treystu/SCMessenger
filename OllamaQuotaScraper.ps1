@@ -7,9 +7,8 @@ param(
 $cookie = 'aid=1eca9b49-d336-4265-b530-adf59eda5cb2; __Secure-session=YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0-IFgyNTUxOSB1Y1ZtV29wL0FKMXVYcEdBZ0lRWHFYdkIxM2dWV0o5OVZaTy9tUmpDSWd3Ck1IZHQzaDYzejJiNXNSOWJsYk5IbkVBeFBHL2dXRzR3cjRWbFpwZzdJeW8KLS0tIDNJaStyM0ZiamdNb0h6Z2tRa2VKakhUY0I0bndFbG1WKzFXNlhhbndERVEKvpGZBU-2FNYweIXfJQASlTF89_MpyXhuNrvdxW1WzY3iYg4fqObliNVBdKDp_PHdRYPGfPP4Vbux665sIS6RVD4Q1ehvqvktPzd2jT-NVFGEorfEFwXP85Wr4a-ddvdEqv1gVQc8wuDoFzoHhm2cSJ0JtuMjU21SF2Npdq3ZZWj1iEJEZbu6MRBtkQ==; __stripe_mid=6ca25dae-2b4c-4d5d-bbea-7793516929ca6bf1ee'
 
 $baseDir     = "C:\Users\kanal\Documents\Github\SCMessenger"
-$outputFile  = "$baseDir\.claude\API_QUOTA_STATE.md"
 $jsonFile    = "$baseDir\.claude\quota_state.json"
-$debugFile   = "$baseDir\debug_ollama.html"
+$debugFile   = "$baseDir\tmp\debug_ollama.html"
 
 if (-not $Quiet) {
     Write-Host "[INFO] Executing native curl.exe bypass..." -ForegroundColor Cyan
@@ -31,6 +30,7 @@ $html = curl.exe -s "https://ollama.com/settings" `
     -H "user-agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
 
 # Dump for debugging
+if (-not (Test-Path "$baseDir\tmp")) { New-Item -ItemType Directory -Path "$baseDir\tmp" -Force | Out-Null }
 Out-File -FilePath $debugFile -InputObject $html -Encoding utf8
 
 # Detect Cloudflare / sign-in page
@@ -62,20 +62,7 @@ if ($success) {
     $sessionUsed = $sessionMatch.Groups[1].Value
     $weeklyUsed  = $weeklyMatch.Groups[1].Value
 
-    # Write markdown state file (existing format for heartbeat compatibility)
-    $resetNote = if ($resetMinutes) { "resets in ~$resetMinutes min" } else { "reset time unknown" }
-    $stateText = @"
-# OLLAMA CLOUD TELEMETRY DATA
-*Last Updated: $(Get-Date)*
-
-* **5-Hour Usage:** $sessionUsed% ($resetNote)
-* **7-Day Usage:** $weeklyUsed%
-
-**SYSTEM STATUS:** NORMAL
-"@
-    Out-File -FilePath $outputFile -InputObject $stateText -Encoding utf8
-
-    # Write structured JSON for programmatic consumption
+    # Write structured JSON (single source of truth for all swarm components)
     $jsonData = @{
         fiveHour     = [double]$sessionUsed
         sevenDay     = [double]$weeklyUsed
@@ -86,7 +73,8 @@ if ($success) {
     $jsonData | ConvertTo-Json | Out-File -FilePath $jsonFile -Encoding utf8
 
     if (-not $Quiet) {
-        Write-Host "[SUCCESS] Session: $sessionUsed% | Weekly: $weeklyUsed% | Reset: $resetNote" -ForegroundColor Green
+        $resetNoteStr = if ($resetMinutes) { "resets in ~$resetMinutes min" } else { "reset time unknown" }
+	        Write-Host "[SUCCESS] Session: $sessionUsed% | Weekly: $weeklyUsed% | Reset: $resetNoteStr" -ForegroundColor Green
     }
     exit 0
 } else {

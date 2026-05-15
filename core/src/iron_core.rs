@@ -1127,8 +1127,9 @@ impl IronCore {
         self.history_manager.clear()
     }
 
-    /// Get the list of all blocked identities.
+    /// Get the list of all blocked identities (non-WASM version).
     /// Returns the bridge type for UniFFI compatibility.
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn list_blocked(
         &self,
     ) -> Result<Vec<crate::blocked_bridge::BlockedIdentity>, IronCoreError> {

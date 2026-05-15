@@ -123,12 +123,12 @@ open class MeshRepository(private val context: Context) {
             }
         }
 
-        internal fun requireMeshParticipationEnabled(settings: uniffi.api.MeshSettings?) {
+        internal fun checkMeshParticipationEnabled(settings: uniffi.api.MeshSettings?): Boolean {
             if (!isMeshParticipationEnabled(settings)) {
-                throw IllegalStateException(
-                    "Cannot send messages: mesh participation is disabled. Enable mesh participation in settings to send and receive messages."
-                )
+                Timber.w("Cannot send messages: mesh participation is disabled. Enable mesh participation in settings to send and receive messages.")
+                return false
             }
+            return true
         }
 
         internal fun isEnabledFlag(raw: String?): Boolean {
@@ -2099,7 +2099,8 @@ open class MeshRepository(private val context: Context) {
             // 5. Update State
             _serviceState.value = meshService?.getState() ?: uniffi.api.ServiceState.STOPPED
             if (_serviceState.value != uniffi.api.ServiceState.RUNNING) {
-                throw IllegalStateException("MeshService did not reach RUNNING state")
+                Timber.e("MeshService did not reach RUNNING state")
+                return
             }
             serviceStartedAtEpochSec = System.currentTimeMillis() / 1000
             updateStats()
@@ -2123,7 +2124,7 @@ open class MeshRepository(private val context: Context) {
         } catch (e: Exception) {
             Timber.e(e, "Failed to start mesh service")
             stopMeshService()
-            throw IllegalStateException("Mesh service startup failed", e)
+            return
         }
     }
 
@@ -3014,7 +3015,10 @@ open class MeshRepository(private val context: Context) {
 
     /** P1_ANDROID_003: Public entry-point for manual identity import from backup string. */
     fun restoreIdentityFromBackup(backup: String) {
-        val core = ironCore ?: throw IllegalStateException("Core not initialized")
+        val core = ironCore ?: run {
+            Timber.w("restoreIdentityFromBackup: Core not initialized, skipping")
+            return
+        }
         core.importIdentityBackup(backup, "")
         Timber.i("Restored identity from manually pasted backup payload")
     }
@@ -3709,8 +3713,10 @@ open class MeshRepository(private val context: Context) {
             return
         }
         Timber.d("setNickname: Requested nickname='%s', trimmed='%s'", nickname, trimmed)
-        val core = ironCore
-            ?: throw IllegalStateException("Cannot set nickname: IronCore is not initialized")
+        val core = ironCore ?: run {
+            Timber.w("setNickname: Cannot set nickname: IronCore is not initialized")
+            return
+        }
         try {
             Timber.d("setNickname: Calling core.setNickname()")
             core.setNickname(trimmed)
@@ -3728,7 +3734,7 @@ open class MeshRepository(private val context: Context) {
             }
         } catch (e: Exception) {
             Timber.e(e, "Rust core failed to set nickname")
-            throw IllegalStateException("Failed to persist nickname: ${e.message}", e)
+            return
         }
         persistIdentityBackup(core)
         // If swarm start was postponed before identity/nickname was ready, resume now.
@@ -3854,7 +3860,8 @@ open class MeshRepository(private val context: Context) {
                         publicKey = discoveredPeer.publicKey.trim()
                         Timber.w("SEND_MSG_RECOVER: Using public key from discovered peers: ${publicKey?.take(8)}")
                     } else {
-                        throw IllegalStateException("Contact public key is invalid (${publicKey.length} chars) and no discovered peer available for recovery")
+                        Timber.e("Contact public key is invalid (${publicKey.length} chars) and no discovered peer available for recovery")
+                        return@withContext
                     }
                 } else {
                     Timber.d("SEND_MSG: Resolved from contact: key=${publicKey?.take(8)}")
@@ -3925,7 +3932,9 @@ open class MeshRepository(private val context: Context) {
 
                 // Check if relay/messaging is enabled (bidirectional control)
                 val currentSettings = settingsManager?.load()
-                Companion.requireMeshParticipationEnabled(currentSettings)
+                if (!Companion.checkMeshParticipationEnabled(currentSettings)) {
+                    return@withContext
+                }
 
             if (publicKey == null) {
                     // 3. Queue with placeholder encrypted data (will re-encrypt when peer discovered)
@@ -3955,7 +3964,8 @@ open class MeshRepository(private val context: Context) {
                 val finalPublicKey = publicKey!!
                 // Pre-validate public key
                 if (finalPublicKey.length != 64 || !finalPublicKey.all { it.isDigit() || it.lowercaseChar() in 'a'..'f' }) {
-                    throw IllegalStateException("Invalid public key format for $normalizedPeerId: $finalPublicKey")
+                    Timber.e("Invalid public key format for $normalizedPeerId: $finalPublicKey")
+                    return@withContext
                 }
 
                 Timber.d("Preparing message for $normalizedPeerId with key: ${finalPublicKey.take(8)}...")
@@ -3981,7 +3991,10 @@ open class MeshRepository(private val context: Context) {
                 // 4. Encrypt/Prepare message
                 val outboundContent = encodeMessageWithIdentityHints(content)
                 val prepared = ironCore?.prepareMessageWithId(finalPublicKey, outboundContent, uniffi.api.MessageType.TEXT, null)
-                    ?: throw IllegalStateException("Failed to prepare message: IronCore not initialized")
+                    ?: run {
+                        Timber.e("Failed to prepare message: IronCore not initialized")
+                        return@withContext
+                    }
 
                 val realMessageId = prepared.messageId.trim()
                 if (realMessageId.isBlank()) {
@@ -4082,9 +4095,8 @@ open class MeshRepository(private val context: Context) {
                         state = "rejected",
                         detail = "terminal_failure_code=${delivery.terminalFailureCode}"
                     )
-                    throw IllegalStateException(
-                        terminalIdentityFailureMessage(delivery.terminalFailureCode)
-                    )
+                    Timber.e(terminalIdentityFailureMessage(delivery.terminalFailureCode))
+                    return@withContext
                 } else {
                     enqueuePendingOutbound(
                         historyRecordId = realMessageId,
@@ -4230,7 +4242,7 @@ open class MeshRepository(private val context: Context) {
             try {
                 if (!ensureServiceInitialized() || ironCore == null) {
                     Timber.e("IronCore is null after ensureServiceInitialized! Cannot create identity.")
-                    throw IllegalStateException("Mesh service initialization failed")
+                    return@withContext
                 }
                 // P0_ANDROID_010: Grant consent before identity initialization.
                 // The Rust core requires consent_granted=true for initialize_identity().
