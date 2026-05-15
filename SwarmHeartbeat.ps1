@@ -6,7 +6,7 @@ $Script:InProgDir            = Join-Path $BaseDir "HANDOFF\IN_PROGRESS"
 $Script:CompleteFlag         = Join-Path $BaseDir "HANDOFF\SWARM_COMPLETE"
 $Script:MaxConcurrentSlots    = 3
 $Script:PollIntervalSeconds   = 10
-$Script:OrchModelTriage       = "gemini-3-flash-preview:cloud"
+$Script:OrchModelTriage       = "deepseek-v4-pro:cloud"
 $Script:OrchModelStandard     = "deepseek-v4-flash:cloud"
 $Script:OrchModelHeavy        = "qwen3-coder-next:cloud"
 $Script:OrchFallbackModel     = "kimi-k2.6:cloud"
@@ -36,6 +36,7 @@ $Script:CachedClaudeCount            = $null
 $Script:CachedClaudeTimestamp        = [datetime]::MinValue
 $Script:LastModelAllowlistRefresh    = [datetime]::MinValue
 $Script:DynamicModelAllowList        = @()
+$Script:BootTime                     = $null
 
 function Write-HeartbeatLog {
     param([string]$Level, [string]$Message)
@@ -48,6 +49,53 @@ function Write-HeartbeatLog {
         "DEBUG" { Write-Host $line -ForegroundColor DarkGray }
         default { Write-Host $line }
     }
+}
+
+function Get-CanonicalTaskName {
+    param([string]$FileName)
+    $name = $FileName
+    while ($name.StartsWith("IN_PROGRESS_")) { $name = $name.Substring("IN_PROGRESS_".Length) }
+    return $name
+}
+
+function Get-InProgressName {
+    param([string]$FileName)
+    $canonical = Get-CanonicalTaskName -FileName $FileName
+    return "IN_PROGRESS_$canonical"
+}
+
+function Acquire-TaskLock {
+    param([string]$TaskFilePath, [int]$TimeoutSeconds = 10)
+    $lockFile = "$TaskFilePath.lock"
+    $startTime = Get-Date
+    while ((Get-Date) -lt $startTime.AddSeconds($TimeoutSeconds)) {
+        if (-not (Test-Path -LiteralPath $lockFile)) {
+            @{ PID = $PID; LockedAt = (Get-Date -Format "o"); Process = "SwarmHeartbeat" } |
+                ConvertTo-Json | Out-File -LiteralPath $lockFile -Encoding utf8
+            return $true
+        }
+        # Check if lock holder is dead
+        try {
+            $lockData = Get-Content -LiteralPath $lockFile -Raw | ConvertFrom-Json
+            $holderPid = [int]$lockData.PID
+            $holder = Get-Process -Id $holderPid -ErrorAction SilentlyContinue
+            if (-not $holder) {
+                Remove-Item -LiteralPath $lockFile -Force -ErrorAction SilentlyContinue
+                continue
+            }
+        } catch {
+            Remove-Item -LiteralPath $lockFile -Force -ErrorAction SilentlyContinue
+            continue
+        }
+        Start-Sleep -Milliseconds 250
+    }
+    return $false
+}
+
+function Release-TaskLock {
+    param([string]$TaskFilePath)
+    $lockFile = "$TaskFilePath.lock"
+    Remove-Item -LiteralPath $lockFile -Force -ErrorAction SilentlyContinue
 }
 
 function Get-ActiveWorkerCount {
@@ -105,15 +153,34 @@ function Get-TrackedAgentCount {
     $tracked = 0
     $agentDirs = Get-ChildItem -LiteralPath $agentsDir -Directory -ErrorAction SilentlyContinue
     foreach ($dir in $agentDirs) {
-        $pidFile = Join-Path $dir.FullName "pid"
-        if (Test-Path $pidFile) {
+        $agentPid = $null
+
+        # Prefer claude_pid from job registry (most accurate)
+        $regFile = Join-Path $dir.FullName "job_registry.json"
+        if (Test-Path $regFile) {
             try {
-                $pid = [int](Get-Content -LiteralPath $pidFile -Raw -ErrorAction Stop).Trim()
-                $proc = Get-Process -Id $pid -ErrorAction SilentlyContinue
-                if ($proc) { $tracked++ }
-            } catch {
-                # Stale PID file -- ignore
+                $reg = Get-Content -LiteralPath $regFile -Raw | ConvertFrom-Json
+                if ($reg.claude_pid -and $reg.claude_pid -ne 0) {
+                    $agentPid = [int]$reg.claude_pid
+                }
+            } catch {}
+        }
+
+        # Fall back to legacy pid file
+        if (-not $agentPid) {
+            $pidFile = Join-Path $dir.FullName "pid"
+            if (Test-Path $pidFile) {
+                try {
+                    $agentPid = [int](Get-Content -LiteralPath $pidFile -Raw -ErrorAction Stop).Trim()
+                } catch {
+                    # Stale PID file -- ignore
+                }
             }
+        }
+
+        if ($agentPid) {
+            $proc = Get-Process -Id $agentPid -ErrorAction SilentlyContinue
+            if ($proc) { $tracked++ }
         }
     }
     return $tracked
@@ -126,9 +193,16 @@ function Get-ActiveSlotCount {
     $orchRunning       = Get-OrchestratorRunning
     $orchSlots         = if ($orchRunning) { 1 } else { 0 }
 
-    # PID cross-check: claude.exe is master indicator; PID files are supplementary
+    # claude.exe processes occupy slots. The host/terminal session is also a
+    # claude.exe and counts toward the slot total -- it is never killed.
+    # TotalUsed = max(worker jobs, claude procs) + orchestrator slot.
+    # If more claude.exe exist than tracked agents + orchestrator, the extras
+    # are pre-existing sessions (like the host) that still occupy slots.
+    $totalUsed = [math]::Max($workerCount, $claudeCount) + $orchSlots
+    $slotsFree = $Script:MaxConcurrentSlots - $totalUsed
+
     if ($claudeCount -gt ($trackedCount + $orchSlots)) {
-        Write-HeartbeatLog "WARN" "claude.exe leak detected: OS reports $claudeCount claude.exe but only $trackedCount tracked by swarm (+$orchSlots orch slot). Possible orphaned agent processes."
+        Write-HeartbeatLog "DEBUG" "Slot accounting: $claudeCount claude.exe processes ($trackedCount tracked + $orchSlots orch). Pre-existing sessions occupy $($claudeCount - $trackedCount - $orchSlots) extra slot(s). TotalUsed=$totalUsed SlotsFree=$slotsFree"
     } elseif ($claudeCount -lt ($workerCount + $orchSlots)) {
         Write-HeartbeatLog "DEBUG" "$workerCount worker job(s) pending process spawn (claude=$claudeCount tracked=$trackedCount orch=$orchSlots)"
     }
@@ -138,9 +212,81 @@ function Get-ActiveSlotCount {
         ClaudeProcs   = $claudeCount
         TrackedAgents = $trackedCount
         OrchSlots     = $orchSlots
-        TotalUsed     = [math]::Max($workerCount, $claudeCount) + $orchSlots
-        SlotsFree     = $Script:MaxConcurrentSlots - ([math]::Max($workerCount, $claudeCount) + $orchSlots)
+        TotalUsed     = $totalUsed
+        SlotsFree     = $slotsFree
     }
+}
+
+function Wait-ClaudePidFromJob {
+    param(
+        [System.Management.Automation.Job]$Job,
+        [string]$AgentDir,
+        [int]$MaxRetries = 10,
+        [int]$InitialDelayMs = 500
+    )
+    $claudePid = $null
+    try {
+        $jobProcessId = $Job.ChildJobs[0].JobProcessId
+        $retryDelay = $InitialDelayMs
+        for ($i = 0; $i -lt $MaxRetries; $i++) {
+            Start-Sleep -Milliseconds $retryDelay
+            # Walk process tree from job process to find claude.exe descendant
+            $searchPids = @($jobProcessId)
+            $depth = 0
+            while ($depth -lt 5 -and $searchPids.Count -gt 0) {
+                $nextPids = @()
+                foreach ($spid in $searchPids) {
+                    $children = @(Get-CimInstance Win32_Process -Filter "ParentProcessId = $spid" -ErrorAction SilentlyContinue)
+                    foreach ($child in $children) {
+                        if ($child.Name -eq "claude.exe") {
+                            $claudePid = $child.ProcessId
+                            break
+                        }
+                        $nextPids += $child.ProcessId
+                    }
+                    if ($null -ne $claudePid) { break }
+                }
+                if ($null -ne $claudePid) { break }
+                $searchPids = $nextPids
+                $depth++
+            }
+            if ($null -ne $claudePid) { break }
+            # Exponential backoff: 500ms -> 750ms -> 1125ms -> ..., capped at 3000ms
+            $retryDelay = [math]::Min([math]::Floor($retryDelay * 1.5), 3000)
+        }
+        # Fallback: newest untracked claude.exe
+        if ($null -eq $claudePid) {
+            $trackedPids = @()
+            $agentDirs = Get-ChildItem -LiteralPath (Join-Path $Script:BaseDir ".claude\agents") -Directory -ErrorAction SilentlyContinue
+            foreach ($dir in $agentDirs) {
+                $pf = Join-Path $dir.FullName "pid"
+                if (Test-Path $pf) {
+                    try { $trackedPids += [int](Get-Content -LiteralPath $pf -Raw).Trim() } catch {}
+                }
+                $regFile = Join-Path $dir.FullName "job_registry.json"
+                if (Test-Path $regFile) {
+                    try {
+                        $reg = Get-Content -LiteralPath $regFile -Raw | ConvertFrom-Json
+                        if ($reg.claude_pid -and $reg.claude_pid -ne 0) {
+                            $trackedPids += [int]$reg.claude_pid
+                        }
+                    } catch {}
+                }
+            }
+            $untracked = @(Get-Process -Name "claude" -ErrorAction SilentlyContinue | Where-Object { $trackedPids -notcontains $_.Id } | Sort-Object StartTime -Descending)
+            if ($untracked.Count -gt 0) { $claudePid = $untracked[0].Id }
+        }
+        if ($null -ne $claudePid) {
+            $pidFile = Join-Path $AgentDir "pid"
+            $claudePid | Out-File -LiteralPath $pidFile -Encoding utf8 -ErrorAction SilentlyContinue
+            Write-HeartbeatLog "INFO" "Captured claude.exe PID: $claudePid (attempt $($i+1)/$MaxRetries)"
+        } else {
+            Write-HeartbeatLog "WARN" "Failed to capture claude.exe PID after $MaxRetries attempts"
+        }
+    } catch {
+        Write-HeartbeatLog "DEBUG" "PID capture via Wait-ClaudePidFromJob failed: $($_.Exception.Message)"
+    }
+    return $claudePid
 }
 
 function Get-SwarmFileState {
@@ -152,7 +298,10 @@ function Get-SwarmFileState {
 
     # Compute orphan status without Get-ActiveSlotCount (which has leak-detection logging)
     # Orphan: IN_PROGRESS files exist but no active slots of any kind
-    $orphanInProg = ($inProgFiles.Count -gt 0) -and ((Get-ClaudeProcessCount) -eq 0) -and ((Get-ActiveWorkerCount) -eq 0) -and (-not (Get-OrchestratorRunning))
+    # Grace period: skip orphan detection for the first 5 minutes after boot
+    # to avoid reclaiming tasks whose agents are still starting up after restart
+    $gracePeriodActive = ($null -ne $Script:BootTime) -and (((Get-Date) - $Script:BootTime).TotalMinutes -lt 5)
+    $orphanInProg = (-not $gracePeriodActive) -and ($inProgFiles.Count -gt 0) -and ((Get-ClaudeProcessCount) -eq 0) -and ((Get-ActiveWorkerCount) -eq 0) -and (-not (Get-OrchestratorRunning))
 
     $state = @{
         DoneCount          = $doneFiles.Count
@@ -175,12 +324,19 @@ function Get-StaleInProgressTasks {
             # Use dispatched_at marker as canonical timestamp; Move-Item preserves
             # the original file's LastWriteTime which may be hours old, causing
             # freshly-dispatched tasks to be misdetected as stale.
-            $agentName = [System.IO.Path]::GetFileNameWithoutExtension($f.Name)
+            $agentName = Get-CanonicalTaskName -FileName ([System.IO.Path]::GetFileNameWithoutExtension($f.Name))
             $dispatchMarker = Join-Path $Script:BaseDir ".claude\agents\$agentName\dispatched_at"
             $refTime = $f.LastWriteTime
             if (Test-Path $dispatchMarker) {
                 try {
-                    $refTime = [datetime]::Parse((Get-Content -LiteralPath $dispatchMarker -Raw -ErrorAction Stop).Trim())
+                    $dispatchTime = [datetime]::Parse((Get-Content -LiteralPath $dispatchMarker -Raw -ErrorAction Stop).Trim())
+                    # Skip tasks dispatched recently (within 30 minutes) -- they may still be starting
+                    $minutesSinceDispatch = ((Get-Date) - $dispatchTime).TotalMinutes
+                    if ($minutesSinceDispatch -lt 30) {
+                        Write-HeartbeatLog "DEBUG" "Skipping stale check for $agentName -- dispatched $([math]::Round($minutesSinceDispatch,1))min ago (grace period)"
+                        continue
+                    }
+                    $refTime = $dispatchTime
                 } catch {
                     # Fall back to file time if marker is unreadable
                 }
@@ -284,7 +440,12 @@ function Read-QuotaState {
             Write-HeartbeatLog "ERROR" "quota_state.json parse failed: $($_.Exception.Message)"
         }
     } else {
-        Write-HeartbeatLog "WARN" "No quota_state.json found; defaulting to Tier 1"
+        # Conservative default: assume quota is tight when data is unavailable.
+        # Defaulting to Tier 1 (HEAVY-LIFT) risks burning through remaining quota.
+        Write-HeartbeatLog "WARN" "No quota_state.json found; defaulting to Tier 5 (MICRO) for safety"
+        $fiveHour = 95.0
+        $sevenDay = 95.0
+        $tier = 5
     }
 
     # 6-tier phased execution: match task weight to quota abundance
@@ -301,6 +462,19 @@ function Read-QuotaState {
         $tier = 2
     } else {
         $tier = 1
+    }
+
+    # 7-day budget override: bump tier up if 7-day is tight, even when
+    # 5-hour looks healthy. This prevents burning through the weekly window
+    # during brief 5-hour dips.
+    if ($sevenDay -gt 99.5) {
+        $tier = 6  # HARDLOCK regardless of 5-hour
+    } elseif ($sevenDay -gt 95 -and $tier -lt 5) {
+        $tier = 5  # MICRO: 7-day critical, conserve aggressively
+    } elseif ($sevenDay -gt 90 -and $tier -lt 4) {
+        $tier = 4  # LIGHT: 7-day very high, limit to docs/tests
+    } elseif ($sevenDay -gt 75 -and $tier -lt 3) {
+        $tier = 3  # MIXED: 7-day elevated, avoid heavy tasks
     }
 
     return @{ FiveHour = $fiveHour; SevenDay = $sevenDay; Tier = $tier; ResetMinutes = $resetMins }
@@ -423,7 +597,17 @@ function Invoke-QuotaGovernor {
     } elseif ($Script:DynamicModelAllowList.Count -gt 0) {
         $Script:WorkerModelAllowList = $Script:DynamicModelAllowList
     } else {
-        # Bootstrap: dynamic list hasn't loaded yet, allow anything
+        # Bootstrap: no model allowlist loaded yet. Demote to Tier 3 until
+        # we have model availability data, to avoid burning quota on heavy models.
+        if ($quota.Tier -le 2) {
+            Write-HeartbeatLog "WARN" "No model allowlist available; demoting from Tier $($quota.Tier) to Tier 3 (MIXED) for safety"
+            $Script:CurrentQuotaTier = 3
+            $Script:MaxConcurrentSlots = 2
+            $Script:OrchCooldownSeconds = 180
+            $Script:MaxBudgetOverride = 1800
+            $Script:CurrentPhaseName = "MIXED"
+            $Script:OrchModelTier = "deepseek-v4-pro:cloud"
+        }
         $Script:WorkerModelAllowList = @()
     }
 }
@@ -456,11 +640,14 @@ function Select-OrchestratorModel {
         return @{ Model = $model; MandateType = "standard" }
     }
 
-    # EXECUTE/HEAVY-LIFT (Tier 1-2): select based on reason complexity
-    if ($Reason -match "malformed|triage|NEEDS_TRIAGE") {
-        return @{ Model = $Script:OrchModelTriage; MandateType = "triage" }
+    # EXECUTE/HEAVY-LIFT (Tier 1-2): always use the tier-assigned model.
+    # The orchestrator needs strong reasoning even for triage/retriage --
+    # it must decompose tasks accurately. Small models produce poor task breakdowns.
+    # Mandate type drives prompt content, not model selection.
+    if ($Reason -match "\bmalformed\b|\bNEEDS_TRIAGE\b|\bretriage\b") {
+        return @{ Model = $model; MandateType = "triage" }
     }
-    elseif ($Reason -match "backlog|drained|remaining") {
+    elseif ($Reason -match "\bbacklog\b|\bdrained\b|\bremaining\b") {
         return @{ Model = $model; MandateType = "heavy" }
     }
     else {
@@ -609,8 +796,28 @@ function Invoke-DispatchWorker {
 
         Write-HeartbeatLog "INFO" "Dispatching Worker for $($TaskFile.Name) -> model=$model budget=${budget}s"
 
-        $inProgressPath = Join-Path $Script:InProgDir $TaskFile.Name
-        Move-Item -LiteralPath $TaskFile.FullName -Destination $inProgressPath -Force -ErrorAction Stop
+        # Canonical naming: use IN_PROGRESS_ prefix for files in the IN_PROGRESS directory
+        $inProgressName = Get-InProgressName -FileName $TaskFile.Name
+        $canonicalName = Get-CanonicalTaskName -FileName ([System.IO.Path]::GetFileNameWithoutExtension($TaskFile.Name))
+
+        # Create agent directory and write dispatched_at BEFORE moving file
+        # This eliminates the window where the file is in IN_PROGRESS/ but has no timestamp
+        $agentDir = Join-Path $Script:BaseDir ".claude\agents\$canonicalName"
+        $null = New-Item -ItemType Directory -Path $agentDir -Force
+        $dispatchMarker = Join-Path $agentDir "dispatched_at"
+        Get-Date -Format "o" | Out-File -LiteralPath $dispatchMarker -Encoding utf8 -ErrorAction SilentlyContinue
+
+        $inProgressPath = Join-Path $Script:InProgDir $inProgressName
+        $lockAcquired = Acquire-TaskLock -TaskFilePath $TaskFile.FullName -TimeoutSeconds 10
+        if (-not $lockAcquired) {
+            Write-HeartbeatLog "WARN" "Could not acquire lock for $($TaskFile.Name) -- skipping dispatch"
+            return $false
+        }
+        try {
+            Move-Item -LiteralPath $TaskFile.FullName -Destination $inProgressPath -Force -ErrorAction Stop
+        } finally {
+            Release-TaskLock -TaskFilePath $TaskFile.FullName
+        }
 
         # Build quota context for TaskGovernor
         $quotaState = Read-QuotaState
@@ -631,26 +838,30 @@ function Invoke-DispatchWorker {
             & "$BaseDir\TaskGovernor.ps1" -TaskFile $TaskFile -Model $Model -BudgetLimit $BudgetLimit -QuotaContextJson $qcJson
         }
 
-        # Capture PID for cross-check tracking after process spawn
-        $agentName = [System.IO.Path]::GetFileNameWithoutExtension($TaskFile.Name)
-        $agentDir = Join-Path $Script:BaseDir ".claude\agents\$agentName"
-        $null = New-Item -ItemType Directory -Path $agentDir -Force
-        # Record dispatch timestamp for staleness checks
-        $dispatchMarker = Join-Path $agentDir "dispatched_at"
-        Get-Date -Format "o" | Out-File -LiteralPath $dispatchMarker -Encoding utf8 -ErrorAction SilentlyContinue
-        # Give the job a moment to spawn ollama, then capture child claude.exe PID
+        # Capture PID via retry-based tree-walk from PS job process
+        $claudePid = Wait-ClaudePidFromJob -Job $job -AgentDir $agentDir
+
+        # Write job registry for persistent cross-session tracking
+        $registryFile = Join-Path $agentDir "job_registry.json"
         try {
-            Start-Sleep -Milliseconds 500
-            $claudeProcs = @(Get-Process -Name "claude" -ErrorAction SilentlyContinue | Sort-Object StartTime -Descending)
-            if ($claudeProcs.Count -gt 0) {
-                $pidFile = Join-Path $agentDir "pid"
-                $claudeProcs[0].Id | Out-File -LiteralPath $pidFile -Encoding utf8 -ErrorAction SilentlyContinue
+            $registry = @{
+                source        = "SwarmHeartbeat"
+                job_name      = $jobName
+                task_file     = $inProgressName
+                canonical_name = $canonicalName
+                model         = $model
+                budget        = $budget
+                dispatched_at = (Get-Date -Format "o")
+                ps_job_id     = $job.Id.ToString()
+                heartbeat_pid = $PID
+                claude_pid    = $claudePid
             }
+            $registry | ConvertTo-Json | Out-File -LiteralPath $registryFile -Encoding utf8 -ErrorAction Stop
         } catch {
-            # PID tracking is best-effort
+            Write-HeartbeatLog "DEBUG" "Failed to write job registry: $($_.Exception.Message)"
         }
 
-        Write-HeartbeatLog "INFO" "Worker dispatched: job=$jobName file=$($TaskFile.Name)"
+        Write-HeartbeatLog "INFO" "Worker dispatched: job=$jobName file=$inProgressName pid=$claudePid"
         return $true
     } catch {
         Write-HeartbeatLog "ERROR" "Worker dispatch failed for $($TaskFile.Name): $($_.Exception.Message)"
@@ -861,20 +1072,32 @@ function Invoke-DispatchOrchestrator {
             & ollama launch claude --model $Model -- --dangerously-skip-permissions --print `
                 >> $LogFile 2>> $StderrFile
     }
-    # Record orchestrator job PID for cross-check
+    # Capture orchestrator PID via retry-based tree-walk from PS job process
+    $orchClaudePid = Wait-ClaudePidFromJob -Job $job -AgentDir $orchWorkDir
     $orchPidFile = Join-Path $orchWorkDir "pid"
+
+    # Write job registry for orchestrator
+    $orchRegistryFile = Join-Path $orchWorkDir "job_registry.json"
     try {
-        # Give the job a moment to spawn, then capture child process PID
-        Start-Sleep -Milliseconds 500
-        $claudeProcs = @(Get-Process -Name "claude" -ErrorAction SilentlyContinue | Sort-Object StartTime -Descending)
-        if ($claudeProcs.Count -gt 0) {
-            $claudeProcs[0].Id | Out-File -LiteralPath $orchPidFile -Encoding utf8 -ErrorAction SilentlyContinue
+        $orchRegistry = @{
+            source        = "SwarmHeartbeat"
+            job_name      = "Orchestrator"
+            task_file     = "ORCHESTRATOR_MANDATE"
+            canonical_name = "orchestrator"
+            model         = $selectedModel
+            budget        = 0
+            dispatched_at = (Get-Date -Format "o")
+            ps_job_id     = $job.Id.ToString()
+            heartbeat_pid = $PID
+            claude_pid    = $orchClaudePid
+            reason        = $Reason
         }
+        $orchRegistry | ConvertTo-Json | Out-File -LiteralPath $orchRegistryFile -Encoding utf8 -ErrorAction Stop
     } catch {
-        # PID tracking is best-effort
+        Write-HeartbeatLog "DEBUG" "Failed to write orchestrator job registry: $($_.Exception.Message)"
     }
 
-    Write-HeartbeatLog "INFO" "Orchestrator job started (mandate=$(($mandate.Length)) chars, model=$selectedModel, log=$logFile)"
+    Write-HeartbeatLog "INFO" "Orchestrator job started (mandate=$(($mandate.Length)) chars, model=$selectedModel, pid=$orchClaudePid, log=$logFile)"
     return $true
 }
 
@@ -942,46 +1165,94 @@ function Test-SwarmComplete {
     return $false
 }
 
-# === ORPHAN CLEANUP ===
+# === ORPHAN HANDLING ===
+# NEVER kill claude.exe -- it is the master process. Pre-existing claude sessions
+# occupy slots. Orphan cleanup reclaims task files only, never terminates processes.
 
-function Invoke-CleanupOrphanProcesses {
+function Invoke-ReclaimOrphanTasks {
     param([int]$InProgressCount)
 
-    Write-HeartbeatLog "WARN" "ORPHAN DETECTED: $InProgressCount IN_PROGRESS task(s) but 0 active agent slots. Cleaning up abandoned processes."
+    Write-HeartbeatLog "WARN" "ORPHAN DETECTED: $InProgressCount IN_PROGRESS task(s) but 0 active agent slots. Reclaiming task files (never killing claude.exe)."
 
-    $killed = 0
+    # Count pre-existing claude.exe processes that will occupy slots
+    $preExistingClaude = @(Get-Process -Name "claude" -ErrorAction SilentlyContinue).Count
+    if ($preExistingClaude -gt 0) {
+        Write-HeartbeatLog "INFO" "Pre-existing claude.exe processes: $preExistingClaude (occupying $preExistingClaude slot(s) -- accounted for in slot calculations)"
+    }
+
+    # Reclaim orphaned IN_PROGRESS tasks back to todo/ with [STALE]_ prefix
+    $reclaimed = 0
     try {
-        $claudeProcs = @(Get-Process -Name "claude" -ErrorAction SilentlyContinue)
-        if ($claudeProcs.Count -gt 0) {
-            foreach ($proc in $claudeProcs) {
-                try {
-                    Stop-Process -Id $proc.Id -Force -ErrorAction Stop
-                    Write-HeartbeatLog "INFO" "Killed orphan claude.exe PID=$($proc.Id)"
-                    $killed++
-                } catch {
-                    Write-HeartbeatLog "WARN" "Could not kill claude.exe PID=$($proc.Id): $($_.Exception.Message)"
+        $inProgFiles = Get-ChildItem -LiteralPath $Script:InProgDir -Filter "*.md" -ErrorAction SilentlyContinue
+        foreach ($f in $inProgFiles) {
+            $canonicalName = Get-CanonicalTaskName -FileName ([System.IO.Path]::GetFileNameWithoutExtension($f.Name))
+            $destName = "[STALE]_$canonicalName.md"
+            $destPath = Join-Path $Script:TodoDir $destName
+
+            # Check if a [STALE] version already exists to avoid overwrite
+            if (Test-Path -LiteralPath $destPath) {
+                Write-HeartbeatLog "DEBUG" "Skipping reclaim of $($f.Name) -- [STALE] version already exists in todo/"
+                continue
+            }
+
+            try {
+                Move-Item -LiteralPath $f.FullName -Destination $destPath -Force -ErrorAction Stop
+                Write-HeartbeatLog "INFO" "Reclaimed orphan task $($f.Name) -> $destName"
+                $reclaimed++
+
+                # Clean up agent directory markers for this task
+                $agentDir = Join-Path $Script:BaseDir ".claude\agents\$canonicalName"
+                if (Test-Path $agentDir) {
+                    # Remove dispatched_at and pid markers but keep job_registry.json for diagnostics
+                    $dispatchMarker = Join-Path $agentDir "dispatched_at"
+                    $pidFile = Join-Path $agentDir "pid"
+                    if (Test-Path $dispatchMarker) { Remove-Item -LiteralPath $dispatchMarker -Force -ErrorAction SilentlyContinue }
+                    if (Test-Path $pidFile) { Remove-Item -LiteralPath $pidFile -Force -ErrorAction SilentlyContinue }
                 }
+            } catch {
+                Write-HeartbeatLog "ERROR" "Failed to reclaim orphan task $($f.Name): $($_.Exception.Message)"
             }
         }
+    } catch {
+        Write-HeartbeatLog "ERROR" "Orphan task reclaim error: $($_.Exception.Message)"
+    }
 
+    # Clean up orphaned Java processes (these are OK to kill -- they are ollama JVMs, not user processes)
+    $javaKilled = 0
+    try {
         $javaProcs = @(Get-Process -Name "java" -ErrorAction SilentlyContinue)
         if ($javaProcs.Count -gt 0) {
-            foreach ($proc in $javaProcs) {
+            $claudePids = @{}
+            $claudeProcs = @(Get-Process -Name "claude" -ErrorAction SilentlyContinue)
+            foreach ($cp in $claudeProcs) { $claudePids[$cp.Id] = $true }
+
+            foreach ($jp in $javaProcs) {
+                # Only kill Java processes that have NO claude.exe parent
+                $hasClaudeParent = $false
                 try {
-                    Stop-Process -Id $proc.Id -Force -ErrorAction Stop
-                    Write-HeartbeatLog "INFO" "Killed orphan java PID=$($proc.Id) (WS=$([math]::Round($proc.WorkingSet64/1MB,1))MB)"
-                    $killed++
-                } catch {
-                    Write-HeartbeatLog "WARN" "Could not kill java PID=$($proc.Id): $($_.Exception.Message)"
+                    $parentId = (Get-CimInstance Win32_Process -Filter "ProcessId = $($jp.Id)" -ErrorAction SilentlyContinue).ParentProcessId
+                    if ($parentId -and $claudePids.ContainsKey($parentId)) {
+                        $hasClaudeParent = $true
+                    }
+                } catch {}
+
+                if (-not $hasClaudeParent) {
+                    try {
+                        Stop-Process -Id $jp.Id -Force -ErrorAction Stop
+                        Write-HeartbeatLog "INFO" "Killed orphan java PID=$($jp.Id) (WS=$([math]::Round($jp.WorkingSet64/1MB,1))MB)"
+                        $javaKilled++
+                    } catch {
+                        Write-HeartbeatLog "WARN" "Could not kill orphan java PID=$($jp.Id): $($_.Exception.Message)"
+                    }
                 }
             }
         }
     } catch {
-        Write-HeartbeatLog "ERROR" "Orphan process cleanup error: $($_.Exception.Message)"
+        Write-HeartbeatLog "ERROR" "Orphan java cleanup error: $($_.Exception.Message)"
     }
 
-    Write-HeartbeatLog "INFO" "Orphan cleanup complete: $killed process(es) terminated"
-    return $killed
+    Write-HeartbeatLog "INFO" "Orphan handling complete: $reclaimed task(s) reclaimed, $javaKilled java process(es) cleaned, $preExistingClaude claude.exe slot(s) accounted for"
+    return @{ Reclaimed = $reclaimed; JavaKilled = $javaKilled; PreExistingClaude = $preExistingClaude }
 }
 
 # === HEARTBEAT PULSE ===
@@ -1066,7 +1337,7 @@ function Invoke-HeartbeatPulse {
 
     # Phase 3: Orphan cleanup (IN_PROGRESS tasks but no active slots)
     if ($fileState.OrphanInProgress) {
-        $null = Invoke-CleanupOrphanProcesses -InProgressCount $fileState.InProgressCount
+        $null = Invoke-ReclaimOrphanTasks -InProgressCount $fileState.InProgressCount
     }
 
     # Phase 4: Exit check
@@ -1192,38 +1463,158 @@ function Invoke-HeartbeatBoot {
     Write-HeartbeatLog "INFO" "Initial state -- Done: $($initial.DoneCount) | Pending: $($initial.PendingCount) | InProg: $($initial.InProgressCount) | Failed/Stale: $($initial.FailedOrStaleCount) | Orphan: $($initial.OrphanInProgress)"
 
     # Phase 6: Clean up orphaned PS jobs from prior session
-    Get-Job | Remove-Job -Force -ErrorAction SilentlyContinue
-    Write-HeartbeatLog "INFO" "Cleaned up orphaned PowerShell jobs"
+    # Preserve Worker_* jobs whose claude.exe processes are still alive --
+    # killing the PS job disconnects the heartbeat from the running agent,
+    # causing orphan detection to reclaim tasks that are still being worked on.
+    $allJobs = @(Get-Job -ErrorAction SilentlyContinue)
+    $preservedCount = 0
+    $removedCount = 0
+    foreach ($j in $allJobs) {
+        if ($j.Name -like "Worker_*" -and $j.State -eq "Running") {
+            $agentName = $j.Name -replace "^Worker_", ""
+            $regFile = Join-Path $Script:BaseDir ".claude\agents\$agentName\job_registry.json"
+            $isAlive = $false
+            if (Test-Path $regFile) {
+                try {
+                    $reg = Get-Content -LiteralPath $regFile -Raw | ConvertFrom-Json
+                    if ($reg.claude_pid -and $reg.claude_pid -ne 0) {
+                        $proc = Get-Process -Id ([int]$reg.claude_pid) -ErrorAction SilentlyContinue
+                        if ($proc) { $isAlive = $true }
+                    }
+                } catch {}
+            }
+            if ($isAlive) {
+                Write-HeartbeatLog "INFO" "Preserving live Worker job: $($j.Name)"
+                $preservedCount++
+                continue
+            }
+        }
+        Remove-Job -Job $j -Force -ErrorAction SilentlyContinue
+        $removedCount++
+    }
+    Write-HeartbeatLog "INFO" "Job cleanup: removed=$removedCount preserved=$preservedCount"
 
     # Phase 7: Cleanup stale worktrees from prior sessions
     Invoke-CleanupStaleWorktrees
 
-    # Phase 8: Config drift detection (informational only -- heartbeat is authority)
+    # Phase 8: Load max_concurrent from agent_pool.json as authoritative source
     $poolConfig = Join-Path $Script:BaseDir ".claude\agent_pool.json"
     if (Test-Path $poolConfig) {
         try {
             $poolJson = Get-Content -Raw -LiteralPath $poolConfig | ConvertFrom-Json
-            if ($poolJson.max_concurrent -ne $Script:MaxConcurrentSlots) {
-                Write-HeartbeatLog "WARN" "CONFIG DRIFT: agent_pool.json max_concurrent=$($poolJson.max_concurrent) vs SwarmHeartbeat MaxConcurrentSlots=$($Script:MaxConcurrentSlots)"
-                Write-HeartbeatLog "INFO" "SwarmHeartbeat.ps1 is the operational authority. Using MaxConcurrentSlots=$($Script:MaxConcurrentSlots)"
+            if ($poolJson.max_concurrent -and $poolJson.max_concurrent -gt 0) {
+                if ($poolJson.max_concurrent -ne $Script:MaxConcurrentSlots) {
+                    Write-HeartbeatLog "INFO" "Overriding MaxConcurrentSlots from agent_pool.json: $($poolJson.max_concurrent) (was $($Script:MaxConcurrentSlots))"
+                    $Script:MaxConcurrentSlots = [int]$poolJson.max_concurrent
+                }
             }
         } catch {
-            Write-HeartbeatLog "WARN" "Could not parse agent_pool.json for drift check"
+            Write-HeartbeatLog "WARN" "Could not parse agent_pool.json for max_concurrent; using default $($Script:MaxConcurrentSlots)"
         }
     }
 
-    # Phase 9: Kill abandoned processes from prior session (IN_PROGRESS tasks but no agents)
+    # Phase 9: Reclaim orphaned tasks from prior session (IN_PROGRESS tasks but no agents)
     if ($initial.OrphanInProgress) {
         Write-HeartbeatLog "WARN" "Boot-time orphan detected: $($initial.InProgressCount) IN_PROGRESS task(s) with no active agents"
-        $null = Invoke-CleanupOrphanProcesses -InProgressCount $initial.InProgressCount
+        $null = Invoke-ReclaimOrphanTasks -InProgressCount $initial.InProgressCount
     }
 
+    # Phase 10: Normalize IN_PROGRESS filenames
+    Invoke-NormalizeInProgressFiles
+
+    # Phase 11: Restore job awareness from prior session
+    Restore-JobAwareness
+
     Write-HeartbeatLog "INFO" "Boot complete. Entering main dispatch loop."
+    $Script:BootTime = Get-Date
+}
+
+# === BOOT: NORMALIZE IN_PROGRESS FILENAMES ===
+# Ensure all files in IN_PROGRESS/ have the canonical IN_PROGRESS_ prefix
+function Invoke-NormalizeInProgressFiles {
+    $inProgFiles = Get-ChildItem -LiteralPath $Script:InProgDir -Filter "*.md" -ErrorAction SilentlyContinue
+    $normalized = 0
+    foreach ($f in $inProgFiles) {
+        $expectedName = Get-InProgressName -FileName $f.Name
+        if ($f.Name -ne $expectedName) {
+            $newPath = Join-Path $Script:InProgDir $expectedName
+            try {
+                Rename-Item -LiteralPath $f.FullName -NewName $expectedName -ErrorAction Stop
+                Write-HeartbeatLog "INFO" "Normalized IN_PROGRESS filename: $($f.Name) -> $expectedName"
+                $normalized++
+            } catch {
+                Write-HeartbeatLog "WARN" "Failed to normalize IN_PROGRESS filename $($f.Name): $($_.Exception.Message)"
+            }
+        }
+    }
+    if ($normalized -gt 0) {
+        Write-HeartbeatLog "INFO" "Normalized $normalized IN_PROGRESS filename(s)"
+    }
+}
+
+# === BOOT: RESTORE JOB AWARENESS ===
+# Read job_registry.json files from agent directories to rebuild context
+# after a PS session restart
+function Restore-JobAwareness {
+    $agentsDir = Join-Path $Script:BaseDir ".claude\agents"
+    if (-not (Test-Path $agentsDir)) { return }
+
+    $agentDirs = Get-ChildItem -LiteralPath $agentsDir -Directory -ErrorAction SilentlyContinue
+    $staleAgents = 0
+    $liveAgents = 0
+
+    foreach ($dir in $agentDirs) {
+        $regFile = Join-Path $dir.FullName "job_registry.json"
+        if (Test-Path $regFile) {
+            try {
+                $reg = Get-Content -LiteralPath $regFile -Raw | ConvertFrom-Json
+                $isAlive = $false
+
+                # Check claude_pid first (most accurate)
+                if ($reg.claude_pid -and $reg.claude_pid -ne 0) {
+                    $proc = Get-Process -Id ([int]$reg.claude_pid) -ErrorAction SilentlyContinue
+                    if ($proc) {
+                        $isAlive = $true
+                        $liveAgents++
+                        Write-HeartbeatLog "DEBUG" "Live agent $($dir.Name): claude_pid=$($reg.claude_pid) model=$($reg.model)"
+                    }
+                }
+
+                # Fall back to legacy pid file
+                if (-not $isAlive) {
+                    $pidFile = Join-Path $dir.FullName "pid"
+                    if (Test-Path $pidFile) {
+                        try {
+                            $legacyPid = [int](Get-Content -LiteralPath $pidFile -Raw).Trim()
+                            $proc = Get-Process -Id $legacyPid -ErrorAction SilentlyContinue
+                            if ($proc) {
+                                $isAlive = $true
+                                $liveAgents++
+                                Write-HeartbeatLog "DEBUG" "Live agent $($dir.Name): legacy pid=$legacyPid"
+                            }
+                        } catch {}
+                    }
+                }
+
+                if (-not $isAlive) {
+                    $staleAgents++
+                    Write-HeartbeatLog "DEBUG" "Stale agent $($dir.Name) -- process no longer running"
+                }
+            } catch {
+                Write-HeartbeatLog "WARN" "Could not parse job registry for $($dir.Name)"
+            }
+        }
+    }
+
+    Write-HeartbeatLog "INFO" "Job awareness restored: $liveAgents live, $staleAgents stale"
+    # Invalidate process count cache to force fresh counts
+    $Script:CachedClaudeCount = $null
+    $Script:CachedClaudeTimestamp = [datetime]::MinValue
 }
 
 # === REGISTER CTRL+C HANDLER ===
 # Only available when PowerShell has an interactive console; silent no-op otherwise
-if ($null -ne [Console]::CancelKeyPress) {
+try {
     $null = [Console]::CancelKeyPress.Add({
         Write-Host "`n[SHUTDOWN] Ctrl+C received. Signaling graceful shutdown (press again to force)..." -ForegroundColor Yellow
         if ($Script:ShutdownRequested) {
@@ -1234,6 +1625,10 @@ if ($null -ne [Console]::CancelKeyPress) {
         $Script:ShutdownRequested = $true
         $_.Cancel = $true
     })
+} catch [System.NotSupportedException] {
+    Write-HeartbeatLog "DEBUG" "No interactive console available -- Ctrl+C handler not registered (running non-interactive)"
+} catch {
+    Write-HeartbeatLog "DEBUG" "Ctrl+C handler registration failed: $($_.Exception.Message)"
 }
 
 # === MAIN ===
