@@ -10,3 +10,7 @@ Token usage tracking for DeepSeek Master Orchestrator wake cycles.
 
 [2026-05-13] - Wake Cycle 002 (gemini-3-flash-preview:cloud) - Tier 3 - Reason: 3 failed/stale task(s) in todo/ need retriage - Tokens: ~1800
 
+[2026-05-14] - Wake Cycle 001 (deepseek-v4-pro:cloud) - Tier 4 - Reason: 4 failed/stale task(s) in todo/ need retriage - Tokens: ~1800
+
+[2026-05-14] - Wake Cycle 001 (deepseek-v4-pro:cloud) - Tier 4 - Reason: queue drained, checking for remaining work in backlog - Tokens: ~1800
+

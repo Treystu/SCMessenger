@@ -112,6 +112,12 @@ you completed and mark remaining work with [REMAINING] comments. Exit cleanly.
 
     Write-GovernorLog "INFO" "Starting agent: model=$($Script:Model) budget=${budgetSeconds}s task=$TaskFilePath"
 
+    # Capture PID for agent directory tracking
+    $taskFileName = Split-Path $TaskFilePath -Leaf
+    $canonicalName = Get-CanonicalTaskName -FileName ([System.IO.Path]::GetFileNameWithoutExtension($taskFileName))
+    $handoffRoot = Split-Path (Split-Path $TaskFilePath -Parent) -Parent
+    $agentDir = Join-Path (Join-Path $handoffRoot ".claude\agents") $canonicalName
+
     $psi = New-Object System.Diagnostics.ProcessStartInfo
     $psi.FileName = $cmd.Exe
     $psi.Arguments = $cmd.Args -join " "
@@ -131,6 +137,56 @@ you completed and mark remaining work with [REMAINING] comments. Exit cleanly.
         $process = New-Object System.Diagnostics.Process
         $process.StartInfo = $psi
         $process.Start() | Out-Null
+
+        # Write agent directory and PID file for heartbeat tracking
+        if (-not (Test-Path $agentDir)) {
+            try { $null = New-Item -ItemType Directory -Path $agentDir -Force } catch {}
+        }
+        $pidFile = Join-Path $agentDir "pid"
+        $process.Id | Out-File -LiteralPath $pidFile -Encoding utf8 -ErrorAction SilentlyContinue
+        # Tree-walk to find claude.exe child of the ollama process
+        Start-Sleep -Milliseconds 300
+        $claudePid = $null
+        try {
+            $searchPids = @($process.Id)
+            $depth = 0
+            while ($depth -lt 5 -and $searchPids.Count -gt 0) {
+                $nextPids = @()
+                foreach ($spid in $searchPids) {
+                    $children = @(Get-CimInstance Win32_Process -Filter "ParentProcessId = $spid" -ErrorAction SilentlyContinue)
+                    foreach ($child in $children) {
+                        if ($child.Name -eq "claude.exe") {
+                            $claudePid = $child.ProcessId
+                            break
+                        }
+                        $nextPids += $child.ProcessId
+                    }
+                    if ($null -ne $claudePid) { break }
+                }
+                if ($null -ne $claudePid) { break }
+                $searchPids = $nextPids
+                $depth++
+            }
+            if ($null -ne $claudePid) {
+                $claudePid | Out-File -LiteralPath $pidFile -Encoding utf8 -ErrorAction SilentlyContinue
+            }
+        } catch {}
+        # Write job registry for persistent cross-session tracking
+        $registryFile = Join-Path $agentDir "job_registry.json"
+        try {
+            $registry = @{
+                source        = "TaskGovernor"
+                task_file     = $taskFileName
+                canonical_name = $canonicalName
+                model         = $Script:Model
+                budget        = $Script:BudgetLimit
+                dispatched_at = (Get-Date -Format "o")
+                governor_pid  = $PID
+                process_pid   = $process.Id
+                claude_pid    = $claudePid
+            }
+            $registry | ConvertTo-Json | Out-File -LiteralPath $registryFile -Encoding utf8 -ErrorAction SilentlyContinue
+        } catch {}
 
         $process.StandardInput.WriteLine($prompt)
         $process.StandardInput.Close()
@@ -263,6 +319,13 @@ you completed and mark remaining work with [REMAINING] comments. Exit cleanly.
     }
 }
 
+function Get-CanonicalTaskName {
+    param([string]$FileName)
+    $name = $FileName
+    while ($name.StartsWith("IN_PROGRESS_")) { $name = $name.Substring("IN_PROGRESS_".Length) }
+    return $name
+}
+
 function Invoke-Governor {
     $taskFilePath = $Script:TaskFile
     $taskFileName = Split-Path $taskFilePath -Leaf
@@ -270,7 +333,10 @@ function Invoke-Governor {
     $todoDir       = Join-Path $handoffRoot "todo"
     $doneDir       = Join-Path $handoffRoot "done"
 
-    Write-GovernorLog "INFO" "Governor engaged: task=$taskFileName model=$($Script:Model) budget=$($Script:BudgetLimit)"
+    # Strip IN_PROGRESS_ prefix for destination naming and agent directory lookup
+    $canonicalName = Get-CanonicalTaskName -FileName ([System.IO.Path]::GetFileNameWithoutExtension($taskFileName))
+
+    Write-GovernorLog "INFO" "Governor engaged: task=$taskFileName canonical=$canonicalName model=$($Script:Model) budget=$($Script:BudgetLimit)"
 
     $headers = Read-TaskHeaders -FilePath $taskFilePath
 
@@ -281,16 +347,17 @@ function Invoke-Governor {
 
     $result = Invoke-AgentWithBudget -TaskFilePath $taskFilePath
 
-    # Determine destination based on result
+    # Determine destination based on result, using canonical name (stripped of IN_PROGRESS_ prefix)
     if ($result.TimedOut) {
-        $destName = "[TIME_BREACH]_$taskFileName"
+        $destName = "[TIME_BREACH]_$canonicalName.md"
         $destPath = Join-Path $todoDir $destName
         $destLabel = "TIMEOUT"
     } elseif ($result.ExitCode -eq 0) {
-        $destPath = Join-Path $doneDir $taskFileName
+        $destName = "$canonicalName.md"
+        $destPath = Join-Path $doneDir $destName
         $destLabel = "SUCCESS"
     } else {
-        $destName = "[FAILED]_$taskFileName"
+        $destName = "[FAILED]_$canonicalName.md"
         $destPath = Join-Path $todoDir $destName
         $destLabel = "FAILED (exit=$($result.ExitCode))"
     }
@@ -306,6 +373,20 @@ function Invoke-Governor {
         }
     } else {
         Write-GovernorLog "INFO" "RESULT: $destLabel (agent already moved file; expected target: $destPath)"
+    }
+
+    # Write COMPLETION marker for heartbeat/orchestrator detection
+    $agentDir = Join-Path (Split-Path $taskFilePath -Parent | Split-Path -Parent | Join-Path -ChildPath ".claude\agents") $canonicalName
+    if (-not (Test-Path $agentDir)) {
+        try { $null = New-Item -ItemType Directory -Path $agentDir -Force } catch {}
+    }
+    $completionFile = Join-Path $agentDir "COMPLETION"
+    try {
+        $completionContent = "STATUS=$destLabel`nTASK_FILE=$destPath`nCHANGED_FILES=unknown`nBUILD_STATUS=unknown`nCOMPLETED_AT=$(Get-Date -Format 'o')`nNEXT_TASK_REQUESTED=false`nGOVERNOR_EXIT_CODE=$($result.ExitCode)`nGOVERNOR_ELAPSED=$($result.Elapsed)`nGOVERNOR_TIMED_OUT=$($result.TimedOut)"
+        $completionContent | Out-File -LiteralPath $completionFile -Encoding utf8 -ErrorAction SilentlyContinue
+        Write-GovernorLog "INFO" "Wrote COMPLETION marker to $completionFile"
+    } catch {
+        Write-GovernorLog "WARN" "Failed to write COMPLETION marker: $($_.Exception.Message)"
     }
 
     exit $result.ExitCode

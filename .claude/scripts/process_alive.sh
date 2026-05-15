@@ -1,5 +1,5 @@
 #!/bin/bash
-# process_alive.sh — Cross-platform process liveness check with 60-sec cache
+# process_alive.sh — Cross-platform process liveness check with 5-sec cache
 # Usage: source this file, then call process_alive <pid>
 # Returns 0 if alive, 1 if dead
 #
@@ -7,11 +7,11 @@
 # PowerShell can only see Windows native PIDs. We try kill -0 first
 # (works for MSYS2 PIDs), then fall back to PowerShell (for Windows PIDs).
 #
-# Cache: per-PID files in .claude/process_cache/<pid> with 60-sec TTL.
-# Eliminates redundant PowerShell spawns for repeated checks.
+# Cache: per-PID files in .claude/process_cache/<pid> with 5-sec TTL.
+# Aligned with SwarmHeartbeat.ps1's 3-second cache for consistency.
 
 PROCESS_CACHE_DIR=".claude/process_cache"
-PROCESS_CACHE_TTL=60  # seconds
+PROCESS_CACHE_TTL=5  # seconds
 
 process_alive() {
     local pid="$1"

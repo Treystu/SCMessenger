@@ -29,6 +29,7 @@ uniffi = { workspace = true, features = ["wasm-unstable-single-threaded"] }
 # WASM-specific dependencies
 console_error_panic_hook = "0.1"
 web-time = "1.1"
+gloo-timers = { version = "0.3", features = ["futures"] }
 
 [dev-dependencies]
 wasm-bindgen-test = "0.3"
