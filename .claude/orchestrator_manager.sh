@@ -19,7 +19,9 @@ detect_python() {
         echo ""
     fi
 }
-PYTHON="$(detect_python)"
+if [ -z "${PYTHON:-}" ]; then
+    PYTHON="$(detect_python)"
+fi
 if [ -z "$PYTHON" ]; then
     echo "ERROR: No Python interpreter found. Install Python 3 or the py launcher."
     exit 1
@@ -472,7 +474,8 @@ for a in cfg.get('agents', []):
 
         # Determine if this is a micro-task that doesn't need full context
         local is_micro_task=false
-        if [[ "$task_file" == *"TRIAGE"* ]] || [[ "$task_file" == *"QUICK"* ]] || [[ "$task_file" == *"LINT"* ]] || [[ "$task_file" == *"FMT"* ]] || [[ "$task_file" == *"_micro_"* ]]; then
+        local task_file_lower=$(echo "$task_file" | tr '[:upper:]' '[:lower:]')
+        if [[ "$task_file_lower" == *"triage"* ]] || [[ "$task_file_lower" == *"quick"* ]] || [[ "$task_file_lower" == *"lint"* ]] || [[ "$task_file_lower" == *"fmt"* ]] || [[ "$task_file_lower" == *"_micro_"* ]] || [[ "$task_file_lower" == *"micro_"* ]]; then
             is_micro_task=true
         fi
 
@@ -514,7 +517,7 @@ except Exception as e:
             echo "Injecting REPO_MAP context into task..."
             # Extract function name for per-function extraction (saves ~28-32K tokens vs module-level)
             local inject_func_name=$(basename "$task_file" | sed 's/^task_wire_//' | sed 's/\.md$//')
-            $PYTHON .claude/scripts/context_extractor.py --task-file "$task_file" --function "$inject_func_name"
+            $PYTHON .claude/scripts/context_extractor.py --task-file "$task_file" --function "$inject_func_name" || true
         else
             echo "Skipping full REPO_MAP context injection for micro-task: $task_file"
         fi
