@@ -9,8 +9,8 @@ incremental = false
 # shadowing the MSVC linker on PATH.
 
 [target.x86_64-pc-windows-msvc]
-linker = "C:/Program Files (x86)/Microsoft Visual Studio/18/BuildTools/VC/Tools/MSVC/14.50.35717/bin/Hostx64/x64/link.exe"
+#linker = "C:/Program Files (x86)/Microsoft Visual #Studio/18/BuildTools/VC/Tools/MSVC/14.50.35717/bin/Hostx64/x64/link.exe"
 
 [target.x86_64-pc-windows-gnu]
 # Retained for explicit --target x86_64-pc-windows-gnu builds.
-linker = "C:/msys64/mingw64/bin/x86_64-w64-mingw32-gcc.exe"
+#linker = "C:/msys64/mingw64/bin/x86_64-w64-mingw32-gcc.exe"

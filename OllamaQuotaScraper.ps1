@@ -4,9 +4,9 @@ param(
     [switch]$Quiet
 )
 
-$cookie = 'aid=1eca9b49-d336-4265-b530-adf59eda5cb2; __Secure-session=YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0-IFgyNTUxOSB1Y1ZtV29wL0FKMXVYcEdBZ0lRWHFYdkIxM2dWV0o5OVZaTy9tUmpDSWd3Ck1IZHQzaDYzejJiNXNSOWJsYk5IbkVBeFBHL2dXRzR3cjRWbFpwZzdJeW8KLS0tIDNJaStyM0ZiamdNb0h6Z2tRa2VKakhUY0I0bndFbG1WKzFXNlhhbndERVEKvpGZBU-2FNYweIXfJQASlTF89_MpyXhuNrvdxW1WzY3iYg4fqObliNVBdKDp_PHdRYPGfPP4Vbux665sIS6RVD4Q1ehvqvktPzd2jT-NVFGEorfEFwXP85Wr4a-ddvdEqv1gVQc8wuDoFzoHhm2cSJ0JtuMjU21SF2Npdq3ZZWj1iEJEZbu6MRBtkQ==; __stripe_mid=6ca25dae-2b4c-4d5d-bbea-7793516929ca6bf1ee'
+$cookie = 'aid=bf5f45fb-b5ea-4b39-b61c-abacf9cc81bb; __Secure-session=YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0-IFgyNTUxOSA0US9BSEh5THJwNkVaa1VsZVJWTDR3UU9SRGZETVZqVFh5ZHRWUWl6b2g0CmV0dCs4aEFUT1BYWlNLQ0JqVmpoM05BeVRXQkd2WmY5enlBUXlwUWY5UXMKLS0tIHB6VTBTWnZvbTBybnp6ZitWaGNEQmIwblV3emxMSm9oR3NlbTBJTnloY0kKS1pTxMYSRROiBR0gy6DrFvbsPrd-Rmq5RLLRDLu_Z5HwZmAl2KDqJDLJtTL_8RyyTZoa_MfRR42Yz3GJoUoFhotn2vOyVUlwe9pFG-DoRF8V5cpu8EGZutiAasa1TnjdA1hXiNAK0cuXjVq1xZe6mUatp1wx2Q0uS5BJyyy0a5HGR1OZh-N8fkoH8A=='
 
-$baseDir     = "C:\Users\kanal\Documents\Github\SCMessenger"
+$baseDir     = "C:\Users\SCM_Dev\Documents\scmessenger"
 $jsonFile    = "$baseDir\.claude\quota_state.json"
 $debugFile   = "$baseDir\tmp\debug_ollama.html"
 
