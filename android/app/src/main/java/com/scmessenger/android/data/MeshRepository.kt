@@ -3983,7 +3983,8 @@ open class MeshRepository(private val context: Context) {
                 }
 
                 if (isKnownRelay(normalizedPeerId) || isBootstrapRelayPeer(normalizedPeerId)) {
-                    throw IllegalStateException("Refusing to use headless relay identity as a chat recipient: $normalizedPeerId")
+                    Timber.w("Refusing to use headless relay identity as a chat recipient: $normalizedPeerId")
+                    return@withContext
                 }
 
                 val preferredRoutePeerId = routePeerCandidates.firstOrNull()
