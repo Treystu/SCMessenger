@@ -3,7 +3,7 @@ import json
 import sys
 import argparse
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timezone
 
 def check_freshness(repo_root, files):
     index_path = Path(repo_root) / "HANDOFF_AUDIT" / "repo_map_index.json"
@@ -38,7 +38,7 @@ def check_freshness(repo_root, files):
         except ValueError:
             continue
 
-        file_modified_at = datetime.utcfromtimestamp(abs_path.stat().st_mtime)
+        file_modified_at = datetime.fromtimestamp(abs_path.stat().st_mtime, timezone.utc)
 
         if rel_path not in index.get("files", {}):
             result["missing_files"].append(rel_path)

@@ -30,9 +30,9 @@ validate_model_before_launch() {
         return 0
     fi
 
-    # Detect Python
+    # Detect Python (test that it actually runs, not just exists)
     local python_cmd=""
-    if command -v python3 &>/dev/null; then python_cmd="python3"; elif command -v python &>/dev/null; then python_cmd="python"; fi
+    if command -v python3 &>/dev/null && python3 --version &>/dev/null; then python_cmd="python3"; elif command -v python &>/dev/null && python --version &>/dev/null; then python_cmd="python"; fi
 
     if [ -n "$python_cmd" ]; then
         # Robust check using Python

@@ -48,7 +48,7 @@ if [ -f ".claude/agent_pool.json" ]; then
             '.agents[] | select(.name == $name) | .file_domains[] // empty' \
             .claude/agent_pool.json 2>/dev/null | tr '\n' ',' | sed 's/,$//')
     elif command -v python > /dev/null 2>&1 || command -v python3 > /dev/null 2>&1; then
-        PYTHON_CMD=$(command -v python3 > /dev/null 2>&1 && echo "python3" || echo "python")
+        PYTHON_CMD=$(command -v python3 > /dev/null 2>&1 && python3 --version > /dev/null 2>&1 && echo "python3" || echo "python")
         AGENT_FILE_DOMAINS=$($PYTHON_CMD -c "
 import json,sys
 d=json.load(open('.claude/agent_pool.json'))
