@@ -47,9 +47,11 @@ def check_freshness(repo_root, files):
             file_meta = index["files"][rel_path]
             try:
                 indexed_at_str = file_meta["indexed_at"].replace("Z", "+00:00")
-                indexed_at = datetime.fromisoformat(indexed_at_str).replace(tzinfo=None)
+                indexed_at = datetime.fromisoformat(indexed_at_str)
+                if indexed_at.tzinfo is None:
+                    indexed_at = indexed_at.replace(tzinfo=timezone.utc)
             except Exception:
-                indexed_at = datetime.min
+                indexed_at = datetime.min.replace(tzinfo=timezone.utc)
                 
             delta = (file_modified_at - indexed_at).total_seconds()
             

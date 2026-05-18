@@ -1,7 +1,7 @@
 # SCMessenger Remaining Work Tracking
 
 Status: Active
-Last updated: 2026-05-18 (Orchestrator pass)
+Last updated: 2026-05-18 (WS13.6 completion)
 
 ---
 
@@ -1105,7 +1105,7 @@ Not feasible for `v0.2.0` without expanding release scope:
    - Action: Securely wipe identity, message history, contacts, and all local preferences from the device.
    - Scope: Android (`SettingsScreen`), iOS (`SettingsView`), and Web.
 
-5. **WS13 (v0.2.1): Single Active Device per Identity (Tight Pairing)**
+5. **WS13 (v0.2.1): Single Active Device per Identity (Tight Pairing) -- COMPLETE**
    - Requirement: enforce one active `(identity_public_key, device_id)` destination binding to prevent stale/recycled identity misrouting and multi-device active collisions.
    - Target: cryptographically signed registration/deregistration protocol + relay-side registration state machine + custody enforcement.
    - Scope:
@@ -1118,6 +1118,7 @@ Not feasible for `v0.2.0` without expanding release scope:
    - Execution decomposition: `WS13.1` through `WS13.6`.
    - Canonical plan: `docs/V0.2.1_SINGLE_ACTIVE_DEVICE_TIGHT_PAIR_PLAN.md`.
    - Kickoff prompt: `docs/V0.2.0_PHASE_EXECUTION_PROMPTS.md` section `WS13 Kickoff (v0.2.1) - Tight Pairing start`.
+   - Completion: WS13.6 landed 2026-05-18. All six phases (WS13.1-WS13.6) complete. Compat mode (Phase A/Phase B) implemented at store and transport layers. Migration tests pass (19/19). Residual risks triaged in `docs/V0.2.1_RESIDUAL_RISK_REGISTER.md`.
 
 6. **WS13.x (v0.2.1): GitHub release/version synchronization and release-note publishing flow**
    - Requirement: normalize repository/app version metadata and GitHub release artifacts so release tags, release notes, and workspace versions remain consistent.

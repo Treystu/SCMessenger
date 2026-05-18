@@ -30,6 +30,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/scripts/process_alive.sh"
 source "$SCRIPT_DIR/scripts/quota_lib.sh"
 
+trap 'echo "[TRAP] Script exiting with code $? at line $LINENO"' EXIT
+
 # Reliable cross-platform process kill.
 # PowerShell Stop-Process is the ONLY method that reliably kills claude.exe on Windows.
 force_kill_pid() {
@@ -70,18 +72,26 @@ count_os_claude_processes() {
 }
 
 assert_process_limit() {
-    # Count only TRACKED agent processes that are actually alive.
-    # Do NOT count all claude.exe — IDE extensions, desktop app, etc. are not agents.
-    local agent_count=$(count_cli_agents)
-    # Allow 1 orchestrator + up to MAX_SUBAGENTS workers = MAX_OS_PROCESSES total
-    if [ "$agent_count" -ge "$MAX_SUBAGENTS" ]; then
-        echo "CRITICAL: Agent slot limit reached ($agent_count/$MAX_SUBAGENTS tracked agents alive)."
+    # Count actual OS claude.exe processes as the primary gate.
+    # This is the most reliable indicator because PID files can go stale
+    # while child claude.exe processes survive.
+    local os_count=$(count_os_claude_processes)
+    if [ "$os_count" -ge "$MAX_OS_PROCESSES" ]; then
+        echo "CRITICAL: OS process limit reached ($os_count/$MAX_OS_PROCESSES claude.exe processes)."
         echo "Refusing to launch agent. Stop an existing agent first."
         return 1
     fi
-    # Also sanity-check: if total OS claude.exe exceeds MAX_OS_PROCESSES + 2 buffer,
+
+    # Also check tracked agent count for consistency
+    local agent_count=$(count_cli_agents)
+    if [ "$agent_count" -ge "$MAX_SUBAGENTS" ]; then
+        echo "CRITICAL: Tracked agent slot limit reached ($agent_count/$MAX_SUBAGENTS agents alive)."
+        echo "Refusing to launch agent. Stop an existing agent first."
+        return 1
+    fi
+
+    # Sanity-check: if total OS claude.exe exceeds MAX_OS_PROCESSES + 2 buffer,
     # something else is spawning claude processes; warn but don't block.
-    local os_count=$(count_os_claude_processes)
     local max_buffer=$((MAX_OS_PROCESSES + 2))
     if [ "$os_count" -gt "$max_buffer" ]; then
         echo "WARNING: $os_count claude.exe processes detected (expected max ~$max_buffer)."
@@ -483,10 +493,13 @@ for a in cfg.get('agents', []):
         if [ "$is_micro_task" = "false" ]; then
             echo "Running REPO_MAP Freshness Gate..."
             local freshness_result
-            freshness_result=$($PYTHON .claude/scripts/freshness_gate.py --task-file "$task_file" 2>&1)
+            freshness_result=$($PYTHON .claude/scripts/freshness_gate.py --task-file "$task_file" 2>&1) || true
+            echo "DEBUG A: assignment done"
             local freshness_exit=$?
+            echo "DEBUG B: freshness_exit=$freshness_exit"
 
-            if [ $freshness_exit -eq 2 ]; then
+            if [ "$freshness_exit" -eq 2 ]; then
+                echo "DEBUG C: stale branch entered"
                 # STALE files detected — trigger targeted re-index
                 local stale_files=$($PYTHON -c "
 import json, sys
@@ -498,6 +511,7 @@ try:
 except Exception as e:
     pass
 " "$freshness_result")
+                echo "DEBUG D: stale_files=$stale_files"
 
                 if [ -n "$stale_files" ]; then
                     echo "FRESHNESS GATE: Stale files detected. Triggering targeted re-index..."
@@ -505,11 +519,9 @@ except Exception as e:
 
                     powershell.exe -NoProfile -ExecutionPolicy Bypass \
                         -File ".claude/scripts/targeted_reindex.ps1" \
-                        -Files "$stale_files"
+                        -Files "$stale_files" || true
 
-                    if [ $? -ne 0 ]; then
-                        echo "WARNING: Targeted re-index failed. Launching agent without fresh context."
-                    fi
+                    echo "DEBUG E: reindex done"
                 fi
             fi
 
@@ -518,6 +530,7 @@ except Exception as e:
             # Extract function name for per-function extraction (saves ~28-32K tokens vs module-level)
             local inject_func_name=$(basename "$task_file" | sed 's/^task_wire_//' | sed 's/\.md$//')
             $PYTHON .claude/scripts/context_extractor.py --task-file "$task_file" --function "$inject_func_name" || true
+            echo "DEBUG F: context injection done"
         else
             echo "Skipping full REPO_MAP context injection for micro-task: $task_file"
         fi
@@ -585,7 +598,7 @@ EOF
             echo "QUOTA at launch: 5hr=${QUOTA_FIVE_HOUR}% 7d=${QUOTA_SEVEN_DAY}% reset=${QUOTA_RESET_MINUTES}min status=${QUOTA_STATUS}"
         fi
 
-        if ! ./scripts/launch_agent.sh "$model" "$agent_id" "$task_file" start 2>/dev/null; then
+        if ! ./scripts/launch_agent.sh "$model" "$agent_id" "$task_file" start; then
             if [ -n "$fallback_model" ]; then
                 echo "Primary model $model unavailable, falling back to $fallback_model"
                 ./scripts/launch_agent.sh "$fallback_model" "$agent_id" "$task_file" start
@@ -628,6 +641,8 @@ pool_stop() {
         ./scripts/launch_agent.sh "dummy" "$agent_id" "" stop
         process_cache_invalidate "$agent_pid"
         rm -rf "$AGENT_ROOT/$agent_id"
+        # Run stale-PID cleanup to catch orphaned claude.exe processes
+        clean_stale_pids
         echo "Stopped CLI agent: $agent_id"
     else
         echo "Error: Agent '$agent_id' has no valid marker or PID file."
@@ -1049,7 +1064,9 @@ pool_batch_verify() {
 pool_status() {
     echo "=== Agent Pool Status ==="
     active_count=$(count_active_agents)
+    os_count=$(count_os_claude_processes)
     echo "Slots:  $active_count/$MAX_SUBAGENTS"
+    echo "OS Processes (claude.exe): $os_count/$MAX_OS_PROCESSES"
     echo ""
     if [ "$active_count" -eq 0 ]; then
         echo "No agents active. Use 'pool launch <name>' to start one."
@@ -1324,7 +1341,7 @@ case "$1" in
                 pool_list
                 ;;
             "launch")
-                pool_launch "$3" "$4" "$5"
+                pool_launch "$3" "$4" "${5:-}"
                 ;;
             "stop")
                 pool_stop "$3"

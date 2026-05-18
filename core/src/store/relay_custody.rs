@@ -128,6 +128,26 @@ impl std::fmt::Display for CustodyError {
     }
 }
 
+/// WS13 compatibility enforcement phase.
+///
+/// Phase A (current): Legacy requests missing `intended_device_id` are accepted
+/// without enforcement. WS13+ clients with both fields are strictly enforced.
+/// Phase B (future): WS13+ clients strictly enforced; legacy clients still
+/// accepted but log deprecation warnings. Phase C (deferred): all requests
+/// require `intended_device_id`; legacy rejected. Transition to Phase B requires
+/// >80% client upgrade penetration; Phase C requires >95%.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CustodyCompatMode {
+    PhaseA,
+    PhaseB,
+}
+
+impl Default for CustodyCompatMode {
+    fn default() -> Self {
+        Self::PhaseA
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CustodyEnforcement {
     Active {
@@ -322,6 +342,9 @@ pub struct RelayCustodyStore {
     pressure_probe: Arc<dyn StoragePressureProbe>,
     /// Security audit pipeline for cryptographic and protocol verification.
     pub(crate) security_audit_pipeline: Arc<crate::dspy::modules::OptimizerPipeline>,
+    /// WS13 compatibility enforcement phase. Controls how legacy requests
+    /// (missing `intended_device_id`) are handled at the store level.
+    compat_mode: CustodyCompatMode,
 }
 
 impl RelayCustodyStore {
@@ -359,6 +382,7 @@ impl RelayCustodyStore {
             local_identity,
             pressure_probe,
             security_audit_pipeline,
+            compat_mode: CustodyCompatMode::default(),
         }
     }
 
@@ -450,6 +474,14 @@ impl RelayCustodyStore {
 
     pub fn registry(&self) -> &RelayRegistry {
         &self.registry
+    }
+
+    pub fn compat_mode(&self) -> CustodyCompatMode {
+        self.compat_mode
+    }
+
+    pub fn set_compat_mode(&mut self, mode: CustodyCompatMode) {
+        self.compat_mode = mode;
     }
 
     pub fn register_identity(
@@ -559,6 +591,46 @@ impl RelayCustodyStore {
             .map(str::trim)
             .filter(|value| !value.is_empty())
             .map(|value| value.to_string());
+
+        // WS13 compat mode enforcement at the store level.
+        // When both identity_id and device_id are present, enforce custody strictly.
+        // When device_id is absent, apply compat mode policy.
+        if let Some(ref identity_id) = normalized_recipient_identity_id {
+            if let Some(ref device_id) = normalized_intended_device_id {
+                // WS13+ client: strictly enforce custody
+                match self.enforce_custody(identity_id, device_id) {
+                    Ok(CustodyEnforcement::Active { .. }) => {}
+                    Ok(CustodyEnforcement::Redirected {
+                        to_device_id,
+                        ..
+                    }) => {
+                        // Redirect accepted: update intended_device_id to the handover target
+                        // The redirect is already handled at the transport layer by
+                        // resolve_custody_metadata; here we just allow it through.
+                        let _ = to_device_id;
+                    }
+                    Err(error) => {
+                        return Err(error.to_string());
+                    }
+                }
+            } else {
+                // Legacy client: no device_id provided
+                match self.compat_mode {
+                    CustodyCompatMode::PhaseA => {
+                        tracing::debug!(
+                            identity_id,
+                            "relay custody accepted in Phase A compat mode (no device enforcement)"
+                        );
+                    }
+                    CustodyCompatMode::PhaseB => {
+                        tracing::warn!(
+                            identity_id,
+                            "relay custody accepted in Phase B compat mode (legacy client, deprecation warning)"
+                        );
+                    }
+                }
+            }
+        }
 
         let pending_count = self
             .pending_for_destination(&destination_peer_id, usize::MAX)
@@ -2174,5 +2246,293 @@ mod tests {
             "expected custody dir override to be created"
         );
         std::env::remove_var("SCM_RELAY_CUSTODY_DIR");
+    }
+
+    // --- WS13.6 custody enforcement state machine tests ---
+
+    #[test]
+    fn custody_enforcement_accepts_active_device_match() {
+        let store = RelayCustodyStore::in_memory();
+        let identity_id = "a".repeat(64);
+        let device_id = Uuid::new_v4().to_string();
+        let seniority = 1700000000u64;
+
+        store
+            .register_identity(identity_id.clone(), device_id.clone(), seniority)
+            .unwrap();
+
+        let result = store.enforce_custody(&identity_id, &device_id);
+        assert!(result.is_ok());
+        assert_eq!(
+            result.unwrap(),
+            CustodyEnforcement::Active {
+                identity_id,
+                device_id
+            }
+        );
+    }
+
+    #[test]
+    fn custody_enforcement_rejects_device_mismatch() {
+        let store = RelayCustodyStore::in_memory();
+        let identity_id = "b".repeat(64);
+        let device_id = Uuid::new_v4().to_string();
+        let other_device = Uuid::new_v4().to_string();
+        let seniority = 1700000000u64;
+
+        store
+            .register_identity(identity_id.clone(), device_id, seniority)
+            .unwrap();
+
+        let result = store.enforce_custody(&identity_id, &other_device);
+        assert_eq!(result.unwrap_err(), CustodyError::DeviceMismatch);
+    }
+
+    #[test]
+    fn custody_enforcement_rejects_no_registration() {
+        let store = RelayCustodyStore::in_memory();
+        let identity_id = "c".repeat(64);
+        let device_id = Uuid::new_v4().to_string();
+
+        let result = store.enforce_custody(&identity_id, &device_id);
+        assert_eq!(result.unwrap_err(), CustodyError::NoRegistration);
+    }
+
+    #[test]
+    fn custody_enforcement_redirects_during_handover() {
+        let store = RelayCustodyStore::in_memory();
+        let identity_id = "d".repeat(64);
+        let from_device = Uuid::new_v4().to_string();
+        let to_device = Uuid::new_v4().to_string();
+        let seniority = 1700000000u64;
+
+        store
+            .register_identity(identity_id.clone(), from_device.clone(), seniority)
+            .unwrap();
+        store
+            .deregister_identity(identity_id.clone(), from_device.clone(), Some(to_device.clone()))
+            .unwrap();
+
+        // The from_device should get a redirect
+        let result = store.enforce_custody(&identity_id, &from_device);
+        assert!(result.is_ok());
+        match result.unwrap() {
+            CustodyEnforcement::Redirected {
+                from_device_id,
+                to_device_id,
+                ..
+            } => {
+                assert_eq!(from_device_id, from_device);
+                assert_eq!(to_device_id, to_device);
+            }
+            other => panic!("expected Redirected, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn custody_enforcement_rejects_abandoned_identity() {
+        let store = RelayCustodyStore::in_memory();
+        let identity_id = "e".repeat(64);
+        let device_id = Uuid::new_v4().to_string();
+        let seniority = 1700000000u64;
+
+        store
+            .register_identity(identity_id.clone(), device_id.clone(), seniority)
+            .unwrap();
+        store
+            .deregister_identity(identity_id.clone(), device_id, None)
+            .unwrap();
+
+        let result = store.enforce_custody(&identity_id, &Uuid::new_v4().to_string());
+        assert_eq!(result.unwrap_err(), CustodyError::AbandonedIdentity);
+    }
+
+    #[test]
+    fn compat_mode_defaults_to_phase_a() {
+        assert_eq!(CustodyCompatMode::default(), CustodyCompatMode::PhaseA);
+    }
+
+    #[test]
+    fn store_compat_mode_defaults_to_phase_a() {
+        let store = RelayCustodyStore::in_memory();
+        assert_eq!(store.compat_mode(), CustodyCompatMode::PhaseA);
+    }
+
+    #[test]
+    fn store_compat_mode_can_transition_to_phase_b() {
+        let mut store = RelayCustodyStore::in_memory();
+        store.set_compat_mode(CustodyCompatMode::PhaseB);
+        assert_eq!(store.compat_mode(), CustodyCompatMode::PhaseB);
+    }
+
+    #[test]
+    fn phase_a_accepts_legacy_request_without_device_id() {
+        let store = RelayCustodyStore::in_memory();
+        let identity_id = "a".repeat(64);
+
+        let result = store.accept_custody(
+            "source-peer".to_string(),
+            "dest-peer".to_string(),
+            "msg-phase-a-legacy".to_string(),
+            vec![1, 2, 3],
+            Some(identity_id),
+            None,
+        );
+
+        assert!(
+            result.is_ok(),
+            "Phase A must accept legacy requests without device_id"
+        );
+    }
+
+    #[test]
+    fn phase_b_accepts_legacy_request_without_device_id() {
+        let mut store = RelayCustodyStore::in_memory();
+        store.set_compat_mode(CustodyCompatMode::PhaseB);
+        let identity_id = "b".repeat(64);
+
+        let result = store.accept_custody(
+            "source-peer".to_string(),
+            "dest-peer".to_string(),
+            "msg-phase-b-legacy".to_string(),
+            vec![4, 5, 6],
+            Some(identity_id),
+            None,
+        );
+
+        assert!(
+            result.is_ok(),
+            "Phase B must still accept legacy requests without device_id (with deprecation warning)"
+        );
+    }
+
+    #[test]
+    fn phase_b_enforces_ws13_device_mismatch() {
+        let mut store = RelayCustodyStore::in_memory();
+        store.set_compat_mode(CustodyCompatMode::PhaseB);
+        let identity_id = "c".repeat(64);
+        let registered_device = Uuid::new_v4().to_string();
+        let wrong_device = Uuid::new_v4().to_string();
+
+        store
+            .register_identity(identity_id.clone(), registered_device, 1700000000)
+            .unwrap();
+
+        let result = store.accept_custody(
+            "source-peer".to_string(),
+            "dest-peer".to_string(),
+            "msg-phase-b-mismatch".to_string(),
+            vec![7, 8, 9],
+            Some(identity_id),
+            Some(wrong_device),
+        );
+
+        assert!(
+            result.is_err(),
+            "Phase B must enforce device mismatch for WS13+ clients"
+        );
+        assert!(result.unwrap_err().contains("identity_device_mismatch"));
+    }
+
+    #[test]
+    fn phase_a_enforces_ws13_device_mismatch() {
+        let store = RelayCustodyStore::in_memory();
+        let identity_id = "d".repeat(64);
+        let registered_device = Uuid::new_v4().to_string();
+        let wrong_device = Uuid::new_v4().to_string();
+
+        store
+            .register_identity(identity_id.clone(), registered_device, 1700000000)
+            .unwrap();
+
+        let result = store.accept_custody(
+            "source-peer".to_string(),
+            "dest-peer".to_string(),
+            "msg-phase-a-mismatch".to_string(),
+            vec![10, 11, 12],
+            Some(identity_id),
+            Some(wrong_device),
+        );
+
+        assert!(
+            result.is_err(),
+            "Phase A must also enforce device mismatch for WS13+ clients with device_id"
+        );
+        assert!(result.unwrap_err().contains("identity_device_mismatch"));
+    }
+
+    #[test]
+    fn phase_a_accepts_ws13_active_device_match() {
+        let store = RelayCustodyStore::in_memory();
+        let identity_id = "e".repeat(64);
+        let device_id = Uuid::new_v4().to_string();
+
+        store
+            .register_identity(identity_id.clone(), device_id.clone(), 1700000000)
+            .unwrap();
+
+        let result = store.accept_custody(
+            "source-peer".to_string(),
+            "dest-peer".to_string(),
+            "msg-phase-a-match".to_string(),
+            vec![13, 14, 15],
+            Some(identity_id),
+            Some(device_id),
+        );
+
+        assert!(result.is_ok(), "Phase A must accept WS13+ active device match");
+    }
+
+    #[test]
+    fn phase_b_accepts_ws13_active_device_match() {
+        let mut store = RelayCustodyStore::in_memory();
+        store.set_compat_mode(CustodyCompatMode::PhaseB);
+        let identity_id = "f".repeat(64);
+        let device_id = Uuid::new_v4().to_string();
+
+        store
+            .register_identity(identity_id.clone(), device_id.clone(), 1700000000)
+            .unwrap();
+
+        let result = store.accept_custody(
+            "source-peer".to_string(),
+            "dest-peer".to_string(),
+            "msg-phase-b-match".to_string(),
+            vec![16, 17, 18],
+            Some(identity_id),
+            Some(device_id),
+        );
+
+        assert!(result.is_ok(), "Phase B must accept WS13+ active device match");
+    }
+
+    #[test]
+    fn compat_mode_allows_handover_redirect() {
+        let store = RelayCustodyStore::in_memory();
+        let identity_id = "1".repeat(64);
+        let from_device = Uuid::new_v4().to_string();
+        let to_device = Uuid::new_v4().to_string();
+
+        store
+            .register_identity(identity_id.clone(), from_device.clone(), 1700000000)
+            .unwrap();
+        store
+            .deregister_identity(identity_id.clone(), from_device.clone(), Some(to_device.clone()))
+            .unwrap();
+
+        // WS13+ request with from_device during handover should redirect
+        let result = store.accept_custody(
+            "source-peer".to_string(),
+            "dest-peer".to_string(),
+            "msg-handover-redirect".to_string(),
+            vec![19, 20, 21],
+            Some(identity_id),
+            Some(from_device),
+        );
+
+        assert!(
+            result.is_ok(),
+            "Handover redirect must be accepted at store level"
+        );
     }
 }

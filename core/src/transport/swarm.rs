@@ -39,7 +39,7 @@ use super::routing::{
     smart_retry::{calculate_next_attempt, BackoffStrategy},
 };
 use crate::drift::{DriftFrame, SyncSession};
-use crate::store::relay_custody::{CustodyEnforcement, RelayCustodyStore};
+use crate::store::relay_custody::{CustodyCompatMode, CustodyEnforcement, RelayCustodyStore};
 use anyhow::Result;
 use bincode;
 #[cfg(target_arch = "wasm32")]
@@ -566,6 +566,7 @@ fn resolve_custody_metadata(
     relay_custody_store: &RelayCustodyStore,
     recipient_identity_id: Option<&str>,
     intended_device_id: Option<&str>,
+    compat_mode: CustodyCompatMode,
 ) -> Result<(Option<String>, Option<String>), String> {
     match (recipient_identity_id, intended_device_id) {
         (Some(identity_id), Some(device_id)) => {
@@ -582,10 +583,33 @@ fn resolve_custody_metadata(
                 Err(error) => Err(error.to_string()),
             }
         }
-        _ => Ok((
-            recipient_identity_id.map(|value| value.to_string()),
-            intended_device_id.map(|value| value.to_string()),
-        )),
+        _ => {
+            // Compat mode: legacy v0.2.0 clients omit device metadata.
+            match compat_mode {
+                CustodyCompatMode::PhaseA => {
+                    tracing::debug!(
+                        identity_id = recipient_identity_id,
+                        device_id = intended_device_id,
+                        "relay request accepted in Phase A compat mode (no device enforcement)"
+                    );
+                    Ok((
+                        recipient_identity_id.map(|value| value.to_string()),
+                        intended_device_id.map(|value| value.to_string()),
+                    ))
+                }
+                CustodyCompatMode::PhaseB => {
+                    tracing::warn!(
+                        identity_id = recipient_identity_id,
+                        device_id = intended_device_id,
+                        "relay request accepted in Phase B compat mode (legacy client, deprecation warning)"
+                    );
+                    Ok((
+                        recipient_identity_id.map(|value| value.to_string()),
+                        intended_device_id.map(|value| value.to_string()),
+                    ))
+                }
+            }
+        }
     }
 }
 
@@ -2731,6 +2755,7 @@ pub async fn start_swarm_with_config(
                                                         &relay_custody_store,
                                                         request.recipient_identity_id.as_deref(),
                                                         request.intended_device_id.as_deref(),
+                                                        CustodyCompatMode::default(),
                                                     ) {
                                                         Err(error) => {
                                                             tracing::warn!(
@@ -4544,6 +4569,7 @@ pub async fn start_swarm_with_config(
                                                             &relay_custody_store,
                                                             request.recipient_identity_id.as_deref(),
                                                             request.intended_device_id.as_deref(),
+                                                            CustodyCompatMode::default(),
                                                         ) {
                                                             Err(error) => RelayResponse {
                                                                 accepted: false,
@@ -4900,7 +4926,7 @@ mod tests {
         RELAY_PEER_BUCKET_REFILL_PER_SEC,
     };
     use crate::identity::IdentityKeys;
-    use crate::store::relay_custody::RelayCustodyStore;
+    use crate::store::relay_custody::{CustodyCompatMode, RelayCustodyStore};
     use crate::transport::RegistrationMessage;
     use std::collections::HashMap;
 

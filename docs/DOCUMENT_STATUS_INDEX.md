@@ -1,7 +1,7 @@
 # SCMessenger Document Status Index
 
 Status: Active
-Last updated: 2026-05-13 (MASTER AUDIT)
+Last updated: 2026-05-18 (WS13.6 completion)
 
 Purpose: classify documentation by lifecycle state so execution decisions use authoritative files and historical content remains discoverable without causing drift.
 
@@ -71,7 +71,7 @@ Purpose: classify documentation by lifecycle state so execution decisions use au
 
 | Document                                              | Status  | Notes                                                                                    |
 | ----------------------------------------------------- | ------- | ---------------------------------------------------------------------------------------- |
-| `docs/V0.2.1_SINGLE_ACTIVE_DEVICE_TIGHT_PAIR_PLAN.md` | Active  | WS13 workstream is complete; keep as the device-model/reference source for WS14          |
+| `docs/V0.2.1_SINGLE_ACTIVE_DEVICE_TIGHT_PAIR_PLAN.md` | Active  | WS13 workstream COMPLETE (WS13.6 landed 2026-05-18); keep as the device-model/reference source for WS14 |
 | `docs/V0.2.1_RESIDUAL_RISK_REGISTER.md`               | Active  | Residual-risk source of truth for active WS13/WS14 execution                             |
 | `docs/V0.2.1_ALPHA_ROLLOUT_PLAN.md`                   | Active  | Pre-rollout checklist, build/deploy instructions, and alpha test protocol for Android/iOS |
 | `docs/ALPHA_BURNDOWN_V0.2.1.md`                       | Active  | Comprehensive CI/test/stub/incomplete/dead-code audit for v0.2.1 alpha release sign-off  |

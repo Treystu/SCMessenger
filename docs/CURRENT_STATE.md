@@ -1,8 +1,8 @@
 # SCMessenger Current State (Verified)
 
 Status: Active
-Last updated: 2026-05-13 (MASTER AUDIT V-Gate Clearance)
-Last verified: **2026-05-13** (V-Gate audit cleared; 10 premature done/ movements identified; 2 P0 Play Store blockers flagged; 6 P1 feature gaps documented)
+Last updated: 2026-05-18 (WS13.6 completion)
+Last verified: **2026-05-18** (WS13 Tight Pairing complete; WS13.6 landed with compat mode, migration tests, risk triage)
 
 ---
 

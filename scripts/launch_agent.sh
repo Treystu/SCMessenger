@@ -364,11 +364,15 @@ stop_agent() {
 
     if [ -f "$AGENT_PID" ]; then
         local agent_pid=$(cat "$AGENT_PID")
+        # Always run force_kill_pid — PowerShell Kill-Tree handles dead PIDs
+        # gracefully and will kill orphaned child claude.exe processes even if
+        # the parent PID is already gone. process_alive alone is unreliable
+        # because the parent may die while children survive.
+        force_kill_pid "$agent_pid"
         if process_alive "$agent_pid"; then
-            force_kill_pid "$agent_pid"
-            log "INFO" "Agent stopped successfully"
+            log "WARN" "Agent process still alive after kill attempt"
         else
-            log "WARN" "Agent process not running"
+            log "INFO" "Agent process terminated"
         fi
         rm -f "$AGENT_PID"
     else
