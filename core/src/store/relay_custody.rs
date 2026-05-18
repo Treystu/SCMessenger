@@ -600,10 +600,7 @@ impl RelayCustodyStore {
                 // WS13+ client: strictly enforce custody
                 match self.enforce_custody(identity_id, device_id) {
                     Ok(CustodyEnforcement::Active { .. }) => {}
-                    Ok(CustodyEnforcement::Redirected {
-                        to_device_id,
-                        ..
-                    }) => {
+                    Ok(CustodyEnforcement::Redirected { to_device_id, .. }) => {
                         // Redirect accepted: update intended_device_id to the handover target
                         // The redirect is already handled at the transport layer by
                         // resolve_custody_metadata; here we just allow it through.
@@ -2310,7 +2307,11 @@ mod tests {
             .register_identity(identity_id.clone(), from_device.clone(), seniority)
             .unwrap();
         store
-            .deregister_identity(identity_id.clone(), from_device.clone(), Some(to_device.clone()))
+            .deregister_identity(
+                identity_id.clone(),
+                from_device.clone(),
+                Some(to_device.clone()),
+            )
             .unwrap();
 
         // The from_device should get a redirect
@@ -2480,7 +2481,10 @@ mod tests {
             Some(device_id),
         );
 
-        assert!(result.is_ok(), "Phase A must accept WS13+ active device match");
+        assert!(
+            result.is_ok(),
+            "Phase A must accept WS13+ active device match"
+        );
     }
 
     #[test]
@@ -2503,7 +2507,10 @@ mod tests {
             Some(device_id),
         );
 
-        assert!(result.is_ok(), "Phase B must accept WS13+ active device match");
+        assert!(
+            result.is_ok(),
+            "Phase B must accept WS13+ active device match"
+        );
     }
 
     #[test]
@@ -2517,7 +2524,11 @@ mod tests {
             .register_identity(identity_id.clone(), from_device.clone(), 1700000000)
             .unwrap();
         store
-            .deregister_identity(identity_id.clone(), from_device.clone(), Some(to_device.clone()))
+            .deregister_identity(
+                identity_id.clone(),
+                from_device.clone(),
+                Some(to_device.clone()),
+            )
             .unwrap();
 
         // WS13+ request with from_device during handover should redirect

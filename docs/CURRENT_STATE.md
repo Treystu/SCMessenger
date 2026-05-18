@@ -1,8 +1,52 @@
 # SCMessenger Current State (Verified)
 
 Status: Active
-Last updated: 2026-05-18 (WS13.6 completion)
-Last verified: **2026-05-18** (WS13 Tight Pairing complete; WS13.6 landed with compat mode, migration tests, risk triage)
+Last updated: 2026-05-18 (Mycorrhizal Routing activation verified)
+Last verified: **2026-05-18** (WS13 Tight Pairing complete; WS13.6 landed with compat mode, migration tests, risk triage; Mycorrhizal Routing confirmed active in live send path)
+
+---
+
+## 2026-05-18: Mycorrhizal Routing Engine — Dormant-to-Active Verification
+
+**Status:** COMPLETE — Routing engine confirmed active in production send path
+
+### Finding
+
+The `core/src/routing/` modules (optimized_engine, timeout_budget, negative_cache, resume_prefetch, adaptive_ttl, engine, local, neighborhood, global, smart_retry) were previously described as "dormant — not wired to production." This was inaccurate. The routing engine is fully integrated:
+
+### Verified Integration Points
+
+1. **IronCore initialization** (`core/src/iron_core.rs:516-518`): `OptimizedRoutingEngine` is created at identity initialization with local peer ID and blake3-derived hint.
+2. **Shared handle pattern** (`iron_core.rs:2331-2332`): `routing_engine_handle()` returns `Arc<RwLock<Option<OptimizedRoutingEngine>>>` shared with the swarm.
+3. **Swarm initialization** (`core/src/transport/swarm.rs:1936-1940`): Engine seeded if not yet created.
+4. **SendMessage path** (`swarm.rs:3666-3716`): `SwarmCommand::SendMessage` handler calls `engine.route_message_optimized()` to get routing decisions, converts them to `RankedRoute` via `routing_decision_to_ranked_routes()`, and dispatches via `dispatch_ranked_route()`.
+5. **Success feedback** (`swarm.rs:2470-2478`): Successful delivery records activity for adaptive TTL and updates reliability in local cell.
+6. **Failure feedback** (`swarm.rs:2519-2527`): Failed delivery records unreachable peer in negative cache and downgrades reliability.
+7. **Identity protocol** (`swarm.rs:3298-3314`): When identify protocol confirms a peer, `local_cell.peer_seen()` is called with transport type.
+8. **Periodic optimization** (`swarm.rs:2159-2179`): Optimization tick runs on interval, performing negative cache cleanup, adaptive TTL sweep, and maintenance.
+9. **IronCore API surface** (`iron_core.rs`): 30+ routing methods exposed: `routing_peer_seen`, `routing_update_peer_hints`, `routing_mark_gateway`, `routing_update_reliability`, `routing_tick`, `routing_summary`, `routing_clear_unreachable_peer`, `routing_current_discovery_phase`, `routing_negative_cache_stats`, `routing_prefetch_stats`, `routing_timeout_budget_summary`, `routing_calculate_dynamic_ttl`, `routing_register_path`, `routing_mark_path_failed`, `routing_refresh_delegate_routes`, `routing_run_optimization`, `routing_evaluate_all_tracked`, `routing_prune_below`, `routing_should_advance`, `make_routing_decision`, etc.
+
+### Integration Tests
+
+`core/tests/integration_mycorrhizal_routing.rs` (567 lines, 14 tests) covers:
+- Engine creation and basic routing decisions
+- Direct routing when peer is known in local cell
+- Transport type propagation in routing decisions (BLE, QUIC, TCP)
+- Reliability scoring feedback loop (success/failure affects confidence)
+- Negative cache blocking unreachable peers
+- Gateway routing decisions via neighborhood
+- Shared handle pattern (Arc<RwLock<Option<...>>>)
+- Optimization tick producing maintenance results
+- Discovery phase advancement through all 4 phases
+- Multi-transport peer routing
+- App background/resume lifecycle prefetch
+- Negative cache clearing restoring routing
+- Stale entry pruning via evaluate_all_tracked
+- Destination reachability checking
+
+### Status
+
+The mycorrhizal routing engine is **active** in the production send path. The task `BATCH_P1_CORE_002/003 (Mycorrhizal Routing Activation)` was a documentation gap — the engine was wired by prior swarm orchestrator passes. No code changes were needed for this task beyond documentation updates.
 
 ---
 
@@ -395,13 +439,13 @@ See `docs/V0.2.1_ALPHA_ROLLOUT_PLAN.md` for complete pre-rollout checklist, buil
 
 ---
 
-## 2026-03-23: Drift and Routing Modules Wired
+## 2026-03-23: Drift and Routing Modules Wired (Compilation Gate)
 
-**Status:** ✅ DORMANT MODULES NOW ACTIVE
+**Status:** ✅ COMPILATION GATE CLEARED
 
 ### Overview
 
-The `drift/` (~4.3K lines) and `routing/` (~4.6K lines) modules were present on disk but never compiled - not declared in `lib.rs`. This has been fixed.
+The `drift/` (~4.3K lines) and `routing/` (~4.6K lines) modules were present on disk but never compiled - not declared in `lib.rs`. This was fixed, enabling the modules to compile. Subsequent orchestrator passes wired the routing engine into the production send path (see 2026-05-18 verification above).
 
 ### Changes Made
 

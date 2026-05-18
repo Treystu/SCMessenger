@@ -16,16 +16,20 @@ use uuid::Uuid;
 #[test]
 fn pre_ws13_identity_store_backfills_device_id_on_hydrate() {
     let dir = tempfile::tempdir().unwrap();
-    let path = dir.path().join("pre_ws13_identity").to_str().unwrap().to_string();
+    let path = dir
+        .path()
+        .join("pre_ws13_identity")
+        .to_str()
+        .unwrap()
+        .to_string();
 
     const MAX_REOPEN_ATTEMPTS: u64 = 10;
     const REOPEN_BACKOFF_BASE_MS: u64 = 25;
 
     // Phase 1: Simulate a pre-WS13 store: persist identity keys but NO device metadata.
     let original_identity_id = {
-        let backend = Arc::new(
-            scmessenger_core::store::backend::SledStorage::new(&path).unwrap(),
-        ) as Arc<dyn scmessenger_core::store::backend::StorageBackend>;
+        let backend = Arc::new(scmessenger_core::store::backend::SledStorage::new(&path).unwrap())
+            as Arc<dyn scmessenger_core::store::backend::StorageBackend>;
         let mut manager = IdentityManager::with_backend(backend.clone()).unwrap();
         manager.initialize().unwrap();
 
@@ -46,9 +50,10 @@ fn pre_ws13_identity_store_backfills_device_id_on_hydrate() {
     // Phase 2: Load the store on WS13 code. Device metadata should be auto-generated.
     let backend2: Arc<dyn scmessenger_core::store::backend::StorageBackend> =
         (0..MAX_REOPEN_ATTEMPTS)
-            .find_map(|attempt| {
-                match scmessenger_core::store::backend::SledStorage::new(&path) {
-                    Ok(storage) => Some(Arc::new(storage) as Arc<dyn scmessenger_core::store::backend::StorageBackend>),
+            .find_map(
+                |attempt| match scmessenger_core::store::backend::SledStorage::new(&path) {
+                    Ok(storage) => Some(Arc::new(storage)
+                        as Arc<dyn scmessenger_core::store::backend::StorageBackend>),
                     Err(_) if attempt + 1 < MAX_REOPEN_ATTEMPTS => {
                         std::thread::sleep(std::time::Duration::from_millis(
                             REOPEN_BACKOFF_BASE_MS * (attempt + 1),
@@ -56,8 +61,8 @@ fn pre_ws13_identity_store_backfills_device_id_on_hydrate() {
                         None
                     }
                     Err(err) => panic!("failed to reopen sled store: {err}"),
-                }
-            })
+                },
+            )
             .unwrap();
     let manager2 = IdentityManager::with_backend(backend2).unwrap();
 
@@ -90,9 +95,7 @@ fn identity_hydrate_does_not_rotate_key_material() {
         .to_string();
 
     let (original_identity_id, original_pub_key) = {
-        let backend = Arc::new(
-            scmessenger_core::store::backend::SledStorage::new(&path).unwrap(),
-        );
+        let backend = Arc::new(scmessenger_core::store::backend::SledStorage::new(&path).unwrap());
         let mut manager = IdentityManager::with_backend(backend).unwrap();
         manager.initialize().unwrap();
         (
@@ -102,9 +105,7 @@ fn identity_hydrate_does_not_rotate_key_material() {
     };
 
     // Re-open the store. The identity keys must NOT change.
-    let backend2 = Arc::new(
-        scmessenger_core::store::backend::SledStorage::new(&path).unwrap(),
-    );
+    let backend2 = Arc::new(scmessenger_core::store::backend::SledStorage::new(&path).unwrap());
     let manager2 = IdentityManager::with_backend(backend2).unwrap();
 
     assert_eq!(manager2.identity_id(), Some(original_identity_id));
@@ -146,8 +147,8 @@ fn legacy_contact_loads_with_none_default_for_last_known_device_id() {
         "notes": null
     }"#;
 
-    let contact: Contact = serde_json::from_str(pre_ws13_json)
-        .expect("pre-WS13 contact JSON must deserialize");
+    let contact: Contact =
+        serde_json::from_str(pre_ws13_json).expect("pre-WS13 contact JSON must deserialize");
     assert!(
         contact.last_known_device_id.is_none(),
         "legacy contacts must default last_known_device_id to None"
@@ -162,7 +163,10 @@ fn ws13_contact_roundtrips_with_last_known_device_id() {
         scmessenger_core::store::backend::MemoryStorage::new(),
     ));
 
-    let mut contact = Contact::new("peer-ws13".to_string(), "pk-hex-32bytes-xxxxxxxxx".to_string());
+    let mut contact = Contact::new(
+        "peer-ws13".to_string(),
+        "pk-hex-32bytes-xxxxxxxxx".to_string(),
+    );
     contact.last_known_device_id = Some("550e8400-e29b-41d4-a716-446655440000".to_string());
     mgr.add(contact).unwrap();
 
@@ -307,15 +311,20 @@ fn pre_ws13_store_migration_preserves_contact_data() {
     let mgr = ContactManager::new(backend.clone());
 
     // Add a pre-WS13 contact (no device_id)
-    let mut contact =
-        Contact::new("peer-migration-test".to_string(), "migration-pk".to_string());
+    let mut contact = Contact::new(
+        "peer-migration-test".to_string(),
+        "migration-pk".to_string(),
+    );
     contact.nickname = Some("MigrationBob".to_string());
     contact.added_at = 1700000000;
     mgr.add(contact).unwrap();
 
     // Reload (simulates store re-open after upgrade)
     let mgr2 = ContactManager::new(backend);
-    let loaded = mgr2.get("peer-migration-test".to_string()).unwrap().unwrap();
+    let loaded = mgr2
+        .get("peer-migration-test".to_string())
+        .unwrap()
+        .unwrap();
 
     assert_eq!(loaded.nickname, Some("MigrationBob".to_string()));
     assert_eq!(loaded.added_at, 1700000000);
@@ -331,7 +340,10 @@ fn pre_ws13_store_migration_preserves_contact_data() {
     )
     .unwrap();
 
-    let reloaded = mgr2.get("peer-migration-test".to_string()).unwrap().unwrap();
+    let reloaded = mgr2
+        .get("peer-migration-test".to_string())
+        .unwrap()
+        .unwrap();
     assert_eq!(
         reloaded.last_known_device_id.as_deref(),
         Some("550e8400-e29b-41d4-a716-446655440000")
@@ -363,7 +375,10 @@ fn phase_b_store_accepts_legacy_request_without_device_id() {
         "Phase B must accept legacy requests without device_id (with deprecation warning)"
     );
     let msg = result.unwrap();
-    assert_eq!(msg.recipient_identity_id.as_deref(), Some(identity_id.as_str()));
+    assert_eq!(
+        msg.recipient_identity_id.as_deref(),
+        Some(identity_id.as_str())
+    );
     assert!(msg.intended_device_id.is_none());
 }
 
@@ -414,7 +429,10 @@ fn phase_b_accepts_ws13_active_device_match() {
         Some(device_id),
     );
 
-    assert!(result.is_ok(), "Phase B must accept WS13+ active device match");
+    assert!(
+        result.is_ok(),
+        "Phase B must accept WS13+ active device match"
+    );
 }
 
 #[test]
@@ -494,9 +512,8 @@ fn pre_ws13_identity_with_no_device_metadata_backfills_without_data_loss() {
 
     // Simulate pre-WS13 store: identity keys but no device metadata
     let (original_identity_id, original_nickname) = {
-        let backend = Arc::new(
-            scmessenger_core::store::backend::SledStorage::new(&path).unwrap(),
-        ) as Arc<dyn scmessenger_core::store::backend::StorageBackend>;
+        let backend = Arc::new(scmessenger_core::store::backend::SledStorage::new(&path).unwrap())
+            as Arc<dyn scmessenger_core::store::backend::StorageBackend>;
         let mut manager = IdentityManager::with_backend(backend.clone()).unwrap();
         manager.initialize().unwrap();
         manager.set_nickname("PreWS13User".to_string()).unwrap();
@@ -518,9 +535,10 @@ fn pre_ws13_identity_with_no_device_metadata_backfills_without_data_loss() {
     // Load on WS13 code: all data preserved, device metadata backfilled
     let backend2: Arc<dyn scmessenger_core::store::backend::StorageBackend> =
         (0..MAX_REOPEN_ATTEMPTS)
-            .find_map(|attempt| {
-                match scmessenger_core::store::backend::SledStorage::new(&path) {
-                    Ok(storage) => Some(Arc::new(storage) as Arc<dyn scmessenger_core::store::backend::StorageBackend>),
+            .find_map(
+                |attempt| match scmessenger_core::store::backend::SledStorage::new(&path) {
+                    Ok(storage) => Some(Arc::new(storage)
+                        as Arc<dyn scmessenger_core::store::backend::StorageBackend>),
                     Err(_) if attempt + 1 < MAX_REOPEN_ATTEMPTS => {
                         std::thread::sleep(std::time::Duration::from_millis(
                             REOPEN_BACKOFF_BASE_MS * (attempt + 1),
@@ -528,8 +546,8 @@ fn pre_ws13_identity_with_no_device_metadata_backfills_without_data_loss() {
                         None
                     }
                     Err(err) => panic!("failed to reopen sled store: {err}"),
-                }
-            })
+                },
+            )
             .unwrap();
     let manager2 = IdentityManager::with_backend(backend2).unwrap();
 

@@ -939,7 +939,10 @@ impl IronCore {
     /// Derive the libp2p Peer ID from the local identity's Ed25519 public key.
     /// Returns None if identity is not initialized.
     pub fn get_libp2p_peer_id(&self) -> Option<String> {
-        self.identity.read().keys().and_then(|k| k.to_libp2p_peer_id().ok())
+        self.identity
+            .read()
+            .keys()
+            .and_then(|k| k.to_libp2p_peer_id().ok())
     }
 
     pub fn get_seniority_timestamp(&self) -> Option<u64> {
@@ -1347,7 +1350,12 @@ impl IronCore {
             let my_id = self.identity.read().identity_id();
             if let Some(ref id) = my_id {
                 if id.to_lowercase() == trimmed {
-                    return self.identity.read().keys().map(|k| k.public_key_hex()).ok_or_else(|| IronCoreError::NotInitialized);
+                    return self
+                        .identity
+                        .read()
+                        .keys()
+                        .map(|k| k.public_key_hex())
+                        .ok_or_else(|| IronCoreError::NotInitialized);
                 }
             }
 

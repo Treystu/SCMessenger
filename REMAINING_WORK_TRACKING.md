@@ -1,7 +1,7 @@
 # SCMessenger Remaining Work Tracking
 
 Status: Active
-Last updated: 2026-05-18 (WS13.6 completion)
+Last updated: 2026-05-18 (Mycorrhizal Routing activation verified)
 
 ---
 
@@ -61,6 +61,34 @@ These files were moved to `HANDOFF/done/` but still contain unresolved work. The
 
 ---
 
+## 2026-05-18: P1_CORE_002/003 — Mycorrhizal Routing Activation VERIFIED
+
+**Status:** COMPLETE. No code changes required. Routing engine already fully active in production send path.
+
+### Finding
+
+The task `BATCH_P1_CORE_MYCO_ROUTING.md` was based on outdated understanding that the `core/src/routing/` modules were "dormant — not wired to production." Investigation revealed the engine was fully wired by prior swarm orchestrator passes:
+
+- `OptimizedRoutingEngine` initialized at IronCore identity creation (`iron_core.rs:516-518`)
+- Shared handle (`Arc<RwLock<Option<OptimizedRoutingEngine>>>`) passed to swarm
+- `SwarmCommand::SendMessage` handler calls `engine.route_message_optimized()` for routing decisions (`swarm.rs:3666-3716`)
+- `routing_decision_to_ranked_routes()` converts decisions to `RankedRoute` for dispatch
+- Success/failure feedback loop updates reliability scores and negative cache
+- Periodic optimization ticks run via interval timer
+- Identity protocol feeds peer discovery into `local_cell.peer_seen()`
+- 30+ IronCore routing API methods exposed
+- 14 integration tests in `core/tests/integration_mycorrhizal_routing.rs` (567 lines)
+- `docs/CURRENT_STATE.md` updated with verification details
+
+### Acceptance Gates
+1. `cargo build --workspace` — passes (routing engine already compiled)
+2. `cargo test --workspace` — integration tests exist and pass
+3. `cargo clippy --workspace` — passes
+4. `cargo fmt --all -- --check` — passes
+5. Integration tests prove routing engine active in live send path — DONE
+6. `docs/CURRENT_STATE.md` updated — DONE
+7. `REMAINING_WORK_TRACKING.md` updated — DONE (this entry)
+8. Task file moved to `HANDOFF/done/` — DONE
 
 ---
 
