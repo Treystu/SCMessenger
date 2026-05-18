@@ -5,7 +5,10 @@ $Script:TodoDir              = Join-Path $BaseDir "HANDOFF\todo"
 $Script:InProgDir            = Join-Path $BaseDir "HANDOFF\IN_PROGRESS"
 $Script:CompleteFlag         = Join-Path $BaseDir "HANDOFF\SWARM_COMPLETE"
 $Script:MaxConcurrentSlots    = 3
-$Script:PollIntervalSeconds   = 10
+$Script:PollIntervalSecondsActive    = 10
+$Script:PollIntervalSecondsIdle      = 60
+$Script:PollIntervalSecondsPostOrch  = 30
+$Script:CurrentPollInterval           = 10
 $Script:OrchModelTriage       = "kimi-k2.6:cloud"
 $Script:OrchModelStandard     = "kimi-k2.6:cloud"
 $Script:OrchModelHeavy        = "kimi-k2.6:cloud"
@@ -33,6 +36,7 @@ $Script:MaxBudgetOverride            = 0
 $Script:LastOrchModelDispatched      = ""
 $Script:LastOrchReasonDispatched     = ""
 $Script:OrchLastFailedModel          = ""
+$Script:OrchMandateOverride          = ""
 $Script:ShutdownRequested            = $false
 $Script:CachedClaudeCount            = $null
 $Script:CachedClaudeTimestamp        = [datetime]::MinValue
@@ -41,6 +45,9 @@ $Script:DynamicModelAllowList        = @()
 $Script:BootTime                     = $null
 $Script:JavaOrphanTracker            = @()
 $Script:LastWorkerDispatchTime      = [datetime]::MinValue
+$Script:QuotaStateLastMtime         = [datetime]::MinValue
+$Script:QuotaStateCache             = $null
+$Script:IdlePulseCount              = 0
 
 function Write-HeartbeatLog {
     param([string]$Level, [string]$Message)
@@ -413,52 +420,86 @@ function Read-QuotaState {
     $sevenDay    = 0
     $resetMins   = $null
 
-    # Lazy-refresh-on-read: if quota_state.json exists but the timestamp is
-    # older than ScraperStaleMinutes, trigger a forced re-scrape before reading.
-    # This ensures any consumer of quota data (even outside the main pulse loop)
-    # automatically gets fresh state. Within the pulse loop, Invoke-QuotaRefresh
-    # already handles the primary refresh cycle with its own cooldown, so the
-    # lazy-refresh here is a safety net.
+    # File-watcher pattern: only re-read and re-parse quota_state.json when the
+    # file's LastWriteTime has changed since our last read. This avoids per-pulse
+    # JSON parsing overhead when nothing has changed.
     $jsonFile = Join-Path $Script:BaseDir ".claude\quota_state.json"
+    $shouldRead = $false
+
     if (Test-Path $jsonFile) {
         try {
-            $checkJson = Get-Content -Raw -LiteralPath $jsonFile -ErrorAction Stop | ConvertFrom-Json
-            if ($checkJson.timestamp) {
-                $lastUpdate = [datetime]::Parse($checkJson.timestamp)
-                $ageMinutes = ((Get-Date) - $lastUpdate).TotalMinutes
-                if ($ageMinutes -ge $Script:ScraperStaleMinutes) {
-                    Write-HeartbeatLog "DEBUG" "Read-QuotaState: data is stale ($([math]::Round($ageMinutes,1))min >= $($Script:ScraperStaleMinutes)min) -- triggering lazy refresh"
-                    Invoke-QuotaRefresh
-                }
+            $currentMtime = (Get-Item -LiteralPath $jsonFile).LastWriteTime
+            if ($currentMtime -ne $Script:QuotaStateLastMtime) {
+                $shouldRead = $true
+                $Script:QuotaStateLastMtime = $currentMtime
             }
-        } catch {}
+        } catch {
+            # Fall through to read anyway
+            $shouldRead = $true
+        }
     } else {
         Write-HeartbeatLog "DEBUG" "Read-QuotaState: no quota_state.json exists -- triggering initial fetch"
         Invoke-QuotaRefresh
+        $shouldRead = $true
     }
 
-    # Read structured JSON (single source of truth, written by OllamaQuotaScraper.ps1)
-    # Re-read in case lazy-refresh above just updated the file
-    if (Test-Path $jsonFile) {
+    # Staleness check: if the cached data's internal timestamp is older than
+    # ScraperStaleMinutes, trigger a forced re-scrape before reading.
+    if ($shouldRead -and $Script:QuotaStateCache -ne $null) {
+        # We have a cache but the file changed -- read it fresh below
+    } elseif (-not $shouldRead -and $Script:QuotaStateCache -ne $null) {
+        # File unchanged and we have a cache -- check staleness from internal timestamp
         try {
-            $json = Get-Content -Raw -LiteralPath $jsonFile -ErrorAction Stop | ConvertFrom-Json
-            if ($json.status -eq "ok") {
-                $fiveHour  = [double]$json.fiveHour
-                $sevenDay  = [double]$json.sevenDay
-                $resetMins = $json.resetMinutes
-            } else {
-                Write-HeartbeatLog "WARN" "quota_state.json status=$($json.status): $($json.error)"
+            $cachedTimestamp = [datetime]::Parse($Script:QuotaStateCache.timestamp)
+            $ageMinutes = ((Get-Date) - $cachedTimestamp).TotalMinutes
+            if ($ageMinutes -ge $Script:ScraperStaleMinutes) {
+                Write-HeartbeatLog "DEBUG" "Read-QuotaState: cached data is stale ($([math]::Round($ageMinutes,1))min >= $($Script:ScraperStaleMinutes)min) -- triggering lazy refresh"
+                Invoke-QuotaRefresh
+                $shouldRead = $true
+                # Update mtime tracker since the file was just rewritten
+                if (Test-Path $jsonFile) {
+                    try { $Script:QuotaStateLastMtime = (Get-Item -LiteralPath $jsonFile).LastWriteTime } catch {}
+                }
             }
         } catch {
-            Write-HeartbeatLog "ERROR" "quota_state.json parse failed: $($_.Exception.Message)"
+            $shouldRead = $true
+        }
+    }
+
+    if ($shouldRead -or $Script:QuotaStateCache -eq $null) {
+        # Read structured JSON (single source of truth, written by OllamaQuotaScraper.ps1)
+        if (Test-Path $jsonFile) {
+            try {
+                $json = Get-Content -Raw -LiteralPath $jsonFile -ErrorAction Stop | ConvertFrom-Json
+                $Script:QuotaStateCache = $json
+                if ($json.status -eq "ok") {
+                    $fiveHour  = [double]$json.fiveHour
+                    $sevenDay  = [double]$json.sevenDay
+                    $resetMins = $json.resetMinutes
+                } else {
+                    Write-HeartbeatLog "WARN" "quota_state.json status=$($json.status): $($json.error)"
+                }
+            } catch {
+                Write-HeartbeatLog "ERROR" "quota_state.json parse failed: $($_.Exception.Message)"
+            }
+        } else {
+            Write-HeartbeatLog "WARN" "No quota_state.json found; defaulting to Tier 5 (MICRO) for safety"
+            $fiveHour = 95.0
+            $sevenDay = 95.0
+            $tier = 5
         }
     } else {
-        # Conservative default: assume quota is tight when data is unavailable.
-        # Defaulting to Tier 1 (HEAVY-LIFT) risks burning through remaining quota.
-        Write-HeartbeatLog "WARN" "No quota_state.json found; defaulting to Tier 5 (MICRO) for safety"
-        $fiveHour = 95.0
-        $sevenDay = 95.0
-        $tier = 5
+        # Use cached values
+        $json = $Script:QuotaStateCache
+        if ($json -and $json.status -eq "ok") {
+            $fiveHour  = [double]$json.fiveHour
+            $sevenDay  = [double]$json.sevenDay
+            $resetMins = $json.resetMinutes
+        } else {
+            $fiveHour = 95.0
+            $sevenDay = 95.0
+            $tier = 5
+        }
     }
 
     # 6-tier phased execution: match task weight to quota abundance
@@ -519,6 +560,9 @@ function Invoke-QuotaRefresh {
 
     Write-HeartbeatLog "INFO" "Refreshing quota data via OllamaQuotaScraper.ps1..."
     $Script:LastScraperRun = Get-Date
+    # Invalidate cache so Read-QuotaState picks up fresh data on next read
+    $Script:QuotaStateCache = $null
+    $Script:QuotaStateLastMtime = [datetime]::MinValue
 
     $scraperPath = Join-Path $Script:BaseDir "OllamaQuotaScraper.ps1"
     if (-not (Test-Path $scraperPath)) {
@@ -799,6 +843,26 @@ function Invoke-DispatchWorker {
             $budget = $Script:MaxBudgetOverride
         }
 
+        # Derive token_budget from time_budget if not already set in the task file.
+        # Formula: token_budget = max(time_budget * 10, 400) ensures proportional output
+        # room relative to the time budget. 400 tokens is the absolute minimum for any task.
+        $tokenBudgetLine = ($content | Where-Object { $_ -match "^token_budget\s*:" } | Select-Object -First 1)
+        if (-not $tokenBudgetLine) {
+            $derivedTokenBudget = [math]::Max($budget * 10, 400)
+            Write-HeartbeatLog "INFO" "Derived token_budget=$derivedTokenBudget from time_budget=${budget}s for $($TaskFile.Name)"
+        } else {
+            # Token budget already set -- ensure it's at least proportional to time budget
+            $existingTokenBudget = [int]($tokenBudgetLine -replace "^token_budget\s*:\s*", "")
+            $minTokenBudget = [math]::Max($budget * 10, 400)
+            if ($existingTokenBudget -lt $minTokenBudget) {
+                Write-HeartbeatLog "WARN" "token_budget=$existingTokenBudget below minimum=$minTokenBudget for ${budget}s budget -- escalating to $minTokenBudget for $($TaskFile.Name)"
+                # Update the file with the escalated token budget
+                $taskContent = Get-Content -LiteralPath $TaskFile.FullName -ErrorAction Stop
+                $taskContent = $taskContent -replace "^token_budget\s*:\s*\d+", "token_budget: $minTokenBudget"
+                Set-Content -LiteralPath $TaskFile.FullName -Value $taskContent -Encoding utf8 -ErrorAction Stop
+            }
+        }
+
         # Worker model allowlist enforcement (Tier 3+)
         if ($Script:WorkerModelAllowList.Count -gt 0) {
             $modelBase = $model -replace ':cloud$', ''
@@ -955,7 +1019,8 @@ function New-OrchestratorMandate {
         [double]$SevenDay,
         [int]$Slots,
         [int]$MaxBudget,
-        [string[]]$WorkerModels
+        [string[]]$WorkerModels,
+        [string]$MandateType = "standard"
     )
 
     $quotaLine = "QUOTA: 5hr=$FiveHour% 7d=$SevenDay% | Phase: $Phase | Slots: $Slots"
@@ -966,6 +1031,26 @@ function New-OrchestratorMandate {
     }
 
     $workerModelLine = if ($WorkerModels.Count -gt 0) { "Allowed worker models: $($WorkerModels -join ', ')" } else { "Any flagship model allowed for workers" }
+
+    # Lightweight triage mandate: used when only FAILED/STALE/NEEDS_TRIAGE tasks need
+    # processing. Much shorter than the full mandate to save tokens.
+    if ($MandateType -eq "triage") {
+        return @"
+$quotaLine
+$workerModelLine
+
+LIGHTWEIGHT TRIAGE MODE. You are performing quick queue maintenance only. Do NOT write
+application code. Do NOT create new tasks. Do NOT run build verification.
+
+Your ONLY duties:
+1. [FAILED]_ tasks: Downgrade model, reduce budget 40%, add [VALIDATED]_ prefix.
+2. [STALE]_ tasks: Re-validate, restore [VALIDATED]_ prefix.
+3. [NEEDS_TRIAGE]_ tasks: Add # MODEL: and # BUDGET: headers, add [VALIDATED]_ prefix.
+4. Update REMAINING_WORK_TRACKING.md if any completions changed the backlog.
+
+Write HANDOFF/ORCHESTRATOR_STATUS.md with STATUS=completed when done. Exit immediately.
+"@
+    }
 
     switch ($Tier) {
         1 {
@@ -1163,6 +1248,73 @@ governor has failed. Exit immediately without doing any work.
     }
 }
 
+# === IN-PROCESS TIME_BREACH RETRIAGE ===
+# Handles TIME_BREACH tasks mechanically without dispatching an orchestrator.
+# Renames prefix, bumps budget, derives token_budget from time_budget.
+
+function Invoke-InProcessTimeBreachRetriage {
+    $timeBreachFiles = @(Get-ChildItem -LiteralPath $Script:TodoDir -Filter "[TIME_BREACH]_*" -ErrorAction SilentlyContinue)
+    if ($timeBreachFiles.Count -eq 0) {
+        return 0
+    }
+
+    $retriaged = 0
+    foreach ($tbFile in $timeBreachFiles) {
+        try {
+            $content = Get-Content -LiteralPath $tbFile.FullName -ErrorAction Stop
+            if ($content.Count -eq 0) {
+                Write-HeartbeatLog "WARN" "TIME_BREACH file $($tbFile.Name) is empty -- skipping"
+                continue
+            }
+
+            # Find and update headers
+            $newContent = @()
+            $budgetSeconds = 0
+            $foundBudget = $false
+
+            foreach ($line in $content) {
+                if ($line -match "^#\s*(BUDGET|Budget)\s*:\s*(\d+)") {
+                    $budgetSeconds = [int]$matches[2]
+                    $newBudget = $budgetSeconds + 60
+                    $newContent += $line -replace "\d+$", $newBudget.ToString()
+                    $foundBudget = $true
+                } elseif ($line -match "^token_budget\s*:\s*(\d+)") {
+                    # Derive token_budget from time_budget: max(token_budget + 100, budgetSeconds * 10)
+                    # This ensures proportional room for model output
+                    $oldTokenBudget = [int]$matches[1]
+                    if ($foundBudget) {
+                        $newTokenBudget = [math]::Max($oldTokenBudget + 100, $newBudget * 10)
+                    } else {
+                        $newTokenBudget = $oldTokenBudget + 100
+                    }
+                    $newContent += $line -replace "\d+$", $newTokenBudget.ToString()
+                } else {
+                    $newContent += $line
+                }
+            }
+
+            # If no BUDGET header found, add one with 120s default
+            if (-not $foundBudget) {
+                $newContent = ,("# BUDGET: 120") + $newContent
+            }
+
+            # Write updated content back
+            Set-Content -LiteralPath $tbFile.FullName -Value $newContent -Encoding utf8 -ErrorAction Stop
+
+            # Rename: [TIME_BREACH]_ prefix -> [VALIDATED]_ prefix
+            $newName = $tbFile.Name -replace "^\[TIME_BREACH\]_", "[VALIDATED]_"
+            $newPath = Join-Path $Script:TodoDir $newName
+            Rename-Item -LiteralPath $tbFile.FullName -NewName $newName -ErrorAction Stop
+
+            Write-HeartbeatLog "INFO" "In-process TIME_BREACH retriage: $($tbFile.Name) -> $newName (budget +60s)"
+            $retriaged++
+        } catch {
+            Write-HeartbeatLog "ERROR" "Failed to retriage TIME_BREACH file $($tbFile.Name): $($_.Exception.Message)"
+        }
+    }
+    return $retriaged
+}
+
 # === ORCHESTRATOR DISPATCH ===
 
 function Invoke-DispatchOrchestrator {
@@ -1196,10 +1348,13 @@ function Invoke-DispatchOrchestrator {
 
     # Read live quota data for mandate injection
     $quota = Read-QuotaState
+    # Use override if set (e.g., "triage" for simple retriage), otherwise use model selection mandate type
+    $mandateType = if ($Script:OrchMandateOverride) { $Script:OrchMandateOverride } elseif ($orchSelection.MandateType) { $orchSelection.MandateType } else { "standard" }
+    $Script:OrchMandateOverride = ""  # Reset override after use
     $mandate = New-OrchestratorMandate -Tier $Script:CurrentQuotaTier -Phase $Script:CurrentPhaseName `
         -FiveHour $quota.FiveHour -SevenDay $quota.SevenDay `
         -Slots $Script:MaxConcurrentSlots -MaxBudget $Script:MaxBudgetOverride `
-        -WorkerModels $Script:WorkerModelAllowList
+        -WorkerModels $Script:WorkerModelAllowList -MandateType $mandateType
 
     $orchWorkDir = Join-Path $Script:BaseDir ".claude\agents\orchestrator"
     $null = New-Item -ItemType Directory -Path $orchWorkDir -Force
@@ -1520,6 +1675,14 @@ function Invoke-HeartbeatPulse {
         $null = Invoke-ReclaimOrphanTasks -InProgressCount $fileState.InProgressCount
     }
 
+    # Phase 3.5: In-process TIME_BREACH retriage (avoids expensive orchestrator dispatch)
+    $retriagedCount = Invoke-InProcessTimeBreachRetriage
+    if ($retriagedCount -gt 0) {
+        Write-HeartbeatLog "INFO" "In-process retriage handled $retriagedCount TIME_BREACH task(s) -- no orchestrator needed"
+        # Refresh file state since we modified files
+        $fileState = Get-SwarmFileState
+    }
+
     # Phase 4: Exit check
     if (Test-SwarmComplete -FileState $fileState) {
         Write-HeartbeatLog "INFO" "SWARM COMPLETE: All tasks finished, orchestrator confirms ALL_DONE."
@@ -1586,10 +1749,21 @@ function Invoke-HeartbeatPulse {
             }
             # else: no free slot; keep flag set, retry next pulse
         } elseif ($fileState.FailedOrStaleCount -gt 0) {
-            if ($slotsFree -gt 0) {
+            # Check if remaining failed/stale tasks need orchestrator triage
+            # TIME_BREACH tasks are handled in-process (Phase 3.5), so only dispatch
+            # orchestrator if there are FAILED or STALE tasks requiring judgment
+            $failedStaleFiles = @(Get-ChildItem -LiteralPath $Script:TodoDir -Filter "[FAILED]_*" -ErrorAction SilentlyContinue)
+            $staleFiles = @(Get-ChildItem -LiteralPath $Script:TodoDir -Filter "[STALE]_*" -ErrorAction SilentlyContinue)
+            $needsTriageFiles = @(Get-ChildItem -LiteralPath $Script:TodoDir -Filter "[NEEDS_TRIAGE]_*" -ErrorAction SilentlyContinue)
+            $totalNeedsOrch = $failedStaleFiles.Count + $staleFiles.Count + $needsTriageFiles.Count
+
+            if ($totalNeedsOrch -gt 0 -and $slotsFree -gt 0) {
                 $needsOrch = $true
-                $orchReason = "$($fileState.FailedOrStaleCount) failed/stale task(s) in todo/ need retriage"
-            } else {
+                $orchReason = "$totalNeedsOrch task(s) need orchestrator triage (FAILED/STALE/NEEDS_TRIAGE)"
+                $Script:OrchMandateOverride = "triage"
+            } elseif ($totalNeedsOrch -eq 0 -and $fileState.FailedOrStaleCount -gt 0) {
+                Write-HeartbeatLog "DEBUG" "All failed/stale tasks were TIME_BREACH and handled in-process -- skipping orchestrator"
+            } elseif ($slotsFree -eq 0) {
                 Write-HeartbeatLog "DEBUG" "Deferring orchestrator: $($fileState.FailedOrStaleCount) failed/stale tasks need triage but no free slots (workers=$workerCount claude=$claudeCount)"
             }
         } elseif (([math]::Max($workerCount, $claudeCount)) -eq 0) {
@@ -1614,13 +1788,35 @@ function Invoke-HeartbeatPulse {
             Start-Sleep -Milliseconds 500
         }
     }
+
+    # Phase 7: Adaptive poll interval -- reduce polling when idle
+    $hasActiveWork = ($fileState.PendingCount -gt 0) -or ($fileState.InProgressCount -gt 0) -or ($fileState.FailedOrStaleCount -gt 0) -or ($staleTasks.Count -gt 0)
+    $hasActiveAgents = ($workerCount -gt 0) -or ($claudeCount -gt 0) -or $orchRunning
+
+    if ($hasActiveWork) {
+        $Script:CurrentPollInterval = $Script:PollIntervalSecondsActive
+        $Script:IdlePulseCount = 0
+    } elseif ($hasActiveAgents) {
+        # Agents running but queue empty -- wait for completions
+        $Script:CurrentPollInterval = $Script:PollIntervalSecondsPostOrch
+        $Script:IdlePulseCount = 0
+    } else {
+        # Fully idle -- progressively back off to avoid burning tokens
+        $Script:IdlePulseCount++
+        if ($Script:IdlePulseCount -le 3) {
+            $Script:CurrentPollInterval = $Script:PollIntervalSecondsPostOrch
+        } else {
+            $Script:CurrentPollInterval = $Script:PollIntervalSecondsIdle
+        }
+    }
+    Write-HeartbeatLog "DEBUG" "Poll interval: $($Script:CurrentPollInterval)s (active=$hasActiveWork agents=$hasActiveAgents idle=$($Script:IdlePulseCount))"
 }
 
 function Invoke-HeartbeatBoot {
     Write-HeartbeatLog "INFO" "============================================"
-    Write-HeartbeatLog "INFO" "SCMessenger Swarm Heartbeat v4.0 BOOTING"
+    Write-HeartbeatLog "INFO" "SCMessenger Swarm Heartbeat v4.1 BOOTING"
     Write-HeartbeatLog "INFO" "Base: $($Script:BaseDir)"
-    Write-HeartbeatLog "INFO" "Poll Interval: $($Script:PollIntervalSeconds)s"
+    Write-HeartbeatLog "INFO" "Poll Intervals: active=$($Script:PollIntervalSecondsActive)s post-orch=$($Script:PollIntervalSecondsPostOrch)s idle=$($Script:PollIntervalSecondsIdle)s"
     Write-HeartbeatLog "INFO" "============================================"
 
     # Phase 1: Directory structure
@@ -1841,7 +2037,7 @@ try {
         }
         # Sleep in small increments so Ctrl+C is responsive
         if ($Script:ShutdownRequested) { break }
-        $sleepEnd = (Get-Date).AddSeconds($Script:PollIntervalSeconds)
+        $sleepEnd = (Get-Date).AddSeconds($Script:CurrentPollInterval)
         while (-not $Script:ShutdownRequested -and (Get-Date) -lt $sleepEnd) {
             Start-Sleep -Milliseconds 250
         }

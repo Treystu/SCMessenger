@@ -121,6 +121,15 @@ you completed and mark remaining work with [REMAINING] comments. Exit cleanly.
     # Token budget already read above for stripped-context check
     $tokenUsedEstimate = Get-ApproximateTokens -Text $prompt
 
+    # Token budget floor: if the prompt itself exceeds the token budget, the model
+    # has zero room to produce output. Auto-escalate the budget to at least
+    # promptTokens * 2 so the model has equal room for output.
+    if ($tokenBudget -gt 0 -and $tokenUsedEstimate -ge $tokenBudget) {
+        $oldBudget = $tokenBudget
+        $tokenBudget = [math]::Max($tokenBudget, $tokenUsedEstimate * 2)
+        Write-GovernorLog "WARN" "TOKEN BUDGET ESCALATED: prompt ($tokenUsedEstimate tokens) >= budget ($oldBudget tokens). New token budget: $tokenBudget tokens (floor = prompt * 2)"
+    }
+
     # Grace period: err on the side of saving work
     $budgetSeconds = $Script:BudgetLimit
     if ($budgetSeconds -le 60) {
