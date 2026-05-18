@@ -8,6 +8,9 @@ time_limit_ms: 180000
 phase: "MICRO"
 ---
 
+# MODEL: gemini-3-flash-preview:cloud
+# BUDGET: 180
+
 # MICRO_DEPRECATION_001: BleGattServer.kt API 31+ Executor Overload
 
 ## Objective

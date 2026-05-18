@@ -8,6 +8,9 @@ time_limit_ms: 120000
 phase: "MICRO"
 ---
 
+# MODEL: gemini-3-flash-preview:cloud
+# BUDGET: 120
+
 # MICRO_ANR_003: MeshForegroundService.kt Safe Return — RUNNING State Guard
 
 ## Objective

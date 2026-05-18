@@ -165,7 +165,12 @@ class MeshForegroundService : Service() {
                     meshRepository.getServiceState() == uniffi.api.ServiceState.RUNNING
                 }
                 if (!started) {
-                    throw IllegalStateException("Repository did not reach RUNNING state")
+                    Timber.e("Repository did not reach RUNNING state; aborting foreground service start")
+                    isRunning = false
+                    releaseWakeLock()
+                    stopForeground(STOP_FOREGROUND_REMOVE)
+                    stopSelf()
+                    return@launch
                 }
                 isRunning = true
 

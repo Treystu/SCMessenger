@@ -8,6 +8,9 @@ time_limit_ms: 180000
 phase: "MICRO"
 ---
 
+# MODEL: gemini-3-flash-preview:cloud
+# BUDGET: 180
+
 # MICRO_DEPRECATION_002: MdnsServiceDiscovery.kt API 28 Gate Fix
 
 ## Objective

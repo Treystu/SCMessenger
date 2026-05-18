@@ -118,7 +118,8 @@ function Get-ClaudeProcessCount {
     }
 
     $job = Start-Job -ScriptBlock {
-        @(Get-Process -Name "claude" -ErrorAction SilentlyContinue).Count
+        $procs = @(Get-CimInstance Win32_Process -Filter "Name = 'claude.exe'" -ErrorAction SilentlyContinue)
+        return $procs.Count
     }
     $null = Wait-Job -Job $job -Timeout 5
     if ($job.State -eq 'Completed') {
@@ -129,7 +130,7 @@ function Get-ClaudeProcessCount {
         return $result
     } else {
         Remove-Job -Job $job -Force -ErrorAction SilentlyContinue
-        Write-HeartbeatLog "WARN" "Get-Process for claude.exe timed out (5s) -- using cached or default value"
+        Write-HeartbeatLog "WARN" "Get-CimInstance for claude.exe timed out (5s) -- using cached or default value"
         if ($Script:CachedClaudeCount -ne $null) { return $Script:CachedClaudeCount }
         return 0
     }
@@ -273,8 +274,8 @@ function Wait-ClaudePidFromJob {
                     } catch {}
                 }
             }
-            $untracked = @(Get-Process -Name "claude" -ErrorAction SilentlyContinue | Where-Object { $trackedPids -notcontains $_.Id } | Sort-Object StartTime -Descending)
-            if ($untracked.Count -gt 0) { $claudePid = $untracked[0].Id }
+            $untracked = @(Get-CimInstance Win32_Process -Filter "Name = 'claude.exe'" -ErrorAction SilentlyContinue | Where-Object { $trackedPids -notcontains $_.ProcessId } | Sort-Object CreationDate -Descending)
+            if ($untracked.Count -gt 0) { $claudePid = $untracked[0].ProcessId }
         }
         if ($null -ne $claudePid) {
             $pidFile = Join-Path $AgentDir "pid"
@@ -1110,8 +1111,8 @@ function Invoke-CleanupOrphanJava {
         if ($javaProcs.Count -eq 0) { return 0 }
 
         $claudePids = @{}
-        $claudeProcs = @(Get-Process -Name "claude" -ErrorAction SilentlyContinue)
-        foreach ($cp in $claudeProcs) { $claudePids[$cp.Id] = $true }
+        $claudeProcs = @(Get-CimInstance Win32_Process -Filter "Name = 'claude.exe'" -ErrorAction SilentlyContinue)
+        foreach ($cp in $claudeProcs) { $claudePids[$cp.ProcessId] = $true }
 
         foreach ($jp in $javaProcs) {
             # Check if this java process has a claude.exe parent
@@ -1175,7 +1176,7 @@ function Invoke-ReclaimOrphanTasks {
     Write-HeartbeatLog "WARN" "ORPHAN DETECTED: $InProgressCount IN_PROGRESS task(s) but 0 active agent slots. Reclaiming task files (never killing claude.exe)."
 
     # Count pre-existing claude.exe processes that will occupy slots
-    $preExistingClaude = @(Get-Process -Name "claude" -ErrorAction SilentlyContinue).Count
+    $preExistingClaude = @(Get-CimInstance Win32_Process -Filter "Name = 'claude.exe'" -ErrorAction SilentlyContinue).Count
     if ($preExistingClaude -gt 0) {
         Write-HeartbeatLog "INFO" "Pre-existing claude.exe processes: $preExistingClaude (occupying $preExistingClaude slot(s) -- accounted for in slot calculations)"
     }
@@ -1223,8 +1224,8 @@ function Invoke-ReclaimOrphanTasks {
         $javaProcs = @(Get-Process -Name "java" -ErrorAction SilentlyContinue)
         if ($javaProcs.Count -gt 0) {
             $claudePids = @{}
-            $claudeProcs = @(Get-Process -Name "claude" -ErrorAction SilentlyContinue)
-            foreach ($cp in $claudeProcs) { $claudePids[$cp.Id] = $true }
+            $claudeProcs = @(Get-CimInstance Win32_Process -Filter "Name = 'claude.exe'" -ErrorAction SilentlyContinue)
+            foreach ($cp in $claudeProcs) { $claudePids[$cp.ProcessId] = $true }
 
             foreach ($jp in $javaProcs) {
                 # Only kill Java processes that have NO claude.exe parent
@@ -1652,7 +1653,7 @@ try {
     Write-Host "`n=== SWARM SHUTDOWN ===" -ForegroundColor Yellow
 
     # Count running agents before touching anything
-    $runningClaude = @(Get-Process -Name "claude" -ErrorAction SilentlyContinue).Count
+    $runningClaude = @(Get-CimInstance Win32_Process -Filter "Name = 'claude.exe'" -ErrorAction SilentlyContinue).Count
     $runningWorkers = @(Get-Job -State Running -ErrorAction SilentlyContinue | Where-Object { $_.Name -like "Worker_*" }).Count
 
     # Clean up non-worker PS jobs only (orchestrator, stale)

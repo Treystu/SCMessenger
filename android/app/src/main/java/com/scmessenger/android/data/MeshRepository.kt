@@ -3999,7 +3999,8 @@ open class MeshRepository(private val context: Context) {
 
                 val realMessageId = prepared.messageId.trim()
                 if (realMessageId.isBlank()) {
-                    throw IllegalStateException("Failed to prepare message: core returned empty message ID")
+                    Timber.e("Failed to prepare message: core returned empty message ID")
+                    return@withContext
                 }
                 val encryptedData = prepared.envelopeData
 
