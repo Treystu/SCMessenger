@@ -471,12 +471,12 @@ class MdnsServiceDiscovery(
     private fun resolveService(serviceInfo: NsdServiceInfo) {
         // resolveService with Listener is deprecated in API 33; requires Executor overload
         // Use SDK version gate to support minSdk 26 while avoiding deprecation warnings on API 33+
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            // API 26+ has Context.getMainExecutor(), use Executor overload
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            // API 28+ has Context.getMainExecutor(), use Executor overload
             nsdManager?.resolveService(serviceInfo, context.getMainExecutor(), getResolveListener())
         } else {
-            // Legacy API for API < 26 (minSdk 26, so this is never reached at runtime)
-            // Kept for completeness but will not be called
+            // Legacy API for API < 28 (minSdk 26, so this covers 26-27)
+            // Kept for completeness but will not be called on API 28+
             @Suppress("DEPRECATION")
             nsdManager?.resolveService(serviceInfo, getResolveListener())
         }
