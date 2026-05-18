@@ -47,13 +47,12 @@ These files were moved to `HANDOFF/done/` but still contain unresolved work. The
 - [x] Duplicate notification channel creation (NotificationHelper + MeshForegroundService) — DONE via `task_p1b_notification_channel_dedup.md`
 
 ### Current Build State (from git status 2026-05-18)
-- Uncommitted changes: `.claude/quota_state.json`, `SwarmHeartbeat.ps1`, `TaskGovernor.ps1`
-- Deleted (moved to done/): `HANDOFF/ORCHESTRATOR_STATUS.md`, `HANDOFF/todo/[TIME_BREACH]_[VALIDATED]_MICRO_ANR_003_ForegroundService_RunningState_SafeReturn.md`
-- Untracked: `HANDOFF/done/[VALIDATED]_MICRO_ANR_003_ForegroundService_RunningState_SafeReturn.md`
+- Uncommitted changes: `.claude/quota_state.json`, `SwarmHeartbeat.ps1`, `TaskGovernor.ps1`; plus orchestrator queue renames (see below)
 - IN_PROGRESS: 0 slots (empty)
 - todo/: empty (only REJECTED subdir with stale historical files)
-- done/: 544 completed tasks
-- Recent commits: `MICRO_ANR_002`, `MICRO_ANR_003`, `MICRO_DEPRECATION_001`, `MICRO_DEPRECATION_002`
+- done/: 547 completed tasks (including 2 recent validations + 1 superseded)
+- Recent commits: `FIX_ANDROID_BUILD_001`, `MICRO_ANR_001`, `MICRO_ANR_002`, `MICRO_ANR_003`, `MICRO_DEPRECATION_001`, `MICRO_DEPRECATION_002`
+- Orchestrator pass: validated `MICRO_DEPRECATION_001` and `MICRO_ANR_001` prefixes; superseded `MICRO_004` (GNU target no longer needed after FIX_ANDROID_BUILD_001)
 
 ### Todo/ Audit Results
 - `task_epic_wiring_draft.md` → REJECTED (unresolved `[USER: INSERT...]` placeholder)

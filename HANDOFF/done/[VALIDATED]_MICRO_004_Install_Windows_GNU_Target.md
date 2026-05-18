@@ -24,6 +24,9 @@ error[E0463]: can't find crate for `core`
 ```
 The active toolchain is `1.95.0-x86_64-pc-windows-msvc`. The `x86_64-pc-windows-gnu` target is missing.
 
+## Orchestrator Note (2026-05-18)
+SUPERSEDED by `FIX_ANDROID_BUILD_001` (completed 2026-05-18). The Android build pipeline was aligned with the MSVC toolchain, eliminating the `x86_64-pc-windows-gnu` dependency entirely. Installing this target is no longer required.
+
 ## Exact Command
 ```bash
 rustup target add x86_64-pc-windows-gnu
