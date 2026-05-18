@@ -1,7 +1,7 @@
 # SCMessenger Remaining Work Tracking
 
 Status: Active
-Last updated: 2026-05-13 (MASTER AUDIT by deepseek-v4-pro:cloud)
+Last updated: 2026-05-18 (Orchestrator pass)
 
 ---
 
@@ -29,9 +29,9 @@ These files were moved to `HANDOFF/done/` but still contain unresolved work. The
 ### Newly Discovered Gaps (from FINAL_WIRING_AUDIT + V2)
 
 **P0 — Google Play Readiness:**
-- [ ] Deprecated API usage with `@Suppress("DEPRECATION")` at targetSdk=35 (2 remaining sites: MdnsServiceDiscovery.kt:459 resolveService; BleGattServer.kt:30 openGattServer)
+- [x] Deprecated API usage with `@Suppress("DEPRECATION")` at targetSdk=35 (2 sites: MdnsServiceDiscovery.kt resolveService, BleGattServer.kt openGattServer) — DONE via `MICRO_DEPRECATION_001` and `MICRO_DEPRECATION_002` (SDK-gated legacy paths with correctly scoped suppression)
 - [x] Missing `foregroundServiceType="dataSync"` in AndroidManifest.xml — DONE (line 107: `connectedDevice|dataSync`)
-- [ ] Theme.kt status bar color regression — status bar color tinting lost after deprecation fix; needs restoration
+- [x] Theme.kt status bar color regression — DONE via `task_p0_theme_regression_fix.md` (statusBarColor tinting restored with `@Suppress("DEPRECATION")` scoped to SideEffect block)
 
 **P1 — Feature Incomplete:**
 - [x] WASM thin client supports only 4 JSON-RPC methods (missing contacts, settings, history, blocking) — DONE (7 methods wired in core/src/wasm_support/rpc.rs)
@@ -43,14 +43,17 @@ These files were moved to `HANDOFF/done/` but still contain unresolved work. The
 
 **P2 — Technical Debt:**
 - [x] 3 hardcoded "Unknown" strings in Android UI (not in strings.xml) — DONE (only remaining is IdentityViewModel.kt:77 inside Timber.d log, not user-facing)
-- [ ] 13 `IllegalStateException` throw sites in MeshRepository.kt (crash-prone guard clauses) — RECLAIMED from premature done/ ([FAILED]_task_p1a_illegalstate_crash_audit.md)
-- [ ] Duplicate notification channel creation (NotificationHelper + MeshForegroundService) — RECLAIMED from premature done/ ([FAILED]_task_p1b_notification_channel_dedup.md)
+- [x] 13 `IllegalStateException` throw sites in MeshRepository.kt (crash-prone guard clauses) — RESOLVED (verified 2026-05-18: zero `throw IllegalStateException` sites remain in current code)
+- [x] Duplicate notification channel creation (NotificationHelper + MeshForegroundService) — DONE via `task_p1b_notification_channel_dedup.md`
 
-### Current Build State (from git status 2026-05-13)
-- Uncommitted changes: `SwarmHeartbeat.ps1`, `TaskGovernor.ps1`
-- Untracked: `API_EFFICIENCY_LEDGER.md`
+### Current Build State (from git status 2026-05-18)
+- Uncommitted changes: `.claude/quota_state.json`, `SwarmHeartbeat.ps1`, `TaskGovernor.ps1`
+- Deleted (moved to done/): `HANDOFF/ORCHESTRATOR_STATUS.md`, `HANDOFF/todo/[TIME_BREACH]_[VALIDATED]_MICRO_ANR_003_ForegroundService_RunningState_SafeReturn.md`
+- Untracked: `HANDOFF/done/[VALIDATED]_MICRO_ANR_003_ForegroundService_RunningState_SafeReturn.md`
 - IN_PROGRESS: 0 slots (empty)
-- todo/: 3 reclaimed [FAILED]_ tasks + BLOCKED_BY_QUOTA.md
+- todo/: empty (only REJECTED subdir with stale historical files)
+- done/: 544 completed tasks
+- Recent commits: `MICRO_ANR_002`, `MICRO_ANR_003`, `MICRO_DEPRECATION_001`, `MICRO_DEPRECATION_002`
 
 ### Todo/ Audit Results
 - `task_epic_wiring_draft.md` → REJECTED (unresolved `[USER: INSERT...]` placeholder)

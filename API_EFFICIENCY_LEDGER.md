@@ -14,3 +14,5 @@ Token usage tracking for DeepSeek Master Orchestrator wake cycles.
 
 [2026-05-14] - Wake Cycle 001 (deepseek-v4-pro:cloud) - Tier 4 - Reason: queue drained, checking for remaining work in backlog - Tokens: ~1800
 
+[2026-05-18] - Wake Cycle 001 (kimi-k2.6:cloud) - Tier 1 - Reason: queue drained, checking for remaining work in backlog - Tokens: ?
+

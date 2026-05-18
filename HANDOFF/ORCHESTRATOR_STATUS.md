@@ -1,86 +1,65 @@
+# Orchestrator Status Report
+
+**Generated:** 2026-05-18
+**Phase:** HEAVY-LIFT (5hr=23.3%, 7d=21.1%)
+**Slots:** 3 available / 3 total
+**Status:** COMPLETED
+
 ---
-timestamp: "2026-05-14"
-quota_5hr: 28.3
-quota_7d: 91.5
-phase: "LIGHT" (per system prompt, though 5hr technically EXECUTE-tier)
+
+## Queue State
+
+| Directory | Count | State |
+|-----------|-------|-------|
+| `HANDOFF/todo/` | 0 | Empty (only REJECTED subdir with stale historical files) |
+| `HANDOFF/IN_PROGRESS/` | 0 | Empty |
+| `HANDOFF/done/` | 544 | Active history |
+
+## Recently Completed Tasks (last 5 commits)
+
+1. `MICRO_DEPRECATION_002`: MdnsServiceDiscovery.kt API 28 Gate Fix
+2. `MICRO_DEPRECATION_001`: BleGattServer API 31+ Executor Overload
+3. `MICRO_ANR_002`: MeshRepository.kt Safe Return — Empty Message ID Guard
+4. `MICRO_ANR_003`: ForegroundService RunningState SafeReturn (was TIME_BREACH, redispatched and completed)
+
+## Tracking Doc Update
+
+`REMAINING_WORK_TRACKING.md` updated 2026-05-18:
+
+- [x] Deprecated API usage at targetSdk=35 — resolved via MICRO_DEPRECATION_001/002
+- [x] Theme.kt status bar color regression — resolved via task_p0_theme_regression_fix.md
+- [x] 13 IllegalStateException throw sites in MeshRepository.kt — verified 0 remaining in current code
+- [x] Duplicate notification channel creation — resolved via task_p1b_notification_channel_dedup.md
+
+## Remaining Work Assessment
+
+All swarm-executable code tasks in the v0.2.0/v0.2.1 backlog are complete. The remaining open items in `REMAINING_WORK_TRACKING.md` fall into two categories:
+
+1. **Physical-device verification gates** (not dispatchable to cloud agents):
+   - Real-world notification testing on iOS/Android
+   - End-to-end message flow with notifications
+   - BLE-only pairing artifact capture
+   - Live network matrix validation (GCP + direct P2P + relay fallback)
+   - App-update + reinstall continuity validation
+   - iOS power settings runtime evidence capture
+
+2. **Dev-environment setup**:
+   - Provision Docker runtime and rerun `verify_simulation.sh`
+
+## Action Taken
+
+- Validated zero `IllegalStateException` throw sites in current `MeshRepository.kt`
+- Verified deprecation suppression is correctly scoped to SDK-gated legacy branches
+- Updated canonical tracking doc with completion evidence
+- No new task files created (no swarm-dispatchable work remains)
+
+## Next Orchestrator Wake
+
+Scheduled via `/loop 30m` cron. At next wake:
+- Re-check `HANDOFF/todo/` for any user-injected tasks
+- Verify no new [TIME_BREACH] or [FAILED] tasks have appeared
+- If physical-device verification results are submitted, update tracking doc accordingly
+
 ---
 
-# ORCHESTRATOR STATUS
-
-**STATUS: completed**
-
-## Directory Scan
-
-### HANDOFF/done/
-~150+ files. Heavily populated with completed work spanning Android P0/P1 fixes,
-core Rust wiring batches, WASM tasks, wire-task completions, and validated
-phase/audit tasks. No action needed.
-
-### HANDOFF/IN_PROGRESS/
-Empty. The 4 stale files previously in this directory have been moved to
-REJECTED/ (confirmed via git status showing deletions). No active workers.
-
-### HANDOFF/todo/
-- **BLOCKED_BY_QUOTA.md** — Fire Drill 001. Correctly blocked: 7d=91.5% exceeds
-  the task's own >90% threshold. Should remain in todo/ as a blocked marker.
-- **MICRO_BATCH_2026_05_14_EXTREME_EFFICIENCY.md** — Operator-authored directive
-  with 12 micro-tasks (MICRO-01 through MICRO-12). This is the active work queue
-  for the next dispatch cycle. See analysis below.
-- **REJECTED/** — 6 files:
-  - 4x [STALE]_[VALIDATED]_* files: P0_WASM_002, phase_2_platform_clients,
-    task_p1a_illegalstate_crash_audit, task_recovery_session_2026-05-14
-  - 2x epic wiring drafts (REJECTION_task_epic_wiring_draft.md, task_epic_wiring_draft.md)
-  All properly triaged. No further action.
-
-## Triage Results
-
-- **No [FAILED]_ tasks** found anywhere in the HANDOFF tree.
-- **4 [STALE]_ tasks**: Already moved to REJECTED/. Downgraded correctly.
-- **No zombie IN_PROGRESS tasks**: Directory is clean.
-
-## Uncommitted Changes (Working Tree)
-
-| File | Status | Risk |
-|------|--------|------|
-| `android/.../Theme.kt` | Modified (status bar color fix, 1 line) | Zero |
-| `wasm/src/daemon_bridge.rs` | Modified (refactor) | Low |
-| `wasm/Cargo.toml` | Modified (1 line added) | Zero |
-| `Cargo.lock` | Modified (dependency resolution) | Zero |
-| `TaskGovernor.ps1` | Modified | Low |
-| `.claude/scripts/process_alive.sh` | Modified | Zero |
-| `.claude/quota_state.json` | Modified (quota update) | Zero |
-| `API_EFFICIENCY_LEDGER.md` | Modified | Zero |
-| 4x stale IN_PROGRESS/*.md | Deleted (moved to REJECTED/) | Zero |
-
-## Micro-Batch Analysis
-
-The MICRO_BATCH defines 12 tasks across 3 priority tiers:
-
-**P0 — Housekeeping (MICRO-01 to 04):** Git commits for uncommitted changes.
-Zero code risk. Should be dispatched first on next wake.
-
-**P1 — IllegalStateException Conversions (MICRO-05 to 10):** 6 targeted
-crash-to-graceful-degradation fixes in MeshRepository.kt. Each <=50 LOC.
-P0 crash fixes qualify under LIGHT-tier rules.
-
-**P2 — Dedup + Archive (MICRO-11 to 12):** Notification channel dedup +
-archiving 150+ done/ files. Low risk, housekeeping.
-
-## Recommendations
-
-1. **On next wake (MICRO phase, 1 slot, 300s):** Dispatch MICRO-01 through
-   MICRO-04 as a single gemini-3-flash-preview agent. These are pure git
-   operations (commits + file moves) that preserve uncommitted work.
-2. **If budget remains:** Dispatch MICRO-05+06 as a pair (one build verify
-   after both). Continue in pairs as quota allows.
-3. **HARD STOP at 7d >= 99.5%.** Currently at 91.5% with ~$4.25 remaining.
-4. **BLOCKED_BY_QUOTA.md:** Keep in todo/ as a marker. Do not dispatch while
-   7d > 90%.
-5. **Archive backlog:** The done/ directory has ~150+ files. Defer archiving
-   (MICRO-12) to lowest priority — it's cosmetic.
-
-## Deferred Items
-
-All feature work, medium+ refactors, and non-P0 changes deferred per LIGHT-tier
-rules. The MICRO_BATCH P1 tasks (illegalstate conversions) qualify as P0 crash
-fixes and are the only code changes appropriate at this quota level.
+STATUS=COMPLETED

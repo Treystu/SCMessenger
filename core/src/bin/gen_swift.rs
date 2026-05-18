@@ -20,8 +20,8 @@ fn main() {
     // it with the UDL declarations, producing complete bindings for proc-macro-
     // exported interfaces (IronCore, MeshService, ContactManager, etc.).
     let library_file = [
-        "../target/x86_64-pc-windows-gnu/debug/scmessenger_mobile.dll",
-        "../target/x86_64-pc-windows-gnu/release/scmessenger_mobile.dll",
+        "../target/x86_64-pc-windows-msvc/debug/scmessenger_mobile.dll",
+        "../target/x86_64-pc-windows-msvc/release/scmessenger_mobile.dll",
         "../target/debug/libscmessenger_mobile.so",
         "../target/release/libscmessenger_mobile.so",
         "../target/debug/libscmessenger_mobile.dylib",

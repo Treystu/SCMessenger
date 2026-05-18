@@ -297,9 +297,8 @@ task generateUniFFIBindings {
             workingDir '../../'
             environment "RUSTFLAGS", ""
             environment "CARGO_INCREMENTAL", "0"
-            if (isWindows && msysUcrtBin) {
-                environment "PATH", "${msysUcrtBin};${System.getenv('PATH')}"
-                commandLine 'cmd', '/c', 'cargo build --target x86_64-pc-windows-gnu -p scmessenger-mobile'
+            if (isWindows) {
+                commandLine 'cmd', '/c', 'cargo build -p scmessenger-mobile'
             } else {
                 commandLine 'cargo', 'build', '-p', 'scmessenger-mobile'
             }
@@ -311,17 +310,9 @@ task generateUniFFIBindings {
             environment "RUSTFLAGS", ""
             environment "CARGO_INCREMENTAL", "0"
 
-            if (isWindows && msysUcrtBin) {
-                environment "PATH", "${msysUcrtBin};${System.getenv('PATH')}"
-            }
-
             if (isWindows) {
-                // Use the gnu target (active default toolchain on Windows CI/dev).
-                // MSVC target requires Visual C++ build tools (cl.exe) for quinn/ring,
-                // which are not guaranteed on PATH; gnu uses MinGW which is provisioned.
-                commandLine 'cmd', '/c', 'cargo run --target x86_64-pc-windows-gnu --bin gen_kotlin --features gen-bindings'
+                commandLine 'cmd', '/c', 'cargo run --bin gen_kotlin --features gen-bindings'
             } else {
-                // macOS/Linux: use the host default toolchain (no --target flag)
                 commandLine 'cargo', 'run', '--bin', 'gen_kotlin', '--features', 'gen-bindings'
             }
         }

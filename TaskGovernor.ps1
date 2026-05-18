@@ -32,20 +32,24 @@ function Write-GovernorLog {
 function Read-TaskHeaders {
     param([string]$FilePath)
     $headers = @{
-        Model    = $Script:Model
-        Budget   = $Script:BudgetLimit
-        Target   = ""
-        Fallback = ""
-        Agent    = ""
+        Model           = $Script:Model
+        Budget          = $Script:BudgetLimit
+        TokenBudget     = 0
+        StrippedContext = $false
+        Target          = ""
+        Fallback        = ""
+        Agent           = ""
     }
     try {
         $lines = Get-Content -LiteralPath $FilePath -TotalCount 50 -ErrorAction Stop
         foreach ($line in $lines) {
-            if ($line -match "^#\s*(MODEL|Model)\s*:\s*(.+)")   { $headers.Model    = $matches[2].Trim() }
-            if ($line -match "^#\s*(BUDGET|Budget)\s*:\s*(\d+)") { $headers.Budget   = [int]$matches[2] }
-            if ($line -match "^#\s*TARGET\s*:\s*(.+)")          { $headers.Target   = $matches[1].Trim() }
-            if ($line -match "^#\s*FALLBACK\s*:\s*(.+)")        { $headers.Fallback = $matches[1].Trim() }
-            if ($line -match "^#\s*AGENT\s*:\s*(.+)")           { $headers.Agent    = $matches[1].Trim() }
+            if ($line -match "^#\s*(MODEL|Model)\s*:\s*(.+)")         { $headers.Model           = $matches[2].Trim() }
+            if ($line -match "^#\s*(BUDGET|Budget)\s*:\s*(\d+)")       { $headers.Budget          = [int]$matches[2] }
+            if ($line -match "^token_budget\s*:\s*(\d+)")             { $headers.TokenBudget     = [int]$matches[1] }
+            if ($line -match "^#\s*STRIPPED_CONTEXT\s*:\s*true")      { $headers.StrippedContext = $true }
+            if ($line -match "^#\s*TARGET\s*:\s*(.+)")                { $headers.Target          = $matches[1].Trim() }
+            if ($line -match "^#\s*FALLBACK\s*:\s*(.+)")              { $headers.Fallback        = $matches[1].Trim() }
+            if ($line -match "^#\s*AGENT\s*:\s*(.+)")                 { $headers.Agent           = $matches[1].Trim() }
         }
     } catch {
         Write-GovernorLog "ERROR" "Failed to read task headers: $($_.Exception.Message)"
@@ -55,6 +59,13 @@ function Read-TaskHeaders {
     }
     $Script:Model = $headers.Model
     return $headers
+}
+
+function Get-ApproximateTokens {
+    param([string]$Text)
+    if ([string]::IsNullOrEmpty($Text)) { return 0 }
+    # Rough estimate: 1 token ~ 4 characters for English/code
+    return [math]::Ceiling($Text.Length / 4)
 }
 
 function New-ClaudeCommand {
@@ -75,9 +86,12 @@ function Invoke-AgentWithBudget {
 
     $cmd = New-ClaudeCommand -Model $Script:Model
 
-    # Build prompt with optional quota context
+    # Build prompt with optional quota context (skip for stripped-context MICRO tasks)
     $quotaBlock = ""
-    if ($Script:QuotaContextJson -and $Script:QuotaContextJson.Trim() -ne "") {
+    $headers = Read-TaskHeaders -FilePath $TaskFilePath
+    $tokenBudget = $headers.TokenBudget
+
+    if (-not $headers.StrippedContext -and $Script:QuotaContextJson -and $Script:QuotaContextJson.Trim() -ne "") {
         try {
             $qc = $Script:QuotaContextJson | ConvertFrom-Json
             $quotaBlock = @"
@@ -104,13 +118,30 @@ you completed and mark remaining work with [REMAINING] comments. Exit cleanly.
 
     $prompt = "${quotaBlock}SYSTEM OVERRIDE: Read and execute all instructions in $TaskFilePath. Do not ask for help. CRITICAL: Do NOT move, rename, or relocate the task file -- the governor handles file movement. When finished, output TASK COMPLETE and exit."
 
-    $startTime = Get-Date
+    # Token budget already read above for stripped-context check
+    $tokenUsedEstimate = Get-ApproximateTokens -Text $prompt
+
+    # Grace period: err on the side of saving work
     $budgetSeconds = $Script:BudgetLimit
+    if ($budgetSeconds -le 60) {
+        $graceSeconds = 30
+    } elseif ($budgetSeconds -le 180) {
+        $graceSeconds = 45
+    } elseif ($budgetSeconds -le 900) {
+        $graceSeconds = 90
+    } else {
+        $graceSeconds = 120
+    }
+    $hardKillAt = $budgetSeconds + $graceSeconds
+    $softStopAt = $budgetSeconds
+
+    $startTime = Get-Date
     $warnThreshold = [math]::Floor($budgetSeconds * 0.80)
     $warned = $false
     $timedOut = $false
+    $softStopped = $false
 
-    Write-GovernorLog "INFO" "Starting agent: model=$($Script:Model) budget=${budgetSeconds}s task=$TaskFilePath"
+    Write-GovernorLog "INFO" "Starting agent: model=$($Script:Model) budget=${budgetSeconds}s grace=${graceSeconds}s tokenBudget=${tokenBudget} promptTokens=${tokenUsedEstimate} task=$TaskFilePath"
 
     # Capture PID for agent directory tracking
     $taskFileName = Split-Path $TaskFilePath -Leaf
@@ -246,9 +277,46 @@ you completed and mark remaining work with [REMAINING] comments. Exit cleanly.
                 Write-GovernorLog "WARN" "BUDGET WARNING: $([math]::Round($elapsed,1))s / ${budgetSeconds}s elapsed (80% threshold)"
             }
 
-            # Budget breach: kill process tree
-            if ($elapsed -ge $budgetSeconds) {
-                Write-GovernorLog "ERROR" "BUDGET BREACH: $([math]::Round($elapsed,1))s >= ${budgetSeconds}s -- force-killing agent"
+            # Token budget enforcement (approximate)
+            if ($tokenBudget -gt 0) {
+                $currentOutput = ""
+                [System.Threading.Monitor]::Enter($syncLock)
+                try { $currentOutput = [string]::Join("`n", $outputList.ToArray()) } finally { [System.Threading.Monitor]::Exit($syncLock) }
+                $tokenUsedEstimate = Get-ApproximateTokens -Text ($prompt + $currentOutput)
+                if ($tokenUsedEstimate -ge $tokenBudget) {
+                    Write-GovernorLog "ERROR" "TOKEN BUDGET BREACH: ${tokenUsedEstimate} tokens >= ${tokenBudget} token budget -- force-killing agent"
+                    $timedOut = $true
+                    try {
+                        Stop-Process -Id $process.Id -Force -ErrorAction Stop
+                    } catch {
+                        Write-GovernorLog "ERROR" "Force kill failed: $($_.Exception.Message)"
+                    }
+                    break
+                }
+            }
+
+            # SOFT STOP at budget: send polite close request, allow agent to save work
+            if (-not $softStopped -and $elapsed -ge $softStopAt) {
+                $softStopped = $true
+                Write-GovernorLog "WARN" "BUDGET SOFT STOP: $([math]::Round($elapsed,1))s >= ${budgetSeconds}s -- requesting graceful exit (hard kill in ${graceSeconds}s)"
+                try {
+                    # Attempt to signal graceful shutdown via closing stdin
+                    $process.StandardInput.Close()
+                } catch {}
+                # Wait briefly for agent to notice and exit on its own
+                $softStopWait = Get-Date
+                while (((Get-Date) - $softStopWait).TotalSeconds -lt [math]::Min($graceSeconds, 15) -and -not $process.HasExited) {
+                    Start-Sleep -Milliseconds 200
+                }
+                if ($process.HasExited) {
+                    Write-GovernorLog "INFO" "Agent exited gracefully after soft stop signal"
+                    break
+                }
+            }
+
+            # HARD KILL at budget + grace: prevent indefinite runaway
+            if ($elapsed -ge $hardKillAt) {
+                Write-GovernorLog "ERROR" "BUDGET HARD KILL: $([math]::Round($elapsed,1))s >= ${hardKillAt}s (grace expired) -- force-killing agent"
                 $timedOut = $true
                 try {
                     Stop-Process -Id $process.Id -Force -ErrorAction Stop

@@ -6,10 +6,11 @@ $Script:InProgDir            = Join-Path $BaseDir "HANDOFF\IN_PROGRESS"
 $Script:CompleteFlag         = Join-Path $BaseDir "HANDOFF\SWARM_COMPLETE"
 $Script:MaxConcurrentSlots    = 3
 $Script:PollIntervalSeconds   = 10
-$Script:OrchModelTriage       = "deepseek-v4-pro:cloud"
-$Script:OrchModelStandard     = "deepseek-v4-flash:cloud"
-$Script:OrchModelHeavy        = "qwen3-coder-next:cloud"
-$Script:OrchFallbackModel     = "kimi-k2.6:cloud"
+$Script:OrchModelTriage       = "kimi-k2.6:cloud"
+$Script:OrchModelStandard     = "kimi-k2.6:cloud"
+$Script:OrchModelHeavy        = "kimi-k2.6:cloud"
+$Script:OrchFallbackModel     = "deepseek-v4-pro:cloud"
+$Script:OrchTertiaryModel     = "glm-5.1:cloud"
 $Script:StaleThresholdMinutes = 60
 $Script:OrchCooldownSeconds   = 120
 $Script:ScraperIntervalMinutes = 5
@@ -31,12 +32,15 @@ $Script:WorkerModelAllowList         = @()
 $Script:MaxBudgetOverride            = 0
 $Script:LastOrchModelDispatched      = ""
 $Script:LastOrchReasonDispatched     = ""
+$Script:OrchLastFailedModel          = ""
 $Script:ShutdownRequested            = $false
 $Script:CachedClaudeCount            = $null
 $Script:CachedClaudeTimestamp        = [datetime]::MinValue
 $Script:LastModelAllowlistRefresh    = [datetime]::MinValue
 $Script:DynamicModelAllowList        = @()
 $Script:BootTime                     = $null
+$Script:JavaOrphanTracker            = @()
+$Script:LastWorkerDispatchTime      = [datetime]::MinValue
 
 function Write-HeartbeatLog {
     param([string]$Level, [string]$Message)
@@ -226,6 +230,7 @@ function Wait-ClaudePidFromJob {
         [int]$InitialDelayMs = 500
     )
     $claudePid = $null
+    $dispatchTime = Get-Date
     try {
         $jobProcessId = $Job.ChildJobs[0].JobProcessId
         $retryDelay = $InitialDelayMs
@@ -255,7 +260,7 @@ function Wait-ClaudePidFromJob {
             # Exponential backoff: 500ms -> 750ms -> 1125ms -> ..., capped at 3000ms
             $retryDelay = [math]::Min([math]::Floor($retryDelay * 1.5), 3000)
         }
-        # Fallback: newest untracked claude.exe
+        # Fallback: newest untracked claude.exe that started AFTER this dispatch
         if ($null -eq $claudePid) {
             $trackedPids = @()
             $agentDirs = Get-ChildItem -LiteralPath (Join-Path $Script:BaseDir ".claude\agents") -Directory -ErrorAction SilentlyContinue
@@ -275,14 +280,20 @@ function Wait-ClaudePidFromJob {
                 }
             }
             $untracked = @(Get-CimInstance Win32_Process -Filter "Name = 'claude.exe'" -ErrorAction SilentlyContinue | Where-Object { $trackedPids -notcontains $_.ProcessId } | Sort-Object CreationDate -Descending)
-            if ($untracked.Count -gt 0) { $claudePid = $untracked[0].ProcessId }
+            foreach ($candidate in $untracked) {
+                if ($candidate.CreationDate -gt $dispatchTime.AddSeconds(-5)) {
+                    $claudePid = $candidate.ProcessId
+                    break
+                }
+            }
         }
         if ($null -ne $claudePid) {
             $pidFile = Join-Path $AgentDir "pid"
             $claudePid | Out-File -LiteralPath $pidFile -Encoding utf8 -ErrorAction SilentlyContinue
-            Write-HeartbeatLog "INFO" "Captured claude.exe PID: $claudePid (attempt $($i+1)/$MaxRetries)"
+            $attemptStr = if ($i -lt $MaxRetries) { "$($i+1)/$MaxRetries" } else { "fallback" }
+            Write-HeartbeatLog "INFO" "Captured claude.exe PID: $claudePid ($attemptStr)"
         } else {
-            Write-HeartbeatLog "WARN" "Failed to capture claude.exe PID after $MaxRetries attempts"
+            Write-HeartbeatLog "WARN" "Failed to capture claude.exe PID after $MaxRetries attempts (no new claude.exe found)"
         }
     } catch {
         Write-HeartbeatLog "DEBUG" "PID capture via Wait-ClaudePidFromJob failed: $($_.Exception.Message)"
@@ -291,11 +302,12 @@ function Wait-ClaudePidFromJob {
 }
 
 function Get-SwarmFileState {
-    $doneFiles    = @(Get-ChildItem -LiteralPath $Script:DoneDir -Filter "*.md" -ErrorAction SilentlyContinue)
-    $pendingFiles = @(Get-ChildItem -LiteralPath $Script:TodoDir -Filter "[VALIDATED]_*.md" -ErrorAction SilentlyContinue)
-    $inProgFiles  = @(Get-ChildItem -LiteralPath $Script:InProgDir -Filter "*.md" -ErrorAction SilentlyContinue)
-    $failedFiles  = @(Get-ChildItem -LiteralPath $Script:TodoDir -Filter "[FAILED]_*.md" -ErrorAction SilentlyContinue)
-    $staleFiles   = @(Get-ChildItem -LiteralPath $Script:TodoDir -Filter "[STALE]_*.md" -ErrorAction SilentlyContinue)
+    $doneFiles       = @(Get-ChildItem -LiteralPath $Script:DoneDir -Filter "*.md" -ErrorAction SilentlyContinue)
+    $pendingFiles    = @(Get-ChildItem -LiteralPath $Script:TodoDir -Filter "[VALIDATED]_*.md" -ErrorAction SilentlyContinue)
+    $inProgFiles     = @(Get-ChildItem -LiteralPath $Script:InProgDir -Filter "*.md" -ErrorAction SilentlyContinue)
+    $failedFiles     = @(Get-ChildItem -LiteralPath $Script:TodoDir -Filter "[FAILED]_*.md" -ErrorAction SilentlyContinue)
+    $staleFiles      = @(Get-ChildItem -LiteralPath $Script:TodoDir -Filter "[STALE]_*.md" -ErrorAction SilentlyContinue)
+    $timeBreachFiles = @(Get-ChildItem -LiteralPath $Script:TodoDir -Filter "[TIME_BREACH]_*.md" -ErrorAction SilentlyContinue)
 
     # Compute orphan status without Get-ActiveSlotCount (which has leak-detection logging)
     # Orphan: IN_PROGRESS files exist but no active slots of any kind
@@ -308,9 +320,9 @@ function Get-SwarmFileState {
         DoneCount          = $doneFiles.Count
         PendingCount       = $pendingFiles.Count
         InProgressCount    = $inProgFiles.Count
-        FailedOrStaleCount = $failedFiles.Count + $staleFiles.Count
+        FailedOrStaleCount = $failedFiles.Count + $staleFiles.Count + $timeBreachFiles.Count
         OrphanInProgress   = $orphanInProg
-        PendingTasks       = $pendingFiles | Sort-Object Name
+        PendingTasks       = ($pendingFiles + $timeBreachFiles) | Sort-Object Name
         HasNewDone         = $doneFiles.Count -gt $Script:PrevDoneCount
     }
     return $state
@@ -551,24 +563,24 @@ function Invoke-QuotaGovernor {
             $Script:OrchCooldownSeconds   = 600
             $Script:MaxBudgetOverride     = 300
             $Script:CurrentPhaseName      = "MICRO"
-            $Script:OrchModelTier         = "deepseek-v4-pro:cloud"
-            Write-HeartbeatLog "WARN" "MICRO PHASE: Single-slot, max budget 300s, P0/defer-only. Orchestrator: deepseek-v4-pro"
+            $Script:OrchModelTier         = "kimi-k2.6:cloud"
+            Write-HeartbeatLog "WARN" "MICRO PHASE: Single-slot, max budget 300s, P0/defer-only. Orchestrator: kimi-k2.6"
         }
         4 {
             $Script:MaxConcurrentSlots    = 2
             $Script:OrchCooldownSeconds   = 300
             $Script:MaxBudgetOverride     = 900
             $Script:CurrentPhaseName      = "LIGHT"
-            $Script:OrchModelTier         = "deepseek-v4-pro:cloud"
-            Write-HeartbeatLog "WARN" "LIGHT PHASE: 2-slot, docs/tests/lint/bindings only, max budget 900s. Orchestrator: deepseek-v4-pro"
+            $Script:OrchModelTier         = "kimi-k2.6:cloud"
+            Write-HeartbeatLog "WARN" "LIGHT PHASE: 2-slot, docs/tests/lint/bindings only, max budget 900s. Orchestrator: kimi-k2.6"
         }
         3 {
             $Script:MaxConcurrentSlots    = 2
             $Script:OrchCooldownSeconds   = 180
             $Script:MaxBudgetOverride     = 1800
             $Script:CurrentPhaseName      = "MIXED"
-            $Script:OrchModelTier         = "deepseek-v4-pro:cloud"
-            Write-HeartbeatLog "INFO" "MIXED PHASE: 2-slot, smaller features/validation/testing, max budget 1800s. Orchestrator: deepseek-v4-pro"
+            $Script:OrchModelTier         = "kimi-k2.6:cloud"
+            Write-HeartbeatLog "INFO" "MIXED PHASE: 2-slot, smaller features/validation/testing, max budget 1800s. Orchestrator: kimi-k2.6"
         }
         2 {
             $Script:MaxConcurrentSlots    = 3
@@ -576,15 +588,15 @@ function Invoke-QuotaGovernor {
             $Script:MaxBudgetOverride     = 5400
             $Script:CurrentPhaseName      = "EXECUTE"
             $Script:OrchModelTier         = "kimi-k2.6:cloud"
-            Write-HeartbeatLog "INFO" "EXECUTE PHASE: 3-slot, major feature implementation, max budget 5400s"
+            Write-HeartbeatLog "INFO" "EXECUTE PHASE: 3-slot, major feature implementation, max budget 5400s. Orchestrator: kimi-k2.6"
         }
         default {
             $Script:MaxConcurrentSlots    = 3
             $Script:OrchCooldownSeconds   = 120
             $Script:MaxBudgetOverride     = 0
             $Script:CurrentPhaseName      = "HEAVY-LIFT"
-            $Script:OrchModelTier         = "qwen3-coder:480b:cloud"
-            Write-HeartbeatLog "INFO" "HEAVY-LIFT PHASE: 3-slot, flagship models, no budget cap. Token-heavy work: multi-file wiring, architecture, deep planning."
+            $Script:OrchModelTier         = "kimi-k2.6:cloud"
+            Write-HeartbeatLog "INFO" "HEAVY-LIFT PHASE: 3-slot, flagship models, no budget cap. Token-heavy work: multi-file wiring, architecture, deep planning. Orchestrator: kimi-k2.6"
         }
     }
 
@@ -629,6 +641,17 @@ function Select-OrchestratorModel {
     if (-not $model) {
         $model = $Script:OrchModelStandard
     }
+
+    # Fallback chain: primary -> fallback -> tertiary
+    $modelChain = @($model)
+    if ($Script:OrchFallbackModel) { $modelChain += $Script:OrchFallbackModel }
+    if ($Script:OrchTertiaryModel) { $modelChain += $Script:OrchTertiaryModel }
+    $resolved = $modelChain | Where-Object { $_ -ne $Script:OrchLastFailedModel } | Select-Object -First 1
+    if ($resolved -and $resolved -ne $model) {
+        Write-HeartbeatLog "WARN" "Orchestrator model $model failed last cycle -- switching to $resolved"
+        $model = $resolved
+    }
+    $Script:OrchLastFailedModel = ""  # Clear after one fallback attempt
 
     # At MICRO phase (Tier 5), force triage model regardless
     if ($Script:CurrentQuotaTier -ge 5) {
@@ -796,6 +819,7 @@ function Invoke-DispatchWorker {
         }
 
         Write-HeartbeatLog "INFO" "Dispatching Worker for $($TaskFile.Name) -> model=$model budget=${budget}s"
+        $Script:LastWorkerDispatchTime = Get-Date
 
         # Canonical naming: use IN_PROGRESS_ prefix for files in the IN_PROGRESS directory
         $inProgressName = Get-InProgressName -FileName $TaskFile.Name
@@ -870,6 +894,57 @@ function Invoke-DispatchWorker {
     }
 }
 
+# === MICRO TASK BATCHING ===
+
+function Invoke-CreateMicroBatch {
+    param([System.IO.FileInfo[]]$PendingTasks)
+    $microTasks = @($PendingTasks | Where-Object { $_.Name -match "MICRO_" -and $_.Name -notmatch "BATCH_MICRO_" })
+    if ($microTasks.Count -lt 2) { return $null }
+
+    $batchName = "BATCH_MICRO_$(Get-Date -Format 'HHmmss').md"
+    $batchPath = Join-Path $Script:TodoDir $batchName
+
+    $header = @"
+# MODEL: gemini-3-flash-preview:cloud
+# BUDGET: $([math]::Min(180, $Script:MaxBudgetOverride))
+# BATCHED_TASKS: $($microTasks.Count)
+# STRIPPED_CONTEXT: true
+
+# BATCH_INSTRUCTIONS:
+# You are processing $($microTasks.Count) MICRO tasks sequentially.
+# For each TASK section below:
+#   1. Apply the code change described
+#   2. Move the original task file from todo/ to done/ (file name shown in each section)
+#   3. Proceed to the next TASK section
+# Do NOT run `./gradlew :app:assembleDebug` for individual MICRO changes.
+# Only run the build ONCE after all tasks are done, if you have time.
+# If you run out of budget, stop cleanly -- remaining tasks stay in todo/.
+# STRIPPED CONTEXT: You do NOT need to read CLAUDE.md in full.
+# Relevant rules only: android.md (minSdk 26, compileSdk 35, Hilt, Compose).
+
+"@
+
+    $body = ""
+    foreach ($mt in $microTasks) {
+        $body += "---`n## TASK: $($mt.Name)`n"
+        try {
+            $taskContent = Get-Content -LiteralPath $mt.FullName -Raw -ErrorAction SilentlyContinue
+            $body += $taskContent + "`n`n"
+        } catch {
+            $body += "[ERROR reading task content]`n`n"
+        }
+    }
+
+    try {
+        ($header + $body) | Out-File -LiteralPath $batchPath -Encoding utf8 -ErrorAction Stop
+        Write-HeartbeatLog "INFO" "Created MICRO batch: $batchName ($($microTasks.Count) tasks)"
+        return Get-Item -LiteralPath $batchPath
+    } catch {
+        Write-HeartbeatLog "ERROR" "Failed to create MICRO batch: $($_.Exception.Message)"
+        return $null
+    }
+}
+
 # === ORCHESTRATOR MANDATE GENERATOR ===
 
 function New-OrchestratorMandate {
@@ -904,16 +979,47 @@ Also create detailed, well-scoped task files that small models can execute in la
 phases. Route aggressively: heavy models for heavy work, but don't waste large models
 on tasks a small model could handle. Queue ambitious work now while budget is unlimited.
 
+DYNAMIC SCOPING & BUDGETING RULES (apply to ALL tiers):
+- Budget = (estimated tokens / 10) + (build verification time in seconds) + 30s buffer.
+- A task that edits 1 file with 8 LOC change should NEVER have a 120s budget.
+- Token budget field MUST be realistic: count prompt characters / 4 for estimate.
+- MICRO tasks (null-guard, safe-return, deprecation wrap) get 60s budget MAX.
+- If a task requires a full Gradle build, add 120s to budget OR delegate build to orchestrator.
+
+BATCHING RULE (MICRO tasks):
+- If 2+ [VALIDATED]_MICRO_* tasks exist in todo/, create BATCH_MICRO_*.md containing ALL of them.
+- The batch worker processes them sequentially, moving each to done/ as it completes.
+- This amortizes model load + context injection cost across multiple tasks.
+
+BUILD VERIFICATION PROTOCOL:
+- Workers executing pure null-guard / safe-return / deprecation-wrap changes SKIP the Gradle build.
+- The orchestrator runs FULL build verification (`./gradlew :app:assembleDebug`) after workers finish.
+- If the orchestrator build fails, it creates a remediation task for the specific failure.
+- This prevents every micro worker from burning 60-120s on Gradle while the change is trivial.
+
+PROMPT STRIPPING (MICRO tasks):
+- MICRO tasks do NOT need full CLAUDE.md architecture context.
+- Strip to: android.md rules only + the exact task instructions + file context.
+- Add header `# STRIPPED_CONTEXT: true` so TaskGovernor knows to omit quota block.
+
+TIME_BREACH PROTOCOL:
+- [TIME_BREACH]_ tasks were force-killed by TaskGovernor for exceeding budget.
+- Rename [TIME_BREACH]_ prefix to [VALIDATED]_.
+- Increase # BUDGET: by +60s minimum (e.g., 120s -> 180s, 180s -> 240s).
+- Verify # MODEL: header exists and is appropriate.
+- Redispatch as normal. Do NOT downgrade model -- the issue was time, not capability.
+
 STANDARD ORCHESTRATOR DUTIES:
 1. Read HANDOFF/done/ for newly completed tasks. Update REMAINING_WORK_TRACKING.md.
 2. Read HANDOFF/IN_PROGRESS/ for stale tasks (>60 min). Reclaim to todo/ with [STALE]_ prefix.
 3. Read HANDOFF/todo/ for [FAILED]_ tasks. Downgrade model, reduce budget 40%, re-validate.
 4. Read HANDOFF/todo/ for [STALE]_ tasks. Re-validate, restore [VALIDATED]_ prefix.
-5. Read HANDOFF/todo/ for [NEEDS_TRIAGE]_ tasks. Add # MODEL: and # BUDGET: headers.
-6. Validate unvalidated tasks. Add [VALIDATED]_ prefix or reject.
-7. Create new task files from REMAINING_WORK_TRACKING.md gaps with proper headers.
-8. Assign models per routing table. Set budgets based on complexity.
-9. Write HANDOFF/ORCHESTRATOR_STATUS.md with STATUS=completed.
+5. Read HANDOFF/todo/ for [TIME_BREACH]_ tasks. Apply TIME_BREACH PROTOCOL above.
+6. Read HANDOFF/todo/ for [NEEDS_TRIAGE]_ tasks. Add # MODEL: and # BUDGET: headers.
+7. Validate unvalidated tasks. Add [VALIDATED]_ prefix or reject.
+8. Create new task files from REMAINING_WORK_TRACKING.md gaps with proper headers.
+9. Assign models per routing table. Set budgets based on complexity.
+10. Write HANDOFF/ORCHESTRATOR_STATUS.md with STATUS=completed.
 
 CRITICAL: You MANAGE the queue. Do NOT write application code. Exit after writing status file.
 RETRY CONSTRAINT: Failed tasks MUST downgrade model. Never escalate. Failed on smallest = UNRESOLVABLE.
@@ -928,16 +1034,30 @@ Standard orchestrator duties. Dispatch implementation tasks per CLAUDE.md routin
 Prefer queuing any remaining heavy-lift work now -- the window for flagship models is
 closing. Start routing docs/tests/lint to smaller models.
 
+DYNAMIC SCOPING & BUDGETING RULES:
+- Budget = (estimated tokens / 10) + (build verification time) + 30s buffer.
+- MICRO tasks (null-guard, safe-return, deprecation wrap) get 60s budget MAX.
+- If 2+ MICRO tasks exist, batch them into BATCH_MICRO_*.md and dispatch ONE worker.
+- Workers skip Gradle for pure null-guard/safe-return changes; orchestrator runs full build after.
+- MICRO tasks: strip CLAUDE.md context to android.md rules only + task instructions.
+
+TIME_BREACH PROTOCOL:
+- [TIME_BREACH]_ tasks were force-killed by TaskGovernor for exceeding budget.
+- Rename [TIME_BREACH]_ prefix to [VALIDATED]_.
+- Increase # BUDGET: by +60s minimum.
+- Redispatch as normal. Do NOT downgrade model -- the issue was time, not capability.
+
 STANDARD ORCHESTRATOR DUTIES:
 1. Read HANDOFF/done/ for newly completed tasks. Update REMAINING_WORK_TRACKING.md.
 2. Read HANDOFF/IN_PROGRESS/ for stale tasks (>60 min). Reclaim to todo/ with [STALE]_ prefix.
 3. Read HANDOFF/todo/ for [FAILED]_ tasks. Downgrade model, reduce budget 40%, re-validate.
 4. Read HANDOFF/todo/ for [STALE]_ tasks. Re-validate, restore [VALIDATED]_ prefix.
-5. Read HANDOFF/todo/ for [NEEDS_TRIAGE]_ tasks. Add # MODEL: and # BUDGET: headers.
-6. Validate unvalidated tasks. Add [VALIDATED]_ prefix or reject.
-7. Create new task files from REMAINING_WORK_TRACKING.md gaps with proper headers.
-8. Assign models per routing table. Set budgets based on complexity.
-9. Write HANDOFF/ORCHESTRATOR_STATUS.md with STATUS=completed.
+5. Read HANDOFF/todo/ for [TIME_BREACH]_ tasks. Apply TIME_BREACH PROTOCOL above.
+6. Read HANDOFF/todo/ for [NEEDS_TRIAGE]_ tasks. Add # MODEL: and # BUDGET: headers.
+7. Validate unvalidated tasks. Add [VALIDATED]_ prefix or reject.
+8. Create new task files from REMAINING_WORK_TRACKING.md gaps with proper headers.
+9. Assign models per routing table. Set budgets based on complexity.
+10. Write HANDOFF/ORCHESTRATOR_STATUS.md with STATUS=completed.
 
 CRITICAL: You MANAGE the queue. Do NOT write application code. Exit after writing status file.
 RETRY CONSTRAINT: Failed tasks MUST downgrade model. Never escalate. Failed on smallest = UNRESOLVABLE.
@@ -950,6 +1070,18 @@ $workerModelLine
 
 Standard orchestrator duties. Dispatch implementation tasks. Avoid large multi-file
 refactors. Route validation/testing/docs to smaller models. Budgets clamped to ${MaxBudget}s.
+
+DYNAMIC SCOPING & BUDGETING RULES:
+- Budget = (estimated tokens / 10) + (build verification time) + 30s buffer.
+- MICRO tasks get 60s budget MAX. If 2+ MICRO tasks exist, batch them into BATCH_MICRO_*.md.
+- Workers skip Gradle for pure null-guard/safe-return changes; orchestrator runs full build after.
+- MICRO tasks: strip CLAUDE.md context to android.md rules only + task instructions.
+
+TIME_BREACH PROTOCOL:
+- [TIME_BREACH]_ tasks were force-killed by TaskGovernor for exceeding budget.
+- Rename [TIME_BREACH]_ prefix to [VALIDATED]_.
+- Increase # BUDGET: by +60s minimum.
+- Redispatch as normal. Do NOT downgrade model -- the issue was time, not capability.
 
 STANDARD ORCHESTRATOR DUTIES: (same as above -- scan, triage, validate, create, route)
 Write HANDOFF/ORCHESTRATOR_STATUS.md with STATUS=completed when done.
@@ -966,12 +1098,25 @@ gemini-3-flash-preview: docs, tests, lint, bindings, P0 fixes. Defer ALL feature
 work and medium+ refactors to next quota window. Break remaining cleanup into
 small chunks (<=${MaxBudget}s each).
 
+DYNAMIC SCOPING & BUDGETING RULES:
+- Budget = (estimated tokens / 10) + (build verification time) + 30s buffer.
+- MICRO tasks get 60s budget MAX. If 2+ MICRO tasks exist, batch them into BATCH_MICRO_*.md.
+- Workers skip Gradle for pure null-guard/safe-return changes; orchestrator runs full build after.
+- MICRO tasks: strip CLAUDE.md context to android.md rules only + task instructions.
+
+TIME_BREACH PROTOCOL:
+- [TIME_BREACH]_ tasks were force-killed by TaskGovernor for exceeding budget.
+- Rename [TIME_BREACH]_ prefix to [VALIDATED]_.
+- Increase # BUDGET: by +60s minimum (respecting max budget cap).
+- Redispatch as normal. Do NOT downgrade model.
+
 ORCHESTRATOR DUTIES (abbreviated):
 1. Scan done/, IN_PROGRESS/, todo/.
 2. Triage [FAILED]_ and [STALE]_ tasks -- downgrade aggressively.
-3. Create ONLY small-model tasks (docs/tests/lint/bindings/P0).
-4. DEFER everything else.
-5. Write HANDOFF/ORCHESTRATOR_STATUS.md with STATUS=completed.
+3. Handle [TIME_BREACH]_ tasks per TIME_BREACH PROTOCOL above.
+4. Create ONLY small-model tasks (docs/tests/lint/bindings/P0).
+5. DEFER everything else.
+6. Write HANDOFF/ORCHESTRATOR_STATUS.md with STATUS=completed.
 CRITICAL: Exit after writing status file. Do NOT write application code.
 "@
         }
@@ -984,11 +1129,25 @@ Quota is critically low. ONLY create/dispatch micro-tasks for gemini-3-flash-pre
 P0 fixes, lint, single-line changes. Budget capped at ${MaxBudget}s. ALL other work
 MUST be deferred to next quota window. PARTIAL COMPLETION IS ACCEPTABLE.
 
+DYNAMIC SCOPING & BUDGETING RULES:
+- Budget = (estimated tokens / 10) + (build verification time) + 30s buffer.
+- MICRO tasks get 60s budget MAX. If 2+ MICRO tasks exist, batch them into BATCH_MICRO_*.md.
+- Workers skip Gradle for pure null-guard/safe-return changes; orchestrator runs full build after.
+- MICRO tasks: strip CLAUDE.md context to android.md rules only + task instructions.
+
+TIME_BREACH PROTOCOL:
+- [TIME_BREACH]_ tasks were force-killed by TaskGovernor for exceeding budget.
+- Rename [TIME_BREACH]_ prefix to [VALIDATED]_.
+- Increase # BUDGET: by +60s (up to max budget cap).
+- Redispatch as normal. Do NOT downgrade model.
+
 ORCHESTRATOR DUTIES (micro only):
 1. Quick scan of done/ and todo/.
-2. Create ONLY gemini-3-flash-preview tasks <= ${MaxBudget}s.
-3. Defer everything else.
-4. Write HANDOFF/ORCHESTRATOR_STATUS.md with STATUS=completed.
+2. Handle [TIME_BREACH]_ tasks per TIME_BREACH PROTOCOL above.
+3. Create ONLY gemini-3-flash-preview tasks <= ${MaxBudget}s.
+4. If 2+ MICRO tasks exist, batch them. ONE worker processes all sequentially.
+5. Defer everything else.
+6. Write HANDOFF/ORCHESTRATOR_STATUS.md with STATUS=completed.
 CRITICAL: Exit after writing status file. Do NOT initiate any work requiring >${MaxBudget}s.
 "@
         }
@@ -1103,8 +1262,15 @@ function Invoke-DispatchOrchestrator {
 }
 
 function Invoke-CleanupOrphanJava {
-    # Kill OpenJDK/Java processes that have no parent claude.exe process
-    # These are abandoned ollama CLI JVMs from completed/failed agent runs
+    param([int]$MinAgeSeconds = 60, [int]$ConfirmationSeconds = 120)
+
+    # Skip cleanup if a worker was dispatched recently -- java processes may still be starting up
+    $sinceLastDispatch = ((Get-Date) - $Script:LastWorkerDispatchTime).TotalSeconds
+    if ($sinceLastDispatch -lt $MinAgeSeconds) {
+        Write-HeartbeatLog "DEBUG" "Skipping orphan java cleanup -- worker dispatched ${sinceLastDispatch}s ago (grace=${MinAgeSeconds}s)"
+        return 0
+    }
+
     $killed = 0
     try {
         $javaProcs = @(Get-Process -Name "java" -ErrorAction SilentlyContinue)
@@ -1115,6 +1281,13 @@ function Invoke-CleanupOrphanJava {
         foreach ($cp in $claudeProcs) { $claudePids[$cp.ProcessId] = $true }
 
         foreach ($jp in $javaProcs) {
+            # Skip young processes -- they may still be starting up
+            $procAge = ((Get-Date) - $jp.StartTime).TotalSeconds
+            if ($procAge -lt $MinAgeSeconds) {
+                Write-HeartbeatLog "DEBUG" "Skipping young java PID=$($jp.Id) (age=${procAge}s < ${MinAgeSeconds}s)"
+                continue
+            }
+
             # Check if this java process has a claude.exe parent
             $hasClaudeParent = $false
             try {
@@ -1125,21 +1298,42 @@ function Invoke-CleanupOrphanJava {
             } catch {}
 
             if (-not $hasClaudeParent) {
+                $now = Get-Date
+                $trackerEntry = $Script:JavaOrphanTracker | Where-Object { $_.Pid -eq $jp.Id } | Select-Object -First 1
+                if (-not $trackerEntry) {
+                    $Script:JavaOrphanTracker += [PSCustomObject]@{ Pid = $jp.Id; FirstSeen = $now }
+                    Write-HeartbeatLog "DEBUG" "Orphan java PID=$($jp.Id) first seen, waiting ${ConfirmationSeconds}s before killing"
+                    continue
+                }
+
+                $orphanAge = ($now - $trackerEntry.FirstSeen).TotalSeconds
+                if ($orphanAge -lt $ConfirmationSeconds) {
+                    Write-HeartbeatLog "DEBUG" "Orphan java PID=$($jp.Id) age=${orphanAge}s < ${ConfirmationSeconds}s, waiting"
+                    continue
+                }
+
                 try {
                     Stop-Process -Id $jp.Id -Force -ErrorAction Stop
-                    Write-HeartbeatLog "INFO" "Killed orphan java PID=$($jp.Id) (WS=$([math]::Round($jp.WorkingSet64/1MB,1))MB)"
+                    Write-HeartbeatLog "INFO" "Killed confirmed orphan java PID=$($jp.Id) (WS=$([math]::Round($jp.WorkingSet64/1MB,1))MB, orphanAge=${orphanAge}s)"
                     $killed++
                 } catch {
                     Write-HeartbeatLog "WARN" "Could not kill orphan java PID=$($jp.Id): $($_.Exception.Message)"
                 }
+            } else {
+                # Has parent -- remove from tracker if present
+                $Script:JavaOrphanTracker = @($Script:JavaOrphanTracker | Where-Object { $_.Pid -ne $jp.Id })
             }
         }
     } catch {
         Write-HeartbeatLog "ERROR" "Orphan java cleanup error: $($_.Exception.Message)"
     }
 
+    # Prune tracker of dead PIDs
+    $livePids = @($javaProcs | ForEach-Object { $_.Id })
+    $Script:JavaOrphanTracker = @($Script:JavaOrphanTracker | Where-Object { $livePids -contains $_.Pid })
+
     if ($killed -gt 0) {
-        Write-HeartbeatLog "INFO" "Java cleanup: $killed orphan process(es) terminated"
+        Write-HeartbeatLog "INFO" "Java cleanup: $killed confirmed orphan process(es) terminated"
     }
     return $killed
 }
@@ -1218,39 +1412,8 @@ function Invoke-ReclaimOrphanTasks {
         Write-HeartbeatLog "ERROR" "Orphan task reclaim error: $($_.Exception.Message)"
     }
 
-    # Clean up orphaned Java processes (these are OK to kill -- they are ollama JVMs, not user processes)
-    $javaKilled = 0
-    try {
-        $javaProcs = @(Get-Process -Name "java" -ErrorAction SilentlyContinue)
-        if ($javaProcs.Count -gt 0) {
-            $claudePids = @{}
-            $claudeProcs = @(Get-CimInstance Win32_Process -Filter "Name = 'claude.exe'" -ErrorAction SilentlyContinue)
-            foreach ($cp in $claudeProcs) { $claudePids[$cp.ProcessId] = $true }
-
-            foreach ($jp in $javaProcs) {
-                # Only kill Java processes that have NO claude.exe parent
-                $hasClaudeParent = $false
-                try {
-                    $parentId = (Get-CimInstance Win32_Process -Filter "ProcessId = $($jp.Id)" -ErrorAction SilentlyContinue).ParentProcessId
-                    if ($parentId -and $claudePids.ContainsKey($parentId)) {
-                        $hasClaudeParent = $true
-                    }
-                } catch {}
-
-                if (-not $hasClaudeParent) {
-                    try {
-                        Stop-Process -Id $jp.Id -Force -ErrorAction Stop
-                        Write-HeartbeatLog "INFO" "Killed orphan java PID=$($jp.Id) (WS=$([math]::Round($jp.WorkingSet64/1MB,1))MB)"
-                        $javaKilled++
-                    } catch {
-                        Write-HeartbeatLog "WARN" "Could not kill orphan java PID=$($jp.Id): $($_.Exception.Message)"
-                    }
-                }
-            }
-        }
-    } catch {
-        Write-HeartbeatLog "ERROR" "Orphan java cleanup error: $($_.Exception.Message)"
-    }
+    # Clean up orphaned Java processes via centralized tracker (requires confirmation period)
+    $javaKilled = Invoke-CleanupOrphanJava -MinAgeSeconds 60 -ConfirmationSeconds 120
 
     Write-HeartbeatLog "INFO" "Orphan handling complete: $reclaimed task(s) reclaimed, $javaKilled java process(es) cleaned, $preExistingClaude claude.exe slot(s) accounted for"
     return @{ Reclaimed = $reclaimed; JavaKilled = $javaKilled; PreExistingClaude = $preExistingClaude }
@@ -1263,8 +1426,8 @@ function Invoke-HeartbeatPulse {
     $Script:PulseCount++
 
     # Refresh quota from ollama.com (with cooldown), then re-evaluate every pulse
-    Invoke-QuotaRefresh
-    Invoke-RefreshModelAllowlist
+    $null = Invoke-QuotaRefresh
+    $null = Invoke-RefreshModelAllowlist
     Invoke-QuotaGovernor
 
     # Phase 1: Cleanup completed jobs
@@ -1289,7 +1452,11 @@ function Invoke-HeartbeatPulse {
             Write-EfficiencyLedger
 
             $orchStatusFile = Join-Path $Script:BaseDir "HANDOFF\ORCHESTRATOR_STATUS.md"
-            if (Test-Path $orchStatusFile) {
+            $orchLogFile = Join-Path $Script:BaseDir ".claude\agents\orchestrator\agent.log"
+            $statusExists = Test-Path $orchStatusFile
+            $logEmpty = if (Test-Path $orchLogFile) { (Get-Item $orchLogFile).Length -lt 200 } else { $true }
+
+            if ($statusExists) {
                 $statusContent = Get-Content $orchStatusFile -Raw -ErrorAction SilentlyContinue
                 Write-HeartbeatLog "INFO" "Orchestrator status written:"
                 foreach ($line in ($statusContent -split "`n" | Where-Object { $_ -match '\S' })) {
@@ -1298,8 +1465,17 @@ function Invoke-HeartbeatPulse {
                 if ($statusContent -match "STATUS=ALL_DONE") {
                     Write-HeartbeatLog "INFO" "Orchestrator reports ALL_DONE - swarm may be complete"
                 }
+            } elseif ($logEmpty) {
+                # Silent failure: no status file AND empty agent.log = model failed to load/process
+                Write-HeartbeatLog "ERROR" "Orchestrator SILENT FAILURE: no status file AND agent.log empty (<200b). Model $($Script:LastOrchModelDispatched) likely crashed. Will retry with fallback."
+                $Script:OrchLastFailedModel = $Script:LastOrchModelDispatched
+                # Reset completion flag and cooldown so retry happens immediately
+                $Script:OrchCompletedCurrentCycle = $false
+                $Script:LastOrchLaunch = [datetime]::MinValue
+                # Don't increment cycle count for a failed run
+                $Script:OrchCycleCount--
             } else {
-                Write-HeartbeatLog "WARN" "Orchestrator completed but did NOT write ORCHESTRATOR_STATUS.md"
+                Write-HeartbeatLog "WARN" "Orchestrator completed but did NOT write ORCHESTRATOR_STATUS.md (agent.log has content -- partial success possible)"
             }
         }
         $jobOutput = Receive-Job -Job $j 2>$null
@@ -1316,7 +1492,10 @@ function Invoke-HeartbeatPulse {
     }
 
     # Phase 1b: Clean up abandoned Java processes from completed jobs
-    Invoke-CleanupOrphanJava
+    # Throttle to every 6 pulses (~60s) and require confirmation to avoid killing startup processes
+    if ($Script:PulseCount % 6 -eq 0) {
+        $null = Invoke-CleanupOrphanJava -MinAgeSeconds 60 -ConfirmationSeconds 120
+    }
 
     # Phase 2: Scan file system
     $fileState      = Get-SwarmFileState
@@ -1358,17 +1537,35 @@ function Invoke-HeartbeatPulse {
         $orchSlots = if ($orchRunning) { 1 } else { 0 }
         $slotsForWorkers = $Script:MaxConcurrentSlots - $orchSlots
         if (([math]::Max($workerCount, $claudeCount)) -lt $slotsForWorkers) {
+            $task = $null
+
             # At MICRO phase (Tier 5), only dispatch P0/emergency tasks
             if ($Script:CurrentQuotaTier -ge 5) {
                 $task = $fileState.PendingTasks | Where-Object { $_.Name -match "p0|P0|BLOCKED_BY_QUOTA|EMERGENCY" } | Select-Object -First 1
                 if (-not $task) {
                     Write-HeartbeatLog "DEBUG" "$($Script:CurrentPhaseName): no P0 tasks available to dispatch"
                 }
-            } else {
+            }
+            # MICRO batching: if 2+ MICRO tasks exist (excluding batch files) and no batch already pending
+            elseif (($fileState.PendingTasks | Where-Object { $_.Name -match "MICRO_" -and $_.Name -notmatch "BATCH_MICRO_" }).Count -ge 2 -and
+                    -not ($fileState.PendingTasks | Where-Object { $_.Name -match "BATCH_MICRO_" })) {
+                $batchFile = Invoke-CreateMicroBatch -PendingTasks $fileState.PendingTasks
+                if ($batchFile) {
+                    $task = $batchFile
+                    Write-HeartbeatLog "INFO" "Dispatching MICRO batch worker"
+                }
+            }
+            # If a BATCH_MICRO file is pending, dispatch it instead of individual MICRO tasks
+            elseif ($fileState.PendingTasks | Where-Object { $_.Name -match "BATCH_MICRO_" } | Select-Object -First 1) {
+                $task = $fileState.PendingTasks | Where-Object { $_.Name -match "BATCH_MICRO_" } | Select-Object -First 1
+                Write-HeartbeatLog "INFO" "Dispatching existing MICRO batch: $($task.Name)"
+            }
+            else {
                 $task = $fileState.PendingTasks | Select-Object -First 1
             }
+
             if ($task) {
-                Invoke-DispatchWorker -TaskFile $task
+                $null = Invoke-DispatchWorker -TaskFile $task
             }
         }
     }
@@ -1412,7 +1609,7 @@ function Invoke-HeartbeatPulse {
         }
 
         if ($needsOrch) {
-            Invoke-DispatchOrchestrator -Reason $orchReason
+            $null = Invoke-DispatchOrchestrator -Reason $orchReason
             # Brief yield so the PS job scheduler can pick up the orchestrator job
             Start-Sleep -Milliseconds 500
         }
@@ -1447,8 +1644,8 @@ function Invoke-HeartbeatBoot {
     Write-HeartbeatLog "INFO" "Ollama service reachable at localhost:11434"
 
     # Phase 3: Refresh quota data and model allowlist, then initialize governor before banner
-    Invoke-QuotaRefresh
-    Invoke-RefreshModelAllowlist
+    $null = Invoke-QuotaRefresh
+    $null = Invoke-RefreshModelAllowlist
     Invoke-QuotaGovernor
     Write-HeartbeatLog "INFO" "Max Concurrent Slots: $($Script:MaxConcurrentSlots) | Phase: $($Script:CurrentPhaseName) | Orch Model: $($Script:OrchModelTier) | Allowed Models: $($Script:WorkerModelAllowList.Count)"
 

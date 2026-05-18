@@ -4,12 +4,12 @@ priority: "P0"
 assigned_agent: "triage-router"
 model: "gemini-3-flash-preview:cloud"
 token_budget: 400
-time_limit_ms: 120000
+time_limit_ms: 180000
 phase: "MICRO"
 ---
 
 # MODEL: gemini-3-flash-preview:cloud
-# BUDGET: 120
+# BUDGET: 180
 
 # MICRO_ANR_003: MeshForegroundService.kt Safe Return — RUNNING State Guard
 
