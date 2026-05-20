@@ -504,10 +504,7 @@ pub fn parse_intent(req: &JsonRpcRequest) -> Result<ClientIntent, JsonRpcErrorBo
         // ── Audit log (P0) ──
         "get_audit_log" => Ok(ClientIntent::GetAuditLog {}),
         "get_audit_events_since" => {
-            let since_timestamp = req
-                .params
-                .get("since_timestamp")
-                .and_then(|v| v.as_u64());
+            let since_timestamp = req.params.get("since_timestamp").and_then(|v| v.as_u64());
             Ok(ClientIntent::GetAuditEventsSince { since_timestamp })
         }
         // ── Privacy config (P0) ──

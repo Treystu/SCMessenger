@@ -6,12 +6,12 @@ pub mod notification_manager;
 pub mod transport;
 
 use anyhow::Error;
-use serde_json::{Map, Value};
 use libp2p::{Multiaddr, PeerId};
 use scmessenger_core::{
     IdentityInfo, IronCore as RustIronCore, NotificationDecision, NotificationMessageContext,
     NotificationUiState, SignatureResult,
 };
+use serde_json::{Map, Value};
 use std::cell::RefCell;
 use std::rc::Rc;
 use wasm_bindgen::prelude::*;

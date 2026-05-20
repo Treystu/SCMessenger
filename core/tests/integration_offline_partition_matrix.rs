@@ -13,7 +13,7 @@ use scmessenger_core::transport::mesh_routing::{
 #[cfg(feature = "phase2_apis")]
 use std::sync::Arc;
 
-#[allow(dead_code)]
+#[cfg(feature = "phase2_apis")]
 fn now_secs() -> u64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -21,7 +21,7 @@ fn now_secs() -> u64 {
         .as_secs()
 }
 
-#[allow(dead_code)]
+#[cfg(feature = "phase2_apis")]
 fn queued_message(message_id: &str, recipient_id: &str) -> QueuedMessage {
     QueuedMessage {
         message_id: message_id.to_string(),

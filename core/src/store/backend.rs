@@ -46,17 +46,30 @@ impl StorageBackend for MemoryStorage {
     }
 
     fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>, String> {
-        Ok(self.data.read().expect("parking_lot RwLock never poisons").get(key).cloned())
+        Ok(self
+            .data
+            .read()
+            .expect("parking_lot RwLock never poisons")
+            .get(key)
+            .cloned())
     }
 
     fn remove(&self, key: &[u8]) -> Result<(), String> {
-        self.data.write().expect("parking_lot RwLock never poisons").remove(key);
+        self.data
+            .write()
+            .expect("parking_lot RwLock never poisons")
+            .remove(key);
         Ok(())
     }
 
     fn scan_prefix(&self, prefix: &[u8]) -> Result<ScanResult, String> {
         let mut results = Vec::new();
-        for (key, value) in self.data.read().expect("parking_lot RwLock never poisons").iter() {
+        for (key, value) in self
+            .data
+            .read()
+            .expect("parking_lot RwLock never poisons")
+            .iter()
+        {
             if key.starts_with(prefix) {
                 results.push((key.clone(), value.clone()));
             }
@@ -271,18 +284,31 @@ impl StorageBackend for IndexedDbStorage {
     }
 
     fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>, String> {
-        Ok(self.data.read().expect("parking_lot RwLock never poisons").get(key).cloned())
+        Ok(self
+            .data
+            .read()
+            .expect("parking_lot RwLock never poisons")
+            .get(key)
+            .cloned())
     }
 
     fn remove(&self, key: &[u8]) -> Result<(), String> {
-        self.data.write().expect("parking_lot RwLock never poisons").remove(key);
+        self.data
+            .write()
+            .expect("parking_lot RwLock never poisons")
+            .remove(key);
         self.persist_remove(key.to_vec());
         Ok(())
     }
 
     fn scan_prefix(&self, prefix: &[u8]) -> Result<ScanResult, String> {
         let mut results = Vec::new();
-        for (k, v) in self.data.read().expect("parking_lot RwLock never poisons").iter() {
+        for (k, v) in self
+            .data
+            .read()
+            .expect("parking_lot RwLock never poisons")
+            .iter()
+        {
             if k.starts_with(prefix) {
                 results.push((k.clone(), v.clone()));
             }

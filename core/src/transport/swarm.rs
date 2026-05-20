@@ -33,13 +33,13 @@ use super::multiport::{self, BindResult, MultiPortConfig};
 use super::observation::{AddressObserver, ConnectionTracker};
 use super::reflection::{AddressReflectionRequest, AddressReflectionService};
 #[cfg(not(target_arch = "wasm32"))]
+use super::routing::local::TransportType as RoutingTransportType;
+use super::routing::optimized_engine::OptimizedRoutingEngine;
+#[cfg(not(target_arch = "wasm32"))]
 use super::routing::{
     engine::{NextHop, RoutingDecision, RoutingLayer},
     smart_retry::{calculate_next_attempt, BackoffStrategy},
 };
-#[cfg(not(target_arch = "wasm32"))]
-use super::routing::local::TransportType as RoutingTransportType;
-use super::routing::optimized_engine::OptimizedRoutingEngine;
 use crate::drift::{DriftFrame, SyncSession};
 use crate::store::relay_custody::{CustodyCompatMode, CustodyEnforcement, RelayCustodyStore};
 use anyhow::Result;
@@ -1748,7 +1748,11 @@ pub async fn start_swarm(
 /// `bootstrap_addrs` — Multiaddrs of well-known relay / bootstrap nodes.
 /// The swarm will auto-dial these after binding, enabling cross-network
 /// peer discovery via Kademlia DHT and relay-circuit connectivity.
-#[allow(clippy::too_many_arguments, clippy::blocks_in_conditions, unused_variables)]
+#[allow(
+    clippy::too_many_arguments,
+    clippy::blocks_in_conditions,
+    unused_variables
+)]
 pub async fn start_swarm_with_config(
     keypair: Keypair,
     listen_addr: Option<Multiaddr>,
@@ -1816,7 +1820,11 @@ pub async fn start_swarm_with_config(
             }
         } else {
             // Single port mode (legacy behavior)
-            let addr = listen_addr.unwrap_or_else(|| "/ip4/0.0.0.0/tcp/0".parse().expect("static multiaddr parse cannot fail"));
+            let addr = listen_addr.unwrap_or_else(|| {
+                "/ip4/0.0.0.0/tcp/0"
+                    .parse()
+                    .expect("static multiaddr parse cannot fail")
+            });
             swarm.listen_on(addr)?;
         }
 
@@ -3988,7 +3996,11 @@ pub async fn start_swarm_with_config(
     }
 
     #[cfg(target_arch = "wasm32")]
-    #[allow(clippy::collapsible_match, clippy::single_match, clippy::if_same_then_else)]
+    #[allow(
+        clippy::collapsible_match,
+        clippy::single_match,
+        clippy::if_same_then_else
+    )]
     {
         use futures::{FutureExt, StreamExt};
         use libp2p::core::{muxing::StreamMuxerBox, upgrade::Version};

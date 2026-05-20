@@ -4,7 +4,6 @@
 // Other CLI commands can send requests to this API instead of accessing the database directly
 
 use anyhow::{Context, Result};
-use serde_json::{Map, Value};
 use axum::{
     extract::{Json as AxumJson, State},
     http::{Method, StatusCode},
@@ -13,6 +12,7 @@ use axum::{
     Router,
 };
 use serde::{Deserialize, Serialize};
+use serde_json::{Map, Value};
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tower_http::cors::{Any, CorsLayer};

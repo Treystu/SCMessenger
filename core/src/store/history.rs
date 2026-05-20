@@ -369,7 +369,8 @@ impl HistoryManager {
         let mut records: Vec<(Vec<u8>, MessageRecord)> = all
             .into_iter()
             .map(|(k, v)| {
-                let rec: MessageRecord = serde_json::from_slice(&v).expect("corrupt history record in sled");
+                let rec: MessageRecord =
+                    serde_json::from_slice(&v).expect("corrupt history record in sled");
                 (k, rec)
             })
             .collect();

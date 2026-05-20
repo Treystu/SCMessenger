@@ -403,22 +403,64 @@ impl MeshService {
             0
         };
         let mut payload = serde_json::Value::Object(serde_json::Map::from_iter([
-            ("service_state".into(), serde_json::Value::from(format!("{:?}", self.get_state()))),
-            ("connection_path_state".into(), serde_json::Value::from(format!("{:?}", self.get_connection_path_state()))),
-            ("nat_status".into(), serde_json::Value::from(self.get_nat_status())),
-            ("peers".into(), serde_json::to_value(self.swarm_bridge.get_peers()).unwrap_or(serde_json::Value::Null)),
-            ("listeners".into(), serde_json::to_value(self.swarm_bridge.get_listeners()).unwrap_or(serde_json::Value::Null)),
-            ("external_addrs".into(), serde_json::to_value(self.swarm_bridge.get_external_addresses()).unwrap_or(serde_json::Value::Null)),
-            ("relay_budget".into(), serde_json::Value::from(*self.relay_budget.lock())),
+            (
+                "service_state".into(),
+                serde_json::Value::from(format!("{:?}", self.get_state())),
+            ),
+            (
+                "connection_path_state".into(),
+                serde_json::Value::from(format!("{:?}", self.get_connection_path_state())),
+            ),
+            (
+                "nat_status".into(),
+                serde_json::Value::from(self.get_nat_status()),
+            ),
+            (
+                "peers".into(),
+                serde_json::to_value(self.swarm_bridge.get_peers())
+                    .unwrap_or(serde_json::Value::Null),
+            ),
+            (
+                "listeners".into(),
+                serde_json::to_value(self.swarm_bridge.get_listeners())
+                    .unwrap_or(serde_json::Value::Null),
+            ),
+            (
+                "external_addrs".into(),
+                serde_json::to_value(self.swarm_bridge.get_external_addresses())
+                    .unwrap_or(serde_json::Value::Null),
+            ),
+            (
+                "relay_budget".into(),
+                serde_json::Value::from(*self.relay_budget.lock()),
+            ),
             ("drift_state".into(), serde_json::Value::from(drift_state)),
-            ("drift_store_size".into(), serde_json::Value::from(drift_store_size)),
-            ("timestamp_ms".into(), serde_json::Value::from(current_timestamp())),
+            (
+                "drift_store_size".into(),
+                serde_json::Value::from(drift_store_size),
+            ),
+            (
+                "timestamp_ms".into(),
+                serde_json::Value::from(current_timestamp()),
+            ),
         ]));
         payload["stats"] = serde_json::Value::Object(serde_json::Map::from_iter([
-            ("peers_discovered".into(), serde_json::Value::from(stats.peers_discovered)),
-            ("messages_relayed".into(), serde_json::Value::from(stats.messages_relayed)),
-            ("bytes_transferred".into(), serde_json::Value::from(stats.bytes_transferred)),
-            ("uptime_secs".into(), serde_json::Value::from(stats.uptime_secs)),
+            (
+                "peers_discovered".into(),
+                serde_json::Value::from(stats.peers_discovered),
+            ),
+            (
+                "messages_relayed".into(),
+                serde_json::Value::from(stats.messages_relayed),
+            ),
+            (
+                "bytes_transferred".into(),
+                serde_json::Value::from(stats.bytes_transferred),
+            ),
+            (
+                "uptime_secs".into(),
+                serde_json::Value::from(stats.uptime_secs),
+            ),
         ]));
 
         payload.to_string()

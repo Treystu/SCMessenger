@@ -1,6 +1,6 @@
-use serde_json::{Map, Value};
 use libp2p::PeerId;
 use serde::{Deserialize, Serialize};
+use serde_json::{Map, Value};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Instant;
@@ -354,17 +354,29 @@ async fn handle_jsonrpc_request(
             let peer_count = ctx.peers.lock().await.len();
             let mut m = Map::new();
             m.insert("identityId".to_string(), ctx.node_peer_id.clone().into());
-            m.insert("publicKeyHex".to_string(), ctx.node_public_key.clone().into());
+            m.insert(
+                "publicKeyHex".to_string(),
+                ctx.node_public_key.clone().into(),
+            );
             m.insert("peerCount".to_string(), peer_count.into());
-            m.insert("bootstrapNodes".to_string(), ctx.bootstrap_nodes.clone().into());
-            m.insert("uptimeSecs".to_string(), ctx.start_time.elapsed().as_secs().into());
+            m.insert(
+                "bootstrapNodes".to_string(),
+                ctx.bootstrap_nodes.clone().into(),
+            );
+            m.insert(
+                "uptimeSecs".to_string(),
+                ctx.start_time.elapsed().as_secs().into(),
+            );
             let mut payload = Value::Object(m);
             // Enrich with core identity fields when available
             if let Some(ref core) = ctx.core {
                 let info = core.get_identity_info();
                 if let Some(obj) = payload.as_object_mut() {
                     obj.insert("nickname".to_string(), info.nickname.into());
-                    obj.insert("libp2pPeerId".to_string(), info.libp2p_peer_id.clone().into());
+                    obj.insert(
+                        "libp2pPeerId".to_string(),
+                        info.libp2p_peer_id.clone().into(),
+                    );
                     obj.insert("initialized".to_string(), info.initialized.into());
                     if let Some(local_peer_id) = info.libp2p_peer_id {
                         obj.insert("localPeerId".to_string(), local_peer_id.into());
@@ -449,7 +461,10 @@ async fn handle_jsonrpc_request(
             let mut m = Map::new();
             m.insert("peerCount".to_string(), peer_count.into());
             m.insert("knownPeers".to_string(), known_peers.len().into());
-            m.insert("bootstrapNodes".to_string(), ctx.bootstrap_nodes.clone().into());
+            m.insert(
+                "bootstrapNodes".to_string(),
+                ctx.bootstrap_nodes.clone().into(),
+            );
             rpc_result(id, Value::Object(m))
         }
         // ── Contacts ──
@@ -569,7 +584,10 @@ async fn handle_jsonrpc_request(
             } else {
                 let mut m = Map::new();
                 m.insert("identityId".to_string(), ctx.node_peer_id.clone().into());
-                m.insert("publicKeyHex".to_string(), ctx.node_public_key.clone().into());
+                m.insert(
+                    "publicKeyHex".to_string(),
+                    ctx.node_public_key.clone().into(),
+                );
                 rpc_result(id, Value::Object(m))
             }
         }
@@ -842,7 +860,10 @@ async fn handle_jsonrpc_request(
                 match core.peel_onion_layer(onion_bytes, secret_bytes) {
                     Ok(result) => {
                         let mut m = Map::new();
-                        m.insert("nextHop".to_string(), result.next_hop.map(hex::encode).into());
+                        m.insert(
+                            "nextHop".to_string(),
+                            result.next_hop.map(hex::encode).into(),
+                        );
                         m.insert(
                             "remainingData".to_string(),
                             hex::encode(result.remaining_data).into(),
@@ -1298,42 +1319,36 @@ async fn handle_jsonrpc_request(
         // ── Message requests (P0) ──
         // Note: get_pending_message_requests, accept_message_request, reject_message_request
         // are not yet implemented in the core crate. They return a "not yet implemented" error.
-        ClientIntent::GetPendingMessageRequests {} => {
-            rpc_error(
-                id,
-                JsonRpcErrorBody {
-                    code: -32001,
-                    message: "get_pending_message_requests not yet implemented".to_string(),
-                    data: None,
-                },
-            )
-        }
-        ClientIntent::AcceptMessageRequest { request_id } => {
-            rpc_error(
-                id,
-                JsonRpcErrorBody {
-                    code: -32001,
-                    message: format!(
-                        "accept_message_request not yet implemented (request_id={})",
-                        request_id
-                    ),
-                    data: None,
-                },
-            )
-        }
-        ClientIntent::RejectMessageRequest { request_id } => {
-            rpc_error(
-                id,
-                JsonRpcErrorBody {
-                    code: -32001,
-                    message: format!(
-                        "reject_message_request not yet implemented (request_id={})",
-                        request_id
-                    ),
-                    data: None,
-                },
-            )
-        }
+        ClientIntent::GetPendingMessageRequests {} => rpc_error(
+            id,
+            JsonRpcErrorBody {
+                code: -32001,
+                message: "get_pending_message_requests not yet implemented".to_string(),
+                data: None,
+            },
+        ),
+        ClientIntent::AcceptMessageRequest { request_id } => rpc_error(
+            id,
+            JsonRpcErrorBody {
+                code: -32001,
+                message: format!(
+                    "accept_message_request not yet implemented (request_id={})",
+                    request_id
+                ),
+                data: None,
+            },
+        ),
+        ClientIntent::RejectMessageRequest { request_id } => rpc_error(
+            id,
+            JsonRpcErrorBody {
+                code: -32001,
+                message: format!(
+                    "reject_message_request not yet implemented (request_id={})",
+                    request_id
+                ),
+                data: None,
+            },
+        ),
         // ── History search/stats (P1) ──
         ClientIntent::SearchMessages { query, limit } => {
             if let Some(ref core) = ctx.core {
@@ -1388,7 +1403,10 @@ async fn handle_jsonrpc_request(
                         m.insert("totalMessages".to_string(), stats.total_messages.into());
                         m.insert("sentCount".to_string(), stats.sent_count.into());
                         m.insert("receivedCount".to_string(), stats.received_count.into());
-                        m.insert("undeliveredCount".to_string(), stats.undelivered_count.into());
+                        m.insert(
+                            "undeliveredCount".to_string(),
+                            stats.undelivered_count.into(),
+                        );
                         rpc_result(id, Value::Object(m))
                     }
                     Err(e) => rpc_error(
@@ -1511,9 +1529,18 @@ async fn handle_jsonrpc_request(
                 m.insert("publicKeyHex".to_string(), info.public_key_hex.into());
                 m.insert("initialized".to_string(), info.initialized.into());
                 m.insert("peerCount".to_string(), peer_count.into());
-                m.insert("uptimeSecs".to_string(), ctx.start_time.elapsed().as_secs().into());
-                m.insert("knownPeers".to_string(), ledger.all_known_topics().len().into());
-                m.insert("bootstrapNodes".to_string(), ctx.bootstrap_nodes.clone().into());
+                m.insert(
+                    "uptimeSecs".to_string(),
+                    ctx.start_time.elapsed().as_secs().into(),
+                );
+                m.insert(
+                    "knownPeers".to_string(),
+                    ledger.all_known_topics().len().into(),
+                );
+                m.insert(
+                    "bootstrapNodes".to_string(),
+                    ctx.bootstrap_nodes.clone().into(),
+                );
                 rpc_result(id, Value::Object(m))
             } else {
                 rpc_error(
@@ -1528,16 +1555,14 @@ async fn handle_jsonrpc_request(
         }
         // ── Self-test (P2) ──
         // Note: run_self_test is not yet implemented in the core crate.
-        ClientIntent::RunSelfTest {} => {
-            rpc_error(
-                id,
-                JsonRpcErrorBody {
-                    code: -32001,
-                    message: "run_self_test not yet implemented".to_string(),
-                    data: None,
-                },
-            )
-        }
+        ClientIntent::RunSelfTest {} => rpc_error(
+            id,
+            JsonRpcErrorBody {
+                code: -32001,
+                message: "run_self_test not yet implemented".to_string(),
+                data: None,
+            },
+        ),
     }
 }
 
