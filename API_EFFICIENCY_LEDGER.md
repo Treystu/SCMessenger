@@ -19,3 +19,4 @@ Token usage tracking for DeepSeek Master Orchestrator wake cycles.
 
 [2026-05-20] - Wake Cycle (kimi-k2.6:cloud) - State: Idle - Tokens: N/A
 [2026-05-20] - Wake Cycle (kimi-k2.6:cloud) - State: HEAVY-LIFT Dispatch - Tokens: N/A
+[2026-05-20] - Wake Cycle (kimi-k2.6:cloud) - State: Idle - Tokens: -

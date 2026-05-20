@@ -125,6 +125,57 @@ pub enum ClientIntent {
     RoutingStartRefresh {
         hint: String, // hex-encoded 4 bytes
     },
+    // ── Identity backup (P0) ──
+    ExportIdentityBackup {
+        passphrase: String,
+    },
+    ImportIdentityBackup {
+        backup: String,
+        passphrase: String,
+    },
+    // ── Nickname (P0) ──
+    SetNickname {
+        nickname: String,
+    },
+    // ── Audit log (P0) ──
+    GetAuditLog {},
+    GetAuditEventsSince {
+        #[serde(default)]
+        since_timestamp: Option<u64>,
+    },
+    // ── Privacy config (P0) ──
+    SetPrivacyConfig {
+        config_json: String,
+    },
+    GetPrivacyConfig {},
+    // ── Message requests (P0) ──
+    GetPendingMessageRequests {},
+    AcceptMessageRequest {
+        request_id: String,
+    },
+    RejectMessageRequest {
+        request_id: String,
+    },
+    // ── History search/stats (P1) ──
+    SearchMessages {
+        query: String,
+        #[serde(default)]
+        limit: Option<usize>,
+    },
+    GetHistoryStats {},
+    MarkMessageDelivered {
+        message_id: String,
+    },
+    DeleteMessage {
+        message_id: String,
+    },
+    ClearConversation {
+        peer_id: String,
+    },
+    // ── Diagnostics (P1) ──
+    GetDiagnostics {},
+    // ── Self-test (P2) ──
+    RunSelfTest {},
 }
 
 pub const ERR_PARSE: i32 = -32700;
@@ -399,6 +450,172 @@ pub fn parse_intent(req: &JsonRpcRequest) -> Result<ClientIntent, JsonRpcErrorBo
                 .to_string();
             Ok(ClientIntent::RoutingStartRefresh { hint })
         }
+        // ── Identity backup (P0) ──
+        "export_identity_backup" => {
+            let passphrase = req
+                .params
+                .get("passphrase")
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| JsonRpcErrorBody {
+                    code: ERR_PARAMS,
+                    message: "missing passphrase".to_string(),
+                    data: None,
+                })?
+                .to_string();
+            Ok(ClientIntent::ExportIdentityBackup { passphrase })
+        }
+        "import_identity_backup" => {
+            let backup = req
+                .params
+                .get("backup")
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| JsonRpcErrorBody {
+                    code: ERR_PARAMS,
+                    message: "missing backup".to_string(),
+                    data: None,
+                })?
+                .to_string();
+            let passphrase = req
+                .params
+                .get("passphrase")
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| JsonRpcErrorBody {
+                    code: ERR_PARAMS,
+                    message: "missing passphrase".to_string(),
+                    data: None,
+                })?
+                .to_string();
+            Ok(ClientIntent::ImportIdentityBackup { backup, passphrase })
+        }
+        // ── Nickname (P0) ──
+        "set_nickname" => {
+            let nickname = req
+                .params
+                .get("nickname")
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| JsonRpcErrorBody {
+                    code: ERR_PARAMS,
+                    message: "missing nickname".to_string(),
+                    data: None,
+                })?
+                .to_string();
+            Ok(ClientIntent::SetNickname { nickname })
+        }
+        // ── Audit log (P0) ──
+        "get_audit_log" => Ok(ClientIntent::GetAuditLog {}),
+        "get_audit_events_since" => {
+            let since_timestamp = req
+                .params
+                .get("since_timestamp")
+                .and_then(|v| v.as_u64());
+            Ok(ClientIntent::GetAuditEventsSince { since_timestamp })
+        }
+        // ── Privacy config (P0) ──
+        "set_privacy_config" => {
+            let config_json = req
+                .params
+                .get("config_json")
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| JsonRpcErrorBody {
+                    code: ERR_PARAMS,
+                    message: "missing config_json".to_string(),
+                    data: None,
+                })?
+                .to_string();
+            Ok(ClientIntent::SetPrivacyConfig { config_json })
+        }
+        "get_privacy_config" => Ok(ClientIntent::GetPrivacyConfig {}),
+        // ── Message requests (P0) ──
+        "get_pending_message_requests" => Ok(ClientIntent::GetPendingMessageRequests {}),
+        "accept_message_request" => {
+            let request_id = req
+                .params
+                .get("request_id")
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| JsonRpcErrorBody {
+                    code: ERR_PARAMS,
+                    message: "missing request_id".to_string(),
+                    data: None,
+                })?
+                .to_string();
+            Ok(ClientIntent::AcceptMessageRequest { request_id })
+        }
+        "reject_message_request" => {
+            let request_id = req
+                .params
+                .get("request_id")
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| JsonRpcErrorBody {
+                    code: ERR_PARAMS,
+                    message: "missing request_id".to_string(),
+                    data: None,
+                })?
+                .to_string();
+            Ok(ClientIntent::RejectMessageRequest { request_id })
+        }
+        // ── History search/stats (P1) ──
+        "search_messages" => {
+            let query = req
+                .params
+                .get("query")
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| JsonRpcErrorBody {
+                    code: ERR_PARAMS,
+                    message: "missing query".to_string(),
+                    data: None,
+                })?
+                .to_string();
+            let limit = req
+                .params
+                .get("limit")
+                .and_then(|v| v.as_u64())
+                .map(|n| n as usize);
+            Ok(ClientIntent::SearchMessages { query, limit })
+        }
+        "get_history_stats" => Ok(ClientIntent::GetHistoryStats {}),
+        "mark_message_delivered" => {
+            let message_id = req
+                .params
+                .get("message_id")
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| JsonRpcErrorBody {
+                    code: ERR_PARAMS,
+                    message: "missing message_id".to_string(),
+                    data: None,
+                })?
+                .to_string();
+            Ok(ClientIntent::MarkMessageDelivered { message_id })
+        }
+        "delete_message" => {
+            let message_id = req
+                .params
+                .get("message_id")
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| JsonRpcErrorBody {
+                    code: ERR_PARAMS,
+                    message: "missing message_id".to_string(),
+                    data: None,
+                })?
+                .to_string();
+            Ok(ClientIntent::DeleteMessage { message_id })
+        }
+        "clear_conversation" => {
+            let peer_id = req
+                .params
+                .get("peer_id")
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| JsonRpcErrorBody {
+                    code: ERR_PARAMS,
+                    message: "missing peer_id".to_string(),
+                    data: None,
+                })?
+                .to_string();
+            Ok(ClientIntent::ClearConversation { peer_id })
+        }
+        // ── Diagnostics (P1) ──
+        "get_diagnostics" => Ok(ClientIntent::GetDiagnostics {}),
+        // ── Self-test (P2) ──
+        "run_self_test" => Ok(ClientIntent::RunSelfTest {}),
         _ => Err(JsonRpcErrorBody {
             code: ERR_METHOD,
             message: format!("unknown method {}", req.method),

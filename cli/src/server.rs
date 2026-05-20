@@ -1064,6 +1064,397 @@ async fn handle_jsonrpc_request(
                 )
             }
         }
+        // ── Identity backup (P0) ──
+        ClientIntent::ExportIdentityBackup { passphrase } => {
+            if let Some(ref core) = ctx.core {
+                match core.export_identity_backup(passphrase) {
+                    Ok(backup) => rpc_result(id, serde_json::json!({"backup": backup})),
+                    Err(e) => rpc_error(
+                        id,
+                        JsonRpcErrorBody {
+                            code: -32000,
+                            message: format!("Failed to export identity backup: {:?}", e),
+                            data: None,
+                        },
+                    ),
+                }
+            } else {
+                rpc_error(
+                    id,
+                    JsonRpcErrorBody {
+                        code: -32000,
+                        message: "Core not available".to_string(),
+                        data: None,
+                    },
+                )
+            }
+        }
+        ClientIntent::ImportIdentityBackup { backup, passphrase } => {
+            if let Some(ref core) = ctx.core {
+                match core.import_identity_backup(backup, passphrase) {
+                    Ok(()) => rpc_result(id, serde_json::json!({"imported": true})),
+                    Err(e) => rpc_error(
+                        id,
+                        JsonRpcErrorBody {
+                            code: -32000,
+                            message: format!("Failed to import identity backup: {:?}", e),
+                            data: None,
+                        },
+                    ),
+                }
+            } else {
+                rpc_error(
+                    id,
+                    JsonRpcErrorBody {
+                        code: -32000,
+                        message: "Core not available".to_string(),
+                        data: None,
+                    },
+                )
+            }
+        }
+        // ── Nickname (P0) ──
+        ClientIntent::SetNickname { nickname } => {
+            if let Some(ref core) = ctx.core {
+                match core.set_nickname(nickname) {
+                    Ok(()) => rpc_result(id, serde_json::json!({"updated": true})),
+                    Err(e) => rpc_error(
+                        id,
+                        JsonRpcErrorBody {
+                            code: -32000,
+                            message: format!("Failed to set nickname: {:?}", e),
+                            data: None,
+                        },
+                    ),
+                }
+            } else {
+                rpc_error(
+                    id,
+                    JsonRpcErrorBody {
+                        code: -32000,
+                        message: "Core not available".to_string(),
+                        data: None,
+                    },
+                )
+            }
+        }
+        // ── Audit log (P0) ──
+        ClientIntent::GetAuditLog {} => {
+            if let Some(ref core) = ctx.core {
+                let events = core.get_audit_log();
+                let list: Vec<serde_json::Value> = events
+                    .into_iter()
+                    .map(|e| serde_json::to_value(e).unwrap_or_else(|_| serde_json::json!({})))
+                    .collect();
+                rpc_result(id, serde_json::json!({"events": list}))
+            } else {
+                rpc_error(
+                    id,
+                    JsonRpcErrorBody {
+                        code: -32000,
+                        message: "Core not available".to_string(),
+                        data: None,
+                    },
+                )
+            }
+        }
+        ClientIntent::GetAuditEventsSince { since_timestamp } => {
+            if let Some(ref core) = ctx.core {
+                let all_events = core.get_audit_log();
+                let since = since_timestamp.unwrap_or(0);
+                let filtered: Vec<serde_json::Value> = all_events
+                    .into_iter()
+                    .filter(|e| {
+                        serde_json::to_value(e)
+                            .ok()
+                            .and_then(|v| v.get("timestamp").and_then(|t| t.as_u64()))
+                            .unwrap_or(0)
+                            >= since
+                    })
+                    .map(|e| serde_json::to_value(e).unwrap_or_else(|_| serde_json::json!({})))
+                    .collect();
+                rpc_result(id, serde_json::json!({"events": filtered}))
+            } else {
+                rpc_error(
+                    id,
+                    JsonRpcErrorBody {
+                        code: -32000,
+                        message: "Core not available".to_string(),
+                        data: None,
+                    },
+                )
+            }
+        }
+        // ── Privacy config (P0) ──
+        ClientIntent::SetPrivacyConfig { config_json } => {
+            if let Some(ref core) = ctx.core {
+                match core.set_privacy_config(config_json) {
+                    Ok(()) => rpc_result(id, serde_json::json!({"updated": true})),
+                    Err(e) => rpc_error(
+                        id,
+                        JsonRpcErrorBody {
+                            code: -32000,
+                            message: format!("Failed to set privacy config: {:?}", e),
+                            data: None,
+                        },
+                    ),
+                }
+            } else {
+                rpc_error(
+                    id,
+                    JsonRpcErrorBody {
+                        code: -32000,
+                        message: "Core not available".to_string(),
+                        data: None,
+                    },
+                )
+            }
+        }
+        ClientIntent::GetPrivacyConfig {} => {
+            if let Some(ref core) = ctx.core {
+                let config = core.get_privacy_config();
+                rpc_result(id, serde_json::json!({"config": config}))
+            } else {
+                rpc_error(
+                    id,
+                    JsonRpcErrorBody {
+                        code: -32000,
+                        message: "Core not available".to_string(),
+                        data: None,
+                    },
+                )
+            }
+        }
+        // ── Message requests (P0) ──
+        // Note: get_pending_message_requests, accept_message_request, reject_message_request
+        // are not yet implemented in the core crate. They return a "not yet implemented" error.
+        ClientIntent::GetPendingMessageRequests {} => {
+            rpc_error(
+                id,
+                JsonRpcErrorBody {
+                    code: -32001,
+                    message: "get_pending_message_requests not yet implemented".to_string(),
+                    data: None,
+                },
+            )
+        }
+        ClientIntent::AcceptMessageRequest { request_id } => {
+            rpc_error(
+                id,
+                JsonRpcErrorBody {
+                    code: -32001,
+                    message: format!(
+                        "accept_message_request not yet implemented (request_id={})",
+                        request_id
+                    ),
+                    data: None,
+                },
+            )
+        }
+        ClientIntent::RejectMessageRequest { request_id } => {
+            rpc_error(
+                id,
+                JsonRpcErrorBody {
+                    code: -32001,
+                    message: format!(
+                        "reject_message_request not yet implemented (request_id={})",
+                        request_id
+                    ),
+                    data: None,
+                },
+            )
+        }
+        // ── History search/stats (P1) ──
+        ClientIntent::SearchMessages { query, limit } => {
+            if let Some(ref core) = ctx.core {
+                let mgr = core.history_manager();
+                match mgr.search(query, limit.unwrap_or(50) as u32) {
+                    Ok(messages) => {
+                        let list: Vec<serde_json::Value> = messages
+                            .into_iter()
+                            .map(|m| {
+                                serde_json::json!({
+                                    "id": m.id,
+                                    "senderId": m.peer_id,
+                                    "content": m.content,
+                                    "timestamp": m.timestamp,
+                                    "direction": format!("{:?}", m.direction),
+                                })
+                            })
+                            .collect();
+                        rpc_result(id, serde_json::json!({"messages": list}))
+                    }
+                    Err(e) => rpc_error(
+                        id,
+                        JsonRpcErrorBody {
+                            code: -32000,
+                            message: format!("Failed to search messages: {:?}", e),
+                            data: None,
+                        },
+                    ),
+                }
+            } else {
+                rpc_error(
+                    id,
+                    JsonRpcErrorBody {
+                        code: -32000,
+                        message: "Core not available".to_string(),
+                        data: None,
+                    },
+                )
+            }
+        }
+        ClientIntent::GetHistoryStats {} => {
+            if let Some(ref core) = ctx.core {
+                let mgr = core.history_manager();
+                match mgr.stats() {
+                    Ok(stats) => rpc_result(
+                        id,
+                        serde_json::json!({
+                            "totalMessages": stats.total_messages,
+                            "sentCount": stats.sent_count,
+                            "receivedCount": stats.received_count,
+                            "undeliveredCount": stats.undelivered_count,
+                        }),
+                    ),
+                    Err(e) => rpc_error(
+                        id,
+                        JsonRpcErrorBody {
+                            code: -32000,
+                            message: format!("Failed to get history stats: {:?}", e),
+                            data: None,
+                        },
+                    ),
+                }
+            } else {
+                rpc_error(
+                    id,
+                    JsonRpcErrorBody {
+                        code: -32000,
+                        message: "Core not available".to_string(),
+                        data: None,
+                    },
+                )
+            }
+        }
+        ClientIntent::MarkMessageDelivered { message_id } => {
+            if let Some(ref core) = ctx.core {
+                let mgr = core.history_manager();
+                match mgr.mark_delivered(message_id) {
+                    Ok(()) => rpc_result(id, serde_json::json!({"delivered": true})),
+                    Err(e) => rpc_error(
+                        id,
+                        JsonRpcErrorBody {
+                            code: -32000,
+                            message: format!("Failed to mark message delivered: {:?}", e),
+                            data: None,
+                        },
+                    ),
+                }
+            } else {
+                rpc_error(
+                    id,
+                    JsonRpcErrorBody {
+                        code: -32000,
+                        message: "Core not available".to_string(),
+                        data: None,
+                    },
+                )
+            }
+        }
+        ClientIntent::DeleteMessage { message_id } => {
+            if let Some(ref core) = ctx.core {
+                let mgr = core.history_manager();
+                match mgr.delete(message_id) {
+                    Ok(()) => rpc_result(id, serde_json::json!({"deleted": true})),
+                    Err(e) => rpc_error(
+                        id,
+                        JsonRpcErrorBody {
+                            code: -32000,
+                            message: format!("Failed to delete message: {:?}", e),
+                            data: None,
+                        },
+                    ),
+                }
+            } else {
+                rpc_error(
+                    id,
+                    JsonRpcErrorBody {
+                        code: -32000,
+                        message: "Core not available".to_string(),
+                        data: None,
+                    },
+                )
+            }
+        }
+        ClientIntent::ClearConversation { peer_id } => {
+            if let Some(ref core) = ctx.core {
+                let mgr = core.history_manager();
+                match mgr.clear_conversation(peer_id) {
+                    Ok(()) => rpc_result(id, serde_json::json!({"cleared": true})),
+                    Err(e) => rpc_error(
+                        id,
+                        JsonRpcErrorBody {
+                            code: -32000,
+                            message: format!("Failed to clear conversation: {:?}", e),
+                            data: None,
+                        },
+                    ),
+                }
+            } else {
+                rpc_error(
+                    id,
+                    JsonRpcErrorBody {
+                        code: -32000,
+                        message: "Core not available".to_string(),
+                        data: None,
+                    },
+                )
+            }
+        }
+        // ── Diagnostics (P1) ──
+        // Note: get_diagnostics is not yet implemented in the core crate.
+        // It returns aggregated diagnostic info from core + transport state.
+        ClientIntent::GetDiagnostics {} => {
+            if let Some(ref core) = ctx.core {
+                let info = core.get_identity_info();
+                let peer_count = ctx.peers.lock().await.len();
+                let ledger = ctx.ledger.lock().await;
+                rpc_result(
+                    id,
+                    serde_json::json!({
+                        "identityId": info.identity_id,
+                        "publicKeyHex": info.public_key_hex,
+                        "initialized": info.initialized,
+                        "peerCount": peer_count,
+                        "uptimeSecs": ctx.start_time.elapsed().as_secs(),
+                        "knownPeers": ledger.all_known_topics().len(),
+                        "bootstrapNodes": ctx.bootstrap_nodes,
+                    }),
+                )
+            } else {
+                rpc_error(
+                    id,
+                    JsonRpcErrorBody {
+                        code: -32000,
+                        message: "Core not available".to_string(),
+                        data: None,
+                    },
+                )
+            }
+        }
+        // ── Self-test (P2) ──
+        // Note: run_self_test is not yet implemented in the core crate.
+        ClientIntent::RunSelfTest {} => {
+            rpc_error(
+                id,
+                JsonRpcErrorBody {
+                    code: -32001,
+                    message: "run_self_test not yet implemented".to_string(),
+                    data: None,
+                },
+            )
+        }
     }
 }
 
