@@ -20,17 +20,17 @@
 //! {"jsonrpc":"2.0","method":"message_received","params":{"from":"...","content":"..."}}
 //! ```
 
-use scmessenger_core::wasm_support::rpc::{JsonRpcNotification, JsonRpcRequest, JsonRpcResponse};
-#[cfg(target_arch = "wasm32")]
-use wasm_bindgen_futures::spawn_local;
 #[cfg(target_arch = "wasm32")]
 use gloo_timers::future::TimeoutFuture;
+use scmessenger_core::wasm_support::rpc::{JsonRpcNotification, JsonRpcRequest, JsonRpcResponse};
 #[cfg(target_arch = "wasm32")]
 use std::cell::RefCell;
 #[cfg(target_arch = "wasm32")]
 use std::rc::Rc;
 #[cfg(target_arch = "wasm32")]
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
+#[cfg(target_arch = "wasm32")]
+use wasm_bindgen_futures::spawn_local;
 
 // ── Request formatters ────────────────────────────────────────────────────
 
@@ -355,7 +355,13 @@ impl DaemonBridgeInner {
                     if let Some(id_num) = id_val.as_u64() {
                         let cb = inner_onmessage.pending.borrow_mut().remove(&id_num);
                         if let Some(cb) = cb {
-                            cb(id_val.clone(), resp.result, resp.error.map(|e| serde_json::json!({"code": e.code, "message": e.message})));
+                            cb(
+                                id_val.clone(),
+                                resp.result,
+                                resp.error.map(
+                                    |e| serde_json::json!({"code": e.code, "message": e.message}),
+                                ),
+                            );
                             return;
                         }
                     }
@@ -369,7 +375,10 @@ impl DaemonBridgeInner {
                 return;
             }
 
-            tracing::warn!("Daemon bridge received unrecognized frame: {}", &text[..text.len().min(200)]);
+            tracing::warn!(
+                "Daemon bridge received unrecognized frame: {}",
+                &text[..text.len().min(200)]
+            );
         }) as Box<dyn FnMut(MessageEvent)>);
         ws.set_onmessage(Some(onmessage.as_ref().unchecked_ref()));
         onmessage.forget();
@@ -388,7 +397,12 @@ impl DaemonBridgeInner {
         let onclose = Closure::wrap(Box::new(move |event: CloseEvent| {
             let code = event.code();
             let reason = event.reason();
-            tracing::info!("Daemon bridge closed for {}: code={} reason={}", onclose_url, code, reason);
+            tracing::info!(
+                "Daemon bridge closed for {}: code={} reason={}",
+                onclose_url,
+                code,
+                reason
+            );
 
             let current_state = *inner_onclose.reconnection_state.borrow();
             if current_state != BridgeState::Closed {
@@ -396,7 +410,9 @@ impl DaemonBridgeInner {
                 let interval = inner_onclose.reconnect_interval_ms.load(Ordering::SeqCst);
                 let next_interval = interval * (2u64.pow(attempts));
 
-                inner_onclose.reconnect_attempts.fetch_add(1, Ordering::SeqCst);
+                inner_onclose
+                    .reconnect_attempts
+                    .fetch_add(1, Ordering::SeqCst);
 
                 let inner_reconnect = Rc::clone(&inner_onclose);
                 spawn_local(async move {
@@ -453,12 +469,16 @@ impl DaemonBridge {
 
     #[cfg(target_arch = "wasm32")]
     pub fn set_max_reconnect_attempts(&self, max: u32) {
-        self.inner.max_reconnect_attempts.store(max, Ordering::SeqCst);
+        self.inner
+            .max_reconnect_attempts
+            .store(max, Ordering::SeqCst);
     }
 
     #[cfg(target_arch = "wasm32")]
     pub fn set_reconnect_interval_ms(&self, interval_ms: u64) {
-        self.inner.reconnect_interval_ms.store(interval_ms, Ordering::SeqCst);
+        self.inner
+            .reconnect_interval_ms
+            .store(interval_ms, Ordering::SeqCst);
     }
 
     #[cfg(target_arch = "wasm32")]
@@ -534,8 +554,14 @@ impl DaemonBridge {
         _params: serde_json::Value,
         _cb: ResponseCallback,
     ) -> Result<u64, String> {
-        let id = self.next_id.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-        tracing::info!("Daemon bridge simulation: sent request id={} method={}", id, method);
+        let id = self
+            .next_id
+            .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        tracing::info!(
+            "Daemon bridge simulation: sent request id={} method={}",
+            id,
+            method
+        );
         Ok(id)
     }
 

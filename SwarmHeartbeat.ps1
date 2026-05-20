@@ -1,3 +1,7 @@
+param(
+    [int]$AgentCount = 0
+)
+
 # === CONFIGURATION ===
 $Script:BaseDir              = $PSScriptRoot
 $Script:DoneDir              = Join-Path $BaseDir "HANDOFF\done"
@@ -1843,7 +1847,8 @@ function Invoke-HeartbeatBoot {
     $null = Invoke-QuotaRefresh
     $null = Invoke-RefreshModelAllowlist
     Invoke-QuotaGovernor
-    Write-HeartbeatLog "INFO" "Max Concurrent Slots: $($Script:MaxConcurrentSlots) | Phase: $($Script:CurrentPhaseName) | Orch Model: $($Script:OrchModelTier) | Allowed Models: $($Script:WorkerModelAllowList.Count)"
+    $agentCountLine = if ($AgentCount -gt 0) { " (override: -AgentCount $AgentCount)" } else { "" }
+    Write-HeartbeatLog "INFO" "Max Concurrent Slots: $($Script:MaxConcurrentSlots)$agentCountLine | Phase: $($Script:CurrentPhaseName) | Orch Model: $($Script:OrchModelTier) | Allowed Models: $($Script:WorkerModelAllowList.Count)"
 
     # Phase 4: Remove stale completion flag from prior run
     if (Test-Path $Script:CompleteFlag) {
@@ -1905,6 +1910,12 @@ function Invoke-HeartbeatBoot {
         } catch {
             Write-HeartbeatLog "WARN" "Could not parse agent_pool.json for max_concurrent; using default $($Script:MaxConcurrentSlots)"
         }
+    }
+
+    # Phase 8b: Command-line agent count override takes highest precedence
+    if ($AgentCount -gt 0) {
+        $Script:MaxConcurrentSlots = $AgentCount
+        Write-HeartbeatLog "INFO" "AgentCount override applied: MaxConcurrentSlots set to $AgentCount (from -AgentCount parameter)"
     }
 
     # Phase 9: Reclaim orphaned tasks from prior session (IN_PROGRESS tasks but no agents)

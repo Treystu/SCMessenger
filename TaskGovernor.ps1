@@ -13,6 +13,10 @@ param (
     [string]$QuotaContextJson = ""
 )
 
+# NOTE: Concurrency control (number of concurrent agents) is managed by SwarmHeartbeat.ps1.
+# This script executes a single agent task and does not enforce slot limits.
+# Use SwarmHeartbeat.ps1 -AgentCount N to restrict swarm concurrency.
+
 $ErrorActionPreference = "Stop"
 
 function Write-GovernorLog {
