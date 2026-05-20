@@ -1,6 +1,6 @@
 #!/bin/bash
 # Orchestrator State Management (v3.3)
-# Handles activation, deactivation, multi-agent slot management (MAX=2)
+# Handles activation, deactivation, multi-agent slot management (MAX=1)
 # Now supports native Agent tool subagents + CLI-based Ollama agents
 # v3.3: STRICT OS-LEVEL PROCESS GATING — fixes pool_stop arg bug, adds assert_process_limit
 # v3.2: PowerShell-based process checking for Windows, self-preservation PID guard
@@ -53,7 +53,6 @@ force_kill_pid() {
 STATE_FILE=".claude/orchestrator_state.json"
 AGENT_ROOT=".claude/agents"
 POOL_CONFIG=".claude/agent_pool.json"
-MAX_SUBAGENTS=2
 MAX_OS_PROCESSES=3
 ORCHESTRATOR_PID_FILE=".claude/orchestrator.pid"
 
@@ -70,6 +69,15 @@ count_os_claude_processes() {
     fi
     echo "$count"
 }
+
+# Dynamic slot calculation: reserve slots for non-swarm claude.exe processes.
+# MAX_SUBAGENTS is computed at runtime so the swarm never overcommit OS capacity.
+# Formula: MAX_OS_PROCESSES - current_claude_exe_count.
+# Examples:
+#   1 claude.exe (orchestrator only) -> 3 - 1 = 2 swarm slots
+#   2 claude.exe (orchestrator + 1 other) -> 3 - 2 = 1 swarm slot
+#   3 claude.exe (full) -> 3 - 3 = 0 swarm slots (HARDLOCK)
+MAX_SUBAGENTS=$((MAX_OS_PROCESSES - $(count_os_claude_processes)))
 
 assert_process_limit() {
     # Count actual OS claude.exe processes as the primary gate.
