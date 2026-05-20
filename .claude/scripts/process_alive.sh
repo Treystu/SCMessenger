@@ -67,6 +67,19 @@ process_cache_clear() {
     rm -rf "$PROCESS_CACHE_DIR" 2>/dev/null
 }
 
+# Check if a PID is actually a claude process (not a reused PID like svchost).
+# On Windows PIDs are aggressively reused; kill -0 alone is not sufficient.
+process_is_claude() {
+    local pid="$1"
+    if [ -z "$pid" ]; then return 1; fi
+    local name
+    name=$(powershell.exe -NoProfile -Command "(Get-Process -Id $pid -ErrorAction SilentlyContinue).ProcessName" 2>/dev/null)
+    if [ "$name" = "claude" ]; then
+        return 0
+    fi
+    return 1
+}
+
 process_memory_kb() {
     local pid="$1"
     if [ -z "$pid" ]; then echo "0"; return; fi

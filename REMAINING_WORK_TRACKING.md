@@ -1,11 +1,47 @@
 # SCMessenger Remaining Work Tracking
 
 Status: Active
-Last updated: 2026-05-18 (Mycorrhizal Routing activation verified)
+Last updated: 2026-05-20 (Verified Swarm Handoff Audit)
 
 ---
 
-## 2026-05-13 MASTER AUDIT: V-Gate Clearance Findings
+## 2026-05-20 VERIFIED SWARM HANDOFF AUDIT
+
+**Status:** AUDIT COMPLETE — 4 dispatchable tasks written to HANDOFF/todo/
+**Orchestrator:** Verified gaps against current source code, not historical docs
+
+### Verified Stale Findings Closed
+
+| Historical Finding | Verification Result | Action |
+|-------------------|---------------------|--------|
+| `BATCH_P1_CORE_MYCO_ROUTING.md` in todo/ | **Stale duplicate** — already done 2026-05-18 (commit 8a49c3ac) | **DELETED** from todo/ |
+| 10 premature done/ files (2026-05-13 audit) | **Re-triaged** — now prefixed `[VALIDATED]_` in done/ | No action needed |
+| `quinn-proto` HIGH CVE (2026-04-29 audit) | **FIXED** — Cargo.lock shows 0.11.14 | Removed from cargo-audit task scope |
+| Android `msg=unknown` in delivery_attempt | **FIXED** — `MeshRepository.kt` now uses proper `messageId` vars | Removed from task scope |
+| Permission request loop (2026-03-14) | **FIXED** — `MainActivity.kt:168-172` has atomic guard | Removed from task scope |
+| Relay peers in contacts (2026-03-14) | **FIXED** — `upsertFederatedContact` has `isRelay` check | Removed from task scope |
+
+### Verified Remaining Dispatchable Tasks
+
+| Task File | Variant | Gap | Verified Evidence |
+|-----------|---------|-----|-------------------|
+| `BATCH_ANDROID_WS14_3_NOTIFICATION_PARITY.md` | Android | Notification action receivers + Requests Inbox UI missing | `NotificationHelper.kt` complete but NO BroadcastReceivers, NO RequestsInboxScreen.kt, NO manifest registration, NO MainActivity ACTION_OPEN_REQUESTS handling |
+| `BATCH_ANDROID_CONTACT_PERSISTENCE_RESIDUAL.md` | Android/Core | Contact auto-creation lacks database-level dedup | `upsertFederatedContact` has mutex + relay filter but NO unique constraint; duplicate possible in rapid sequential callbacks |
+| `BATCH_SECURITY_CARGO_AUDIT_RESIDUAL.md` | Core/CLI | `ring` 0.16.20 and `rustls-webpki` 0.101.7 remain in Cargo.lock | Verified via `grep` on Cargo.lock; `quinn-proto` already fixed |
+| `CLEANUP_STALE_BATCH_P1_CORE_MYCO_ROUTING.md` | Meta | Stale task file in todo/ | Instant, no code changes |
+
+### Physical-Device Evidence Tasks (NOT Swarm-Dispatchable)
+
+These require synchronized Android + iOS hardware and are tracked for operator execution, not agent dispatch:
+
+- WS12.11.6: synchronized dual-device live probe + flap-cycle artifact bundle
+- WS12.12.5: tri-platform traces for one failed message ID
+- WS12.12.6: iOS receipt/ack path verification during Android BLE fallback
+- WS12.14.6: BLE-only artifact bundle with message ID timeline
+- WS12.15.3: Docker runtime provisioning + simulation rerun
+- WS12.15.4-7: live network matrix, ACK-safe switching, app-update continuity, iOS power evidence
+
+---
 
 **Status:** AUDIT COMPLETE — V-Gate CLEARED with findings below
 **Orchestrator pass:** 2026-05-13 23:15 HST — 10 premature completions reclaimed from done/ to todo/. 3 [FAILED]_ tasks retriaged and downgraded. 15 tasks [VALIDATED]_ in todo/. IN_PROGRESS: 1 slot occupied (API migration). See HANDOFF/ORCHESTRATOR_STATUS.md.

@@ -8,7 +8,9 @@
       "Bash(rm -rf \".claude/agents/implementer_1776734222\")",
       "Bash(./.claude/orchestrator_manager.sh pool *)",
       "Bash(xargs ls *)",
-      "WebFetch(domain:ollama.com)"
+      "WebFetch(domain:ollama.com)",
+      "Bash(C:\\\\Program Files\\\\Git\\\\bin\\\\bash.exe *)",
+      "Bash(\"C:\\\\Program Files\\\\Git\\\\bin\\\\bash.exe\" -x .claude/orchestrator_manager.sh pool patrol)"
     ]
   }
 }

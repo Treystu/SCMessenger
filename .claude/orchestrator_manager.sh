@@ -175,11 +175,21 @@ clean_stale_pids() {
                 rm -rf "$dir"
                 continue
             fi
-            # Check if the process is still alive
-            if ! process_alive "$pid"; then
-                echo "Cleaning stale agent: $id (PID $pid no longer exists)"
-                # Precise recursive tree kill to ensure orphaned sub-processes die
-                force_kill_pid "$pid"
+            # Check if the process is still alive AND is actually a claude process.
+            # On Windows PIDs are aggressively reused; a reused svchost PID must not
+            # be treated as a live agent.
+            local is_claude=1
+            if process_alive "$pid"; then
+                if process_is_claude "$pid"; then
+                    is_claude=0
+                fi
+            fi
+            if [ "$is_claude" -ne 0 ]; then
+                echo "Cleaning stale agent: $id (PID $pid no longer a claude process)"
+                # Only kill if it is actually a claude process (not a reused system PID)
+                if [ "$is_claude" -eq 0 ]; then
+                    force_kill_pid "$pid"
+                fi
                 rm -rf "$dir"
             fi
         fi
@@ -238,7 +248,7 @@ count_cli_agents() {
         for pidfile in "$AGENT_ROOT"/*/pid; do
             if [ -f "$pidfile" ]; then
                 pid=$(cat "$pidfile")
-                if process_alive "$pid"; then
+                if process_alive "$pid" && process_is_claude "$pid"; then
                     ((count++))
                 fi
             fi
@@ -269,7 +279,7 @@ list_agents() {
                 printf "%-25s %-15s %-10s %-10s %-10s\n" "$id" "CLI" "$model" "$pid" "ORCHESTRATOR"
                 continue
             fi
-            if process_alive "$pid"; then
+            if process_alive "$pid" && process_is_claude "$pid"; then
                 printf "%-25s %-15s %-10s %-10s %-10s\n" "$id" "CLI" "$model" "$pid" "RUNNING"
             else
                 printf "%-25s %-15s %-10s %-10s %-10s\n" "$id" "CLI" "$model" "$pid" "STALE"
@@ -1131,8 +1141,10 @@ pool_patrol() {
                 "completed")
                     # Verify actual code changes before accepting completion
                     local verify_result
+                    set +e
                     verify_result=$(verify_agent_completion "$agent_id")
                     local verify_exit=$?
+                    set -e
 
                     if [ $verify_exit -eq 1 ]; then
                         # NO_CODE_CHANGES: re-queue the task
@@ -1203,7 +1215,7 @@ pool_patrol() {
                     # Kill the zombie process if still alive
                     if [ -f "$pid_file" ]; then
                         local pid=$(cat "$pid_file")
-                        if process_alive "$pid"; then
+                        if process_alive "$pid" && process_is_claude "$pid"; then
                             echo "PATROL: Agent $agent_id process $pid still alive — terminating zombie"
                             kill -9 "$pid" 2>/dev/null || true
                             taskkill //F //T //PID "$pid" 2>/dev/null || true
@@ -1239,10 +1251,10 @@ pool_patrol() {
             # Check if agent is still alive
             if [ -n "$agent_id" ] && [ -f "$AGENT_ROOT/$agent_id/pid" ]; then
                 local agent_pid=$(cat "$AGENT_ROOT/$agent_id/pid")
-                if process_alive "$agent_pid"; then
+                if process_alive "$agent_pid" && process_is_claude "$agent_pid"; then
                     echo "  Agent $agent_id still alive past deadline. Consider stopping."
                 else
-                    echo "  Agent $agent_id dead. Reclaiming task."
+                    echo "  Agent $agent_id dead or PID reused. Reclaiming task."
                     local original_name=$(basename "$task_file" | sed 's/^IN_PROGRESS_//')
                     mv "$task_file" "HANDOFF/todo/$original_name" 2>/dev/null || true
                     rm -f "$lockfile"
@@ -1256,7 +1268,7 @@ pool_patrol() {
     local active=$(count_active_agents)
     if [ "$active" -lt "$MAX_SUBAGENTS" ]; then
         local available=$((MAX_SUBAGENTS - active))
-        local todo_count=$(ls HANDOFF/todo/*.md 2>/dev/null | grep -v IN_PROGRESS | wc -l)
+        local todo_count=$(find HANDOFF/todo/ -maxdepth 1 -name '*.md' -not -name '*IN_PROGRESS*' | wc -l)
         if [ "$todo_count" -gt 0 ]; then
             echo "PATROL: $available slot(s) available, $todo_count task(s) in todo queue."
         else
@@ -1274,10 +1286,10 @@ pool_patrol() {
 
     # Phase 6: Summary
     active=$(count_active_agents)
-    local done_count=$(ls HANDOFF/done/*.md 2>/dev/null | wc -l)
-    local todo_count=$(ls HANDOFF/todo/*.md 2>/dev/null | wc -l)
-    local in_progress_count=$(ls HANDOFF/IN_PROGRESS/*.md 2>/dev/null | wc -l)
-    local batch_count=$(ls HANDOFF/batches/*.md 2>/dev/null | wc -l 2>/dev/null || echo "0")
+    local done_count=$(find HANDOFF/done/ -maxdepth 1 -name '*.md' | wc -l)
+    local todo_count=$(find HANDOFF/todo/ -maxdepth 1 -name '*.md' | wc -l)
+    local in_progress_count=$(find HANDOFF/IN_PROGRESS/ -maxdepth 1 -name '*.md' | wc -l)
+    local batch_count=$(find HANDOFF/batches/ -maxdepth 1 -name '*.md' | wc -l)
     echo ""
     echo "PATROL COMPLETE: $actions_taken action(s) taken"
     echo "Slots: $active/$MAX_SUBAGENTS | Tasks: $todo_count todo | $in_progress_count in-progress | $done_count done | $batch_count batches"
