@@ -266,8 +266,8 @@ fun ConversationItem(
     messages: List<uniffi.api.MessageRecord>,
     onClick: () -> Unit,
     onRequestDelete: () -> Unit,
-    deliveryState: DeliveryStatePresentation = DeliveryStatePresentation(DeliveryStateSurface.PENDING, "pending", ""),
-    onNavigateToChat: (String) -> Unit = {},
+    @Suppress("UNUSED_PARAMETER") deliveryState: DeliveryStatePresentation = DeliveryStatePresentation(DeliveryStateSurface.PENDING, "pending", ""),
+    @Suppress("UNUSED_PARAMETER") onNavigateToChat: (String) -> Unit = {},
 ) {
     val lastMessage = messages.firstOrNull() ?: return
     val undeliveredCount = messages.count { !it.delivered }

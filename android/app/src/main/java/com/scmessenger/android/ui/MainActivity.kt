@@ -131,6 +131,7 @@ class MainActivity : ComponentActivity() {
                     Timber.d("Opening requests inbox on cold start")
                     mainViewModel.navigateToRequestsInbox()
                 }
+                else -> {}
             }
         }
 
@@ -271,6 +272,7 @@ class MainActivity : ComponentActivity() {
                     Timber.d("Opening requests inbox on intent")
                     mainViewModel.navigateToRequestsInbox()
                 }
+                else -> {}
             }
         }
     }

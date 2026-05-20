@@ -3,7 +3,6 @@ package com.scmessenger.android.ui.viewmodels
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.scmessenger.android.data.MeshRepository
-import com.scmessenger.android.ui.screens.RequestsInboxScreen.RequestItem
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -78,7 +77,7 @@ class RequestsInboxViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 withContext(Dispatchers.IO) {
-                    meshRepository.addContact(peerId, null, null, null)
+                    meshRepository.addContactByPeerId(peerId)
                 }
                 Timber.i("Accepted message request from $peerId")
                 loadRequests()

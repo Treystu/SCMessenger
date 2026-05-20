@@ -29,6 +29,7 @@ import com.scmessenger.android.ui.viewmodels.SettingsViewModel
  */
 
 @OptIn(ExperimentalMaterial3Api::class)
+@Suppress("USELESS_ELVIS")
 @Composable
 fun MeshSettingsScreen(
     onNavigateBack: () -> Unit,

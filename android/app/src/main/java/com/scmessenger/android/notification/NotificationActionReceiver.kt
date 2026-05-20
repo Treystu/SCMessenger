@@ -7,9 +7,11 @@ import android.os.Build
 import com.scmessenger.android.utils.NotificationHelper
 import com.scmessenger.android.utils.PeerIdValidator
 import com.scmessenger.android.data.MeshRepository
-import dagger.hilt.android.AndroidEntryPoint
+import dagger.hilt.EntryPoint
+import dagger.hilt.InstallIn
+import dagger.hilt.android.EntryPointAccessors
+import dagger.hilt.components.SingletonComponent
 import timber.log.Timber
-import javax.inject.Inject
 import kotlinx.coroutines.*
 import kotlinx.coroutines.Dispatchers
 
@@ -24,17 +26,24 @@ import kotlinx.coroutines.Dispatchers
  */
 class NotificationActionReceiver : BroadcastReceiver() {
 
-    @Inject
-    lateinit var meshRepository: MeshRepository
+    private lateinit var meshRepository: MeshRepository
+
+    @EntryPoint
+    @InstallIn(SingletonComponent::class)
+    interface NotificationActionReceiverEntryPoint {
+        fun meshRepository(): MeshRepository
+    }
 
     private val serviceScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
     override fun onReceive(context: Context, intent: Intent) {
         Timber.d("NotificationActionReceiver received action: ${intent.action}")
 
-        // Hilt injection for MeshRepository - need to manually inject since this is a BroadcastReceiver
-        val app = context.applicationContext as com.scmessenger.android.MeshApplication
-        app.component().inject(this)
+        // Hilt EntryPoint injection for BroadcastReceiver (not supported by @AndroidEntryPoint)
+        meshRepository = EntryPointAccessors.fromApplication(
+            context.applicationContext,
+            NotificationActionReceiverEntryPoint::class.java
+        ).meshRepository()
 
         when (intent.action) {
             NotificationHelper.ACTION_REPLY -> handleReply(context, intent)

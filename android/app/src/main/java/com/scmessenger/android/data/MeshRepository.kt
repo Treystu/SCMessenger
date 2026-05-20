@@ -3443,6 +3443,61 @@ open class MeshRepository(private val context: Context) {
         Timber.d("Contact added/updated: ${finalContact.peerId}")
     }
 
+    /**
+     * Add a contact by peer ID, resolving the public key from discovery data.
+     * Returns true if the contact was added, false if the public key could not be resolved.
+     */
+    fun addContactByPeerId(peerId: String, nickname: String? = null): Boolean {
+        ensureServiceInitializedFireAndForget()
+        try {
+            val canonical = canonicalId(peerId)
+
+            // Already a contact? Just update nickname if provided.
+            val existing = contactManager?.get(canonical)
+            if (existing != null) {
+                if (nickname != null) {
+                    addContact(uniffi.api.Contact(
+                        peerId = existing.peerId,
+                        nickname = nickname,
+                        localNickname = existing.localNickname,
+                        publicKey = existing.publicKey,
+                        addedAt = existing.addedAt,
+                        lastSeen = existing.lastSeen,
+                        notes = existing.notes,
+                        lastKnownDeviceId = existing.lastKnownDeviceId
+                    ))
+                }
+                return true
+            }
+
+            // Resolve public key from discovery data
+            val discoveryInfo = _discoveredPeers.value[canonical]
+                ?: _discoveredPeers.value.entries.firstOrNull { it.value.peerId == canonical }?.value
+            val publicKey = discoveryInfo?.publicKey
+
+            if (publicKey.isNullOrBlank()) {
+                Timber.e("Cannot add contact for $canonical: no public key available from discovery data")
+                return false
+            }
+
+            val contact = uniffi.api.Contact(
+                peerId = canonical,
+                nickname = nickname ?: discoveryInfo.nickname,
+                localNickname = null,
+                publicKey = publicKey,
+                addedAt = (System.currentTimeMillis() / 1000).toULong(),
+                lastSeen = null,
+                notes = null,
+                lastKnownDeviceId = null
+            )
+            addContact(contact)
+            return true
+        } catch (e: Exception) {
+            Timber.e(e, "Failed to add contact by peer ID: $peerId")
+            return false
+        }
+    }
+
     fun getContact(peerId: String): uniffi.api.Contact? {
         return contactManager?.get(canonicalId(peerId))
     }
@@ -3608,7 +3663,7 @@ open class MeshRepository(private val context: Context) {
 
             // Get unique peerIds from messages that aren't contacts
             val requestPeerIds = inboxMessages
-                .map { it.peerId }
+                .map { it.senderId }
                 .filter { it !in contactPeerIds }
                 .distinct()
 
@@ -3616,8 +3671,8 @@ open class MeshRepository(private val context: Context) {
             requestPeerIds.map { peerId ->
                 // Get the most recent message from this peer for preview
                 val recentMessage = inboxMessages
-                    .filter { it.peerId == peerId }
-                    .maxByOrNull { it.timestamp }
+                    .filter { it.senderId == peerId }
+                    .maxByOrNull { it.receivedAt }
 
                 // Get contact info if available (for nickname)
                 val contact = contactManager?.get(canonicalId(peerId))
@@ -3625,9 +3680,11 @@ open class MeshRepository(private val context: Context) {
                 uniffi.api.MessageRequest(
                     peerId = peerId,
                     nickname = contact?.nickname ?: contact?.localNickname,
-                    messagePreview = recentMessage?.content ?: "",
-                    messageTimestamp = recentMessage?.timestamp ?: 0u,
-                    messageCount = inboxMessages.count { it.peerId == peerId }.toUInt()
+                    messagePreview = recentMessage?.payload?.let { bytes ->
+                        try { bytes.decodeToString() } catch (_: Exception) { "[binary]" }
+                    } ?: "",
+                    messageTimestamp = recentMessage?.receivedAt ?: 0u,
+                    messageCount = inboxMessages.count { it.senderId == peerId }.toUInt()
                 )
             }
         } catch (e: Exception) {

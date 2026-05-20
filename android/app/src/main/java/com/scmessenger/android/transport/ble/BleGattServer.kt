@@ -80,13 +80,8 @@ class BleGattServer(
         }
 
         try {
-            // openGattServer is deprecated in API 31+ in favor of executor-based overload.
-            gattServer = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                bluetoothManager?.openGattServer(context, context.mainExecutor, gattServerCallback)
-            } else {
-                @Suppress("DEPRECATION")
-                bluetoothManager?.openGattServer(context, gattServerCallback)
-            }
+            @Suppress("DEPRECATION")
+            gattServer = bluetoothManager?.openGattServer(context, gattServerCallback)
 
             if (gattServer == null) {
                 Timber.e("Failed to open GATT server")

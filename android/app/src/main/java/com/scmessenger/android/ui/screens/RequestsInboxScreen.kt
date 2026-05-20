@@ -112,7 +112,7 @@ private fun RequestItem(
     onAccept: (peerId: String) -> Unit,
     onReject: (peerId: String) -> Unit,
     onBlockAndDelete: (peerId: String) -> Unit,
-    onNavigateToChat: ((peerId: String) -> Unit)?,
+    @Suppress("UNUSED_PARAMETER") onNavigateToChat: ((peerId: String) -> Unit)?,
     modifier: Modifier = Modifier
 ) {
     Card(
@@ -156,7 +156,7 @@ private fun RequestItem(
 
                         Text(
                             text = formatTimestamp(request.messageTimestamp),
-                            style = MaterialTheme.typography.bodyExtraSmall,
+                            style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.outline
                         )
                     }
