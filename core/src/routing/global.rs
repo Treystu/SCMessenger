@@ -204,7 +204,7 @@ impl GlobalRoutes {
                             other => other,
                         }
                     })
-                    .unwrap(),
+                    .expect("routes non-empty checked above"),
             )
         })
     }

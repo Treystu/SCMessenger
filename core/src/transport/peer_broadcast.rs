@@ -20,6 +20,7 @@ pub struct PeerBroadcaster {
 }
 
 /// Information about a connected peer
+#[allow(dead_code)]
 struct PeerInfo {
     /// Peer's addresses
     addresses: Vec<String>,
@@ -47,7 +48,7 @@ impl PeerBroadcaster {
     pub fn peer_connected(&mut self, peer_id: PeerId, addresses: Vec<String>) {
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .unwrap()
+            .expect("system clock before UNIX_EPOCH")
             .as_secs();
 
         self.connected_peers.insert(
@@ -71,7 +72,7 @@ impl PeerBroadcaster {
         let info = self.connected_peers.get(peer_id)?;
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .unwrap()
+            .expect("system clock before UNIX_EPOCH")
             .as_secs();
 
         Some(RelayMessage::PeerJoined {
@@ -98,7 +99,7 @@ impl PeerBroadcaster {
     pub fn create_peer_list_response(&self) -> RelayMessage {
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .unwrap()
+            .expect("system clock before UNIX_EPOCH")
             .as_secs();
 
         let peers: Vec<RelayPeerInfoMessage> = self

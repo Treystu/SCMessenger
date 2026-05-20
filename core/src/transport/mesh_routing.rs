@@ -138,7 +138,7 @@ impl RelayReputation {
 
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .unwrap()
+            .expect("system clock before UNIX_EPOCH")
             .as_secs();
         let age_secs = now.saturating_sub(self.stats.last_used);
         let recency_score = if age_secs < 60 {
@@ -204,7 +204,7 @@ impl ReputationTracker {
 
         rep.stats.last_used = SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .unwrap()
+            .expect("system clock before UNIX_EPOCH")
             .as_secs();
 
         rep.calculate_score();
@@ -329,7 +329,7 @@ impl DeliveryAttempt {
             paths_tried: Vec::new(),
             last_attempt: SystemTime::now()
                 .duration_since(UNIX_EPOCH)
-                .unwrap()
+                .expect("system clock before UNIX_EPOCH")
                 .as_secs(),
             strategy: RetryStrategy::default(),
         }
@@ -351,7 +351,7 @@ impl DeliveryAttempt {
         self.attempt += 1;
         self.last_attempt = SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .unwrap()
+            .expect("system clock before UNIX_EPOCH")
             .as_secs();
     }
 }
@@ -601,7 +601,7 @@ impl BootstrapCapability {
             self.known_peers.push(peer_id);
             self.last_update = SystemTime::now()
                 .duration_since(UNIX_EPOCH)
-                .unwrap()
+                .expect("system clock before UNIX_EPOCH")
                 .as_secs();
         }
     }

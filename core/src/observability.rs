@@ -210,7 +210,7 @@ impl AuditLog {
             None => {
                 // All events are older than the cutoff
                 if !self.events.is_empty() {
-                    self.pruned_head_hash = Some(self.events.last().unwrap().chain_hash());
+                    self.pruned_head_hash = Some(self.events.last().expect("checked non-empty above").chain_hash());
                     let count = self.events.len() as u32;
                     self.events.clear();
                     count

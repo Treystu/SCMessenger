@@ -503,10 +503,8 @@ fn test_clear_unreachable_restores_routing() {
     // After clearing, the negative cache should not block this peer
     // (the entry count may not decrease immediately due to bloom filter semantics)
     let stats_after = engine.negative_cache_stats();
-    assert!(
-        stats_after.negative_checks >= 0,
-        "Negative cache should be accessible after clearing"
-    );
+    // Verify stats are accessible after clearing (negative_checks is u64, always >= 0)
+    let _ = stats_after.negative_checks;
 }
 
 /// Verify that the routing engine's evaluate_all_tracked method

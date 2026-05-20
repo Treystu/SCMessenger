@@ -241,7 +241,7 @@ impl std::fmt::Debug for TransportHealthMonitor {
                 "state_change_callbacks",
                 &format!(
                     "{} callbacks",
-                    self.state_change_callbacks.lock().unwrap().len()
+                    self.state_change_callbacks.lock().expect("parking_lot Mutex never poisons").len()
                 ),
             )
             .finish()
@@ -266,20 +266,20 @@ impl TransportHealthMonitor {
 
     /// Update connection state
     pub fn update_connection_state(&self, peer_id: PeerId, state: ConnectionState) {
-        let mut stats = self.connection_stats.lock().unwrap();
+        let mut stats = self.connection_stats.lock().expect("parking_lot Mutex never poisons");
         let entry = stats
             .entry(peer_id)
             .or_insert_with(|| ConnectionStats::new(peer_id));
         entry.update_state(state.clone());
 
         // Notify callbacks
-        let callbacks = self.state_change_callbacks.lock().unwrap();
+        let callbacks = self.state_change_callbacks.lock().expect("parking_lot Mutex never poisons");
         for callback in callbacks.iter() {
             callback(peer_id, state.clone());
         }
 
         // Update global metrics
-        let mut global = self.global_metrics.lock().unwrap();
+        let mut global = self.global_metrics.lock().expect("parking_lot Mutex never poisons");
         global.record_connection_state_change(&state);
 
         match state {
@@ -298,74 +298,74 @@ impl TransportHealthMonitor {
 
     /// Record successful message
     pub fn record_message_success(&self, peer_id: PeerId, bytes: u64, latency_ms: u64) {
-        let mut stats = self.connection_stats.lock().unwrap();
+        let mut stats = self.connection_stats.lock().expect("parking_lot Mutex never poisons");
         if let Some(entry) = stats.get_mut(&peer_id) {
             entry.record_message_success(bytes, latency_ms);
         }
 
-        let mut global = self.global_metrics.lock().unwrap();
+        let mut global = self.global_metrics.lock().expect("parking_lot Mutex never poisons");
         global.record_message_success(bytes, latency_ms);
     }
 
     /// Record failed message
     pub fn record_message_failure(&self, peer_id: PeerId) {
-        let mut stats = self.connection_stats.lock().unwrap();
+        let mut stats = self.connection_stats.lock().expect("parking_lot Mutex never poisons");
         if let Some(entry) = stats.get_mut(&peer_id) {
             entry.record_message_failure();
         }
 
-        let mut global = self.global_metrics.lock().unwrap();
+        let mut global = self.global_metrics.lock().expect("parking_lot Mutex never poisons");
         global.record_message_failure();
     }
 
     /// Record bytes received
     pub fn record_bytes_received(&self, peer_id: PeerId, bytes: u64) {
-        let mut stats = self.connection_stats.lock().unwrap();
+        let mut stats = self.connection_stats.lock().expect("parking_lot Mutex never poisons");
         if let Some(entry) = stats.get_mut(&peer_id) {
             entry.record_bytes_received(bytes);
         }
 
-        let mut global = self.global_metrics.lock().unwrap();
+        let mut global = self.global_metrics.lock().expect("parking_lot Mutex never poisons");
         global.record_bytes_received(bytes);
     }
 
     /// Record connection attempt
     pub fn record_connection_attempt(&self, peer_id: PeerId) {
-        let mut stats = self.connection_stats.lock().unwrap();
+        let mut stats = self.connection_stats.lock().expect("parking_lot Mutex never poisons");
         let entry = stats
             .entry(peer_id)
             .or_insert_with(|| ConnectionStats::new(peer_id));
         entry.record_connection_attempt();
 
-        let mut global = self.global_metrics.lock().unwrap();
+        let mut global = self.global_metrics.lock().expect("parking_lot Mutex never poisons");
         global.record_connection_attempt();
     }
 
     /// Record successful connection
     pub fn record_successful_connection(&self, peer_id: PeerId) {
-        let mut stats = self.connection_stats.lock().unwrap();
+        let mut stats = self.connection_stats.lock().expect("parking_lot Mutex never poisons");
         if let Some(entry) = stats.get_mut(&peer_id) {
             entry.record_successful_connection();
         }
 
-        let mut global = self.global_metrics.lock().unwrap();
+        let mut global = self.global_metrics.lock().expect("parking_lot Mutex never poisons");
         global.record_successful_connection();
     }
 
     /// Record connection failure
     pub fn record_connection_failure(&self, peer_id: PeerId) {
-        let mut stats = self.connection_stats.lock().unwrap();
+        let mut stats = self.connection_stats.lock().expect("parking_lot Mutex never poisons");
         if let Some(entry) = stats.get_mut(&peer_id) {
             entry.record_connection_failure();
         }
 
-        let mut global = self.global_metrics.lock().unwrap();
+        let mut global = self.global_metrics.lock().expect("parking_lot Mutex never poisons");
         global.record_connection_failure();
     }
 
     /// Update current address
     pub fn update_current_address(&self, peer_id: PeerId, address: Multiaddr) {
-        let mut stats = self.connection_stats.lock().unwrap();
+        let mut stats = self.connection_stats.lock().expect("parking_lot Mutex never poisons");
         if let Some(entry) = stats.get_mut(&peer_id) {
             entry.update_current_address(address);
         }
@@ -373,25 +373,25 @@ impl TransportHealthMonitor {
 
     /// Get connection stats for a peer
     pub fn get_connection_stats(&self, peer_id: &PeerId) -> Option<ConnectionStats> {
-        let stats = self.connection_stats.lock().unwrap();
+        let stats = self.connection_stats.lock().expect("parking_lot Mutex never poisons");
         stats.get(peer_id).cloned()
     }
 
     /// Get all connection stats
     pub fn get_all_connection_stats(&self) -> HashMap<PeerId, ConnectionStats> {
-        let stats = self.connection_stats.lock().unwrap();
+        let stats = self.connection_stats.lock().expect("parking_lot Mutex never poisons");
         stats.clone()
     }
 
     /// Get global transport metrics
     pub fn get_global_metrics(&self) -> GlobalTransportMetrics {
-        let global = self.global_metrics.lock().unwrap();
+        let global = self.global_metrics.lock().expect("parking_lot Mutex never poisons");
         global.clone()
     }
 
     /// Get healthy connections
     pub fn get_healthy_connections(&self) -> Vec<PeerId> {
-        let stats = self.connection_stats.lock().unwrap();
+        let stats = self.connection_stats.lock().expect("parking_lot Mutex never poisons");
         stats
             .iter()
             .filter(|(_, stat)| stat.is_healthy())
@@ -401,7 +401,7 @@ impl TransportHealthMonitor {
 
     /// Get unhealthy connections
     pub fn get_unhealthy_connections(&self) -> Vec<PeerId> {
-        let stats = self.connection_stats.lock().unwrap();
+        let stats = self.connection_stats.lock().expect("parking_lot Mutex never poisons");
         stats
             .iter()
             .filter(|(_, stat)| !stat.is_healthy())
@@ -414,7 +414,7 @@ impl TransportHealthMonitor {
     where
         F: Fn(PeerId, ConnectionState) + Send + Sync + 'static,
     {
-        let mut callbacks = self.state_change_callbacks.lock().unwrap();
+        let mut callbacks = self.state_change_callbacks.lock().expect("parking_lot Mutex never poisons");
         callbacks.push(Box::new(callback));
     }
 
@@ -427,7 +427,7 @@ impl TransportHealthMonitor {
 
         let cutoff_ms = now_ms - (max_age_secs * 1000);
 
-        let mut stats = self.connection_stats.lock().unwrap();
+        let mut stats = self.connection_stats.lock().expect("parking_lot Mutex never poisons");
         let stale_peers: Vec<PeerId> = stats
             .iter()
             .filter(|(_, stat)| stat.last_activity < cutoff_ms)
@@ -662,7 +662,7 @@ mod tests {
         // Verify stats
         let stats = monitor.get_connection_stats(&peer_id);
         assert!(stats.is_some(), "Should have connection stats");
-        let stats = stats.unwrap();
+        let stats = stats.expect("just asserted is_some");
         assert_eq!(stats.state, ConnectionState::Connected);
         assert_eq!(stats.messages_sent, 1);
         assert_eq!(stats.successful_connections, 1);

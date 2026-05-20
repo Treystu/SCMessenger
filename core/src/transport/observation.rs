@@ -49,7 +49,7 @@ impl AddressObserver {
     pub fn record_observation(&mut self, observer: PeerId, address: SocketAddr) {
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .unwrap()
+            .expect("system clock before UNIX_EPOCH")
             .as_secs();
 
         self.observations
@@ -96,7 +96,7 @@ impl AddressObserver {
     pub fn expire_old_observations(&mut self, max_age_secs: u64) {
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .unwrap()
+            .expect("system clock before UNIX_EPOCH")
             .as_secs();
 
         self.observations
@@ -169,7 +169,7 @@ impl ConnectionTracker {
     ) {
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .unwrap()
+            .expect("system clock before UNIX_EPOCH")
             .as_secs();
 
         self.connections.insert(

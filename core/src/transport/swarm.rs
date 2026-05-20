@@ -32,12 +32,14 @@ use super::multiport::MultiPortConfig;
 use super::multiport::{self, BindResult, MultiPortConfig};
 use super::observation::{AddressObserver, ConnectionTracker};
 use super::reflection::{AddressReflectionRequest, AddressReflectionService};
+#[cfg(not(target_arch = "wasm32"))]
 use super::routing::{
     engine::{NextHop, RoutingDecision, RoutingLayer},
-    local::TransportType as RoutingTransportType,
-    optimized_engine::OptimizedRoutingEngine,
     smart_retry::{calculate_next_attempt, BackoffStrategy},
 };
+#[cfg(not(target_arch = "wasm32"))]
+use super::routing::local::TransportType as RoutingTransportType;
+use super::routing::optimized_engine::OptimizedRoutingEngine;
 use crate::drift::{DriftFrame, SyncSession};
 use crate::store::relay_custody::{CustodyCompatMode, CustodyEnforcement, RelayCustodyStore};
 use anyhow::Result;
@@ -109,6 +111,7 @@ fn is_discoverable_multiaddr(addr: &Multiaddr) -> bool {
     has_ip && !ip_is_restricted
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 fn relay_reservation_multiaddr(base: &Multiaddr, relay_peer_id: PeerId) -> Multiaddr {
     use libp2p::multiaddr::Protocol;
 
@@ -509,6 +512,7 @@ fn extract_ed25519_public_key_from_peer_id(peer_id: &PeerId) -> Result<[u8; 32],
 
 /// Extract the 32-byte public key from libp2p PeerId bytes for routing module compatibility
 /// Handles both libp2p PeerId formats (Ed25519 and secp256k1)
+#[cfg(not(target_arch = "wasm32"))]
 fn extract_peer_id_bytes(bytes: &[u8]) -> [u8; 32] {
     // For Ed25519 PeerIds (most common): bytes are [0x00, 0x24, 0x08, 0x01, 0x12, 0x20, <32-byte-key>]
     // We extract the last 32 bytes (the actual public key)
@@ -705,6 +709,7 @@ fn dispatch_ranked_route(
 
 /// Convert libp2p Kademlia protocol mode to routing transport type.
 /// Maps the Kademlia query mode to the appropriate transport classification.
+#[cfg(not(target_arch = "wasm32"))]
 fn transport_type_to_routing_transport(mode: kad::Mode) -> RoutingTransportType {
     match mode {
         kad::Mode::Client => RoutingTransportType::QUIC,
@@ -1743,7 +1748,7 @@ pub async fn start_swarm(
 /// `bootstrap_addrs` — Multiaddrs of well-known relay / bootstrap nodes.
 /// The swarm will auto-dial these after binding, enabling cross-network
 /// peer discovery via Kademlia DHT and relay-circuit connectivity.
-#[allow(clippy::too_many_arguments, clippy::blocks_in_conditions)]
+#[allow(clippy::too_many_arguments, clippy::blocks_in_conditions, unused_variables)]
 pub async fn start_swarm_with_config(
     keypair: Keypair,
     listen_addr: Option<Multiaddr>,
@@ -1811,7 +1816,7 @@ pub async fn start_swarm_with_config(
             }
         } else {
             // Single port mode (legacy behavior)
-            let addr = listen_addr.unwrap_or_else(|| "/ip4/0.0.0.0/tcp/0".parse().unwrap());
+            let addr = listen_addr.unwrap_or_else(|| "/ip4/0.0.0.0/tcp/0".parse().expect("static multiaddr parse cannot fail"));
             swarm.listen_on(addr)?;
         }
 
@@ -2539,7 +2544,7 @@ pub async fn start_swarm_with_config(
                                         let observed_addr = connection_tracker
                                             .get_connection(&peer)
                                             .and_then(|conn| ConnectionTracker::extract_socket_addr(&conn.remote_addr))
-                                            .unwrap_or_else(|| "0.0.0.0:0".parse().unwrap());
+                                            .unwrap_or_else(|| "0.0.0.0:0".parse().expect("static socket addr parse cannot fail"));
 
                                         tracing::debug!("Observed address for {}: {}", peer, observed_addr);
 
@@ -2557,8 +2562,8 @@ pub async fn start_swarm_with_config(
                                                 // Convert SocketAddr to Multiaddr and add to swarm
                                                 let (ip, port) = (primary.ip(), primary.port());
                                                 let maddr: Multiaddr = match ip {
-                                                    std::net::IpAddr::V4(ip4) => format!("/ip4/{}/tcp/{}", ip4, port).parse().unwrap(),
-                                                    std::net::IpAddr::V6(ip6) => format!("/ip6/{}/tcp/{}", ip6, port).parse().unwrap(),
+                                                    std::net::IpAddr::V4(ip4) => format!("/ip4/{}/tcp/{}", ip4, port).parse().expect("formatted multiaddr is always valid"),
+                                                    std::net::IpAddr::V6(ip6) => format!("/ip6/{}/tcp/{}", ip6, port).parse().expect("formatted multiaddr is always valid"),
                                                 };
                                                 swarm.add_external_address(maddr);
                                             }
@@ -3334,8 +3339,8 @@ pub async fn start_swarm_with_config(
                                         // Convert SocketAddr to Multiaddr and add to swarm
                                         let (ip, port) = (primary.ip(), primary.port());
                                         let maddr: Multiaddr = match ip {
-                                            std::net::IpAddr::V4(ip4) => format!("/ip4/{}/tcp/{}", ip4, port).parse().unwrap(),
-                                            std::net::IpAddr::V6(ip6) => format!("/ip6/{}/tcp/{}", ip6, port).parse().unwrap(),
+                                            std::net::IpAddr::V4(ip4) => format!("/ip4/{}/tcp/{}", ip4, port).parse().expect("formatted multiaddr is always valid"),
+                                            std::net::IpAddr::V6(ip6) => format!("/ip6/{}/tcp/{}", ip6, port).parse().expect("formatted multiaddr is always valid"),
                                         };
                                         swarm.add_external_address(maddr);
                                     }
@@ -3490,7 +3495,7 @@ pub async fn start_swarm_with_config(
                                     remote_addr.clone(),
                                     match endpoint {
                                         libp2p::core::ConnectedPoint::Listener { local_addr, .. } => local_addr.clone(),
-                                        libp2p::core::ConnectedPoint::Dialer { .. } => "/ip4/0.0.0.0/tcp/0".parse().unwrap(),
+                                        libp2p::core::ConnectedPoint::Dialer { .. } => "/ip4/0.0.0.0/tcp/0".parse().expect("static multiaddr parse cannot fail"),
                                     },
                                     connection_id.to_string(),
                                 );
@@ -3666,7 +3671,7 @@ pub async fn start_swarm_with_config(
                             #[cfg(not(target_arch = "wasm32"))]
                             SwarmCommand::SendMessage { peer_id, envelope_data, recipient_identity_id, intended_device_id, reply } => {
                                 // PHASE 6: Multi-path delivery with routing engine integration
-                                let message_id = format!("{}-{}", peer_id, SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis());
+                                let message_id = format!("{}-{}", peer_id, SystemTime::now().duration_since(UNIX_EPOCH).expect("system clock before UNIX_EPOCH").as_millis());
 
                                 // Start delivery tracking
                                 multi_path_delivery.start_delivery(message_id.clone(), peer_id);
@@ -3757,7 +3762,7 @@ pub async fn start_swarm_with_config(
                             #[cfg(target_arch = "wasm32")]
                             SwarmCommand::SendMessage { peer_id, envelope_data, recipient_identity_id, intended_device_id, reply } => {
                                 // WASM: Simple direct send without complex routing
-                                let message_id = format!("{}-{}", peer_id, SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis());
+                                let message_id = format!("{}-{}", peer_id, SystemTime::now().duration_since(UNIX_EPOCH).expect("system clock before UNIX_EPOCH").as_millis());
                                 let framed = wrap_in_drift_frame(&envelope_data);
                                 let request_id = swarm.behaviour_mut().messaging.send_request(
                                     &peer_id,
@@ -3838,7 +3843,7 @@ pub async fn start_swarm_with_config(
                             SwarmCommand::Listen { addr, reply } => {
                                 match swarm.listen_on(addr) {
                                     Ok(_) => {
-                                        let _ = reply.send(Ok("/ip4/0.0.0.0/tcp/0".parse().unwrap())).await;
+                                        let _ = reply.send(Ok("/ip4/0.0.0.0/tcp/0".parse().expect("static multiaddr parse cannot fail"))).await;
                                     }
                                     Err(e) => {
                                         let _ = reply.send(Err(format!("{}", e))).await;
@@ -3983,6 +3988,7 @@ pub async fn start_swarm_with_config(
     }
 
     #[cfg(target_arch = "wasm32")]
+    #[allow(clippy::collapsible_match, clippy::single_match, clippy::if_same_then_else)]
     {
         use futures::{FutureExt, StreamExt};
         use libp2p::core::{muxing::StreamMuxerBox, upgrade::Version};
@@ -4459,7 +4465,7 @@ pub async fn start_swarm_with_config(
                                             let observed_addr = connection_tracker
                                                 .get_connection(&peer)
                                                 .and_then(|conn| ConnectionTracker::extract_socket_addr(&conn.remote_addr))
-                                                .unwrap_or_else(|| "0.0.0.0:0".parse().unwrap());
+                                                .unwrap_or_else(|| "0.0.0.0:0".parse().expect("static socket addr parse cannot fail"));
 
                                             let response = reflection_service.handle_request(request, observed_addr);
                                             let _ = swarm.behaviour_mut().address_reflection.send_response(channel, response);
@@ -4791,7 +4797,7 @@ pub async fn start_swarm_with_config(
                                     endpoint.get_remote_address().clone(),
                                     match endpoint {
                                         libp2p::core::ConnectedPoint::Listener { local_addr, .. } => local_addr.clone(),
-                                        libp2p::core::ConnectedPoint::Dialer { .. } => "/ip4/0.0.0.0/tcp/0".parse().unwrap(),
+                                        libp2p::core::ConnectedPoint::Dialer { .. } => "/ip4/0.0.0.0/tcp/0".parse().expect("static multiaddr parse cannot fail"),
                                     },
                                     connection_id.to_string(),
                                 );
@@ -4927,7 +4933,7 @@ mod tests {
         RELAY_PEER_BUCKET_REFILL_PER_SEC,
     };
     use crate::identity::IdentityKeys;
-    use crate::store::relay_custody::{CustodyCompatMode, RelayCustodyStore};
+    use crate::store::relay_custody::RelayCustodyStore;
     use crate::transport::RegistrationMessage;
     use std::collections::HashMap;
 

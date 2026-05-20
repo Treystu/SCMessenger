@@ -3,7 +3,9 @@
 //! Configures a non-blocking JSON file appender for the core mesh router.
 //! The log directory is provided by the host OS via FFI to respect mobile sandboxing.
 
+#[cfg(not(target_arch = "wasm32"))]
 use std::path::Path;
+#[cfg(not(target_arch = "wasm32"))]
 use tracing_subscriber::{fmt, layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 
 /// Initialize file-based structured tracing with JSON output.

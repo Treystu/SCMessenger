@@ -771,7 +771,7 @@ impl TransportManager {
                 TransportType::Internet,
                 TransportType::Local,
             ] {
-                if transports.get(&transport_type).map_or(false, |s| s.running) {
+                if transports.get(&transport_type).is_some_and(|s| s.running) {
                     selected_transports.push(transport_type);
                 }
             }

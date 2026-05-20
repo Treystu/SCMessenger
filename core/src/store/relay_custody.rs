@@ -136,16 +136,11 @@ impl std::fmt::Display for CustodyError {
 /// accepted but log deprecation warnings. Phase C (deferred): all requests
 /// require `intended_device_id`; legacy rejected. Transition to Phase B requires
 /// >80% client upgrade penetration; Phase C requires >95%.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum CustodyCompatMode {
+    #[default]
     PhaseA,
     PhaseB,
-}
-
-impl Default for CustodyCompatMode {
-    fn default() -> Self {
-        Self::PhaseA
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

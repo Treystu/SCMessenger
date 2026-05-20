@@ -392,32 +392,34 @@ impl MeshService {
 
     pub fn export_diagnostics(&self) -> String {
         let stats = self.get_stats();
-        let payload = serde_json::json!({
-            "service_state": format!("{:?}", self.get_state()),
-            "connection_path_state": format!("{:?}", self.get_connection_path_state()),
-            "nat_status": self.get_nat_status(),
-            "peers": self.swarm_bridge.get_peers(),
-            "listeners": self.swarm_bridge.get_listeners(),
-            "external_addrs": self.swarm_bridge.get_external_addresses(),
-            "relay_budget": *self.relay_budget.lock(),
-            "drift_state": if let Some(core) = self.core.lock().as_ref() {
-                core.drift_network_state()
-            } else {
-                "Dormant".to_string()
-            },
-            "drift_store_size": if let Some(core) = self.core.lock().as_ref() {
-                core.drift_store_size()
-            } else {
-                0
-            },
-            "stats": {
-                "peers_discovered": stats.peers_discovered,
-                "messages_relayed": stats.messages_relayed,
-                "bytes_transferred": stats.bytes_transferred,
-                "uptime_secs": stats.uptime_secs
-            },
-            "timestamp_ms": current_timestamp(),
-        });
+        let drift_state = if let Some(core) = self.core.lock().as_ref() {
+            core.drift_network_state()
+        } else {
+            "Dormant".to_string()
+        };
+        let drift_store_size = if let Some(core) = self.core.lock().as_ref() {
+            core.drift_store_size()
+        } else {
+            0
+        };
+        let mut payload = serde_json::Value::Object(serde_json::Map::from_iter([
+            ("service_state".into(), serde_json::Value::from(format!("{:?}", self.get_state()))),
+            ("connection_path_state".into(), serde_json::Value::from(format!("{:?}", self.get_connection_path_state()))),
+            ("nat_status".into(), serde_json::Value::from(self.get_nat_status())),
+            ("peers".into(), serde_json::to_value(self.swarm_bridge.get_peers()).unwrap_or(serde_json::Value::Null)),
+            ("listeners".into(), serde_json::to_value(self.swarm_bridge.get_listeners()).unwrap_or(serde_json::Value::Null)),
+            ("external_addrs".into(), serde_json::to_value(self.swarm_bridge.get_external_addresses()).unwrap_or(serde_json::Value::Null)),
+            ("relay_budget".into(), serde_json::Value::from(*self.relay_budget.lock())),
+            ("drift_state".into(), serde_json::Value::from(drift_state)),
+            ("drift_store_size".into(), serde_json::Value::from(drift_store_size)),
+            ("timestamp_ms".into(), serde_json::Value::from(current_timestamp())),
+        ]));
+        payload["stats"] = serde_json::Value::Object(serde_json::Map::from_iter([
+            ("peers_discovered".into(), serde_json::Value::from(stats.peers_discovered)),
+            ("messages_relayed".into(), serde_json::Value::from(stats.messages_relayed)),
+            ("bytes_transferred".into(), serde_json::Value::from(stats.bytes_transferred)),
+            ("uptime_secs".into(), serde_json::Value::from(stats.uptime_secs)),
+        ]));
 
         payload.to_string()
     }
@@ -2538,7 +2540,7 @@ impl SwarmBridge {
 fn current_timestamp() -> u64 {
     web_time::SystemTime::now()
         .duration_since(web_time::UNIX_EPOCH)
-        .unwrap()
+        .expect("system clock before UNIX_EPOCH")
         .as_millis() as u64
 }
 

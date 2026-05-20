@@ -321,7 +321,7 @@ impl NeighborhoodTable {
             .values()
             .min_by_key(|g| g.last_updated)
             .map(|g| &g.gateway_id)
-            .unwrap();
+            .expect("checked gateways non-empty above");
 
         self.gateways.remove(&gateway_to_evict);
     }

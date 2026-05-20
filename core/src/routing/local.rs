@@ -227,7 +227,7 @@ impl LocalCell {
         peers.sort_by(|a, b| {
             b.reliability_score
                 .partial_cmp(&a.reliability_score)
-                .unwrap()
+                .expect("f64 reliability scores should always be comparable")
         });
         peers
     }
@@ -339,10 +339,10 @@ impl LocalCell {
             .min_by(|a, b| {
                 a.reliability_score
                     .partial_cmp(&b.reliability_score)
-                    .unwrap()
+                    .expect("f64 reliability scores should always be comparable")
             })
             .map(|p| &p.peer_id)
-            .unwrap();
+            .expect("checked non-empty above");
 
         self.peers.remove(&peer_to_evict);
     }

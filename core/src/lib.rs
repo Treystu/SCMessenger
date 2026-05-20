@@ -35,8 +35,6 @@ pub mod contacts_bridge;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod mobile_bridge;
 
-use observability::{AuditEvent, AuditEventType};
-
 // IronCoreError — defined in Rust rather than generated from UDL
 // because the UDL-based scaffolding requires interface types to have
 // matching Rust implementations (which are wired in Phase 1B).
@@ -76,6 +74,7 @@ pub use notification::{
     NotificationEndpointRegistry, NotificationKind, NotificationMessageContext,
     NotificationPlatform, NotificationUiState,
 };
+pub use observability::{AuditEvent, AuditEventType};
 pub use settings::{DiscoveryMode, MeshSettings};
 
 // Mobile bridge exports for UniFFI

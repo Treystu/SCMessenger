@@ -425,7 +425,7 @@ impl RelayClient {
         let quic_addr = SocketAddr::new(socket_addr.ip(), self.config.quic_port);
 
         // Create QUIC endpoint
-        let mut endpoint = quinn::Endpoint::client("0.0.0.0:0".parse().unwrap()).map_err(|e| {
+        let mut endpoint = quinn::Endpoint::client("0.0.0.0:0".parse().expect("static socket addr parse cannot fail")).map_err(|e| {
             RelayClientError::ConnectionFailed(format!("QUIC endpoint error: {}", e))
         })?;
 

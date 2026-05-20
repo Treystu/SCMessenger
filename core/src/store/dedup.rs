@@ -80,7 +80,7 @@ impl DedupStatsTracker {
 
         if let Some(entry) = self.entries.get_mut(message_id) {
             entry.record_duplicate();
-            self.entries.get(message_id).unwrap()
+            self.entries.get(message_id).expect("entry just mutated above")
         } else {
             let mut stats = DedupStats::new(message_id.to_string(), now_ms);
             stats.first_transport = first_transport;
@@ -96,7 +96,7 @@ impl DedupStatsTracker {
                 }
             }
             self.entries.insert(message_id.to_string(), stats);
-            self.entries.get(message_id).unwrap()
+            self.entries.get(message_id).expect("entry just inserted above")
         }
     }
 

@@ -3,6 +3,11 @@
 //! The browser opens `ws://127.0.0.1:<port>/ws` and exchanges JSON-RPC 2.0
 //! frames as defined in `scmessenger_core::wasm_support::rpc`.
 //!
+//! NOTE: serde_json::json!() macro internally calls unwrap(). We allow
+//! disallowed_methods here because the macro is the canonical way to build
+//! JSON values and cannot be reasonably replaced.
+
+#![allow(clippy::disallowed_methods)]
 //! ## Wire format
 //!
 //! **Request (browser -> daemon):**

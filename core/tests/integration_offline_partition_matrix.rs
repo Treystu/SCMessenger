@@ -1,11 +1,16 @@
+#[cfg(feature = "phase2_apis")]
 use libp2p::PeerId;
+#[cfg(feature = "phase2_apis")]
 use scmessenger_core::store::backend::SledStorage;
+#[cfg(feature = "phase2_apis")]
 use scmessenger_core::store::QueuedMessage;
+#[cfg(feature = "phase2_apis")]
 use scmessenger_core::store::{CustodyState, Outbox, RelayCustodyStore};
 #[cfg(feature = "phase2_apis")]
 use scmessenger_core::transport::mesh_routing::{
     MultiPathDelivery, ROUTE_REASON_DIRECT_FIRST, ROUTE_REASON_RELAY_RECENCY_SUCCESS,
 };
+#[cfg(feature = "phase2_apis")]
 use std::sync::Arc;
 
 #[allow(dead_code)]

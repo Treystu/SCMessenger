@@ -1139,7 +1139,7 @@ impl IronCore {
         let core_blocked = self.blocked_manager.read().list()?;
         Ok(core_blocked
             .into_iter()
-            .map(|b| crate::blocked_bridge::BlockedIdentity::from(b))
+            .map(crate::blocked_bridge::BlockedIdentity::from)
             .collect())
     }
 
@@ -1355,7 +1355,7 @@ impl IronCore {
                         .read()
                         .keys()
                         .map(|k| k.public_key_hex())
-                        .ok_or_else(|| IronCoreError::NotInitialized);
+                        .ok_or(IronCoreError::NotInitialized);
                 }
             }
 
@@ -1877,32 +1877,32 @@ impl IronCore {
         if let Some(engine) = guard.as_mut() {
             let maintenance = engine.tick(now);
             let summary = engine.base_engine().routing_summary();
-            let mut payload = serde_json::to_value(&summary).unwrap_or(serde_json::json!({}));
+            let mut payload = serde_json::to_value(&summary).unwrap_or_else(|_| serde_json::Value::Object(serde_json::Map::new()));
             let neg_stats = &maintenance.negative_cache_stats;
-            payload["negative_cache"] = serde_json::json!({
-                "negative_checks": neg_stats.negative_checks,
-                "bloom_hits": neg_stats.bloom_hits,
-                "bloom_misses": neg_stats.bloom_misses,
-                "entry_count": neg_stats.entry_count,
-                "expired_count": neg_stats.expired_count,
-                "entries_cleaned": maintenance.negative_cache_entries_cleaned,
-            });
+            payload["negative_cache"] = serde_json::Value::Object(serde_json::Map::from_iter([
+                ("negative_checks".into(), serde_json::Value::from(neg_stats.negative_checks)),
+                ("bloom_hits".into(), serde_json::Value::from(neg_stats.bloom_hits)),
+                ("bloom_misses".into(), serde_json::Value::from(neg_stats.bloom_misses)),
+                ("entry_count".into(), serde_json::Value::from(neg_stats.entry_count)),
+                ("expired_count".into(), serde_json::Value::from(neg_stats.expired_count)),
+                ("entries_cleaned".into(), serde_json::Value::from(maintenance.negative_cache_entries_cleaned)),
+            ]));
             let budget = &maintenance.timeout_budget_summary;
-            payload["timeout_budget"] = serde_json::json!({
-                "total_budget_ms": budget.total_budget.as_millis(),
-                "elapsed_ms": budget.elapsed.as_millis(),
-                "remaining_ms": budget.remaining.as_millis(),
-                "phase": format!("{:?}", budget.current_phase),
-                "phase_elapsed_ms": budget.phase_elapsed.as_millis(),
-                "exhausted": budget.is_exhausted,
-            });
-            payload["drift_network_state"] = serde_json::json!(self.drift_network_state());
-            payload["drift_store_size"] = serde_json::json!(self.drift_store_size());
+            payload["timeout_budget"] = serde_json::Value::Object(serde_json::Map::from_iter([
+                ("total_budget_ms".into(), serde_json::Value::from(budget.total_budget.as_millis() as u64)),
+                ("elapsed_ms".into(), serde_json::Value::from(budget.elapsed.as_millis() as u64)),
+                ("remaining_ms".into(), serde_json::Value::from(budget.remaining.as_millis() as u64)),
+                ("phase".into(), serde_json::Value::from(format!("{:?}", budget.current_phase))),
+                ("phase_elapsed_ms".into(), serde_json::Value::from(budget.phase_elapsed.as_millis() as u64)),
+                ("exhausted".into(), serde_json::Value::from(budget.is_exhausted)),
+            ]));
+            payload["drift_network_state"] = serde_json::Value::from(self.drift_network_state());
+            payload["drift_store_size"] = serde_json::Value::from(self.drift_store_size());
             serde_json::to_string(&payload).unwrap_or_else(|_| "{}".to_string())
         } else {
-            let mut payload = serde_json::json!({});
-            payload["drift_network_state"] = serde_json::json!(self.drift_network_state());
-            payload["drift_store_size"] = serde_json::json!(self.drift_store_size());
+            let mut payload = serde_json::Value::Object(serde_json::Map::new());
+            payload["drift_network_state"] = serde_json::Value::from(self.drift_network_state());
+            payload["drift_store_size"] = serde_json::Value::from(self.drift_store_size());
             serde_json::to_string(&payload).unwrap_or_else(|_| "{}".to_string())
         }
     }

@@ -40,23 +40,23 @@ impl StorageBackend for MemoryStorage {
     fn put(&self, key: &[u8], value: &[u8]) -> Result<(), String> {
         self.data
             .write()
-            .unwrap()
+            .expect("parking_lot RwLock never poisons")
             .insert(key.to_vec(), value.to_vec());
         Ok(())
     }
 
     fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>, String> {
-        Ok(self.data.read().unwrap().get(key).cloned())
+        Ok(self.data.read().expect("parking_lot RwLock never poisons").get(key).cloned())
     }
 
     fn remove(&self, key: &[u8]) -> Result<(), String> {
-        self.data.write().unwrap().remove(key);
+        self.data.write().expect("parking_lot RwLock never poisons").remove(key);
         Ok(())
     }
 
     fn scan_prefix(&self, prefix: &[u8]) -> Result<ScanResult, String> {
         let mut results = Vec::new();
-        for (key, value) in self.data.read().unwrap().iter() {
+        for (key, value) in self.data.read().expect("parking_lot RwLock never poisons").iter() {
             if key.starts_with(prefix) {
                 results.push((key.clone(), value.clone()));
             }
@@ -68,7 +68,7 @@ impl StorageBackend for MemoryStorage {
         let count = self
             .data
             .read()
-            .unwrap()
+            .expect("parking_lot RwLock never poisons")
             .keys()
             .filter(|k| k.starts_with(prefix))
             .count();
@@ -80,7 +80,7 @@ impl StorageBackend for MemoryStorage {
     }
 
     fn approximate_size(&self) -> Result<u64, String> {
-        let data = self.data.read().unwrap();
+        let data = self.data.read().expect("parking_lot RwLock never poisons");
         let size: u64 = data.iter().map(|(k, v)| (k.len() + v.len()) as u64).sum();
         Ok(size)
     }
@@ -178,15 +178,19 @@ impl IndexedDbStorage {
             .await
             .map_err(|e| format!("{:?}", e))?;
 
-        let mut map = data.write().unwrap();
+        let mut entries = Vec::new();
         for key_js in all_keys_js {
             if let Ok(Some(value_js)) = store.get(key_js.clone()).await {
                 if value_js.is_instance_of::<js_sys::Uint8Array>() {
                     let key_arr = js_sys::Uint8Array::new(&key_js);
                     let val_arr = js_sys::Uint8Array::new(&value_js);
-                    map.insert(key_arr.to_vec(), val_arr.to_vec());
+                    entries.push((key_arr.to_vec(), val_arr.to_vec()));
                 }
             }
+        }
+        let mut map = data.write().expect("parking_lot RwLock never poisons");
+        for (key, value) in entries {
+            map.insert(key, value);
         }
 
         Ok(Self {
@@ -213,7 +217,7 @@ impl IndexedDbStorage {
                 }
             }
         });
-        block_on(receiver).unwrap()
+        block_on(receiver).expect("new_sync: oneshot channel should not be dropped")
     }
 
     fn persist_put(&self, key: Vec<u8>, value: Vec<u8>) {
@@ -260,25 +264,25 @@ impl StorageBackend for IndexedDbStorage {
     fn put(&self, key: &[u8], value: &[u8]) -> Result<(), String> {
         self.data
             .write()
-            .unwrap()
+            .expect("parking_lot RwLock never poisons")
             .insert(key.to_vec(), value.to_vec());
         self.persist_put(key.to_vec(), value.to_vec());
         Ok(())
     }
 
     fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>, String> {
-        Ok(self.data.read().unwrap().get(key).cloned())
+        Ok(self.data.read().expect("parking_lot RwLock never poisons").get(key).cloned())
     }
 
     fn remove(&self, key: &[u8]) -> Result<(), String> {
-        self.data.write().unwrap().remove(key);
+        self.data.write().expect("parking_lot RwLock never poisons").remove(key);
         self.persist_remove(key.to_vec());
         Ok(())
     }
 
     fn scan_prefix(&self, prefix: &[u8]) -> Result<ScanResult, String> {
         let mut results = Vec::new();
-        for (k, v) in self.data.read().unwrap().iter() {
+        for (k, v) in self.data.read().expect("parking_lot RwLock never poisons").iter() {
             if k.starts_with(prefix) {
                 results.push((k.clone(), v.clone()));
             }
@@ -290,7 +294,7 @@ impl StorageBackend for IndexedDbStorage {
         let count = self
             .data
             .read()
-            .unwrap()
+            .expect("parking_lot RwLock never poisons")
             .keys()
             .filter(|k| k.starts_with(prefix))
             .count();
@@ -302,7 +306,7 @@ impl StorageBackend for IndexedDbStorage {
     }
 
     fn approximate_size(&self) -> Result<u64, String> {
-        let data = self.data.read().unwrap();
+        let data = self.data.read().expect("parking_lot RwLock never poisons");
         let size: u64 = data.iter().map(|(k, v)| (k.len() + v.len()) as u64).sum();
         Ok(size)
     }

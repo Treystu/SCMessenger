@@ -367,6 +367,7 @@ impl IronCoreBehaviour {
     /// - Kademlia set to Server mode by default
     /// - Ledger exchange for automatic peer list sharing
     /// - All timeouts are generous to survive flaky networks
+    #[allow(unused_variables)]
     pub fn new(
         keypair: &libp2p::identity::Keypair,
         relay_client: relay::client::Behaviour,
