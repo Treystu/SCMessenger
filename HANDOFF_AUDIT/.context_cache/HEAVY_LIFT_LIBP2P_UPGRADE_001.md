@@ -54,6 +54,57 @@ core/src/transport/abstraction.rs: Defines 9 types: TransportType, fmt, Transpor
 - `use thiserror::Error`
 ---
 
+## core/src/abuse/auto_block.rs (1 chunks, 336 lines)
+Function `HEAVY_LIFT_LIBP2P_UPGRADE_001` not found in REPO_MAP chunks. Full file listing below.
+
+### Summary
+core/src/abuse/auto_block.rs: Defines 7 types: AutoBlockConfig, Default, AutoBlockReason, AutoBlockAuditEntry, AutoBlockResult; 19 functions; 11 imports
+
+### Structs/Classes
+- AutoBlockAuditEntry
+- AutoBlockConfig
+- AutoBlockEngine
+- AutoBlockReason
+- AutoBlockResult
+- Default
+
+### Functions
+| Function | Line | Calls Out To |
+|----------|------|-------------|
+| `default` | 35 | new |
+| `new` | 97 | new |
+| `evaluate` | 112 | evaluate |
+| `evaluate_and_block` | 161 | evaluate, new |
+| `exempt_peer` | 195 | evaluate_and_block |
+| `unexempt_peer` | 200 | evaluate_and_block, now |
+| `is_exempt` | 205 | evaluate_and_block, now |
+| `audit_log` | 214 | default, new, evaluate_and_block, now |
+| `update_config` | 219 | default, new, evaluate_and_block, now |
+| `config` | 224 | default, new, evaluate_and_block, now |
+| `evaluate_all_tracked` | 230 | default, new, evaluate_and_block, now |
+| `current_epoch_secs` | 243 | default, new, now |
+| `make_engine` | 258 | default, new |
+| `test_default_config` | 273 | default |
+| `test_exempt_peer_not_blocked` | 281 | default |
+| `test_unexempt_peer` | 290 | default |
+| `test_audit_log_records_block` | 298 | default |
+| `test_disabled_auto_block` | 316 | default |
+| `test_neutral_peer_not_blocked` | 326 |  |
+
+### Imports
+- `use crate::abuse::reputation::EnhancedAbuseReputationManager`
+- `use crate::abuse::spam_detection::{SpamDetectionConfig, SpamDetectionEngine}`
+- `use crate::store::backend::MemoryStorage`
+- `use crate::store::blocked::BlockedManager`
+- `use crate::store::contacts::ContactManager`
+- `use crate::transport::reputation::ReputationScore`
+- `use parking_lot::RwLock`
+- `use serde::{Deserialize, Serialize}`
+- `use std::sync::Arc`
+- `use std::time::SystemTime`
+- `use super::*`
+---
+
 ## core/src/transport/ble/beacon.rs (1 chunks, 372 lines)
 Function `HEAVY_LIFT_LIBP2P_UPGRADE_001` not found in REPO_MAP chunks. Full file listing below.
 
@@ -155,6 +206,78 @@ core/src/transport/behaviour.rs: Defines 19 types: IronCoreBehaviour, MessageReq
 - `use super::reflection::{AddressReflectionRequest, AddressReflectionResponse}`
 - `use uuid::Uuid`
 - `use web_time::Duration`
+---
+
+## cli/src/ble_daemon.rs (2 chunks, 449 lines)
+Function `HEAVY_LIFT_LIBP2P_UPGRADE_001` not found in REPO_MAP chunks. Full file listing below.
+
+### Summary
+cli/src/ble_daemon.rs: Defines 11 types: BleError, std, std, BleResult, BleStatus; 23 functions; 3 imports cli/src/ble_daemon.rs: Defines 11 types: BleError, std, std, BleResult, BleStatus; 23 functions; 3 imports
+
+### Structs/Classes
+- BleAdapterInfo
+- BleConfig
+- BleDaemon
+- BleError
+- BleResult
+- BleStatus
+- Default
+- std
+
+### Functions
+| Function | Line | Calls Out To |
+|----------|------|-------------|
+| `probe_and_log` | 8 | new |
+| `fmt` | 79 | ManagerInitFailed, Other |
+| `default` | 126 | Unavailable, ManagerInitFailed, new |
+| `new` | 146 | ManagerInitFailed, get_adapter_info, Unavailable, Available, Other, new |
+| `initialize` | 161 | ManagerInitFailed, get_adapter_info, Unavailable, Available, Other, new |
+| `get_adapter_info` | 212 | is_available, status, Other, Available |
+| `is_available` | 225 | is_available, status, Other, Available |
+| `status` | 230 | is_available, status, Other |
+| `scan_for_advertisements` | 236 | is_available, status, Other |
+| `advertise_service` | 265 | is_available, new, Other, default, status |
+| `shutdown` | 287 | default, new, from_timestamp |
+| `default` | 293 | default, new, from_timestamp |
+| `is_ble_available` | 300 | new, from_timestamp |
+| `format_bytes` | 323 | Other, from_utf8_lossy, new, from_timestamp |
+| `format_timestamp` | 336 | Other, new, default, from_utf8_lossy, from_timestamp |
+| `try_enable_bluetooth` | 345 | ManagerInitFailed, Unavailable, Other, new, default, from_utf8_lossy |
+| `test_ble_error_display` | 371 | ManagerInitFailed, Unavailable, new, Other, default |
+| `test_ble_config_default` | 383 | default, Unavailable, ManagerInitFailed, new |
+| `test_ble_status_initialization` | 390 | default, Unavailable, ManagerInitFailed, new |
+| `test_ble_status_disabled` | 400 | default, Unavailable, new |
+| `test_format_bytes` | 408 | default, Unavailable, new |
+| `test_ble_error_variants` | 415 | default, Unavailable, new |
+| `test_ble_daemon_fallback_logic` | 432 | default, Unavailable, new |
+| `probe_and_log` | 8 | new |
+| `fmt` | 79 | ManagerInitFailed, Other |
+| `default` | 126 | new, Unavailable, ManagerInitFailed |
+| `new` | 146 | new, get_adapter_info, Unavailable, Other, Available, ManagerInitFailed |
+| `initialize` | 161 | new, get_adapter_info, Unavailable, Other, Available, ManagerInitFailed |
+| `get_adapter_info` | 212 | status, Available, Other, is_available |
+| `is_available` | 225 | status, Available, Other, is_available |
+| `status` | 230 | status, Other, is_available |
+| `scan_for_advertisements` | 236 | status, Other, is_available |
+| `advertise_service` | 265 | new, status, Other, is_available, default |
+| `shutdown` | 287 | new, from_timestamp, default |
+| `default` | 293 | new, from_timestamp, default |
+| `is_ble_available` | 300 | new, from_timestamp |
+| `format_bytes` | 323 | new, from_timestamp, Other, from_utf8_lossy |
+| `format_timestamp` | 336 | new, from_utf8_lossy, Other, from_timestamp, default |
+| `try_enable_bluetooth` | 345 | new, from_utf8_lossy, Unavailable, Other, ManagerInitFailed, default |
+| `test_ble_error_display` | 371 | new, Unavailable, Other, ManagerInitFailed, default |
+| `test_ble_config_default` | 383 | new, Unavailable, ManagerInitFailed, default |
+| `test_ble_status_initialization` | 390 | new, Unavailable, ManagerInitFailed, default |
+| `test_ble_status_disabled` | 400 | new, Unavailable, default |
+| `test_format_bytes` | 408 | new, Unavailable, default |
+| `test_ble_error_variants` | 415 | new, Unavailable, default |
+| `test_ble_daemon_fallback_logic` | 432 | new, Unavailable, default |
+
+### Imports
+- `use btleplug::api::Manager as _`
+- `use std::process::Command`
+- `use super::*`
 ---
 
 ## core/src/relay/bootstrap.rs (1 chunks, 470 lines)
@@ -342,6 +465,296 @@ core/src/transport/circuit_breaker.rs: Defines 8 types: CircuitState, CircuitBre
 - `use web_time::{Duration, SystemTime}`
 ---
 
+## cli/src/cli.rs (2 chunks, 392 lines)
+Function `HEAVY_LIFT_LIBP2P_UPGRADE_001` not found in REPO_MAP chunks. Full file listing below.
+
+### Summary
+cli/src/cli.rs: Defines 7 types: Cli, Commands, BlockAction, IdentityAction, ContactAction; 14 functions; 2 imports cli/src/cli.rs: Defines 7 types: Cli, Commands, BlockAction, IdentityAction, ContactAction; 14 functions; 2 imports
+
+### Structs/Classes
+- BlockAction
+- Cli
+- Commands
+- ConfigAction
+- ContactAction
+- IdentityAction
+- SwarmAction
+
+### Functions
+| Function | Line | Calls Out To |
+|----------|------|-------------|
+| `test_cli_parse_init` | 8 | parse_from |
+| `test_cli_parse_identity_show` | 14 | parse_from |
+| `test_cli_parse_contact_add` | 20 | parse_from |
+| `test_cli_parse_contact_list` | 36 | parse_from |
+| `test_cli_parse_block_add` | 47 | parse_from |
+| `test_cli_parse_relay` | 55 | parse_from |
+| `test_cli_parse_send` | 63 | parse_from |
+| `test_cli_parse_status` | 71 | parse_from |
+| `test_cli_parse_identity_export` | 77 | parse_from |
+| `test_cli_parse_identity_import` | 93 | parse_from |
+| `test_cli_parse_contact_remove` | 109 | parse_from |
+| `test_cli_parse_contact_search` | 117 | parse_from |
+| `test_cli_parse_block_remove` | 125 | parse_from |
+| `test_cli_parse_block_delete` | 133 | parse_from |
+| `test_cli_parse_init` | 8 | parse_from |
+| `test_cli_parse_identity_show` | 14 | parse_from |
+| `test_cli_parse_contact_add` | 20 | parse_from |
+| `test_cli_parse_contact_list` | 36 | parse_from |
+| `test_cli_parse_block_add` | 47 | parse_from |
+| `test_cli_parse_relay` | 55 | parse_from |
+| `test_cli_parse_send` | 63 | parse_from |
+| `test_cli_parse_status` | 71 | parse_from |
+| `test_cli_parse_identity_export` | 77 | parse_from |
+| `test_cli_parse_identity_import` | 93 | parse_from |
+| `test_cli_parse_contact_remove` | 109 | parse_from |
+| `test_cli_parse_contact_search` | 117 | parse_from |
+| `test_cli_parse_block_remove` | 125 | parse_from |
+| `test_cli_parse_block_delete` | 133 | parse_from |
+
+### Imports
+- `use clap::{Parser, Subcommand}`
+- `use super::*`
+---
+
+## core/src/relay/client.rs (1 chunks, 1039 lines)
+Function `HEAVY_LIFT_LIBP2P_UPGRADE_001` not found in REPO_MAP chunks. Full file listing below.
+
+### Summary
+core/src/relay/client.rs: Defines 9 types: TransportType, RelayClientConfig, Default, ConnectionState, RelayConnection; 41 functions; 15 imports
+
+### Structs/Classes
+- ConnectionState
+- Default
+- RelayClient
+- RelayClientConfig
+- RelayClientError
+- RelayConnection
+- TransportType
+
+### Functions
+| Function | Line | Calls Out To |
+|----------|------|-------------|
+| `default` | 56 | from_secs, new |
+| `new` | 102 | now |
+| `with_transport` | 114 | now |
+| `set_state` | 126 | now |
+| `is_connected` | 139 | new, full_relay |
+| `new` | 184 | new, connect_tcp, full_relay, connect_quic |
+| `set_capabilities` | 198 | connect_tcp, connect_websocket, connect_quic |
+| `create_handshake` | 203 | connect_tcp, connect_websocket, connect_quic |
+| `connect` | 214 | connect_tcp, connect_websocket, connect_quic |
+| `connect_websocket` | 263 | connect_async, IoTimeout, with_transport, create_handshake, into_client_request, ConnectionFailed |
+| `connect_websocket` | 362 | new, IoTimeout, send_and_receive_raw, connect, with_transport, complete_handshake, clone, create_handshake, ConnectionFailed |
+| `connect_tcp` | 374 | new, IoTimeout, send_and_receive_raw, connect, with_transport, complete_handshake, clone, create_handshake, ConnectionFailed |
+| `connect_quic` | 406 | client, try_with_platform_verifier, new, IoTimeout, with_transport, ConnectionFailed |
+| `complete_handshake` | 509 | HandshakeFailed, ConnectionFailed |
+| `connect_quic` | 541 | send_and_receive_raw, MessageError, ConnectionFailed |
+| `push_envelopes` | 551 | send_and_receive_raw, MessageError, ConnectionFailed |
+| `pull_envelopes` | 594 | send_and_receive_raw, MessageError, new, ConnectionFailed |
+| `active_connections` | 645 | MessageError |
+| `add_connection` | 655 | from_millis, min, MessageError |
+| `remove_connection` | 660 | from_millis, min, MessageError |
+| `send_ping` | 667 | from_millis, min, MessageError, SerializationError |
+| `get_relay_addresses` | 694 | SerializationError, IoTimeout, MessageError, from_millis, min, ConnectionFailed |
+| `backoff_duration` | 699 | SerializationError, IoTimeout, MessageError, from_bytes, from_millis, min, ConnectionFailed |
+| `send_and_receive_raw` | 704 | MessageError, from_bytes, SerializationError, IoTimeout, ConnectionFailed |
+| `test_client` | 757 | bind, spawn, new, from_bytes, default, mobile |
+| `test_relay_client_creation` | 763 | bind, spawn, full_relay, from_bytes, mobile |
+| `test_create_handshake` | 770 | bind, spawn, full_relay, from_bytes, mobile |
+| `test_set_capabilities` | 789 | bind, spawn, full_relay, from_bytes, new, mobile |
+| `test_connect_to_relay` | 798 | bind, spawn, full_relay, new, from_bytes |
+| `test_relay_connection_creation` | 829 | full_relay, new |
+| `test_relay_connection_state_transitions` | 837 | full_relay, new |
+| `test_complete_handshake_success` | 855 | full_relay, new |
+| `test_complete_handshake_version_mismatch` | 872 | full_relay, new |
+| `test_push_envelopes_not_connected` | 887 | new |
+| `test_pull_envelopes_not_connected` | 899 | spawn, new, bind |
+| `test_active_connections` | 911 | bind, spawn, full_relay, from_bytes, new |
+| `test_remove_connection` | 928 | bind, spawn, full_relay, from_bytes, new |
+| `test_push_pull_and_ping_over_network` | 942 | full_relay, spawn, from_bytes, bind |
+| `test_send_ping_not_connected` | 996 | default, new |
+| `test_backoff_duration` | 1008 | default, new |
+| `test_get_relay_addresses` | 1025 | default, new |
+
+### Imports
+- `use futures::{SinkExt, StreamExt}`
+- `use quinn`
+- `use std::collections::HashMap`
+- `use std::net::SocketAddr`
+- `use std::sync::Arc`
+- `use super::*`
+- `use super::protocol::{RelayCapability, RelayMessage, PROTOCOL_VERSION}`
+- `use thiserror::Error`
+- `use tokio::io::{AsyncReadExt, AsyncWriteExt}`
+- `use tokio::net::TcpStream`
+- `use tokio::sync::{Mutex, RwLock}`
+- `use tokio::time::timeout`
+- `use tokio_tungstenite::tungstenite::client::IntoClientRequest`
+- `use tokio_tungstenite::tungstenite::protocol::Message`
+- `use web_time::{Duration, SystemTime, UNIX_EPOCH}`
+---
+
+## cli/src/config.rs (2 chunks, 322 lines)
+Function `HEAVY_LIFT_LIBP2P_UPGRADE_001` not found in REPO_MAP chunks. Full file listing below.
+
+### Summary
+cli/src/config.rs: Defines 5 types: Config, NetworkConfig, Default, Default, Config; 15 functions; 4 imports cli/src/config.rs: Defines 5 types: Config, NetworkConfig, Default, Default, Config; 15 functions; 4 imports
+
+### Structs/Classes
+- Config
+- Default
+- NetworkConfig
+
+### Functions
+| Function | Line | Calls Out To |
+|----------|------|-------------|
+| `default` | 61 | config_dir, new, data_local_dir, default, create_dir_all |
+| `default` | 74 | config_dir, create_dir_all, data_local_dir, from_str, read_to_string, config_file |
+| `config_dir` | 86 | config_dir, create_dir_all, data_local_dir, default, to_string_pretty, from_str, read_to_string, config_file |
+| `data_dir` | 98 | config_dir, create_dir_all, write, data_local_dir, default, to_string_pretty, from_str, read_to_string, config_file |
+| `config_file` | 110 | config_dir, write, default, to_string_pretty, from_str, read_to_string, config_file |
+| `load` | 115 | write, default, to_string_pretty, from_str, read_to_string, config_file |
+| `save` | 134 | to_string_pretty, write, config_file |
+| `set` | 142 | save |
+| `get` | 190 |  |
+| `list` | 206 | strip_peer_id |
+| `strip_peer_id` | 238 | strip_peer_id, default, save |
+| `add_bootstrap_node` | 247 | to_string, save, strip_peer_id, default, from_str |
+| `remove_bootstrap_node` | 263 | to_string, save, strip_peer_id, default, from_str |
+| `test_default_config` | 285 | default, to_string, from_str |
+| `test_config_serialization` | 293 | default, to_string, from_str |
+| `default` | 61 | new, config_dir, default, data_local_dir, create_dir_all |
+| `default` | 74 | read_to_string, config_dir, config_file, from_str, data_local_dir, create_dir_all |
+| `config_dir` | 86 | read_to_string, config_dir, to_string_pretty, config_file, from_str, default, data_local_dir, create_dir_all |
+| `data_dir` | 98 | read_to_string, config_dir, to_string_pretty, write, config_file, from_str, default, data_local_dir, create_dir_all |
+| `config_file` | 110 | read_to_string, config_dir, to_string_pretty, write, config_file, from_str, default |
+| `load` | 115 | read_to_string, to_string_pretty, write, config_file, from_str, default |
+| `save` | 134 | write, config_file, to_string_pretty |
+| `set` | 142 | save |
+| `get` | 190 |  |
+| `list` | 206 | strip_peer_id |
+| `strip_peer_id` | 238 | strip_peer_id, save, default |
+| `add_bootstrap_node` | 247 | from_str, to_string, default, strip_peer_id, save |
+| `remove_bootstrap_node` | 263 | from_str, to_string, default, strip_peer_id, save |
+| `test_default_config` | 285 | from_str, to_string, default |
+| `test_config_serialization` | 293 | from_str, to_string, default |
+
+### Imports
+- `use anyhow::{Context, Result}`
+- `use serde::{Deserialize, Serialize}`
+- `use std::path::PathBuf`
+- `use super::*`
+---
+
+## cli/src/contacts.rs (2 chunks, 254 lines)
+Function `HEAVY_LIFT_LIBP2P_UPGRADE_001` not found in REPO_MAP chunks. Full file listing below.
+
+### Summary
+cli/src/contacts.rs: Defines 4 types: Contact, Contact, ContactList, ContactList; 18 functions; 5 imports cli/src/contacts.rs: Defines 4 types: Contact, Contact, ContactList, ContactList; 18 functions; 5 imports
+
+### Structs/Classes
+- Contact
+- ContactList
+
+### Functions
+| Function | Line | Calls Out To |
+|----------|------|-------------|
+| `new` | 35 | default, to_vec |
+| `with_nickname` | 45 | default, from_slice, to_vec |
+| `display_name` | 50 | default, from_slice, to_vec |
+| `open` | 62 | default, new, from_slice, to_vec |
+| `add` | 73 | new, from_slice, to_vec |
+| `get` | 85 | new, from_slice |
+| `remove` | 96 | get, add, new, from_slice |
+| `list` | 102 | get, add, new, from_slice |
+| `find_by_nickname` | 119 | get, add, from_slice |
+| `find_by_public_key` | 131 | get, add, from_slice |
+| `update_last_seen` | 143 | get, add, new, from_slice |
+| `set_nickname` | 153 | get, add, new, from_slice |
+| `set_notes` | 165 | get, now, add, new, from_slice |
+| `count` | 176 | now, new, from_slice |
+| `search` | 181 | now, new, from_slice |
+| `current_timestamp` | 209 | tempdir, new, now, open |
+| `test_contact_creation` | 222 | tempdir, new, open |
+| `test_contact_list` | 231 | new, tempdir, open |
+| `new` | 35 | to_vec, default |
+| `with_nickname` | 45 | from_slice, to_vec, default |
+| `display_name` | 50 | from_slice, to_vec, default |
+| `open` | 62 | from_slice, to_vec, new, default |
+| `add` | 73 | new, to_vec, from_slice |
+| `get` | 85 | new, from_slice |
+| `remove` | 96 | new, from_slice, add, get |
+| `list` | 102 | new, from_slice, add, get |
+| `find_by_nickname` | 119 | from_slice, add, get |
+| `find_by_public_key` | 131 | from_slice, add, get |
+| `update_last_seen` | 143 | new, from_slice, add, get |
+| `set_nickname` | 153 | new, from_slice, add, get |
+| `set_notes` | 165 | new, now, get, from_slice, add |
+| `count` | 176 | new, from_slice, now |
+| `search` | 181 | new, from_slice, now |
+| `current_timestamp` | 209 | new, tempdir, open, now |
+| `test_contact_creation` | 222 | new, tempdir, open |
+| `test_contact_list` | 231 | new, tempdir, open |
+
+### Imports
+- `use anyhow::{Context, Result}`
+- `use serde::{Deserialize, Serialize}`
+- `use sled::Db`
+- `use std::path::PathBuf`
+- `use super::*`
+---
+
+## core/src/store/contacts.rs (1 chunks, 411 lines)
+Function `HEAVY_LIFT_LIBP2P_UPGRADE_001` not found in REPO_MAP chunks. Full file listing below.
+
+### Summary
+core/src/store/contacts.rs: Defines 4 types: Contact, Contact, ContactManager, ContactManager; 26 functions; 8 imports
+
+### Structs/Classes
+- Contact
+- ContactManager
+
+### Functions
+| Function | Line | Calls Out To |
+|----------|------|-------------|
+| `new` | 28 | get, add, derive_public_key_from_peer_id, new |
+| `with_nickname` | 40 | get, add, derive_public_key_from_peer_id, new |
+| `display_name` | 45 | get, add, derive_public_key_from_peer_id, new, decode |
+| `new` | 60 | get, add, derive_public_key_from_peer_id, new, from_bytes, decode |
+| `reconcile_from_history` | 66 | get, add, derive_public_key_from_peer_id, new, from_bytes, decode |
+| `derive_public_key_from_peer_id` | 84 | decode, encode, from_bytes, to_vec |
+| `add` | 128 | new, from_slice, to_vec |
+| `get` | 137 | new, from_slice, list |
+| `remove` | 152 | new, from_slice, list |
+| `list` | 160 | get, list, add, new, from_slice |
+| `search` | 177 | get, add, list |
+| `set_nickname` | 200 | get, add |
+| `set_local_nickname` | 216 | get, add, parse_str |
+| `update_last_seen` | 232 | get, count, add, parse_str |
+| `update_last_known_device_id` | 248 | get, count, add, parse_str |
+| `count` | 270 | count, new, now |
+| `flush` | 274 | count, new, now |
+| `verify_integrity` | 281 | count, new, now |
+| `current_timestamp` | 300 | new, now |
+| `make_manager` | 313 | new, from_str |
+| `contact_new_has_no_last_known_device_id` | 319 | new, from_str |
+| `update_last_known_device_id_persists_and_is_readable` | 325 | new, from_str |
+| `update_last_known_device_id_can_clear` | 344 | new, from_str |
+| `contact_roundtrips_through_serde_with_default_device_id` | 358 | new, from_str |
+| `update_last_known_device_id_trims_valid_uuid` | 369 | new |
+| `update_last_known_device_id_ignores_invalid_values` | 388 | new |
+
+### Imports
+- `use crate::IronCoreError`
+- `use crate::store::backend::MemoryStorage`
+- `use crate::store::backend::StorageBackend`
+- `use crate::store::history::HistoryManager`
+- `use serde::{Deserialize, Serialize}`
+- `use std::sync::Arc`
+- `use super::*`
+---
+
 ## core/src/transport/diagnostics.rs (1 chunks, 177 lines)
 Function `HEAVY_LIFT_LIBP2P_UPGRADE_001` not found in REPO_MAP chunks. Full file listing below.
 
@@ -480,6 +893,61 @@ core/src/transport/escalation.rs: Defines 6 types: EscalationPolicy, Default, Es
 - `use super::*`
 - `use thiserror::Error`
 - `use tracing::debug`
+---
+
+## core/src/relay/findmy.rs (1 chunks, 463 lines)
+Function `HEAVY_LIFT_LIBP2P_UPGRADE_001` not found in REPO_MAP chunks. Full file listing below.
+
+### Summary
+core/src/relay/findmy.rs: Defines 9 types: FindMyConfig, Default, FindMyConfig, WakeUpPayload, WakeUpPayload; 31 functions; 4 imports
+
+### Structs/Classes
+- Default
+- FindMyBeaconManager
+- FindMyConfig
+- FindMyError
+- WakeUpPayload
+
+### Functions
+| Function | Line | Calls Out To |
+|----------|------|-------------|
+| `default` | 23 |  |
+| `new` | 34 |  |
+| `with_key` | 43 |  |
+| `with_interval` | 49 |  |
+| `new` | 68 | new |
+| `encode_wakeup` | 101 | new |
+| `decode_wakeup` | 142 | new |
+| `is_our_wakeup` | 178 |  |
+| `new` | 198 |  |
+| `should_broadcast` | 206 |  |
+| `generate_beacon` | 220 | default, new |
+| `process_beacon` | 238 | default, new |
+| `is_our_beacon` | 249 | default, new |
+| `default` | 261 | default, new |
+| `test_key` | 273 | new |
+| `test_wakeup_payload_creation` | 279 | new |
+| `test_encode_decode_roundtrip` | 287 | new |
+| `test_encode_decode_message_flag_false` | 301 | new |
+| `test_encode_produces_22_bytes` | 312 | new |
+| `test_is_our_wakeup_match` | 321 | new |
+| `test_is_our_wakeup_no_match` | 333 | new |
+| `test_is_our_wakeup_invalid_length` | 346 | new |
+| `test_beacon_manager_creation` | 357 | new |
+| `test_beacon_manager_should_broadcast` | 366 | new |
+| `test_beacon_manager_generate_beacon` | 378 | default, new |
+| `test_beacon_manager_process_beacon` | 390 | default, new |
+| `test_beacon_manager_is_our_beacon` | 409 | default, new |
+| `test_find_my_config_default` | 426 | default, new |
+| `test_find_my_config_builder` | 434 | new |
+| `test_different_keys_produce_different_output` | 444 | new |
+| `test_beacon_missing_key_error` | 456 | new |
+
+### Imports
+- `use blake3::Hasher`
+- `use serde::{Deserialize, Serialize}`
+- `use super::*`
+- `use thiserror::Error`
 ---
 
 ## core/src/transport/ble/gatt.rs (1 chunks, 563 lines)
@@ -629,6 +1097,120 @@ core/src/transport/health.rs: Defines 10 types: ConnectionState, ConnectionStats
 - `use web_time::{SystemTime, UNIX_EPOCH}`
 ---
 
+## cli/src/history.rs (2 chunks, 322 lines)
+Function `HEAVY_LIFT_LIBP2P_UPGRADE_001` not found in REPO_MAP chunks. Full file listing below.
+
+### Summary
+cli/src/history.rs: Defines 6 types: MessageRecord, Direction, MessageRecord, MessageHistory, MessageHistory; 19 functions; 6 imports cli/src/history.rs: Defines 6 types: MessageRecord, Direction, MessageRecord, MessageHistory, MessageHistory; 19 functions; 6 imports
+
+### Structs/Classes
+- Direction
+- HistoryStats
+- MessageHistory
+- MessageRecord
+
+### Functions
+| Function | Line | Calls Out To |
+|----------|------|-------------|
+| `new_sent` | 42 | default, new_v4, from_timestamp |
+| `new_received` | 53 | default, new_v4, to_vec, from_timestamp |
+| `formatted_time` | 65 | default, from_slice, to_vec, from_timestamp |
+| `peer` | 70 | default, from_slice, to_vec |
+| `open` | 85 | default, new, from_slice, to_vec |
+| `add` | 96 | new, from_slice, to_vec |
+| `get` | 111 | new, recent, from_slice |
+| `recent` | 123 | recent, new, from_slice |
+| `conversation` | 149 | get, recent, new, from_slice |
+| `search` | 154 | get, add, new, from_slice |
+| `count` | 176 | get, new, add, from_slice |
+| `count_with_peer` | 182 | get, new, add, from_slice |
+| `mark_delivered` | 198 | get, add, new, default, from_slice |
+| `clear` | 208 | default, new, from_slice |
+| `clear_conversation` | 215 | default, new, from_slice |
+| `stats` | 236 | default, from_slice, now |
+| `current_timestamp` | 273 | now, open, new_sent, new_received, tempdir |
+| `test_message_record` | 286 | new_sent, new_received, tempdir, open |
+| `test_message_history` | 295 | new_sent, new_received, tempdir, open |
+| `new_sent` | 42 | from_timestamp, new_v4, default |
+| `new_received` | 53 | to_vec, from_timestamp, new_v4, default |
+| `formatted_time` | 65 | from_slice, to_vec, from_timestamp, default |
+| `peer` | 70 | from_slice, to_vec, default |
+| `open` | 85 | from_slice, to_vec, new, default |
+| `add` | 96 | new, to_vec, from_slice |
+| `get` | 111 | new, from_slice, recent |
+| `recent` | 123 | new, from_slice, recent |
+| `conversation` | 149 | new, from_slice, get, recent |
+| `search` | 154 | new, from_slice, add, get |
+| `count` | 176 | new, from_slice, add, get |
+| `count_with_peer` | 182 | new, from_slice, add, get |
+| `mark_delivered` | 198 | new, get, from_slice, add, default |
+| `clear` | 208 | new, from_slice, default |
+| `clear_conversation` | 215 | new, from_slice, default |
+| `stats` | 236 | from_slice, now, default |
+| `current_timestamp` | 273 | new_received, open, new_sent, now, tempdir |
+| `test_message_record` | 286 | new_received, tempdir, open, new_sent |
+| `test_message_history` | 295 | new_received, tempdir, open, new_sent |
+
+### Imports
+- `use anyhow::{Context, Result}`
+- `use chrono::{DateTime, Utc}`
+- `use serde::{Deserialize, Serialize}`
+- `use sled::Db`
+- `use std::path::PathBuf`
+- `use super::*`
+---
+
+## core/src/store/history.rs (1 chunks, 515 lines)
+Function `HEAVY_LIFT_LIBP2P_UPGRADE_001` not found in REPO_MAP chunks. Full file listing below.
+
+### Summary
+core/src/store/history.rs: Defines 7 types: MessageDirection, MessageRecord, MessageRecord, MessageRecord, HistoryStats; 26 functions; 6 imports
+
+### Structs/Classes
+- HistoryManager
+- HistoryStats
+- MessageDirection
+- MessageRecord
+
+### Functions
+| Function | Line | Calls Out To |
+|----------|------|-------------|
+| `adjust_legacy_timestamps` | 34 | new_v4, now |
+| `new_sent` | 43 | new_v4, now |
+| `new_received` | 57 | new_v4, to_vec, now |
+| `current_timestamp` | 72 | to_vec, from_slice, now |
+| `new` | 94 | recent_internal, from_slice, to_vec |
+| `backend` | 99 | recent_internal, from_slice, to_vec |
+| `add` | 102 | new, recent_internal, from_slice, to_vec |
+| `get` | 111 | new, recent_internal, from_slice |
+| `recent` | 126 | recent_internal, new, from_slice |
+| `recent_including_hidden` | 137 | Reverse, recent_internal, new, from_slice |
+| `recent_internal` | 144 | recent, Reverse, new, from_slice |
+| `conversation` | 185 | recent, from_slice, to_vec |
+| `unhide_messages_for_peer` | 195 | new, from_slice, to_vec |
+| `hide_messages_for_peer` | 219 | new, Reverse, from_slice, to_vec |
+| `search` | 241 | Reverse, new, from_slice |
+| `remove_conversation` | 270 | get, add, from_slice |
+| `mark_delivered` | 291 | get, add, default, from_slice |
+| `clear` | 306 | default, from_slice |
+| `delete` | 320 | default, from_slice |
+| `stats` | 328 | default, from_slice |
+| `count` | 353 | from_slice |
+| `enforce_retention` | 357 | from_slice |
+| `prune_before` | 388 | new, from_slice |
+| `flush` | 409 | new |
+| `test_case_insensitive_peer_id_matching` | 421 | new |
+| `test_remove_conversation_case_insensitive` | 471 | new |
+
+### Imports
+- `use crate::IronCoreError`
+- `use crate::store::backend::MemoryStorage`
+- `use crate::store::backend::StorageBackend`
+- `use serde::{Deserialize, Serialize}`
+- `use std::sync::Arc`
+- `use super::*`
+---
+
 ## core/src/transport/internet.rs (1 chunks, 903 lines)
 Function `HEAVY_LIFT_LIBP2P_UPGRADE_001` not found in REPO_MAP chunks. Full file listing below.
 
@@ -767,6 +1349,92 @@ core/src/transport/ble/l2cap.rs: Defines 15 types: ProtocolServiceMultiplexer, P
 - `use serde::{Deserialize, Serialize}`
 - `use super::*`
 - `use thiserror::Error`
+---
+
+## cli/src/ledger.rs (2 chunks, 550 lines)
+Function `HEAVY_LIFT_LIBP2P_UPGRADE_001` not found in REPO_MAP chunks. Full file listing below.
+
+### Summary
+cli/src/ledger.rs: Defines 5 types: LedgerEntry, LedgerEntry, ConnectionLedger, Default, ConnectionLedger; 27 functions; 6 imports cli/src/ledger.rs: Defines 5 types: LedgerEntry, LedgerEntry, ConnectionLedger, Default, ConnectionLedger; 27 functions; 6 imports
+
+### Structs/Classes
+- ConnectionLedger
+- Default
+- LedgerEntry
+
+### Functions
+| Function | Line | Calls Out To |
+|----------|------|-------------|
+| `new` | 59 | new, now |
+| `record_success` | 85 | min, now |
+| `record_failure` | 117 | min, now |
+| `should_attempt` | 135 | from_str, new, now, read_to_string |
+| `add_topic` | 145 | default, new, from_str, read_to_string |
+| `default` | 166 | now, write, new, default, to_string_pretty, from_str, read_to_string |
+| `load` | 177 | now, write, default, to_string_pretty, from_str, read_to_string |
+| `save` | 197 | to_string_pretty, write, new, now |
+| `add_bootstrap` | 213 | new |
+| `record_connection` | 235 | new |
+| `record_topic` | 251 |  |
+| `record_failure` | 259 |  |
+| `dialable_addresses` | 273 | now |
+| `all_known_topics` | 289 | now |
+| `find_by_peer_id` | 301 | now |
+| `to_shared_entries` | 312 | new, now |
+| `merge_shared_entries` | 336 | new |
+| `summary` | 390 |  |
+| `strip_peer_id` | 413 |  |
+| `extract_ip_port` | 422 |  |
+| `test_strip_peer_id` | 448 | new |
+| `test_extract_ip_port` | 460 | new |
+| `test_ledger_entry_backoff` | 472 | new |
+| `test_ledger_entry_backoff_overflow_safety` | 496 | default, new |
+| `test_ledger_entry_peer_id_tracking` | 508 | default, new |
+| `test_ledger_crud` | 525 | default |
+| `test_ledger_topic_tracking` | 540 | default |
+| `new` | 59 | new, now |
+| `record_success` | 85 | min, now |
+| `record_failure` | 117 | min, now |
+| `should_attempt` | 135 | new, read_to_string, from_str, now |
+| `add_topic` | 145 | new, read_to_string, from_str, default |
+| `default` | 166 | new, read_to_string, now, to_string_pretty, write, from_str, default |
+| `load` | 177 | read_to_string, now, to_string_pretty, write, from_str, default |
+| `save` | 197 | new, write, now, to_string_pretty |
+| `add_bootstrap` | 213 | new |
+| `record_connection` | 235 | new |
+| `record_topic` | 251 |  |
+| `record_failure` | 259 |  |
+| `dialable_addresses` | 273 | now |
+| `all_known_topics` | 289 | now |
+| `find_by_peer_id` | 301 | now |
+| `to_shared_entries` | 312 | new, now |
+| `merge_shared_entries` | 336 | new |
+| `summary` | 390 |  |
+| `strip_peer_id` | 413 |  |
+| `extract_ip_port` | 422 |  |
+| `test_strip_peer_id` | 448 | new |
+| `test_extract_ip_port` | 460 | new |
+| `test_ledger_entry_backoff` | 472 | new |
+| `test_ledger_entry_backoff_overflow_safety` | 496 | new, default |
+| `test_ledger_entry_peer_id_tracking` | 508 | new, default |
+| `test_ledger_crud` | 525 | default |
+| `test_ledger_topic_tracking` | 540 | default |
+
+### Imports
+- `use anyhow::{Context, Result}`
+- `use serde::{Deserialize, Serialize}`
+- `use std::collections::HashMap`
+- `use std::path::Path`
+- `use std::time::{SystemTime, UNIX_EPOCH}`
+- `use super::*`
+---
+
+## cli/src/lib.rs (2 chunks, 18 lines)
+Function `HEAVY_LIFT_LIBP2P_UPGRADE_001` not found in REPO_MAP chunks. Full file listing below.
+
+### Summary
+cli/src/lib.rs: structural extraction cli/src/lib.rs: structural extraction
+
 ---
 
 ## core/src/transport/manager.rs (1 chunks, 1415 lines)
@@ -1121,6 +1789,114 @@ core/src/transport/peer_broadcast.rs: Defines 4 types: PeerBroadcaster, PeerInfo
 - `use web_time::{SystemTime, UNIX_EPOCH}`
 ---
 
+## core/src/relay/peer_exchange.rs (1 chunks, 489 lines)
+Function `HEAVY_LIFT_LIBP2P_UPGRADE_001` not found in REPO_MAP chunks. Full file listing below.
+
+### Summary
+core/src/relay/peer_exchange.rs: Defines 6 types: PeerExchangeError, RelayPeerInfo, RelayPeerInfo, PeerExchangeManager, PeerExchangeManager; 42 functions; 5 imports
+
+### Structs/Classes
+- Default
+- PeerExchangeError
+- PeerExchangeManager
+- RelayPeerInfo
+
+### Functions
+| Function | Line | Calls Out To |
+|----------|------|-------------|
+| `new` | 34 | now |
+| `mark_seen` | 50 | now |
+| `record_success` | 59 | new |
+| `record_failure` | 64 | new |
+| `to_message` | 69 | new |
+| `from_message` | 80 | new |
+| `new` | 103 | new |
+| `with_config` | 112 | add_peer, new |
+| `add_peer` | 121 | add_peer, now |
+| `get_peer` | 138 | add_peer, now |
+| `get_all_peers` | 143 | add_peer, now |
+| `get_peers_by_reliability` | 148 | add_peer, now |
+| `merge_peer_list` | 159 | add_peer, now, merge_peer_list |
+| `prune_stale` | 166 | get_peers_by_reliability, now, merge_peer_list |
+| `record_success` | 177 | new, get_peers_by_reliability, merge_peer_list |
+| `record_failure` | 185 | new, get_peers_by_reliability, merge_peer_list |
+| `peer_count` | 192 | full_relay, new, get_peers_by_reliability, merge_peer_list |
+| `has_peer` | 197 | full_relay, new, get_peers_by_reliability, merge_peer_list |
+| `clear` | 202 | full_relay, new, get_peers_by_reliability, merge_peer_list |
+| `exchange_peers` | 207 | get_peers_by_reliability, sleep, full_relay, new, merge_peer_list, from_millis |
+| `default` | 220 | from_millis, full_relay, sleep, new |
+| `test_peer` | 232 | from_millis, full_relay, sleep, new |
+| `test_relay_peer_info_creation` | 242 | from_millis, sleep |
+| `test_mark_seen` | 250 | from_millis, sleep |
+| `test_record_success` | 261 | new, from_message |
+| `test_record_failure` | 271 | new, from_message |
+| `test_score_bounds` | 281 | new, from_message |
+| `test_peer_message_conversion` | 298 | new, with_config, from_message |
+| `test_peer_exchange_manager_creation` | 310 | new, with_config |
+| `test_add_peer` | 317 | new, with_config |
+| `test_add_peer_duplicate` | 327 | new, with_config |
+| `test_add_peer_capacity` | 341 | new, with_config |
+| `test_get_peer` | 352 | new |
+| `test_get_all_peers` | 364 | new |
+| `test_get_peers_by_reliability` | 376 | new |
+| `test_merge_peer_list` | 399 | from_millis, sleep, new, with_config |
+| `test_record_success_2` | 411 | from_millis, sleep, new, with_config |
+| `test_record_failure_2` | 423 | from_millis, sleep, new, with_config |
+| `test_prune_stale` | 435 | from_millis, sleep, new, with_config |
+| `test_clear` | 448 | new |
+| `test_exchange_peers` | 461 | new |
+| `test_exchange_peers_truncation` | 474 | new |
+
+### Imports
+- `use std::collections::HashMap`
+- `use super::*`
+- `use super::protocol::{RelayCapability, RelayPeerInfoMessage}`
+- `use thiserror::Error`
+- `use web_time::{SystemTime, UNIX_EPOCH}`
+---
+
+## core/src/relay/protocol.rs (1 chunks, 379 lines)
+Function `HEAVY_LIFT_LIBP2P_UPGRADE_001` not found in REPO_MAP chunks. Full file listing below.
+
+### Summary
+core/src/relay/protocol.rs: Defines 7 types: RelayCapability, RelayCapability, Default, RelayMessage, RelayPeerInfoMessage; 19 functions; 3 imports
+
+### Structs/Classes
+- Default
+- RelayCapability
+- RelayMessage
+- RelayPeerInfoMessage
+- RelayProtocolError
+
+### Functions
+| Function | Line | Calls Out To |
+|----------|------|-------------|
+| `full_relay` | 21 | full_relay |
+| `mobile` | 31 | full_relay |
+| `is_relay` | 41 | full_relay |
+| `is_store` | 46 | full_relay |
+| `default` | 52 | full_relay |
+| `to_bytes` | 166 | serialize, SerializationError, full_relay, DeserializationError, deserialize |
+| `from_bytes` | 171 | mobile, full_relay, DeserializationError, deserialize |
+| `message_type` | 177 | mobile, full_relay |
+| `test_capability_full_relay` | 206 | mobile, from_bytes, full_relay |
+| `test_capability_mobile` | 217 | mobile, from_bytes, full_relay |
+| `test_relay_message_handshake_serialization` | 228 | from_bytes, full_relay |
+| `test_relay_message_store_request_serialization` | 242 | full_relay, from_bytes |
+| `test_relay_message_pull_request_serialization` | 260 | full_relay, from_bytes |
+| `test_relay_message_peer_exchange_serialization` | 282 | from_bytes, full_relay |
+| `test_relay_message_disconnect_serialization` | 306 | from_bytes |
+| `test_relay_message_ping_pong` | 323 | from_bytes |
+| `test_relay_message_store_ack` | 338 | from_bytes |
+| `test_relay_message_pull_response` | 357 | from_bytes |
+| `test_invalid_deserialization` | 374 | from_bytes |
+
+### Imports
+- `use serde::{Deserialize, Serialize}`
+- `use super::*`
+- `use thiserror::Error`
+---
+
 ## core/src/transport/reflection.rs (1 chunks, 360 lines)
 Function `HEAVY_LIFT_LIBP2P_UPGRADE_001` not found in REPO_MAP chunks. Full file listing below.
 
@@ -1369,6 +2145,120 @@ core/src/transport/ble/scanner.rs: Defines 13 types: BleScanConfig, Default, Ble
 - `use web_time::{SystemTime, UNIX_EPOCH}`
 ---
 
+## cli/src/server.rs (2 chunks, 1070 lines)
+Function `HEAVY_LIFT_LIBP2P_UPGRADE_001` not found in REPO_MAP chunks. Full file listing below.
+
+### Summary
+cli/src/server.rs: Defines 8 types: UiEvent, UiOutbound, UiCommand, WebContext, Clone; 5 functions; 9 imports cli/src/server.rs: Defines 8 types: UiEvent, UiOutbound, UiCommand, WebContext, Clone; 5 functions; 9 imports
+
+### Structs/Classes
+- Clone
+- UiCommand
+- UiEvent
+- UiOutbound
+- WebContext
+- WsSender
+- WsSenderList
+- std
+
+### Functions
+| Function | Line | Calls Out To |
+|----------|------|-------------|
+| `clone` | 131 | new, clone |
+| `fmt` | 147 | html, new, end |
+| `start` | 168 | ws, html, new, path, end |
+| `handle_ws_connection` | 231 | to_string, Lagged, spawn, text, Legacy, JsonRpc |
+| `handle_jsonrpc_request` | 320 | from_str |
+| `clone` | 131 | new, clone |
+| `fmt` | 147 | new, end, html |
+| `start` | 168 | new, end, path, html, ws |
+| `handle_ws_connection` | 231 | Lagged, Legacy, JsonRpc, to_string, text, spawn |
+| `handle_jsonrpc_request` | 320 | from_str |
+
+### Imports
+- `use futures::StreamExt`
+- `use futures_util::SinkExt`
+- `use libp2p::PeerId`
+- `use serde::{Deserialize, Serialize}`
+- `use std::collections::HashMap`
+- `use std::sync::Arc`
+- `use std::time::Instant`
+- `use tokio::sync::{broadcast, mpsc, Mutex}`
+- `use warp::Filter`
+---
+
+## core/src/abuse/spam_detection.rs (1 chunks, 498 lines)
+Function `HEAVY_LIFT_LIBP2P_UPGRADE_001` not found in REPO_MAP chunks. Full file listing below.
+
+### Summary
+core/src/abuse/spam_detection.rs: Defines 8 types: SpamDetectionConfig, Default, SpamDetectionResult, PeerMessageTrack, PeerMessageTrack; 23 functions; 9 imports
+
+### Structs/Classes
+- Default
+- PeerMessageTrack
+- SpamDetectionConfig
+- SpamDetectionEngine
+- SpamDetectionResult
+- SpamSignal
+
+### Functions
+| Function | Line | Calls Out To |
+|----------|------|-------------|
+| `default` | 43 | new |
+| `new` | 91 | new |
+| `new` | 119 | new |
+| `new_heuristics_only` | 135 | new |
+| `content_fingerprint` | 147 | new |
+| `detect_spam` | 157 | from_secs, new, now |
+| `spam_score` | 268 | detect_spam |
+| `record_spam_signal` | 279 | content_fingerprint |
+| `record_outbound_message` | 304 | content_fingerprint, from_secs, now |
+| `is_content_suspicious` | 350 | default, new_heuristics_only, new |
+| `prune_stale_peers` | 355 | default, new_heuristics_only, new |
+| `make_engine` | 389 | default, content_fingerprint, new_heuristics_only, new |
+| `make_heuristics_only_engine` | 396 | default, content_fingerprint, new_heuristics_only |
+| `test_default_config` | 402 | default, content_fingerprint |
+| `test_no_contacts_is_not_spam` | 409 | content_fingerprint |
+| `test_heuristics_only_no_contacts_is_not_spam` | 417 | content_fingerprint |
+| `test_content_fingerprint_deterministic` | 425 | content_fingerprint |
+| `test_record_spam_signal_accumulates` | 437 |  |
+| `test_record_outbound_message` | 446 |  |
+| `test_record_outbound_cold_contact` | 456 |  |
+| `test_content_suspicious_length` | 465 |  |
+| `test_prune_stale_peers` | 474 |  |
+| `test_heuristics_only_flooding_detection` | 487 |  |
+
+### Imports
+- `use crate::store::backend::MemoryStorage`
+- `use crate::store::blocked::BlockedManager`
+- `use crate::store::contacts::ContactManager`
+- `use parking_lot::RwLock`
+- `use std::collections::HashMap`
+- `use std::sync::Arc`
+- `use std::time::Instant`
+- `use super::*`
+---
+
+## cli/src/transport_api.rs (2 chunks, 33 lines)
+Function `HEAVY_LIFT_LIBP2P_UPGRADE_001` not found in REPO_MAP chunks. Full file listing below.
+
+### Summary
+cli/src/transport_api.rs: Defines 4 types: RegisterPeerRequest, TransportError, std, warp; 1 functions cli/src/transport_api.rs: Defines 4 types: RegisterPeerRequest, TransportError, std, warp; 1 functions
+
+### Structs/Classes
+- RegisterPeerRequest
+- TransportError
+- std
+- warp
+
+### Functions
+| Function | Line | Calls Out To |
+|----------|------|-------------|
+| `fmt` | 23 |  |
+| `fmt` | 23 |  |
+
+---
+
 ## core/src/transport/websocket.rs (1 chunks, 306 lines)
 Function `HEAVY_LIFT_LIBP2P_UPGRADE_001` not found in REPO_MAP chunks. Full file listing below.
 
@@ -1494,6 +2384,40 @@ core/src/transport/wifi_aware.rs: Defines 12 types: WifiAwareError, WifiAwareCon
 - `use tracing::{info, warn}`
 ---
 
+## cli/src/ble_mesh.rs (1 chunks, 295 lines)
+Function `HEAVY_LIFT_LIBP2P_UPGRADE_001` not found in REPO_MAP chunks. Full file listing below.
+
+### Summary
+cli/src/ble_mesh.rs: 8 functions; 13 imports
+
+### Functions
+| Function | Line | Calls Out To |
+|----------|------|-------------|
+| `scm_service_uuid` | 26 | from_u128, to_value, from_bytes, Legacy, JsonRpc |
+| `scm_notify_uuid` | 30 | Legacy, to_value, from_bytes, JsonRpc |
+| `decode_ble_payload_for_ui` | 36 | Legacy, to_value, from_bytes, JsonRpc |
+| `push_message_to_ui` | 58 | Legacy, to_value, JsonRpc |
+| `subscribe_ingress_for_peripheral` | 75 |  |
+| `run_ble_central_ingress` | 128 | new |
+| `run_ble_peripheral_advertising` | 225 | new, sleep, from_secs |
+| `decode_rejects_short_buffer` | 245 | new |
+
+### Imports
+- `use btleplug::api::bleuuid::uuid_from_u16`
+- `use btleplug::platform::{Manager, Peripheral}`
+- `use crate::server::{UiEvent, UiOutbound}`
+- `use futures_util::StreamExt`
+- `use scmessenger_core::IronCore`
+- `use scmessenger_core::IronCore as CoreIron`
+- `use scmessenger_core::drift::frame::{DriftFrame, FrameType}`
+- `use scmessenger_core::wasm_support::rpc::{notif_message_received, MessageReceivedParams}`
+- `use std::collections::HashSet`
+- `use std::sync::Arc`
+- `use super::*`
+- `use tokio::sync::Mutex`
+- `use uuid::Uuid`
+---
+
 ## cli/src/bootstrap.rs (1 chunks, 219 lines)
 Function `HEAVY_LIFT_LIBP2P_UPGRADE_001` not found in REPO_MAP chunks. Full file listing below.
 
@@ -1517,6 +2441,510 @@ cli/src/bootstrap.rs: 10 functions; 2 imports
 ### Imports
 - `use crate::ledger`
 - `use super::*`
+---
+
+## cli/src/transport_bridge.rs (1 chunks, 386 lines)
+Function `HEAVY_LIFT_LIBP2P_UPGRADE_001` not found in REPO_MAP chunks. Full file listing below.
+
+### Summary
+cli/src/transport_bridge.rs: Defines 5 types: TransportPath, serde, TransportBridge, Default, TransportBridge; 26 functions; 7 imports
+
+### Structs/Classes
+- Default
+- TransportBridge
+- TransportPath
+- serde
+
+### Functions
+| Function | Line | Calls Out To |
+|----------|------|-------------|
+| `serialize` | 22 | new, detect_cli_capabilities |
+| `default` | 48 | new, detect_cli_capabilities, get_wasm_transports |
+| `new` | 55 | new, is_compatible_path, find_cli_bridge_transport, get_wasm_transports, detect_cli_capabilities |
+| `detect_cli_capabilities` | 63 | new, is_compatible_path, estimate_path_latency, find_cli_bridge_transport, get_wasm_transports, get_path_reliability |
+| `register_peer` | 75 | new, is_compatible_path, estimate_path_latency, find_cli_bridge_transport, get_wasm_transports, get_path_reliability |
+| `find_all_paths` | 86 | new, is_compatible_path, estimate_path_latency, find_cli_bridge_transport, get_wasm_transports, get_path_reliability, find_all_paths |
+| `find_best_path` | 129 | find_all_paths |
+| `get_wasm_transports` | 135 |  |
+| `is_compatible_path` | 143 |  |
+| `find_cli_bridge_transport` | 149 | new, find_all_paths |
+| `get_path_reliability` | 159 | new, find_all_paths |
+| `estimate_path_latency` | 177 | new, find_all_paths |
+| `get_available_paths` | 195 | new, find_all_paths |
+| `get_cli_capabilities` | 209 |  |
+| `get_peer_capabilities` | 214 |  |
+| `get_available_peer_capabilities` | 221 | get_peer_capabilities |
+| `register_peer_capabilities` | 243 | get_peer_capabilities, find_all_paths |
+| `can_forward_for_wasm` | 252 | get_peer_capabilities, find_all_paths |
+| `get_forwarding_capability` | 258 | get_peer_capabilities, find_all_paths |
+| `can_reach_destination` | 270 | new, get_peer_capabilities, ed25519_from_bytes, find_all_paths |
+| `get_best_forwarding_path` | 285 | new, ed25519_from_bytes, find_all_paths |
+| `create_test_peer_id` | 300 | new, ed25519_from_bytes |
+| `test_transport_bridge_creation` | 315 | new |
+| `test_peer_registration` | 327 | new |
+| `test_path_finding` | 344 | new |
+| `test_path_scoring` | 370 | new |
+
+### Imports
+- `use libp2p::PeerId`
+- `use libp2p::identity::Keypair`
+- `use scmessenger_core::transport::abstraction::TransportType`
+- `use serde::ser::SerializeStruct`
+- `use std::collections::HashMap`
+- `use super::*`
+---
+
+## mobile/src/lib.rs (1 chunks, 77 lines)
+Function `HEAVY_LIFT_LIBP2P_UPGRADE_001` not found in REPO_MAP chunks. Full file listing below.
+
+### Summary
+mobile/src/lib.rs: 4 functions; 2 imports
+
+### Functions
+| Function | Line | Calls Out To |
+|----------|------|-------------|
+| `test_mobile_bindings_lifecycle` | 12 | new |
+| `test_mobile_identity` | 24 | new |
+| `test_mobile_messaging` | 41 | new |
+| `test_swarm_bridge_creation` | 66 | new |
+
+### Imports
+- `use scmessenger_core::IronCore`
+- `use scmessenger_core::SwarmBridge`
+---
+
+## core/src/relay/invite.rs (1 chunks, 498 lines)
+Function `HEAVY_LIFT_LIBP2P_UPGRADE_001` not found in REPO_MAP chunks. Full file listing below.
+
+### Summary
+core/src/relay/invite.rs: Defines 8 types: InviteError, InviteToken, InviteToken, InviteChain, InviteChain; 47 functions; 5 imports
+
+### Structs/Classes
+- Default
+- InviteChain
+- InviteError
+- InviteSystem
+- InviteToken
+
+### Functions
+| Function | Line | Calls Out To |
+|----------|------|-------------|
+| `new` | 44 | new, now |
+| `with_expiry` | 62 | deserialize, new, now, serialize, SerializationError |
+| `with_metadata` | 68 | deserialize, new, now, serialize, SerializationError |
+| `with_signature` | 74 | deserialize, new, now, serialize, SerializationError |
+| `is_valid` | 80 | deserialize, new, now, serialize, SerializationError |
+| `get_signable_data` | 90 | deserialize, new, now, serialize, SerializationError |
+| `to_bytes` | 105 | deserialize, new, now, serialize, SerializationError |
+| `from_bytes` | 110 | new, SerializationError, deserialize, now |
+| `new` | 124 | new, now, get_inviter |
+| `record_invite` | 131 | get_trust_chain, now, get_inviter |
+| `get_inviter` | 142 | get_trust_chain, get_inviter |
+| `get_invitees` | 152 | get_trust_chain, get_inviter |
+| `get_trust_chain` | 166 | get_trust_chain, new, get_inviter |
+| `distance_from_root` | 179 | get_trust_chain, new |
+| `invite_count` | 184 | new |
+| `clear` | 189 | new |
+| `get_direct_invitations` | 194 | new |
+| `default` | 209 | new |
+| `new` | 226 | new |
+| `create_invite_token` | 235 | new |
+| `record_invitation` | 240 | new |
+| `get_trust_chain` | 247 | new |
+| `get_invitees` | 252 | new |
+| `get_inviter` | 257 | new |
+| `is_direct_connection` | 262 | new |
+| `get_connected_peers` | 270 | new |
+| `test_token` | 288 | sleep, new, from_bytes, from_millis |
+| `test_invite_token_creation` | 294 | sleep, new, from_bytes, from_millis |
+| `test_invite_token_with_expiry` | 302 | sleep, new, from_bytes, from_millis |
+| `test_invite_token_with_metadata` | 308 | sleep, new, from_bytes, from_millis |
+| `test_invite_token_validity` | 314 | sleep, new, from_bytes, from_millis |
+| `test_invite_token_expiry_check` | 323 | sleep, new, from_bytes, from_millis |
+| `test_invite_token_serialization` | 331 | new, from_bytes |
+| `test_invite_chain_creation` | 342 | new |
+| `test_record_invite` | 348 | new |
+| `test_get_invitees` | 357 | new |
+| `test_get_trust_chain` | 373 | new |
+| `test_distance_from_root` | 385 | new |
+| `test_get_direct_invitations` | 402 | new |
+| `test_invite_system_creation` | 416 | new |
+| `test_create_invite_token` | 422 | new |
+| `test_record_invitation` | 431 | new |
+| `test_get_inviter` | 440 | new |
+| `test_is_direct_connection` | 455 | new |
+| `test_get_connected_peers` | 464 | new |
+| `test_get_trust_chain_via_system` | 476 | new |
+| `test_chain_clear` | 490 | new |
+
+### Imports
+- `use serde::{Deserialize, Serialize}`
+- `use std::collections::HashMap`
+- `use super::*`
+- `use thiserror::Error`
+- `use web_time::{SystemTime, UNIX_EPOCH}`
+---
+
+## core/src/relay/delegate_prewarm.rs (1 chunks, 426 lines)
+Function `HEAVY_LIFT_LIBP2P_UPGRADE_001` not found in REPO_MAP chunks. Full file listing below.
+
+### Summary
+core/src/relay/delegate_prewarm.rs: Defines 10 types: DelegateInfo, DelegateInfo, WarmConnection, WarmConnection, DelegatePrewarmManager; 26 functions; 5 imports
+
+### Structs/Classes
+- Default
+- DelegateInfo
+- DelegatePrewarmConfig
+- DelegatePrewarmManager
+- DelegatePrewarmStats
+- WarmConnection
+- std
+
+### Functions
+| Function | Line | Calls Out To |
+|----------|------|-------------|
+| `new` | 39 | now |
+| `update` | 52 | now |
+| `has_capacity` | 59 | now |
+| `score` | 64 | now |
+| `new` | 88 | now |
+| `update_keepalive` | 100 | now |
+| `mark_registered` | 105 | from_secs |
+| `is_stale` | 110 | from_secs |
+| `default` | 148 | select_best_delegates, from_secs, Vacant, default, new, now |
+| `new` | 162 | select_best_delegates, Vacant, default, new, now |
+| `with_defaults` | 173 | new, select_best_delegates, default, Vacant |
+| `add_delegate` | 178 | new, Vacant, select_best_delegates |
+| `prewarm_for_background` | 185 | new, Vacant, select_best_delegates, now |
+| `refresh_delegate_routes` | 215 | new, default, now |
+| `select_best_delegates` | 237 | default |
+| `tick` | 256 | now, default |
+| `stats` | 289 | now |
+| `active_connection_count` | 303 | generate_ed25519, new, from |
+| `registered_delegate_count` | 308 | generate_ed25519, new, from |
+| `fmt` | 330 | generate_ed25519, new, from, with_defaults |
+| `create_test_delegate` | 345 | generate_ed25519, new, from, with_defaults |
+| `test_delegate_creation` | 359 | new, with_defaults, now |
+| `test_delegate_selection` | 366 | new, with_defaults, now |
+| `test_prewarm_for_background` | 380 | new, with_defaults, now |
+| `test_tick_maintenance` | 398 | new, with_defaults, now |
+| `test_stats` | 415 | with_defaults |
+
+### Imports
+- `use libp2p::PeerId`
+- `use libp2p::identity::Keypair`
+- `use std::collections::{HashMap, VecDeque}`
+- `use super::*`
+- `use web_time::{Duration, Instant}`
+---
+
+## cli/src/main.rs (1 chunks, 3659 lines)
+Function `HEAVY_LIFT_LIBP2P_UPGRADE_001` not found in REPO_MAP chunks. Full file listing below.
+
+### Summary
+cli/src/main.rs: Defines 8 types: Cli, Commands, AuditAction, BlockAction, IdentityAction; 33 functions; 15 imports
+
+### Structs/Classes
+- AuditAction
+- BlockAction
+- Cli
+- Commands
+- ConfigAction
+- ContactAction
+- IdentityAction
+- SwarmAction
+
+### Functions
+| Function | Line | Calls Out To |
+|----------|------|-------------|
+| `load_or_create_headless_network_keypair` | 32 | create_dir_all, read, from_protobuf_encoding, generate_ed25519, set_permissions, from_mode, write |
+| `main` | 362 | parse, layer, create_dir_all, hourly, new, non_blocking, try_from_default_env, from, registry, data_dir |
+| `cmd_stop` | 439 | load, stop_node_via_api, is_api_available, with_storage, data_dir |
+| `cmd_init` | 453 | with_storage, load, data_dir |
+| `cmd_identity` | 492 | with_storage, load, write, data_dir |
+| `print_full_identity` | 623 |  |
+| `cmd_contact` | 681 | add_contact_via_api, is_api_available, validate_ed25519_public_key, with_storage, data_dir |
+| `cmd_config` | 924 | with_storage, load, from_str, data_dir |
+| `cmd_history` | 1022 | with_storage, data_dir |
+| `cmd_start` | 1078 | load, bind, is_api_available, with_storage, from, data_dir |
+| `cmd_relay` | 2060 | with_storage, new, data_dir |
+| `cmd_send_offline` | 2493 | is_api_available, new_v4, with_storage, new, now, send_message_via_api, persistent, data_dir |
+| `cmd_status` | 2575 | is_api_available, get_peers_via_api, data_dir, with_storage, is_ble_available |
+| `cmd_mark_sent` | 2678 | with_storage, data_dir |
+| `cmd_history_clear` | 2699 | with_storage, data_dir |
+| `cmd_history_enforce_retention` | 2712 | with_storage, data_dir |
+| `cmd_history_prune_before` | 2729 | with_storage, data_dir |
+| `cmd_block` | 2746 | with_storage, data_dir |
+| `cmd_history_get` | 2852 | with_storage, data_dir |
+| `cmd_history_stats` | 2883 | with_storage, data_dir |
+| `cmd_history_count` | 2910 | with_storage, data_dir |
+| `cmd_history_mark_delivered` | 2919 | with_storage, data_dir |
+| `cmd_history_clear_conversation` | 2935 | with_storage, new, data_dir |
+| `cmd_history_delete` | 2960 | with_storage, new, data_dir |
+| `cmd_test` | 2972 | new |
+| `looks_like_blake3_id` | 3028 | read_dir, remove_file, from_secs, from_timestamp, now |
+| `looks_like_libp2p_peer_id` | 3034 | read_dir, remove_file, from_secs, from_timestamp, now |
+| `find_contact` | 3037 | read_dir, remove_file, from_secs, from_timestamp, now |
+| `format_timestamp` | 3050 | read_dir, remove_file, load, from_secs, from_timestamp, with_storage, now, write, data_dir |
+| `prune_logs` | 3059 | read_dir, remove_file, load, from_secs, with_storage, now, write, data_dir |
+| `cmd_audit` | 3086 | with_storage, load, write, data_dir |
+| `cmd_swarm` | 3129 | get_peers_via_api, is_api_available |
+| `cmd_swarm_stats` | 3135 | get_listeners_via_api, get_peers_via_api, is_api_available |
+
+### Imports
+- `use anyhow::{Context, Result}`
+- `use chrono::{DateTime, Local, Utc}`
+- `use clap::{Parser, Subcommand}`
+- `use colored::*`
+- `use libp2p::{Multiaddr, PeerId}`
+- `use scmessenger_core::IronCore`
+- `use scmessenger_core::message::{decode_envelope, MessageType}`
+- `use scmessenger_core::store::{Contact, ContactManager, MessageDirection, Outbox, QueuedMessage}`
+- `use scmessenger_core::transport::abstraction::TransportType`
+- `use scmessenger_core::transport::{self, SwarmEvent}`
+- `use std::collections::HashMap`
+- `use std::os::unix::fs::PermissionsExt`
+- `use std::sync::Arc`
+- `use tracing_subscriber::prelude::*`
+---
+
+## cli/src/api.rs (1 chunks, 922 lines)
+Function `HEAVY_LIFT_LIBP2P_UPGRADE_001` not found in REPO_MAP chunks. Full file listing below.
+
+### Summary
+cli/src/api.rs: Defines 14 types: SendMessageRequest, SendMessageResponse, AddContactRequest, AddContactResponse, PeerEntry; 24 functions; 7 imports
+
+### Structs/Classes
+- AddContactRequest
+- AddContactResponse
+- ApiContext
+- ConnectionPathStateResponse
+- DriftStatusResponse
+- GetExternalAddressResponse
+- GetHistoryRequest
+- GetHistoryResponse
+- GetListenersResponse
+- GetPeersResponse
+- HistoryMessage
+- PeerEntry
+- SendMessageRequest
+- SendMessageResponse
+
+### Functions
+| Function | Line | Calls Out To |
+|----------|------|-------------|
+| `is_api_available` | 94 | to_bytes, connect, from_slice, to_string, new, builder, from |
+| `send_message_via_api` | 99 | to_bytes, from_slice, to_string, new, builder, from |
+| `add_contact_via_api` | 129 | empty, to_bytes, from_slice, to_string, new, builder, from |
+| `get_peers_via_api` | 166 | empty, to_bytes, from_slice, to_string, new, builder, from |
+| `get_history_via_api` | 181 | empty, to_bytes, from_slice, to_string, new, builder, from, from_utf8_lossy |
+| `get_external_address_via_api` | 203 | empty, to_bytes, from_slice, new, builder, from_utf8_lossy |
+| `get_listeners_via_api` | 226 | empty, to_bytes, from_utf8, from_slice, new, builder |
+| `get_connection_path_state_via_api` | 239 | empty, to_bytes, from_utf8, from_slice, new, builder |
+| `get_drift_state_via_api` | 252 | empty, to_bytes, from_utf8, from_slice, new, builder |
+| `export_diagnostics_via_api` | 264 | empty, spawn, to_bytes, from_utf8, from_millis, new, builder, sleep |
+| `stop_node_via_api` | 283 | empty, spawn, exit, from_millis, new, builder, from, sleep |
+| `handle_request` | 294 | spawn, to_bytes, exit, from_slice, from_millis, builder, from, sleep |
+| `handle_send_message` | 335 | to_bytes, from_slice, to_string, builder, from |
+| `handle_add_contact` | 379 | to_bytes, from_slice, to_string, new, builder, from |
+| `handle_get_peers` | 406 | to_bytes, from_slice, to_string, builder, from |
+| `handle_get_listeners` | 431 | to_bytes, from_slice, to_string, builder, from |
+| `handle_get_history` | 448 | to_bytes, from_slice, to_string, builder, from |
+| `handle_get_external_address` | 487 | from, builder, to_string |
+| `get_connection_path_state` | 513 | now |
+| `export_diagnostics` | 530 | now |
+| `handle_get_connection_path_state` | 563 | from, builder, to_string |
+| `handle_export_diagnostics` | 602 | from, builder |
+| `handle_get_drift_status` | 645 | bind, to_string, new, builder, from |
+| `start_api_server` | 660 | from, new, bind |
+
+### Imports
+- `use anyhow::{Context, Result}`
+- `use hyper::service::{make_service_fn, service_fn}`
+- `use hyper::{Body, Method, Request, Response, Server, StatusCode}`
+- `use serde::{Deserialize, Serialize}`
+- `use std::convert::Infallible`
+- `use std::net::SocketAddr`
+- `use std::sync::Arc`
+---
+
+## wasm/src/lib.rs (1 chunks, 2347 lines)
+Function `HEAVY_LIFT_LIBP2P_UPGRADE_001` not found in REPO_MAP chunks. Full file listing below.
+
+### Summary
+wasm/src/lib.rs: Defines 30 types: DiscoveryMode, MeshSettings, Default, From, MeshSettingsManager; 137 functions; 8 imports
+
+### Structs/Classes
+- Default
+- DiscoveryMode
+- From
+- IronCore
+- IronCoreMode
+- MeshSettings
+- MeshSettingsManager
+- WasmContactManager
+- WasmHistoryManager
+- WasmHistoryStats
+- WasmIdentityInfo
+- WasmMeshSettings
+- WasmMessage
+- WasmNotificationDecision
+- WasmNotificationMessageContext
+- WasmNotificationUiState
+- WasmPreparedMessage
+- WasmRegistrationStateInfo
+- WasmSignatureResult
+
+### Functions
+| Function | Line | Calls Out To |
+|----------|------|-------------|
+| `default` | 50 |  |
+| `from` | 76 | from, from_str, read_to_string |
+| `new` | 110 | from_str, create_dir_all, default, validate, to_string_pretty, read_to_string, from, write |
+| `load` | 113 | from_str, create_dir_all, default, validate, to_string_pretty, read_to_string, from, write |
+| `save` | 130 | set_as_global_default, create_dir_all, validate, new, to_string_pretty, set_once, from, write |
+| `validate` | 149 | set_as_global_default, new, set_once |
+| `init_logging` | 172 | set_as_global_default, new, set_once |
+| `new` | 215 | with_storage, new, default |
+| `with_storage` | 246 | with_storage, new, default |
+| `with_storage` | 277 | new, default |
+| `with_storage_async` | 308 | to_value, default, new, from_value, from |
+| `start` | 329 | from, to_value, from_value |
+| `stop` | 335 | from, to_value, from_value |
+| `is_running` | 341 | from, to_value, from_value |
+| `get_identity_info` | 346 | from, to_value, from_value |
+| `set_iron_core_mode` | 355 | to_value, from_value |
+| `get_iron_core_mode` | 364 | to_value |
+| `set_daemon_socket_url` | 372 | to_value |
+| `get_daemon_socket_url` | 378 | to_value |
+| `initialize_identity` | 390 |  |
+| `initialize_identity_from_daemon` | 417 |  |
+| `get_identity_from_daemon` | 452 | from, to_value |
+| `sign_data` | 475 | from, to_value |
+| `verify_signature` | 483 |  |
+| `prepare_message` | 500 | to_value |
+| `receive_message` | 536 | to_value, clone |
+| `outbox_count` | 554 | clone |
+| `flush_outbox_for_peer` | 561 | clone |
+| `inbox_count` | 566 | clone |
+| `start_swarm` | 574 | clone |
+| `stop_swarm` | 588 |  |
+| `send_prepared_envelope` | 601 | to_value |
+| `get_peers` | 626 | to_value |
+| `get_external_addresses` | 645 | to_value |
+| `get_connection_path_state` | 664 | outbox_count, inbox_count, is_running, new, now, get_connection_path_state |
+| `export_diagnostics` | 690 | outbox_count, inbox_count, is_running, new, now, get_connection_path_state |
+| `subscribe_topic` | 722 |  |
+| `unsubscribe_topic` | 740 |  |
+| `publish_topic` | 758 |  |
+| `dial` | 778 | new |
+| `send_to_all_peers` | 798 | new |
+| `get_listeners` | 838 | to_value |
+| `get_nat_status` | 860 | to_value, from_value, to_string, from_str |
+| `get_drift_state` | 865 | to_value, from_value, to_string, from_str |
+| `get_drift_store_size` | 870 | to_value, from_value, to_string, from_str |
+| `get_audit_log` | 875 | to_value, from_value, to_string, from_str |
+| `get_audit_events_since` | 881 | to_value, from_value, to_string, from_str |
+| `get_peer_reputation` | 887 | to_value, from_value, to_string, from_str |
+| `get_enhanced_peer_reputation` | 892 | to_value, from_value, to_string, from_str |
+| `get_privacy_config` | 898 | to_value, from_value, to_string, from_str |
+| `set_privacy_config` | 904 | clone, from_value, to_string, from_str |
+| `validate_settings` | 916 | clone, from_value |
+| `start_receive_loop` | 942 | to_value, clone, new, from |
+| `drain_received_messages` | 968 | from, to_value, new, from_value |
+| `get_settings` | 986 | from, to_value, from_value, default |
+| `update_settings` | 994 | from, to_value, from_value, default |
+| `get_default_settings` | 1019 | from, to_value, from_value, default |
+| `classify_notification` | 1032 | from, to_value, from_value |
+| `set_nickname` | 1053 |  |
+| `export_identity_backup` | 1061 | to_value |
+| `import_identity_backup` | 1070 | to_value |
+| `extract_public_key_from_peer_id` | 1082 | to_value |
+| `prepare_message_with_id` | 1093 | to_value |
+| `prepare_receipt` | 1119 |  |
+| `prepare_cover_traffic` | 1134 |  |
+| `mark_message_sent` | 1143 |  |
+| `get_contact_manager` | 1148 |  |
+| `get_history_manager` | 1155 |  |
+| `resolve_identity` | 1166 |  |
+| `resolve_to_identity_id` | 1174 |  |
+| `block_peer` | 1184 | set, new, from_str |
+| `unblock_peer` | 1192 | set, new, from_str |
+| `block_and_delete_peer` | 1201 | set, new, from_str, from_f64 |
+| `is_peer_blocked` | 1213 | set, new, from_str, from_f64 |
+| `list_blocked_peers` | 1221 | from_str, set, new, from_f64, from_bool |
+| `blocked_count` | 1274 | to_value |
+| `get_device_id` | 1284 | to_value |
+| `get_seniority_timestamp` | 1290 | to_value |
+| `get_registration_state` | 1296 | to_value |
+| `blake3_hash` | 1311 |  |
+| `perform_maintenance` | 1320 | from_value |
+| `update_disk_stats` | 1328 | from_value |
+| `record_log` | 1334 | to_value, from_value |
+| `export_logs` | 1340 | to_value, from_value |
+| `notify_peer_discovered` | 1350 | to_value, from_value, new |
+| `notify_peer_disconnected` | 1356 | to_value, from_value, new |
+| `add` | 1369 | to_value, from_value, new |
+| `get` | 1378 | to_value, new |
+| `remove` | 1387 | to_value, new |
+| `list` | 1394 | to_value, new |
+| `count` | 1407 | to_value, new |
+| `set_local_nickname` | 1412 | to_value, new |
+| `search` | 1424 | to_value, new |
+| `set_nickname` | 1438 |  |
+| `update_last_seen` | 1446 | from_value |
+| `update_device_id` | 1454 | from_value |
+| `flush` | 1466 | to_value, new, from_value |
+| `add` | 1487 | to_value, new, from_value |
+| `recent` | 1497 | to_value, new |
+| `conversation` | 1514 | to_value, new |
+| `clear` | 1527 | to_value |
+| `stats` | 1534 | to_value, new |
+| `count` | 1549 | to_value, new |
+| `enforce_retention` | 1554 | to_value, new |
+| `prune_before` | 1561 | to_value, new |
+| `get` | 1569 | to_value, new |
+| `search` | 1579 | to_value, new, from_str |
+| `mark_delivered` | 1593 | new, from_str, from_value |
+| `clear_conversation` | 1602 | new, from_str, from_value |
+| `delete` | 1610 | new, from_str, from_value |
+| `flush` | 1618 | new, from_str, from_value |
+| `js_value_from_str` | 1622 | new, from_str, from_value |
+| `parse_bootstrap_addrs` | 1634 | new, from_value |
+| `relay_url_to_multiaddr` | 1643 |  |
+| `ensure_mesh_participation_enabled` | 1696 | start_swarm_with_config, downgrade, channel |
+| `start_swarm_runtime` | 1705 | clone, downgrade, channel, spawn_local, start_swarm_with_config |
+| `resolve_swarm_keypair_and_mode` | 1819 | generate_ed25519 |
+| `from` | 1851 |  |
+| `from` | 1872 |  |
+| `from` | 1931 |  |
+| `from` | 1961 |  |
+| `from` | 2006 |  |
+| `from` | 2030 | new |
+| `from` | 2050 | with_storage, new |
+| `test_wasm_core_creation` | 2078 | with_storage, new |
+| `test_wasm_identity` | 2087 | with_storage, new |
+| `test_desktop_identity_flow_exposes_metadata_after_init` | 2096 | with_storage |
+| `test_relay_url_to_multiaddr_ws_defaults` | 2129 | new |
+| `test_relay_url_to_multiaddr_wss_defaults` | 2135 | with_storage, new |
+| `test_relay_url_to_multiaddr_ipv4_port` | 2141 | with_storage, new |
+| `test_relay_url_to_multiaddr_rejects_http` | 2147 | with_storage, new |
+| `test_desktop_role_resolution_defaults_to_relay_only_without_identity` | 2153 | with_storage, new |
+| `test_desktop_relay_only_flow_blocks_outbound_message_prepare` | 2171 | with_storage, new |
+| `test_desktop_contacts_and_messaging_interaction_flow` | 2181 | with_storage, new |
+| `test_desktop_mesh_dashboard_stats_update_with_message_flow` | 2218 | create_dir_all, with_storage, new, now, temp_dir |
+| `test_notification_manager_creation` | 2255 | new, create_dir_all, temp_dir, now |
+| `temp_storage_path` | 2259 | now, create_dir_all, temp_dir |
+
+### Imports
+- `use anyhow::Error`
+- `use libp2p::{Multiaddr, PeerId}`
+- `use parking_lot::Mutex`
+- `use scmessenger_core::store::{Contact, MessageDirection, MessageRecord}`
+- `use std::sync::Arc`
+- `use super::*`
+- `use wasm_bindgen::prelude::*`
+- `use wasm_bindgen_test::*`
 ---
 
 ## core/src/abuse/reputation.rs (1 chunks, 274 lines)
