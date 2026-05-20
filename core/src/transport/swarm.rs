@@ -3230,6 +3230,7 @@ pub async fn start_swarm_with_config(
                                     }
                                     RelayServerEvent::ReservationReqDenied { .. } |
                                     RelayServerEvent::ReservationTimedOut { .. } |
+                                    RelayServerEvent::ReservationClosed { .. } |
                                     RelayServerEvent::CircuitReqDenied { .. } |
                                     RelayServerEvent::CircuitReqOutboundConnectFailed { .. } |
                                     RelayServerEvent::ReservationReqAcceptFailed { .. } |
@@ -3866,11 +3867,11 @@ pub async fn start_swarm_with_config(
                             SwarmCommand::UnsubscribeTopic { topic } => {
                                 if subscribed_topics.contains(&topic) {
                                     let ident_topic = libp2p::gossipsub::IdentTopic::new(topic.clone());
-                                    if let Err(e) = swarm.behaviour_mut().gossipsub.unsubscribe(&ident_topic) {
-                                        tracing::warn!("Failed to unsubscribe from topic {}: {}", topic, e);
-                                    } else {
-                                        tracing::info!("📡 Unsubscribed from topic: {}", topic);
+                                    if swarm.behaviour_mut().gossipsub.unsubscribe(&ident_topic) {
+                                        tracing::info!("Unsubscribed from topic: {}", topic);
                                         subscribed_topics.remove(&topic);
+                                    } else {
+                                        tracing::warn!("Not subscribed to topic {}", topic);
                                     }
                                 }
                             }
@@ -4217,7 +4218,7 @@ pub async fn start_swarm_with_config(
                             SwarmCommand::UnsubscribeTopic { topic } => {
                                 if subscribed_topics.contains(&topic) {
                                     let ident_topic = libp2p::gossipsub::IdentTopic::new(topic.clone());
-                                    if swarm.behaviour_mut().gossipsub.unsubscribe(&ident_topic).is_ok() {
+                                    if swarm.behaviour_mut().gossipsub.unsubscribe(&ident_topic) {
                                         subscribed_topics.remove(&topic);
                                     }
                                 }

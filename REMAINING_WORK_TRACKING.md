@@ -1,7 +1,46 @@
 # SCMessenger Remaining Work Tracking
 
 Status: Active
-Last updated: 2026-05-20 (Verified Swarm Handoff Audit)
+Last updated: 2026-05-20 (HEAVY_LIFT_LIBP2P_UPGRADE_001 Complete)
+
+---
+
+## 2026-05-20 HEAVY_LIFT_LIBP2P_UPGRADE_001 COMPLETE
+
+**Status:** UPGRADE COMPLETE
+**Agent:** rust-coder (glm-5.1:cloud)
+
+### Cargo.lock Vulnerability Status (Post-Upgrade)
+
+| Crate | Before | After | Status |
+|-------|--------|-------|--------|
+| `ring` | 0.16.20 (VULNERABLE) | 0.17.14 | FIXED |
+| `rustls-webpki` | 0.101.7 (VULNERABLE) | 0.102.8 + 0.103.13 | FIXED |
+| `instant` | 0.1.13 (libp2p chain) | N/A (libp2p chain) | FIXED |
+| `instant` | 0.1.13 (sled/parking_lot chain) | 0.1.13 (unchanged) | Not from libp2p |
+| `libp2p` | 0.53.2 | 0.56.0 | UPGRADED |
+| `libp2p-tls` | 0.4.1 | 0.6.2 | UPGRADED |
+| `libp2p-quic` | 0.10.3 | 0.13.0 | UPGRADED |
+| `rcgen` | 0.11.3 | 0.13.2 | UPGRADED |
+
+### Code Changes Required
+
+1. **`Cargo.toml`**: libp2p version `0.53` -> `0.56`
+2. **`core/src/transport/swarm.rs`**:
+   - `gossipsub.unsubscribe()` now returns `bool` instead of `Result` — updated both native and WASM code paths
+   - Added `ReservationClosed` variant to `RelayServerEvent` match arm (new in libp2p-relay 0.21)
+
+### Acceptance Gate Results
+
+| Gate | Result |
+|------|--------|
+| `cargo build --workspace` | PASS |
+| `cargo test -p scmessenger-core --lib` | 919 passed, 1 pre-existing proptest failure |
+| `cargo test -p scmessenger-cli --lib` | 44 passed |
+| `cargo check -p scmessenger-wasm --target wasm32-unknown-unknown` | PASS |
+| `cargo fmt --all -- --check` | PASS (after auto-format) |
+| `ring` >= 0.17.0 in Cargo.lock | PASS (0.17.14) |
+| `rustls-webpki` >= 0.102.0 in Cargo.lock | PASS (0.102.8, 0.103.13) |
 
 ---
 
@@ -27,7 +66,7 @@ Last updated: 2026-05-20 (Verified Swarm Handoff Audit)
 |-----------|---------|-----|-------------------|
 | `BATCH_ANDROID_WS14_3_NOTIFICATION_PARITY.md` | Android | ~~Notification action receivers + Requests Inbox UI missing~~ | **DONE 2026-05-20** — `NotificationActionReceiver.kt` wired, `RequestsInboxScreen.kt` + `RequestsInboxViewModel.kt` created, NavHost route added, `MainActivity` handles `ACTION_OPEN_REQUESTS` cold start + warm start, all strings externalized to `strings.xml` |
 | `BATCH_ANDROID_CONTACT_PERSISTENCE_RESIDUAL.md` | Android/Core | Contact auto-creation lacks database-level dedup | `upsertFederatedContact` has mutex + relay filter but NO unique constraint; duplicate possible in rapid sequential callbacks |
-| `BATCH_SECURITY_CARGO_AUDIT_RESIDUAL.md` | Core/CLI | `ring` 0.16.20 and `rustls-webpki` 0.101.7 remain in Cargo.lock | BLOCKED: requires libp2p 0.53->0.56 upgrade (breaking). See task file for full dependency chain analysis. `quinn-proto` already fixed |
+| `BATCH_SECURITY_CARGO_AUDIT_RESIDUAL.md` | Core/CLI | ~~`ring` 0.16.20 and `rustls-webpki` 0.101.7 remain in Cargo.lock~~ | **FIXED** by HEAVY_LIFT_LIBP2P_UPGRADE_001: ring now 0.17.14, rustls-webpki now 0.102.8/0.103.13. `instant` from libp2p chain eliminated. Only `instant 0.1.13` from sled/parking_lot remains (not from libp2p). |
 | `CLEANUP_STALE_BATCH_P1_CORE_MYCO_ROUTING.md` | Meta | Stale task file in todo/ | Instant, no code changes |
 
 ### Physical-Device Evidence Tasks (NOT Swarm-Dispatchable)
