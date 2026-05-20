@@ -6,6 +6,7 @@ pub mod notification_manager;
 pub mod transport;
 
 use anyhow::Error;
+use serde_json::{Map, Value};
 use libp2p::{Multiaddr, PeerId};
 use scmessenger_core::{
     IdentityInfo, IronCore as RustIronCore, NotificationDecision, NotificationMessageContext,
@@ -701,15 +702,18 @@ impl IronCore {
         };
 
         let connection_path = self.get_connection_path_state().await?;
-        let payload = serde_json::json!({
-            "running": self.is_running(),
-            "connection_path_state": connection_path,
-            "peers": peers,
-            "inbox_count": self.inbox_count(),
-            "outbox_count": self.outbox_count(),
-            "relay_enabled": self.settings.borrow().relay_enabled,
-            "timestamp_ms": js_sys::Date::now(),
-        });
+        let mut m = Map::new();
+        m.insert("running".to_string(), self.is_running().into());
+        m.insert("connection_path_state".to_string(), connection_path.into());
+        m.insert("peers".to_string(), peers.into());
+        m.insert("inbox_count".to_string(), self.inbox_count().into());
+        m.insert("outbox_count".to_string(), self.outbox_count().into());
+        m.insert(
+            "relay_enabled".to_string(),
+            self.settings.borrow().relay_enabled.into(),
+        );
+        m.insert("timestamp_ms".to_string(), js_sys::Date::now().into());
+        let payload = Value::Object(m);
 
         Ok(payload.to_string())
     }

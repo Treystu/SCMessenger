@@ -696,7 +696,9 @@ fn print_full_identity(core: &IronCore, config: &config::Config) -> Result<()> {
     println!("{}", "Identity Information".bold());
     println!(
         "  ID:                     {}",
-        info.identity_id.unwrap().bright_cyan()
+        info.identity_id
+            .expect("Identity ID should be available")
+            .bright_cyan()
     );
     println!(
         "  Peer ID (Network):      {}",
@@ -711,7 +713,9 @@ fn print_full_identity(core: &IronCore, config: &config::Config) -> Result<()> {
     );
     println!(
         "  Public Key:             {}",
-        info.public_key_hex.unwrap().bright_yellow()
+        info.public_key_hex
+            .expect("Public key hex should be available")
+            .bright_yellow()
     );
     println!();
 
@@ -1251,7 +1255,10 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
     println!();
     println!(
         "Identity: {}",
-        info.identity_id.clone().unwrap().bright_cyan()
+        info.identity_id
+            .clone()
+            .expect("Identity ID should be available")
+            .bright_cyan()
     );
     println!(
         "Public Key: {}",
@@ -2068,13 +2075,13 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
                                 match intent {
                                     ClientIntent::GetIdentity {} => {
                                         let i = core_rx.get_identity_info();
-                                        push(serde_json::json!({
-                                            "peer_id": i.identity_id,
-                                            "public_key_hex": i.public_key_hex,
-                                            "libp2p_peer_id": i.libp2p_peer_id,
-                                            "initialized": i.initialized,
-                                            "nickname": i.nickname,
-                                        }));
+                                        let mut m = serde_json::Map::new();
+                                        m.insert("peer_id".to_string(), i.identity_id.into());
+                                        m.insert("public_key_hex".to_string(), i.public_key_hex.into());
+                                        m.insert("libp2p_peer_id".to_string(), i.libp2p_peer_id.into());
+                                        m.insert("initialized".to_string(), i.initialized.into());
+                                        m.insert("nickname".to_string(), i.nickname.into());
+                                        push(serde_json::Value::Object(m));
                                     }
                                     ClientIntent::ScanPeers {} => {
                                         let peers: Vec<String> = peers_rx
@@ -2083,7 +2090,9 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
                                             .keys()
                                             .map(|p| p.to_string())
                                             .collect();
-                                        push(serde_json::json!({ "peers": peers }));
+                                        let mut m = serde_json::Map::new();
+                                        m.insert("peers".to_string(), peers.into());
+                                        push(serde_json::Value::Object(m));
                                     }
                                     ClientIntent::GetTopology {} => {
                                         let peer_count = peers_rx.lock().await.len();
@@ -2140,10 +2149,10 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
                                                     .is_ok()
                                                 {
                                                     let mid = msg_id.clone().unwrap_or_default();
-                                                    push(serde_json::json!({
-                                                        "status": "sent",
-                                                        "message_id": mid.clone(),
-                                                    }));
+                                                    let mut m = serde_json::Map::new();
+                                                    m.insert("status".to_string(), "sent".into());
+                                                    m.insert("message_id".to_string(), mid.clone().into());
+                                                    push(serde_json::Value::Object(m));
                                                     let _ = ui_broadcast.send(server::UiOutbound::Legacy(
                                                         server::UiEvent::MessageStatus {
                                                             message_id: mid.clone(),
@@ -3338,7 +3347,10 @@ async fn cmd_test() -> Result<()> {
     println!("{} Identity generation", "✓".green());
 
     let envelope = alice.prepare_message(
-        bob_info.public_key_hex.clone().unwrap(),
+        bob_info
+            .public_key_hex
+            .clone()
+            .expect("Bob's public key should be available"),
         "Test message".to_string(),
         scmessenger_core::MessageType::Text,
         None,
@@ -3351,7 +3363,11 @@ async fn cmd_test() -> Result<()> {
     );
 
     let msg = bob.receive_message(envelope.envelope_data)?;
-    assert_eq!(msg.text_content().unwrap(), "Test message");
+    assert_eq!(
+        msg.text_content()
+            .expect("Message text should be available"),
+        "Test message"
+    );
 
     println!("{} Message decryption", "✓".green());
 
@@ -3359,7 +3375,10 @@ async fn cmd_test() -> Result<()> {
     eve.initialize_identity()?;
 
     let envelope = alice.prepare_message(
-        bob_info.public_key_hex.clone().unwrap(),
+        bob_info
+            .public_key_hex
+            .clone()
+            .expect("Bob's public key should be available"),
         "Secret".to_string(),
         scmessenger_core::MessageType::Text,
         None,
@@ -3380,9 +3399,7 @@ async fn cmd_test() -> Result<()> {
 /// NOTE: This also matches valid Ed25519 public keys (also 64 hex chars).
 /// Use looks_like_ed25519_pk() to distinguish.
 fn looks_like_blake3_id(s: &str) -> bool {
-    s.len() == 64
-        && s.chars()
-            .all(|c| matches!(c, '0'..='9' | 'a'..='f' | 'A'..='F'))
+    s.len() == 64 && s.chars().all(|c: char| c.is_ascii_hexdigit())
 }
 
 /// Returns true if `s` is a valid Ed25519 public key (64 hex chars that decode

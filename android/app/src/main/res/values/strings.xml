@@ -40,4 +40,18 @@
     <string name="notification_peer_discovered_title">Peer Discovered</string>
     <string name="notification_peer_discovered_format">%1$s via %2$s</string>
     <string name="notification_message_request_title">Message Request from %1$s</string>
+    <string name="notification_mesh_status_content_format">Connected: %1$d peers • Relayed: %2$d messages</string>
+
+    <!-- Notification Channels -->
+    <string name="notification_channel_group_mesh">Mesh Network</string>
+    <string name="notification_channel_messages">Messages</string>
+    <string name="notification_channel_messages_description">New messages from contacts</string>
+    <string name="notification_channel_message_requests">Message Requests</string>
+    <string name="notification_channel_message_requests_description">Messages from unknown senders</string>
+    <string name="notification_channel_mesh_status">Mesh Status</string>
+    <string name="notification_channel_mesh_status_description">Mesh network connection status</string>
+    <string name="notification_channel_peer_events">Peer Events</string>
+    <string name="notification_channel_peer_events_description">Peer discovery and connection events</string>
+    <string name="notification_channel_system">System</string>
+    <string name="notification_channel_system_description">System notifications and updates</string>
 </resources>

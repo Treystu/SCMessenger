@@ -1,3 +1,4 @@
+use serde_json::{Map, Value};
 use libp2p::PeerId;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -351,28 +352,22 @@ async fn handle_jsonrpc_request(
     match intent {
         ClientIntent::GetIdentity {} => {
             let peer_count = ctx.peers.lock().await.len();
-            let mut payload = serde_json::json!({
-                "identityId": ctx.node_peer_id,
-                "publicKeyHex": ctx.node_public_key,
-                "peerCount": peer_count,
-                "bootstrapNodes": ctx.bootstrap_nodes,
-                "uptimeSecs": ctx.start_time.elapsed().as_secs(),
-            });
+            let mut m = Map::new();
+            m.insert("identityId".to_string(), ctx.node_peer_id.clone().into());
+            m.insert("publicKeyHex".to_string(), ctx.node_public_key.clone().into());
+            m.insert("peerCount".to_string(), peer_count.into());
+            m.insert("bootstrapNodes".to_string(), ctx.bootstrap_nodes.clone().into());
+            m.insert("uptimeSecs".to_string(), ctx.start_time.elapsed().as_secs().into());
+            let mut payload = Value::Object(m);
             // Enrich with core identity fields when available
             if let Some(ref core) = ctx.core {
                 let info = core.get_identity_info();
                 if let Some(obj) = payload.as_object_mut() {
-                    obj.insert("nickname".to_string(), serde_json::json!(info.nickname));
-                    obj.insert(
-                        "libp2pPeerId".to_string(),
-                        serde_json::json!(info.libp2p_peer_id),
-                    );
-                    obj.insert(
-                        "initialized".to_string(),
-                        serde_json::json!(info.initialized),
-                    );
+                    obj.insert("nickname".to_string(), info.nickname.into());
+                    obj.insert("libp2pPeerId".to_string(), info.libp2p_peer_id.clone().into());
+                    obj.insert("initialized".to_string(), info.initialized.into());
                     if let Some(local_peer_id) = info.libp2p_peer_id {
-                        obj.insert("localPeerId".to_string(), serde_json::json!(local_peer_id));
+                        obj.insert("localPeerId".to_string(), local_peer_id.into());
                     }
                 }
             }
@@ -381,7 +376,11 @@ async fn handle_jsonrpc_request(
         ClientIntent::InitializeIdentity {} => {
             if let Some(ref core) = ctx.core {
                 match core.initialize_identity() {
-                    Ok(()) => rpc_result(id, serde_json::json!({"initialized": true})),
+                    Ok(()) => {
+                        let mut m = Map::new();
+                        m.insert("initialized".to_string(), true.into());
+                        rpc_result(id, Value::Object(m))
+                    }
                     Err(e) => rpc_error(
                         id,
                         JsonRpcErrorBody {
@@ -423,34 +422,35 @@ async fn handle_jsonrpc_request(
                     },
                 );
             }
-            rpc_result(id, serde_json::json!({"status": "queued"}))
+            let mut m = Map::new();
+            m.insert("status".to_string(), "queued".into());
+            rpc_result(id, Value::Object(m))
         }
         ClientIntent::ScanPeers {} => {
             let peers_lock = ctx.peers.lock().await;
-            let peer_list: Vec<serde_json::Value> = peers_lock
+            let peer_list: Vec<Value> = peers_lock
                 .iter()
                 .map(|(pid, key)| {
-                    serde_json::json!({
-                        "peerId": pid.to_string(),
-                        "publicKey": key,
-                    })
+                    let mut m = Map::new();
+                    m.insert("peerId".to_string(), pid.to_string().into());
+                    m.insert("publicKey".to_string(), key.clone().into());
+                    Value::Object(m)
                 })
                 .collect();
-            rpc_result(id, serde_json::json!({"peers": peer_list}))
+            let mut m = Map::new();
+            m.insert("peers".to_string(), Value::Array(peer_list));
+            rpc_result(id, Value::Object(m))
         }
         ClientIntent::GetTopology {} => {
             let peers_lock = ctx.peers.lock().await;
             let peer_count = peers_lock.len();
             let ledger = ctx.ledger.lock().await;
             let known_peers = ledger.all_known_topics();
-            rpc_result(
-                id,
-                serde_json::json!({
-                    "peerCount": peer_count,
-                    "knownPeers": known_peers.len(),
-                    "bootstrapNodes": ctx.bootstrap_nodes,
-                }),
-            )
+            let mut m = Map::new();
+            m.insert("peerCount".to_string(), peer_count.into());
+            m.insert("knownPeers".to_string(), known_peers.len().into());
+            m.insert("bootstrapNodes".to_string(), ctx.bootstrap_nodes.clone().into());
+            rpc_result(id, Value::Object(m))
         }
         // ── Contacts ──
         ClientIntent::GetContacts {} => {
@@ -458,17 +458,19 @@ async fn handle_jsonrpc_request(
                 let mgr = core.contacts_manager();
                 match mgr.list() {
                     Ok(contacts) => {
-                        let list: Vec<serde_json::Value> = contacts
+                        let list: Vec<Value> = contacts
                             .into_iter()
                             .map(|c| {
-                                serde_json::json!({
-                                    "peerId": c.peer_id,
-                                    "nickname": c.nickname,
-                                    "localNickname": c.local_nickname,
-                                })
+                                let mut m = Map::new();
+                                m.insert("peerId".to_string(), c.peer_id.into());
+                                m.insert("nickname".to_string(), c.nickname.into());
+                                m.insert("localNickname".to_string(), c.local_nickname.into());
+                                Value::Object(m)
                             })
                             .collect();
-                        rpc_result(id, serde_json::json!({"contacts": list}))
+                        let mut m = Map::new();
+                        m.insert("contacts".to_string(), Value::Array(list));
+                        rpc_result(id, Value::Object(m))
                     }
                     Err(e) => rpc_error(
                         id,
@@ -499,7 +501,11 @@ async fn handle_jsonrpc_request(
                     contact = contact.with_nickname(n);
                 }
                 match mgr.add(contact) {
-                    Ok(()) => rpc_result(id, serde_json::json!({"added": true})),
+                    Ok(()) => {
+                        let mut m = Map::new();
+                        m.insert("added".to_string(), true.into());
+                        rpc_result(id, Value::Object(m))
+                    }
                     Err(e) => rpc_error(
                         id,
                         JsonRpcErrorBody {
@@ -524,7 +530,11 @@ async fn handle_jsonrpc_request(
             if let Some(ref core) = ctx.core {
                 let mgr = core.contacts_manager();
                 match mgr.remove(peer_id) {
-                    Ok(()) => rpc_result(id, serde_json::json!({"removed": true})),
+                    Ok(()) => {
+                        let mut m = Map::new();
+                        m.insert("removed".to_string(), true.into());
+                        rpc_result(id, Value::Object(m))
+                    }
                     Err(e) => rpc_error(
                         id,
                         JsonRpcErrorBody {
@@ -549,24 +559,18 @@ async fn handle_jsonrpc_request(
         ClientIntent::GetSettings {} => {
             if let Some(ref core) = ctx.core {
                 let info = core.get_identity_info();
-                rpc_result(
-                    id,
-                    serde_json::json!({
-                        "nickname": info.nickname,
-                        "identityId": info.identity_id,
-                        "publicKeyHex": info.public_key_hex,
-                        "libp2pPeerId": info.libp2p_peer_id,
-                        "initialized": info.initialized,
-                    }),
-                )
+                let mut m = Map::new();
+                m.insert("nickname".to_string(), info.nickname.into());
+                m.insert("identityId".to_string(), info.identity_id.into());
+                m.insert("publicKeyHex".to_string(), info.public_key_hex.into());
+                m.insert("libp2pPeerId".to_string(), info.libp2p_peer_id.into());
+                m.insert("initialized".to_string(), info.initialized.into());
+                rpc_result(id, Value::Object(m))
             } else {
-                rpc_result(
-                    id,
-                    serde_json::json!({
-                        "identityId": ctx.node_peer_id,
-                        "publicKeyHex": ctx.node_public_key,
-                    }),
-                )
+                let mut m = Map::new();
+                m.insert("identityId".to_string(), ctx.node_peer_id.clone().into());
+                m.insert("publicKeyHex".to_string(), ctx.node_public_key.clone().into());
+                rpc_result(id, Value::Object(m))
             }
         }
         ClientIntent::UpdateSettings { key, value } => {
@@ -575,7 +579,11 @@ async fn handle_jsonrpc_request(
                     "nickname" => {
                         if let Some(nick) = value.as_str() {
                             match core.set_nickname(nick.to_string()) {
-                                Ok(()) => rpc_result(id, serde_json::json!({"updated": true})),
+                                Ok(()) => {
+                                    let mut m = Map::new();
+                                    m.insert("updated".to_string(), true.into());
+                                    rpc_result(id, Value::Object(m))
+                                }
                                 Err(e) => rpc_error(
                                     id,
                                     JsonRpcErrorBody {
@@ -622,19 +630,24 @@ async fn handle_jsonrpc_request(
                 let mgr = core.history_manager();
                 match mgr.recent(None, limit.unwrap_or(50) as u32) {
                     Ok(messages) => {
-                        let list: Vec<serde_json::Value> = messages
+                        let list: Vec<Value> = messages
                             .into_iter()
                             .map(|m| {
-                                serde_json::json!({
-                                    "id": m.id,
-                                    "senderId": m.peer_id,
-                                    "content": m.content,
-                                    "timestamp": m.timestamp,
-                                    "direction": format!("{:?}", m.direction),
-                                })
+                                let mut map = Map::new();
+                                map.insert("id".to_string(), m.id.into());
+                                map.insert("senderId".to_string(), m.peer_id.into());
+                                map.insert("content".to_string(), m.content.into());
+                                map.insert("timestamp".to_string(), m.timestamp.into());
+                                map.insert(
+                                    "direction".to_string(),
+                                    format!("{:?}", m.direction).into(),
+                                );
+                                Value::Object(map)
                             })
                             .collect();
-                        rpc_result(id, serde_json::json!({"messages": list}))
+                        let mut m = Map::new();
+                        m.insert("messages".to_string(), Value::Array(list));
+                        rpc_result(id, Value::Object(m))
                     }
                     Err(e) => rpc_error(
                         id,
@@ -661,18 +674,20 @@ async fn handle_jsonrpc_request(
                 let mgr = core.history_manager();
                 match mgr.conversation(peer_id.clone(), limit.unwrap_or(50) as u32) {
                     Ok(messages) => {
-                        let list: Vec<serde_json::Value> = messages
+                        let list: Vec<Value> = messages
                             .into_iter()
                             .map(|m| {
-                                serde_json::json!({
-                                    "id": m.id,
-                                    "senderId": m.peer_id,
-                                    "content": m.content,
-                                    "timestamp": m.timestamp,
-                                })
+                                let mut map = Map::new();
+                                map.insert("id".to_string(), m.id.into());
+                                map.insert("senderId".to_string(), m.peer_id.into());
+                                map.insert("content".to_string(), m.content.into());
+                                map.insert("timestamp".to_string(), m.timestamp.into());
+                                Value::Object(map)
                             })
                             .collect();
-                        rpc_result(id, serde_json::json!({"messages": list}))
+                        let mut m = Map::new();
+                        m.insert("messages".to_string(), Value::Array(list));
+                        rpc_result(id, Value::Object(m))
                     }
                     Err(e) => rpc_error(
                         id,
@@ -698,7 +713,11 @@ async fn handle_jsonrpc_request(
         ClientIntent::BlockPeer { peer_id, reason } => {
             if let Some(ref core) = ctx.core {
                 match core.block_peer(peer_id, reason, None) {
-                    Ok(()) => rpc_result(id, serde_json::json!({"blocked": true})),
+                    Ok(()) => {
+                        let mut m = Map::new();
+                        m.insert("blocked".to_string(), true.into());
+                        rpc_result(id, Value::Object(m))
+                    }
                     Err(e) => rpc_error(
                         id,
                         JsonRpcErrorBody {
@@ -722,7 +741,11 @@ async fn handle_jsonrpc_request(
         ClientIntent::UnblockPeer { peer_id } => {
             if let Some(ref core) = ctx.core {
                 match core.unblock_peer(peer_id, None) {
-                    Ok(()) => rpc_result(id, serde_json::json!({"unblocked": true})),
+                    Ok(()) => {
+                        let mut m = Map::new();
+                        m.insert("unblocked".to_string(), true.into());
+                        rpc_result(id, Value::Object(m))
+                    }
                     Err(e) => rpc_error(
                         id,
                         JsonRpcErrorBody {
@@ -751,10 +774,11 @@ async fn handle_jsonrpc_request(
             if let Some(ref core) = ctx.core {
                 match hex::decode(&envelope_data) {
                     Ok(data) => match core.prepare_onion_message(data, relay_public_keys_json) {
-                        Ok(onion_bytes) => rpc_result(
-                            id,
-                            serde_json::json!({"onionData": hex::encode(onion_bytes)}),
-                        ),
+                        Ok(onion_bytes) => {
+                            let mut m = Map::new();
+                            m.insert("onionData".to_string(), hex::encode(onion_bytes).into());
+                            rpc_result(id, Value::Object(m))
+                        }
                         Err(e) => rpc_error(
                             id,
                             JsonRpcErrorBody {
@@ -816,13 +840,15 @@ async fn handle_jsonrpc_request(
                     }
                 };
                 match core.peel_onion_layer(onion_bytes, secret_bytes) {
-                    Ok(result) => rpc_result(
-                        id,
-                        serde_json::json!({
-                            "nextHop": result.next_hop.map(hex::encode),
-                            "remainingData": hex::encode(result.remaining_data),
-                        }),
-                    ),
+                    Ok(result) => {
+                        let mut m = Map::new();
+                        m.insert("nextHop".to_string(), result.next_hop.map(hex::encode).into());
+                        m.insert(
+                            "remainingData".to_string(),
+                            hex::encode(result.remaining_data).into(),
+                        );
+                        rpc_result(id, Value::Object(m))
+                    }
                     Err(e) => rpc_error(
                         id,
                         JsonRpcErrorBody {
@@ -847,7 +873,9 @@ async fn handle_jsonrpc_request(
         ClientIntent::RatchetSessionCount {} => {
             if let Some(ref core) = ctx.core {
                 let count = core.ratchet_session_count();
-                rpc_result(id, serde_json::json!({"sessionCount": count}))
+                let mut m = Map::new();
+                m.insert("sessionCount".to_string(), count.into());
+                rpc_result(id, Value::Object(m))
             } else {
                 rpc_error(
                     id,
@@ -862,7 +890,9 @@ async fn handle_jsonrpc_request(
         ClientIntent::RatchetHasSession { peer_id } => {
             if let Some(ref core) = ctx.core {
                 let has = core.ratchet_has_session(peer_id);
-                rpc_result(id, serde_json::json!({"hasSession": has}))
+                let mut m = Map::new();
+                m.insert("hasSession".to_string(), has.into());
+                rpc_result(id, Value::Object(m))
             } else {
                 rpc_error(
                     id,
@@ -880,7 +910,9 @@ async fn handle_jsonrpc_request(
                 match hex::decode(&data_hex) {
                     Ok(data) => {
                         let hash = core.dspy_blake3_hash(&data);
-                        rpc_result(id, serde_json::json!({"hash": hex::encode(hash)}))
+                        let mut m = Map::new();
+                        m.insert("hash".to_string(), hex::encode(hash).into());
+                        rpc_result(id, Value::Object(m))
                     }
                     Err(e) => rpc_error(
                         id,
@@ -906,7 +938,9 @@ async fn handle_jsonrpc_request(
         ClientIntent::RoutingIsPrefetchComplete {} => {
             if let Some(ref core) = ctx.core {
                 let complete = core.routing_is_prefetch_complete();
-                rpc_result(id, serde_json::json!({"isPrefetchComplete": complete}))
+                let mut m = Map::new();
+                m.insert("isPrefetchComplete".to_string(), complete.into());
+                rpc_result(id, Value::Object(m))
             } else {
                 rpc_error(
                     id,
@@ -921,7 +955,9 @@ async fn handle_jsonrpc_request(
         ClientIntent::RoutingIsPrefetchInProgress {} => {
             if let Some(ref core) = ctx.core {
                 let in_progress = core.routing_is_prefetch_in_progress();
-                rpc_result(id, serde_json::json!({"isPrefetchInProgress": in_progress}))
+                let mut m = Map::new();
+                m.insert("isPrefetchInProgress".to_string(), in_progress.into());
+                rpc_result(id, Value::Object(m))
             } else {
                 rpc_error(
                     id,
@@ -948,7 +984,9 @@ async fn handle_jsonrpc_request(
                     })
                     .unwrap_or([0, 0, 0, 0]);
                 core.routing_mark_refresh_failed(hint_bytes);
-                rpc_result(id, serde_json::json!({"marked": true}))
+                let mut m = Map::new();
+                m.insert("marked".to_string(), true.into());
+                rpc_result(id, Value::Object(m))
             } else {
                 rpc_error(
                     id,
@@ -964,7 +1002,9 @@ async fn handle_jsonrpc_request(
             if let Some(ref core) = ctx.core {
                 let hint = core.routing_next_refresh_hint();
                 let hint_hex = hint.map(hex::encode).unwrap_or_default();
-                rpc_result(id, serde_json::json!({"hint": hint_hex}))
+                let mut m = Map::new();
+                m.insert("hint".to_string(), hint_hex.into());
+                rpc_result(id, Value::Object(m))
             } else {
                 rpc_error(
                     id,
@@ -991,7 +1031,9 @@ async fn handle_jsonrpc_request(
                     })
                     .unwrap_or([0, 0, 0, 0]);
                 core.routing_start_refresh(hint_bytes);
-                rpc_result(id, serde_json::json!({"started": true}))
+                let mut m = Map::new();
+                m.insert("started".to_string(), true.into());
+                rpc_result(id, Value::Object(m))
             } else {
                 rpc_error(
                     id,
@@ -1007,7 +1049,11 @@ async fn handle_jsonrpc_request(
         ClientIntent::ClearHistory {} => {
             if let Some(ref core) = ctx.core {
                 match core.clear_history() {
-                    Ok(()) => rpc_result(id, serde_json::json!({"cleared": true})),
+                    Ok(()) => {
+                        let mut m = Map::new();
+                        m.insert("cleared".to_string(), true.into());
+                        rpc_result(id, Value::Object(m))
+                    }
                     Err(e) => rpc_error(
                         id,
                         JsonRpcErrorBody {
@@ -1032,17 +1078,19 @@ async fn handle_jsonrpc_request(
             if let Some(ref core) = ctx.core {
                 match core.list_blocked() {
                     Ok(blocked) => {
-                        let list: Vec<serde_json::Value> = blocked
+                        let list: Vec<Value> = blocked
                             .into_iter()
                             .map(|b| {
-                                serde_json::json!({
-                                    "peerId": b.peer_id,
-                                    "reason": b.reason,
-                                    "blockedAt": b.blocked_at,
-                                })
+                                let mut map = Map::new();
+                                map.insert("peerId".to_string(), b.peer_id.into());
+                                map.insert("reason".to_string(), b.reason.into());
+                                map.insert("blockedAt".to_string(), b.blocked_at.into());
+                                Value::Object(map)
                             })
                             .collect();
-                        rpc_result(id, serde_json::json!({"blocked": list}))
+                        let mut m = Map::new();
+                        m.insert("blocked".to_string(), Value::Array(list));
+                        rpc_result(id, Value::Object(m))
                     }
                     Err(e) => rpc_error(
                         id,
@@ -1068,7 +1116,11 @@ async fn handle_jsonrpc_request(
         ClientIntent::ExportIdentityBackup { passphrase } => {
             if let Some(ref core) = ctx.core {
                 match core.export_identity_backup(passphrase) {
-                    Ok(backup) => rpc_result(id, serde_json::json!({"backup": backup})),
+                    Ok(backup) => {
+                        let mut m = Map::new();
+                        m.insert("backup".to_string(), backup.into());
+                        rpc_result(id, Value::Object(m))
+                    }
                     Err(e) => rpc_error(
                         id,
                         JsonRpcErrorBody {
@@ -1092,7 +1144,11 @@ async fn handle_jsonrpc_request(
         ClientIntent::ImportIdentityBackup { backup, passphrase } => {
             if let Some(ref core) = ctx.core {
                 match core.import_identity_backup(backup, passphrase) {
-                    Ok(()) => rpc_result(id, serde_json::json!({"imported": true})),
+                    Ok(()) => {
+                        let mut m = Map::new();
+                        m.insert("imported".to_string(), true.into());
+                        rpc_result(id, Value::Object(m))
+                    }
                     Err(e) => rpc_error(
                         id,
                         JsonRpcErrorBody {
@@ -1117,7 +1173,11 @@ async fn handle_jsonrpc_request(
         ClientIntent::SetNickname { nickname } => {
             if let Some(ref core) = ctx.core {
                 match core.set_nickname(nickname) {
-                    Ok(()) => rpc_result(id, serde_json::json!({"updated": true})),
+                    Ok(()) => {
+                        let mut m = Map::new();
+                        m.insert("updated".to_string(), true.into());
+                        rpc_result(id, Value::Object(m))
+                    }
                     Err(e) => rpc_error(
                         id,
                         JsonRpcErrorBody {
@@ -1142,11 +1202,13 @@ async fn handle_jsonrpc_request(
         ClientIntent::GetAuditLog {} => {
             if let Some(ref core) = ctx.core {
                 let events = core.get_audit_log();
-                let list: Vec<serde_json::Value> = events
+                let list: Vec<Value> = events
                     .into_iter()
-                    .map(|e| serde_json::to_value(e).unwrap_or_else(|_| serde_json::json!({})))
+                    .map(|e| serde_json::to_value(e).unwrap_or_else(|_| Value::Object(Map::new())))
                     .collect();
-                rpc_result(id, serde_json::json!({"events": list}))
+                let mut m = Map::new();
+                m.insert("events".to_string(), Value::Array(list));
+                rpc_result(id, Value::Object(m))
             } else {
                 rpc_error(
                     id,
@@ -1171,9 +1233,11 @@ async fn handle_jsonrpc_request(
                             .unwrap_or(0)
                             >= since
                     })
-                    .map(|e| serde_json::to_value(e).unwrap_or_else(|_| serde_json::json!({})))
+                    .map(|e| serde_json::to_value(e).unwrap_or_else(|_| Value::Object(Map::new())))
                     .collect();
-                rpc_result(id, serde_json::json!({"events": filtered}))
+                let mut m = Map::new();
+                m.insert("events".to_string(), Value::Array(filtered));
+                rpc_result(id, Value::Object(m))
             } else {
                 rpc_error(
                     id,
@@ -1189,7 +1253,11 @@ async fn handle_jsonrpc_request(
         ClientIntent::SetPrivacyConfig { config_json } => {
             if let Some(ref core) = ctx.core {
                 match core.set_privacy_config(config_json) {
-                    Ok(()) => rpc_result(id, serde_json::json!({"updated": true})),
+                    Ok(()) => {
+                        let mut m = Map::new();
+                        m.insert("updated".to_string(), true.into());
+                        rpc_result(id, Value::Object(m))
+                    }
                     Err(e) => rpc_error(
                         id,
                         JsonRpcErrorBody {
@@ -1213,7 +1281,9 @@ async fn handle_jsonrpc_request(
         ClientIntent::GetPrivacyConfig {} => {
             if let Some(ref core) = ctx.core {
                 let config = core.get_privacy_config();
-                rpc_result(id, serde_json::json!({"config": config}))
+                let mut m = Map::new();
+                m.insert("config".to_string(), config.into());
+                rpc_result(id, Value::Object(m))
             } else {
                 rpc_error(
                     id,
@@ -1270,19 +1340,24 @@ async fn handle_jsonrpc_request(
                 let mgr = core.history_manager();
                 match mgr.search(query, limit.unwrap_or(50) as u32) {
                     Ok(messages) => {
-                        let list: Vec<serde_json::Value> = messages
+                        let list: Vec<Value> = messages
                             .into_iter()
                             .map(|m| {
-                                serde_json::json!({
-                                    "id": m.id,
-                                    "senderId": m.peer_id,
-                                    "content": m.content,
-                                    "timestamp": m.timestamp,
-                                    "direction": format!("{:?}", m.direction),
-                                })
+                                let mut map = Map::new();
+                                map.insert("id".to_string(), m.id.into());
+                                map.insert("senderId".to_string(), m.peer_id.into());
+                                map.insert("content".to_string(), m.content.into());
+                                map.insert("timestamp".to_string(), m.timestamp.into());
+                                map.insert(
+                                    "direction".to_string(),
+                                    format!("{:?}", m.direction).into(),
+                                );
+                                Value::Object(map)
                             })
                             .collect();
-                        rpc_result(id, serde_json::json!({"messages": list}))
+                        let mut m = Map::new();
+                        m.insert("messages".to_string(), Value::Array(list));
+                        rpc_result(id, Value::Object(m))
                     }
                     Err(e) => rpc_error(
                         id,
@@ -1308,15 +1383,14 @@ async fn handle_jsonrpc_request(
             if let Some(ref core) = ctx.core {
                 let mgr = core.history_manager();
                 match mgr.stats() {
-                    Ok(stats) => rpc_result(
-                        id,
-                        serde_json::json!({
-                            "totalMessages": stats.total_messages,
-                            "sentCount": stats.sent_count,
-                            "receivedCount": stats.received_count,
-                            "undeliveredCount": stats.undelivered_count,
-                        }),
-                    ),
+                    Ok(stats) => {
+                        let mut m = Map::new();
+                        m.insert("totalMessages".to_string(), stats.total_messages.into());
+                        m.insert("sentCount".to_string(), stats.sent_count.into());
+                        m.insert("receivedCount".to_string(), stats.received_count.into());
+                        m.insert("undeliveredCount".to_string(), stats.undelivered_count.into());
+                        rpc_result(id, Value::Object(m))
+                    }
                     Err(e) => rpc_error(
                         id,
                         JsonRpcErrorBody {
@@ -1341,7 +1415,11 @@ async fn handle_jsonrpc_request(
             if let Some(ref core) = ctx.core {
                 let mgr = core.history_manager();
                 match mgr.mark_delivered(message_id) {
-                    Ok(()) => rpc_result(id, serde_json::json!({"delivered": true})),
+                    Ok(()) => {
+                        let mut m = Map::new();
+                        m.insert("delivered".to_string(), true.into());
+                        rpc_result(id, Value::Object(m))
+                    }
                     Err(e) => rpc_error(
                         id,
                         JsonRpcErrorBody {
@@ -1366,7 +1444,11 @@ async fn handle_jsonrpc_request(
             if let Some(ref core) = ctx.core {
                 let mgr = core.history_manager();
                 match mgr.delete(message_id) {
-                    Ok(()) => rpc_result(id, serde_json::json!({"deleted": true})),
+                    Ok(()) => {
+                        let mut m = Map::new();
+                        m.insert("deleted".to_string(), true.into());
+                        rpc_result(id, Value::Object(m))
+                    }
                     Err(e) => rpc_error(
                         id,
                         JsonRpcErrorBody {
@@ -1391,7 +1473,11 @@ async fn handle_jsonrpc_request(
             if let Some(ref core) = ctx.core {
                 let mgr = core.history_manager();
                 match mgr.clear_conversation(peer_id) {
-                    Ok(()) => rpc_result(id, serde_json::json!({"cleared": true})),
+                    Ok(()) => {
+                        let mut m = Map::new();
+                        m.insert("cleared".to_string(), true.into());
+                        rpc_result(id, Value::Object(m))
+                    }
                     Err(e) => rpc_error(
                         id,
                         JsonRpcErrorBody {
@@ -1420,18 +1506,15 @@ async fn handle_jsonrpc_request(
                 let info = core.get_identity_info();
                 let peer_count = ctx.peers.lock().await.len();
                 let ledger = ctx.ledger.lock().await;
-                rpc_result(
-                    id,
-                    serde_json::json!({
-                        "identityId": info.identity_id,
-                        "publicKeyHex": info.public_key_hex,
-                        "initialized": info.initialized,
-                        "peerCount": peer_count,
-                        "uptimeSecs": ctx.start_time.elapsed().as_secs(),
-                        "knownPeers": ledger.all_known_topics().len(),
-                        "bootstrapNodes": ctx.bootstrap_nodes,
-                    }),
-                )
+                let mut m = Map::new();
+                m.insert("identityId".to_string(), info.identity_id.into());
+                m.insert("publicKeyHex".to_string(), info.public_key_hex.into());
+                m.insert("initialized".to_string(), info.initialized.into());
+                m.insert("peerCount".to_string(), peer_count.into());
+                m.insert("uptimeSecs".to_string(), ctx.start_time.elapsed().as_secs().into());
+                m.insert("knownPeers".to_string(), ledger.all_known_topics().len().into());
+                m.insert("bootstrapNodes".to_string(), ctx.bootstrap_nodes.clone().into());
+                rpc_result(id, Value::Object(m))
             } else {
                 rpc_error(
                     id,

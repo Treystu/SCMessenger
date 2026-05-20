@@ -94,16 +94,16 @@ object NotificationHelper {
         val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
         // Create channel group
-        val channelGroup = NotificationChannelGroup(GROUP_MESH, "Mesh Network")
+        val channelGroup = NotificationChannelGroup(GROUP_MESH, context.getString(R.string.notification_channel_group_mesh))
         notificationManager.createNotificationChannelGroup(channelGroup)
 
         // 1. Messages Channel (HIGH priority) - for known contacts
         val messagesChannel = NotificationChannel(
             CHANNEL_MESSAGES,
-            "Messages",
+            context.getString(R.string.notification_channel_messages),
             NotificationManager.IMPORTANCE_HIGH
         ).apply {
-            description = "New messages from contacts"
+            description = context.getString(R.string.notification_channel_messages_description)
             group = GROUP_MESH
             enableLights(true)
             enableVibration(true)
@@ -113,10 +113,10 @@ object NotificationHelper {
         // 2. Message Requests Channel (HIGH priority) - WS14: for unknown senders
         val messageRequestsChannel = NotificationChannel(
             CHANNEL_MESSAGE_REQUESTS,
-            "Message Requests",
+            context.getString(R.string.notification_channel_message_requests),
             NotificationManager.IMPORTANCE_HIGH
         ).apply {
-            description = "Messages from unknown senders"
+            description = context.getString(R.string.notification_channel_message_requests_description)
             group = GROUP_MESH
             enableLights(true)
             enableVibration(true)
@@ -126,10 +126,10 @@ object NotificationHelper {
         // 3. Mesh Status Channel (LOW priority)
         val meshStatusChannel = NotificationChannel(
             CHANNEL_MESH_STATUS,
-            "Mesh Status",
+            context.getString(R.string.notification_channel_mesh_status),
             NotificationManager.IMPORTANCE_LOW
         ).apply {
-            description = "Mesh network connection status"
+            description = context.getString(R.string.notification_channel_mesh_status_description)
             group = GROUP_MESH
             enableLights(false)
             enableVibration(false)
@@ -139,10 +139,10 @@ object NotificationHelper {
         // 4. Peer Events Channel (DEFAULT priority)
         val peerEventsChannel = NotificationChannel(
             CHANNEL_PEER_EVENTS,
-            "Peer Events",
+            context.getString(R.string.notification_channel_peer_events),
             NotificationManager.IMPORTANCE_DEFAULT
         ).apply {
-            description = "Peer discovery and connection events"
+            description = context.getString(R.string.notification_channel_peer_events_description)
             group = GROUP_MESH
             enableLights(false)
             enableVibration(false)
@@ -152,10 +152,10 @@ object NotificationHelper {
         // 5. System Channel (LOW priority)
         val systemChannel = NotificationChannel(
             CHANNEL_SYSTEM,
-            "System",
+            context.getString(R.string.notification_channel_system),
             NotificationManager.IMPORTANCE_LOW
         ).apply {
-            description = "System notifications and updates"
+            description = context.getString(R.string.notification_channel_system_description)
             group = GROUP_MESH
             enableLights(false)
             enableVibration(false)
@@ -189,7 +189,7 @@ object NotificationHelper {
             null
         }
 
-        val contentText = "Connected: $peerCount peers • Relayed: $relayCount messages"
+        val contentText = context.getString(R.string.notification_mesh_status_content_format, peerCount, relayCount)
 
         return NotificationCompat.Builder(context, CHANNEL_MESH_STATUS)
             .setContentTitle(context.getString(R.string.mesh_service_notification_title))
@@ -395,7 +395,7 @@ object NotificationHelper {
         // WS14: Use appropriate channel
         val channelId = if (isDmRequest) CHANNEL_MESSAGE_REQUESTS else CHANNEL_MESSAGES
         val category = if (isDmRequest) NotificationCompat.CATEGORY_MESSAGE else NotificationCompat.CATEGORY_MESSAGE
-        val title = if (isDmRequest) "Message Request from $displayName" else null
+        val title = if (isDmRequest) context.getString(R.string.notification_message_request_title, displayName) else null
 
         // Build notification
         val notification = NotificationCompat.Builder(context, channelId)
@@ -506,8 +506,8 @@ object NotificationHelper {
         if (isDndEnabled(context)) return
 
         val notification = NotificationCompat.Builder(context, CHANNEL_PEER_EVENTS)
-            .setContentTitle("Peer Discovered")
-            .setContentText("$peerId via $transport")
+            .setContentTitle(context.getString(R.string.notification_peer_discovered_title))
+            .setContentText(context.getString(R.string.notification_peer_discovered_format, peerId, transport))
             .setSmallIcon(R.drawable.ic_notification)
             .setAutoCancel(true)
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)

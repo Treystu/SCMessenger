@@ -4,6 +4,7 @@
 // Other CLI commands can send requests to this API instead of accessing the database directly
 
 use anyhow::{Context, Result};
+use serde_json::{Map, Value};
 use axum::{
     extract::{Json as AxumJson, State},
     http::{Method, StatusCode},
@@ -720,28 +721,46 @@ fn export_diagnostics(
 ) -> String {
     let history = core.history_store_manager();
     let stats = history.stats().ok();
-    let payload = serde_json::json!({
-        "running": true,
-        "connection_path_state": connection_path_state,
-        "peers": peers,
-        "listeners": listeners,
-        "external_addrs": external_addrs,
-        "inbox_count": core.inbox_count(),
-        "outbox_count": core.outbox_count(),
-        "custody_audit_count": core.custody_audit_count(),
-        "drift": {
-            "state": core.drift_network_state(),
-            "store_size": core.drift_store_size(),
-        },
-        "history_stats": stats.as_ref().map(|s| serde_json::json!({
-            "total_messages": s.total_messages,
-            "sent_count": s.sent_count,
-            "received_count": s.received_count,
-            "undelivered_count": s.undelivered_count,
-        })),
-        "timestamp_ms": chrono::Utc::now().timestamp_millis(),
-    });
-    payload.to_string()
+    let mut payload = Map::new();
+    payload.insert("running".to_string(), true.into());
+    payload.insert(
+        "connection_path_state".to_string(),
+        connection_path_state.into(),
+    );
+    payload.insert("peers".to_string(), peers.into());
+    payload.insert("listeners".to_string(), listeners.into());
+    payload.insert("external_addrs".to_string(), external_addrs.into());
+    payload.insert("inbox_count".to_string(), core.inbox_count().into());
+    payload.insert("outbox_count".to_string(), core.outbox_count().into());
+    payload.insert(
+        "custody_audit_count".to_string(),
+        core.custody_audit_count().into(),
+    );
+
+    let mut drift = Map::new();
+    drift.insert("state".to_string(), core.drift_network_state().into());
+    drift.insert("store_size".to_string(), core.drift_store_size().into());
+    payload.insert("drift".to_string(), Value::Object(drift));
+
+    payload.insert(
+        "history_stats".to_string(),
+        stats
+            .as_ref()
+            .map(|s| {
+                let mut m = Map::new();
+                m.insert("total_messages".to_string(), s.total_messages.into());
+                m.insert("sent_count".to_string(), s.sent_count.into());
+                m.insert("received_count".to_string(), s.received_count.into());
+                m.insert("undelivered_count".to_string(), s.undelivered_count.into());
+                Value::Object(m)
+            })
+            .into(),
+    );
+    payload.insert(
+        "timestamp_ms".to_string(),
+        chrono::Utc::now().timestamp_millis().into(),
+    );
+    Value::Object(payload).to_string()
 }
 
 async fn handle_get_connection_path_state(

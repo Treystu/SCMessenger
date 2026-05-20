@@ -227,15 +227,15 @@ pub async fn run_ble_central_ingress(
 
                 // 1. Quick check if events gave us immediate evidence
                 match &evt {
-                    CentralEvent::ServicesAdvertisement { services, .. } => {
-                        if services.contains(&target_svc) {
-                            is_match = true;
-                        }
+                    CentralEvent::ServicesAdvertisement { services, .. }
+                        if services.contains(&target_svc) =>
+                    {
+                        is_match = true;
                     }
-                    CentralEvent::ServiceDataAdvertisement { service_data, .. } => {
-                        if service_data.contains_key(&target_svc) {
-                            is_match = true;
-                        }
+                    CentralEvent::ServiceDataAdvertisement { service_data, .. }
+                        if service_data.contains_key(&target_svc) =>
+                    {
+                        is_match = true;
                     }
                     _ => {}
                 }
@@ -243,9 +243,9 @@ pub async fn run_ble_central_ingress(
                 // 2. Explicit property poll if event variant was generic
                 if !is_match {
                     if let Ok(Some(props)) = peripheral.properties().await {
-                        if props.services.contains(&target_svc) {
-                            is_match = true;
-                        } else if props.service_data.contains_key(&target_svc) {
+                        if props.services.contains(&target_svc)
+                            || props.service_data.contains_key(&target_svc)
+                        {
                             is_match = true;
                         }
                     }
