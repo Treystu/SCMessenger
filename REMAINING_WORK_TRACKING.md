@@ -27,7 +27,7 @@ Last updated: 2026-05-20 (Verified Swarm Handoff Audit)
 |-----------|---------|-----|-------------------|
 | `BATCH_ANDROID_WS14_3_NOTIFICATION_PARITY.md` | Android | Notification action receivers + Requests Inbox UI missing | `NotificationHelper.kt` complete but NO BroadcastReceivers, NO RequestsInboxScreen.kt, NO manifest registration, NO MainActivity ACTION_OPEN_REQUESTS handling |
 | `BATCH_ANDROID_CONTACT_PERSISTENCE_RESIDUAL.md` | Android/Core | Contact auto-creation lacks database-level dedup | `upsertFederatedContact` has mutex + relay filter but NO unique constraint; duplicate possible in rapid sequential callbacks |
-| `BATCH_SECURITY_CARGO_AUDIT_RESIDUAL.md` | Core/CLI | `ring` 0.16.20 and `rustls-webpki` 0.101.7 remain in Cargo.lock | Verified via `grep` on Cargo.lock; `quinn-proto` already fixed |
+| `BATCH_SECURITY_CARGO_AUDIT_RESIDUAL.md` | Core/CLI | `ring` 0.16.20 and `rustls-webpki` 0.101.7 remain in Cargo.lock | BLOCKED: requires libp2p 0.53->0.56 upgrade (breaking). See task file for full dependency chain analysis. `quinn-proto` already fixed |
 | `CLEANUP_STALE_BATCH_P1_CORE_MYCO_ROUTING.md` | Meta | Stale task file in todo/ | Instant, no code changes |
 
 ### Physical-Device Evidence Tasks (NOT Swarm-Dispatchable)
