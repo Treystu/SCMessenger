@@ -44,7 +44,7 @@ pub struct IronCoreBehaviour {
     /// Keepalive and round-trip telemetry.
     pub ping: ping::Behaviour,
     /// Direct message delivery (request-response pattern)
-    pub messaging: request_response::cbor::Behaviour<MessageRequest, MessageResponse>,
+    pub messaging: request_response::cbor::Behaviour<Libp2pMessageRequest, Libp2pMessageResponse>,
     /// Address reflection for sovereign NAT discovery (replaces external STUN)
     pub address_reflection:
         request_response::cbor::Behaviour<AddressReflectionRequest, AddressReflectionResponse>,
@@ -71,16 +71,18 @@ pub struct IronCoreBehaviour {
     pub upnp: upnp::tokio::Behaviour,
 }
 
-/// A message request sent to a peer
+/// A libp2p request_response message request sent to a peer
+/// Renamed from MessageRequest to avoid collision with UniFFI api.udl MessageRequest
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub struct MessageRequest {
+pub struct Libp2pMessageRequest {
     /// Serialized Envelope bytes
     pub envelope_data: Vec<u8>,
 }
 
-/// A response to a message request
+/// A libp2p request_response message response
+/// Renamed from MessageResponse to avoid collision with UniFFI api.udl types
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub struct MessageResponse {
+pub struct Libp2pMessageResponse {
     /// Whether the message was accepted
     pub accepted: bool,
     /// Optional error message

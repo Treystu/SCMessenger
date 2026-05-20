@@ -25,7 +25,7 @@ pub mod websocket;
 
 pub use behaviour::{
     DeregistrationPayload, DeregistrationRequest, IronCoreBehaviour, LedgerExchangeRequest,
-    LedgerExchangeResponse, MessageRequest, MessageResponse, RegistrationMessage,
+    LedgerExchangeResponse, Libp2pMessageRequest, Libp2pMessageResponse, RegistrationMessage,
     RegistrationPayload, RegistrationRequest, RegistrationResponse, RelayRequest, RelayResponse,
     SharedPeerEntry,
 };

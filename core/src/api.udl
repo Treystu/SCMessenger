@@ -353,6 +353,14 @@ dictionary BlockedIdentity {
     boolean is_deleted;
 };
 
+dictionary MessageRequest {
+    string peer_id;
+    string? nickname;
+    string message_preview;
+    u64 message_timestamp;
+    u32 message_count;
+};
+
 namespace api {
     BlockedIdentity blocked_identity_new(string peer_id);
     BlockedIdentity blocked_identity_with_device_id(BlockedIdentity blocked, string device_id);

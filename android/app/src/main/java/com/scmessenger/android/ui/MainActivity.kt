@@ -24,6 +24,7 @@ import androidx.core.content.ContextCompat
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import com.scmessenger.android.data.MeshRepository
 import com.scmessenger.android.utils.Permissions
+import com.scmessenger.android.utils.NotificationHelper
 import javax.inject.Inject
 import java.util.concurrent.atomic.AtomicBoolean
 import androidx.activity.viewModels
@@ -119,10 +120,16 @@ class MainActivity : ComponentActivity() {
 
         // Handle deep links for cold start
         intent?.let {
-            if (it.action == Intent.ACTION_VIEW) {
-                it.data?.let { uri ->
-                    Timber.d("Handling deep link on cold start: $uri")
-                    mainViewModel.handleDeepLink(uri)
+            when (it.action) {
+                Intent.ACTION_VIEW -> {
+                    it.data?.let { uri ->
+                        Timber.d("Handling deep link on cold start: $uri")
+                        mainViewModel.handleDeepLink(uri)
+                    }
+                }
+                NotificationHelper.ACTION_OPEN_REQUESTS -> {
+                    Timber.d("Opening requests inbox on cold start")
+                    mainViewModel.navigateToRequestsInbox()
                 }
             }
         }
@@ -253,10 +260,16 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent?) {
         super.onNewIntent(intent)
         intent?.let {
-            if (it.action == Intent.ACTION_VIEW) {
-                it.data?.let { uri ->
-                    Timber.d("Handling deep link on new intent: $uri")
-                    mainViewModel.handleDeepLink(uri)
+            when (it.action) {
+                Intent.ACTION_VIEW -> {
+                    it.data?.let { uri ->
+                        Timber.d("Handling deep link on new intent: $uri")
+                        mainViewModel.handleDeepLink(uri)
+                    }
+                }
+                NotificationHelper.ACTION_OPEN_REQUESTS -> {
+                    Timber.d("Opening requests inbox on intent")
+                    mainViewModel.navigateToRequestsInbox()
                 }
             }
         }

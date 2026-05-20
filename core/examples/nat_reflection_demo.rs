@@ -9,7 +9,9 @@ use scmessenger_core::transport::{
     nat::{NatConfig, NatTraversal},
     swarm::{start_swarm, SwarmEvent2},
 };
+use std::sync::Arc;
 use std::time::Duration;
+use parking_lot::RwLock;
 use tokio::sync::mpsc;
 
 #[tokio::main]
@@ -42,13 +44,13 @@ async fn main() -> anyhow::Result<()> {
     let (event_tx2, mut event_rx2) = mpsc::channel(256);
     let (event_tx3, mut event_rx3) = mpsc::channel(256);
 
-    let swarm1 = start_swarm(keypair1, None, event_tx1, None, false, None).await?;
+    let swarm1 = start_swarm(keypair1, None, event_tx1, None, false, None, Arc::new(RwLock::new(None))).await?;
     tokio::time::sleep(Duration::from_millis(300)).await;
 
-    let swarm2 = start_swarm(keypair2, None, event_tx2, None, false, None).await?;
+    let swarm2 = start_swarm(keypair2, None, event_tx2, None, false, None, Arc::new(RwLock::new(None))).await?;
     tokio::time::sleep(Duration::from_millis(300)).await;
 
-    let swarm3 = start_swarm(keypair3, None, event_tx3, None, false, None).await?;
+    let swarm3 = start_swarm(keypair3, None, event_tx3, None, false, None, Arc::new(RwLock::new(None))).await?;
     tokio::time::sleep(Duration::from_millis(500)).await;
 
     // Get listening addresses

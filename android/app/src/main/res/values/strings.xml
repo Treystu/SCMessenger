@@ -2,13 +2,13 @@
 <resources>
     <string name="app_name">SCMessenger</string>
     <string name="privacy_policy_url">https://scmessenger-privacy.netlify.app/</string>
-    
+
     <!-- Service notifications -->
     <string name="mesh_service_notification_title">Mesh Network Active</string>
     <string name="mesh_service_notification_text">Relaying messages and discovering peers</string>
     <string name="mesh_service_channel_name">Mesh Service</string>
     <string name="mesh_service_channel_description">Maintains mesh network connectivity</string>
-    
+
     <!-- Common -->
     <string name="cancel">Cancel</string>
 
@@ -23,4 +23,13 @@
     <!-- Error messages -->
     <string name="unknown_error">Unknown error</string>
     <string name="unknown_peer">Unknown Peer</string>
+
+    <!-- Message Requests Inbox -->
+    <string name="requests_inbox_title">Message Requests</string>
+    <string name="requests_inbox_empty_title">No pending message requests</string>
+    <string name="requests_inbox_empty_description">When someone sends you a message without being a contact, it will appear here.</string>
+    <string name="action_accept">Accept</string>
+    <string name="action_reject">Reject</string>
+    <string name="action_block_and_delete">Block &amp; Delete All</string>
+    <string name="button_block">Block</string>
 </resources>

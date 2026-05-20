@@ -17,7 +17,7 @@
 use super::behaviour::RelayRequest;
 use super::behaviour::{
     DeregistrationRequest, IronCoreBehaviour, LedgerExchangeRequest, LedgerExchangeResponse,
-    MessageRequest, MessageResponse, RegistrationMessage, RegistrationRequest,
+    Libp2pMessageRequest, Libp2pMessageResponse, RegistrationMessage, RegistrationRequest,
     RegistrationResponse, RelayResponse, SharedPeerEntry,
 };
 use super::discovery::DiscoveryConfig;
@@ -681,7 +681,7 @@ fn dispatch_ranked_route(
     if route.path.len() == 1 {
         let request_id = swarm.behaviour_mut().messaging.send_request(
             &target_peer,
-            MessageRequest {
+            Libp2pMessageRequest {
                 envelope_data: framed_data.clone(),
             },
         );
@@ -1105,7 +1105,7 @@ fn dispatch_pending_custody_for_peer(
 
         let request_id = swarm.behaviour_mut().messaging.send_request(
             &destination_peer,
-            MessageRequest {
+            Libp2pMessageRequest {
                 envelope_data: wrap_in_drift_frame(&custody.envelope_data),
             },
         );
@@ -2302,7 +2302,7 @@ pub async fn start_swarm_with_config(
                                                     }
                                                     let _ = swarm.behaviour_mut().messaging.send_response(
                                                         channel,
-                                                        MessageResponse { accepted: true, error: None },
+                                                        Libp2pMessageResponse { accepted: true, error: None },
                                                     );
                                                     continue;
                                                 }
@@ -2320,7 +2320,7 @@ pub async fn start_swarm_with_config(
                                                     }
                                                     let _ = swarm.behaviour_mut().messaging.send_response(
                                                         channel,
-                                                        MessageResponse { accepted: true, error: None },
+                                                        Libp2pMessageResponse { accepted: true, error: None },
                                                     );
                                                     continue;
                                                 }
@@ -2328,7 +2328,7 @@ pub async fn start_swarm_with_config(
                                                     tracing::info!("📢 Peer left: {}", peer_id);
                                                     let _ = swarm.behaviour_mut().messaging.send_response(
                                                         channel,
-                                                        MessageResponse { accepted: true, error: None },
+                                                        Libp2pMessageResponse { accepted: true, error: None },
                                                     );
                                                     continue;
                                                 }
@@ -2356,7 +2356,7 @@ pub async fn start_swarm_with_config(
 
                                         // Check if sender is blocked before processing message
                                         let sender_blocked = if let Some(core_handle) = core_handle.as_ref().and_then(|w| w.upgrade()) {
-                                            // MessageRequest doesn't have device_id, only RelayRequest does.
+                                            // Libp2pMessageRequest doesn't have device_id, only RelayRequest does.
                                             // For direct messaging, we check the peer-level block.
                                             core_handle.is_peer_blocked(peer.to_string(), None).unwrap_or(false)
                                         } else {
@@ -2367,7 +2367,7 @@ pub async fn start_swarm_with_config(
                                             tracing::warn!("Blocked peer {} attempted to send message", peer);
                                             let _ = swarm.behaviour_mut().messaging.send_response(
                                                 channel,
-                                                MessageResponse { accepted: false, error: Some("blocked".to_string()) },
+                                                Libp2pMessageResponse { accepted: false, error: Some("blocked".to_string()) },
                                             );
                                             continue;
                                         }
@@ -2381,7 +2381,7 @@ pub async fn start_swarm_with_config(
                                         // Send acceptance response
                                         let _ = swarm.behaviour_mut().messaging.send_response(
                                             channel,
-                                            MessageResponse { accepted: true, error: None },
+                                            Libp2pMessageResponse { accepted: true, error: None },
                                         );
                                     }
                                     request_response::Message::Response { request_id, response } => {
@@ -3533,7 +3533,7 @@ pub async fn start_swarm_with_config(
                                             let framed = wrap_in_drift_frame(&join_bytes);
                                             let _request_id = swarm.behaviour_mut().messaging.send_request(
                                                 &other_peer,
-                                                MessageRequest { envelope_data: framed },
+                                                Libp2pMessageRequest { envelope_data: framed },
                                             );
                                             tracing::debug!("Broadcast PeerJoined({}) to {}", peer_id, other_peer);
                                         }
@@ -3546,7 +3546,7 @@ pub async fn start_swarm_with_config(
                                     let framed = wrap_in_drift_frame(&list_bytes);
                                     let _request_id = swarm.behaviour_mut().messaging.send_request(
                                         &peer_id,
-                                        MessageRequest { envelope_data: framed },
+                                        Libp2pMessageRequest { envelope_data: framed },
                                     );
                                     tracing::info!("Sent peer list ({} peers) to {}", peer_broadcaster.peer_count(), peer_id);
                                 }
@@ -3612,7 +3612,7 @@ pub async fn start_swarm_with_config(
                                         let framed = wrap_in_drift_frame(&left_bytes);
                                         let _request_id = swarm.behaviour_mut().messaging.send_request(
                                             &other_peer,
-                                            MessageRequest { envelope_data: framed },
+                                            Libp2pMessageRequest { envelope_data: framed },
                                         );
                                         tracing::debug!("Broadcast PeerLeft({}) to {}", peer_id, other_peer);
                                     }
@@ -3760,7 +3760,7 @@ pub async fn start_swarm_with_config(
                                 let framed = wrap_in_drift_frame(&envelope_data);
                                 let request_id = swarm.behaviour_mut().messaging.send_request(
                                     &peer_id,
-                                    MessageRequest {
+                                    Libp2pMessageRequest {
                                         envelope_data: framed,
                                     },
                                 );
@@ -4145,7 +4145,7 @@ pub async fn start_swarm_with_config(
                                 let framed = wrap_in_drift_frame(&envelope_data);
                                 let request_id = swarm.behaviour_mut().messaging.send_request(
                                     &peer_id,
-                                    MessageRequest { envelope_data: framed },
+                                    Libp2pMessageRequest { envelope_data: framed },
                                 );
                                 pending_direct_replies.insert(request_id, reply);
                             }
@@ -4302,7 +4302,7 @@ pub async fn start_swarm_with_config(
                                                 tracing::warn!("Blocked peer {} attempted to send message", peer);
                                                 let _ = swarm.behaviour_mut().messaging.send_response(
                                                     channel,
-                                                    MessageResponse { accepted: false, error: Some("blocked".to_string()) },
+                                                    Libp2pMessageResponse { accepted: false, error: Some("blocked".to_string()) },
                                                 );
                                                 continue;
                                             }
@@ -4323,7 +4323,7 @@ pub async fn start_swarm_with_config(
 
                                             let _ = swarm.behaviour_mut().messaging.send_response(
                                                 channel,
-                                                MessageResponse { accepted: true, error: None },
+                                                Libp2pMessageResponse { accepted: true, error: None },
                                             );
                                         }
                                         request_response::Message::Response { request_id, response } => {

@@ -259,6 +259,21 @@ class ConversationsViewModel @Inject constructor(
     }
 
     /**
+     * WS14: Mute notifications for a peer (blocks the peer).
+     */
+    fun mutePeer(peerId: String, reason: String? = null) {
+        viewModelScope.launch {
+            try {
+                meshRepository.mutePeer(peerId, reason)
+                loadBlockedPeers()
+                Timber.i("Muted peer: $peerId")
+            } catch (e: Exception) {
+                Timber.e(e, "Failed to mute peer: $peerId")
+            }
+        }
+    }
+
+    /**
      * Unblock a peer by ID
      */
     fun unblockPeer(peerId: String) {

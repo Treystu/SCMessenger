@@ -73,6 +73,9 @@ class MainViewModel @Inject constructor(
     private val _pendingDeepLink = MutableStateFlow<DeepLinkData?>(null)
     val pendingDeepLink: StateFlow<DeepLinkData?> = _pendingDeepLink.asStateFlow()
 
+    private val _pendingRequestsInbox = MutableStateFlow<String?>(null)
+    val pendingRequestsInbox: StateFlow<String?> = _pendingRequestsInbox.asStateFlow()
+
     private val _themeMode = MutableStateFlow(PreferencesRepository.ThemeMode.SYSTEM)
     val themeMode: StateFlow<PreferencesRepository.ThemeMode> = _themeMode.asStateFlow()
 
@@ -324,6 +327,16 @@ class MainViewModel @Inject constructor(
         val data = _pendingDeepLink.value
         _pendingDeepLink.value = null
         return data
+    }
+
+    fun navigateToRequestsInbox(peerId: String? = null) {
+        _pendingRequestsInbox.value = peerId
+    }
+
+    fun consumeRequestsInboxNav(): String? {
+        val peerId = _pendingRequestsInbox.value
+        _pendingRequestsInbox.value = null
+        return peerId
     }
 }
 

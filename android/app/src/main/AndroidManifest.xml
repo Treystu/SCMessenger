@@ -129,6 +129,19 @@
             </intent-filter>
         </receiver>
 
+        <!-- Notification Action Receiver for message notification actions -->
+        <receiver
+            android:name=".notification.NotificationActionReceiver"
+            android:enabled="true"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.scmessenger.ACTION_REPLY" />
+                <action android:name="com.scmessenger.ACTION_MARK_READ" />
+                <action android:name="com.scmessenger.ACTION_MUTE" />
+                <action android:name="com.scmessenger.ACTION_OPEN_REQUESTS" />
+            </intent-filter>
+        </receiver>
+
         <!-- File Provider for sharing logs -->
         <provider
             android:name="androidx.core.content.FileProvider"

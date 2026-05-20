@@ -3534,6 +3534,21 @@ open class MeshRepository(private val context: Context) {
     }
 
     /**
+     * WS14: Mute notifications for a peer by blocking them.
+     * This is the Android implementation of "mute" - blocking a peer
+     * prevents them from sending notifications (per NotificationHelper logic).
+     */
+    fun mutePeer(peerId: String, deviceId: String? = null, reason: String? = null) {
+        ensureServiceInitializedFireAndForget()
+        try {
+            ironCore?.blockPeer(peerId, deviceId, reason)
+            Timber.i("Muted peer: $peerId (device: $deviceId, reason: $reason)")
+        } catch (e: Exception) {
+            Timber.e(e, "Failed to mute peer: $peerId")
+        }
+    }
+
+    /**
      * Block a peer AND delete all their stored messages (cascade purge).
      * Future payloads from this peer are dropped at the ingress layer.
      */
@@ -3574,6 +3589,50 @@ open class MeshRepository(private val context: Context) {
         } catch (e: Exception) {
             Timber.w(e, "Failed to get blocked count")
             0u
+        }
+    }
+
+    /**
+     * WS14: Get pending message requests.
+     * A message request is from a peer who has sent a message but is not yet a contact.
+     * Returns a list of MessageRequest objects with sender info and preview.
+     */
+    fun getPendingMessageRequests(): List<uniffi.api.MessageRequest> {
+        ensureServiceInitializedFireAndForget()
+        return try {
+            val contacts = contactManager?.list() ?: emptyList()
+            val contactPeerIds = contacts.map { it.peerId }.toSet()
+
+            // Get all messages from inbox to find senders without conversations
+            val inboxMessages = ironCore?.drainReceivedMessages() ?: emptyList()
+
+            // Get unique peerIds from messages that aren't contacts
+            val requestPeerIds = inboxMessages
+                .map { it.peerId }
+                .filter { it !in contactPeerIds }
+                .distinct()
+
+            // Build MessageRequest objects for each peer
+            requestPeerIds.map { peerId ->
+                // Get the most recent message from this peer for preview
+                val recentMessage = inboxMessages
+                    .filter { it.peerId == peerId }
+                    .maxByOrNull { it.timestamp }
+
+                // Get contact info if available (for nickname)
+                val contact = contactManager?.get(canonicalId(peerId))
+
+                uniffi.api.MessageRequest(
+                    peerId = peerId,
+                    nickname = contact?.nickname ?: contact?.localNickname,
+                    messagePreview = recentMessage?.content ?: "",
+                    messageTimestamp = recentMessage?.timestamp ?: 0u,
+                    messageCount = inboxMessages.count { it.peerId == peerId }.toUInt()
+                )
+            }
+        } catch (e: Exception) {
+            Timber.w(e, "Failed to get pending message requests")
+            emptyList()
         }
     }
 

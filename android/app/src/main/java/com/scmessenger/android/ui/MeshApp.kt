@@ -28,6 +28,7 @@ import com.scmessenger.android.ui.dashboard.PeerListScreen
 import com.scmessenger.android.ui.dashboard.TopologyScreen
 import com.scmessenger.android.ui.identity.IdentityScreen
 import com.scmessenger.android.ui.screens.*
+import com.scmessenger.android.ui.screens.RequestsInboxScreen
 import com.scmessenger.android.ui.viewmodels.MainViewModel
 import com.scmessenger.android.ui.viewmodels.DeepLinkData
 import com.scmessenger.android.ui.settings.MeshSettingsScreen
@@ -47,6 +48,7 @@ fun MeshApp() {
     val availableStorageMB by mainViewModel.availableStorageMB.collectAsState()
     val navController = rememberNavController()
     val pendingDeepLink by mainViewModel.pendingDeepLink.collectAsState()
+    val pendingRequestsInbox by mainViewModel.pendingRequestsInbox.collectAsState()
 
     LaunchedEffect(Unit) {
         mainViewModel.refreshIdentityState()
@@ -77,6 +79,18 @@ fun MeshApp() {
         if (pendingDeepLink != null && hasStableIdentity) {
             navController.navigate(Screen.AddContact.route) {
                 launchSingleTop = true
+            }
+        }
+    }
+
+    // Navigate to requests inbox when ACTION_OPEN_REQUESTS is triggered
+    LaunchedEffect(pendingRequestsInbox, hasStableIdentity) {
+        if (pendingRequestsInbox != null && hasStableIdentity) {
+            navController.navigate(Screen.RequestsInbox.route) {
+                launchSingleTop = true
+                popUpTo(navController.graph.startDestinationId) {
+                    saveState = true
+                }
             }
         }
     }
@@ -266,6 +280,12 @@ fun MeshNavHost(
             )
         }
 
+        composable(Screen.RequestsInbox.route) {
+            RequestsInboxScreen(
+                onNavigateBack = { navController.popBackStack() }
+            )
+        }
+
         if (hasIdentity) {
             composable(
                 route = "chat/{peerId}",
@@ -324,6 +344,7 @@ sealed class Screen(val route: String, val label: String, val icon: androidx.com
     object Identity : Screen("identity", "Identity", androidx.compose.material.icons.Icons.Default.Settings)
     object Diagnostics : Screen("diagnostics", "Diagnostics", androidx.compose.material.icons.Icons.Default.Settings)
     object BlockedPeers : Screen("blocked_peers", "Blocked Peers", androidx.compose.material.icons.Icons.Filled.Block)
+    object RequestsInbox : Screen("requests_inbox", "Requests", androidx.compose.material.icons.Icons.Default.Add)
 
     companion object {
         val fullRoleBottomNavItems = listOf(Conversations, Contacts, Dashboard, Settings)

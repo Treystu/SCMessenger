@@ -123,6 +123,14 @@ pub struct PeelResult {
     pub remaining_data: Vec<u8>,
 }
 
+pub struct MessageRequest {
+    pub peer_id: String,
+    pub nickname: Option<String>,
+    pub message_preview: String,
+    pub message_timestamp: u64,
+    pub message_count: u32,
+}
+
 pub struct RegistrationStateInfo {
     pub state: String,
     pub device_id: Option<String>,
