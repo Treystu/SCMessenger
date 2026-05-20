@@ -1,3 +1,7 @@
+# MODEL: glm-5.1:cloud
+# BUDGET: 1800
+# token_budget: 18000
+
 # P1_ANDROID_DIAGNOSTICS_EXPORT_001
 
 **Status:** VERIFIED REMAINING WORK

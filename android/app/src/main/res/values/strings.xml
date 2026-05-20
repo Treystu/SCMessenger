@@ -32,4 +32,12 @@
     <string name="action_reject">Reject</string>
     <string name="action_block_and_delete">Block &amp; Delete All</string>
     <string name="button_block">Block</string>
+
+    <!-- Notification Actions & Content -->
+    <string name="notification_action_reply">Reply</string>
+    <string name="notification_action_mark_read">Mark Read</string>
+    <string name="notification_action_mute">Mute</string>
+    <string name="notification_peer_discovered_title">Peer Discovered</string>
+    <string name="notification_peer_discovered_format">%1$s via %2$s</string>
+    <string name="notification_message_request_title">Message Request from %1$s</string>
 </resources>

@@ -1,8 +1,12 @@
+# MODEL: gemini-3-flash-preview:cloud
+# BUDGET: 180
+# token_budget: 1800
+# STRIPPED_CONTEXT: true
+
 # MICRO_ANDROID_NOTIFICATION_STRINGS_001
 
 **Status:** VERIFIED REMAINING WORK
 **Agent:** worker / triage-router
-**Budget:** 300s (MICRO tier)
 **Phase:** WS14.3 follow-up
 **Source:** Static analysis of NotificationHelper.kt
 

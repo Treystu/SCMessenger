@@ -13,9 +13,7 @@ $Script:PollIntervalSecondsActive    = 10
 $Script:PollIntervalSecondsIdle      = 60
 $Script:PollIntervalSecondsPostOrch  = 30
 $Script:CurrentPollInterval           = 10
-$Script:OrchModelTriage       = "kimi-k2.6:cloud"
-$Script:OrchModelStandard     = "kimi-k2.6:cloud"
-$Script:OrchModelHeavy        = "kimi-k2.6:cloud"
+$Script:OrchModel              = "kimi-k2.6:cloud"
 $Script:OrchFallbackModel     = "deepseek-v4-pro:cloud"
 $Script:OrchTertiaryModel     = "glm-5.1:cloud"
 $Script:StaleThresholdMinutes = 60
@@ -34,13 +32,10 @@ $Script:PulseCount                   = 0
 $Script:OrchCycleCount               = 0
 $Script:CurrentQuotaTier             = 1
 $Script:CurrentPhaseName             = "HEAVY-LIFT"
-$Script:OrchModelTier                = "qwen3-coder:480b:cloud"
 $Script:WorkerModelAllowList         = @()
-$Script:MaxBudgetOverride            = 0
 $Script:LastOrchModelDispatched      = ""
 $Script:LastOrchReasonDispatched     = ""
 $Script:OrchLastFailedModel          = ""
-$Script:OrchMandateOverride          = ""
 $Script:ShutdownRequested            = $false
 $Script:CachedClaudeCount            = $null
 $Script:CachedClaudeTimestamp        = [datetime]::MinValue
@@ -601,74 +596,50 @@ function Invoke-QuotaGovernor {
         6 {
             $Script:MaxConcurrentSlots    = 0
             $Script:OrchCooldownSeconds   = 9999
-            $Script:MaxBudgetOverride     = 0
             $Script:CurrentPhaseName      = "HARDLOCK"
-            $Script:OrchModelTier         = $null
             Write-HeartbeatLog "ERROR" "HARDLOCK ACTIVE: 5hr=$($quota.FiveHour)% 7d=$($quota.SevenDay)%. ZERO dispatch. Polling until reset."
         }
         5 {
             $Script:MaxConcurrentSlots    = 1
-            $Script:OrchCooldownSeconds   = 600
-            $Script:MaxBudgetOverride     = 300
+            $Script:OrchCooldownSeconds   = 120
             $Script:CurrentPhaseName      = "MICRO"
-            $Script:OrchModelTier         = "kimi-k2.6:cloud"
-            Write-HeartbeatLog "WARN" "MICRO PHASE: Single-slot, max budget 300s, P0/defer-only. Orchestrator: kimi-k2.6"
+            Write-HeartbeatLog "WARN" "MICRO PHASE: Single-slot. Orchestrator decides model/budget per task."
         }
         4 {
             $Script:MaxConcurrentSlots    = 2
-            $Script:OrchCooldownSeconds   = 300
-            $Script:MaxBudgetOverride     = 900
+            $Script:OrchCooldownSeconds   = 120
             $Script:CurrentPhaseName      = "LIGHT"
-            $Script:OrchModelTier         = "kimi-k2.6:cloud"
-            Write-HeartbeatLog "WARN" "LIGHT PHASE: 2-slot, docs/tests/lint/bindings only, max budget 900s. Orchestrator: kimi-k2.6"
+            Write-HeartbeatLog "INFO" "LIGHT PHASE: 2-slot. Orchestrator decides model/budget per task."
         }
         3 {
             $Script:MaxConcurrentSlots    = 2
-            $Script:OrchCooldownSeconds   = 180
-            $Script:MaxBudgetOverride     = 1800
+            $Script:OrchCooldownSeconds   = 120
             $Script:CurrentPhaseName      = "MIXED"
-            $Script:OrchModelTier         = "kimi-k2.6:cloud"
-            Write-HeartbeatLog "INFO" "MIXED PHASE: 2-slot, smaller features/validation/testing, max budget 1800s. Orchestrator: kimi-k2.6"
+            Write-HeartbeatLog "INFO" "MIXED PHASE: 2-slot. Orchestrator decides model/budget per task."
         }
         2 {
             $Script:MaxConcurrentSlots    = 3
             $Script:OrchCooldownSeconds   = 120
-            $Script:MaxBudgetOverride     = 5400
             $Script:CurrentPhaseName      = "EXECUTE"
-            $Script:OrchModelTier         = "kimi-k2.6:cloud"
-            Write-HeartbeatLog "INFO" "EXECUTE PHASE: 3-slot, major feature implementation, max budget 5400s. Orchestrator: kimi-k2.6"
+            Write-HeartbeatLog "INFO" "EXECUTE PHASE: 3-slot. Orchestrator decides model/budget per task."
         }
         default {
             $Script:MaxConcurrentSlots    = 3
             $Script:OrchCooldownSeconds   = 120
-            $Script:MaxBudgetOverride     = 0
             $Script:CurrentPhaseName      = "HEAVY-LIFT"
-            $Script:OrchModelTier         = "kimi-k2.6:cloud"
-            Write-HeartbeatLog "INFO" "HEAVY-LIFT PHASE: 3-slot, flagship models, no budget cap. Token-heavy work: multi-file wiring, architecture, deep planning. Orchestrator: kimi-k2.6"
+            Write-HeartbeatLog "INFO" "HEAVY-LIFT PHASE: 3-slot. Orchestrator decides model/budget per task."
         }
     }
 
-    # Resolve worker model allowlist from dynamic source (ollama.com/api/tags).
-    # Hardlock: empty list. Tier 5 (MICRO): minimal safe list to avoid burning
-    # critically-scarce quota on heavy models. All other tiers: full dynamic list.
+    # Resolve available models list for orchestrator mandate.
+    # Hardlock: empty list (no dispatch). All other tiers: full dynamic list
+    # from ollama.com/api/tags. The orchestrator decides which models to assign
+    # to tasks -- this list is informational, not enforced on workers.
     if ($quota.Tier -ge 6) {
         $Script:WorkerModelAllowList = @()
-    } elseif ($quota.Tier -ge 5) {
-        $Script:WorkerModelAllowList = @("gemini-3-flash-preview:cloud")
     } elseif ($Script:DynamicModelAllowList.Count -gt 0) {
         $Script:WorkerModelAllowList = $Script:DynamicModelAllowList
     } else {
-        # Bootstrap: no model allowlist loaded yet. Demote to Tier 3 until
-        # we have model availability data, to avoid burning quota on heavy models.
-        if ($quota.Tier -le 2) {
-            Write-HeartbeatLog "WARN" "No model allowlist available; demoting from Tier $($quota.Tier) to Tier 3 (MIXED) for safety"
-            $Script:CurrentQuotaTier = 3
-            $Script:MaxConcurrentSlots = 2
-            $Script:OrchCooldownSeconds = 180
-            $Script:MaxBudgetOverride = 1800
-            $Script:CurrentPhaseName = "MIXED"
-            $Script:OrchModelTier = "deepseek-v4-pro:cloud"
-        }
         $Script:WorkerModelAllowList = @()
     }
 }
@@ -684,11 +655,7 @@ function Select-OrchestratorModel {
         return $null
     }
 
-    # Use the tier-assigned orchestrator model
-    $model = $Script:OrchModelTier
-    if (-not $model) {
-        $model = $Script:OrchModelStandard
-    }
+    $model = $Script:OrchModel
 
     # Fallback chain: primary -> fallback -> tertiary
     $modelChain = @($model)
@@ -701,30 +668,8 @@ function Select-OrchestratorModel {
     }
     $Script:OrchLastFailedModel = ""  # Clear after one fallback attempt
 
-    # At MICRO phase (Tier 5), force triage model regardless
-    if ($Script:CurrentQuotaTier -ge 5) {
-        Write-HeartbeatLog "INFO" "Orchestrator model: $model (quota phase: $($Script:CurrentPhaseName))"
-        return @{ Model = $model; MandateType = "micro" }
-    }
-
-    # At LIGHT/MIXED (Tier 3-4), use tier-assigned model
-    if ($Script:CurrentQuotaTier -ge 3) {
-        return @{ Model = $model; MandateType = "standard" }
-    }
-
-    # EXECUTE/HEAVY-LIFT (Tier 1-2): always use the tier-assigned model.
-    # The orchestrator needs strong reasoning even for triage/retriage --
-    # it must decompose tasks accurately. Small models produce poor task breakdowns.
-    # Mandate type drives prompt content, not model selection.
-    if ($Reason -match "\bmalformed\b|\bNEEDS_TRIAGE\b|\bretriage\b") {
-        return @{ Model = $model; MandateType = "triage" }
-    }
-    elseif ($Reason -match "\bbacklog\b|\bdrained\b|\bremaining\b") {
-        return @{ Model = $model; MandateType = "heavy" }
-    }
-    else {
-        return @{ Model = $model; MandateType = "standard" }
-    }
+    Write-HeartbeatLog "INFO" "Orchestrator model: $model (quota phase: $($Script:CurrentPhaseName))"
+    return @{ Model = $model }
 }
 
 # === WORKTREE CLEANUP ===
@@ -841,12 +786,6 @@ function Invoke-DispatchWorker {
             return $false
         }
 
-        # Quota-aware budget clamping
-        if ($Script:MaxBudgetOverride -gt 0 -and $budget -gt $Script:MaxBudgetOverride) {
-            Write-HeartbeatLog "WARN" "Budget clamped: ${budget}s -> ${Script:MaxBudgetOverride}s (phase: $($Script:CurrentPhaseName))"
-            $budget = $Script:MaxBudgetOverride
-        }
-
         # Derive token_budget from time_budget if not already set in the task file.
         # Formula: token_budget = max(time_budget * 10, 400) ensures proportional output
         # room relative to the time budget. 400 tokens is the absolute minimum for any task.
@@ -864,25 +803,6 @@ function Invoke-DispatchWorker {
                 $taskContent = Get-Content -LiteralPath $TaskFile.FullName -ErrorAction Stop
                 $taskContent = $taskContent -replace "^token_budget\s*:\s*\d+", "token_budget: $minTokenBudget"
                 Set-Content -LiteralPath $TaskFile.FullName -Value $taskContent -Encoding utf8 -ErrorAction Stop
-            }
-        }
-
-        # Worker model allowlist enforcement (Tier 3+)
-        if ($Script:WorkerModelAllowList.Count -gt 0) {
-            $modelBase = $model -replace ':cloud$', ''
-            $allowed = $false
-            foreach ($allowedModel in $Script:WorkerModelAllowList) {
-                $allowedBase = $allowedModel -replace ':cloud$', ''
-                if ($model -eq $allowedModel -or $modelBase -eq $allowedBase) {
-                    $allowed = $true
-                    break
-                }
-            }
-            if (-not $allowed) {
-                Write-HeartbeatLog "WARN" "Worker model $model not in allowlist for phase $($Script:CurrentPhaseName). Allowlist: $($Script:WorkerModelAllowList -join ', ')"
-                # Downgrade to first allowed model
-                $model = $Script:WorkerModelAllowList[0]
-                Write-HeartbeatLog "INFO" "Downgraded worker model to $model"
             }
         }
 
@@ -962,56 +882,6 @@ function Invoke-DispatchWorker {
     }
 }
 
-# === MICRO TASK BATCHING ===
-
-function Invoke-CreateMicroBatch {
-    param([System.IO.FileInfo[]]$PendingTasks)
-    $microTasks = @($PendingTasks | Where-Object { $_.Name -match "MICRO_" -and $_.Name -notmatch "BATCH_MICRO_" })
-    if ($microTasks.Count -lt 2) { return $null }
-
-    $batchName = "BATCH_MICRO_$(Get-Date -Format 'HHmmss').md"
-    $batchPath = Join-Path $Script:TodoDir $batchName
-
-    $header = @"
-# MODEL: gemini-3-flash-preview:cloud
-# BUDGET: $([math]::Min(180, $Script:MaxBudgetOverride))
-# BATCHED_TASKS: $($microTasks.Count)
-# STRIPPED_CONTEXT: true
-
-# BATCH_INSTRUCTIONS:
-# You are processing $($microTasks.Count) MICRO tasks sequentially.
-# For each TASK section below:
-#   1. Apply the code change described
-#   2. Move the original task file from todo/ to done/ (file name shown in each section)
-#   3. Proceed to the next TASK section
-# Do NOT run `./gradlew :app:assembleDebug` for individual MICRO changes.
-# Only run the build ONCE after all tasks are done, if you have time.
-# If you run out of budget, stop cleanly -- remaining tasks stay in todo/.
-# STRIPPED CONTEXT: You do NOT need to read CLAUDE.md in full.
-# Relevant rules only: android.md (minSdk 26, compileSdk 35, Hilt, Compose).
-
-"@
-
-    $body = ""
-    foreach ($mt in $microTasks) {
-        $body += "---`n## TASK: $($mt.Name)`n"
-        try {
-            $taskContent = Get-Content -LiteralPath $mt.FullName -Raw -ErrorAction SilentlyContinue
-            $body += $taskContent + "`n`n"
-        } catch {
-            $body += "[ERROR reading task content]`n`n"
-        }
-    }
-
-    try {
-        ($header + $body) | Out-File -LiteralPath $batchPath -Encoding utf8 -ErrorAction Stop
-        Write-HeartbeatLog "INFO" "Created MICRO batch: $batchName ($($microTasks.Count) tasks)"
-        return Get-Item -LiteralPath $batchPath
-    } catch {
-        Write-HeartbeatLog "ERROR" "Failed to create MICRO batch: $($_.Exception.Message)"
-        return $null
-    }
-}
 
 # === ORCHESTRATOR MANDATE GENERATOR ===
 
@@ -1022,301 +892,105 @@ function New-OrchestratorMandate {
         [double]$FiveHour,
         [double]$SevenDay,
         [int]$Slots,
-        [int]$MaxBudget,
-        [string[]]$WorkerModels,
-        [string]$MandateType = "standard"
+        [string[]]$WorkerModels
     )
 
     $quotaLine = "QUOTA: 5hr=$FiveHour% 7d=$SevenDay% | Phase: $Phase | Slots: $Slots"
-    if ($MaxBudget -gt 0) {
-        $quotaLine += " | Max budget: ${MaxBudget}s"
-    } else {
-        $quotaLine += " | Budget: unlimited"
+    if ($Tier -ge 6) {
+        $quotaLine += " | HARDLOCK: ZERO DISPATCH"
     }
 
-    $workerModelLine = if ($WorkerModels.Count -gt 0) { "Allowed worker models: $($WorkerModels -join ', ')" } else { "Any flagship model allowed for workers" }
+    $resetInfo = ""
+    $quota = Read-QuotaState
+    if ($quota.ResetMinutes -and $quota.ResetMinutes -ne "?") {
+        $resetInfo = " | Resets in: $($quota.ResetMinutes)min"
+    }
 
-    # Lightweight triage mandate: used when only FAILED/STALE/NEEDS_TRIAGE tasks need
-    # processing. Much shorter than the full mandate to save tokens.
-    if ($MandateType -eq "triage") {
+    $modelList = if ($WorkerModels.Count -gt 0) { $WorkerModels -join ', ' } else { "none (HARDLOCK)" }
+
+    # HARDLOCK mandate
+    if ($Tier -ge 6) {
         return @"
-$quotaLine
-$workerModelLine
+$quotaLine$resetInfo
+Available models: $modelList
 
-LIGHTWEIGHT TRIAGE MODE. You are performing quick queue maintenance only. Do NOT write
-application code. Do NOT create new tasks. Do NOT run build verification.
-
-Your ONLY duties:
-1. [FAILED]_ tasks: Downgrade model, reduce budget 40%, add [VALIDATED]_ prefix.
-2. [STALE]_ tasks: Re-validate, restore [VALIDATED]_ prefix.
-3. [NEEDS_TRIAGE]_ tasks: Add # MODEL: and # BUDGET: headers, add [VALIDATED]_ prefix.
-4. Update REMAINING_WORK_TRACKING.md if any completions changed the backlog.
-
-Write HANDOFF/ORCHESTRATOR_STATUS.md with STATUS=completed when done. Exit immediately.
+HARDLOCK -- quota exhausted. Do NOT dispatch any workers. Exit immediately.
+Write HANDOFF/ORCHESTRATOR_STATUS.md with STATUS=completed.
 "@
     }
 
-    switch ($Tier) {
-        1 {
-            return @"
-$quotaLine
-$workerModelLine
+    # Unified dynamic mandate for all non-hardlock tiers
+    return @"
+$quotaLine$resetInfo
+Available models: $modelList
 
-Quota is abundant. Prioritize token-heavy work that is most efficient with flagship
-models -- multi-file wiring, architecture changes, deep planning, complex integrations.
-Also create detailed, well-scoped task files that small models can execute in later
-phases. Route aggressively: heavy models for heavy work, but don't waste large models
-on tasks a small model could handle. Queue ambitious work now while budget is unlimited.
+You are the swarm orchestrator. Your job is to MANAGE the task queue -- triage, validate,
+assign models and budgets, and create well-scoped task files. Do NOT write application code.
+Exit after writing HANDOFF/ORCHESTRATOR_STATUS.md with STATUS=completed.
 
-DYNAMIC SCOPING & BUDGETING RULES (apply to ALL tiers):
-- Budget = (estimated tokens / 10) + (build verification time in seconds) + 30s buffer.
-- A task that edits 1 file with 8 LOC change should NEVER have a 120s budget.
-- Token budget field MUST be realistic: count prompt characters / 4 for estimate.
-- MICRO tasks (null-guard, safe-return, deprecation wrap) get 60s budget MAX.
-- If a task requires a full Gradle build, add 120s to budget OR delegate build to orchestrator.
+MODEL & BUDGET ASSIGNMENT (your primary responsibility):
+- Assign # MODEL: and # BUDGET: headers to every task you validate.
+- Choose models dynamically based on task complexity and current quota state.
+- At high quota usage (5hr > 75% or 7d > 75%), prefer cheaper models for simple tasks.
+- At low quota usage, use flagship models for complex work.
+- Budget should reflect actual task complexity: (estimated tokens / 10) + (build time if needed) + 30s buffer.
+- A single null-guard fix should NEVER have a 300s budget. Scale budgets to task scope.
+- Add `# token_budget:` headers proportionally: max(budget_seconds * 10, 400).
 
-BATCHING RULE (MICRO tasks):
-- If 2+ [VALIDATED]_MICRO_* tasks exist in todo/, create BATCH_MICRO_*.md containing ALL of them.
-- The batch worker processes them sequentially, moving each to done/ as it completes.
-- This amortizes model load + context injection cost across multiple tasks.
+TASK TRIAGE:
+1. [FAILED]_ tasks: Analyze the failure. Downgrade model. Reduce budget. Re-validate with [VALIDATED]_ prefix.
+   RETRY CONSTRAINT: Failed tasks MUST downgrade model. Never escalate. Failed on smallest model = UNRESOLVABLE.
+2. [STALE]_ tasks: Re-validate if still relevant. Restore [VALIDATED]_ prefix or reject.
+3. [NEEDS_TRIAGE]_ tasks: Add # MODEL: and # BUDGET: headers. Add [VALIDATED]_ prefix.
+4. [TIME_BREACH]_ tasks: Analyze WHY the task breached. Was budget too low? Was model too slow?
+   Adjust budget and/or model accordingly. Add [VALIDATED]_ prefix when re-triaged.
 
-BUILD VERIFICATION PROTOCOL:
+BATCHING (your decision):
+- You MAY batch related MICRO tasks (null-guards, safe-returns, deprecation wraps) into a single
+  BATCH_MICRO_*.md file if it makes sense for efficiency. This is your call -- not every group
+  of MICRO tasks should be batched.
+- Batches should use `# MODEL:`, `# BUDGET:`, and `# BATCHED_TASKS: N` headers.
+- Individual MICRO tasks that need separate verification should stay separate.
+
+BUILD VERIFICATION:
 - Workers executing pure null-guard / safe-return / deprecation-wrap changes SKIP the Gradle build.
-- The orchestrator runs FULL build verification (`./gradlew :app:assembleDebug`) after workers finish.
-- If the orchestrator build fails, it creates a remediation task for the specific failure.
-- This prevents every micro worker from burning 60-120s on Gradle while the change is trivial.
+- You may run `./gradlew :app:assembleDebug` once after workers finish to verify.
+- MICRO tasks: add `# STRIPPED_CONTEXT: true` header to omit full CLAUDE.md context.
 
-PROMPT STRIPPING (MICRO tasks):
-- MICRO tasks do NOT need full CLAUDE.md architecture context.
-- Strip to: android.md rules only + the exact task instructions + file context.
-- Add header `# STRIPPED_CONTEXT: true` so TaskGovernor knows to omit quota block.
-
-TIME_BREACH PROTOCOL:
-- [TIME_BREACH]_ tasks were force-killed by TaskGovernor for exceeding budget.
-- Rename [TIME_BREACH]_ prefix to [VALIDATED]_.
-- Increase # BUDGET: by +60s minimum (e.g., 120s -> 180s, 180s -> 240s).
-- Verify # MODEL: header exists and is appropriate.
-- Redispatch as normal. Do NOT downgrade model -- the issue was time, not capability.
-
-STANDARD ORCHESTRATOR DUTIES:
+QUEUE MANAGEMENT:
 1. Read HANDOFF/done/ for newly completed tasks. Update REMAINING_WORK_TRACKING.md.
 2. Read HANDOFF/IN_PROGRESS/ for stale tasks (>60 min). Reclaim to todo/ with [STALE]_ prefix.
-3. Read HANDOFF/todo/ for [FAILED]_ tasks. Downgrade model, reduce budget 40%, re-validate.
-4. Read HANDOFF/todo/ for [STALE]_ tasks. Re-validate, restore [VALIDATED]_ prefix.
-5. Read HANDOFF/todo/ for [TIME_BREACH]_ tasks. Apply TIME_BREACH PROTOCOL above.
-6. Read HANDOFF/todo/ for [NEEDS_TRIAGE]_ tasks. Add # MODEL: and # BUDGET: headers.
-7. Validate unvalidated tasks. Add [VALIDATED]_ prefix or reject.
-8. Create new task files from REMAINING_WORK_TRACKING.md gaps with proper headers.
-9. Assign models per routing table. Set budgets based on complexity.
-10. Write HANDOFF/ORCHESTRATOR_STATUS.md with STATUS=completed.
+3. Create new task files from REMAINING_WORK_TRACKING.md gaps with proper # MODEL: and # BUDGET: headers.
+4. Validate unvalidated tasks. Add [VALIDATED]_ prefix or reject to REJECTED/.
+5. Write HANDOFF/ORCHESTRATOR_STATUS.md with STATUS=completed when done.
 
 CRITICAL: You MANAGE the queue. Do NOT write application code. Exit after writing status file.
-RETRY CONSTRAINT: Failed tasks MUST downgrade model. Never escalate. Failed on smallest = UNRESOLVABLE.
 "@
-        }
-        2 {
-            return @"
-$quotaLine
-$workerModelLine
-
-Standard orchestrator duties. Dispatch implementation tasks per CLAUDE.md routing table.
-Prefer queuing any remaining heavy-lift work now -- the window for flagship models is
-closing. Start routing docs/tests/lint to smaller models.
-
-DYNAMIC SCOPING & BUDGETING RULES:
-- Budget = (estimated tokens / 10) + (build verification time) + 30s buffer.
-- MICRO tasks (null-guard, safe-return, deprecation wrap) get 60s budget MAX.
-- If 2+ MICRO tasks exist, batch them into BATCH_MICRO_*.md and dispatch ONE worker.
-- Workers skip Gradle for pure null-guard/safe-return changes; orchestrator runs full build after.
-- MICRO tasks: strip CLAUDE.md context to android.md rules only + task instructions.
-
-TIME_BREACH PROTOCOL:
-- [TIME_BREACH]_ tasks were force-killed by TaskGovernor for exceeding budget.
-- Rename [TIME_BREACH]_ prefix to [VALIDATED]_.
-- Increase # BUDGET: by +60s minimum.
-- Redispatch as normal. Do NOT downgrade model -- the issue was time, not capability.
-
-STANDARD ORCHESTRATOR DUTIES:
-1. Read HANDOFF/done/ for newly completed tasks. Update REMAINING_WORK_TRACKING.md.
-2. Read HANDOFF/IN_PROGRESS/ for stale tasks (>60 min). Reclaim to todo/ with [STALE]_ prefix.
-3. Read HANDOFF/todo/ for [FAILED]_ tasks. Downgrade model, reduce budget 40%, re-validate.
-4. Read HANDOFF/todo/ for [STALE]_ tasks. Re-validate, restore [VALIDATED]_ prefix.
-5. Read HANDOFF/todo/ for [TIME_BREACH]_ tasks. Apply TIME_BREACH PROTOCOL above.
-6. Read HANDOFF/todo/ for [NEEDS_TRIAGE]_ tasks. Add # MODEL: and # BUDGET: headers.
-7. Validate unvalidated tasks. Add [VALIDATED]_ prefix or reject.
-8. Create new task files from REMAINING_WORK_TRACKING.md gaps with proper headers.
-9. Assign models per routing table. Set budgets based on complexity.
-10. Write HANDOFF/ORCHESTRATOR_STATUS.md with STATUS=completed.
-
-CRITICAL: You MANAGE the queue. Do NOT write application code. Exit after writing status file.
-RETRY CONSTRAINT: Failed tasks MUST downgrade model. Never escalate. Failed on smallest = UNRESOLVABLE.
-"@
-        }
-        3 {
-            return @"
-$quotaLine
-$workerModelLine
-
-Standard orchestrator duties. Dispatch implementation tasks. Avoid large multi-file
-refactors. Route validation/testing/docs to smaller models. Budgets clamped to ${MaxBudget}s.
-
-DYNAMIC SCOPING & BUDGETING RULES:
-- Budget = (estimated tokens / 10) + (build verification time) + 30s buffer.
-- MICRO tasks get 60s budget MAX. If 2+ MICRO tasks exist, batch them into BATCH_MICRO_*.md.
-- Workers skip Gradle for pure null-guard/safe-return changes; orchestrator runs full build after.
-- MICRO tasks: strip CLAUDE.md context to android.md rules only + task instructions.
-
-TIME_BREACH PROTOCOL:
-- [TIME_BREACH]_ tasks were force-killed by TaskGovernor for exceeding budget.
-- Rename [TIME_BREACH]_ prefix to [VALIDATED]_.
-- Increase # BUDGET: by +60s minimum.
-- Redispatch as normal. Do NOT downgrade model -- the issue was time, not capability.
-
-STANDARD ORCHESTRATOR DUTIES: (same as above -- scan, triage, validate, create, route)
-Write HANDOFF/ORCHESTRATOR_STATUS.md with STATUS=completed when done.
-CRITICAL: You MANAGE the queue. Do NOT write application code. Exit after writing status file.
-"@
-        }
-        4 {
-            return @"
-$quotaLine
-$workerModelLine
-
-Quota is tight. Only create/dispatch tasks executable by gemma4:31b or
-gemini-3-flash-preview: docs, tests, lint, bindings, P0 fixes. Defer ALL feature
-work and medium+ refactors to next quota window. Break remaining cleanup into
-small chunks (<=${MaxBudget}s each).
-
-DYNAMIC SCOPING & BUDGETING RULES:
-- Budget = (estimated tokens / 10) + (build verification time) + 30s buffer.
-- MICRO tasks get 60s budget MAX. If 2+ MICRO tasks exist, batch them into BATCH_MICRO_*.md.
-- Workers skip Gradle for pure null-guard/safe-return changes; orchestrator runs full build after.
-- MICRO tasks: strip CLAUDE.md context to android.md rules only + task instructions.
-
-TIME_BREACH PROTOCOL:
-- [TIME_BREACH]_ tasks were force-killed by TaskGovernor for exceeding budget.
-- Rename [TIME_BREACH]_ prefix to [VALIDATED]_.
-- Increase # BUDGET: by +60s minimum (respecting max budget cap).
-- Redispatch as normal. Do NOT downgrade model.
-
-ORCHESTRATOR DUTIES (abbreviated):
-1. Scan done/, IN_PROGRESS/, todo/.
-2. Triage [FAILED]_ and [STALE]_ tasks -- downgrade aggressively.
-3. Handle [TIME_BREACH]_ tasks per TIME_BREACH PROTOCOL above.
-4. Create ONLY small-model tasks (docs/tests/lint/bindings/P0).
-5. DEFER everything else.
-6. Write HANDOFF/ORCHESTRATOR_STATUS.md with STATUS=completed.
-CRITICAL: Exit after writing status file. Do NOT write application code.
-"@
-        }
-        5 {
-            return @"
-$quotaLine
-$workerModelLine
-
-Quota is critically low. ONLY create/dispatch micro-tasks for gemini-3-flash-preview:
-P0 fixes, lint, single-line changes. Budget capped at ${MaxBudget}s. ALL other work
-MUST be deferred to next quota window. PARTIAL COMPLETION IS ACCEPTABLE.
-
-DYNAMIC SCOPING & BUDGETING RULES:
-- Budget = (estimated tokens / 10) + (build verification time) + 30s buffer.
-- MICRO tasks get 60s budget MAX. If 2+ MICRO tasks exist, batch them into BATCH_MICRO_*.md.
-- Workers skip Gradle for pure null-guard/safe-return changes; orchestrator runs full build after.
-- MICRO tasks: strip CLAUDE.md context to android.md rules only + task instructions.
-
-TIME_BREACH PROTOCOL:
-- [TIME_BREACH]_ tasks were force-killed by TaskGovernor for exceeding budget.
-- Rename [TIME_BREACH]_ prefix to [VALIDATED]_.
-- Increase # BUDGET: by +60s (up to max budget cap).
-- Redispatch as normal. Do NOT downgrade model.
-
-ORCHESTRATOR DUTIES (micro only):
-1. Quick scan of done/ and todo/.
-2. Handle [TIME_BREACH]_ tasks per TIME_BREACH PROTOCOL above.
-3. Create ONLY gemini-3-flash-preview tasks <= ${MaxBudget}s.
-4. If 2+ MICRO tasks exist, batch them. ONE worker processes all sequentially.
-5. Defer everything else.
-6. Write HANDOFF/ORCHESTRATOR_STATUS.md with STATUS=completed.
-CRITICAL: Exit after writing status file. Do NOT initiate any work requiring >${MaxBudget}s.
-"@
-        }
-        default {
-            return @"
-$quotaLine
-$workerModelLine
-
-HARDLOCK -- this mandate should never be dispatched. If you see this, the heartbeat
-governor has failed. Exit immediately without doing any work.
-"@
-        }
-    }
 }
 
-# === IN-PROCESS TIME_BREACH RETRIAGE ===
-# Handles TIME_BREACH tasks mechanically without dispatching an orchestrator.
-# Renames prefix, bumps budget, derives token_budget from time_budget.
+# === TIME_BREACH TO NEEDS_TRIAGE ===
+# Renames [TIME_BREACH]_ tasks to [NEEDS_TRIAGE]_ so the orchestrator can
+# intelligently retriage them (adjust budget, change model, or reject).
 
-function Invoke-InProcessTimeBreachRetriage {
+function Invoke-RenameTimeBreachToNeedsTriage {
     $timeBreachFiles = @(Get-ChildItem -LiteralPath $Script:TodoDir -Filter "[TIME_BREACH]_*" -ErrorAction SilentlyContinue)
     if ($timeBreachFiles.Count -eq 0) {
         return 0
     }
 
-    $retriaged = 0
+    $renamed = 0
     foreach ($tbFile in $timeBreachFiles) {
         try {
-            $content = Get-Content -LiteralPath $tbFile.FullName -ErrorAction Stop
-            if ($content.Count -eq 0) {
-                Write-HeartbeatLog "WARN" "TIME_BREACH file $($tbFile.Name) is empty -- skipping"
-                continue
-            }
-
-            # Find and update headers
-            $newContent = @()
-            $budgetSeconds = 0
-            $foundBudget = $false
-
-            foreach ($line in $content) {
-                if ($line -match "^#\s*(BUDGET|Budget)\s*:\s*(\d+)") {
-                    $budgetSeconds = [int]$matches[2]
-                    $newBudget = $budgetSeconds + 60
-                    $newContent += $line -replace "\d+$", $newBudget.ToString()
-                    $foundBudget = $true
-                } elseif ($line -match "^token_budget\s*:\s*(\d+)") {
-                    # Derive token_budget from time_budget: max(token_budget + 100, budgetSeconds * 10)
-                    # This ensures proportional room for model output
-                    $oldTokenBudget = [int]$matches[1]
-                    if ($foundBudget) {
-                        $newTokenBudget = [math]::Max($oldTokenBudget + 100, $newBudget * 10)
-                    } else {
-                        $newTokenBudget = $oldTokenBudget + 100
-                    }
-                    $newContent += $line -replace "\d+$", $newTokenBudget.ToString()
-                } else {
-                    $newContent += $line
-                }
-            }
-
-            # If no BUDGET header found, add one with 120s default
-            if (-not $foundBudget) {
-                $newContent = ,("# BUDGET: 120") + $newContent
-            }
-
-            # Write updated content back
-            Set-Content -LiteralPath $tbFile.FullName -Value $newContent -Encoding utf8 -ErrorAction Stop
-
-            # Rename: [TIME_BREACH]_ prefix -> [VALIDATED]_ prefix
-            $newName = $tbFile.Name -replace "^\[TIME_BREACH\]_", "[VALIDATED]_"
+            $newName = $tbFile.Name -replace "^\[TIME_BREACH\]_", "[NEEDS_TRIAGE]_"
             $newPath = Join-Path $Script:TodoDir $newName
             Rename-Item -LiteralPath $tbFile.FullName -NewName $newName -ErrorAction Stop
-
-            Write-HeartbeatLog "INFO" "In-process TIME_BREACH retriage: $($tbFile.Name) -> $newName (budget +60s)"
-            $retriaged++
+            Write-HeartbeatLog "INFO" "TIME_BREACH -> NEEDS_TRIAGE: $($tbFile.Name) -> $newName (orchestrator will retriage)"
+            $renamed++
         } catch {
-            Write-HeartbeatLog "ERROR" "Failed to retriage TIME_BREACH file $($tbFile.Name): $($_.Exception.Message)"
+            Write-HeartbeatLog "ERROR" "Failed to rename TIME_BREACH file $($tbFile.Name): $($_.Exception.Message)"
         }
     }
-    return $retriaged
+    return $renamed
 }
 
 # === ORCHESTRATOR DISPATCH ===
@@ -1352,13 +1026,9 @@ function Invoke-DispatchOrchestrator {
 
     # Read live quota data for mandate injection
     $quota = Read-QuotaState
-    # Use override if set (e.g., "triage" for simple retriage), otherwise use model selection mandate type
-    $mandateType = if ($Script:OrchMandateOverride) { $Script:OrchMandateOverride } elseif ($orchSelection.MandateType) { $orchSelection.MandateType } else { "standard" }
-    $Script:OrchMandateOverride = ""  # Reset override after use
     $mandate = New-OrchestratorMandate -Tier $Script:CurrentQuotaTier -Phase $Script:CurrentPhaseName `
         -FiveHour $quota.FiveHour -SevenDay $quota.SevenDay `
-        -Slots $Script:MaxConcurrentSlots -MaxBudget $Script:MaxBudgetOverride `
-        -WorkerModels $Script:WorkerModelAllowList -MandateType $mandateType
+        -Slots $Script:MaxConcurrentSlots -WorkerModels $Script:WorkerModelAllowList
 
     $orchWorkDir = Join-Path $Script:BaseDir ".claude\agents\orchestrator"
     $null = New-Item -ItemType Directory -Path $orchWorkDir -Force
@@ -1679,10 +1349,10 @@ function Invoke-HeartbeatPulse {
         $null = Invoke-ReclaimOrphanTasks -InProgressCount $fileState.InProgressCount
     }
 
-    # Phase 3.5: In-process TIME_BREACH retriage (avoids expensive orchestrator dispatch)
-    $retriagedCount = Invoke-InProcessTimeBreachRetriage
-    if ($retriagedCount -gt 0) {
-        Write-HeartbeatLog "INFO" "In-process retriage handled $retriagedCount TIME_BREACH task(s) -- no orchestrator needed"
+    # Phase 3.5: Rename TIME_BREACH tasks to NEEDS_TRIAGE for orchestrator retriage
+    $renamedCount = Invoke-RenameTimeBreachToNeedsTriage
+    if ($renamedCount -gt 0) {
+        Write-HeartbeatLog "INFO" "Renamed $renamedCount TIME_BREACH task(s) to NEEDS_TRIAGE for orchestrator retriage"
         # Refresh file state since we modified files
         $fileState = Get-SwarmFileState
     }
@@ -1704,33 +1374,9 @@ function Invoke-HeartbeatPulse {
         $orchSlots = if ($orchRunning) { 1 } else { 0 }
         $slotsForWorkers = $Script:MaxConcurrentSlots - $orchSlots
         if (([math]::Max($workerCount, $claudeCount)) -lt $slotsForWorkers) {
-            $task = $null
-
-            # At MICRO phase (Tier 5), only dispatch P0/emergency tasks
-            if ($Script:CurrentQuotaTier -ge 5) {
-                $task = $fileState.PendingTasks | Where-Object { $_.Name -match "p0|P0|BLOCKED_BY_QUOTA|EMERGENCY" } | Select-Object -First 1
-                if (-not $task) {
-                    Write-HeartbeatLog "DEBUG" "$($Script:CurrentPhaseName): no P0 tasks available to dispatch"
-                }
-            }
-            # MICRO batching: if 2+ MICRO tasks exist (excluding batch files) and no batch already pending
-            elseif (($fileState.PendingTasks | Where-Object { $_.Name -match "MICRO_" -and $_.Name -notmatch "BATCH_MICRO_" }).Count -ge 2 -and
-                    -not ($fileState.PendingTasks | Where-Object { $_.Name -match "BATCH_MICRO_" })) {
-                $batchFile = Invoke-CreateMicroBatch -PendingTasks $fileState.PendingTasks
-                if ($batchFile) {
-                    $task = $batchFile
-                    Write-HeartbeatLog "INFO" "Dispatching MICRO batch worker"
-                }
-            }
-            # If a BATCH_MICRO file is pending, dispatch it instead of individual MICRO tasks
-            elseif ($fileState.PendingTasks | Where-Object { $_.Name -match "BATCH_MICRO_" } | Select-Object -First 1) {
-                $task = $fileState.PendingTasks | Where-Object { $_.Name -match "BATCH_MICRO_" } | Select-Object -First 1
-                Write-HeartbeatLog "INFO" "Dispatching existing MICRO batch: $($task.Name)"
-            }
-            else {
-                $task = $fileState.PendingTasks | Select-Object -First 1
-            }
-
+            # Dispatch the first pending [VALIDATED]_ task -- the orchestrator has
+            # already assigned model and budget via # MODEL: and # BUDGET: headers.
+            $task = $fileState.PendingTasks | Select-Object -First 1
             if ($task) {
                 $null = Invoke-DispatchWorker -TaskFile $task
             }
@@ -1753,9 +1399,7 @@ function Invoke-HeartbeatPulse {
             }
             # else: no free slot; keep flag set, retry next pulse
         } elseif ($fileState.FailedOrStaleCount -gt 0) {
-            # Check if remaining failed/stale tasks need orchestrator triage
-            # TIME_BREACH tasks are handled in-process (Phase 3.5), so only dispatch
-            # orchestrator if there are FAILED or STALE tasks requiring judgment
+            # Failed/stale/needs-triage tasks need orchestrator triage
             $failedStaleFiles = @(Get-ChildItem -LiteralPath $Script:TodoDir -Filter "[FAILED]_*" -ErrorAction SilentlyContinue)
             $staleFiles = @(Get-ChildItem -LiteralPath $Script:TodoDir -Filter "[STALE]_*" -ErrorAction SilentlyContinue)
             $needsTriageFiles = @(Get-ChildItem -LiteralPath $Script:TodoDir -Filter "[NEEDS_TRIAGE]_*" -ErrorAction SilentlyContinue)
@@ -1764,9 +1408,6 @@ function Invoke-HeartbeatPulse {
             if ($totalNeedsOrch -gt 0 -and $slotsFree -gt 0) {
                 $needsOrch = $true
                 $orchReason = "$totalNeedsOrch task(s) need orchestrator triage (FAILED/STALE/NEEDS_TRIAGE)"
-                $Script:OrchMandateOverride = "triage"
-            } elseif ($totalNeedsOrch -eq 0 -and $fileState.FailedOrStaleCount -gt 0) {
-                Write-HeartbeatLog "DEBUG" "All failed/stale tasks were TIME_BREACH and handled in-process -- skipping orchestrator"
             } elseif ($slotsFree -eq 0) {
                 Write-HeartbeatLog "DEBUG" "Deferring orchestrator: $($fileState.FailedOrStaleCount) failed/stale tasks need triage but no free slots (workers=$workerCount claude=$claudeCount)"
             }
@@ -1848,7 +1489,7 @@ function Invoke-HeartbeatBoot {
     $null = Invoke-RefreshModelAllowlist
     Invoke-QuotaGovernor
     $agentCountLine = if ($AgentCount -gt 0) { " (override: -AgentCount $AgentCount)" } else { "" }
-    Write-HeartbeatLog "INFO" "Max Concurrent Slots: $($Script:MaxConcurrentSlots)$agentCountLine | Phase: $($Script:CurrentPhaseName) | Orch Model: $($Script:OrchModelTier) | Allowed Models: $($Script:WorkerModelAllowList.Count)"
+    Write-HeartbeatLog "INFO" "Max Concurrent Slots: $($Script:MaxConcurrentSlots)$agentCountLine | Phase: $($Script:CurrentPhaseName) | Orch Model: $($Script:OrchModel) | Available Models: $($Script:WorkerModelAllowList.Count)"
 
     # Phase 4: Remove stale completion flag from prior run
     if (Test-Path $Script:CompleteFlag) {

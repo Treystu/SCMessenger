@@ -1,3 +1,7 @@
+# MODEL: gemma4:31b:cloud
+# BUDGET: 300
+# token_budget: 3000
+
 # MICRO_RUST_RELAY_ONION_ENABLE_001
 
 **Status:** VERIFIED REMAINING WORK

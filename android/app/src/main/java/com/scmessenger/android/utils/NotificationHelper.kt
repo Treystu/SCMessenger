@@ -192,7 +192,7 @@ object NotificationHelper {
         val contentText = "Connected: $peerCount peers • Relayed: $relayCount messages"
 
         return NotificationCompat.Builder(context, CHANNEL_MESH_STATUS)
-            .setContentTitle("Mesh Network Active")
+            .setContentTitle(context.getString(R.string.mesh_service_notification_title))
             .setContentText(contentText)
             .setSmallIcon(R.drawable.ic_notification)
             .setOngoing(true)
@@ -327,12 +327,12 @@ object NotificationHelper {
             )
 
             val remoteInput = RemoteInput.Builder(KEY_REPLY_TEXT)
-                .setLabel("Reply")
+                .setLabel(context.getString(R.string.notification_action_reply))
                 .build()
 
             val replyAction = NotificationCompat.Action.Builder(
                 R.drawable.ic_notification,
-                "Reply",
+                context.getString(R.string.notification_action_reply),
                 replyPendingIntent
             )
                 .addRemoteInput(remoteInput)
@@ -352,7 +352,7 @@ object NotificationHelper {
 
         val markReadAction = NotificationCompat.Action.Builder(
             R.drawable.ic_notification,
-            "Mark Read",
+            context.getString(R.string.notification_action_mark_read),
             markReadPendingIntent
         ).build()
         actions.add(markReadAction)
@@ -368,7 +368,7 @@ object NotificationHelper {
 
         val muteAction = NotificationCompat.Action.Builder(
             R.drawable.ic_notification,
-            "Mute",
+            context.getString(R.string.notification_action_mute),
             mutePendingIntent
         ).build()
         actions.add(muteAction)
