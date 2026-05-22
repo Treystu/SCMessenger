@@ -52,15 +52,15 @@ fun PeerListScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Connected Peers") },
+                title = { Text(stringResource(R.string.peer_list_title)) },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.chat_action_dismiss))
                     }
                 },
                 actions = {
                     IconButton(onClick = { viewModel.refreshData() }) {
-                        Icon(Icons.Default.Refresh, contentDescription = "Refresh")
+                        Icon(Icons.Default.Refresh, contentDescription = stringResource(R.string.diagnostics_action_refresh))
                     }
                 }
             )
@@ -86,14 +86,14 @@ fun PeerListScreen(
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         Text(
-                            text = "No peers connected",
+                            text = stringResource(R.string.peer_list_no_peers),
                             style = MaterialTheme.typography.titleLarge
                         )
 
                         Spacer(modifier = Modifier.height(8.dp))
 
                         Text(
-                            text = "Start the mesh service to discover peers",
+                            text = stringResource(R.string.peer_list_no_peers_description),
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -115,8 +115,13 @@ fun PeerListScreen(
                             modifier = Modifier.fillMaxWidth(),
                             tonalElevation = 1.dp
                         ) {
+                            val countText = if (peers.size == 1) {
+                                stringResource(R.string.peer_list_count_format_singular, peers.size)
+                            } else {
+                                stringResource(R.string.peer_list_count_format_plural, peers.size)
+                            }
                             Text(
-                                text = "${peers.size} peer${if (peers.size != 1) "s" else ""} connected",
+                                text = countText,
                                 modifier = Modifier.padding(16.dp),
                                 style = MaterialTheme.typography.titleSmall,
                                 fontWeight = FontWeight.Bold
@@ -189,7 +194,7 @@ private fun PeerCard(
                                   else ConnectionQuality.UNKNOWN
                     )
                     Text(
-                        text = if (peer.isOnline) "Online" else "Offline",
+                        text = if (peer.isOnline) stringResource(R.string.peer_list_status_online) else stringResource(R.string.peer_list_status_offline),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -198,7 +203,7 @@ private fun PeerCard(
                 // Last seen
                 peer.lastSeen?.let {
                     Text(
-                        text = "Last seen: ${formatTimestamp(it)}",
+                        text = stringResource(R.string.peer_list_last_seen, formatTimestamp(it)),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )

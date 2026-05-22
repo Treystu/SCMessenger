@@ -12,6 +12,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.compose.ui.res.stringResource
+import com.scmessenger.android.R
 import com.scmessenger.android.ui.components.ErrorBanner
 import com.scmessenger.android.ui.components.ErrorState
 import com.scmessenger.android.ui.components.IdenticonFromHex
@@ -68,10 +70,10 @@ fun PowerSettingsScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Power Settings") },
+                title = { Text(stringResource(R.string.power_settings_title)) },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.chat_action_dismiss))
                     }
                 }
             )
@@ -94,7 +96,7 @@ fun PowerSettingsScreen(
             // Info banner about AutoAdjust
             if (autoAdjustEnabled) {
                 InfoBanner(
-                    message = "AutoAdjust is active - settings will be automatically optimized based on battery and network conditions",
+                    message = stringResource(R.string.power_settings_info_autoadjust_active),
                     onDismiss = {}
                 )
             }
@@ -109,10 +111,10 @@ fun PowerSettingsScreen(
             }
 
             // AutoAdjust Settings
-            SettingsSection(title = "AutoAdjust Engine") {
+            SettingsSection(title = stringResource(R.string.power_settings_section_autoadjust)) {
                 SwitchSetting(
-                    title = "Enable AutoAdjust",
-                    description = "Automatically adjust settings based on battery and network conditions",
+                    title = stringResource(R.string.power_settings_label_enable_autoadjust),
+                    description = stringResource(R.string.power_settings_description_enable_autoadjust),
                     checked = autoAdjustEnabled,
                     onCheckedChange = { viewModel.setAutoAdjust(it) }
                 )
@@ -125,7 +127,7 @@ fun PowerSettingsScreen(
                     ) {
                         Column(modifier = Modifier.padding(16.dp)) {
                             Text(
-                                text = "Current Profile",
+                                text = stringResource(R.string.power_settings_label_current_profile),
                                 style = MaterialTheme.typography.labelMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -142,7 +144,7 @@ fun PowerSettingsScreen(
 
             // Manual Profile Override
             if (!autoAdjustEnabled) {
-                SettingsSection(title = "Manual Profile") {
+                SettingsSection(title = stringResource(R.string.power_settings_section_manual_profile)) {
                     ProfileSelector(
                         currentProfile = currentProfile,
                         onProfileSelected = { viewModel.setManualProfile(it) }
@@ -151,10 +153,10 @@ fun PowerSettingsScreen(
             }
 
             // Advanced Overrides
-            SettingsSection(title = "Advanced Overrides") {
+            SettingsSection(title = stringResource(R.string.power_settings_section_advanced_overrides)) {
                 SliderSetting(
-                    title = "BLE Scan Interval",
-                    description = "How often to scan for BLE peers (lower = more battery)",
+                    title = stringResource(R.string.power_settings_label_ble_scan_interval),
+                    description = stringResource(R.string.power_settings_description_ble_scan_interval),
                     value = bleScanInterval.toFloat(),
                     valueRange = 500f..10000f,
                     steps = 18,
@@ -167,8 +169,8 @@ fun PowerSettingsScreen(
                 )
 
                 SliderSetting(
-                    title = "Relay Max Per Hour",
-                    description = "Maximum messages to relay per hour",
+                    title = stringResource(R.string.power_settings_label_relay_max_per_hour),
+                    description = stringResource(R.string.power_settings_description_relay_max_per_hour),
                     value = relayMaxPerHour.toFloat(),
                     valueRange = 0f..500f,
                     steps = 49,
@@ -187,7 +189,7 @@ fun PowerSettingsScreen(
                         .padding(horizontal = 16.dp, vertical = 8.dp),
                     enabled = !autoAdjustEnabled
                 ) {
-                    Text("Reset to Defaults")
+                    Text(stringResource(R.string.power_settings_action_reset_defaults))
                 }
             }
 
@@ -251,10 +253,10 @@ fun PowerSettingsScreen(
 
             // Battery Settings
             settings?.let { currentSettings ->
-                SettingsSection(title = "Battery Management") {
+                SettingsSection(title = stringResource(R.string.power_settings_section_battery_management)) {
                     SliderSetting(
-                        title = "Battery Floor",
-                        description = "Stop relaying when battery drops below this level",
+                        title = stringResource(R.string.power_settings_label_battery_floor),
+                        description = stringResource(R.string.power_settings_description_battery_floor),
                         value = currentSettings.batteryFloor.toFloat(),
                         valueRange = 0f..50f,
                         steps = 49,
@@ -265,8 +267,8 @@ fun PowerSettingsScreen(
                     )
 
                     SwitchSetting(
-                        title = "Background Tunnel (VPN)",
-                        description = "Keeps connection alive in the background using an idle, local loop. Consumes no network data.",
+                        title = stringResource(R.string.power_settings_label_vpn_tunnel),
+                        description = stringResource(R.string.power_settings_description_vpn_tunnel),
                         checked = vpnModeEnabled,
                         onCheckedChange = { enabled ->
                             if (enabled) {
@@ -283,13 +285,8 @@ fun PowerSettingsScreen(
                     )
 
                     InfoCard(
-                        title = "Power Saving Tips",
-                        message = """
-                            • Enable AutoAdjust for automatic optimization
-                            • Increase BLE scan interval to save battery
-                            • Disable unused transports
-                            • Lower relay budget on battery power
-                        """.trimIndent()
+                        title = stringResource(R.string.power_settings_section_tips),
+                        message = stringResource(R.string.power_settings_tips_content)
                     )
                 }
             }
@@ -420,9 +417,9 @@ private fun ProfileSelector(
             .padding(horizontal = 16.dp, vertical = 12.dp)
     ) {
         val profiles = listOf(
-            uniffi.api.AdjustmentProfile.MINIMAL to "Minimal (Battery Saver)",
-            uniffi.api.AdjustmentProfile.STANDARD to "Standard (Balanced)",
-            uniffi.api.AdjustmentProfile.MAXIMUM to "Maximum (Performance)"
+            uniffi.api.AdjustmentProfile.MINIMAL to stringResource(R.string.power_settings_profile_minimal),
+            uniffi.api.AdjustmentProfile.STANDARD to stringResource(R.string.power_settings_profile_standard),
+            uniffi.api.AdjustmentProfile.MAXIMUM to stringResource(R.string.power_settings_profile_maximum)
         )
 
         profiles.forEach { (profile, label) ->

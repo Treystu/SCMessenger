@@ -14,6 +14,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.compose.ui.res.stringResource
+import com.scmessenger.android.R
 import com.scmessenger.android.ui.viewmodels.ConversationsViewModel
 import java.text.SimpleDateFormat
 import java.util.*
@@ -30,10 +32,10 @@ fun BlockedPeersScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Blocked Peers") },
+                title = { Text(stringResource(R.string.blocked_peers_title)) },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.chat_action_dismiss))
                     }
                 }
             )
@@ -55,7 +57,7 @@ fun BlockedPeersScreen(
                     )
                     Spacer(modifier = Modifier.height(16.dp))
                     Text(
-                        "No blocked peers",
+                        stringResource(R.string.blocked_peers_empty_state),
                         style = MaterialTheme.typography.bodyLarge,
                         color = MaterialTheme.colorScheme.outline
                     )
@@ -83,8 +85,8 @@ fun BlockedPeersScreen(
         val peer = showUnblockConfirm!!
         AlertDialog(
             onDismissRequest = { showUnblockConfirm = null },
-            title = { Text("Unblock Peer?") },
-            text = { Text("Peer ID: ${peer.peerId}\n\nYou will receive messages and notifications from this peer again.") },
+            title = { Text(stringResource(R.string.blocked_peers_dialog_unblock_title)) },
+            text = { Text(stringResource(R.string.blocked_peers_dialog_unblock_description, peer.peerId)) },
             confirmButton = {
                 TextButton(
                     onClick = {
@@ -92,12 +94,12 @@ fun BlockedPeersScreen(
                         showUnblockConfirm = null
                     }
                 ) {
-                    Text("Unblock")
+                    Text(stringResource(R.string.blocked_peers_action_unblock))
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showUnblockConfirm = null }) {
-                    Text("Cancel")
+                    Text(stringResource(R.string.cancel))
                 }
             }
         )
@@ -126,13 +128,13 @@ fun BlockedPeerItem(
                     fontWeight = FontWeight.Bold
                 )
                 Text(
-                    text = "Blocked on: ${formatDate(blocked.blockedAt)}",
+                    text = stringResource(R.string.blocked_peers_label_blocked_on, formatDate(blocked.blockedAt)),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 if (!blocked.reason.isNullOrBlank()) {
                     Text(
-                        text = "Reason: ${blocked.reason}",
+                        text = stringResource(R.string.blocked_peers_label_reason, blocked.reason!!),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -141,7 +143,7 @@ fun BlockedPeerItem(
             IconButton(onClick = onUnblock) {
                 Icon(
                     Icons.Default.Delete,
-                    contentDescription = "Unblock",
+                    contentDescription = stringResource(R.string.blocked_peers_action_unblock),
                     tint = MaterialTheme.colorScheme.error
                 )
             }

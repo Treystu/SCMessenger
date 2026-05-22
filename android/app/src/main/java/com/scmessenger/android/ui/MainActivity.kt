@@ -12,6 +12,7 @@ import androidx.compose.ui.Modifier
 import androidx.core.view.WindowCompat
 import com.scmessenger.android.service.AndroidPlatformBridge
 import com.scmessenger.android.service.AnrWatchdog
+import com.scmessenger.android.R
 import com.scmessenger.android.ui.theme.SCMessengerTheme
 import dagger.hilt.android.AndroidEntryPoint
 import timber.log.Timber
@@ -226,7 +227,7 @@ class MainActivity : ComponentActivity() {
         allToRequest: List<String>
     ) {
         val message = buildString {
-            appendLine("SCMessenger needs the following permissions to function:")
+            appendLine(getString(R.string.permissions_rationale_intro))
             appendLine()
             rationalePermissions.forEach { permission ->
                 appendLine("• ${Permissions.getPermissionName(permission)}: ${Permissions.getRationale(permission)}")
@@ -234,13 +235,13 @@ class MainActivity : ComponentActivity() {
         }
 
         AlertDialog.Builder(this)
-            .setTitle("Permission Required")
+            .setTitle(R.string.permissions_rationale_title)
             .setMessage(message.trim())
-            .setPositiveButton("Grant") { _, _ ->
+            .setPositiveButton(R.string.permissions_action_grant) { _, _ ->
                 Timber.i("Requesting permissions after rationale: $allToRequest")
                 requestPermissionLauncher.launch(allToRequest.toTypedArray())
             }
-            .setNegativeButton("Cancel") { _, _ ->
+            .setNegativeButton(R.string.cancel) { _, _ ->
                 Timber.w("User cancelled permission rationale")
                 schedulePermissionReset()
             }

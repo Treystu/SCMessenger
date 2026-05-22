@@ -10,6 +10,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 
+import androidx.compose.ui.res.stringResource
+import com.scmessenger.android.R
+
 /**
  * Message input component for chat UI.
  *
@@ -41,7 +44,7 @@ fun MessageInput(
                 value = value,
                 onValueChange = onValueChange,
                 modifier = Modifier.weight(1f),
-                placeholder = { Text("Type a message...") },
+                placeholder = { Text(stringResource(R.string.chat_placeholder_type_message)) },
                 enabled = enabled,
                 maxLines = 5,
                 shape = MaterialTheme.shapes.medium
@@ -56,7 +59,7 @@ fun MessageInput(
             ) {
                 Icon(
                     imageVector = Icons.AutoMirrored.Filled.Send,
-                    contentDescription = "Send message",
+                    contentDescription = stringResource(R.string.contact_detail_action_send_message),
                     modifier = Modifier.size(24.dp)
                 )
             }

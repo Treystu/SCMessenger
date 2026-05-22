@@ -36,11 +36,11 @@ import timber.log.Timber
 object NotificationHelper {
 
     // Channel IDs
-    private const val CHANNEL_MESSAGES = "messages"
-    private const val CHANNEL_MESSAGE_REQUESTS = "message_requests"
-    private const val CHANNEL_MESH_STATUS = "mesh_status"
-    private const val CHANNEL_PEER_EVENTS = "peer_events"
-    private const val CHANNEL_SYSTEM = "system"
+    const val CHANNEL_MESSAGES = "messages"
+    const val CHANNEL_MESSAGE_REQUESTS = "message_requests"
+    const val CHANNEL_MESH_STATUS = "mesh_status"
+    const val CHANNEL_PEER_EVENTS = "peer_events"
+    const val CHANNEL_SYSTEM = "system"
 
     // Channel Group
     private const val GROUP_MESH = "mesh_group"

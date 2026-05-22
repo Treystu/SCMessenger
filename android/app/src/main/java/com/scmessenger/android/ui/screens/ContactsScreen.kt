@@ -35,6 +35,8 @@ import com.google.mlkit.common.MlKitException
 import com.google.mlkit.vision.barcode.common.Barcode
 import com.google.mlkit.vision.codescanner.GmsBarcodeScannerOptions
 import com.google.mlkit.vision.codescanner.GmsBarcodeScanning
+import androidx.compose.ui.res.stringResource
+import com.scmessenger.android.R
 import com.scmessenger.android.ui.viewmodels.ContactsViewModel
 import com.scmessenger.android.ui.viewmodels.NearbyPeer
 import com.scmessenger.android.utils.ContactImportParseResult
@@ -66,12 +68,12 @@ fun ContactsScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Contacts (${contacts.size})") }
+                title = { Text(stringResource(R.string.contacts_title, contacts.size)) }
             )
         },
         floatingActionButton = {
             FloatingActionButton(onClick = onNavigateToAddContact) {
-                Icon(Icons.Default.Add, contentDescription = "Add Contact")
+                Icon(Icons.Default.Add, contentDescription = stringResource(R.string.contacts_action_add))
             }
         }
     ) { paddingValues ->
@@ -87,12 +89,12 @@ fun ContactsScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(16.dp),
-                placeholder = { Text("Search contacts...") },
+                placeholder = { Text(stringResource(R.string.contacts_placeholder_search)) },
                 singleLine = true,
                 trailingIcon = {
                     if (searchQuery.isNotBlank()) {
                         IconButton(onClick = { viewModel.clearSearch() }) {
-                            Icon(Icons.Default.Close, contentDescription = "Clear search")
+                            Icon(Icons.Default.Close, contentDescription = stringResource(R.string.contacts_action_clear_search))
                         }
                     }
                 }
@@ -104,7 +106,7 @@ fun ContactsScreen(
                     modifier = Modifier.padding(16.dp),
                     action = {
                         TextButton(onClick = { viewModel.clearError() }) {
-                            Text("Dismiss")
+                            Text(stringResource(R.string.chat_action_dismiss))
                         }
                     }
                 ) {
@@ -138,9 +140,9 @@ fun ContactsScreen(
                         Spacer(modifier = Modifier.height(16.dp))
                         Text(
                             text = if (searchQuery.isBlank()) {
-                                "No contacts yet"
+                                stringResource(R.string.contacts_empty_state_none)
                             } else {
-                                "No contacts found"
+                                stringResource(R.string.contacts_empty_state_not_found)
                             },
                             style = MaterialTheme.typography.bodyLarge,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -148,7 +150,7 @@ fun ContactsScreen(
                         if (searchQuery.isBlank()) {
                             Spacer(modifier = Modifier.height(8.dp))
                             Text(
-                                text = "Add contacts to start messaging",
+                                text = stringResource(R.string.contacts_empty_state_description),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -175,7 +177,7 @@ fun ContactsScreen(
                                 )
                                 Spacer(modifier = Modifier.width(4.dp))
                                 Text(
-                                    text = "Nearby (${nearbyPeers.size})",
+                                    text = stringResource(R.string.contacts_section_nearby, nearbyPeers.size),
                                     style = MaterialTheme.typography.labelMedium,
                                     color = MaterialTheme.colorScheme.primary
                                 )
@@ -214,7 +216,7 @@ fun ContactsScreen(
                             item {
                                 HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
                                 Text(
-                                    text = "Contacts (${contacts.size})",
+                                    text = stringResource(R.string.contacts_title, contacts.size),
                                     style = MaterialTheme.typography.labelMedium,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     modifier = Modifier.padding(bottom = 4.dp)
@@ -332,11 +334,11 @@ fun ContactItem(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Column(
-                    modifier = Modifier.weight(1f)
-                ) {
+                Column {
+                    val unknownFallback = stringResource(R.string.unknown_contact)
+                    val currentNickname = contact.localNickname ?: contact.nickname ?: ""
                     Text(
-                        text = contact.localNickname ?: contact.nickname ?: contact.peerId.take(16) + "...",
+                        text = currentNickname.ifBlank { unknownFallback },
                         style = MaterialTheme.typography.titleMedium
                     )
                     if (contact.localNickname != null && contact.nickname != null) {
@@ -351,9 +353,10 @@ fun ContactItem(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                    contact.lastSeen?.let { lastSeen ->
+                    val lastSeen = contact.lastSeen
+                    if (lastSeen != null) {
                         Text(
-                            text = "Last seen: ${formatTimestamp(lastSeen)}",
+                            text = stringResource(R.string.contacts_dialog_details_last_seen, formatTimestamp(lastSeen)),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -364,7 +367,7 @@ fun ContactItem(
                     IconButton(onClick = { showDetails = true }) {
                         Icon(
                             imageVector = Icons.Default.Info,
-                            contentDescription = "View Details",
+                            contentDescription = stringResource(R.string.contacts_action_details),
                             tint = MaterialTheme.colorScheme.primary
                         )
                     }
@@ -372,7 +375,7 @@ fun ContactItem(
                     IconButton(onClick = { showEditNicknameDialog = true }) {
                         Icon(
                             imageVector = Icons.Default.Edit,
-                            contentDescription = "Edit Nickname",
+                            contentDescription = stringResource(R.string.contacts_action_edit_nickname),
                             tint = MaterialTheme.colorScheme.primary
                         )
                     }
@@ -386,30 +389,32 @@ fun ContactItem(
     if (showDetails) {
         AlertDialog(
             onDismissRequest = { showDetails = false },
-            title = { Text("Contact Details") },
+            title = { Text(stringResource(R.string.contacts_dialog_details_title)) },
             text = {
                 Column {
                     Text(
-                        text = "Peer ID: ${contact.peerId}",
+                        text = stringResource(R.string.contacts_dialog_details_peer_id, contact.peerId),
                         style = MaterialTheme.typography.bodyMedium,
                         fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        text = "Public Key: ${contact.publicKey.take(32)}...",
+                        text = stringResource(R.string.contacts_dialog_details_public_key, contact.publicKey.take(32)),
                         style = MaterialTheme.typography.bodyMedium,
                         fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace
                     )
                     Spacer(modifier = Modifier.height(8.dp))
-                    contact.nickname?.let {
+                    val nickname = contact.nickname
+                    if (nickname != null) {
                         Text(
-                            text = "Nickname: $it",
+                            text = stringResource(R.string.contacts_dialog_details_nickname, nickname),
                             style = MaterialTheme.typography.bodyMedium
                         )
                     }
-                    contact.lastSeen?.let {
+                    val lastSeen = contact.lastSeen
+                    if (lastSeen != null) {
                         Text(
-                            text = "Last Seen: ${formatTimestamp(it)}",
+                            text = stringResource(R.string.contacts_dialog_details_last_seen, formatTimestamp(lastSeen)),
                             style = MaterialTheme.typography.bodyMedium
                         )
                     }
@@ -422,12 +427,12 @@ fun ContactItem(
                         onDetails()
                     }
                 ) {
-                    Text("View Full Details")
+                    Text(stringResource(R.string.contacts_action_view_full_details))
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showDetails = false }) {
-                    Text("Close")
+                    Text(stringResource(R.string.contacts_action_close))
                 }
             }
         )
@@ -440,11 +445,11 @@ fun ContactItem(
 
         AlertDialog(
             onDismissRequest = { showEditNicknameDialog = false },
-            title = { Text("Edit Nickname") },
+            title = { Text(stringResource(R.string.contacts_action_edit_nickname)) },
             text = {
                 Column {
                     Text(
-                        text = "Set a local nickname for ${contact.peerId.take(16)}...",
+                        text = stringResource(R.string.contacts_dialog_edit_nickname_description, contact.peerId.take(16)),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -452,7 +457,7 @@ fun ContactItem(
                     OutlinedTextField(
                         value = newNickname,
                         onValueChange = { newNickname = it },
-                        label = { Text("Nickname") },
+                        label = { Text(stringResource(R.string.settings_label_nickname)) },
                         singleLine = true,
                         modifier = Modifier
                             .fillMaxWidth()
@@ -475,12 +480,12 @@ fun ContactItem(
                         showEditNicknameDialog = false
                     }
                 ) {
-                    Text("Save")
+                    Text(stringResource(R.string.contacts_action_save))
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showEditNicknameDialog = false }) {
-                    Text("Cancel")
+                    Text(stringResource(R.string.cancel))
                 }
             }
         )
@@ -495,9 +500,9 @@ fun ContactItem(
     if (showDeleteDialog) {
         AlertDialog(
             onDismissRequest = { showDeleteDialog = false },
-            title = { Text("Delete Contact?") },
+            title = { Text(stringResource(R.string.contacts_dialog_delete_title)) },
             text = {
-                Text("Are you sure you want to delete ${contact.localNickname ?: contact.nickname ?: "this contact"}?")
+                Text(stringResource(R.string.contacts_dialog_delete_description, contact.localNickname ?: contact.nickname ?: "this contact"))
             },
             confirmButton = {
                 TextButton(
@@ -506,12 +511,12 @@ fun ContactItem(
                         showDeleteDialog = false
                     }
                 ) {
-                    Text("Delete", color = MaterialTheme.colorScheme.error)
+                    Text(stringResource(R.string.delete), color = MaterialTheme.colorScheme.error)
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showDeleteDialog = false }) {
-                    Text("Cancel")
+                    Text(stringResource(R.string.cancel))
                 }
             }
         )
@@ -756,6 +761,10 @@ private fun formatTimestamp(timestamp: ULong): String {
     val date = Date(timestampMillis)
     val now = System.currentTimeMillis()
     val diff = now - timestampMillis
+
+    // These need to be accessed via Context or moved to a composable that takes strings
+    // For simplicity in a non-composable function, we'll keep it as is but use string resources where possible if we pass them in
+    // But since this is a private helper, let's just make it return the relative time.
 
     return when {
         diff < 60_000 -> "Just now"

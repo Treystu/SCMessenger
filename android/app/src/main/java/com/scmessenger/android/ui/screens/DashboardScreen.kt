@@ -28,6 +28,8 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavHostController
+import androidx.compose.ui.res.stringResource
+import com.scmessenger.android.R
 import com.scmessenger.android.ui.dashboard.PeerListScreen
 import com.scmessenger.android.ui.dashboard.TopologyScreen
 import com.scmessenger.android.ui.viewmodels.MeshServiceViewModel
@@ -58,7 +60,7 @@ fun DashboardScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Mesh") }
+                title = { Text(stringResource(R.string.dashboard_title)) }
             )
         }
     ) { paddingValues ->
@@ -88,8 +90,8 @@ fun DashboardScreen(
                     StatCard(
                         modifier = Modifier.weight(1.5f),
                         title = buildString {
-                            append("$fullPeers Node")
-                            if (headlessPeers > 0) append(" / $headlessPeers Headless")
+                            append(stringResource(R.string.dashboard_stat_nodes_format, fullPeers))
+                            if (headlessPeers > 0) append(stringResource(R.string.dashboard_stat_headless_format, headlessPeers))
                         },
                         value = totalPeers.toString(),
                         icon = Icons.Filled.People,
@@ -97,7 +99,7 @@ fun DashboardScreen(
                     )
                     StatCard(
                         modifier = Modifier.weight(1f),
-                        title = "Relayed",
+                        title = stringResource(R.string.dashboard_label_relayed),
                         value = stats?.messagesRelayed?.toString() ?: "0",
                         icon = Icons.Filled.Router,
                         color = MaterialTheme.colorScheme.tertiary
@@ -125,13 +127,13 @@ fun DashboardScreen(
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
                         Text(
-                            text = "Mesh Performance",
+                            text = stringResource(R.string.dashboard_section_performance),
                             style = MaterialTheme.typography.titleMedium,
                             modifier = Modifier.padding(bottom = 8.dp)
                         )
 
-                        TextDetailRow("Uptime", formatDuration(stats?.uptimeSecs ?: 0uL))
-                        TextDetailRow("Data Transferred", formatBytes(stats?.bytesTransferred ?: 0uL))
+                        TextDetailRow(stringResource(R.string.dashboard_label_uptime), formatDuration(stats?.uptimeSecs ?: 0uL))
+                        TextDetailRow(stringResource(R.string.dashboard_label_data_transferred), formatBytes(stats?.bytesTransferred ?: 0uL))
                     }
                 }
             }
@@ -139,7 +141,7 @@ fun DashboardScreen(
             // Discovered Nodes Header
             item {
                 Text(
-                    text = "Discovered Nodes",
+                    text = stringResource(R.string.dashboard_section_discovered),
                     style = MaterialTheme.typography.titleMedium,
                     modifier = Modifier.padding(top = 8.dp)
                 )
@@ -149,7 +151,7 @@ fun DashboardScreen(
             if (peers.isEmpty()) {
                 item {
                     Text(
-                        text = "No nodes discovered yet",
+                        text = stringResource(R.string.dashboard_empty_state_discovered),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -221,8 +223,8 @@ fun PeerItem(peer: com.scmessenger.android.ui.viewmodels.PeerInfo) {
                 text = peer.localNickname
                     ?: peer.nickname
                     ?: when {
-                        peer.isFull -> "Node"
-                        else -> "Headless Node"
+                        peer.isFull -> stringResource(R.string.dashboard_label_node)
+                        else -> stringResource(R.string.dashboard_label_headless_node)
                     },
                 style = MaterialTheme.typography.bodyLarge,
                 fontWeight = FontWeight.Bold
@@ -243,8 +245,8 @@ fun PeerItem(peer: com.scmessenger.android.ui.viewmodels.PeerInfo) {
                     append(" • ")
                     append(
                         when {
-                            peer.isFull -> "Node"
-                            else -> "Headless Node"
+                            peer.isFull -> stringResource(R.string.dashboard_label_node)
+                            else -> stringResource(R.string.dashboard_label_headless_node)
                         }
                     )
                 },
@@ -283,13 +285,13 @@ fun StatusCard(
         ) {
             Column {
                 Text(
-                    text = if (isRunning) "Mesh Active" else "Mesh Stopped",
+                    text = if (isRunning) stringResource(R.string.dashboard_status_active) else stringResource(R.string.dashboard_status_stopped),
                     style = MaterialTheme.typography.headlineSmall,
                     fontWeight = FontWeight.Bold,
                     color = if (isRunning) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Text(
-                    text = "State: $stateName",
+                    text = stringResource(R.string.dashboard_label_state_format, stateName),
                     style = MaterialTheme.typography.bodyMedium,
                     color = if (isRunning) MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f) else MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -346,7 +348,7 @@ fun ConnectionStatusCard(
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text(
-                text = "Transports",
+                text = stringResource(R.string.dashboard_section_transports),
                 style = MaterialTheme.typography.titleMedium,
                 modifier = Modifier.padding(bottom = 12.dp)
             )
@@ -414,12 +416,12 @@ fun DashboardToPeerListNavigation(
     Card(modifier = modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text(
-                text = "Connected Peers",
+                text = stringResource(R.string.dashboard_nav_peers_title),
                 style = MaterialTheme.typography.titleMedium,
                 modifier = Modifier.padding(bottom = 8.dp)
             )
             Text(
-                text = "View detailed list of all connected peers",
+                text = stringResource(R.string.dashboard_nav_peers_description),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(bottom = 12.dp)
@@ -428,7 +430,7 @@ fun DashboardToPeerListNavigation(
                 onClick = onNavigateToPeerList,
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Text("View Peers")
+                Text(stringResource(R.string.dashboard_nav_peers_action))
             }
         }
     }
@@ -445,12 +447,12 @@ fun DashboardToTopologyNavigation(
     Card(modifier = modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text(
-                text = "Mesh Topology",
+                text = stringResource(R.string.dashboard_nav_topology_title),
                 style = MaterialTheme.typography.titleMedium,
                 modifier = Modifier.padding(bottom = 8.dp)
             )
             Text(
-                text = "Visualize network connections and routes",
+                text = stringResource(R.string.dashboard_nav_topology_description),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(bottom = 12.dp)
@@ -459,7 +461,7 @@ fun DashboardToTopologyNavigation(
                 onClick = onNavigateToTopology,
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Text("View Topology")
+                Text(stringResource(R.string.dashboard_nav_topology_action))
             }
         }
     }

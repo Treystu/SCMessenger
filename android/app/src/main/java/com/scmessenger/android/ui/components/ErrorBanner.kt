@@ -19,6 +19,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.res.stringResource
+import com.scmessenger.android.R
 import com.scmessenger.android.ui.theme.StatusError
 import com.scmessenger.android.ui.theme.StatusWarning
 
@@ -74,14 +76,14 @@ fun ErrorBanner(
 
                 if (onRetry != null) {
                     TextButton(onClick = onRetry) {
-                        Text("Retry")
+                        Text(stringResource(R.string.retry))
                     }
                 }
 
                 IconButton(onClick = onDismiss) {
                     Icon(
                         imageVector = Icons.Default.Close,
-                        contentDescription = "Dismiss"
+                        contentDescription = stringResource(R.string.dismiss)
                     )
                 }
             }

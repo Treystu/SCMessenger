@@ -58,15 +58,15 @@ fun IdentityScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("My Identity") },
+                title = { Text(stringResource(R.string.identity_title)) },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.chat_action_dismiss))
                     }
                 },
                 actions = {
                     IconButton(onClick = { viewModel.loadIdentity() }) {
-                        Icon(Icons.Default.Refresh, contentDescription = "Refresh")
+                        Icon(Icons.Default.Refresh, contentDescription = stringResource(R.string.diagnostics_action_refresh))
                     }
                 }
             )
@@ -122,12 +122,12 @@ private fun IdentityNotInitializedView(
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         Text(
-            text = "Identity Not Initialized",
+            text = stringResource(R.string.identity_not_initialized_title),
             style = MaterialTheme.typography.titleLarge
         )
 
         Text(
-            text = "Create your identity to start using SCMessenger",
+            text = stringResource(R.string.identity_not_initialized_description),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
@@ -135,13 +135,13 @@ private fun IdentityNotInitializedView(
         OutlinedTextField(
             value = nickname,
             onValueChange = { nickname = it },
-            label = { Text("Nickname") },
+            label = { Text(stringResource(R.string.identity_label_nickname)) },
             modifier = Modifier.fillMaxWidth(0.8f),
             singleLine = true
         )
 
         Button(onClick = { onCreateIdentity(nickname) }) {
-            Text("Create Identity")
+            Text(stringResource(R.string.identity_action_create))
         }
     }
 }
@@ -204,7 +204,7 @@ private fun IdentityContent(
         Card {
             Column(modifier = Modifier.padding(16.dp)) {
                 Text(
-                    text = "Identity Hash",
+                    text = stringResource(R.string.identity_label_hash),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold
                 )
@@ -222,7 +222,7 @@ private fun IdentityContent(
         Card {
             Column(modifier = Modifier.padding(16.dp)) {
                 Text(
-                    text = "Peer ID (Network)",
+                    text = stringResource(R.string.identity_label_peer_id),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold
                 )
@@ -240,7 +240,7 @@ private fun IdentityContent(
         Card {
             Column(modifier = Modifier.padding(16.dp)) {
                 Text(
-                    text = "Public Key",
+                    text = stringResource(R.string.identity_label_public_key),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold
                 )
@@ -277,7 +277,7 @@ private fun QRCodeDisplay(
         Card(modifier = modifier) {
             Image(
                 bitmap = it.asImageBitmap(),
-                contentDescription = "QR Code",
+                contentDescription = stringResource(R.string.identity_label_qr_code),
                 modifier = Modifier
                     .size(256.dp)
                     .padding(16.dp)

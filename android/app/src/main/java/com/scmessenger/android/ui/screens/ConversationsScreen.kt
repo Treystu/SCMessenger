@@ -22,6 +22,8 @@ import com.scmessenger.android.ui.chat.DeliveryStateMapper
 import com.scmessenger.android.ui.chat.DeliveryStatePresentation
 import com.scmessenger.android.ui.chat.DeliveryStateSurface
 import com.scmessenger.android.service.MeshEventBus
+import androidx.compose.ui.res.stringResource
+import com.scmessenger.android.R
 import com.scmessenger.android.ui.viewmodels.ConversationsViewModel
 import com.scmessenger.android.utils.toEpochMillis
 import java.text.SimpleDateFormat
@@ -54,12 +56,12 @@ fun ConversationsScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Conversations") },
+                title = { Text(stringResource(R.string.conversations_title)) },
                 actions = {
                     IconButton(onClick = { showClearHistoryDialog = true }) {
                         Icon(
                             imageVector = Icons.Default.Delete,
-                            contentDescription = "Clear All History"
+                            contentDescription = stringResource(R.string.conversations_action_clear_all)
                         )
                     }
                 }
@@ -84,10 +86,10 @@ fun ConversationsScreen(
                             .padding(16.dp),
                         horizontalArrangement = Arrangement.SpaceEvenly
                     ) {
-                        StatItem("Total", historyStats.totalMessages.toString())
-                        StatItem("Sent", historyStats.sentCount.toString())
-                        StatItem("Received", historyStats.receivedCount.toString())
-                        StatItem("Delivered", (historyStats.sentCount - historyStats.undeliveredCount).toString())
+                        StatItem(stringResource(R.string.total), historyStats.totalMessages.toString())
+                        StatItem(stringResource(R.string.sent), historyStats.sentCount.toString())
+                        StatItem(stringResource(R.string.received), historyStats.receivedCount.toString())
+                        StatItem(stringResource(R.string.delivered), (historyStats.sentCount - historyStats.undeliveredCount).toString())
                     }
                 }
             }
@@ -98,7 +100,7 @@ fun ConversationsScreen(
                     modifier = Modifier.padding(16.dp),
                     action = {
                         TextButton(onClick = { viewModel.clearError() }) {
-                            Text("Dismiss")
+                            Text(stringResource(R.string.dismiss))
                         }
                     }
                 ) {
@@ -131,13 +133,13 @@ fun ConversationsScreen(
                         )
                         Spacer(modifier = Modifier.height(16.dp))
                         Text(
-                            text = "No conversations yet",
+                            text = stringResource(R.string.conversations_empty_state),
                             style = MaterialTheme.typography.bodyLarge,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
-                            text = "Your encrypted conversations will appear here",
+                            text = stringResource(R.string.conversations_empty_state_description),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -182,8 +184,8 @@ fun ConversationsScreen(
     if (showClearHistoryDialog) {
         AlertDialog(
             onDismissRequest = { showClearHistoryDialog = false },
-            title = { Text("Clear All History?") },
-            text = { Text("This will delete ALL messages with ALL contacts. This cannot be undone.") },
+            title = { Text(stringResource(R.string.conversations_dialog_clear_all_title)) },
+            text = { Text(stringResource(R.string.conversations_dialog_clear_all_description)) },
             confirmButton = {
                 TextButton(
                     onClick = {
@@ -192,12 +194,12 @@ fun ConversationsScreen(
                     },
                     colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
                 ) {
-                    Text("Clear All")
+                    Text(stringResource(R.string.conversations_action_clear_all))
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showClearHistoryDialog = false }) {
-                    Text("Cancel")
+                    Text(stringResource(R.string.cancel))
                 }
             }
         )
@@ -206,7 +208,7 @@ fun ConversationsScreen(
     if (showDeleteDialog) {
         AlertDialog(
             onDismissRequest = { showDeleteDialog = false },
-            title = { Text("Delete Conversation?") },
+            title = { Text(stringResource(R.string.conversations_dialog_delete_title)) },
             text = {
                 val (peerId, _) = conversationToDelete ?: return@AlertDialog
                 val contact = viewModel.getContactForPeer(peerId)
@@ -217,7 +219,7 @@ fun ConversationsScreen(
                     federatedNickname.isNotEmpty() -> federatedNickname
                     else -> "${peerId.take(8)}..."
                 }
-                Text("Delete all messages with $displayName? This cannot be undone.")
+                Text(stringResource(R.string.conversations_dialog_delete_description, displayName))
             },
             confirmButton = {
                 TextButton(
@@ -229,12 +231,12 @@ fun ConversationsScreen(
                         showDeleteDialog = false
                     },
                 ) {
-                    Text("Delete", color = MaterialTheme.colorScheme.error)
+                    Text(stringResource(R.string.delete), color = MaterialTheme.colorScheme.error)
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showDeleteDialog = false }) {
-                    Text("Cancel")
+                    Text(stringResource(R.string.cancel))
                 }
             },
         )

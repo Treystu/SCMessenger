@@ -18,6 +18,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.compose.ui.res.stringResource
+import com.scmessenger.android.R
 import com.scmessenger.android.network.DiagnosticsReporter
 import com.scmessenger.android.ui.diagnostics.DiagnosticsBundleFormatter
 import com.scmessenger.android.ui.diagnostics.DiagnosticsBundleInput
@@ -43,7 +45,11 @@ fun DiagnosticsScreen(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var showNetworkDiagnostics by remember { mutableStateOf(false) }
-    var logText by remember { mutableStateOf("Loading logs...") }
+    var logText by remember { mutableStateOf("") }
+    val loadingLogsText = stringResource(R.string.diagnostics_loading_logs)
+    LaunchedEffect(Unit) {
+        logText = loadingLogsText
+    }
     var networkDiagnosticsReport by remember { mutableStateOf<DiagnosticsReporter.NetworkDiagnosticsReport?>(null) }
     var notificationStats by remember { mutableStateOf(NotificationHelper.getNotificationStats()) }
     var performanceHealthStatus by remember { mutableStateOf("") }
@@ -85,14 +91,14 @@ fun DiagnosticsScreen(
     // Wire WarningBanner into diagnostics for health warnings
     if (!serviceHealthy) {
         WarningBanner(
-            message = "Mesh service health check failed — service may be unresponsive",
+            message = stringResource(R.string.diagnostics_error_service_unresponsive),
             onDismiss = {}
         )
     }
 
     // Wire InfoBanner into diagnostics for informational notices
     InfoBanner(
-        message = "Diagnostics data is local to this device. Share the bundle for remote analysis.",
+        message = stringResource(R.string.diagnostics_info_local_data),
         onDismiss = {}
     )
 
@@ -118,31 +124,31 @@ fun DiagnosticsScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Diagnostics") },
+                title = { Text(stringResource(R.string.diagnostics_title)) },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.chat_action_dismiss))
                     }
                 },
                 actions = {
                     IconButton(onClick = { refreshLogs() }) {
-                        Icon(Icons.Default.Refresh, contentDescription = "Refresh")
+                        Icon(Icons.Default.Refresh, contentDescription = stringResource(R.string.diagnostics_action_refresh))
                     }
                     IconButton(onClick = {
                         viewModel.clearDiagnosticsLogs()
                         refreshLogs()
                     }) {
-                        Icon(imageVector = Icons.Default.Delete, contentDescription = "Clear")
+                        Icon(imageVector = Icons.Default.Delete, contentDescription = stringResource(R.string.diagnostics_action_clear))
                     }
                     IconButton(onClick = {
                         scope.launch {
                             shareDiagnosticsBundle(context, viewModel.buildTesterDiagnosticsBundle())
                         }
                     }) {
-                        Icon(Icons.Default.Share, contentDescription = "Share")
+                        Icon(Icons.Default.Share, contentDescription = stringResource(R.string.diagnostics_action_share))
                     }
                     IconButton(onClick = { showNetworkDiagnostics = true }) {
-                        Icon(Icons.Default.Refresh, contentDescription = "Network Diagnostics")
+                        Icon(Icons.Default.Refresh, contentDescription = stringResource(R.string.diagnostics_action_network))
                     }
                 }
             )
@@ -164,12 +170,12 @@ fun DiagnosticsScreen(
                     modifier = Modifier.padding(16.dp)
                 ) {
                     Text(
-                        text = "Network Diagnostics",
+                        text = stringResource(R.string.diagnostics_section_network),
                         style = MaterialTheme.typography.titleMedium
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        text = "Test connectivity, DNS resolution, relay reachability, and get actionable recommendations.",
+                        text = stringResource(R.string.diagnostics_network_description),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -178,7 +184,7 @@ fun DiagnosticsScreen(
                         onClick = { showNetworkDiagnostics = true },
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Text("Run Network Diagnostics")
+                        Text(stringResource(R.string.diagnostics_action_run_network))
                     }
                 }
             }
@@ -194,55 +200,57 @@ fun DiagnosticsScreen(
                         modifier = Modifier.padding(16.dp)
                     ) {
                         Text(
-                            text = "Network Diagnostics Report",
-                            style = MaterialTheme.typography.titleMedium
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
+                        text = stringResource(R.string.diagnostics_section_network_report),
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = stringResource(R.string.diagnostics_report_internet_network, report.hasInternet, report.networkType),
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                    // P0_NETWORK_001 Phase 7: Transport priority
+                    if (report.transportPriority.isNotEmpty()) {
+                        val transportStr = report.transportPriority.joinToString(" > ") {
+                            "${it.scheme}:${it.defaultPort}"
+                        }
                         Text(
-                            text = "Internet: ${report.hasInternet}, Network: ${report.networkType}",
+                            text = stringResource(R.string.diagnostics_report_transport, transportStr),
                             style = MaterialTheme.typography.bodySmall
                         )
-                        // P0_NETWORK_001 Phase 7: Transport priority
-                        if (report.transportPriority.isNotEmpty()) {
-                            val transportStr = report.transportPriority.joinToString(" > ") {
-                                "${it.scheme}:${it.defaultPort}"
-                            }
-                            Text(
-                                text = "Transport: $transportStr",
-                                style = MaterialTheme.typography.bodySmall
-                            )
+                    }
+                    // P0_NETWORK_001 Phase 7: Port probe results summary
+                    if (report.portProbeResults.isNotEmpty()) {
+                        val reachable = report.portProbeResults.filterValues { it }.size
+                        val blocked = report.portProbeResults.filterValues { !it }.size
+                        Text(
+                            text = stringResource(R.string.diagnostics_report_port_probe, reachable, blocked),
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                    // P0_NETWORK_001 Phase 7: Circuit breaker summary
+                    if (report.circuitBreakerEntries.isNotEmpty()) {
+                        val openCount = report.circuitBreakerEntries.count {
+                            it.state == com.scmessenger.android.utils.CircuitBreaker.CircuitState.OPEN
                         }
-                        // P0_NETWORK_001 Phase 7: Port probe results summary
-                        if (report.portProbeResults.isNotEmpty()) {
-                            val reachable = report.portProbeResults.filterValues { it }.size
-                            val blocked = report.portProbeResults.filterValues { !it }.size
-                            Text(
-                                text = "Port Probe: $reachable reachable, $blocked blocked",
-                                style = MaterialTheme.typography.bodySmall
-                            )
+                        val halfOpenCount = report.circuitBreakerEntries.count {
+                            it.state == com.scmessenger.android.utils.CircuitBreaker.CircuitState.HALF_OPEN
                         }
-                        // P0_NETWORK_001 Phase 7: Circuit breaker summary
-                        if (report.circuitBreakerEntries.isNotEmpty()) {
-                            val openCount = report.circuitBreakerEntries.count {
-                                it.state == com.scmessenger.android.utils.CircuitBreaker.CircuitState.OPEN
-                            }
-                            val halfOpenCount = report.circuitBreakerEntries.count {
-                                it.state == com.scmessenger.android.utils.CircuitBreaker.CircuitState.HALF_OPEN
-                            }
-                            val closedCount = report.circuitBreakerEntries.count {
-                                it.state == com.scmessenger.android.utils.CircuitBreaker.CircuitState.CLOSED
-                            }
-                            Text(
-                                text = "Circuits: $closedCount OK, $openCount blocked, $halfOpenCount probing",
-                                style = MaterialTheme.typography.bodySmall
-                            )
+                        val closedCount = report.circuitBreakerEntries.count {
+                            it.state == com.scmessenger.android.utils.CircuitBreaker.CircuitState.CLOSED
                         }
-                        report.relayResults.forEach { (relay, reachable) ->
-                            Text(
-                                text = "Relay $relay: ${if (reachable) "Reachable" else "Unreachable"}",
-                                style = MaterialTheme.typography.bodySmall
-                            )
-                        }
+                        Text(
+                            text = stringResource(R.string.diagnostics_report_circuits, closedCount, openCount, halfOpenCount),
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                    val reachableLabel = stringResource(R.string.diagnostics_relay_reachable)
+                    val unreachableLabel = stringResource(R.string.diagnostics_relay_unreachable)
+                    report.relayResults.forEach { (relay, reachable) ->
+                        Text(
+                            text = stringResource(R.string.diagnostics_report_relay_status, relay, if (reachable) reachableLabel else unreachableLabel),
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
                     }
                 }
                 Spacer(modifier = Modifier.height(16.dp))
@@ -257,7 +265,7 @@ fun DiagnosticsScreen(
                     modifier = Modifier.padding(16.dp)
                 ) {
                     Text(
-                        text = "Notification Stats",
+                        text = stringResource(R.string.diagnostics_section_notification_stats),
                         style = MaterialTheme.typography.titleMedium
                     )
                     Spacer(modifier = Modifier.height(8.dp))
@@ -279,7 +287,7 @@ fun DiagnosticsScreen(
                             },
                             modifier = Modifier.weight(1f)
                         ) {
-                            Text("Reset Stats", style = MaterialTheme.typography.labelSmall)
+                            Text(stringResource(R.string.diagnostics_action_reset_stats), style = MaterialTheme.typography.labelSmall)
                         }
                         Button(
                             onClick = {
@@ -289,7 +297,7 @@ fun DiagnosticsScreen(
                             },
                             modifier = Modifier.weight(1f)
                         ) {
-                            Text("Clear Requests", style = MaterialTheme.typography.labelSmall)
+                            Text(stringResource(R.string.diagnostics_action_clear_requests), style = MaterialTheme.typography.labelSmall)
                         }
                     }
                 }
@@ -306,12 +314,13 @@ fun DiagnosticsScreen(
                     modifier = Modifier.padding(16.dp)
                 ) {
                     Text(
-                        text = "Service Health",
+                        text = stringResource(R.string.diagnostics_section_service_health),
                         style = MaterialTheme.typography.titleMedium
                     )
                     Spacer(modifier = Modifier.height(8.dp))
+                    val statusLabel = if (serviceHealthy) stringResource(R.string.diagnostics_status_healthy) else stringResource(R.string.diagnostics_status_unhealthy)
                     Text(
-                        text = "Status: ${if (serviceHealthy) "Healthy" else "Unhealthy"}",
+                        text = stringResource(R.string.settings_label_status_format, statusLabel),
                         style = MaterialTheme.typography.bodyMedium,
                         color = if (serviceHealthy) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onErrorContainer
                     )
@@ -334,7 +343,7 @@ fun DiagnosticsScreen(
                         },
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Text("Reset Health", style = MaterialTheme.typography.labelSmall)
+                        Text(stringResource(R.string.diagnostics_action_reset_health), style = MaterialTheme.typography.labelSmall)
                     }
                 }
             }
@@ -349,7 +358,7 @@ fun DiagnosticsScreen(
                     modifier = Modifier.padding(16.dp)
                 ) {
                     Text(
-                        text = "Performance & ANR",
+                        text = stringResource(R.string.diagnostics_section_performance_anr),
                         style = MaterialTheme.typography.titleMedium
                     )
                     Spacer(modifier = Modifier.height(8.dp))
@@ -367,12 +376,12 @@ fun DiagnosticsScreen(
                     if (anrEvents.isNotEmpty()) {
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
-                            text = "Recent ANR Events:",
+                            text = stringResource(R.string.diagnostics_anr_events_title),
                             style = MaterialTheme.typography.labelMedium
                         )
                         anrEvents.take(5).forEach { event: AnrEvent ->
                             Text(
-                                text = "- ${event.context}: ${event.durationMs}ms (API ${event.androidVersion}, ${event.device})",
+                                text = stringResource(R.string.diagnostics_anr_event_format, event.context, event.durationMs, event.androidVersion, event.device),
                                 style = MaterialTheme.typography.bodySmall,
                                 fontFamily = FontFamily.Monospace
                             )
@@ -393,7 +402,7 @@ fun DiagnosticsScreen(
                             },
                             modifier = Modifier.weight(1f)
                         ) {
-                            Text("Clear ANR", style = MaterialTheme.typography.labelSmall)
+                            Text(stringResource(R.string.diagnostics_action_clear_anr), style = MaterialTheme.typography.labelSmall)
                         }
                     }
                 }
@@ -403,12 +412,12 @@ fun DiagnosticsScreen(
 
             // Log viewer
             Text(
-                text = "Diagnostics Logs",
+                text = stringResource(R.string.diagnostics_section_logs),
                 style = MaterialTheme.typography.titleSmall
             )
             Spacer(modifier = Modifier.height(8.dp))
             Text(
-                text = "Tester note: share bundle after reproducing issue. Include permission prompts and install/first-message steps.",
+                text = stringResource(R.string.diagnostics_tester_note),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )

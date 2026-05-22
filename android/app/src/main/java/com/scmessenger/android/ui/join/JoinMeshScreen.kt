@@ -20,6 +20,7 @@ import com.google.mlkit.common.MlKitException
 import com.google.mlkit.vision.barcode.common.Barcode
 import com.google.mlkit.vision.codescanner.GmsBarcodeScannerOptions
 import com.google.mlkit.vision.codescanner.GmsBarcodeScanning
+import com.scmessenger.android.R
 import com.scmessenger.android.data.MeshRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -135,7 +136,7 @@ private fun QrScannerView(
         verticalArrangement = Arrangement.Center
     ) {
         Text(
-            text = "Scan QR Code",
+            text = stringResource(R.string.join_mesh_qr_title),
             style = MaterialTheme.typography.headlineMedium,
             textAlign = TextAlign.Center
         )
@@ -143,7 +144,7 @@ private fun QrScannerView(
         Spacer(modifier = Modifier.height(16.dp))
 
         Text(
-            text = "Position the QR code within the frame",
+            text = stringResource(R.string.join_mesh_qr_description),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center
@@ -152,7 +153,7 @@ private fun QrScannerView(
         Spacer(modifier = Modifier.height(24.dp))
 
         OutlinedButton(onClick = onCancel) {
-            Text("Cancel")
+            Text(stringResource(R.string.cancel))
         }
 
         Spacer(modifier = Modifier.height(16.dp))
@@ -162,11 +163,14 @@ private fun QrScannerView(
                 .setBarcodeFormats(Barcode.FORMAT_QR_CODE)
                 .build()
             val scanner = GmsBarcodeScanning.getClient(context, options)
+            val qrEmptyError = context.getString(R.string.add_contact_error_qr_empty)
+            val qrFailedError = context.getString(R.string.add_contact_error_qr_failed)
+
             scanner.startScan()
                 .addOnSuccessListener { barcode ->
                     val rawValue = barcode.rawValue
                     if (rawValue.isNullOrBlank()) {
-                        onScanError("QR code was empty. Please try again.")
+                        onScanError(qrEmptyError)
                     } else {
                         onQrScanned(rawValue)
                     }
@@ -176,10 +180,10 @@ private fun QrScannerView(
                     if (e is MlKitException && e.errorCode == CommonStatusCodes.CANCELED) {
                         return@addOnFailureListener
                     }
-                    onScanError("Unable to scan QR code. Please try again.")
+                    onScanError(qrFailedError)
                 }
         }) {
-            Text("Scan QR Code")
+            Text(stringResource(R.string.join_mesh_qr_title))
         }
     }
 }
@@ -195,7 +199,7 @@ private fun ParsingView() {
     ) {
         CircularProgressIndicator()
         Spacer(modifier = Modifier.height(16.dp))
-        Text("Parsing join bundle...", style = MaterialTheme.typography.bodyLarge)
+        Text(stringResource(R.string.join_mesh_parsing), style = MaterialTheme.typography.bodyLarge)
     }
 }
 
@@ -231,7 +235,7 @@ private fun ConnectingView(progress: Float) {
         Spacer(modifier = Modifier.height(24.dp))
 
         Text(
-            text = "Connecting to mesh...",
+            text = stringResource(R.string.join_mesh_connecting),
             style = MaterialTheme.typography.headlineSmall
         )
 
@@ -278,7 +282,7 @@ private fun SuccessView(onComplete: () -> Unit) {
         Spacer(modifier = Modifier.height(16.dp))
 
         Text(
-            text = "Connected!",
+            text = stringResource(R.string.join_mesh_connected),
             style = MaterialTheme.typography.headlineSmall,
             color = Color(0xFF4CAF50)
         )
@@ -308,7 +312,7 @@ private fun ErrorView(
         Spacer(modifier = Modifier.height(16.dp))
 
         Text(
-            text = "Connection Failed",
+            text = stringResource(R.string.join_mesh_connection_failed),
             style = MaterialTheme.typography.headlineSmall,
             color = MaterialTheme.colorScheme.error
         )
@@ -329,10 +333,10 @@ private fun ErrorView(
             horizontalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             OutlinedButton(onClick = onCancel) {
-                Text("Cancel")
+                Text(stringResource(R.string.cancel))
             }
             Button(onClick = onRetry) {
-                Text("Retry")
+                Text(stringResource(R.string.retry))
             }
         }
     }

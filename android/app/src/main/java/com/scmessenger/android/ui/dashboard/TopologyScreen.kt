@@ -19,6 +19,8 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.compose.ui.res.stringResource
+import com.scmessenger.android.R
 import com.scmessenger.android.ui.components.ErrorBanner
 import com.scmessenger.android.ui.theme.*
 import com.scmessenger.android.ui.viewmodels.DashboardViewModel
@@ -52,15 +54,15 @@ fun TopologyScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Mesh Topology") },
+                title = { Text(stringResource(R.string.topology_title)) },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.chat_action_dismiss))
                     }
                 },
                 actions = {
                     IconButton(onClick = { viewModel.refreshData() }) {
-                        Icon(Icons.Default.Refresh, contentDescription = "Refresh")
+                        Icon(Icons.Default.Refresh, contentDescription = stringResource(R.string.diagnostics_action_refresh))
                     }
                 }
             )
@@ -86,14 +88,14 @@ fun TopologyScreen(
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         Text(
-                            text = "No topology data",
+                            text = stringResource(R.string.topology_no_data),
                             style = MaterialTheme.typography.titleLarge
                         )
 
                         Spacer(modifier = Modifier.height(8.dp))
 
                         Text(
-                            text = "Start the mesh service to see mesh topology",
+                            text = stringResource(R.string.topology_no_data_description),
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -153,17 +155,17 @@ private fun TopologyStats(
             horizontalArrangement = Arrangement.SpaceEvenly
         ) {
             StatItem(
-                label = "Nodes",
+                label = stringResource(R.string.topology_stat_nodes),
                 value = topology.nodes.size.toString()
             )
 
             StatItem(
-                label = "Connections",
+                label = stringResource(R.string.topology_stat_connections),
                 value = topology.edges.size.toString()
             )
 
             StatItem(
-                label = "Online",
+                label = stringResource(R.string.topology_stat_online),
                 value = topology.nodes.count { it.isOnline }.toString()
             )
         }
@@ -291,7 +293,7 @@ private fun TopologyLegend(
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Text(
-                text = "Legend",
+                text = stringResource(R.string.topology_label_legend),
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold
             )
@@ -299,22 +301,22 @@ private fun TopologyLegend(
             // Node types
             LegendItem(
                 color = MaterialTheme.colorScheme.secondary,
-                label = "This Device"
+                label = stringResource(R.string.topology_label_this_device)
             )
             LegendItem(
                 color = MaterialTheme.colorScheme.primary,
-                label = "Connected Peer"
+                label = stringResource(R.string.topology_label_connected_peer)
             )
             LegendItem(
                 color = MaterialTheme.colorScheme.surfaceVariant,
-                label = "Offline Peer"
+                label = stringResource(R.string.topology_label_offline_peer)
             )
 
             HorizontalDivider()
 
             // Transport types
             Text(
-                text = "Connection Types",
+                text = stringResource(R.string.topology_label_connection_types),
                 style = MaterialTheme.typography.titleSmall
             )
 

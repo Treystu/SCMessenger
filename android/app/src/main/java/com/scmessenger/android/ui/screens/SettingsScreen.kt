@@ -10,6 +10,9 @@ import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import kotlinx.coroutines.launch
 import androidx.compose.ui.Modifier
@@ -97,7 +100,7 @@ fun SettingsScreen(
                 .padding(16.dp)
         ) {
         Text(
-            text = "Settings",
+            text = stringResource(R.string.settings_title),
             style = MaterialTheme.typography.headlineMedium,
             modifier = Modifier.padding(bottom = 16.dp)
         )
@@ -113,7 +116,7 @@ fun SettingsScreen(
         // Wire WarningBanner into settings for service warnings
         if (!isRunning) {
             WarningBanner(
-                message = "Mesh service is not running — start it to enable messaging",
+                message = stringResource(R.string.settings_error_not_running),
                 onDismiss = {}
             )
         }
@@ -229,12 +232,12 @@ fun SettingsScreen(
     if (showImportDialog) {
         AlertDialog(
             onDismissRequest = { showImportDialog = false },
-            title = { Text("Import Identity Backup") },
+            title = { Text(stringResource(R.string.settings_title_import_identity)) },
             text = {
                 OutlinedTextField(
                     value = importText,
                     onValueChange = { importText = it },
-                    label = { Text("Paste backup string") },
+                    label = { Text(stringResource(R.string.settings_label_paste_backup)) },
                     minLines = 3,
                     maxLines = 6
                 )
@@ -248,12 +251,12 @@ fun SettingsScreen(
                     },
                     enabled = importText.isNotBlank()
                 ) {
-                    Text("Import")
+                    Text(stringResource(R.string.settings_action_import))
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showImportDialog = false }) {
-                    Text("Cancel")
+                    Text(stringResource(R.string.cancel))
                 }
             }
         )
@@ -275,8 +278,8 @@ fun DataManagementSection(
     if (showConfirmDialog) {
         AlertDialog(
             onDismissRequest = { showConfirmDialog = false },
-            title = { Text("Reset All Data?") },
-            text = { Text("This will permanently delete your identity, messages, contacts, and settings. This action cannot be undone.") },
+            title = { Text(stringResource(R.string.settings_title_reset_data)) },
+            text = { Text(stringResource(R.string.settings_reset_data_description)) },
             confirmButton = {
                 TextButton(
                     onClick = {
@@ -285,12 +288,12 @@ fun DataManagementSection(
                     },
                     colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
                 ) {
-                    Text("RESET")
+                    Text(stringResource(R.string.settings_action_reset))
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showConfirmDialog = false }) {
-                    Text("Cancel")
+                    Text(stringResource(R.string.cancel))
                 }
             }
         )
@@ -306,14 +309,14 @@ fun DataManagementSection(
             modifier = Modifier.padding(16.dp)
         ) {
             Text(
-                text = "Data Management",
+                text = stringResource(R.string.settings_section_data_management),
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.error,
                 modifier = Modifier.padding(bottom = 8.dp)
             )
 
             Text(
-                text = "DANGER ZONE: This permanently wipes your identity and all local history.",
+                text = stringResource(R.string.settings_danger_zone_description),
                 style = MaterialTheme.typography.bodySmall,
                 modifier = Modifier.padding(bottom = 16.dp)
             )
@@ -323,7 +326,7 @@ fun DataManagementSection(
                 modifier = Modifier.fillMaxWidth(),
                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
             ) {
-                Text("Delete All Data & Reset App")
+                Text(stringResource(R.string.settings_button_delete_reset))
             }
         }
     }
@@ -343,7 +346,7 @@ fun ServiceControlSection(
             modifier = Modifier.padding(16.dp)
         ) {
             Text(
-                text = "Mesh Service",
+                text = stringResource(R.string.settings_section_service),
                 style = MaterialTheme.typography.titleMedium,
                 modifier = Modifier.padding(bottom = 8.dp)
             )
@@ -354,10 +357,10 @@ fun ServiceControlSection(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Column {
-                    Text("Status: ${serviceState.name}")
+                    Text(stringResource(R.string.settings_label_status_format, serviceState.name))
                     if (isRunning) {
                         Text(
-                            text = "Active",
+                            text = stringResource(R.string.settings_status_active),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.primary
                         )
@@ -365,7 +368,7 @@ fun ServiceControlSection(
                 }
 
                 Button(onClick = onToggleService) {
-                    Text(if (isRunning) "Stop" else "Start")
+                    Text(if (isRunning) stringResource(R.string.action_stop) else stringResource(R.string.action_start))
                 }
             }
 
@@ -396,7 +399,7 @@ fun MeshSettingsSection(
             modifier = Modifier.padding(16.dp)
         ) {
             Text(
-                text = "Mesh Network",
+                text = stringResource(R.string.mesh_network_label),
                 style = MaterialTheme.typography.titleMedium,
                 modifier = Modifier.padding(bottom = 8.dp)
             )
@@ -414,13 +417,13 @@ fun MeshSettingsSection(
                     modifier = Modifier.padding(12.dp)
                 ) {
                     Text(
-                        text = "⚠️ Relay = Messaging (Bidirectional)",
+                        text = stringResource(R.string.settings_mesh_relay_warning_title),
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.Medium,
                         color = MaterialTheme.colorScheme.onErrorContainer
                     )
                     Text(
-                        text = "OFF = no sending OR receiving. Complete shutdown both directions. ON = full participation.",
+                        text = stringResource(R.string.settings_mesh_relay_warning_description),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onErrorContainer
                     )
@@ -428,40 +431,40 @@ fun MeshSettingsSection(
             }
 
             SwitchPreference(
-                title = "Mesh Participation",
-                subtitle = "Controls ALL communication. OFF = bidirectional shutdown.",
+                title = stringResource(R.string.settings_label_mesh_participation),
+                subtitle = stringResource(R.string.settings_description_mesh_participation),
                 checked = settings.relayEnabled,
                 onCheckedChange = { onUpdateSetting { vm -> vm.updateRelayEnabled(it) } },
                 enabled = !isLoading
             )
 
             SwitchPreference(
-                title = "Bluetooth LE",
-                subtitle = "Discover peers via Bluetooth",
+                title = stringResource(R.string.settings_label_ble),
+                subtitle = stringResource(R.string.settings_description_ble),
                 checked = settings.bleEnabled,
                 onCheckedChange = { onUpdateSetting { vm -> vm.updateBleEnabled(it) } },
                 enabled = !isLoading
             )
 
             SwitchPreference(
-                title = "WiFi Aware",
-                subtitle = "Direct WiFi peer discovery",
+                title = stringResource(R.string.settings_label_wifi_aware),
+                subtitle = stringResource(R.string.settings_description_wifi_aware),
                 checked = settings.wifiAwareEnabled,
                 onCheckedChange = { onUpdateSetting { vm -> vm.updateWifiAwareEnabled(it) } },
                 enabled = !isLoading
             )
 
             SwitchPreference(
-                title = "WiFi Direct",
-                subtitle = "WiFi Direct connections",
+                title = stringResource(R.string.settings_label_wifi_direct),
+                subtitle = stringResource(R.string.settings_description_wifi_direct),
                 checked = settings.wifiDirectEnabled,
                 onCheckedChange = { onUpdateSetting { vm -> vm.updateWifiDirectEnabled(it) } },
                 enabled = !isLoading
             )
 
             SwitchPreference(
-                title = "Internet Relay",
-                subtitle = "Use internet as fallback",
+                title = stringResource(R.string.settings_label_internet_relay),
+                subtitle = stringResource(R.string.settings_description_internet_relay),
                 checked = settings.internetEnabled,
                 onCheckedChange = { onUpdateSetting { vm -> vm.updateInternetEnabled(it) } },
                 enabled = !isLoading
@@ -486,21 +489,21 @@ fun AppPreferencesSection(
             modifier = Modifier.padding(16.dp)
         ) {
             Text(
-                text = "App Preferences",
+                text = stringResource(R.string.settings_section_preferences),
                 style = MaterialTheme.typography.titleMedium,
                 modifier = Modifier.padding(bottom = 8.dp)
             )
 
             SwitchPreference(
-                title = "Auto-start on Boot",
-                subtitle = "Start mesh service when device boots",
+                title = stringResource(R.string.settings_label_auto_start),
+                subtitle = stringResource(R.string.settings_description_auto_start),
                 checked = autoStart,
                 onCheckedChange = onAutoStartChange
             )
 
             SwitchPreference(
-                title = "Notifications",
-                subtitle = "Show message notifications",
+                title = stringResource(R.string.settings_label_notifications),
+                subtitle = stringResource(R.string.settings_description_notifications),
                 checked = notificationsEnabled,
                 onCheckedChange = onNotificationsChange
             )
@@ -520,23 +523,23 @@ fun ThemeSection(
             modifier = Modifier.padding(16.dp)
         ) {
             Text(
-                text = "Theme",
+                text = stringResource(R.string.settings_label_theme),
                 style = MaterialTheme.typography.titleMedium,
                 modifier = Modifier.padding(bottom = 8.dp)
             )
 
             ThemeRadioOption(
-                label = "System Default",
+                label = stringResource(R.string.settings_theme_system),
                 selected = themeMode == PreferencesRepository.ThemeMode.SYSTEM,
                 onClick = { onThemeModeChange(PreferencesRepository.ThemeMode.SYSTEM) }
             )
             ThemeRadioOption(
-                label = "Light",
+                label = stringResource(R.string.settings_theme_light),
                 selected = themeMode == PreferencesRepository.ThemeMode.LIGHT,
                 onClick = { onThemeModeChange(PreferencesRepository.ThemeMode.LIGHT) }
             )
             ThemeRadioOption(
-                label = "Dark",
+                label = stringResource(R.string.settings_theme_dark),
                 selected = themeMode == PreferencesRepository.ThemeMode.DARK,
                 onClick = { onThemeModeChange(PreferencesRepository.ThemeMode.DARK) }
             )
@@ -617,14 +620,14 @@ fun InfoSection(
             modifier = Modifier.padding(16.dp)
         ) {
             Text(
-                text = "Information",
+                text = stringResource(R.string.settings_section_info),
                 style = MaterialTheme.typography.titleMedium,
                 modifier = Modifier.padding(bottom = 8.dp)
             )
 
-            InfoRow("Contacts", contactCount.toString())
-            InfoRow("Messages", messageCount.toString())
-            InfoRow("Version", BuildConfig.VERSION_NAME)
+            InfoRow(stringResource(R.string.settings_label_contacts), contactCount.toString())
+            InfoRow(stringResource(R.string.settings_label_messages), messageCount.toString())
+            InfoRow(stringResource(R.string.settings_label_version), BuildConfig.VERSION_NAME)
         }
     }
 }
@@ -906,20 +909,20 @@ fun AdvancedSettingsSection(
             modifier = Modifier.padding(16.dp)
         ) {
             Text(
-                text = "Advanced",
+                text = stringResource(R.string.settings_section_advanced),
                 style = MaterialTheme.typography.titleMedium,
                 modifier = Modifier.padding(bottom = 8.dp)
             )
 
             Text(
-                text = "Reliability: messages may appear as pending/stored/forwarding before delivered while routes are discovered.",
+                text = stringResource(R.string.settings_advanced_reliability_note),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(bottom = 8.dp)
             )
 
             Text(
-                text = "Permissions rationale: Bluetooth, Location, and Nearby WiFi are required for peer discovery and transport fallback.",
+                text = stringResource(R.string.settings_advanced_permissions_note),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(bottom = 12.dp)
@@ -929,15 +932,12 @@ fun AdvancedSettingsSection(
                 onClick = onNavigateToDiagnostics,
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Text("Diagnostics & Logs")
+                Text(stringResource(R.string.settings_button_diagnostics))
             }
         }
     }
 }
 
-/**
- * Navigation helper to navigate to MeshSettingsScreen.
- */
 @Composable
 fun SettingsToMeshSettingsNavigation(
     onNavigateToMeshSettings: () -> Unit,
@@ -946,12 +946,12 @@ fun SettingsToMeshSettingsNavigation(
     Card(modifier = modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text(
-                text = "Mesh Settings",
+                text = stringResource(R.string.settings_nav_mesh_title),
                 style = MaterialTheme.typography.titleMedium,
                 modifier = Modifier.padding(bottom = 8.dp)
             )
             Text(
-                text = "Configure relay, transport, and discovery settings",
+                text = stringResource(R.string.settings_nav_mesh_description),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(bottom = 12.dp)
@@ -960,7 +960,7 @@ fun SettingsToMeshSettingsNavigation(
                 onClick = onNavigateToMeshSettings,
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Text("Configure Mesh")
+                Text(stringResource(R.string.settings_button_configure_mesh))
             }
         }
     }
@@ -977,12 +977,12 @@ fun SettingsToPowerSettingsNavigation(
     Card(modifier = modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text(
-                text = "Power Settings",
+                text = stringResource(R.string.settings_nav_power_title),
                 style = MaterialTheme.typography.titleMedium,
                 modifier = Modifier.padding(bottom = 8.dp)
             )
             Text(
-                text = "AutoAdjust engine and battery management",
+                text = stringResource(R.string.settings_nav_power_description),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(bottom = 12.dp)
@@ -991,7 +991,7 @@ fun SettingsToPowerSettingsNavigation(
                 onClick = onNavigateToPowerSettings,
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Text("Configure Power")
+                Text(stringResource(R.string.settings_button_configure_power))
             }
         }
     }

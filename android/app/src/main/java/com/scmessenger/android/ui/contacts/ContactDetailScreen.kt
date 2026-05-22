@@ -61,18 +61,18 @@ fun ContactDetailScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(contact?.localNickname ?: contact?.nickname ?: "Contact Details") },
+                title = { Text(contact?.localNickname ?: contact?.nickname ?: stringResource(R.string.contact_detail_title)) },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.chat_action_dismiss))
                     }
                 },
                 actions = {
                     IconButton(onClick = { showEditDialog = true }) {
-                        Icon(Icons.Default.Edit, contentDescription = "Edit")
+                        Icon(Icons.Default.Edit, contentDescription = stringResource(R.string.action_edit))
                     }
                     IconButton(onClick = { showDeleteDialog = true }) {
-                        Icon(Icons.Default.Delete, contentDescription = "Delete")
+                        Icon(Icons.Default.Delete, contentDescription = stringResource(R.string.delete))
                     }
                 }
             )
@@ -101,7 +101,7 @@ fun ContactDetailScreen(
                     Spacer(modifier = Modifier.height(16.dp))
 
                     Text(
-                        text = "Contact not found",
+                        text = stringResource(R.string.contact_detail_not_found),
                         style = MaterialTheme.typography.titleLarge
                     )
                 }
@@ -121,8 +121,8 @@ fun ContactDetailScreen(
     if (showDeleteDialog) {
         AlertDialog(
             onDismissRequest = { showDeleteDialog = false },
-            title = { Text("Delete Contact") },
-            text = { Text("Are you sure you want to delete this contact?") },
+            title = { Text(stringResource(R.string.contact_detail_action_delete)) },
+            text = { Text(stringResource(R.string.contact_detail_delete_description)) },
             confirmButton = {
                 TextButton(
                     onClick = {
@@ -131,12 +131,12 @@ fun ContactDetailScreen(
                         onNavigateBack()
                     }
                 ) {
-                    Text("Delete")
+                    Text(stringResource(R.string.delete))
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showDeleteDialog = false }) {
-                    Text("Cancel")
+                    Text(stringResource(R.string.cancel))
                 }
             }
         )
@@ -149,12 +149,12 @@ fun ContactDetailScreen(
 
         AlertDialog(
             onDismissRequest = { showEditDialog = false },
-            title = { Text("Edit Local Nickname") },
+            title = { Text(stringResource(R.string.contact_detail_action_edit_local_nickname)) },
             text = {
                 OutlinedTextField(
                     value = newNickname,
                     onValueChange = { newNickname = it },
-                    label = { Text("Local nickname") },
+                    label = { Text(stringResource(R.string.contact_detail_label_local_nickname)) },
                     singleLine = true,
                     modifier = Modifier
                         .fillMaxWidth()
@@ -171,12 +171,12 @@ fun ContactDetailScreen(
                         showEditDialog = false
                     }
                 ) {
-                    Text("Save")
+                    Text(stringResource(R.string.action_save))
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showEditDialog = false }) {
-                    Text("Cancel")
+                    Text(stringResource(R.string.cancel))
                 }
             }
         )
@@ -250,7 +250,7 @@ private fun ContactDetailContent(
                         tint = if (contact.lastSeen != null) StatusOnline else StatusOffline
                     )
                     Text(
-                        text = if (contact.lastSeen != null) "Last seen recently" else "Never seen",
+                        text = if (contact.lastSeen != null) stringResource(R.string.contact_detail_status_last_seen_recent) else stringResource(R.string.contact_detail_status_never_seen),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -263,7 +263,7 @@ private fun ContactDetailContent(
                 ) {
                     Icon(Icons.AutoMirrored.Filled.Send, contentDescription = null)
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text("Send Message")
+                    Text(stringResource(R.string.contact_detail_action_send_message))
                 }
             }
         }
@@ -272,7 +272,7 @@ private fun ContactDetailContent(
         Card {
             Column(modifier = Modifier.padding(16.dp)) {
                 LabeledCopyableText(
-                    label = "Peer ID",
+                    label = stringResource(R.string.contact_detail_label_peer_id),
                     text = contact.peerId,
                     monospace = true
                 )
@@ -293,7 +293,7 @@ private fun ContactDetailContent(
                     )
                     Column(modifier = Modifier.weight(1f)) {
                         LabeledCopyableText(
-                            label = "Public Key",
+                            label = stringResource(R.string.contact_detail_label_public_key),
                             text = contact.publicKey,
                             monospace = true
                         )
@@ -306,23 +306,23 @@ private fun ContactDetailContent(
         Card {
             Column(modifier = Modifier.padding(16.dp)) {
                 Text(
-                    text = "Metadata",
+                    text = stringResource(R.string.contact_detail_section_metadata),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold
                 )
 
                 Spacer(modifier = Modifier.height(8.dp))
 
-                MetadataRow(label = "Added", value = formatTimestamp(contact.addedAt))
+                MetadataRow(label = stringResource(R.string.contact_detail_label_added), value = formatTimestamp(contact.addedAt))
 
                 contact.lastSeen?.let {
-                    MetadataRow(label = "Last Seen", value = formatTimestamp(it))
+                    MetadataRow(label = stringResource(R.string.contact_detail_label_last_seen), value = formatTimestamp(it))
                 }
 
                 contact.notes?.let {
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        text = "Notes:",
+                        text = stringResource(R.string.contact_detail_label_notes),
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )

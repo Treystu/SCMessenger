@@ -14,43 +14,53 @@ if (keystorePropertiesFile.canRead()) {
 }
 
 android {
-    namespace 'com.scmessenger.android'
-    compileSdk rootProject.ext.compileSdk
+    namespace = 'com.scmessenger.android'
+    compileSdk = rootProject.ext.compileSdk
     
     // Pinned NDK version for build reproducibility (Requirement 7.3)
     // NDK r26b (26.1.10909125) or NDK r30 (30.0.14904198)
-    ndkVersion '30.0.14904198'
+    ndkVersion = '30.0.14904198'
 
     signingConfigs {
         release {
-            if (keystorePropertiesFile.canRead()) {
-                storeFile file(keystoreProperties['storeFile'])
-                storePassword keystoreProperties['storePassword']
-                keyAlias keystoreProperties['keyAlias']
-                keyPassword keystoreProperties['keyPassword']
-            } else if (System.getenv("KEYSTORE_FILE") != null) {
+            if (System.getenv("KEYSTORE_FILE") != null) {
                 storeFile file(System.getenv("KEYSTORE_FILE"))
                 storePassword System.getenv("KEYSTORE_PASSWORD")
                 keyAlias System.getenv("KEYSTORE_ALIAS")
                 keyPassword System.getenv("KEY_PASSWORD")
+            } else if (keystorePropertiesFile.canRead() && 
+                       keystoreProperties.containsKey('storeFile') &&
+                       keystoreProperties.containsKey('storePassword') &&
+                       keystoreProperties.containsKey('keyAlias') &&
+                       keystoreProperties.containsKey('keyPassword')) {
+                storeFile file(keystoreProperties['storeFile'])
+                storePassword keystoreProperties['storePassword']
+                keyAlias keystoreProperties['keyAlias']
+                keyPassword keystoreProperties['keyPassword']
             } else {
-                // Fallback to debug keystore for CI/development builds
-                storeFile file("${System.getProperty('user.home')}/.android/debug.keystore")
-                storePassword "android"
-                keyAlias "androiddebugkey"
-                keyPassword "android"
+                // Automated fallback for environment-ready builds
+                def debugKeystore = file("${System.getProperty('user.home')}/.android/debug.keystore")
+                if (debugKeystore.exists()) {
+                    storeFile debugKeystore
+                    storePassword "android"
+                    keyAlias "androiddebugkey"
+                    keyPassword "android"
+                    println "Signing: Using native debug fallback"
+                } else {
+                    println "Signing: No release or debug keystore found. Build may fail if signing is required."
+                }
             }
         }
     }
     
     defaultConfig {
-        applicationId 'com.scmessenger.android'
-        minSdk rootProject.ext.minSdk
-        targetSdk rootProject.ext.targetSdk
-        versionCode rootProject.ext.versionCode
-        versionName rootProject.ext.versionName
+        applicationId = 'com.scmessenger.android'
+        minSdk = rootProject.ext.minSdk
+        targetSdk = rootProject.ext.targetSdk
+        versionCode = rootProject.ext.versionCode
+        versionName = rootProject.ext.versionName
         
-        testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
+        testInstrumentationRunner = 'androidx.test.runner.AndroidJUnitRunner'
         
         // Specify ABIs we're building for (devices and simulators)
         ndk {
@@ -60,16 +70,16 @@ android {
     
     buildTypes {
         release {
-            minifyEnabled true
+            minifyEnabled = true
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
-            signingConfig signingConfigs.release
+            signingConfig = signingConfigs.release
             ndk {
-                debugSymbolLevel 'FULL'
+                debugSymbolLevel = 'FULL'
             }
         }
         debug {
-            minifyEnabled false
-            debuggable true
+            minifyEnabled = false
+            debuggable = true
         }
     }
     
@@ -90,12 +100,12 @@ android {
     // Kapt block removed in favor of KSP
     
     buildFeatures {
-        compose true
-        buildConfig true
+        compose = true
+        buildConfig = true
     }
     
     composeOptions {
-        kotlinCompilerExtensionVersion rootProject.ext.compose_compiler_version
+        kotlinCompilerExtensionVersion = rootProject.ext.compose_compiler_version
     }
     
     packaging {

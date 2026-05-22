@@ -58,10 +58,10 @@ fun NetworkStatusDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Network Diagnostics") },
+        title = { Text(stringResource(R.string.network_diagnostics_title)) },
         text = {
             if (report == null) {
-                Text("Running diagnostics...")
+                Text(stringResource(R.string.network_diagnostics_running))
             } else {
                 Column(
                     modifier = Modifier
@@ -71,7 +71,7 @@ fun NetworkStatusDialog(
                 ) {
                     // Network Type
                     DiagnosticRow(
-                        label = "Network",
+                        label = stringResource(R.string.network_diagnostics_label_network),
                         value = formatNetworkType(report!!.networkType),
                         isGood = report!!.networkType in listOf(
                             com.scmessenger.android.transport.NetworkType.WIFI,
@@ -82,16 +82,18 @@ fun NetworkStatusDialog(
                     )
 
                     // Internet
+                    val internetConnectedLabel = stringResource(R.string.network_diagnostics_status_connected)
+                    val internetDisconnectedLabel = stringResource(R.string.network_diagnostics_status_disconnected)
                     DiagnosticRow(
-                        label = "Internet",
-                        value = if (report!!.hasInternet) "Connected" else "Disconnected",
+                        label = stringResource(R.string.network_diagnostics_label_internet),
+                        value = if (report!!.hasInternet) internetConnectedLabel else internetDisconnectedLabel,
                         isGood = report!!.hasInternet
                     )
 
                     // P0_NETWORK_001 Phase 7: Transport Priority
                     if (report!!.transportPriority.isNotEmpty()) {
                         HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
-                        Text("Transport Priority:", style = MaterialTheme.typography.labelMedium)
+                        Text(stringResource(R.string.network_diagnostics_section_priority), style = MaterialTheme.typography.labelMedium)
                         val transportStr = report!!.transportPriority.joinToString(" > ") {
                             formatTransport(it)
                         }
@@ -101,9 +103,11 @@ fun NetworkStatusDialog(
                     // P0_NETWORK_001 Phase 7: Port Probe Results
                     if (report!!.portProbeResults.isNotEmpty()) {
                         HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
-                        Text("Port Probe:", style = MaterialTheme.typography.labelMedium)
+                        Text(stringResource(R.string.network_diagnostics_section_port_probe), style = MaterialTheme.typography.labelMedium)
+                        val openLabel = stringResource(R.string.network_diagnostics_status_open)
+                        val blockedLabel = stringResource(R.string.network_diagnostics_status_blocked)
                         report!!.portProbeResults.forEach { (hostPort, reachable) ->
-                            val label = if (reachable) "open" else "blocked"
+                            val label = if (reachable) openLabel else blockedLabel
                             val isGood = reachable
                             DiagnosticRow(
                                 label = hostPort,
@@ -116,12 +120,15 @@ fun NetworkStatusDialog(
                     // P0_NETWORK_001 Phase 7: Circuit Breaker States
                     if (report!!.circuitBreakerEntries.isNotEmpty()) {
                         HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
-                        Text("Circuit Breakers:", style = MaterialTheme.typography.labelMedium)
+                        Text(stringResource(R.string.network_diagnostics_section_circuits), style = MaterialTheme.typography.labelMedium)
+                        val okLabel = stringResource(R.string.ok)
+                        val blockedLabel = stringResource(R.string.network_diagnostics_status_blocked).uppercase()
+                        val probingLabel = stringResource(R.string.network_diagnostics_status_probing)
                         report!!.circuitBreakerEntries.forEach { entry ->
                             val stateLabel = when (entry.state) {
-                                CircuitBreaker.CircuitState.CLOSED -> "OK"
-                                CircuitBreaker.CircuitState.OPEN -> "BLOCKED"
-                                CircuitBreaker.CircuitState.HALF_OPEN -> "PROBING"
+                                CircuitBreaker.CircuitState.CLOSED -> okLabel
+                                CircuitBreaker.CircuitState.OPEN -> blockedLabel
+                                CircuitBreaker.CircuitState.HALF_OPEN -> probingLabel
                             }
                             val isGood = entry.state == CircuitBreaker.CircuitState.CLOSED
                             DiagnosticRow(
@@ -143,7 +150,7 @@ fun NetworkStatusDialog(
                     val failedDns = report!!.dnsResults.filterValues { !it }.keys
                     if (failedDns.isNotEmpty()) {
                         HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
-                        Text("DNS Failures:", style = MaterialTheme.typography.labelMedium)
+                        Text(stringResource(R.string.network_diagnostics_section_dns_failures), style = MaterialTheme.typography.labelMedium)
                         failedDns.forEach { domain ->
                             Text("  - $domain", style = MaterialTheme.typography.bodySmall)
                         }
@@ -153,7 +160,7 @@ fun NetworkStatusDialog(
                     val unreachableRelays = report!!.relayResults.filterValues { !it }.keys
                     if (unreachableRelays.isNotEmpty()) {
                         HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
-                        Text("Unreachable Relays:", style = MaterialTheme.typography.labelMedium)
+                        Text(stringResource(R.string.network_diagnostics_section_unreachable_relays), style = MaterialTheme.typography.labelMedium)
                         unreachableRelays.forEach { relay ->
                             Text("  - $relay", style = MaterialTheme.typography.bodySmall)
                         }
@@ -162,7 +169,7 @@ fun NetworkStatusDialog(
                     // Recommendations
                     if (report!!.recommendations.isNotEmpty()) {
                         HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
-                        Text("Recommendations:", style = MaterialTheme.typography.labelMedium)
+                        Text(stringResource(R.string.network_diagnostics_section_recommendations), style = MaterialTheme.typography.labelMedium)
                         report!!.recommendations.forEach { rec ->
                             Text("  - $rec", style = MaterialTheme.typography.bodySmall)
                         }
@@ -181,10 +188,10 @@ fun NetworkStatusDialog(
         confirmButton = {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedButton(onClick = onRetryBootstrap) {
-                    Text("Retry")
+                    Text(stringResource(R.string.retry))
                 }
                 Button(onClick = onDismiss) {
-                    Text("OK")
+                    Text(stringResource(R.string.ok))
                 }
             }
         }

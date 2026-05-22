@@ -24,6 +24,8 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.google.mlkit.vision.barcode.common.Barcode
 import com.google.mlkit.vision.codescanner.GmsBarcodeScannerOptions
 import com.google.mlkit.vision.codescanner.GmsBarcodeScanning
+import androidx.compose.ui.res.stringResource
+import com.scmessenger.android.R
 import com.scmessenger.android.ui.viewmodels.MainViewModel
 import timber.log.Timber
 
@@ -205,7 +207,7 @@ fun OnboardingScreen(
                             enabled = consentChecked,
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            Text("Continue")
+                            Text(stringResource(R.string.onboarding_action_continue))
                         }
                     }
                 }
@@ -214,7 +216,7 @@ fun OnboardingScreen(
                 if (isCreating) {
                     CircularProgressIndicator()
                     Spacer(modifier = Modifier.height(16.dp))
-                    Text("Generating Identity keys...")
+                    Text(stringResource(R.string.onboarding_generating_keys))
                 } else {
                     val focusManager = LocalFocusManager.current
                     
@@ -224,8 +226,8 @@ fun OnboardingScreen(
                             nickname = it 
                             touchEntropySalt = null // Reset salt when nickname changes
                         },
-                        label = { Text("Your nickname") },
-                        placeholder = { Text("e.g. christy") },
+                        label = { Text(stringResource(R.string.onboarding_label_nickname)) },
+                        placeholder = { Text(stringResource(R.string.onboarding_placeholder_nickname)) },
                         singleLine = true,
                         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                         keyboardActions = KeyboardActions(
@@ -291,7 +293,7 @@ fun OnboardingScreen(
                             onClick = { permissionsState.launchMultiplePermissionRequest() },
                             modifier = Modifier.fillMaxWidth().height(52.dp)
                         ) {
-                            Text("Grant Mesh Permissions (Recommended)")
+                            Text(stringResource(R.string.onboarding_action_grant_permissions))
                         }
                     }
 
@@ -305,7 +307,7 @@ fun OnboardingScreen(
                         },
                         modifier = Modifier.fillMaxWidth().height(56.dp)
                     ) {
-                        Text("Import Contact / Join Existing Mesh")
+                        Text(stringResource(R.string.onboarding_button_import_join))
                     }
                 }
             } // end consent else
@@ -356,7 +358,7 @@ private fun ImportContactDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Import Contact") },
+        title = { Text(stringResource(R.string.onboarding_title_import)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(
@@ -371,11 +373,14 @@ private fun ImportContactDialog(
                             .setBarcodeFormats(Barcode.FORMAT_QR_CODE)
                             .build()
                         val scanner = GmsBarcodeScanning.getClient(context, options)
+                        val qrEmptyError = context.getString(R.string.add_contact_error_qr_empty)
+                        val qrFailedError = context.getString(R.string.add_contact_error_qr_failed)
+
                         scanner.startScan()
                             .addOnSuccessListener { barcode ->
                                 val rawValue = barcode.rawValue
                                 if (rawValue.isNullOrBlank()) {
-                                    qrScanError = "QR code was empty. Please try again."
+                                    qrScanError = qrEmptyError
                                 } else {
                                     onImportCodeChange(rawValue)
                                     qrScanError = null
@@ -383,12 +388,12 @@ private fun ImportContactDialog(
                             }
                             .addOnFailureListener { e ->
                                 Timber.w(e, "Onboarding QR scan failed")
-                                qrScanError = "Unable to scan QR code. Please try again."
+                                qrScanError = qrFailedError
                             }
                     },
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text("Scan QR Code")
+                    Text(stringResource(R.string.onboarding_action_scan_qr))
                 }
 
                 Spacer(modifier = Modifier.height(4.dp))
@@ -396,7 +401,7 @@ private fun ImportContactDialog(
                 OutlinedTextField(
                     value = importCode,
                     onValueChange = onImportCodeChange,
-                    label = { Text("Identity JSON") },
+                    label = { Text(stringResource(R.string.onboarding_label_identity_json)) },
                     modifier = Modifier.fillMaxWidth().heightIn(min = 120.dp),
                     minLines = 4,
                     maxLines = 8,
@@ -422,11 +427,11 @@ private fun ImportContactDialog(
         },
         confirmButton = {
             Button(onClick = onImport, enabled = importCode.isNotBlank()) {
-                Text("Import")
+                Text(stringResource(R.string.settings_action_import))
             }
         },
         dismissButton = {
-            OutlinedButton(onClick = onDismiss) { Text("Cancel") }
+            OutlinedButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
         }
     )
 }

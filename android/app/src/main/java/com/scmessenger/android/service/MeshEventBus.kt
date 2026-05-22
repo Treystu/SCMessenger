@@ -79,6 +79,23 @@ object MeshEventBus {
             Timber.e(e, "Failed to emit network event")
         }
     }
+
+    // UI state events
+    private val _uiEvents = MutableSharedFlow<UiEvent>(replay = 1)
+    val uiEvents: SharedFlow<UiEvent> = _uiEvents.asSharedFlow()
+
+    /**
+     * Emit a UI event (screen change, active conversation).
+     */
+    suspend fun emitUiEvent(event: UiEvent) {
+        try {
+            _uiEvents.emit(event)
+            Timber.d("UiEvent emitted: $event")
+        } catch (e: Exception) {
+            Timber.e(e, "Failed to emit UI event")
+        }
+    }
+
 }
 
 // ============================================================================
@@ -130,6 +147,14 @@ sealed class NetworkEvent {
     data class TransportDisabled(val transport: TransportType) : NetworkEvent()
     data class ConnectionQualityChanged(val peerId: String, val quality: ConnectionQuality) : NetworkEvent()
     data class BatteryStateChanged(val level: Int, val isCharging: Boolean) : NetworkEvent()
+}
+
+/**
+ * UI-related events.
+ */
+sealed class UiEvent {
+    data class ConversationOpened(val peerId: String) : UiEvent()
+    object ConversationClosed : UiEvent()
 }
 
 /**

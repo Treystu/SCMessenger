@@ -23,11 +23,16 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.compose.ui.res.stringResource
+import uniffi.api.*
+import com.scmessenger.android.R
 import com.scmessenger.android.utils.toEpochMillis
 import com.scmessenger.android.ui.viewmodels.ConversationsViewModel
 import com.scmessenger.android.ui.viewmodels.ContactsViewModel
 import com.scmessenger.android.ui.viewmodels.ChatViewModel
 import com.scmessenger.android.ui.chat.MessageInput
+import com.scmessenger.android.service.MeshEventBus
+import com.scmessenger.android.service.UiEvent
 import kotlinx.coroutines.launch
 import timber.log.Timber
 import java.text.SimpleDateFormat
@@ -49,6 +54,21 @@ fun ChatScreen(
             // Messages loaded into the shared state by loadMessages
         }
     }
+
+    LaunchedEffect(conversationId) {
+        MeshEventBus.emitUiEvent(UiEvent.ConversationOpened(conversationId))
+    }
+
+    DisposableEffect(conversationId) {
+        onDispose {
+            // GlobalScope is used here because the composable's scope is already cancelled
+            @Suppress("OPT_IN_USAGE")
+            kotlinx.coroutines.GlobalScope.launch {
+                MeshEventBus.emitUiEvent(UiEvent.ConversationClosed)
+            }
+        }
+    }
+
 
     val messages by viewModel.messages.collectAsState()
     val error by viewModel.error.collectAsState()
@@ -160,7 +180,7 @@ fun ChatScreen(
                         .padding(horizontal = 16.dp, vertical = 8.dp),
                     action = {
                         TextButton(onClick = { viewModel.clearError() }) {
-                            Text("Dismiss")
+                            Text(stringResource(R.string.chat_action_dismiss))
                         }
                     }
                 ) {
@@ -187,18 +207,18 @@ fun ChatScreen(
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = "Not in contacts",
+                                text = stringResource(R.string.chat_not_in_contacts),
                                 style = MaterialTheme.typography.titleSmall,
                                 color = MaterialTheme.colorScheme.onSecondaryContainer
                             )
                             Text(
-                                text = "Add to send messages",
+                                text = stringResource(R.string.chat_add_to_send_messages),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSecondaryContainer
                             )
                         }
                         Button(onClick = { showAddContactDialog = true }) {
-                            Text("Add Contact")
+                            Text(stringResource(R.string.chat_action_add_contact))
                         }
                     }
                 }
@@ -352,15 +372,15 @@ fun ChatScreen(
 
             AlertDialog(
                 onDismissRequest = { showAddContactDialog = false },
-                title = { Text("Add Contact") },
+                title = { Text(stringResource(R.string.chat_action_add_contact)) },
                 text = {
                     Column {
-                        Text("Add this peer to your contacts to send messages.")
+                        Text(stringResource(R.string.chat_add_contact_description))
                         Spacer(modifier = Modifier.height(8.dp))
                         OutlinedTextField(
                             value = nickname,
                             onValueChange = { nickname = it },
-                            label = { Text("Nickname") },
+                            label = { Text(stringResource(R.string.settings_label_nickname)) },
                             singleLine = true,
                             modifier = Modifier.fillMaxWidth()
                         )
@@ -384,12 +404,12 @@ fun ChatScreen(
                             }
                         }
                     ) {
-                        Text("Add")
+                        Text(stringResource(R.string.chat_action_add_contact))
                     }
                 },
                 dismissButton = {
                     TextButton(onClick = { showAddContactDialog = false }) {
-                        Text("Cancel")
+                        Text(stringResource(R.string.cancel))
                     }
                 }
             )
@@ -403,8 +423,8 @@ fun ChatScreen(
     if (showBlockConfirmation) {
         AlertDialog(
             onDismissRequest = { showBlockConfirmation = false },
-            title = { Text("Block Peer?") },
-            text = { Text("You will no longer receive notifications from this peer. Existing messages will be kept.") },
+            title = { Text(stringResource(R.string.chat_dialog_block_title)) },
+            text = { Text(stringResource(R.string.chat_dialog_block_description)) },
             confirmButton = {
                 TextButton(
                     onClick = {
@@ -413,12 +433,12 @@ fun ChatScreen(
                     },
                     colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
                 ) {
-                    Text("Block")
+                    Text(stringResource(R.string.action_block))
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showBlockConfirmation = false }) {
-                    Text("Cancel")
+                    Text(stringResource(R.string.cancel))
                 }
             }
         )

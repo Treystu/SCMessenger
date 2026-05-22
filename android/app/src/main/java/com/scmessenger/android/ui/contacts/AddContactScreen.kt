@@ -64,10 +64,10 @@ fun AddContactScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Add Contact") },
+                title = { Text(stringResource(R.string.contacts_action_add)) },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.chat_action_dismiss))
                     }
                 }
             )
@@ -83,17 +83,17 @@ fun AddContactScreen(
                 Tab(
                     selected = selectedTab == 0,
                     onClick = { selectedTab = 0 },
-                    text = { Text("Manual Entry") }
+                    text = { Text(stringResource(R.string.add_contact_tab_manual)) }
                 )
                 Tab(
                     selected = selectedTab == 1,
                     onClick = { selectedTab = 1 },
-                    text = { Text("QR Scan") }
+                    text = { Text(stringResource(R.string.add_contact_tab_qr)) }
                 )
                 Tab(
                     selected = selectedTab == 2,
                     onClick = { selectedTab = 2 },
-                    text = { Text("Nearby") }
+                    text = { Text(stringResource(R.string.add_contact_tab_nearby)) }
                 )
             }
 
@@ -223,7 +223,7 @@ private fun ManualEntryTab(
         OutlinedTextField(
             value = peerId,
             onValueChange = onPeerIdChange,
-            label = { Text("Peer ID *") },
+            label = { Text(stringResource(R.string.add_contact_label_peer_id_required)) },
             modifier = Modifier.fillMaxWidth(),
             singleLine = true,
             enabled = !isAdding
@@ -233,7 +233,7 @@ private fun ManualEntryTab(
         OutlinedTextField(
             value = publicKey,
             onValueChange = onPublicKeyChange,
-            label = { Text("Public Key *") },
+            label = { Text(stringResource(R.string.add_contact_label_public_key_required)) },
             modifier = Modifier.fillMaxWidth(),
             minLines = 2,
             maxLines = 4,
@@ -244,7 +244,7 @@ private fun ManualEntryTab(
         OutlinedTextField(
             value = nickname,
             onValueChange = onNicknameChange,
-            label = { Text("Nickname (optional)") },
+            label = { Text(stringResource(R.string.add_contact_label_nickname_optional)) },
             modifier = Modifier.fillMaxWidth(),
             singleLine = true,
             enabled = !isAdding
@@ -254,7 +254,7 @@ private fun ManualEntryTab(
         OutlinedTextField(
             value = notes,
             onValueChange = onNotesChange,
-            label = { Text("Notes (optional)") },
+            label = { Text(stringResource(R.string.add_contact_label_notes_optional)) },
             modifier = Modifier.fillMaxWidth(),
             minLines = 3,
             maxLines = 5,
@@ -273,9 +273,9 @@ private fun ManualEntryTab(
                     color = MaterialTheme.colorScheme.onPrimary
                 )
             } else {
-                Icon(Icons.Default.Add, contentDescription = "Add contact")
+                Icon(Icons.Default.Add, contentDescription = stringResource(R.string.contacts_action_add))
                 Spacer(modifier = Modifier.width(8.dp))
-                Text("Add Contact")
+                Text(stringResource(R.string.contacts_action_add))
             }
         }
     }
@@ -304,14 +304,14 @@ private fun QRScanTab(
         Spacer(modifier = Modifier.height(16.dp))
 
         Text(
-            text = "QR Code Scanning",
+            text = stringResource(R.string.add_contact_qr_title),
             style = MaterialTheme.typography.titleLarge
         )
 
         Spacer(modifier = Modifier.height(8.dp))
 
         Text(
-            text = "Scan a contact export QR to auto-fill peer ID and public key.",
+            text = stringResource(R.string.add_contact_qr_description),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
@@ -321,11 +321,14 @@ private fun QRScanTab(
         val gmsAvailable = remember {
             GoogleApiAvailability.getInstance().isGooglePlayServicesAvailable(context) == ConnectionResult.SUCCESS
         }
+        val gmsUnavailableError = stringResource(R.string.add_contact_error_gms_unavailable)
+        val qrEmptyError = stringResource(R.string.add_contact_error_qr_empty)
+        val qrFailedError = stringResource(R.string.add_contact_error_qr_failed)
 
         Button(
             onClick = {
                 if (!gmsAvailable) {
-                    onScanError("Google Play Services is not available on this device. Please use manual entry or paste the identity string.")
+                    onScanError(gmsUnavailableError)
                     return@Button
                 }
                 val options = GmsBarcodeScannerOptions.Builder()
@@ -336,7 +339,7 @@ private fun QRScanTab(
                     .addOnSuccessListener { barcode ->
                         val rawValue = barcode.rawValue
                         if (rawValue.isNullOrBlank()) {
-                            onScanError("QR code was empty. Please try again.")
+                            onScanError(qrEmptyError)
                         } else {
                             onScanned(rawValue)
                         }
@@ -346,20 +349,20 @@ private fun QRScanTab(
                         if (e is MlKitException && e.errorCode == CommonStatusCodes.CANCELED) {
                             return@addOnFailureListener
                         }
-                        onScanError("Unable to scan QR code. Please try again.")
+                        onScanError(qrFailedError)
                     }
             },
             enabled = gmsAvailable
         ) {
-            Icon(Icons.Default.CameraAlt, contentDescription = "Scan QR code")
+            Icon(Icons.Default.CameraAlt, contentDescription = stringResource(R.string.contacts_label_scan_qr))
             Spacer(modifier = Modifier.width(8.dp))
-            Text(if (gmsAvailable) "Scan QR Code" else "QR Scanning Unavailable")
+            Text(if (gmsAvailable) stringResource(R.string.add_contact_action_scan) else stringResource(R.string.add_contact_action_scan_unavailable))
         }
 
         if (!gmsAvailable) {
             Spacer(modifier = Modifier.height(8.dp))
             Text(
-                text = "Google Play Services is required for QR scanning. Use manual entry or paste instead.",
+                text = stringResource(R.string.add_contact_gms_requirement_note),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.error
             )
@@ -386,14 +389,14 @@ private fun NearbyDiscoveryTab() {
         Spacer(modifier = Modifier.height(16.dp))
 
         Text(
-            text = "Nearby Discovery",
+            text = stringResource(R.string.add_contact_nearby_title),
             style = MaterialTheme.typography.titleLarge
         )
 
         Spacer(modifier = Modifier.height(8.dp))
 
         Text(
-            text = "Automatic discovery of nearby peers will be available in a future update",
+            text = stringResource(R.string.add_contact_nearby_description),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )

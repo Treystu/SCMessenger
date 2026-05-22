@@ -35,7 +35,8 @@
     
     <!-- Boot receiver -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
-    
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+
     <!-- Features -->
     <uses-feature
         android:name="android.hardware.bluetooth_le"

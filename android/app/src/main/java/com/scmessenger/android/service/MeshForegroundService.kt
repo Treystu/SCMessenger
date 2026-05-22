@@ -58,7 +58,9 @@ class MeshForegroundService : Service() {
     lateinit var preferencesRepository: PreferencesRepository
 
     @Volatile private var isRunning = false
+    @Volatile private var activeConversationId: String? = null
     private val connectedPeers: MutableSet<String> = Collections.synchronizedSet(mutableSetOf())
+
     private val messagesRelayed = AtomicInteger(0)
 
     // WakeLock for BLE scan windows
@@ -229,6 +231,17 @@ class MeshForegroundService : Service() {
 
                 // Start periodic AutoAdjust profile computation
                 startPeriodicAdjustments()
+
+                // Monitor UI state for notification suppression
+                launch {
+                    MeshEventBus.uiEvents.collect { event ->
+                        activeConversationId = when (event) {
+                            is UiEvent.ConversationOpened -> event.peerId
+                            is UiEvent.ConversationClosed -> null
+                        }
+                    }
+                }
+
 
                 // BATTERY FIX (P0_ANDROID_STABILITY_001): Removed periodic WakeLock renewal.
                 // Persistent wakelocks are unnecessary with FOREGROUND_SERVICE + startForeground().
@@ -446,16 +459,19 @@ class MeshForegroundService : Service() {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
 
-        // Use NotificationHelper for content text formatting
-        val contentText = "Connected to ${connectedPeers.size} peers • ${messagesRelayed.get()} relayed"
+        val contentText = getString(
+            R.string.notification_mesh_status_content_format,
+            connectedPeers.size,
+            messagesRelayed.get()
+        )
 
-        return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("Mesh Network Active")
+        return NotificationCompat.Builder(this, NotificationHelper.CHANNEL_MESH_STATUS)
+            .setContentTitle(getString(R.string.mesh_service_notification_title))
             .setContentText(contentText)
             .setSmallIcon(R.drawable.ic_notification)
             .setContentIntent(pendingIntent)
-            .addAction(0, "Pause", pausePendingIntent)
-            .addAction(0, "Stop", stopPendingIntent)
+            .addAction(0, getString(R.string.action_pause), pausePendingIntent)
+            .addAction(0, getString(R.string.action_stop), stopPendingIntent)
             .setOngoing(true)
             .setCategory(NotificationCompat.CATEGORY_SERVICE)
             .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
@@ -463,8 +479,7 @@ class MeshForegroundService : Service() {
     }
 
     /**
-     * Wire buildForegroundServiceNotification from NotificationHelper.
-     * Uses the NotificationHelper function as a base, then adds actions for pause/stop.
+     * Build foreground service notification using base from NotificationHelper.
      */
     private fun createSimpleForegroundNotification(): Notification {
         // Build notification using NotificationHelper for content
@@ -475,7 +490,7 @@ class MeshForegroundService : Service() {
         )
 
         // Get content from base notification (copy the NotificationCompat.Builder content)
-        val builder = NotificationCompat.Builder(this, CHANNEL_ID)
+        val builder = NotificationCompat.Builder(this, NotificationHelper.CHANNEL_MESH_STATUS)
             .setContentTitle(baseNotification.extras.getString(NotificationCompat.EXTRA_TITLE))
             .setContentText(baseNotification.extras.getString(NotificationCompat.EXTRA_TEXT))
             .setSmallIcon(baseNotification.icon)
@@ -495,7 +510,7 @@ class MeshForegroundService : Service() {
             pauseIntent,
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
-        builder.addAction(0, "Pause", pausePendingIntent)
+        builder.addAction(0, getString(R.string.action_pause), pausePendingIntent)
 
         // Action: Stop Service
         val stopIntent = Intent(this, MeshForegroundService::class.java).apply {
@@ -507,7 +522,7 @@ class MeshForegroundService : Service() {
             stopIntent,
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
-        builder.addAction(0, "Stop", stopPendingIntent)
+        builder.addAction(0, getString(R.string.action_stop), stopPendingIntent)
 
         return builder.build()
     }
@@ -647,9 +662,9 @@ class MeshForegroundService : Service() {
      * Get currently active conversation ID.
      */
     private fun getActiveConversationId(): String? {
-        // In production, would track this via activity lifecycle or event bus
-        return null
+        return activeConversationId
     }
+
 
     override fun onBind(intent: Intent?): IBinder? {
         // Wire isServiceHealthy check into onBind for binder clients
@@ -678,7 +693,6 @@ class MeshForegroundService : Service() {
     }
 
     companion object {
-        private const val CHANNEL_ID = "mesh_status"
         private const val NOTIFICATION_ID = 1001
 
         const val ACTION_START = "com.scmessenger.android.service.START"
