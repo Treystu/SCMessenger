@@ -91,7 +91,7 @@ impl DedupStatsTracker {
                 if let Some(oldest_key) = self
                     .entries
                     .iter()
-                    .min_by_key(|(_, v)| v.first_received_at)
+                    .min_by_key(|(_, v)| (v.first_received_at, &v.message_id))
                     .map(|(k, _)| k.clone())
                 {
                     self.entries.remove(&oldest_key);

@@ -181,8 +181,8 @@ impl SyncSession {
         let message_count = store.len() as u32;
         // Size IBLT generously to handle expected differences
         // Differences can be at most message_count + peer_message_count, but we don't know peer_count yet
-        // Use 2x message_count as a reasonable estimate (allows for peer having up to 2x messages)
-        let iblt_capacity = (message_count as usize * 2).max(1);
+        // Use 4x message_count + 8 as a reasonable estimate with headroom for small sets
+        let iblt_capacity = (message_count as usize * 4 + 8).max(1);
         let mut iblt = IBLT::new(iblt_capacity);
 
         for msg_id in store.message_ids() {
