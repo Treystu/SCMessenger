@@ -19,7 +19,7 @@ android {
     
     // Pinned NDK version for build reproducibility (Requirement 7.3)
     // NDK r26b (26.1.10909125) or NDK r30 (30.0.14904198)
-    ndkVersion = '30.0.14904198'
+    ndkVersion = '26.1.10909125'
 
     signingConfigs {
         release {
