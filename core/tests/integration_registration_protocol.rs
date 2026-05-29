@@ -53,6 +53,7 @@ async fn wait_for_peer_ready(
 }
 
 #[tokio::test]
+#[ignore = "requires real networking (TCP bind + mDNS multicast); run with --include-ignored"]
 async fn registration_protocol_accepts_valid_signed_registration_request() {
     let receiver_keypair = Keypair::generate_ed25519();
     let receiver_peer_id = receiver_keypair.public().to_peer_id();
@@ -113,6 +114,7 @@ async fn registration_protocol_accepts_valid_signed_registration_request() {
 }
 
 #[tokio::test]
+#[ignore = "requires real networking (TCP bind + mDNS multicast); run with --include-ignored"]
 async fn registration_protocol_rejects_malformed_identity_id_without_mutation() {
     let receiver_keypair = Keypair::generate_ed25519();
     let receiver_peer_id = receiver_keypair.public().to_peer_id();
@@ -180,6 +182,7 @@ async fn registration_protocol_rejects_malformed_identity_id_without_mutation() 
 }
 
 #[tokio::test]
+#[ignore = "requires real networking (TCP bind + mDNS multicast); run with --include-ignored"]
 async fn registration_protocol_rejects_tampered_signed_deregistration_request() {
     let receiver_keypair = Keypair::generate_ed25519();
     let receiver_peer_id = receiver_keypair.public().to_peer_id();

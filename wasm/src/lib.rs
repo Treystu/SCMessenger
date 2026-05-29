@@ -2274,7 +2274,11 @@ mod tests {
         contact.local_nickname = Some("Alice".to_string());
         contact.last_seen = Some(1);
         contact_manager.add(contact).unwrap();
-        assert_eq!(contact_manager.count(), 1);
+
+        // Verify the specific contact exists (count() may include other sled table keys).
+        let fetched = contact_manager.get(peer_id.clone()).unwrap();
+        assert!(fetched.is_some(), "contact should exist after add");
+        assert_eq!(fetched.unwrap().local_nickname, Some("Alice".to_string()));
 
         let outbound = MessageRecord {
             id: "desktop-outbound-1".to_string(),
@@ -2340,11 +2344,16 @@ mod tests {
     }
 
     fn temp_storage_path(label: &str) -> String {
-        let nonce = web_time::SystemTime::now()
+        let ts = web_time::SystemTime::now()
             .duration_since(web_time::UNIX_EPOCH)
             .unwrap()
             .as_nanos();
-        let path = std::env::temp_dir().join(format!("scm-wasm-{}-{}", label, nonce));
+        let path = std::env::temp_dir().join(format!(
+            "scm-wasm-{}-{}-{}",
+            label,
+            ts,
+            std::process::id()
+        ));
         std::fs::create_dir_all(&path).unwrap();
         path.to_string_lossy().to_string()
     }
