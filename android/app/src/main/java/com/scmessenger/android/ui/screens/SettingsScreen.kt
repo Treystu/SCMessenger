@@ -48,6 +48,12 @@ fun SettingsScreen(
     val identityInfo by settingsViewModel.identityInfo.collectAsState()
     val autoStart by settingsViewModel.autoStart.collectAsState()
     val notificationsEnabled by settingsViewModel.notificationsEnabled.collectAsState()
+    val notifyDmEnabled by settingsViewModel.notifyDmEnabled.collectAsState()
+    val notifyDmRequestEnabled by settingsViewModel.notifyDmRequestEnabled.collectAsState()
+    val notifyDmInForeground by settingsViewModel.notifyDmInForeground.collectAsState()
+    val notifyDmRequestInForeground by settingsViewModel.notifyDmRequestInForeground.collectAsState()
+    val soundEnabled by settingsViewModel.soundEnabled.collectAsState()
+    val badgeEnabled by settingsViewModel.badgeEnabled.collectAsState()
     val themeMode by settingsViewModel.themeMode.collectAsState()
     val isLoading by settingsViewModel.isLoading.collectAsState()
     val serviceState by serviceViewModel.serviceState.collectAsState()
@@ -186,6 +192,25 @@ fun SettingsScreen(
         )
 
         Spacer(modifier = Modifier.height(24.dp))
+
+        // Notification Sub-Settings Section (visible only when master toggle is on)
+        if (notificationsEnabled) {
+            NotificationSettingsSection(
+                notifyDmEnabled = notifyDmEnabled,
+                notifyDmRequestEnabled = notifyDmRequestEnabled,
+                notifyDmInForeground = notifyDmInForeground,
+                notifyDmRequestInForeground = notifyDmRequestInForeground,
+                soundEnabled = soundEnabled,
+                badgeEnabled = badgeEnabled,
+                onNotifyDmEnabledChange = { settingsViewModel.setNotifyDmEnabled(it) },
+                onNotifyDmRequestEnabledChange = { settingsViewModel.setNotifyDmRequestEnabled(it) },
+                onNotifyDmInForegroundChange = { settingsViewModel.setNotifyDmInForeground(it) },
+                onNotifyDmRequestInForegroundChange = { settingsViewModel.setNotifyDmRequestInForeground(it) },
+                onSoundEnabledChange = { settingsViewModel.setSoundEnabled(it) },
+                onBadgeEnabledChange = { settingsViewModel.setBadgeEnabled(it) }
+            )
+            Spacer(modifier = Modifier.height(24.dp))
+        }
 
         // Privacy Section
         PrivacySection(
@@ -506,6 +531,78 @@ fun AppPreferencesSection(
                 subtitle = stringResource(R.string.settings_description_notifications),
                 checked = notificationsEnabled,
                 onCheckedChange = onNotificationsChange
+            )
+        }
+    }
+}
+
+@Composable
+fun NotificationSettingsSection(
+    notifyDmEnabled: Boolean,
+    notifyDmRequestEnabled: Boolean,
+    notifyDmInForeground: Boolean,
+    notifyDmRequestInForeground: Boolean,
+    soundEnabled: Boolean,
+    badgeEnabled: Boolean,
+    onNotifyDmEnabledChange: (Boolean) -> Unit,
+    onNotifyDmRequestEnabledChange: (Boolean) -> Unit,
+    onNotifyDmInForegroundChange: (Boolean) -> Unit,
+    onNotifyDmRequestInForegroundChange: (Boolean) -> Unit,
+    onSoundEnabledChange: (Boolean) -> Unit,
+    onBadgeEnabledChange: (Boolean) -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp)
+        ) {
+            Text(
+                text = stringResource(R.string.settings_label_notifications),
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.padding(bottom = 8.dp)
+            )
+
+            SwitchPreference(
+                title = stringResource(R.string.settings_label_notify_dm),
+                subtitle = stringResource(R.string.settings_description_notify_dm),
+                checked = notifyDmEnabled,
+                onCheckedChange = onNotifyDmEnabledChange
+            )
+
+            SwitchPreference(
+                title = stringResource(R.string.settings_label_notify_dm_request),
+                subtitle = stringResource(R.string.settings_description_notify_dm_request),
+                checked = notifyDmRequestEnabled,
+                onCheckedChange = onNotifyDmRequestEnabledChange
+            )
+
+            SwitchPreference(
+                title = stringResource(R.string.settings_label_notify_dm_foreground),
+                subtitle = stringResource(R.string.settings_description_notify_dm_foreground),
+                checked = notifyDmInForeground,
+                onCheckedChange = onNotifyDmInForegroundChange
+            )
+
+            SwitchPreference(
+                title = stringResource(R.string.settings_label_notify_dm_request_foreground),
+                subtitle = stringResource(R.string.settings_description_notify_dm_request_foreground),
+                checked = notifyDmRequestInForeground,
+                onCheckedChange = onNotifyDmRequestInForegroundChange
+            )
+
+            SwitchPreference(
+                title = stringResource(R.string.settings_label_sound),
+                subtitle = stringResource(R.string.settings_description_sound),
+                checked = soundEnabled,
+                onCheckedChange = onSoundEnabledChange
+            )
+
+            SwitchPreference(
+                title = stringResource(R.string.settings_label_badge),
+                subtitle = stringResource(R.string.settings_description_badge),
+                checked = badgeEnabled,
+                onCheckedChange = onBadgeEnabledChange
             )
         }
     }

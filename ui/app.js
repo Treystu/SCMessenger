@@ -20,7 +20,14 @@ const SETTING_KEYS = [
 // Switch element IDs that map to settings keys
 const SWITCH_IDS = {
   relayEnabled: "sw-relay",
-  internetEnabled: "sw-internetEnabled"
+  internetEnabled: "sw-internetEnabled",
+  notificationsEnabled: "sw-notificationsEnabled",
+  notifyDmEnabled: "sw-notifyDmEnabled",
+  notifyDmRequestEnabled: "sw-notifyDmRequestEnabled",
+  notifyDmInForeground: "sw-notifyDmInForeground",
+  notifyDmRequestInForeground: "sw-notifyDmRequestInForeground",
+  soundEnabled: "sw-soundEnabled",
+  badgeEnabled: "sw-badgeEnabled"
 };
 
 const SCM = {
@@ -52,6 +59,7 @@ const SCM = {
       // Fetch identity from CLI JSON-RPC instead of local WebRTC swarm
       await this.refreshContacts();
       this.bindSettingsListeners();
+      this.updateNotificationSubToggles();
       this.startPolling();
       await this.refreshDashboard();
     } catch (e) {
@@ -635,9 +643,35 @@ const SCM = {
     try {
       this.state.core.updateSettings(this.state.settings);
       this.showSnackbar("Settings saved.");
-      // If relay toggled, we might need to restart swarm or just notify core
     } catch (e) {
       this.showSnackbar("Failed to save settings: " + e.message);
+    }
+  },
+
+  // Master notifications toggle gates all sub-toggles
+  NOTIFY_SUB_TOGGLE_IDS: [
+    "sw-notifyDmEnabled",
+    "sw-notifyDmRequestEnabled",
+    "sw-notifyDmInForeground",
+    "sw-notifyDmRequestInForeground",
+    "sw-soundEnabled",
+    "sw-badgeEnabled"
+  ],
+  updateNotificationSubToggles() {
+    const masterOn = !!this.state.settings.notificationsEnabled;
+    for (const id of this.NOTIFY_SUB_TOGGLE_IDS) {
+      const el = document.getElementById(id);
+      if (!el) continue;
+      const row = el.closest(".switch-row");
+      if (masterOn) {
+        el.style.pointerEvents = "";
+        el.style.opacity = "";
+        if (row) row.style.opacity = "";
+      } else {
+        el.style.pointerEvents = "none";
+        el.style.opacity = "0.38";
+        if (row) row.style.opacity = "0.38";
+      }
     }
   },
 
@@ -707,6 +741,10 @@ const SCM = {
         const elId = SWITCH_IDS[key];
         if (elId) document.getElementById(elId)?.classList.toggle("on", s[key]);
         SCM.showSnackbar(key + " " + (s[key] ? "enabled" : "disabled"));
+        // If master notifications toggle changed, gate sub-toggles
+        if (key === "notificationsEnabled") {
+          SCM.updateNotificationSubToggles();
+        }
       } catch(e) { SCM.showSnackbar("Settings error: " + e); }
     },
 

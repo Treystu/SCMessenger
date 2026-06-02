@@ -169,6 +169,41 @@
           </div>
         </div>
 
+        <!-- Notifications -->
+        <div class="card">
+          <div class="card-title">Notifications</div>
+          <div class="switch-row">
+            <div class="switch-info"><div class="switch-title">Enable Notifications</div><div class="switch-subtitle">Master toggle for all alerts</div></div>
+            <div class="switch on" id="sw-notificationsEnabled" onclick="SCM.actions.toggleSetting('notificationsEnabled')"></div>
+          </div>
+          <div class="divider"></div>
+          <div class="switch-row">
+            <div class="switch-info"><div class="switch-title">Direct Messages</div><div class="switch-subtitle">Notify on new DM</div></div>
+            <div class="switch on" id="sw-notifyDmEnabled" onclick="SCM.actions.toggleSetting('notifyDmEnabled')"></div>
+          </div>
+          <div class="switch-row">
+            <div class="switch-info"><div class="switch-title">DM Requests</div><div class="switch-subtitle">Notify on incoming DM request</div></div>
+            <div class="switch on" id="sw-notifyDmRequestEnabled" onclick="SCM.actions.toggleSetting('notifyDmRequestEnabled')"></div>
+          </div>
+          <div class="switch-row">
+            <div class="switch-info"><div class="switch-title">DM in Foreground</div><div class="switch-subtitle">Notify even when chat is open</div></div>
+            <div class="switch on" id="sw-notifyDmInForeground" onclick="SCM.actions.toggleSetting('notifyDmInForeground')"></div>
+          </div>
+          <div class="switch-row">
+            <div class="switch-info"><div class="switch-title">DM Request in Foreground</div><div class="switch-subtitle">Notify for requests when app is active</div></div>
+            <div class="switch on" id="sw-notifyDmRequestInForeground" onclick="SCM.actions.toggleSetting('notifyDmRequestInForeground')"></div>
+          </div>
+          <div class="divider"></div>
+          <div class="switch-row">
+            <div class="switch-info"><div class="switch-title">Sound</div><div class="switch-subtitle">Play alert sound</div></div>
+            <div class="switch on" id="sw-soundEnabled" onclick="SCM.actions.toggleSetting('soundEnabled')"></div>
+          </div>
+          <div class="switch-row">
+            <div class="switch-info"><div class="switch-title">Badge</div><div class="switch-subtitle">Show unread count badge</div></div>
+            <div class="switch on" id="sw-badgeEnabled" onclick="SCM.actions.toggleSetting('badgeEnabled')"></div>
+          </div>
+        </div>
+
         <!-- Bootstrap Nodes -->
         <div class="card">
           <div class="card-title">Bootstrap Nodes</div>

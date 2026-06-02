@@ -69,6 +69,25 @@ class SettingsViewModel @Inject constructor(
             initialValue = true
         )
 
+    // Notification sub-settings (backed by MeshSettings)
+    private val _notifyDmEnabled = MutableStateFlow(true)
+    val notifyDmEnabled: StateFlow<Boolean> = _notifyDmEnabled.asStateFlow()
+
+    private val _notifyDmRequestEnabled = MutableStateFlow(true)
+    val notifyDmRequestEnabled: StateFlow<Boolean> = _notifyDmRequestEnabled.asStateFlow()
+
+    private val _notifyDmInForeground = MutableStateFlow(false)
+    val notifyDmInForeground: StateFlow<Boolean> = _notifyDmInForeground.asStateFlow()
+
+    private val _notifyDmRequestInForeground = MutableStateFlow(true)
+    val notifyDmRequestInForeground: StateFlow<Boolean> = _notifyDmRequestInForeground.asStateFlow()
+
+    private val _soundEnabled = MutableStateFlow(true)
+    val soundEnabled: StateFlow<Boolean> = _soundEnabled.asStateFlow()
+
+    private val _badgeEnabled = MutableStateFlow(true)
+    val badgeEnabled: StateFlow<Boolean> = _badgeEnabled.asStateFlow()
+
     val showPeerCount = preferencesRepository.showPeerCount
         .stateIn(
             scope = viewModelScope,
@@ -219,6 +238,13 @@ class SettingsViewModel @Inject constructor(
             val settings = meshRepository.loadSettings()
             cachedSettings = settings  // ANR FIX: Cache for future use
             _settings.value = settings
+            // Hydrate notification sub-settings from loaded MeshSettings
+            _notifyDmEnabled.value = settings.notifyDmEnabled
+            _notifyDmRequestEnabled.value = settings.notifyDmRequestEnabled
+            _notifyDmInForeground.value = settings.notifyDmInForeground
+            _notifyDmRequestInForeground.value = settings.notifyDmRequestInForeground
+            _soundEnabled.value = settings.soundEnabled
+            _badgeEnabled.value = settings.badgeEnabled
             Timber.d("Loaded mesh settings: $settings")
         } catch (e: Exception) {
             _error.value = "Failed to load settings: ${e.message}"
@@ -513,6 +539,52 @@ class SettingsViewModel @Inject constructor(
     fun setNotificationsEnabled(enabled: Boolean) {
         viewModelScope.launch {
             preferencesRepository.setNotificationsEnabled(enabled)
+        }
+    }
+
+    // ========================================================================
+    // NOTIFICATION SUB-SETTINGS
+    // ========================================================================
+
+    fun setNotifyDmEnabled(enabled: Boolean) {
+        _notifyDmEnabled.value = enabled
+        _settings.value?.let { current ->
+            debouncedUpdateSettings(current.copy(notifyDmEnabled = enabled))
+        }
+    }
+
+    fun setNotifyDmRequestEnabled(enabled: Boolean) {
+        _notifyDmRequestEnabled.value = enabled
+        _settings.value?.let { current ->
+            debouncedUpdateSettings(current.copy(notifyDmRequestEnabled = enabled))
+        }
+    }
+
+    fun setNotifyDmInForeground(enabled: Boolean) {
+        _notifyDmInForeground.value = enabled
+        _settings.value?.let { current ->
+            debouncedUpdateSettings(current.copy(notifyDmInForeground = enabled))
+        }
+    }
+
+    fun setNotifyDmRequestInForeground(enabled: Boolean) {
+        _notifyDmRequestInForeground.value = enabled
+        _settings.value?.let { current ->
+            debouncedUpdateSettings(current.copy(notifyDmRequestInForeground = enabled))
+        }
+    }
+
+    fun setSoundEnabled(enabled: Boolean) {
+        _soundEnabled.value = enabled
+        _settings.value?.let { current ->
+            debouncedUpdateSettings(current.copy(soundEnabled = enabled))
+        }
+    }
+
+    fun setBadgeEnabled(enabled: Boolean) {
+        _badgeEnabled.value = enabled
+        _settings.value?.let { current ->
+            debouncedUpdateSettings(current.copy(badgeEnabled = enabled))
         }
     }
 

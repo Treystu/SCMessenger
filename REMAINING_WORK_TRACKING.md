@@ -1222,6 +1222,7 @@ Not feasible for `v0.2.0` without expanding release scope:
    - Canonical plan: `docs/V0.2.1_SINGLE_ACTIVE_DEVICE_TIGHT_PAIR_PLAN.md`.
    - Kickoff prompt: `docs/V0.2.0_PHASE_EXECUTION_PROMPTS.md` section `WS13 Kickoff (v0.2.1) - Tight Pairing start`.
    - Completion: WS13.6 landed 2026-05-18. All six phases (WS13.1-WS13.6) complete. Compat mode (Phase A/Phase B) implemented at store and transport layers. Migration tests pass (19/19). Residual risks triaged in `docs/V0.2.1_RESIDUAL_RISK_REGISTER.md`.
+   - **2026-06-02 fixes:** R-WS13.6-02 audit trail now uses mode-specific reason strings (`custody_accepted_compat_phase_a` / `custody_accepted_compat_phase_b`). R-WS13.6-01 adoption telemetry counters (`ws13_requests`, `legacy_requests`, `adoption_pct()`) added to `RelayCustodyStore` with 4 unit tests. `isBootstrapRelayPeer()` fixed to dynamically check against circuit breaker relay addresses + discovered relay peers instead of hardcoded `return false`.
 
 6. **WS13.x (v0.2.1): GitHub release/version synchronization and release-note publishing flow**
    - Requirement: normalize repository/app version metadata and GitHub release artifacts so release tags, release notes, and workspace versions remain consistent.
@@ -1254,7 +1255,7 @@ Not feasible for `v0.2.0` without expanding release scope:
    - LoC planning envelope: `2,500-4,550 LoC`.
    - Canonical plan (full context): `docs/V0.2.1_NOTIFICATIONS_DM_PLAN.md`.
    - Execution handoff + prompt: `docs/WS14_AUTOMATION_HANDOFF.md` and `docs/WS14_HOURLY_AUTOMATION_PROMPT.md`.
-   - Current status (2026-03-14 HST): `WS14.1` core notification contract and `WS14.2` iOS notification completion are landed on `codex/ws14-hourly-20260314-0301`; next exact phase is `WS14.3` Android notification parity.
+   - Current status (2026-06-02): **WS14 COMPLETE.** All six phases (WS14.1-WS14.6) landed. WS14.1 core notification policy with 6 unit tests. WS14.2 iOS notification with DM/DM Request categories, routing, settings parity. WS14.3 Android notification with NotificationHelper.kt channels, classification, settings toggles + SettingsScreen.kt UI wiring. WS14.4 WASM browser Notification API + settings toggle wiring in app.js. WS14.5 remote push interface contracts (in-memory, no backend dispatch). WS14.6 verification gate passed. Cross-platform parity achieved. Residual risks updated in `docs/V0.2.1_RESIDUAL_RISK_REGISTER.md`.
 
 ## Edge-Case Hardening Backlog (Global/Extreme Conditions)
 

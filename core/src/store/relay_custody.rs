@@ -340,6 +340,9 @@ pub struct RelayCustodyStore {
     /// WS13 compatibility enforcement phase. Controls how legacy requests
     /// (missing `intended_device_id`) are handled at the store level.
     compat_mode: CustodyCompatMode,
+    /// WS13+ adoption telemetry for Phase B transition decisions.
+    ws13_requests: Arc<std::sync::atomic::AtomicU64>,
+    legacy_requests: Arc<std::sync::atomic::AtomicU64>,
 }
 
 impl RelayCustodyStore {
@@ -378,6 +381,8 @@ impl RelayCustodyStore {
             pressure_probe,
             security_audit_pipeline,
             compat_mode: CustodyCompatMode::default(),
+            ws13_requests: Arc::new(std::sync::atomic::AtomicU64::new(0)),
+            legacy_requests: Arc::new(std::sync::atomic::AtomicU64::new(0)),
         }
     }
 
@@ -477,6 +482,20 @@ impl RelayCustodyStore {
 
     pub fn set_compat_mode(&mut self, mode: CustodyCompatMode) {
         self.compat_mode = mode;
+    }
+
+    pub fn adoption_stats(&self) -> (u64, u64) {
+        (
+            self.ws13_requests.load(std::sync::atomic::Ordering::Relaxed),
+            self.legacy_requests.load(std::sync::atomic::Ordering::Relaxed),
+        )
+    }
+
+    pub fn adoption_pct(&self) -> f64 {
+        let (ws13, legacy) = self.adoption_stats();
+        let total = ws13 + legacy;
+        if total == 0 { return 0.0; }
+        (ws13 as f64 / total as f64) * 100.0
     }
 
     pub fn register_identity(
@@ -590,6 +609,7 @@ impl RelayCustodyStore {
         // WS13 compat mode enforcement at the store level.
         // When both identity_id and device_id are present, enforce custody strictly.
         // When device_id is absent, apply compat mode policy.
+        let mut legacy_reason = None;
         if let Some(ref identity_id) = normalized_recipient_identity_id {
             if let Some(ref device_id) = normalized_intended_device_id {
                 // WS13+ client: strictly enforce custody
@@ -605,6 +625,7 @@ impl RelayCustodyStore {
                         return Err(error.to_string());
                     }
                 }
+                self.ws13_requests.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
             } else {
                 // Legacy client: no device_id provided
                 match self.compat_mode {
@@ -613,14 +634,17 @@ impl RelayCustodyStore {
                             identity_id,
                             "relay custody accepted in Phase A compat mode (no device enforcement)"
                         );
+                        legacy_reason = Some("custody_accepted_compat_phase_a");
                     }
                     CustodyCompatMode::PhaseB => {
                         tracing::warn!(
                             identity_id,
                             "relay custody accepted in Phase B compat mode (legacy client, deprecation warning)"
                         );
+                        legacy_reason = Some("custody_accepted_compat_phase_b");
                     }
                 }
+                self.legacy_requests.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
             }
         }
 
@@ -662,7 +686,8 @@ impl RelayCustodyStore {
 
         self.enforce_storage_pressure_for_write(&message)?;
         self.put_message(&message)?;
-        self.record_transition(&message, None, CustodyState::Accepted, "custody_accepted")?;
+        let reason = legacy_reason.unwrap_or("custody_accepted");
+        self.record_transition(&message, None, CustodyState::Accepted, reason)?;
         Ok(message)
     }
 
@@ -2539,6 +2564,109 @@ mod tests {
         assert!(
             result.is_ok(),
             "Handover redirect must be accepted at store level"
+        );
+    }
+
+    #[test]
+    fn test_adoption_stats_start_at_zero() {
+        let store = RelayCustodyStore::in_memory();
+        let (ws13, legacy) = store.adoption_stats();
+        assert_eq!(ws13, 0, "ws13_requests should start at 0");
+        assert_eq!(legacy, 0, "legacy_requests should start at 0");
+        assert_eq!(store.adoption_pct(), 0.0, "adoption_pct should be 0.0 with no requests");
+    }
+
+    #[test]
+    fn test_ws13_request_increments_counter() {
+        let store = RelayCustodyStore::in_memory();
+        let identity_id = "a".repeat(64);
+        let device_id = Uuid::new_v4().to_string();
+
+        store
+            .register_identity(identity_id.clone(), device_id.clone(), 1700000000)
+            .unwrap();
+
+        let result = store.accept_custody(
+            "source-peer".to_string(),
+            "dest-peer".to_string(),
+            "msg-ws13-count".to_string(),
+            vec![1, 2, 3],
+            Some(identity_id),
+            Some(device_id),
+        );
+        assert!(result.is_ok(), "WS13+ custody accept should succeed");
+
+        let (ws13, legacy) = store.adoption_stats();
+        assert_eq!(ws13, 1, "ws13_requests should be 1 after one WS13+ accept");
+        assert_eq!(legacy, 0, "legacy_requests should remain 0");
+    }
+
+    #[test]
+    fn test_legacy_request_increments_counter() {
+        let mut store = RelayCustodyStore::in_memory();
+        store.set_compat_mode(CustodyCompatMode::PhaseA);
+        let identity_id = "b".repeat(64);
+
+        // Accept custody without a device_id (legacy client)
+        let result = store.accept_custody(
+            "source-peer".to_string(),
+            "dest-peer".to_string(),
+            "msg-legacy-count".to_string(),
+            vec![4, 5, 6],
+            Some(identity_id),
+            None,
+        );
+        assert!(result.is_ok(), "Legacy custody accept should succeed in Phase A");
+
+        let (ws13, legacy) = store.adoption_stats();
+        assert_eq!(ws13, 0, "ws13_requests should remain 0");
+        assert_eq!(legacy, 1, "legacy_requests should be 1 after one legacy accept");
+    }
+
+    #[test]
+    fn test_adoption_pct_calculation() {
+        let store = RelayCustodyStore::in_memory();
+        let identity_id_ws13 = "c".repeat(64);
+        let device_id = Uuid::new_v4().to_string();
+
+        store
+            .register_identity(identity_id_ws13.clone(), device_id.clone(), 1700000000)
+            .unwrap();
+
+        // First: 3 WS13+ requests
+        for i in 0..3 {
+            let result = store.accept_custody(
+                "source-peer".to_string(),
+                "dest-peer".to_string(),
+                format!("msg-ws13-pct-{}", i),
+                vec![1],
+                Some(identity_id_ws13.clone()),
+                Some(device_id.clone()),
+            );
+            assert!(result.is_ok());
+        }
+
+        // Then: 1 legacy request (no device_id)
+        let identity_id_legacy = "d".repeat(64);
+        let result = store.accept_custody(
+            "source-peer".to_string(),
+            "dest-peer".to_string(),
+            "msg-legacy-pct".to_string(),
+            vec![2],
+            Some(identity_id_legacy),
+            None,
+        );
+        assert!(result.is_ok());
+
+        let (ws13, legacy) = store.adoption_stats();
+        assert_eq!(ws13, 3);
+        assert_eq!(legacy, 1);
+
+        let pct = store.adoption_pct();
+        assert!(
+            (pct - 75.0).abs() < f64::EPSILON,
+            "adoption_pct should be 75.0, got {}",
+            pct
         );
     }
 }

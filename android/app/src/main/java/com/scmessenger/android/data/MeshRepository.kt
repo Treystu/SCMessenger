@@ -7566,8 +7566,39 @@ open class MeshRepository(private val context: Context) {
         return transportAddr to relayPeerId
     }
 
+    /**
+     * Lazily-built set of known relay peer IDs extracted from circuit breaker
+     * addresses and discovered peer entries.  Rebuilt on each call to pick up
+     * newly-discovered relays without requiring a manual refresh.
+     */
+    private fun collectKnownRelayPeerIds(): Set<String> {
+        val ids = mutableSetOf<String>()
+        // 1. Relay peer IDs seen by the circuit breaker (multiaddr strings like
+        //    "/ip4/.../tcp/.../p2p/12D3KooW…").  Covers both healthy (closed)
+        //    and failed (open) relays so we don't miss relays merely because
+        //    they just went down.
+        val relayAddrs = relayCircuitBreaker.getHealthyRelays() +
+            relayCircuitBreaker.getOpenCircuits()
+        relayAddrs.forEach { addr ->
+            parseBootstrapRelay(addr)?.second?.let { ids.add(it) }
+        }
+        // 2. Peers the discovery layer has already identified as relays.
+        _discoveredPeers.value.values
+            .filter { it.isRelay }
+            .forEach { info ->
+                ids.add(info.peerId)
+                info.libp2pPeerId?.let { ids.add(it) }
+            }
+        return ids
+    }
+
     fun isBootstrapRelayPeer(peerId: String): Boolean {
         if (peerId.isBlank()) return false
+        val knownRelays = collectKnownRelayPeerIds()
+        if (peerId in knownRelays) return true
+        // Also check with /p2p/ prefix in case callers include it
+        val stripped = peerId.substringAfterLast("/p2p/")
+        if (stripped != peerId && stripped in knownRelays) return true
         return false
     }
 
@@ -7578,7 +7609,8 @@ open class MeshRepository(private val context: Context) {
      */
     fun isBootstrapRelayPeerFromKey(normalizedKey: String): Boolean {
         if (normalizedKey.isBlank()) return false
-        // First check if we can extract a peer ID from the key
+        // Convert public key → peer ID using the same routine the rest of
+        // the codebase relies on, then delegate to the main check.
         val peerId = PeerKeyUtils.extractPeerIdFromPublicKey(normalizedKey)
         return isBootstrapRelayPeer(peerId)
     }
