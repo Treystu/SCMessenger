@@ -1,0 +1,19 @@
+[package]
+name = "scmessenger-desktop-bridge"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[lib]
+crate-type = ["lib"]
+
+[dependencies]
+tokio = { workspace = true }
+tracing = { workspace = true }
+
+# XDG directory resolution
+dirs = "5.0"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+zbus = "4"

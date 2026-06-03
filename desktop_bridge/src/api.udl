@@ -1,0 +1,207 @@
+// desktop_bridge/src/api.udl
+// Desktop-specific UniFFI namespace for Linux desktop integration.
+// Extends the core api namespace with desktop-only capabilities:
+//   - XDG-compliant storage paths
+//   - System tray status reporting
+//   - Native desktop notifications (via D-Bus)
+//   - BlueZ BLE D-Bus integration
+//   - Socket activation awareness
+//   - Power management hints
+
+namespace desktop {};
+
+// ============================================================================
+// XDG PATH CONFIGURATION
+// ============================================================================
+
+/// XDG Base Directory specification paths for desktop Linux.
+/// All paths follow the XDG standard: https://specifications.freedesktop.org/basedir-spec/
+dictionary XdgPaths {
+    /// Data directory: $XDG_DATA_HOME/scmessenger (default: ~/.local/share/scmessenger)
+    string data_dir;
+    /// Config directory: $XDG_CONFIG_HOME/scmessenger (default: ~/.config/scmessenger)
+    string config_dir;
+    /// Cache directory: $XDG_CACHE_HOME/scmessenger (default: ~/.cache/scmessenger)
+    string cache_dir;
+    /// Runtime directory: $XDG_RUNTIME_DIR/scmessenger (if available, else temp)
+    string? runtime_dir;
+    /// Sled database path: data_dir/store
+    string store_path;
+};
+
+// ============================================================================
+// DESKTOP NOTIFICATIONS (D-Bus / Desktop Notifications Spec)
+// ============================================================================
+
+/// Desktop notification urgency level per Desktop Notifications spec.
+enum NotificationUrgency {
+    "Low",
+    "Normal",
+    "Critical",
+};
+
+/// Desktop notification action triggered by the user.
+dictionary NotificationAction {
+    /// Action identifier (e.g., "reply", "dismiss")
+    string action_id;
+    /// Action label shown to the user
+    string label;
+};
+
+/// Result of a desktop notification request.
+dictionary NotificationResult {
+    /// Notification ID assigned by the compositor (for replacing/dismissing)
+    u32 notification_id;
+    /// Whether the notification was successfully displayed
+    boolean shown;
+    /// Error message if not shown
+    string? error_message;
+};
+
+/// Suppression policy for desktop notifications.
+enum NotificationPriority {
+    "SuppressAll",
+    "SuppressWhenFocused",
+    "AllowAll",
+};
+
+// ============================================================================
+// SYSTEM TRAY / APP INDICATOR
+// ============================================================================
+
+/// System tray icon state (for AppIndicator / StatusIcon backends).
+enum TrayIconState {
+    /// No active mesh connections — idle/idle-unconnected
+    "Disconnected",
+    /// Mesh active, no unread messages
+    "Connected",
+    /// Mesh active, unread messages waiting
+    "UnreadMessages",
+    /// Error state (NAT symmetric, relay unreachable)
+    "Error",
+};
+
+/// Status payload exposed to system tray AppIndicator widget.
+dictionary TrayStatus {
+    TrayIconState icon_state;
+    u32 unread_count;
+    u32 connected_peers;
+    string status_text;          // Localized tooltip text
+}; // WS14: comma-separated dictionary entries are not allowed; semicolons required.
+
+// ============================================================================
+// BLE ADAPTER STATUS (BlueZ D-Bus)
+// ============================================================================
+
+/// BLE adapter power and discovery state reported by BlueZ.
+enum BleAdapterState {
+    "PoweredOff",
+    "PoweredOn",
+    "Scanning",
+    "Error",
+};
+
+/// BLE adapter information from BlueZ D-Bus.
+dictionary BleAdapterInfo {
+    /// D-Bus object path (e.g., "/org/bluez/hci0")
+    string dbus_path;
+    /// Human-readable name (e.g., "hci0")
+    string name;
+    /// Bluetooth MAC address
+    string address;
+    /// Whether the adapter is powered on
+    boolean powered;
+    /// Whether the adapter is actively scanning
+    boolean scanning;
+    /// Whether BLE advertising is active
+    boolean advertising;
+    /// Adapter state summary
+    BleAdapterState state;
+};
+
+/// BLE peer discovered via BlueZ D-Bus or internal mDNS.
+dictionary BlePeer {
+    /// D-Bus object path or mDNS peer identifier
+    string peer_id;
+    /// Display name (if advertised)
+    string? display_name;
+    /// RSSI in dBm (negative value)
+    i16 rssi;
+    /// Whether the peer is an SCMessenger node (matched via service UUID)
+    boolean is_scmessenger_node;
+    /// Last seen timestamp (unix epoch seconds)
+    u64 last_seen_secs;
+};
+
+// ============================================================================
+// POWER MANAGEMENT
+// ============================================================================
+
+/// Power management hint for the desktop session.
+enum PowerProfile {
+    /// Running on battery — reduce network activity
+    "Battery",
+    /// Running on AC power — full operation
+    "AC",
+    /// System is about to suspend
+    "SuspendImminent",
+    /// System just resumed from suspend
+    "Resumed",
+};
+
+/// Power management state passed to the mesh engine.
+dictionary PowerState {
+    PowerProfile profile;
+    /// Battery percentage (0-100, 255 if unknown)
+    u8 battery_pct;
+    /// Whether the system is on battery power
+    boolean on_battery;
+    /// Whether the screensaver / idle inhibitor is active
+    boolean idle_inhibited;
+};
+
+// ============================================================================
+// SOCKET ACTIVATION
+// ============================================================================
+
+/// Socket activation readiness state.
+enum SocketActivationState {
+    /// No socket activation — daemon manages own lifecycle
+    "None",
+    /// Listening on socket-activated FDs from systemd
+    "Listening",
+    /// All handoff sockets accepted, no longer in activation mode
+    "HandoffComplete",
+};
+
+/// Socket activation status for systemd integration.
+dictionary SocketActivationStatus {
+    SocketActivationState state;
+    u32 activated_socket_count;
+    string? listen_address;
+};
+
+// ============================================================================
+// DESKTOP INTEGRATION CALLBACKS
+// ============================================================================
+
+/// Callback interface for desktop-specific events from the Rust core.
+/// Implement this in Kotlin on the desktop client to receive:
+///   - Notification requests
+///   - Tray icon state changes
+///   - Power management events
+///   - BLE adapter state changes
+callback interface DesktopDelegate {
+    /// Request the desktop client to show a native notification.
+    void on_notification_requested(string title, string body, NotificationUrgency urgency);
+    /// Update the system tray icon state.
+    void on_tray_state_changed(TrayStatus status);
+    /// Power state changed (battery/AC/suspend).
+    void on_power_state_changed(PowerState state);
+    /// BLE adapter state changed.
+    void on_ble_adapter_changed(BleAdapterInfo info);
+    /// A new BLE peer was discovered.
+    void on_ble_peer_discovered(BlePeer peer);
+    /// A BLE peer was lost (out of range).
+    void on_ble_peer_lost(string peer_id);
+};

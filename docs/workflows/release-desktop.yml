@@ -1,0 +1,340 @@
+name: Release — Desktop (KMP linuxX64)
+
+# =============================================================================
+# Release workflow template for SCMessenger Desktop packages.
+#
+# Triggered on version tags (v*) or manual dispatch.
+# Produces:
+#   - Signed .deb package
+#   - Signed AppImage
+#   - SHA256 checksums
+#   - GitHub Release with all artifacts
+#
+# Required secrets:
+#   GPG_PRIVATE_KEY       — GPG private key for .deb signing (ASCII-armored)
+#   GPG_PASSPHRASE        — GPG key passphrase
+#   APPIMAGE_SIGNING_KEY  — Optional GPG key ID for AppImage signing
+# =============================================================================
+
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g. 0.2.1)'
+        required: true
+        type: string
+      skip_signing:
+        description: 'Skip GPG signing (for testing)'
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+env:
+  PACKAGE_NAME: scmessenger-desktop
+  PACKAGE_VENDOR: SCMessenger
+  GPG_KEY_ID: ""  # Set to your GPG key ID for signing
+
+jobs:
+  # ------------------------------------------------------------------
+  # Build and sign .deb package
+  # ------------------------------------------------------------------
+  build-deb:
+    name: Build & Sign .deb
+    runs-on: ubuntu-22.04
+    timeout-minutes: 60
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.95.0
+
+      - name: Cache Cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target/
+          key: release-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Cache Gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: release-gradle-${{ hashFiles('**/*.gradle.kts', '**/gradle-wrapper.properties') }}
+
+      - name: Build Rust workspace (release)
+        run: cargo build --release --workspace
+
+      - name: Setup JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Install packaging tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq fakeroot dpkg-dev libfuse2
+
+      - name: Sync version
+        run: |
+          chmod +x ./scripts/sync_version.sh
+          ./scripts/sync_version.sh
+
+      - name: Build .deb package
+        run: |
+          cd shared
+          ./gradlew packageDeb --no-daemon --stacktrace
+
+      - name: Import GPG key
+        if: ${{ !inputs.skip_signing && env.GPG_PRIVATE_KEY != '' }}
+        env:
+          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+        run: |
+          echo "$GPG_PRIVATE_KEY" | gpg --batch --import
+          echo "$GPG_PASSPHRASE" | gpg --batch --yes --passphrase-fd 0 \
+            --pinentry-mode loopback --sign-key ${{ env.GPG_KEY_ID }}
+
+      - name: Sign .deb package
+        if: ${{ !inputs.skip_signing }}
+        env:
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+        run: |
+          DEB_FILE=$(find shared/build/compose/binaries/main/deb -name "*.deb" | head -1)
+          if [ -z "$DEB_FILE" ]; then
+            echo "ERROR: .deb package not found"
+            exit 1
+          fi
+          echo "Signing: $DEB_FILE"
+          # Use dpkg-sig for .deb signing
+          dpkg-sig --sign builder \
+            -k "${{ env.GPG_KEY_ID }}" \
+            --gpg-options "--batch --passphrase ${{ secrets.GPG_PASSPHRASE }} --pinentry-mode loopback" \
+            "$DEB_FILE"
+          dpkg-sig --verify "$DEB_FILE"
+          echo "DEB_FILE=$DEB_FILE" >> $GITHUB_ENV
+
+      - name: Generate .deb checksum
+        run: |
+          DEB_FILE="${{ env.DEB_FILE }}"
+          if [ -z "$DEB_FILE" ]; then
+            DEB_FILE=$(find shared/build/compose/binaries/main/deb -name "*.deb" | head -1)
+          fi
+          sha256sum "$DEB_FILE" > "${DEB_FILE}.sha256"
+          echo "Checksum:"
+          cat "${DEB_FILE}.sha256"
+
+      - name: Upload .deb artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.PACKAGE_NAME }}-deb
+          path: |
+            shared/build/compose/binaries/main/deb/*.deb
+            shared/build/compose/binaries/main/deb/*.sha256
+          retention-days: 90
+
+  # ------------------------------------------------------------------
+  # Build and sign AppImage
+  # ------------------------------------------------------------------
+  build-appimage:
+    name: Build & Sign AppImage
+    runs-on: ubuntu-22.04
+    timeout-minutes: 60
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.95.0
+
+      - name: Cache Cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target/
+          key: release-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Cache Gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: release-gradle-${{ hashFiles('**/*.gradle.kts', '**/gradle-wrapper.properties') }}
+
+      - name: Build Rust workspace (release)
+        run: cargo build --release --workspace
+
+      - name: Setup JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Install AppImage tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq libfuse2 desktop-file-utils
+          # Download appimagetool
+          wget -q "https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage" \
+            -O /tmp/appimagetool
+          chmod +x /tmp/appimagetool
+          sudo mv /tmp/appimagetool /usr/local/bin/appimagetool
+
+      - name: Sync version
+        run: |
+          chmod +x ./scripts/sync_version.sh
+          ./scripts/sync_version.sh
+
+      - name: Build AppImage
+        run: |
+          chmod +x ./scripts/build_appimage.sh
+          ./scripts/build_appimage.sh
+        env:
+          APP_VERSION: ${{ github.event.inputs.version || github.ref_name }}
+
+      - name: Sign AppImage
+        if: ${{ !inputs.skip_signing }}
+        env:
+          APPIMAGE_SIGNING_KEY: ${{ secrets.APPIMAGE_SIGNING_KEY }}
+        run: |
+          APPIMAGE_FILE=$(find build/distributions -name "*.AppImage" | head -1)
+          if [ -z "$APPIMAGE_FILE" ]; then
+            echo "ERROR: AppImage not found"
+            exit 1
+          fi
+          echo "Signing: $APPIMAGE_FILE"
+          # AppImage signing via embedded signature
+          gpg --batch --yes --detach-sign \
+            --local-user "${{ env.APPIMAGE_SIGNING_KEY }}" \
+            "$APPIMAGE_FILE"
+          # Verify signature
+          gpg --verify "${APPIMAGE_FILE}.sig" "$APPIMAGE_FILE"
+          echo "APPIMAGE_FILE=$APPIMAGE_FILE" >> $GITHUB_ENV
+
+      - name: Generate AppImage checksum
+        run: |
+          APPIMAGE_FILE="${{ env.APPIMAGE_FILE }}"
+          if [ -z "$APPIMAGE_FILE" ]; then
+            APPIMAGE_FILE=$(find build/distributions -name "*.AppImage" | head -1)
+          fi
+          sha256sum "$APPIMAGE_FILE" > "${APPIMAGE_FILE}.sha256"
+          if [ -f "${APPIMAGE_FILE}.sig" ]; then
+            sha256sum "${APPIMAGE_FILE}.sig" >> "${APPIMAGE_FILE}.sha256"
+          fi
+          echo "Checksums:"
+          cat "${APPIMAGE_FILE}.sha256"
+
+      - name: Upload AppImage artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.PACKAGE_NAME }}-appimage
+          path: |
+            build/distributions/*.AppImage
+            build/distributions/*.sig
+            build/distributions/*.sha256
+          retention-days: 90
+
+  # ------------------------------------------------------------------
+  # Create GitHub Release with all desktop artifacts
+  # ------------------------------------------------------------------
+  create-desktop-release:
+    name: Create GitHub Release
+    needs: [build-deb, build-appimage]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-artifacts
+
+      - name: Generate combined checksums
+        run: |
+          echo "# SCMessenger Desktop ${{ github.ref_name }}" > SHA256SUMS.txt
+          echo "" >> SHA256SUMS.txt
+          find release-artifacts -name "*.sha256" -exec cat {} \; >> SHA256SUMS.txt
+          echo "" >> SHA256SUMS.txt
+          echo "Generated checksums:"
+          cat SHA256SUMS.txt
+
+      - name: Generate release notes
+        run: |
+          cat > RELEASE_NOTES.md << 'EOF'
+          ## SCMessenger Desktop ${{ github.ref_name }}
+
+          ### Packages
+          | Package | File | SHA256 |
+          |---------|------|--------|
+          | .deb | scmessenger-desktop_*_amd64.deb | See SHA256SUMS.txt |
+          | AppImage | SCMessenger-Desktop-*-x86_64.AppImage | See SHA256SUMS.txt |
+
+          ### Installation
+
+          **Debian/Ubuntu (.deb):**
+          ```bash
+          sudo dpkg -i scmessenger-desktop_*_amd64.deb
+          sudo apt-get install -f  # if dependency errors
+          ```
+
+          **AppImage:**
+          ```bash
+          chmod +x SCMessenger-Desktop-*.AppImage
+          ./SCMessenger-Desktop-*.AppImage
+          ```
+
+          ### System Requirements
+          - Ubuntu 22.04 LTS or compatible
+          - x86_64 (amd64) architecture
+          - glibc 2.35+
+          - libgtk3, libfuse2 (for AppImage)
+
+          ### Verification
+          ```bash
+          # Verify .deb signature
+          dpkg-sig --verify scmessenger-desktop_*_amd64.deb
+
+          # Verify AppImage signature
+          gpg --verify SCMessenger-Desktop-*.AppImage.sig SCMessenger-Desktop-*.AppImage
+
+          # Verify checksums
+          sha256sum -c SHA256SUMS.txt
+          ```
+          EOF
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            release-artifacts/**/*.deb
+            release-artifacts/**/*.AppImage
+            release-artifacts/**/*.sig
+            release-artifacts/**/*.sha256
+            SHA256SUMS.txt
+          body_path: RELEASE_NOTES.md
+          draft: true
+          prerelease: ${{ contains(github.ref, 'alpha') || contains(github.ref, 'beta') || contains(github.ref, 'rc') }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

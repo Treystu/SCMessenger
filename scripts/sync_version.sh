@@ -102,11 +102,102 @@ else
     echo -e "${YELLOW}  ⚠ wasm/package.json not found${NC}"
 fi
 
+# =============================================================================
+# NEW: Update KMP Desktop package metadata
+# =============================================================================
+
+# Update shared/build.gradle.kts version
+if [ -f "shared/build.gradle.kts" ]; then
+    echo "🖥️  Updating KMP Desktop version..."
+    
+    # Update the version property in build.gradle.kts
+    if grep -q '^version = ' shared/build.gradle.kts; then
+        sed -i.bak "s/^version = \".*\"/version = \"$VERSION\"/" shared/build.gradle.kts
+        echo -e "${GREEN}  ✓ Updated shared/build.gradle.kts version to $VERSION${NC}"
+    else
+        echo -e "${YELLOW}  ⚠ version property not found in shared/build.gradle.kts${NC}"
+    fi
+    
+    # Update packageVersion in nativeDistribution block
+    if grep -q 'packageVersion = ' shared/build.gradle.kts; then
+        sed -i.bak "s/packageVersion = \".*\"/packageVersion = \"$VERSION\"/" shared/build.gradle.kts
+        echo -e "${GREEN}  ✓ Updated nativeDistribution.packageVersion to $VERSION${NC}"
+    fi
+    
+    # Update description/version references in compose.desktop block
+    if grep -q 'appRelease = ' shared/build.gradle.kts; then
+        sed -i.bak "s/appRelease = \".*\"/appRelease = \"$VERSION\"/" shared/build.gradle.kts
+        echo -e "${GREEN}  ✓ Updated nativeDistribution.appRelease to $VERSION${NC}"
+    fi
+    
+    rm -f shared/build.gradle.kts.bak
+else
+    echo -e "${YELLOW}  ⚠ shared/build.gradle.kts not found — skipping KMP desktop version sync${NC}"
+fi
+
+# Update desktop workflow version reference (docs/workflows/desktop.yml)
+if [ -f "docs/workflows/desktop.yml" ]; then
+    echo "🔧 Updating desktop workflow version comments..."
+    # Workflow doesn't embed version directly (reads from Cargo.toml at runtime)
+    # but we update any hardcoded comments if present
+    sed -i.bak "s/# Version: .*/# Version: $VERSION/" docs/workflows/desktop.yml 2>/dev/null || true
+    rm -f docs/workflows/desktop.yml.bak
+    echo -e "${GREEN}  ✓ Desktop workflow checked${NC}"
+fi
+
+# Update release workflow template version references
+for workflow in docs/workflows/release.yml docs/workflows/release-desktop.yml; do
+    if [ -f "$workflow" ]; then
+        echo "🏷️  Updating release workflow: $workflow"
+        sed -i.bak "s/app_deb_name: .*/app_deb_name: scmessenger-desktop_${VERSION}_amd64.deb/" "$workflow" 2>/dev/null || true
+        sed -i.bak "s/appimage_name: .*/appimage_name: SCMessenger-Desktop-${VERSION}-x86_64.AppImage/" "$workflow" 2>/dev/null || true
+        rm -f "$workflow.bak"
+        echo -e "${GREEN}  ✓ Release workflow updated${NC}"
+    fi
+done
+
 echo ""
 echo -e "${GREEN}✅ Version synchronization complete!${NC}"
+echo ""
+echo "Updated manifests:"
+echo "  - Android (android/app/build.gradle)"
+echo "  - iOS (iOS/SCMessenger/Info.plist)"
+echo "  - WASM (wasm/package.json)"
+echo "  - KMP Desktop (shared/build.gradle.kts)"
 echo ""
 echo "Next steps:"
 echo "  1. Review changes: git diff"
 echo "  2. Commit: git add -A && git commit -m \"chore: bump version to $VERSION\""
 echo "  3. Tag: git tag v$VERSION"
 echo "  4. Push: git push origin main --tags"
+echo ""
+
+# =============================================================================
+# DESKTOP PACKAGE METADATA SYNC (stub)
+# -----------------------------------------------------------------------------
+# The following locations would be updated with the synchronized version for
+# desktop releases. These are NOT actively modified by this script yet — they
+# are listed here as placeholders so that a future contributor can wire them
+# into the main sync loop above without needing to reverse-engineer the
+# project layout.
+#
+#   1. shared/src/desktopMain/resources/metainf/make-app.desktop
+#      — Update X-AppImage-Version= or Version= field
+#
+#   2. shared/build.gradle.kts (nativeDistribution block)
+#      — packageVersion = "$VERSION"
+#
+#   3. AppImage — build_appimage.sh environment
+#      — Pass APP_VERSION env var to appimagetool
+#
+#   4. Cargo.toml workspace.version
+#      — Already the source of truth; no additional update needed
+#
+#   5. docs/workflows/release-desktop.yml
+#      — Update default artifact name patterns:
+#        app_deb_name: scmessenger-desktop_${VERSION}_amd64.deb
+#        appimage_name: SCMessenger-Desktop-${VERSION}-x86_64.AppImage
+#
+# To enable: uncomment the sed/update commands below and reference $VERSION
+# extracted from Cargo.toml at the top of this script.
+# =============================================================================
