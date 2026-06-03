@@ -9,7 +9,10 @@ use std::path::PathBuf;
 #[test]
 fn test_xdg_data_dir() {
     let dir: PathBuf = scmessenger_desktop_bridge::xdg_data_dir();
-    assert!(dir.is_absolute(), "xdg_data_dir() returned relative path: {dir:?}");
+    assert!(
+        dir.is_absolute(),
+        "xdg_data_dir() returned relative path: {dir:?}"
+    );
 }
 
 /// Verify that `xdg_data_dir` path ends with "scmessenger".
@@ -27,7 +30,10 @@ fn test_xdg_data_dir_contains_scmessenger() {
 #[test]
 fn test_xdg_config_dir() {
     let dir: PathBuf = scmessenger_desktop_bridge::xdg_config_dir();
-    assert!(dir.is_absolute(), "xdg_config_dir() returned relative path: {dir:?}");
+    assert!(
+        dir.is_absolute(),
+        "xdg_config_dir() returned relative path: {dir:?}"
+    );
 }
 
 /// Verify that `xdg_config_dir` path ends with "scmessenger".

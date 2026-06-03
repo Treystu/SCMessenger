@@ -104,6 +104,7 @@ impl From<MeshSettings> for scmessenger_core::MeshSettings {
 }
 
 pub struct MeshSettingsManager {
+    #[allow(dead_code)]
     storage_path: String,
 }
 
@@ -2348,12 +2349,8 @@ mod tests {
             .duration_since(web_time::UNIX_EPOCH)
             .unwrap()
             .as_nanos();
-        let path = std::env::temp_dir().join(format!(
-            "scm-wasm-{}-{}-{}",
-            label,
-            ts,
-            std::process::id()
-        ));
+        let path =
+            std::env::temp_dir().join(format!("scm-wasm-{}-{}-{}", label, ts, std::process::id()));
         std::fs::create_dir_all(&path).unwrap();
         path.to_string_lossy().to_string()
     }

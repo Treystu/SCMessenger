@@ -486,15 +486,19 @@ impl RelayCustodyStore {
 
     pub fn adoption_stats(&self) -> (u64, u64) {
         (
-            self.ws13_requests.load(std::sync::atomic::Ordering::Relaxed),
-            self.legacy_requests.load(std::sync::atomic::Ordering::Relaxed),
+            self.ws13_requests
+                .load(std::sync::atomic::Ordering::Relaxed),
+            self.legacy_requests
+                .load(std::sync::atomic::Ordering::Relaxed),
         )
     }
 
     pub fn adoption_pct(&self) -> f64 {
         let (ws13, legacy) = self.adoption_stats();
         let total = ws13 + legacy;
-        if total == 0 { return 0.0; }
+        if total == 0 {
+            return 0.0;
+        }
         (ws13 as f64 / total as f64) * 100.0
     }
 
@@ -625,7 +629,8 @@ impl RelayCustodyStore {
                         return Err(error.to_string());
                     }
                 }
-                self.ws13_requests.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                self.ws13_requests
+                    .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
             } else {
                 // Legacy client: no device_id provided
                 match self.compat_mode {
@@ -644,7 +649,8 @@ impl RelayCustodyStore {
                         legacy_reason = Some("custody_accepted_compat_phase_b");
                     }
                 }
-                self.legacy_requests.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                self.legacy_requests
+                    .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
             }
         }
 
@@ -2573,7 +2579,11 @@ mod tests {
         let (ws13, legacy) = store.adoption_stats();
         assert_eq!(ws13, 0, "ws13_requests should start at 0");
         assert_eq!(legacy, 0, "legacy_requests should start at 0");
-        assert_eq!(store.adoption_pct(), 0.0, "adoption_pct should be 0.0 with no requests");
+        assert_eq!(
+            store.adoption_pct(),
+            0.0,
+            "adoption_pct should be 0.0 with no requests"
+        );
     }
 
     #[test]
@@ -2616,11 +2626,17 @@ mod tests {
             Some(identity_id),
             None,
         );
-        assert!(result.is_ok(), "Legacy custody accept should succeed in Phase A");
+        assert!(
+            result.is_ok(),
+            "Legacy custody accept should succeed in Phase A"
+        );
 
         let (ws13, legacy) = store.adoption_stats();
         assert_eq!(ws13, 0, "ws13_requests should remain 0");
-        assert_eq!(legacy, 1, "legacy_requests should be 1 after one legacy accept");
+        assert_eq!(
+            legacy, 1,
+            "legacy_requests should be 1 after one legacy accept"
+        );
     }
 
     #[test]
