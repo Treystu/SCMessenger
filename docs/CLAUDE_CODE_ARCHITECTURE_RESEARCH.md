@@ -33,13 +33,14 @@ Claude Code implements tiered model routing rather than routing everything throu
 | Fast/lightweight | Haiku 3.5/4.5 | `deepseek-v4-flash:cloud`, `gemini-3-flash-preview:cloud`, `gemma4:31b:cloud` | Triage, lint, CI, title generation, simple queries |
 
 **SCMessenger routing strategy (to be implemented):**
+- **Orchestration & coordination:** `minimax-m3:cloud`
 - **Architecture & planning:** `glm-5.1:cloud` or `qwen3-coder:480b:cloud`
 - **Rust core implementation:** `glm-5.1:cloud` (proven Rust output) or `qwen3-coder-next:cloud`
 - **Crypto/math/protocol validation:** `deepseek-v3.2:cloud` or `deepseek-v4-pro:cloud`
 - **Code review / gatekeeping:** `kimi-k2-thinking:cloud` or `kimi-k2.6:cloud`
 - **Quick fixes, lint, CI:** `gemini-3-flash-preview:cloud` or `deepseek-v4-flash:cloud`
 - **Documentation, tests, bindings:** `gemma4:31b:cloud` or `devstral-2:123b:cloud`
-- **Pipeline coordination:** `mistral-large-3:675b:cloud`
+- **Pipeline coordination:** `minimax-m3:cloud` or `mistral-large-3:675b:cloud`
 
 ## 4. Three-Layer Memory Architecture
 

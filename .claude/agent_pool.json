@@ -7,7 +7,7 @@
     {
       "name": "orchestrator",
       "launch_type": "cli",
-      "model": "kimi-k2.6:cloud",
+      "model": "scm-thinker:14b",
       "fallback_model": "qwen3-coder:480b:cloud",
       "purpose": "Lead coordinator: tracks progress across all phases, delegates tasks, verifies completion, manages HANDOFF state, ensures the swarm stays on track",
       "task_patterns": [
@@ -23,12 +23,13 @@
         "scripts/",
         "docs/"
       ],
-      "max_per_type": 1
+      "max_per_type": 1,
+      "_local_first_patched": true
     },
     {
       "name": "architect-planner",
       "launch_type": "cli",
-      "model": "deepseek-v4-pro:cloud",
+      "model": "deepseek-r1-distill-14b-iq2xs:latest",
       "fallback_model": "deepseek-v3.2:cloud",
       "purpose": "High-level architecture planning AND precision validation: designs system architecture, plans implementation order, validates correctness of crypto/protocol/security code, performs adversarial review",
       "task_patterns": [
@@ -47,12 +48,13 @@
         "core/src/crypto/",
         "core/src/privacy/"
       ],
-      "max_per_type": 1
+      "max_per_type": 1,
+      "_local_first_patched": true
     },
     {
       "name": "rust-coder",
       "launch_type": "cli",
-      "model": "glm-5.1:cloud",
+      "model": "scm-coder:7b",
       "fallback_model": "qwen3-coder-next:cloud",
       "purpose": "Rust core implementation: identity, crypto, transport, store, relay modules. glm-5.1 has proven Rust output quality",
       "task_patterns": [
@@ -67,12 +69,13 @@
         "core/",
         "wasm/"
       ],
-      "max_per_type": 1
+      "max_per_type": 1,
+      "_local_first_patched": true
     },
     {
       "name": "implementer",
       "launch_type": "cli",
-      "model": "qwen3-coder-next:cloud",
+      "model": "scm-coder:7b",
       "fallback_model": "glm-5.1:cloud",
       "purpose": "Rapid feature landing: general coding, bug fixes, platform client implementation",
       "task_patterns": [
@@ -89,12 +92,13 @@
         "mobile/src/",
         "iOS/"
       ],
-      "max_per_type": 2
+      "max_per_type": 2,
+      "_local_first_patched": true
     },
     {
       "name": "gatekeeper-reviewer",
       "launch_type": "cli",
-      "model": "kimi-k2-thinking:cloud",
+      "model": "scm-thinker:14b",
       "fallback_model": "kimi-k2.6:cloud",
       "purpose": "Pre-merge verification: final code review gate, ensures build passes, tests pass, docs synced",
       "task_patterns": [
@@ -104,12 +108,13 @@
         "GATE"
       ],
       "file_domains": [],
-      "max_per_type": 1
+      "max_per_type": 1,
+      "_local_first_patched": true
     },
     {
       "name": "worker",
       "launch_type": "cli",
-      "model": "gemma4:31b:cloud",
+      "model": "qwen2.5-coder:7b",
       "fallback_model": "devstral-2:123b:cloud",
       "purpose": "Unit tests, UniFFI bindings, documentation, platform engineering, small changes under 200 LOC",
       "task_patterns": [
@@ -128,12 +133,13 @@
         "android/app/src/test/",
         "android/app/src/androidTest/"
       ],
-      "max_per_type": 1
+      "max_per_type": 1,
+      "_local_first_patched": true
     },
     {
       "name": "triage-router",
       "launch_type": "cli",
-      "model": "gemini-3-flash-preview:cloud",
+      "model": "qwen2.5-coder:1.5b",
       "fallback_model": "deepseek-v4-flash:cloud",
       "purpose": "Quick triage, lint fixes, minor edits under 50 LOC, CI gatekeeping, parsing",
       "task_patterns": [
@@ -144,12 +150,13 @@
         "FMT"
       ],
       "file_domains": [],
-      "max_per_type": 1
+      "max_per_type": 1,
+      "_local_first_patched": true
     },
     {
       "name": "micro-batch-processor",
       "launch_type": "cli",
-      "model": "gemini-3-flash-preview:cloud",
+      "model": "qwen2.5-coder:1.5b",
       "fallback_model": "deepseek-v4-flash:cloud",
       "purpose": "Process batches of micro-tasks (lint, quick fixes, formatting) to reduce API overhead",
       "task_patterns": [
@@ -159,12 +166,13 @@
       "file_domains": [
         "HANDOFF/batches/"
       ],
-      "max_per_type": 1
+      "max_per_type": 1,
+      "_local_first_patched": true
     },
     {
       "name": "wiring-verifier",
       "launch_type": "cli",
-      "model": "deepseek-v4-pro:cloud",
+      "model": "deepseek-r1-distill-14b-iq2xs:latest",
       "fallback_model": "deepseek-v3.2:cloud",
       "purpose": "Full repo-wide wiring verification: checks all module connections, IronCore entry points, cross-module dependencies, API surface completeness",
       "task_patterns": [
@@ -174,12 +182,13 @@
         "CONNECTIVITY"
       ],
       "file_domains": [],
-      "max_per_type": 1
+      "max_per_type": 1,
+      "_local_first_patched": true
     },
     {
       "name": "CLIBetaTester",
       "launch_type": "cli",
-      "model": "qwen3-coder:480b:cloud",
+      "model": "scm-thinker:14b",
       "fallback_model": "glm-5.1:cloud",
       "purpose": "Acts as an aggressive Beta User against the Rust Core daemon. Tests the JSON-RPC bridge and libp2p mesh.",
       "task_patterns": [
@@ -190,7 +199,8 @@
         "STRESS"
       ],
       "file_domains": [],
-      "max_per_type": 1
+      "max_per_type": 1,
+      "_local_first_patched": true
     },
     {
       "name": "vision-analyst",
@@ -293,6 +303,11 @@
       "name": "glm-4.6",
       "params": "696B",
       "specialty": "earlier GLM"
+    },
+    {
+      "name": "minimax-m3",
+      "params": "480B",
+      "specialty": "orchestration, coordination, general reasoning"
     },
     {
       "name": "minimax-m2.7",

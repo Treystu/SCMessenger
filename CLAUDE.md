@@ -398,6 +398,7 @@ Route work to the appropriate ollama cloud model tier based on task complexity. 
 
 | Task Type | Primary Model | Fallback |
 |-----------|--------------|----------|
+| Orchestration, coordination | `minimax-m3:cloud` | `mistral-large-3:675b:cloud` |
 | Architecture, planning | `qwen3-coder:480b:cloud` | `qwen3.5:397b:cloud` |
 | Implementation, coding | `qwen3-coder-next:cloud` | `glm-5.1:cloud` |
 | Rust core, protocol | `glm-5.1:cloud` | `qwen3-coder-next:cloud` |
@@ -405,7 +406,7 @@ Route work to the appropriate ollama cloud model tier based on task complexity. 
 | Code review, merge gate | `kimi-k2-thinking:cloud` | `kimi-k2.6:cloud` |
 | Quick fix, lint, CI | `gemini-3-flash-preview:cloud` | `deepseek-v4-flash:cloud` |
 | Tests, docs, bindings | `gemma4:31b:cloud` | `devstral-2:123b:cloud` |
-| Pipeline coordination | `mistral-large-3:675b:cloud` | `cogito-2.1:671b:cloud` |
+| Pipeline coordination | `minimax-m3:cloud` | `mistral-large-3:675b:cloud` |
 
 ### Context Bloat Protection
 
