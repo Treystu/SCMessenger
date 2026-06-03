@@ -30,14 +30,17 @@ The [agent_pool.json](file:///c:/Users/kanal/Documents/SCMessenger/SCMessenger/.
 ### Agent Roster
 | Agent | Model | Specialization |
 |-------|-------|----------------|
+| orchestrator | minimax-m3:cloud | Lead coordination, delegation, swarm tracking |
 | architect | qwen3-coder:480b:cloud | Design, planning, multi-file reasoning |
 | implementer | qwen3-coder-next:cloud | Feature landing, bug fixes, code changes |
 | precision-validator | deepseek-v3.2:cloud | Crypto, math, protocol audit |
 | worker | gemma4:31b:cloud | Tests, bindings, docs, platform |
 | triage-router | gemini-3-flash-preview:cloud | Quick triage, lint, CI |
 | gatekeeper-reviewer | kimi-k2-thinking:cloud | Pre-merge review, final gate |
-| swarm-orchestrator | mistral-large-3:675b:cloud | Pipeline coordination |
 | rust-coder | glm-5.1:cloud | Rust core, protocol implementation |
+| wiring-verifier | deepseek-v3.2:cloud | Full repo-wide wiring verification |
+| beta-tester | glm-5.1:cloud | CLI beta testing, stress testing |
+| vision-analyst | qwen3-vl:235b:cloud | Visual analysis, screenshots, diagrams |
 
 ## 🧬 Sub-Agent Swarm
 - **Specialist Routing**: Refer to [AI_STANDARDS.md](file:///c:/Users/kanal/Documents/SCMessenger/SCMessenger/docs/AI_STANDARDS.md) for model-to-scenario mappings (Qwen, DeepSeek, Google, etc.).

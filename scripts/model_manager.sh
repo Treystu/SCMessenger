@@ -74,6 +74,12 @@ create_model_mapping() {
       "role": "rust_coder",
       "size": "1.5t",
       "recommended_for": ["rust_core", "protocol_work", "compatibility"]
+    },
+    "minimax-m3:cloud": {
+      "capabilities": ["orchestration", "coordination", "delegation", "multi_agent_tracking", "swarm_oversight"],
+      "role": "orchestrator",
+      "size": "480b",
+      "recommended_for": ["orchestration", "coordination", "delegation", "swarm_management"]
     }
   },
   "source_of_truth": "$MODEL_API",
@@ -138,7 +144,7 @@ get_recommended_model() {
             echo "kimi-k2-thinking:cloud"
             ;;
         "orchestration" | "coordination")
-            echo "mistral-large-3:675b:cloud"
+            echo "minimax-m3:cloud"
             ;;
         "rust" | "protocols" | "core")
             echo "glm-5.1:cloud"

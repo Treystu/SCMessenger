@@ -18,6 +18,6 @@
   "agent_pool_config": ".claude/agent_pool.json",
   "active_native_agents": [],
   "agent_pool_enabled": true,
-  "agent_launch_command": "ollama run glm-5.1:cloud -- --dangerously-skip-permissions",
+  "agent_launch_command": "ollama run minimax-m3:cloud -- --dangerously-skip-permissions",
   "notes": "Orchestrator integrates with existing agent system - no duplication. Native agent support added for Claude Code Agent tool subagents."
 }
