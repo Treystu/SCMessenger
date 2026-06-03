@@ -1,8 +1,24 @@
 # SCMessenger Platform Support Matrix (v0.2.0-alpha)
 
 Status: Active
-Last updated: 2026-03-03
+Last updated: 2026-06-03 (verified build state)
 Lock policy: **Lock to Code** (baseline values match current repository build configuration)
+
+## Current Verified Build State
+
+| Target | Command | Status |
+|---|---|---|
+| Full workspace check | `cargo check --workspace` | ✅ PASS |
+| Core test compilation | `cargo test -p scmessenger-core --no-run` | ✅ PASS |
+| CLI test compilation | `cargo test -p scmessenger-cli --no-run` | ✅ PASS |
+| Mobile test compilation | `cargo test -p scmessenger-mobile --no-run` | ✅ PASS |
+| Desktop bridge test compilation | `cargo test -p scmessenger-desktop-bridge --no-run` | ✅ PASS |
+| Full workspace test gate (serial) | `cargo test --workspace --no-run --jobs 1` | ⚠️ PENDING (Windows linker OOM workaround) |
+| WASM test compilation | `cargo test -p scmessenger-wasm --no-run` | ⚠️ HANGS (investigating) |
+| WASM target check | `cargo check -p scmessenger-wasm --target wasm32-unknown-unknown` | ✅ PASS |
+| Android debug build | `./gradlew :app:assembleDebug` | ✅ PASS (with env vars) |
+
+**Rustup targets installed** (verified): `aarch64-apple-darwin`, `aarch64-apple-ios`, `aarch64-apple-ios-sim`, `aarch64-linux-android`, `armv7-linux-androideabi`, `i686-linux-android`, `wasm32-unknown-unknown`, `x86_64-apple-darwin`, `x86_64-apple-ios`, `x86_64-linux-android`, `x86_64-pc-windows-msvc`, `x86_64-unknown-linux-gnu`
 
 ## Minimum Supported Versions
 
@@ -74,10 +90,12 @@ Function-level interoperability and adapter-consumption evidence is tracked in:
 1. WASM/Desktop browser target remains internet-path only (no BLE/WiFi nearby stack in-browser).
 2. iOS build passes with non-fatal linker warnings tied to simulator SDK/object-version skew in local environments.
 3. Function-level adapter parity is currently gap-free in static scan evidence (`docs/INTEROP_MATRIX_V0.2.0_ALPHA.md`); runtime/live network scenarios still require separate device validation.
+4. **Windows full-workspace test compilation** requires `--jobs 1` to avoid linker OOM (`LNK1102`). Per-crate compilation is healthy.
+5. **WASM test compilation** (`cargo test -p scmessenger-wasm --no-run`) hangs — under investigation. `cargo check --target wasm32-unknown-unknown` passes.
 
 ## Verification Gates (Current Baseline)
 
-1. `cargo check --workspace`
+1. `cargo check --workspace` ✅
 2. `cargo fmt --all -- --check`
 3. `cargo clippy --workspace`
 4. `cargo clippy --workspace --lib --bins --examples -- -D warnings`
