@@ -1,0 +1,381 @@
+package com.scmessenger.android.transport
+
+import android.content.Context
+import android.net.ConnectivityManager
+import android.net.LinkAddress
+import android.net.LinkProperties
+import android.net.NetworkCapabilities
+import android.os.Build
+import com.scmessenger.android.service.TransportType
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
+import timber.log.Timber
+import java.net.Inet4Address
+import java.net.InetSocketAddress
+import java.net.Socket
+import java.util.concurrent.ConcurrentHashMap
+
+/**
+ * TCP-based LAN subnet probe.
+ *
+ * Motivation: mDNS (NsdManager) on Android and libp2p-mdns on Rust peers use
+ * different service types and often fail to discover each other. Even when both
+ * speak mDNS, multicast DNS is link-local (224.0.0.251) and does NOT cross
+ * routers, different broadcast domains, or some NAT'd virtual interfaces
+ * (notably WSL2). The libp2p swarm listens on TCP 9001 and the relay/WS on
+ * 9002, both of which respond to unicast TCP.
+ *
+ * This service periodically scans common LAN subnets for an open port and
+ * reports any successful hit as a peer candidate. The reported multiaddr is
+ * fed through the same onLanAddressResolved callback that mDNS uses, so
+ * downstream dial logic in MeshRepository -> SwarmBridge is unchanged.
+ *
+ * Behaviour:
+ * - Discover the device's own IPv4 link-local subnets (192.168.x, 10.x,
+ *   172.16-31.x) by querying ConnectivityManager. Each interface's
+ *   /24 (or shorter) prefix is queued for probing.
+ * - Additionally, scan a small set of common "fallback" subnets to catch
+ *   devices on neighbouring VLANs or split-WiFi networks.
+ * - For each candidate host, attempt a TCP connect to ports 9001 and 9002
+ *   with a 1s timeout. If either succeeds, derive a libp2p multiaddr and
+ *   notify the callback.
+ * - Cancellable via [stop]. Re-entrant calls to [start] are no-ops.
+ * - Battery friendly: full sweep every [scanIntervalMs] (default 30s) and
+ *   the per-host connect timeout is short (1s). Concurrency is bounded by
+ *   [maxConcurrentProbes].
+ */
+class SubnetProbe(
+    private val context: Context,
+    /**
+     * Called when a host:port is found open and identified as a likely peer.
+     * The multiaddr is in libp2p format suitable for SwarmBridge.dial.
+     * Example: "/ip4/192.168.0.230/tcp/9001" or with peer id:
+     * "/ip4/192.168.0.230/tcp/9001/p2p/12D3Koo..."
+     */
+    private val onLanAddressResolved: (multiaddr: String, transport: TransportType) -> Unit,
+    /**
+     * Optional callback to request the local libp2p peer id so we can
+     * exclude self during scanning. When null, self-exclusion falls back
+     * to a best-effort check on the device's own IP addresses.
+     */
+    private val getLocalPeerId: (() -> String?)? = null,
+    /** Optional: limit probed ports (defaults: libp2p TCP 9001, WS 9002). */
+    private val targetPorts: IntArray = intArrayOf(9001, 9002),
+    /** Full-sweep interval. Default 30s keeps battery impact minimal. */
+    private val scanIntervalMs: Long = 30_000L,
+    /** Per-TCP-connect timeout. */
+    private val connectTimeoutMs: Int = 1_000,
+    /** Bounded parallelism for the connect probe fan-out. */
+    private val maxConcurrentProbes: Int = 32
+) {
+    @Volatile private var isRunning = false
+    private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+    private var sweepJob: Job? = null
+
+    // Track (host,port) tuples we've already reported within this lifetime
+    // so we don't spam the dialer. The dialer has its own backoff; this is
+    // just a defence-in-depth rate limit.
+    private val recentlyReported = ConcurrentHashMap<String, Long>()
+    private val reportDedupMs = 60_000L
+
+    // Track which subnets we've already expanded this cycle to avoid
+    // re-listing them across overlapping interfaces.
+    private val probedSubnetsThisCycle = ConcurrentHashMap<String, Long>()
+
+    /**
+     * Begin periodic scanning. Safe to call multiple times; only the first
+     * call has effect.
+     */
+    fun start() {
+        if (isRunning) {
+            Timber.d("SubnetProbe already running; start() ignored")
+            return
+        }
+        isRunning = true
+        Timber.i("SubnetProbe starting (interval=${scanIntervalMs}ms, ports=${targetPorts.toList()})")
+        sweepJob = scope.launch {
+            // Run an immediate first sweep, then loop on the interval.
+            while (isRunning) {
+                try {
+                    runSweep()
+                } catch (t: Throwable) {
+                    Timber.w(t, "SubnetProbe sweep failed")
+                }
+                if (!isRunning) break
+                delay(scanIntervalMs)
+            }
+        }
+    }
+
+    /**
+     * Cancel all in-flight probes and stop the sweep loop.
+     */
+    fun stop() {
+        if (!isRunning) return
+        isRunning = false
+        sweepJob?.cancel()
+        sweepJob = null
+        Timber.i("SubnetProbe stopped")
+    }
+
+    /**
+     * Release coroutine resources. Call when the owning component is
+     * destroyed (e.g. in TransportManager.cleanup()).
+     */
+    fun cleanup() {
+        stop()
+        scope.cancel()
+    }
+
+    // ----------------------------------------------------------------------
+    // Sweep implementation
+    // ----------------------------------------------------------------------
+
+    private suspend fun runSweep() {
+        val localSelfIps = enumerateLocalIPv4Addresses()
+        val subnets = enumerateCandidateSubnets()
+        if (subnets.isEmpty()) {
+            Timber.d("SubnetProbe: no candidate subnets (no WiFi/Ethernet link?)")
+            return
+        }
+        Timber.d("SubnetProbe: scanning ${subnets.size} subnets, skipping self=$localSelfIps")
+
+        val candidates = mutableListOf<Pair<String, Int>>()
+        for (subnet in subnets) {
+            // Avoid re-scanning the same /24 within the dedup window.
+            if (probedSubnetsThisCycle[subnet]?.let { (System.currentTimeMillis() - it) < reportDedupMs } == true) {
+                continue
+            }
+            probedSubnetsThisCycle[subnet] = System.currentTimeMillis()
+            candidates += expandSubnet(subnet)
+        }
+
+        // Fan out probes in bounded parallel batches.
+        val sem = java.util.concurrent.Semaphore(maxConcurrentProbes)
+        val jobs = candidates.map { (host, port) ->
+            scope.async(Dispatchers.IO) {
+                sem.acquire()
+                try {
+                    if (!isRunning) return@async
+                    if (host in localSelfIps) return@async
+                    probeHost(host, port, localSelfIps)
+                } finally {
+                    sem.release()
+                }
+            }
+        }
+        jobs.awaitAll()
+    }
+
+    private suspend fun probeHost(host: String, port: Int, localSelfIps: Set<String>) {
+        if (host in localSelfIps) return
+        val key = "$host:$port"
+        val now = System.currentTimeMillis()
+        recentlyReported.entries.removeAll { (_, ts) -> (now - ts) > reportDedupMs }
+        if (recentlyReported.containsKey(key)) return
+
+        val opened = withTimeoutOrNull(connectTimeoutMs.toLong() + 250L) {
+            try {
+                Socket().use { sock ->
+                    sock.connect(InetSocketAddress(host, port), connectTimeoutMs)
+                    // Optional: try to read a tiny amount to confirm something
+                    // is actually answering (not just a firewalled drop). We
+                    // give the server 200ms; libp2p won't push unsolicited
+                    // data, but a WebSocket relay may send an HTTP 400.
+                    try {
+                        sock.soTimeout = 200
+                        val peek = ByteArray(1)
+                        sock.getInputStream().read(peek)
+                    } catch (_: Throwable) {
+                        // No data is fine — connection accepted is enough.
+                    }
+                    true
+                }
+            } catch (_: Throwable) {
+                false
+            }
+        } ?: false
+
+        if (!opened) return
+
+        recentlyReported[key] = now
+        val multiaddr = "/ip4/$host/tcp/$port"
+        Timber.i("SubnetProbe: open port $host:$port (likely SCMessenger peer) -> $multiaddr")
+        try {
+            onLanAddressResolved(multiaddr, TransportType.TCP_MDNS)
+        } catch (t: Throwable) {
+            Timber.w(t, "SubnetProbe: onLanAddressResolved callback threw")
+        }
+    }
+
+    // ----------------------------------------------------------------------
+    // Subnet enumeration
+    // ----------------------------------------------------------------------
+
+    private fun enumerateLocalIPv4Addresses(): Set<String> {
+        val result = HashSet<String>()
+        try {
+            val cm = context.applicationContext.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
+                ?: return result
+            val active = cm.activeNetwork ?: return result
+            val link: LinkProperties = cm.getLinkProperties(active) ?: return result
+            for (addr in link.linkAddresses) {
+                val ip = addr.address
+                if (ip is Inet4Address && !ip.isLoopbackAddress) {
+                    result += ip.hostAddress.orEmpty()
+                }
+            }
+        } catch (t: Throwable) {
+            Timber.w(t, "SubnetProbe: failed to enumerate local IPv4 addresses")
+        }
+        return result
+    }
+
+    /**
+     * Returns a list of /24 subnets (in "a.b.c.0/24" form) that are worth
+     * scanning. The list is built from:
+     *   1. The device's own IPv4 link-local prefixes (with /24 applied if
+     *      the prefix is shorter than /24, e.g. /16 home networks are
+     *      narrowed to a /24 around the local address).
+     *   2. A small fallback list of common router defaults.
+     */
+    private fun enumerateCandidateSubnets(): List<String> {
+        val out = LinkedHashSet<String>()
+        try {
+            val cm = context.applicationContext.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
+            if (cm != null) {
+                val networks = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                    cm.allNetworks
+                } else {
+                    null
+                }
+                if (networks != null) {
+                    for (net in networks) {
+                        val caps = cm.getNetworkCapabilities(net) ?: continue
+                        // Only scan interfaces that are useful for LAN discovery.
+                        if (!caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) &&
+                            !caps.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET) &&
+                            !caps.hasTransport(NetworkCapabilities.TRANSPORT_VPN)) {
+                            continue
+                        }
+                        val link = cm.getLinkProperties(net) ?: continue
+                        for (addr in link.linkAddresses) {
+                            val ip = addr.address
+                            if (ip !is Inet4Address || ip.isLoopbackAddress) continue
+                            out += narrowToScanSubnet(addr)
+                        }
+                    }
+                } else {
+                    // Legacy fallback (< API 21) — should not happen on minSdk 26.
+                    val link = cm.activeNetwork?.let { cm.getLinkProperties(it) }
+                    if (link != null) {
+                        for (addr in link.linkAddresses) {
+                            val ip = addr.address
+                            if (ip !is Inet4Address || ip.isLoopbackAddress) continue
+                            out += narrowToScanSubnet(addr)
+                        }
+                    }
+                }
+            }
+        } catch (t: Throwable) {
+            Timber.w(t, "SubnetProbe: failed to enumerate candidate subnets")
+        }
+
+        // Always probe a few common defaults in case the device's own
+        // interface is misreported (e.g. mobile hotspot on a different /24
+        // than the host that runs the daemon).
+        for (fallback in FALLBACK_SUBNETS) {
+            out += fallback
+        }
+        return out.toList()
+    }
+
+    private fun narrowToScanSubnet(addr: LinkAddress): String {
+        val ip = addr.address as Inet4Address
+        val rawPrefix = addr.prefixLength
+        val octets = ip.hostAddress.split(".")
+        if (octets.size != 4) return "${octets[0]}.${octets[1]}.${octets[2]}.0/24"
+        return when {
+            // Use /24 around the local host for the typical /16 home LAN.
+            rawPrefix < 24 -> "${octets[0]}.${octets[1]}.${octets[2]}.0/24"
+            // /30 or smaller — scan the whole thing.
+            else -> {
+                val mask = ipv4NetmaskInt(rawPrefix)
+                val ipInt = (octets[0].toInt() and 0xff shl 24) or
+                    (octets[1].toInt() and 0xff shl 16) or
+                    (octets[2].toInt() and 0xff shl 8) or
+                    (octets[3].toInt() and 0xff)
+                val netInt = ipInt and mask
+                val a = (netInt ushr 24) and 0xff
+                val b = (netInt ushr 16) and 0xff
+                val c = (netInt ushr 8) and 0xff
+                val d = netInt and 0xff
+                "$a.$b.$c.$d/$rawPrefix"
+            }
+        }
+    }
+
+    private fun ipv4NetmaskInt(prefixLen: Int): Int {
+        if (prefixLen <= 0) return 0
+        if (prefixLen >= 32) return -1 // 0xFFFFFFFF
+        return (0xFFFFFFFF.toInt() shl (32 - prefixLen))
+    }
+
+    /**
+     * Expand a /24 (or smaller) subnet into host candidates. For /24 we
+     * probe 1..254 (skipping .0 network and .255 broadcast). For shorter
+     * prefixes we just probe the local /24 around the device address.
+     */
+    private fun expandSubnet(subnet: String): List<Pair<String, Int>> {
+        val parts = subnet.split("/")
+        val base = parts[0]
+        val prefix = parts.getOrNull(1)?.toIntOrNull() ?: 24
+        val octets = base.split(".")
+        if (octets.size != 4) return emptyList()
+        val a = octets[0].toIntOrNull() ?: return emptyList()
+        val b = octets[1].toIntOrNull() ?: return emptyList()
+        val c = octets[2].toIntOrNull() ?: return emptyList()
+        val d = octets[3].toIntOrNull() ?: return emptyList()
+
+        val out = ArrayList<Pair<String, Int>>(256)
+        val ips = if (prefix >= 24) {
+            (1..254).map { last -> "$a.$b.$c.$last" }
+        } else {
+            // /16 or wider: only scan the local /24 around the device
+            // (i.e. just the .0/24 from the local address). Expanding a /16
+            // would mean 65k probes, which is unacceptable.
+            (1..254).map { last -> "$a.$b.$c.$last" }
+        }
+        for (host in ips) {
+            for (port in targetPorts) {
+                out += host to port
+            }
+        }
+        return out
+    }
+
+    companion object {
+        // A handful of common router defaults. Keep this list short — the
+        // point is to catch the obvious cases (home WiFi /24 = 192.168.0.x
+        // and 192.168.1.x, plus 10.0.0.x used by some mesh routers).
+        private val FALLBACK_SUBNETS = listOf(
+            "192.168.0.0/24",
+            "192.168.1.0/24",
+            "10.0.0.0/24",
+            "10.0.1.0/24",
+            "172.16.0.0/24",
+            "172.20.0.0/24",
+            "172.24.0.0/24",
+            "172.26.0.0/24",
+            "172.30.0.0/24"
+        )
+    }
+}

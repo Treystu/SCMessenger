@@ -1,6 +1,7 @@
 package com.scmessenger.android.ui
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.automirrored.filled.Chat
@@ -118,9 +119,28 @@ fun MeshApp() {
                 modifier = Modifier.weight(1f)
             )
         } else {
+            // Track current route so the outer Scaffold can host a
+            // per-screen FAB without nesting a Scaffold inside the
+            // Contacts screen. Nested Scaffolds previously hid the "+" FAB.
+            val navBackStackEntry by navController.currentBackStackEntryAsState()
+            val currentRoute = navBackStackEntry?.destination?.route
+            val isContactsScreen = currentRoute == Screen.Contacts.route
+
             Scaffold(
                 modifier = Modifier.weight(1f),
-                bottomBar = { MeshBottomBar(navController = navController, hasIdentity = hasIdentity) }
+                bottomBar = { MeshBottomBar(navController = navController, hasIdentity = hasIdentity) },
+                floatingActionButton = {
+                    if (isContactsScreen) {
+                        FloatingActionButton(
+                            onClick = { navController.navigate(Screen.AddContact.route) }
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Add,
+                                contentDescription = "Add contact"
+                            )
+                        }
+                    }
+                }
             ) { paddingValues ->
                 MeshNavHost(
                     navController = navController,

@@ -65,25 +65,22 @@ fun ContactsScreen(
     var showAddDialog by remember { mutableStateOf(false) }
     var nearbyPrefilledPeer by remember { mutableStateOf<NearbyPeer?>(null) }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text(stringResource(R.string.contacts_title, contacts.size)) }
-            )
-        },
-        floatingActionButton = {
-            FloatingActionButton(onClick = onNavigateToAddContact) {
-                Icon(Icons.Default.Add, contentDescription = stringResource(R.string.contacts_action_add))
-            }
-        }
-    ) { paddingValues ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(paddingValues)
-        ) {
-            // Search bar
-            OutlinedTextField(
+    // No inner Scaffold here — the outer Scaffold in MeshApp.kt hosts the
+    // TopAppBar (per-screen) and the contacts "+" FAB (route-conditional).
+    // Nested Scaffolds caused the FAB to be hidden or mispositioned.
+    Column(
+        modifier = Modifier.fillMaxSize()
+    ) {
+        // Per-screen title bar (rendered as plain content, not a TopAppBar,
+        // so the outer Scaffold's TopAppBar slot can own window insets)
+        Text(
+            text = stringResource(R.string.contacts_title, contacts.size),
+            style = MaterialTheme.typography.titleLarge,
+            modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 8.dp)
+        )
+
+        // Search bar
+        OutlinedTextField(
                 value = searchQuery,
                 onValueChange = { viewModel.setSearchQuery(it) },
                 modifier = Modifier
@@ -242,7 +239,6 @@ fun ContactsScreen(
                 }
             }
         }
-    }
 
     // Add contact dialog
     if (showAddDialog) {

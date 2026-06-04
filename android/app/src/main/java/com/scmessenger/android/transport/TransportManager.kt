@@ -50,6 +50,12 @@ class TransportManager @JvmOverloads constructor(
     // mDNS LAN discovery (cross-platform: Android ↔ Windows/iOS/macOS)
     private var mdnsDiscovery: MdnsServiceDiscovery? = null
 
+    // TCP subnet probe — fallback LAN discovery that works where mDNS can't
+    // (different subnets, broadcast domains, virtual NICs). Scans common
+    // /24 subnets for open port 9001 (libp2p TCP) / 9002 (WS relay) and
+    // feeds any hit through onLanAddressResolved.
+    private var subnetProbe: SubnetProbe? = null
+
     // Track active transports
     private val activeTransports = ConcurrentHashMap<TransportType, Boolean>()
 
@@ -113,7 +119,14 @@ class TransportManager @JvmOverloads constructor(
         if (enableMdns) {
             val discovery = getOrCreateMdns()
             discovery.start()
-            Timber.i("All transports started (including mDNS LAN discovery)")
+            // Also start the TCP subnet probe as a fallback. mDNS multicast
+            // is link-local and does NOT cross routers, different broadcast
+            // domains, or WSL-style virtual NICs. The probe sends unicast
+            // TCP connect attempts to common /24 subnets on port 9001/9002
+            // and feeds any open host into SwarmBridge.
+            val probe = getOrCreateSubnetProbe()
+            probe.start()
+            Timber.i("All transports started (including mDNS LAN discovery + TCP subnet probe)")
         } else {
             Timber.i("All transports started (mDNS/LAN disabled as requested)")
         }
@@ -153,6 +166,33 @@ class TransportManager @JvmOverloads constructor(
     }
 
     /**
+     * Helper to centralized creation of SubnetProbe with correct callbacks.
+     * The probe emits multiaddrs via the same onLanAddressResolved channel
+     * as mDNS, so the downstream SwarmBridge.dial path is identical.
+     *
+     * Note: the probe does not have a peer-id (mDNS TXT records carry the
+     * libp2p peer id; TCP probing port-open-ness does not). We feed the
+     * /ip4/host/tcp/port form to SwarmBridge; the swarm will learn the
+     * peer id after the noise/identify handshake completes.
+     */
+    private fun getOrCreateSubnetProbe(): SubnetProbe {
+        var probe = subnetProbe
+        if (probe == null) {
+            probe = SubnetProbe(
+                context = context,
+                onLanAddressResolved = { multiaddr, transport ->
+                    Timber.i("SubnetProbe: LAN address resolved -> $multiaddr — feeding to SwarmBridge")
+                    onLanAddressResolved?.invoke(multiaddr)
+                    activeTransports[TransportType.TCP_MDNS] = true
+                },
+                getLocalPeerId = getLocalPeerId
+            )
+            subnetProbe = probe
+        }
+        return probe
+    }
+
+    /**
      * Stop all transports.
      */
     fun stopAll() {
@@ -175,6 +215,10 @@ class TransportManager @JvmOverloads constructor(
         // Stop mDNS
         mdnsDiscovery?.stop()
         mdnsDiscovery = null
+
+        // Stop TCP subnet probe
+        subnetProbe?.stop()
+        subnetProbe = null
 
         activeTransports.clear()
         peerTransports.clear()
@@ -438,6 +482,8 @@ class TransportManager @JvmOverloads constructor(
             TransportType.TCP_MDNS -> {
                 val discovery = getOrCreateMdns()
                 discovery.start()
+                val probe = getOrCreateSubnetProbe()
+                probe.start()
             }
         }
     }
@@ -463,6 +509,8 @@ class TransportManager @JvmOverloads constructor(
             TransportType.TCP_MDNS -> {
                 mdnsDiscovery?.stop()
                 mdnsDiscovery = null
+                subnetProbe?.stop()
+                subnetProbe = null
             }
         }
 
@@ -479,6 +527,7 @@ class TransportManager @JvmOverloads constructor(
         bleL2capManager?.shutdown()
         wifiAware?.cleanup()
         wifiDirect?.cleanup()
+        subnetProbe?.cleanup()
 
         scope.cancel()
 
