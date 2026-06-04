@@ -2950,7 +2950,10 @@ open class MeshRepository(private val context: Context) {
             // Core auto-selects headless mode when identity is absent and upgrades when identity appears.
             // P0_TRANSPORT_001: Use static port 9001 for LAN connectivity with CLI daemon.
             // This ensures both sides can dial each other using predictable addresses.
-            meshService?.startSwarm("/ip4/0.0.0.0/tcp/9001")
+            // Bootstrap addrs: empty for now — mobile will discover LAN peers via mDNS
+            // and relay peers via the ledger exchange protocol. Can be populated from
+            // config or QR-scanned contact addrs in future.
+            meshService?.startSwarm("/ip4/0.0.0.0/tcp/9001", listOf())
 
             // Obtain the SwarmBridge managed by Rust MeshService
             swarmBridge = meshService?.getSwarmBridge()

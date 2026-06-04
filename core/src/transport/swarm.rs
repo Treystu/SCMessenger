@@ -1891,7 +1891,7 @@ pub async fn start_swarm_with_config(
         if let Ok(quic_addr) = "/ip4/0.0.0.0/udp/0/quic-v1".parse::<Multiaddr>() {
             match swarm.listen_on(quic_addr.clone()) {
                 Ok(_) => tracing::info!("✓ Bound QUIC-v1 listener {}", quic_addr),
-                Err(e) => tracing::warn!("✗ Failed to bind QUIC-v1 listener {}: {}", quic_addr, e),
+                Err(e) => tracing::debug!("QUIC-v1 listener not available ({}): {}", quic_addr, e),
             }
         } else {
             tracing::debug!("QUIC-v1 multiaddr parse failed — skipping QUIC listener");
@@ -3713,6 +3713,22 @@ pub async fn start_swarm_with_config(
                                 // SwarmEvent2::PeerDiscovered and trigger ShareLedger.
                                 // This is handled in main.rs to keep swarm.rs agnostic
                                 // about the persistent ledger format.
+
+                                // Reset bootstrap backoff for any addr that matches this peer.
+                                // On successful connection, the backoff should reset so
+                                // subsequent failures start from the initial 60s interval.
+                                for ba in &bootstrap_addrs_clone {
+                                    let matches = ba.iter().any(|proto| {
+                                        if let libp2p::multiaddr::Protocol::P2p(p) = proto { p == peer_id } else { false }
+                                    });
+                                    if matches {
+                                        if let Some(entry) = bootstrap_backoff.get_mut(ba) {
+                                            entry.on_success();
+                                            tracing::debug!("Reset bootstrap backoff for {} (connected)", ba);
+                                        }
+                                        break;
+                                    }
+                                }
                             }
 
                             SwarmEvent::ConnectionClosed { peer_id, .. } => {
@@ -3791,17 +3807,42 @@ pub async fn start_swarm_with_config(
                                     tracing::debug!("⚠ Outgoing connection error: {}", error);
                                 }
                                 // Exponential backoff for bootstrap re-dial: if the failed
-                                // peer_id matches any bootstrap addr, apply backoff so we
-                                // don't keep hammering a node that refuses connections.
-                                if let Some(pid) = peer_id {
-                                    for ba in &bootstrap_addrs_clone {
-                                        let matches = ba.iter().any(|proto| {
+                                // connection matches any bootstrap addr (by IP+port for
+                                // peer_id=None errors, or by /p2p/ component), apply backoff
+                                // so we don't keep hammering a node that refuses connections.
+                                tracing::trace!("Bootstrap backoff check: {} addrs, peer_id={:?}", bootstrap_addrs_clone.len(), peer_id);
+                                for ba in &bootstrap_addrs_clone {
+                                    let matches = if let Some(pid) = peer_id {
+                                        // Known peer: match by p2p component
+                                        ba.iter().any(|proto| {
                                             if let libp2p::multiaddr::Protocol::P2p(p) = proto { p == pid } else { false }
-                                        });
-                                        if matches {
-                                            bootstrap_backoff.entry(ba.clone()).or_insert_with(BootstrapBackoffEntry::new).on_failure();
-                                            break;
+                                        })
+                                    } else {
+                                        // Unknown peer (connection refused before handshake):
+                                        // Extract IP + TCP port from the bootstrap multiaddr and
+                                        // check that both appear in the error string. This is
+                                        // more robust than matching the full formatted multiaddr.
+                                        let mut ip_str = None;
+                                        let mut port_str = None;
+                                        for proto in ba.iter() {
+                                            match proto {
+                                                libp2p::multiaddr::Protocol::Ip4(ip) => ip_str = Some(format!("{}", ip)),
+                                                libp2p::multiaddr::Protocol::Tcp(p) => port_str = Some(format!("{}", p)),
+                                                _ => {}
+                                            }
                                         }
+                                        let err_str = format!("{} {:?}", error, error);
+                                        let matched = ip_str.as_ref().map_or(false, |ip| err_str.contains(ip.as_str()))
+                                            && port_str.as_ref().map_or(false, |p| err_str.contains(p.as_str()));
+                                        if matched {
+                                            tracing::debug!("Bootstrap backoff match: addr {} in error", ba);
+                                        }
+                                        matched
+                                    };
+                                    if matches {
+                                        bootstrap_backoff.entry(ba.clone()).or_insert_with(BootstrapBackoffEntry::new).on_failure();
+                                        tracing::debug!("Applied backoff to bootstrap addr {}", ba);
+                                        break;
                                     }
                                 }
                             }
@@ -4311,6 +4352,7 @@ pub async fn start_swarm_with_config(
         let mut last_custody_pull: f64 = js_sys::Date::now();
         let mut seen_delivery_convergence_markers: HashSet<String> = HashSet::new();
         let bootstrap_addrs_clone = bootstrap_addrs;
+        let mut bootstrap_backoff: HashMap<Multiaddr, BootstrapBackoffEntry> = HashMap::new();
         let mut reported_peer_discoveries: HashSet<PeerId> = HashSet::new();
         let mut sync_sessions: HashMap<PeerId, SyncSession> = HashMap::new();
 
@@ -4999,6 +5041,20 @@ pub async fn start_swarm_with_config(
                                         peer_id
                                     );
                                 }
+
+                                // Reset bootstrap backoff for any addr matching this peer
+                                for ba in &bootstrap_addrs_clone {
+                                    let matches = ba.iter().any(|proto| {
+                                        if let libp2p::multiaddr::Protocol::P2p(p) = proto { p == peer_id } else { false }
+                                    });
+                                    if matches {
+                                        if let Some(entry) = bootstrap_backoff.get_mut(ba) {
+                                            entry.on_success();
+                                            tracing::debug!("Reset bootstrap backoff for {} (connected)", ba);
+                                        }
+                                        break;
+                                    }
+                                }
                             }
                             SwarmEvent::ConnectionClosed { peer_id, .. } => {
                                 connection_tracker.remove_connection(&peer_id);
@@ -5030,6 +5086,45 @@ pub async fn start_swarm_with_config(
                                     tracing::debug!("⚠ Outgoing connection error to {}: {}", pid, error);
                                 } else {
                                     tracing::debug!("⚠ Outgoing connection error: {}", error);
+                                }
+                                // Exponential backoff for bootstrap re-dial: if the failed
+                                // connection matches any bootstrap addr (by IP+port for
+                                // peer_id=None errors, or by /p2p/ component), apply backoff
+                                // so we don't keep hammering a node that refuses connections.
+                                tracing::trace!("Bootstrap backoff check: {} addrs, peer_id={:?}", bootstrap_addrs_clone.len(), peer_id);
+                                for ba in &bootstrap_addrs_clone {
+                                    let matches = if let Some(pid) = peer_id {
+                                        // Known peer: match by p2p component
+                                        ba.iter().any(|proto| {
+                                            if let libp2p::multiaddr::Protocol::P2p(p) = proto { p == pid } else { false }
+                                        })
+                                    } else {
+                                        // Unknown peer (connection refused before handshake):
+                                        // Extract IP + TCP port from the bootstrap multiaddr and
+                                        // check that both appear in the error string. This is
+                                        // more robust than matching the full formatted multiaddr.
+                                        let mut ip_str = None;
+                                        let mut port_str = None;
+                                        for proto in ba.iter() {
+                                            match proto {
+                                                libp2p::multiaddr::Protocol::Ip4(ip) => ip_str = Some(format!("{}", ip)),
+                                                libp2p::multiaddr::Protocol::Tcp(p) => port_str = Some(format!("{}", p)),
+                                                _ => {}
+                                            }
+                                        }
+                                        let err_str = format!("{} {:?}", error, error);
+                                        let matched = ip_str.as_ref().map_or(false, |ip| err_str.contains(ip.as_str()))
+                                            && port_str.as_ref().map_or(false, |p| err_str.contains(p.as_str()));
+                                        if matched {
+                                            tracing::debug!("Bootstrap backoff match: addr {} in error", ba);
+                                        }
+                                        matched
+                                    };
+                                    if matches {
+                                        bootstrap_backoff.entry(ba.clone()).or_insert_with(BootstrapBackoffEntry::new).on_failure();
+                                        tracing::debug!("Applied backoff to bootstrap addr {}", ba);
+                                        break;
+                                    }
                                 }
                             }
                             SwarmEvent::IncomingConnectionError { local_addr, send_back_addr, error, .. } => {
@@ -5086,6 +5181,12 @@ pub async fn start_swarm_with_config(
                             continue;
                         }
 
+                        // Exponential backoff gate: skip this addr if it is still
+                        // within its backoff window after a recent failure.
+                        if !bootstrap_backoff.get(addr).map_or(true, |e| e.is_eligible()) {
+                            continue;
+                        }
+
                         let already_connected = addr.iter().any(|proto| {
                             if let libp2p::multiaddr::Protocol::P2p(pid) = proto {
                                 connected_peers.contains(&pid)
@@ -5100,11 +5201,14 @@ pub async fn start_swarm_with_config(
                                 .filter(|p| !matches!(p, libp2p::multiaddr::Protocol::P2p(_)))
                                 .collect();
                             if let Err(e) = swarm.dial(stripped_addr.clone()) {
+                                // Dial was rejected internally (e.g. already dialing).
+                                // Treat as a failure and apply backoff to avoid retry spam.
                                 tracing::trace!(
                                     "Bootstrap re-dial {} skipped: {}",
                                     stripped_addr,
                                     e
                                 );
+                                bootstrap_backoff.entry(addr.clone()).or_insert_with(BootstrapBackoffEntry::new).on_failure();
                             }
                         }
                     }
