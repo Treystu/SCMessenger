@@ -1327,10 +1327,20 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
             scmessenger_core::transport::DiscoveryMode::Manual
         });
 
-    let swarm_handle = transport::start_swarm(
+    // Parse bootstrap node multiaddrs from config (relay also uses bootstrap nodes)
+    let relay_bootstrap: Vec<libp2p::Multiaddr> = config
+        .bootstrap_nodes
+        .iter()
+        .filter_map(|addr| addr.parse().ok())
+        .collect();
+
+    let swarm_handle = transport::start_swarm_with_config(
         network_keypair,
         Some(listen_addr),
         event_tx,
+        None,
+        relay_bootstrap,
+        None,
         None,
         false,
         Some(discovery_config),
@@ -2344,10 +2354,26 @@ async fn cmd_relay(listen_addr: String, http_port: u16, node_name: Option<String
             scmessenger_core::transport::DiscoveryMode::Manual
         });
 
-    let swarm_handle = transport::start_swarm(
+    // Parse bootstrap node multiaddrs from config
+    let bootstrap_multiaddrs: Vec<libp2p::Multiaddr> = all_bootstrap
+        .iter()
+        .filter_map(|addr| addr.parse().ok())
+        .collect();
+    if !bootstrap_multiaddrs.is_empty() {
+        println!(
+            "{} Auto-dialing {} bootstrap node(s)",
+            "📡".to_string(),
+            bootstrap_multiaddrs.len().to_string().bright_cyan()
+        );
+    }
+
+    let swarm_handle = transport::start_swarm_with_config(
         network_keypair,
         Some(listen_multiaddr),
         event_tx,
+        None,
+        bootstrap_multiaddrs,
+        None,
         None,
         true,
         Some(discovery_config),
