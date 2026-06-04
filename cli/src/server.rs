@@ -221,11 +221,19 @@ pub async fn start(
     // Bind and serve on 127.0.0.1 only (local bridge, never exposed to network).
     let bound_addr: std::net::SocketAddr = ([127, 0, 0, 1], port).into();
 
-    // Spawn the warp server (bind panics on port conflict, but cmd_start
-    // already validates availability).
-    tokio::spawn(async move { warp::serve(routes).bind(bound_addr).await });
-
-    tracing::info!("Warp HTTP+WS server listening on ws://{}", bound_addr);
+    // Bind the TCP listener first so failures are reported instead of silently
+    // panicking inside a spawned task.
+    let tcp_listener = match tokio::net::TcpListener::bind(bound_addr).await {
+        Ok(l) => l,
+        Err(e) => {
+            tracing::error!("✗ Failed to bind Warp server on {}: {}", bound_addr, e);
+            return Err(anyhow::anyhow!("Warp bind failed on {}: {}", bound_addr, e));
+        }
+    };
+    let local_addr = tcp_listener.local_addr()?;
+    // warp::serve(...).incoming(listener).run() is the correct API chain
+    tokio::spawn(warp::serve(routes).incoming(tcp_listener).run());
+    tracing::info!("Warp HTTP+WS server listening on ws://{}", local_addr);
 
     Ok((ui_tx, ui_cmd_rx))
 }

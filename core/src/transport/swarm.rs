@@ -3793,6 +3793,32 @@ pub async fn start_swarm_with_config(
                                     relay_reconnect_pending.push((peer_id, 0, web_time::Instant::now()));
                                 }
 
+                                // SELF-HEALING: Auto-redial non-relay peers that disconnect.
+                                // Use the bootstrap_backoff map to track them — the next
+                                // bootstrap reconnect tick will find them eligible and redial.
+                                // We only do this for peers that are in our bootstrap list,
+                                // since we know their addresses.
+                                if !relay_peer_addrs.contains_key(&peer_id) {
+                                    let local_peer = swarm.local_peer_id();
+                                    if peer_id != *local_peer {
+                                        for ba in &bootstrap_addrs_clone {
+                                            let matches = ba.iter().any(|proto| {
+                                                if let libp2p::multiaddr::Protocol::P2p(p) = proto { p == peer_id } else { false }
+                                            });
+                                            if matches {
+                                                tracing::info!(
+                                                    "🔄 Self-heal: queueing redial for disconnected bootstrap peer {}",
+                                                    peer_id
+                                                );
+                                                if !bootstrap_backoff.contains_key(ba) {
+                                                    bootstrap_backoff.insert(ba.clone(), BootstrapBackoffEntry::new());
+                                                }
+                                                break;
+                                            }
+                                        }
+                                    }
+                                }
+
                                 let _ = event_tx.send(SwarmEvent2::PeerDisconnected(peer_id)).await;
                             }
 
@@ -5057,6 +5083,7 @@ pub async fn start_swarm_with_config(
                                 }
                             }
                             SwarmEvent::ConnectionClosed { peer_id, .. } => {
+                                tracing::info!("❌ Disconnected from {} (WASM)", peer_id);
                                 connection_tracker.remove_connection(&peer_id);
                                 ledger_exchanged_peers.remove(&peer_id);
                                 let stale_dispatches: Vec<libp2p::request_response::OutboundRequestId> =
@@ -5078,6 +5105,26 @@ pub async fn start_swarm_with_config(
                                         );
                                     }
                                 }
+
+                                // SELF-HEALING (WASM): Queue redial for disconnected bootstrap peers
+                                {
+                                    let local_peer = swarm.local_peer_id();
+                                    if peer_id != *local_peer {
+                                        for ba in &bootstrap_addrs_clone {
+                                            let matches = ba.iter().any(|proto| {
+                                                if let libp2p::multiaddr::Protocol::P2p(p) = proto { p == peer_id } else { false }
+                                            });
+                                            if matches && !bootstrap_backoff.contains_key(ba) {
+                                                tracing::info!(
+                                                    "🔄 Self-heal: queueing redial for disconnected WASM bootstrap peer {}",
+                                                    peer_id
+                                                );
+                                                bootstrap_backoff.insert(ba.clone(), BootstrapBackoffEntry::new());
+                                            }
+                                        }
+                                    }
+                                }
+
                                 let _ = event_tx.send(SwarmEvent2::PeerDisconnected(peer_id)).await;
                             }
                             SwarmEvent::OutgoingConnectionError { peer_id, error, .. } => {
