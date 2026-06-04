@@ -117,7 +117,17 @@ impl Config {
     }
 
     /// Get the config file path
+    /// Honors SCMESSENGER_CONFIG env var (absolute path to config file).
+    /// Falls back to config_dir/config.json if not set.
     pub fn config_file() -> Result<PathBuf> {
+        if let Ok(env_path) = std::env::var("SCMESSENGER_CONFIG") {
+            let path = PathBuf::from(env_path);
+            if path.exists() {
+                return Ok(path);
+            }
+            // If env var set but file missing, still use it (will create default there)
+            return Ok(path);
+        }
         Ok(Self::config_dir()?.join("config.json"))
     }
 

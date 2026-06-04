@@ -1587,11 +1587,31 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
     let outbox_rx = outbox.clone();
 
     // Stdin handling
+    // Ctrl+C handler for graceful shutdown
+    let ctrl_c_swarm = swarm_handle.clone();
+    let ctrl_c_ledger = ledger.clone();
+    let ctrl_c_data_dir = data_dir.clone();
+
     let stdin = tokio::io::BufReader::new(tokio::io::stdin());
     let mut stdin_lines = tokio::io::AsyncBufReadExt::lines(stdin);
 
     loop {
         tokio::select! {
+                    // 0. Ctrl+C — graceful shutdown
+                    _ = tokio::signal::ctrl_c() => {
+                        println!("\nCaught Ctrl+C, shutting down gracefully...");
+                        let _ = ctrl_c_swarm.shutdown().await;
+                        {
+                            let mut l = ctrl_c_ledger.lock().await;
+                            if let Err(e) = l.save(&ctrl_c_data_dir) {
+                                tracing::warn!("Failed to save ledger on shutdown: {}", e);
+                            } else {
+                                tracing::info!("Ledger saved on shutdown");
+                            }
+                        }
+                        break;
+                    }
+
                     // 1. Swarm Events (Network -> App -> UI)
                     Some(event) = event_rx.recv() => {
                         match event {
@@ -2206,6 +2226,14 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
                         if line == "quit" || line == "exit" {
                             println!("Shutting down...");
                             let _ = swarm_handle.shutdown().await;
+                            {
+                                let mut l = ledger_rx.lock().await;
+                                if let Err(e) = l.save(&data_dir) {
+                                    tracing::warn!("Failed to save ledger on quit: {}", e);
+                                } else {
+                                    tracing::info!("Ledger saved on quit");
+                                }
+                            }
                             break;
                         }
                         // (Implement simple CLI commands if needed, mirroring old logic)

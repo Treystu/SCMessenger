@@ -376,7 +376,15 @@ impl IronCoreBehaviour {
     ) -> anyhow::Result<Self> {
         let peer_id = keypair.public().to_peer_id();
         let dcutr = dcutr::Behaviour::new(peer_id);
-        let autonat = autonat::Behaviour::new(peer_id, autonat::Config::default());
+        let autonat = autonat::Behaviour::new(peer_id, autonat::Config {
+            // Use a longer retry_interval (300s) instead of the default 90s.
+            // This reduces spurious "NoServer" probe errors when isolated
+            // (no connected peers to use as probe servers). The probe will
+            // still fire, but less aggressively — and the swarm event loop
+            // gates the log on connected_peers being non-empty.
+            retry_interval: Duration::from_secs(300),
+            ..autonat::Config::default()
+        });
         let ping = ping::Behaviour::new(
             ping::Config::new()
                 .with_interval(Duration::from_secs(15))

@@ -4,7 +4,7 @@
 // Connectivity takes priority over strict identity or topic matching.
 //
 // This creates and manages the libp2p Swarm with:
-// - TCP transport (QUIC can be added later)
+// - TCP transport + QUIC-v1 transport (native only)
 // - Noise encryption (transport-level, separate from message encryption)
 // - Yamux multiplexing
 // - Promiscuous peer acceptance (any PeerID is valid)
@@ -162,7 +162,51 @@ struct TokenBucketState {
     last_refill_ms: u64,
 }
 
+/// Per-address exponential backoff state for bootstrap re-dial.
+///
+/// When a bootstrap addr refuses a connection, the backoff interval doubles
+/// (60s → 120s → … → 960s max). On a successful connection, it resets to 60s.
 #[derive(Debug, Clone)]
+struct BootstrapBackoffEntry {
+    /// Current backoff duration in seconds.
+    backoff_secs: u64,
+    /// Instant at which the next dial attempt is permitted.
+    next_dial: web_time::Instant,
+}
+
+impl BootstrapBackoffEntry {
+    /// Create a new entry with the initial backoff (60s), eligible immediately.
+    fn new() -> Self {
+        Self {
+            backoff_secs: BOOTSTRAP_BACKOFF_INITIAL_SECS,
+            next_dial: web_time::Instant::now(),
+        }
+    }
+
+    /// Double the backoff on failure, capped at the max.
+    fn on_failure(&mut self) {
+        self.backoff_secs = (self.backoff_secs * 2).min(BOOTSTRAP_BACKOFF_MAX_SECS);
+        self.next_dial = web_time::Instant::now() + Duration::from_secs(self.backoff_secs);
+    }
+
+    /// Reset to the initial interval on success.
+    fn on_success(&mut self) {
+        self.backoff_secs = BOOTSTRAP_BACKOFF_INITIAL_SECS;
+        self.next_dial = web_time::Instant::now() + Duration::from_secs(self.backoff_secs);
+    }
+
+    /// Whether this addr is eligible for a dial attempt right now.
+    fn is_eligible(&self) -> bool {
+        web_time::Instant::now() >= self.next_dial
+    }
+}
+
+/// Initial bootstrap re-dial backoff in seconds.
+const BOOTSTRAP_BACKOFF_INITIAL_SECS: u64 = 60;
+/// Maximum bootstrap re-dial backoff in seconds (16 minutes).
+const BOOTSTRAP_BACKOFF_MAX_SECS: u64 = 960;
+
+
 struct RelayAbuseGuardrails {
     per_peer_buckets: HashMap<String, TokenBucketState>,
     recent_duplicates: HashMap<String, u64>,
@@ -1841,12 +1885,16 @@ pub async fn start_swarm_with_config(
             }
         }
 
-        // Always expose a QUIC listener for NAT traversal and future relay-circuit upgrades.
-        if let Ok(quic_addr) = "/ip4/0.0.0.0/udp/0/quic".parse::<Multiaddr>() {
+        // Expose a QUIC-v1 listener for NAT traversal and future relay-circuit upgrades.
+        // Uses quic-v1 (RFC 9001) which is the modern standard in libp2p; the legacy /quic
+        // protocol tag is not supported by libp2p ≥ 0.53 SwarmBuilder.
+        if let Ok(quic_addr) = "/ip4/0.0.0.0/udp/0/quic-v1".parse::<Multiaddr>() {
             match swarm.listen_on(quic_addr.clone()) {
-                Ok(_) => tracing::info!("✓ Bound QUIC listener {}", quic_addr),
-                Err(e) => tracing::warn!("✗ Failed to bind QUIC listener {}: {}", quic_addr, e),
+                Ok(_) => tracing::info!("✓ Bound QUIC-v1 listener {}", quic_addr),
+                Err(e) => tracing::warn!("✗ Failed to bind QUIC-v1 listener {}: {}", quic_addr, e),
             }
+        } else {
+            tracing::debug!("QUIC-v1 multiaddr parse failed — skipping QUIC listener");
         }
 
         // ADDED: Always expose a WebSocket listener for WASM bridge on 9002
@@ -2007,12 +2055,34 @@ pub async fn start_swarm_with_config(
         let mut seen_delivery_convergence_markers: HashSet<String> = HashSet::new();
 
         // Auto-dial bootstrap nodes for cross-network discovery
+        // Self-dial guard: track bootstrap addrs that resolve to our own peer
+        // so we log once at info level and then suppress the warning spam.
+        let mut self_dial_logged: HashSet<Multiaddr> = HashSet::new();
         if !bootstrap_addrs.is_empty() {
             tracing::info!(
                 "🌐 Dialing {} bootstrap node(s) for NAT traversal",
                 bootstrap_addrs.len()
             );
             for addr in &bootstrap_addrs {
+                // Self-dial check: skip bootstrap addrs whose p2p component
+                // matches our own peer ID (e.g. portproxy loopback).
+                let is_self = addr.iter().any(|proto| {
+                    if let libp2p::multiaddr::Protocol::P2p(pid) = proto {
+                        pid == local_peer_id
+                    } else {
+                        false
+                    }
+                });
+                if is_self {
+                    if !self_dial_logged.contains(addr) {
+                        tracing::info!(
+                            "  ⊘ Skipping self-dial bootstrap addr (matches local peer): {}",
+                            addr
+                        );
+                        self_dial_logged.insert(addr.clone());
+                    }
+                    continue;
+                }
                 let stripped_addr: Multiaddr = addr
                     .iter()
                     .filter(|p| !matches!(p, libp2p::multiaddr::Protocol::P2p(_)))
@@ -2032,9 +2102,12 @@ pub async fn start_swarm_with_config(
             let mut retry_interval = tokio::time::interval(Duration::from_millis(500));
 
             // Bootstrap reconnection timer — re-dial bootstrap nodes every 60s
-            // to handle network changes and maintain connectivity
+            // to handle network changes and maintain connectivity.
+            // Exponential backoff per addr: 60s → 120s → … → 960s max on failure;
+            // resets to 60s on success.
             let mut bootstrap_reconnect_interval = tokio::time::interval(Duration::from_secs(60));
             let bootstrap_addrs_clone = bootstrap_addrs;
+            let mut bootstrap_backoff: HashMap<Multiaddr, BootstrapBackoffEntry> = HashMap::new();
 
             // Cover traffic — 1 dummy message/min to mask real traffic patterns
             let mut cover_traffic_interval = tokio::time::interval(Duration::from_secs(60));
@@ -2248,12 +2321,41 @@ pub async fn start_swarm_with_config(
                     }
 
                     // Bootstrap reconnection: re-dial bootstrap nodes periodically
-                    // This handles network changes, dropped connections, and roaming
+                    // This handles network changes, dropped connections, and roaming.
+                    // Exponential backoff per addr avoids spamming logs for persistently
+                    // unreachable nodes (Connection refused, timeout, etc.).
                     _ = bootstrap_reconnect_interval.tick() => {
                         tracing::info!("📊 Relay custody audit log count: {}", relay_custody_store.audit_count());
                         if !bootstrap_addrs_clone.is_empty() {
                             let connected_peers: HashSet<PeerId> = swarm.connected_peers().cloned().collect();
                             for addr in &bootstrap_addrs_clone {
+                                // Self-dial guard: skip bootstrap addrs that resolve to
+                                // our own peer ID (e.g. portproxy loopback) to avoid
+                                // the "tried to dial local peer id" warning every 60s.
+                                let is_self = addr.iter().any(|proto| {
+                                    if let libp2p::multiaddr::Protocol::P2p(pid) = proto {
+                                        pid == local_peer_id
+                                    } else {
+                                        false
+                                    }
+                                });
+                                if is_self {
+                                    if !self_dial_logged.contains(addr) {
+                                        tracing::info!(
+                                            "  ⊘ Skipping self-dial bootstrap addr (matches local peer): {}",
+                                            addr
+                                        );
+                                        self_dial_logged.insert(addr.clone());
+                                    }
+                                    continue;
+                                }
+
+                                // Exponential backoff gate: skip this addr if it's still
+                                // within its backoff window after a recent failure.
+                                if !bootstrap_backoff.get(addr).map_or(true, |e| e.is_eligible()) {
+                                    continue;
+                                }
+
                                 // Extract peer ID from multiaddr if present to avoid
                                 // re-dialing already-connected bootstrap nodes
                                 let already_connected = addr.iter().any(|proto| {
@@ -2268,7 +2370,12 @@ pub async fn start_swarm_with_config(
                                     let stripped_addr: Multiaddr = addr.iter().filter(|p| !matches!(p, libp2p::multiaddr::Protocol::P2p(_))).collect();
                                     match swarm.dial(stripped_addr.clone()) {
                                         Ok(_) => tracing::debug!("🔄 Re-dialing bootstrap: {}", stripped_addr),
-                                        Err(e) => tracing::trace!("Bootstrap re-dial {} skipped: {}", stripped_addr, e),
+                                        Err(e) => {
+                                            // Dial was rejected internally (e.g. already dialing).
+                                            // Treat as a failure and apply backoff to avoid retry spam.
+                                            tracing::trace!("Bootstrap re-dial {} skipped: {}", stripped_addr, e);
+                                            bootstrap_backoff.entry(addr.clone()).or_insert_with(BootstrapBackoffEntry::new).on_failure();
+                                        }
                                     }
                                 }
                             }
@@ -3128,7 +3235,32 @@ pub async fn start_swarm_with_config(
                                         tracing::debug!("AutoNAT inbound probe: {:?}", result);
                                     }
                                     autonat::Event::OutboundProbe(result) => {
-                                        tracing::debug!("AutoNAT outbound probe: {:?}", result);
+                                        // Gate noisy AutoNAT logs: if we have no connected
+                                        // peers, a NoServer error is expected and inevitable —
+                                        // skip logging entirely to avoid log spam. When peers
+                                        // ARE connected, log at debug as usual for diagnostics.
+                                        match &result {
+                                            autonat::OutboundProbeEvent::Error {
+                                                peer: None,
+                                                error: autonat::OutboundProbeError::NoServer,
+                                                ..
+                                            } => {
+                                                if swarm.connected_peers().next().is_some() {
+                                                    tracing::debug!(
+                                                        "AutoNAT outbound probe: {:?}",
+                                                        result
+                                                    );
+                                                }
+                                                // No connected peers → NoServer is expected;
+                                                // silent skip, no log.
+                                            }
+                                            _ => {
+                                                tracing::debug!(
+                                                    "AutoNAT outbound probe: {:?}",
+                                                    result
+                                                );
+                                            }
+                                        }
                                     }
                                 }
                             }
@@ -3658,6 +3790,20 @@ pub async fn start_swarm_with_config(
                                 } else {
                                     tracing::debug!("⚠ Outgoing connection error: {}", error);
                                 }
+                                // Exponential backoff for bootstrap re-dial: if the failed
+                                // peer_id matches any bootstrap addr, apply backoff so we
+                                // don't keep hammering a node that refuses connections.
+                                if let Some(pid) = peer_id {
+                                    for ba in &bootstrap_addrs_clone {
+                                        let matches = ba.iter().any(|proto| {
+                                            if let libp2p::multiaddr::Protocol::P2p(p) = proto { p == pid } else { false }
+                                        });
+                                        if matches {
+                                            bootstrap_backoff.entry(ba.clone()).or_insert_with(BootstrapBackoffEntry::new).on_failure();
+                                            break;
+                                        }
+                                    }
+                                }
                             }
 
                             SwarmEvent::IncomingConnectionError { local_addr, send_back_addr, error, .. } => {
@@ -4067,12 +4213,34 @@ pub async fn start_swarm_with_config(
             .set_mode(Some(kad::Mode::Server));
 
         // Auto-dial bootstrap nodes for internet connectivity.
+        // Self-dial guard: track bootstrap addrs that resolve to our own peer
+        // so we log once at info level and then suppress the warning spam.
+        let mut self_dial_logged: HashSet<Multiaddr> = HashSet::new();
         if !bootstrap_addrs.is_empty() {
             tracing::info!(
                 "🌐 Dialing {} bootstrap node(s) from wasm",
                 bootstrap_addrs.len()
             );
             for addr in &bootstrap_addrs {
+                // Self-dial check: skip bootstrap addrs whose p2p component
+                // matches our own peer ID (e.g. portproxy loopback).
+                let is_self = addr.iter().any(|proto| {
+                    if let libp2p::multiaddr::Protocol::P2p(pid) = proto {
+                        pid == local_peer_id
+                    } else {
+                        false
+                    }
+                });
+                if is_self {
+                    if !self_dial_logged.contains(addr) {
+                        tracing::info!(
+                            "  ⊘ Skipping self-dial bootstrap addr (matches local peer): {}",
+                            addr
+                        );
+                        self_dial_logged.insert(addr.clone());
+                    }
+                    continue;
+                }
                 let stripped_addr: Multiaddr = addr
                     .iter()
                     .filter(|p| !matches!(p, libp2p::multiaddr::Protocol::P2p(_)))
@@ -4897,6 +5065,27 @@ pub async fn start_swarm_with_config(
                     let connected_peers: HashSet<PeerId> =
                         swarm.connected_peers().cloned().collect();
                     for addr in &bootstrap_addrs_clone {
+                        // Self-dial guard: skip bootstrap addrs that resolve to
+                        // our own peer ID (e.g. portproxy loopback) to avoid
+                        // the "tried to dial local peer id" warning every 60s.
+                        let is_self = addr.iter().any(|proto| {
+                            if let libp2p::multiaddr::Protocol::P2p(pid) = proto {
+                                pid == local_peer_id
+                            } else {
+                                false
+                            }
+                        });
+                        if is_self {
+                            if !self_dial_logged.contains(addr) {
+                                tracing::info!(
+                                    "  ⊘ Skipping self-dial bootstrap addr (matches local peer): {}",
+                                    addr
+                                );
+                                self_dial_logged.insert(addr.clone());
+                            }
+                            continue;
+                        }
+
                         let already_connected = addr.iter().any(|proto| {
                             if let libp2p::multiaddr::Protocol::P2p(pid) = proto {
                                 connected_peers.contains(&pid)
