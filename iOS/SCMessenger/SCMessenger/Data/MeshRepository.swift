@@ -640,7 +640,7 @@ final class MeshRepository {
                 meshService?.setBootstrapNodes(addrs: bootstrapAddrs)
                 // P0_TRANSPORT_001: Use static port 9001 for LAN connectivity with CLI daemon.
                 // This ensures both sides can dial each other using predictable addresses.
-                try? meshService?.startSwarm(listenAddr: "/ip4/0.0.0.0/tcp/9001")
+                try? meshService?.startSwarm(listenAddr: "/ip4/0.0.0.0/tcp/9001", bootstrapAddrs: [])
                 broadcastIdentityBeacon()
                 logger.info("Internet transport (Swarm) initiated with \(bootstrapAddrs.count) bootstrap nodes")
             }
@@ -797,7 +797,7 @@ final class MeshRepository {
                 // Configure bootstrap nodes for NAT traversal
                 meshService?.setBootstrapNodes(addrs: Self.defaultBootstrapNodes)
                 // P0_TRANSPORT_001: Use static port 9001 for LAN connectivity with CLI daemon.
-                try meshService?.startSwarm(listenAddr: "/ip4/0.0.0.0/tcp/9001")
+                try meshService?.startSwarm(listenAddr: "/ip4/0.0.0.0/tcp/9001", bootstrapAddrs: [])
                 broadcastIdentityBeacon()
                 logger.info("✓ Internet transport (Swarm) started manually")
             } catch {
