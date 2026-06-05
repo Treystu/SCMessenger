@@ -306,6 +306,16 @@ task buildRustAndroid {
 }
 
 // Task to generate UniFFI Kotlin bindings
+//
+// Lifecycle (the order MATTERS — see comment on each step):
+//   1. cargo build -p scmessenger-mobile (host target) → cdylib for binding gen
+//   2. STAGE the cdylib to a stable path outside the cargo target dir, so
+//      step 3's cargo invocation (which re-compiles scmessenger-core with the
+//      gen-bindings feature) cannot invalidate or move it
+//   3. cargo build -p scmessenger-core --bin gen_kotlin --features gen-bindings
+//      → produces the gen_kotlin binary at a known path
+//   4. Run the gen_kotlin binary directly with the staged cdylib path passed
+//      via env var, so its hardcoded relative-path search is bypassed
 task generateUniFFIBindings {
     description = 'Generate bindings using custom binary from core crate'
     group = 'rust'
@@ -321,9 +331,13 @@ task generateUniFFIBindings {
 
     doLast {
         def isWindows = System.getProperty('os.name').toLowerCase().contains('windows')
+        def isLinux = System.getProperty('os.name').toLowerCase().contains('linux')
+        def isMac = System.getProperty('os.name').toLowerCase().contains('mac')
 
-        // Build scmessenger-mobile cdylib for host target so library-mode binding
-        // generation can extract proc-macro metadata (IronCore, MeshService, etc.)
+        // Resolve the host cdylib name
+        def cdylibName = isWindows ? 'scmessenger_mobile.dll' : (isMac ? 'libscmessenger_mobile.dylib' : 'libscmessenger_mobile.so')
+
+        // Step 1: build the host cdylib
         exec {
             workingDir '../../'
             environment "RUSTFLAGS", ""
@@ -335,16 +349,50 @@ task generateUniFFIBindings {
             }
         }
 
+        // Step 2: stage the cdylib to a stable location outside cargo's target
+        // dir. This survives subsequent cargo invocations that re-compile
+        // scmessenger-core with different feature flags (which can otherwise
+        // delete or move the cdylib in the incremental target dir).
+        def cargoTargetDir = System.getenv('CARGO_TARGET_DIR') ?: '../../target'
+        def stagedDir = file('../../core/target/staged-cdylib')
+        stagedDir.mkdirs()
+        def cdylibSrc = new File(cargoTargetDir, "debug/${cdylibName}")
+        def cdylibStaged = new File(stagedDir, cdylibName)
+        if (cdylibSrc.exists()) {
+            ant.copy(file: cdylibSrc.absolutePath, tofile: cdylibStaged.absolutePath, overwrite: true)
+            println "Staged cdylib: ${cdylibStaged.absolutePath}"
+        } else {
+            throw new GradleException("cdylib not found at ${cdylibSrc.absolutePath} after cargo build")
+        }
+
+        // Step 3: build (do NOT run) the gen_kotlin binary
         exec {
             workingDir '../../core'
-            // Unset RUSTFLAGS to avoid Android-specific linker flags affecting the generator build
             environment "RUSTFLAGS", ""
             environment "CARGO_INCREMENTAL", "0"
-
             if (isWindows) {
-                commandLine 'cmd', '/c', 'cargo run --bin gen_kotlin --features gen-bindings'
+                commandLine 'cmd', '/c', 'cargo build --bin gen_kotlin --features gen-bindings'
             } else {
-                commandLine 'cargo', 'run', '--bin', 'gen_kotlin', '--features', 'gen-bindings'
+                commandLine 'cargo', 'build', '--bin', 'gen_kotlin', '--features', 'gen-bindings'
+            }
+        }
+
+        // Step 4: invoke the gen_kotlin binary directly with the staged cdylib
+        // path. The binary now also honours SCMESSENGER_CDYLIB_PATH env var as
+        // a primary lookup, falling back to CARGO_TARGET_DIR + relative paths.
+        def genKotlinBin = new File(cargoTargetDir, "debug/gen_kotlin${isWindows ? '.exe' : ''}")
+        if (!genKotlinBin.exists()) {
+            throw new GradleException("gen_kotlin binary not found at ${genKotlinBin.absolutePath}")
+        }
+        exec {
+            workingDir '../../core'
+            environment "CARGO_MANIFEST_DIR", file('../../core').absolutePath
+            environment "SCMESSENGER_CDYLIB_PATH", cdylibStaged.absolutePath
+            environment "CARGO_INCREMENTAL", "0"
+            if (isWindows) {
+                commandLine 'cmd', '/c', genKotlinBin.absolutePath
+            } else {
+                commandLine genKotlinBin.absolutePath
             }
         }
     }

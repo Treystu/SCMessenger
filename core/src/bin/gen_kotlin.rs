@@ -19,25 +19,78 @@ fn main() {
     // Library mode scans proc-macro metadata from the compiled cdylib and merges
     // it with the UDL declarations, producing complete bindings for proc-macro-
     // exported interfaces (IronCore, MeshService, ContactManager, etc.).
-    let library_file = [
-        "../target/x86_64-pc-windows-msvc/debug/scmessenger_mobile.dll",
-        "../target/x86_64-pc-windows-msvc/release/scmessenger_mobile.dll",
-        "../target/debug/scmessenger_mobile.dll",
-        "../target/release/scmessenger_mobile.dll",
-        "../target/debug/libscmessenger_mobile.so",
-        "../target/release/libscmessenger_mobile.so",
-        "../target/debug/libscmessenger_mobile.dylib",
-        "../target/release/libscmessenger_mobile.dylib",
-    ]
-    .iter()
-    .map(|p| manifest_path.join(p))
-    .find(|p| p.exists())
-    .unwrap_or_else(|| {
-        panic!(
-            "scmessenger_mobile cdylib not found. \
-             Please run: cargo build -p scmessenger-mobile"
-        )
-    });
+    //
+    // Search order:
+    //   1. SCMESSENGER_CDYLIB_PATH (explicit override, set by Gradle to bypass
+    //      cargo incremental target invalidation races)
+    //   2. CARGO_TARGET_DIR (if set) — both debug and release variants
+    //   3. Hardcoded relative paths covering default target dir and the
+    //      Windows MSVC triple (used by gradle's host-mode binding gen on Win)
+    //   4. Panic with actionable message
+    let mut candidate_paths: Vec<Utf8PathBuf> = Vec::new();
+
+    if let Ok(override_path) = std::env::var("SCMESSENGER_CDYLIB_PATH") {
+        candidate_paths.push(Utf8PathBuf::from(override_path));
+    }
+
+    let host_triple_dir = format!(
+        "../target/{}/debug",
+        std::env::var("HOST").unwrap_or_else(|_| "x86_64-pc-windows-msvc".into())
+    );
+    let host_triple_dir_release = format!(
+        "../target/{}/release",
+        std::env::var("HOST").unwrap_or_else(|_| "x86_64-pc-windows-msvc".into())
+    );
+
+    if let Ok(target_dir) = std::env::var("CARGO_TARGET_DIR") {
+        let target_dir = Utf8PathBuf::from(target_dir);
+        candidate_paths.push(target_dir.join("debug/libscmessenger_mobile.so"));
+        candidate_paths.push(target_dir.join("release/libscmessenger_mobile.so"));
+        candidate_paths.push(target_dir.join("debug/scmessenger_mobile.dll"));
+        candidate_paths.push(target_dir.join("release/scmessenger_mobile.dll"));
+        candidate_paths.push(target_dir.join("debug/libscmessenger_mobile.dylib"));
+        candidate_paths.push(target_dir.join("release/libscmessenger_mobile.dylib"));
+        // Android per-ABI build outputs (the cdylib compiled for android targets
+        // lives under <CARGO_TARGET_DIR>/<triple>/.../<name>.so).
+        for triple in &[
+            "aarch64-linux-android",
+            "armv7-linux-androideabi",
+            "x86_64-linux-android",
+            "i686-linux-android",
+        ] {
+            candidate_paths
+                .push(target_dir.join(format!("{triple}/debug/libscmessenger_mobile.so")));
+            candidate_paths
+                .push(target_dir.join(format!("{triple}/release/libscmessenger_mobile.so")));
+        }
+    }
+
+    candidate_paths.extend(
+        [
+            host_triple_dir.as_str(),
+            host_triple_dir_release.as_str(),
+            "../target/x86_64-pc-windows-msvc/debug/scmessenger_mobile.dll",
+            "../target/x86_64-pc-windows-msvc/release/scmessenger_mobile.dll",
+            "../target/debug/scmessenger_mobile.dll",
+            "../target/release/scmessenger_mobile.dll",
+            "../target/debug/libscmessenger_mobile.so",
+            "../target/release/libscmessenger_mobile.so",
+            "../target/debug/libscmessenger_mobile.dylib",
+            "../target/release/libscmessenger_mobile.dylib",
+        ]
+        .iter()
+        .map(|p| manifest_path.join(p)),
+    );
+
+    let library_file = candidate_paths
+        .into_iter()
+        .find(|p| p.exists())
+        .unwrap_or_else(|| {
+            panic!(
+                "scmessenger_mobile cdylib not found. \
+                 Please run: cargo build -p scmessenger-mobile"
+            )
+        });
 
     println!("Generating Kotlin bindings from library: {}", library_file);
 
