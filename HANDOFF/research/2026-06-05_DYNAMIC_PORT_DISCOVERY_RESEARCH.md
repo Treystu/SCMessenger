@@ -495,14 +495,12 @@ Expose `port_range` as a CLI/config field and implement
 - `mdns` (advertises `_p2p._udp`) — https://github.com/libp2p/rust-libp2p/tree/master/protocols/mdns
 
 ### 8.4 Inspiration
-- **Tailscale** — *How NAT traversal works* — https://tailscale.com/blog/how-nat-traversal-works/ (simultaneous hole-punch via coordinator, ~80% first-try success).
+- **Tailscale** — *How NAT traversal works* (simultaneous hole-punch via coordinator, ~80% first-try).
 - **ZeroTier** — `ztnc` control-plane, rendezvous-coordinates-peers model.
 - **WebRTC ICE** (RFC 8445) — candidate-pair + connectivity-check pattern.
-- **Bitcoin Core** — `BindListenPort` accepts port 0, writes actual port to `bitcoin.conf`; the same pattern we use in Phase 1.
+- **Bitcoin Core** — `BindListenPort` accepts port 0, writes actual port to `bitcoin.conf` (same pattern as Phase 1).
 - **Cjdns** — IPv6-address-encodes-key; reference for sovereign mesh design.
 
-### 8.5 WSL+Android+Windows+Ubuntu stack notes
+### 8.5 WSL+Android+Windows stack notes
 - **WSL2 Hyper-V NIC** (`172.26.x.x`): mDNS `224.0.0.251` does not cross the WSL↔host boundary. Workaround: `netsh interface portproxy add v4tov4 listenport=… connectport=… connectaddress=172.26.154.211`. Phase 0+1's ephemeral ports still need this proxy for inbound-from-LAN.
-- **Windows Defender Firewall** — blocks inbound TCP on public profile. CLI must add a firewall rule on first run, or document the manual step.
-- **Android battery-saver** — suspends mDNS and BLE scans. Document in user FAQ.
-- **iOS Local Network permission** — first-launch prompt required; wire into BLE/mDNS startup.
+- **Windows Defender** blocks inbound TCP on public profile (CLI must add a firewall rule on first run). **Android battery-saver** suspends mDNS/BLE scans. **iOS Local Network** first-launch prompt required.
