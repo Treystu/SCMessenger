@@ -489,10 +489,7 @@ Expose `port_range` as a CLI/config field and implement
 - **RFC 6762/6763** — mDNS / DNS-SD — https://datatracker.ietf.org/doc/html/rfc6762
 
 ### 8.3 libp2p
-- `tcp::Config` — https://docs.rs/libp2p/latest/libp2p/tcp/struct.Config.html
-- `relay::v2::client` — https://github.com/libp2p/rust-libp2p/tree/master/protocols/relay
-- `autonat` — https://github.com/libp2p/rust-libp2p/tree/master/protocols/autonat
-- `mdns` (advertises `_p2p._udp`) — https://github.com/libp2p/rust-libp2p/tree/master/protocols/mdns
+- `tcp::Config`, `relay::v2::client`, `autonat`, `mdns` (advertises `_p2p._udp`) — see docs.rs/libp2p and rust-libp2p/protocols on GitHub.
 
 ### 8.4 Inspiration
 - **Tailscale** — *How NAT traversal works* (simultaneous hole-punch via coordinator, ~80% first-try).
