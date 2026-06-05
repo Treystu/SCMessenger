@@ -388,7 +388,26 @@
     <string name="add_contact_action_scan_unavailable">QR Scanning Unavailable</string>
     <string name="add_contact_gms_requirement_note">Google Play Services is required for QR scanning. Use manual entry or paste instead.</string>
     <string name="add_contact_nearby_title">Nearby Discovery</string>
-    <string name="add_contact_nearby_description">Automatic discovery of nearby peers will be available in a future update</string>
+    <string name="add_contact_nearby_description">Find peers broadcasting on this network via BLE, Wi-Fi, mDNS, or TCP.</string>
+    <string name="add_contact_nearby_searching">Searching for nearby peers on this network…</string>
+    <string name="add_contact_nearby_empty">No nearby peers found</string>
+    <string name="add_contact_nearby_rescan">Rescan</string>
+    <string name="add_contact_nearby_rescan_content_description">Rescan for nearby peers</string>
+    <string name="add_contact_nearby_add_button">Add</string>
+    <string name="add_contact_nearby_add_content_description">Add as contact</string>
+    <string name="add_contact_nearby_offline_badge">Offline</string>
+    <string name="add_contact_nearby_no_public_key">No public key yet — wait for identity announcement</string>
+    <string name="add_contact_nearby_added_toast">Added as contact</string>
+    <string name="add_contact_nearby_added_failed">Could not add contact: missing public key</string>
+    <string name="add_contact_nearby_permission_rationale">Nearby discovery needs Bluetooth and Wi-Fi permissions. Without them, peers on this network can\'t be detected.</string>
+    <string name="add_contact_nearby_grant_permissions">Grant permissions</string>
+    <string name="add_contact_nearby_transport_ble">Bluetooth</string>
+    <string name="add_contact_nearby_transport_wifi_aware">Wi-Fi Aware</string>
+    <string name="add_contact_nearby_transport_wifi_direct">Wi-Fi Direct</string>
+    <string name="add_contact_nearby_transport_internet">Internet</string>
+    <string name="add_contact_nearby_transport_tcp_mdns">LAN (mDNS/TCP)</string>
+    <string name="add_contact_nearby_transport_unknown">Unknown transport</string>
+    <string name="add_contact_nearby_refreshed">Rescanning…</string>
 
     <string name="unknown_contact">Unknown</string>
     <string name="unknown_transport">Unknown</string>
@@ -430,4 +449,10 @@
     <string name="notification_channel_peer_events_description">Peer discovery and connection events</string>
     <string name="notification_channel_system">System</string>
     <string name="notification_channel_system_description">System notifications and updates</string>
+
+    <!-- Notification Permission Rationale (API 33+) -->
+    <string name="notification_permission_rationale_title">Enable Notifications</string>
+    <string name="notification_permission_rationale_message">SCMessenger needs notification permission to alert you about new messages, message requests, and mesh network status. You can change this later in Android Settings.</string>
+    <string name="notification_permission_request_button">Allow</string>
+    <string name="notification_permission_skip_button">Not now</string>
 </resources>

@@ -62,6 +62,25 @@ class MainActivity : ComponentActivity() {
     // ANR watchdog for UI thread monitoring
     private lateinit var anrWatchdog: AnrWatchdog
 
+    // Standalone POST_NOTIFICATIONS launcher (API 33+) with rationale dialog.
+    // We use a single-permission launcher for this one because the user
+    // rationale is specific to notifications, and a system dialog that
+    // only asks for the single permission feels less overwhelming than a
+    // batch of 6+ runtime permissions on first launch.
+    private val notificationPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) {
+            Timber.i("POST_NOTIFICATIONS granted by user")
+        } else {
+            Timber.w("POST_NOTIFICATIONS denied by user")
+        }
+    }
+
+    // Tracks whether we already showed the notification rationale dialog
+    // this session so we do not show it twice.
+    private var notificationRationaleShown = false
+
     private val requestPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
@@ -101,6 +120,12 @@ class MainActivity : ComponentActivity() {
         startAnrMonitoring()
 
         checkPermissions()
+
+        // Request POST_NOTIFICATIONS specifically (API 33+) with a
+        // dedicated rationale dialog. This is a separate, focused flow
+        // so the user understands the value before the system dialog
+        // appears. Falls through silently on older API levels.
+        requestNotificationPermissionIfNeeded()
 
         setContent {
             val themeMode by mainViewModel.themeMode.collectAsState()
@@ -247,6 +272,67 @@ class MainActivity : ComponentActivity() {
             }
             .setCancelable(false)
             .show()
+    }
+
+    /**
+     * POST_NOTIFICATIONS (API 33+) is a special-case runtime permission
+     * because the user benefit is high (message alerts) and the rationale
+     * is non-obvious to people who have not used a mesh messenger before.
+     *
+     * Flow:
+     *  - API < 33: no runtime grant needed; declared in manifest only.
+     *  - API >= 33 + already granted: nothing to do.
+     *  - API >= 33 + not granted + never asked: show rationale dialog,
+     *    then launch the system permission dialog.
+     *  - API >= 33 + not granted + previously denied: show rationale
+     *    dialog with a "Go to settings" hint (handled by checking
+     *    shouldShowRequestPermissionRationale). If the user has selected
+     *    "Don't ask again", we just skip silently — the mesh service
+     *    will still run, just without system notifications.
+     */
+    private fun requestNotificationPermissionIfNeeded() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
+
+        val alreadyGranted = ContextCompat.checkSelfPermission(
+            this,
+            Manifest.permission.POST_NOTIFICATIONS
+        ) == PackageManager.PERMISSION_GRANTED
+
+        if (alreadyGranted) {
+            Timber.d("POST_NOTIFICATIONS already granted; skipping rationale")
+            return
+        }
+
+        if (notificationRationaleShown) {
+            // The system dialog will be re-launched from the rationale
+            // dialog's positive button instead.
+            return
+        }
+        notificationRationaleShown = true
+
+        val needsRationale = shouldShowRequestPermissionRationale(
+            Manifest.permission.POST_NOTIFICATIONS
+        )
+
+        if (needsRationale) {
+            // User previously denied — explain why we need it again.
+            AlertDialog.Builder(this)
+                .setTitle(R.string.notification_permission_rationale_title)
+                .setMessage(R.string.notification_permission_rationale_message)
+                .setPositiveButton(R.string.notification_permission_request_button) { _, _ ->
+                    Timber.i("Requesting POST_NOTIFICATIONS after rationale")
+                    notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                }
+                .setNegativeButton(R.string.notification_permission_skip_button) { _, _ ->
+                    Timber.w("User declined POST_NOTIFICATIONS rationale")
+                }
+                .setCancelable(true)
+                .show()
+        } else {
+            // First time — fire the system dialog directly.
+            Timber.i("Requesting POST_NOTIFICATIONS (first time)")
+            notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
     }
 
     override fun onResume() {

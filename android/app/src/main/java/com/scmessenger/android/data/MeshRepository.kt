@@ -3395,6 +3395,18 @@ open class MeshRepository(private val context: Context) {
             return
         }
 
+        // P0_ANDROID_022: Reject relay peers — they are infrastructure, not user
+        // contacts. Mirrors the check inside `upsertFederatedContact` and
+        // `validatePeerBeforeContactCreation` so the user-facing public path
+        // is also guarded. We check both the canonical peerId and the
+        // derived peerId from the public key (relay peerIds can be encoded
+        // in either form).
+        if (isBootstrapRelayPeer(contact.peerId) ||
+            isBootstrapRelayPeerFromKey(trimmedKey)) {
+            Timber.i("addContact rejected: peer ${contact.peerId} is a bootstrap relay (infrastructure, not a user contact)")
+            return
+        }
+
         // Idempotent upsert unique constraint check: match existing contact by public key
         val existingWithKey = try {
             contactManager?.list()?.firstOrNull {

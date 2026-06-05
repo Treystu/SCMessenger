@@ -24,7 +24,8 @@ data class NearbyPeer(
     val blePeerId: String? = null,
     val libp2pPeerId: String? = null,
     val listeners: List<String> = emptyList(),
-    val isOnline: Boolean = true
+    val isOnline: Boolean = true,
+    val transport: com.scmessenger.android.service.TransportType? = null
 ) {
     val displayName: String get() = nickname?.takeIf { it.isNotBlank() } ?: peerId.take(16)
     val hasFullIdentity: Boolean get() = publicKey != null
@@ -253,7 +254,7 @@ class ContactsViewModel @Inject constructor(
                         (meshRepository.getContact(event.peerId) != null ||
                             meshRepository.getContact(event.publicKey) != null ||
                             (event.libp2pPeerId?.let { meshRepository.getContact(it) } != null))
-                        
+
                         if (alreadyContact) {
                             Timber.d("Peer already saved as contact: ${event.peerId.take(16)}, skipping nearby")
                             // Federated nickname/route hints can update in repository upsert;
@@ -261,7 +262,7 @@ class ContactsViewModel @Inject constructor(
                             loadContacts()
                             return@collect
                         }
-                        
+
                         val current = _nearbyPeers.value.toMutableList()
                         val matches = current.filter { peer -> isSameNearbyIdentity(peer, event) }
                         val existing = matches.maxByOrNull { peer ->
@@ -280,6 +281,21 @@ class ContactsViewModel @Inject constructor(
                             ?: event.peerId.takeIf { PeerIdValidator.isLibp2pPeerId(it) }
                         val resolvedBlePeerId = event.blePeerId?.trim()?.takeIf { it.isNotEmpty() }
                             ?: existing?.blePeerId?.trim()?.takeIf { it.isNotEmpty() }
+                        // Best-effort transport inference: BLE wins if a BLE id is present,
+                        // else TCP_MDNS for private LAN listeners, else INTERNET.
+                        val resolvedTransport: com.scmessenger.android.service.TransportType? =
+                            existing?.transport
+                                ?: if (resolvedBlePeerId != null) {
+                                    com.scmessenger.android.service.TransportType.BLE
+                                } else if ((event.listeners.isNotEmpty() ||
+                                    (existing?.listeners?.isNotEmpty() == true))) {
+                                    val listeners = event.listeners.ifEmpty { existing?.listeners ?: emptyList() }
+                                    if (listeners.any { addr -> isPrivateLanAddress(addr) }) {
+                                        com.scmessenger.android.service.TransportType.TCP_MDNS
+                                    } else {
+                                        com.scmessenger.android.service.TransportType.INTERNET
+                                    }
+                                } else null
                         val updated = NearbyPeer(
                             peerId = resolvedPeerId,
                             publicKey = event.publicKey,
@@ -287,7 +303,8 @@ class ContactsViewModel @Inject constructor(
                             blePeerId = resolvedBlePeerId,
                             libp2pPeerId = resolvedLibp2pPeerId,
                             listeners = if (event.listeners.isNotEmpty()) event.listeners else (existing?.listeners ?: emptyList()),
-                            isOnline = true
+                            isOnline = true,
+                            transport = resolvedTransport
                         )
                         current.add(updated)
                         _nearbyPeers.value = current
@@ -304,7 +321,7 @@ class ContactsViewModel @Inject constructor(
                                 libp2pPeerId = event.peerId.takeIf { PeerIdValidator.isLibp2pPeerId(it) }
                             ), contact)
                         } || (meshRepository.getContact(event.peerId) != null)
-                        
+
                         cancelPendingNearbyRemoval(event.peerId)
                         val current = _nearbyPeers.value.toMutableList()
                         val existingIdx = current.indexOfFirst {
@@ -312,10 +329,17 @@ class ContactsViewModel @Inject constructor(
                             it.libp2pPeerId?.let { libp -> PeerIdValidator.isSame(libp, event.peerId) } ?: false
                         }
                         if (existingIdx >= 0) {
-                            current[existingIdx] = current[existingIdx].copy(isOnline = true)
+                            // Update isOnline, and refine transport if we now have a definite value.
+                            val existing = current[existingIdx]
+                            val refinedTransport = existing.transport ?: event.transport
+                            current[existingIdx] = existing.copy(isOnline = true, transport = refinedTransport)
                             _nearbyPeers.value = current
                         } else if (!alreadyContact) {
-                            _nearbyPeers.value = current + NearbyPeer(event.peerId, isOnline = true)
+                            _nearbyPeers.value = current + NearbyPeer(
+                                peerId = event.peerId,
+                                isOnline = true,
+                                transport = event.transport
+                            )
                         }
                     }
                     is PeerEvent.Disconnected -> {
@@ -660,6 +684,77 @@ class ContactsViewModel @Inject constructor(
                 _error.value = "Failed to import: ${e.message}"
             }
         }
+    }
+
+    /**
+     * Promote a [NearbyPeer] to a saved [uniffi.api.Contact].
+     *
+     * This is the wiring used by the Nearby Discovery UI: tapping the per-row "Add"
+     * button calls this method. The peer's public key must be known (i.e. the peer
+     * has emitted an [PeerEvent.IdentityDiscovered]) before a contact can be saved.
+     *
+     * On success, [_error] is left unchanged and the underlying [meshRepository] is
+     * asked to refresh its contact list. On failure (typically: missing public key
+     * for a peer we only heard about via transport-level discovery), a user-facing
+     * message is set in [_error] and the method returns false.
+     *
+     * @param peer The peer to promote; must be present in [nearbyPeers].
+     * @return true on success, false if the peer cannot be promoted.
+     */
+    fun promoteNearbyPeerToContact(peer: NearbyPeer): Boolean {
+        if (peer.publicKey.isNullOrBlank()) {
+            _error.value = "Cannot add ${peer.displayName}: no public key yet (wait for identity announcement)"
+            Timber.w("promoteNearbyPeerToContact rejected: missing public key for ${peer.peerId}")
+            return false
+        }
+        addContact(
+            peerId = peer.peerId,
+            publicKey = peer.publicKey,
+            nickname = peer.nickname,
+            libp2pPeerId = peer.libp2pPeerId,
+            listeners = peer.listeners
+        )
+        // addContact is fire-and-forget via viewModelScope; the contact will appear
+        // after the next loadContacts() round-trip. We also drop the peer from the
+        // nearby list optimistically so the UI updates immediately.
+        _nearbyPeers.value = _nearbyPeers.value.filterNot { it.peerId == peer.peerId }
+        return true
+    }
+
+    /**
+     * Force a rediscovery of nearby peers by replaying the cached
+     * [com.scmessenger.android.data.MeshRepository.discoveredPeers] map through the
+     * event bus.
+     *
+     * Used by the "Rescan" button in the Nearby Discovery tab. Useful after the
+     * user toggles a transport back on and we want the UI to reflect cached
+     * discoveries immediately rather than waiting for the next periodic scan.
+     */
+    fun refreshDiscovery() {
+        Timber.d("refreshDiscovery requested; replaying cached discoveries")
+        meshRepository.replayDiscoveredPeerEvents()
+    }
+
+    /**
+     * Best-effort: classify a multiaddr/libp2p listener string as private LAN.
+     *
+     * Recognises IPv4 private ranges (10/8, 172.16/12, 192.168/16, 127/8) and the
+     * emulator host (`/ip4/10.0.2.2`). IPv6 link-local and unique-local addresses
+     * are also treated as LAN. Anything that includes a public IPv4 or hostname
+     * resolves to false (treated as Internet by the caller).
+     */
+    private fun isPrivateLanAddress(addr: String): Boolean {
+        val needle = addr.lowercase()
+        // Common private IPv4 patterns inside multiaddrs (e.g. /ip4/192.168.1.5/tcp/9101)
+        val privateV4Prefixes = listOf("/ip4/10.", "/ip4/172.16.", "/ip4/172.17.",
+            "/ip4/172.18.", "/ip4/172.19.", "/ip4/172.2", "/ip4/172.30.", "/ip4/172.31.",
+            "/ip4/192.168.", "/ip4/127.", "/ip4/169.254.", "/ip4/0.0.0.0",
+            // Emulator host bridge
+            "/ip4/10.0.2.2")
+        if (privateV4Prefixes.any { needle.contains(it) }) return true
+        // LAN IPv6 (link-local fe80::/10 and unique-local fc00::/7)
+        if (needle.contains("/ip6/fe80:") || needle.contains("/ip6/fc") || needle.contains("/ip6/fd")) return true
+        return false
     }
 
     override fun onCleared() {

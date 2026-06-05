@@ -1,15 +1,30 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  Android Auto Backup rules (API < 31) for SCMessenger.
+
+  All other files (SharedPreferences, settings, etc.) are backed up by
+  default. We explicitly exclude the identity key database, the message
+  history database, and the on-disk identity key directory so that a
+  restore on a new device does not silently re-introduce a stale
+  identity or old message history.
+
+  See: https://developer.android.com/guide/topics/data/autobackup
+-->
 <full-backup-content>
     <!-- Exclude raw identity key files — the encrypted backup payload in
          identity_backup_prefs.xml is safe to back up and will be included
          by default (no <include> tag, so all non-excluded data is backed up). -->
     <exclude domain="file" path="identity/" />
-    
+
+    <!-- Exclude identity key database (primary identity store). -->
+    <exclude domain="database" path="identity.db" />
+    <exclude domain="database" path="identity_keys.db" />
+
     <!-- Exclude database files to prevent stale data restoration on fresh install.
          This fixes Issue #4 where Android Auto Backup restores old message history. -->
     <exclude domain="database" path="contacts.db" />
     <exclude domain="database" path="history.db" />
-    
+
     <!-- Exclude identity backup prefs to prevent stale identity restoration.
          Users should go through onboarding on fresh install. -->
     <exclude domain="sharedpref" path="identity_backup_prefs.xml" />

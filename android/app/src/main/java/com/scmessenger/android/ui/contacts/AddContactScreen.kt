@@ -1,6 +1,15 @@
 package com.scmessenger.android.ui.contacts
 
+import android.Manifest
+import android.content.Context
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.net.Uri
+import android.os.Build
+import android.provider.Settings
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -11,9 +20,11 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.google.android.gms.common.ConnectionResult
 import com.google.android.gms.common.GoogleApiAvailability
@@ -22,11 +33,12 @@ import com.google.mlkit.common.MlKitException
 import com.google.mlkit.vision.codescanner.GmsBarcodeScannerOptions
 import com.google.mlkit.vision.codescanner.GmsBarcodeScanning
 import com.google.mlkit.vision.barcode.common.Barcode
-import androidx.compose.ui.res.stringResource
 import com.scmessenger.android.R
+import com.scmessenger.android.service.TransportType
 import com.scmessenger.android.ui.components.ErrorBanner
 import com.scmessenger.android.ui.components.IdenticonFromPeerId
 import com.scmessenger.android.ui.viewmodels.ContactsViewModel
+import com.scmessenger.android.ui.viewmodels.NearbyPeer
 import com.scmessenger.android.utils.ContactImportParseResult
 import com.scmessenger.android.utils.parseContactImportPayload
 import timber.log.Timber
@@ -166,7 +178,7 @@ fun AddContactScreen(
                         qrError = message
                     }
                 )
-                2 -> NearbyDiscoveryTab()
+                2 -> NearbyDiscoveryTab(viewModel = viewModel)
             }
         }
     }
@@ -370,8 +382,174 @@ private fun QRScanTab(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun NearbyDiscoveryTab() {
+private fun NearbyDiscoveryTab(viewModel: ContactsViewModel) {
+    val context = LocalContext.current
+    val nearbyPeers by viewModel.nearbyPeers.collectAsState()
+    val error by viewModel.error.collectAsState()
+
+    // Permission state — recompute when this composable re-enters composition
+    // (e.g. user backgrounds and returns after toggling permissions).
+    var hasPermissions by remember { mutableStateOf(isNearbyPermissionsGranted(context)) }
+    // Briefly flash a "Rescanning…" message after a Rescan click.
+    var lastRefreshAt by remember { mutableStateOf(0L) }
+    val isRefreshing = remember(lastRefreshAt) { mutableStateOf(false) }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 16.dp, vertical = 8.dp)
+    ) {
+        // Top bar: title + Rescan action
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = stringResource(R.string.add_contact_nearby_title),
+                    style = MaterialTheme.typography.titleLarge
+                )
+                Text(
+                    text = stringResource(R.string.add_contact_nearby_description),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            IconButton(
+                onClick = {
+                    viewModel.refreshDiscovery()
+                    lastRefreshAt = System.currentTimeMillis()
+                    hasPermissions = isNearbyPermissionsGranted(context)
+                }
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Refresh,
+                    contentDescription = stringResource(R.string.add_contact_nearby_rescan_content_description)
+                )
+            }
+        }
+
+        // Error banner (only show if the error isn't about a missing public key,
+        // which we surface inline on the row instead).
+        val inlineError = error?.contains("no public key", ignoreCase = true) == true
+        if (error != null && !inlineError) {
+            ErrorBanner(
+                message = error ?: "",
+                onDismiss = { viewModel.clearError() }
+            )
+            Spacer(Modifier.height(8.dp))
+        }
+
+        // Content
+        Box(modifier = Modifier.fillMaxSize()) {
+            when {
+                !hasPermissions -> PermissionRationaleCard(
+                    onGrant = {
+                        val intent = Intent(
+                            Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                            Uri.fromParts("package", context.packageName, null)
+                        ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        context.startActivity(intent)
+                    }
+                )
+                nearbyPeers.isEmpty() -> {
+                    if (isRefreshing.value) {
+                        ScanningState()
+                    } else {
+                        EmptyState(
+                            onRescan = {
+                                viewModel.refreshDiscovery()
+                                lastRefreshAt = System.currentTimeMillis()
+                            }
+                        )
+                    }
+                }
+                else -> PeerList(
+                    peers = nearbyPeers,
+                    onAdd = { peer ->
+                        val ok = viewModel.promoteNearbyPeerToContact(peer)
+                        if (ok) {
+                            Timber.i("Promoted nearby peer to contact: ${peer.peerId.take(16)}")
+                        }
+                    },
+                    hasInlineError = inlineError,
+                    inlineErrorMessage = error,
+                    onDismissInlineError = { viewModel.clearError() }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun PermissionRationaleCard(onGrant: () -> Unit) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 16.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.tertiaryContainer
+        )
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Warning,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onTertiaryContainer
+                )
+                Text(
+                    text = stringResource(R.string.add_contact_nearby_permission_rationale),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onTertiaryContainer
+                )
+            }
+            Button(onClick = onGrant) {
+                Icon(
+                    imageVector = Icons.Default.Settings,
+                    contentDescription = null
+                )
+                Spacer(Modifier.width(8.dp))
+                Text(stringResource(R.string.add_contact_nearby_grant_permissions))
+            }
+        }
+    }
+}
+
+@Composable
+private fun ScanningState() {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(32.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        CircularProgressIndicator()
+        Spacer(Modifier.height(16.dp))
+        Text(
+            text = stringResource(R.string.add_contact_nearby_searching),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
+
+@Composable
+private fun EmptyState(onRescan: () -> Unit) {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -385,20 +563,127 @@ private fun NearbyDiscoveryTab() {
             modifier = Modifier.size(64.dp),
             tint = MaterialTheme.colorScheme.primary
         )
-
-        Spacer(modifier = Modifier.height(16.dp))
-
+        Spacer(Modifier.height(16.dp))
         Text(
-            text = stringResource(R.string.add_contact_nearby_title),
-            style = MaterialTheme.typography.titleLarge
+            text = stringResource(R.string.add_contact_nearby_empty),
+            style = MaterialTheme.typography.titleMedium
         )
+        Spacer(Modifier.height(16.dp))
+        Button(onClick = onRescan) {
+            Icon(Icons.Default.Refresh, contentDescription = null)
+            Spacer(Modifier.width(8.dp))
+            Text(stringResource(R.string.add_contact_nearby_rescan))
+        }
+    }
+}
 
-        Spacer(modifier = Modifier.height(8.dp))
+@Composable
+private fun PeerList(
+    peers: List<NearbyPeer>,
+    onAdd: (NearbyPeer) -> Unit,
+    hasInlineError: Boolean,
+    inlineErrorMessage: String?,
+    onDismissInlineError: () -> Unit
+) {
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(vertical = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        if (hasInlineError && inlineErrorMessage != null) {
+            item(key = "nearby_error") {
+                ErrorBanner(message = inlineErrorMessage, onDismiss = onDismissInlineError)
+            }
+        }
+        items(peers, key = { it.peerId }) { peer ->
+            NearbyPeerCard(peer = peer, onAdd = { onAdd(peer) })
+        }
+    }
+}
 
-        Text(
-            text = stringResource(R.string.add_contact_nearby_description),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+@Composable
+private fun NearbyPeerCard(peer: NearbyPeer, onAdd: () -> Unit) {
+    Card(
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            IdenticonFromPeerId(peerId = peer.peerId, size = 48.dp)
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = peer.displayName,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Text(
+                    text = peer.peerId.take(16) + "…",
+                    style = MaterialTheme.typography.bodySmall,
+                    fontFamily = FontFamily.Monospace,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                if (!peer.isOnline) {
+                    Text(
+                        text = stringResource(R.string.add_contact_nearby_offline_badge),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
+            }
+            TransportIcon(transport = peer.transport)
+            FilledTonalIconButton(
+                onClick = onAdd,
+                enabled = peer.publicKey != null
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Add,
+                    contentDescription = stringResource(R.string.add_contact_nearby_add_content_description)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun TransportIcon(transport: TransportType?) {
+    val (icon, label) = when (transport) {
+        TransportType.BLE -> Icons.Default.Bluetooth to stringResource(R.string.add_contact_nearby_transport_ble)
+        TransportType.WIFI_AWARE -> Icons.Default.Wifi to stringResource(R.string.add_contact_nearby_transport_wifi_aware)
+        TransportType.WIFI_DIRECT -> Icons.Default.Wifi to stringResource(R.string.add_contact_nearby_transport_wifi_direct)
+        TransportType.INTERNET -> Icons.Default.Public to stringResource(R.string.add_contact_nearby_transport_internet)
+        TransportType.TCP_MDNS -> Icons.Default.Router to stringResource(R.string.add_contact_nearby_transport_tcp_mdns)
+        null -> Icons.Default.HelpOutline to stringResource(R.string.add_contact_nearby_transport_unknown)
+    }
+    Icon(
+        imageVector = icon,
+        contentDescription = label,
+        tint = MaterialTheme.colorScheme.secondary
+    )
+}
+
+/**
+ * Returns true if the runtime permissions required for nearby BLE + Wi-Fi discovery
+ * are currently granted.
+ *
+ * Android 12 (API 31)+ requires [Manifest.permission.BLUETOOTH_SCAN],
+ * [Manifest.permission.BLUETOOTH_CONNECT] and [Manifest.permission.NEARBY_WIFI_DEVICES].
+ * Older releases fall back to [Manifest.permission.ACCESS_FINE_LOCATION] for BLE scanning.
+ */
+fun isNearbyPermissionsGranted(context: Context): Boolean {
+    val required: Array<String> = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        arrayOf(
+            Manifest.permission.BLUETOOTH_SCAN,
+            Manifest.permission.BLUETOOTH_CONNECT,
+            Manifest.permission.NEARBY_WIFI_DEVICES
         )
+    } else {
+        arrayOf(Manifest.permission.ACCESS_FINE_LOCATION)
+    }
+    return required.all { perm ->
+        ContextCompat.checkSelfPermission(context, perm) == PackageManager.PERMISSION_GRANTED
     }
 }
