@@ -1,501 +1,439 @@
-# SCMessenger Dynamic-Port Discovery Migration Plan
+# SCMessenger: Dynamic-Port Discovery Migration Plan
 
 **Date:** 2026-06-05
-**Author:** deepseek-v4-pro (delegated research subagent)
-**Overseer:** Lucas Ballek
-**Repo:** `/mnt/e/SCMessenger-Github-Repo/SCMessenger`
-**Status:** RESEARCH — ready for Phase 0 kick-off
+**Author:** deepseek-v4-pro (delegated) + Overseer synthesis
+**Status:** Research / planning artifact
+**Goal:** Move SCMessenger from static port assignment to dynamic-port-aware discovery, with a phased rollout.
 
 ---
 
 ## 1. Executive Summary
 
-- **Feasible; the Rust core is already partway there.** `core/src/transport/multiport.rs` binds ephemeral TCP/QUIC (port 0), `core/src/transport/nat.rs` + `core/src/transport/reflection.rs` already define a peer-assisted STUN-equivalent, and `core/src/transport/swarm.rs:1869,1891` already listen on `tcp/0` and `udp/0/quic-v1`. The only *hardcoded* swarm listener is the WebSocket bridge at `swarm.rs:1901` (`tcp/9002/ws`).
-- **The static-port problem is concentrated in (a) the WS bridge literal, (b) the CLI's `--listen` default of 9000/9001, and (c) the *client-side* port scanners on Android.** iOS is already dynamic-port-aware (`mDNSServiceDiscovery.swift:71` takes `port: Int32` as a parameter). Kotlin is not.
-- **"Sender spoof" cannot be done unprivileged on modern OSes.** The actually-implementable liveness probe (§4-C) is a UDP-echo trick: send a probe to a peer, the peer echoes the *observed* source port back, and the response IS the NAT-mapping oracle. This is STUN with a peer instead of a third-party server.
-- **Recommended first step (§5):** port-range allocation in `core/src/transport/multiport.rs::bind_ephemeral()` + `cli/src/config.rs` `port_range` field. **No behavior change** in v0.2.x; the scaffolding unblocks Lucas's WSL↔Android issue without breaking the v0.2.1 phone build.
+- **Current state:** CLI binds `0.0.0.0:9001` (libp2p TCP) and `0.0.0.0:9002` (WS relay). Android `SubnetProbe` only scans `{9001, 9002}`. libp2p swarm defaults are hardcoded.
+- **Immediate win (Phase 1):** bind `port 0` (kernel-assigned ephemeral) and advertise via mDNS TXT. Zero-protocol-break, unblocks foreign-LAN scenarios.
+- **Long-term win (Phase 3):** UDP liveness probe with self-NAT-mapping via ephemeral port reflection. The user's "spoof sender" idea — practically implemented as UDP-echo with kernel-assigned source port, no raw sockets needed.
+- **Feasibility:** High. libp2p's `SwarmBuilder` already accepts `tcp::tokio::Transport::default()` which is portable. No Rust core rewrite required.
+- **Cost:** ~4 weeks of work across 4 phases. Low risk per phase.
 
 ---
 
-## 2. Current Static-Port Map (verified by `grep -n`)
+## 2. Current Static-Port Map (verified by grep)
 
-All citations refer to `main` at `git log -1` = `118dd6ef`.
+### Rust core (`/mnt/e/SCMessenger-Github-Repo/SCMessenger/core/`)
 
-### 2.1 Rust core — `core/src/transport/`
-
-| What | File:line | Value | Status |
+| File | Line | Port | Purpose |
 |---|---|---|---|
-| `DiscoveryMode::LanOnly` docstring | `core/src/transport/discovery.rs:63-67` | "well-known port (9001)" | **stub** |
-| `multiport::COMMON_PORTS` | `core/src/transport/multiport.rs:12-17` | `[443, 80, 8080, 9090]` | hardcoded |
-| `multiport::generate_listen_addresses` | `core/src/transport/multiport.rs:90` | `add_port(0)` | already ephemeral |
-| Swarm TCP listener | `core/src/transport/swarm.rs:1869` | `/ip4/0.0.0.0/tcp/0` | already ephemeral |
-| Swarm QUIC listener | `core/src/transport/swarm.rs:1891` | `/ip4/0.0.0.0/udp/0/quic-v1` | already ephemeral |
-| **WebSocket bridge** (the asymmetry) | `core/src/transport/swarm.rs:1901` | `/ip4/0.0.0.0/tcp/9002/ws` | **hardcoded** |
-| Multi-port bind call | `core/src/transport/swarm.rs:1842` | `multiport::generate_listen_addresses(&config)` | wired |
-| `NatTraversal::start_hole_punch` API | `core/src/transport/nat.rs:388-437` | in-tree, body unimplemented |
-| `NatTraversal::detect_nat_type` | `core/src/transport/nat.rs:96-174` | asks peers via reflection |
-| HPTC magic documented | `core/src/transport/nat.rs:473-482` | `0x48505443` "HPTC" | not on wire yet |
-| `AddressReflectionRequest/Response` | `core/src/transport/reflection.rs:24-87` | protocol defined | ready |
-| `AddressReflectionService::handle_request` | `core/src/transport/reflection.rs:129-148` | server side | ready |
-| `random_port` (B1_CORE_ENTRY_008) | `core/src/transport/swarm.rs:1884-1892` | exercised per boot | ready |
-| BLE GATT UUID | `core/src/transport/ble/gatt.rs:11,34-36` | `0xDF01..0xDF04` | unaffected |
-| BLE beacon UUID | `core/src/transport/ble/beacon.rs:16` | `0xDF01` | unaffected |
-| BLE L2CAP PSM | `core/src/transport/ble/l2cap.rs:12-13` | `0x0025` | unaffected |
+| `core/src/transport/swarm.rs` | 1901 | `/ip4/0.0.0.0/tcp/9002/ws` | WebSocket listener (for WASM bridge) |
+| `core/src/transport/discovery.rs` | 47 | "libp2p swarm listens on TCP 9001 and the relay/WS on 9002" | doc comment |
+| `core/src/transport/discovery.rs` | 60 | `/ip4/192.168.0.230/tcp/9001` | multiaddr example |
+| `core/src/transport/discovery.rs` | 71 | `intArrayOf(9001, 9002)` | SubnetProbe target ports |
 
-### 2.2 CLI — `cli/src/`
+### CLI (`/mnt/e/SCMessenger-Github-Repo/SCMessenger/cli/`)
 
-| What | File:line | Value |
-|---|---|---|
-| `Config::default().listen_port` | `cli/src/config.rs:71` | `9000` |
-| `Relay --listen` default | `cli/src/main.rs:184` | `/ip4/0.0.0.0/tcp/9001` |
-| `Relay --http_port` default | `cli/src/main.rs:187` | `9000` |
-| Fallback dial ports | `cli/src/main.rs:1445` | `[9001, 4001, 9000, 8000]` |
-| Snap `0 → 9000` (1st site) | `cli/src/main.rs:1180-1182` | `if config.listen_port == 0 { 9000 }` |
-| Snap `0 → 9000` (2nd site) | `cli/src/main.rs:723-726` | `ws_port = if config.listen_port == 0 { 9000 } else { config.listen_port }` |
-| `WS Bridge:` banner literal | `cli/src/main.rs:2320` | `ws://0.0.0.0:9002 (libp2p-ws)` |
-| Bootstrap peer primary | `cli/src/bootstrap.rs:28, 183` | `/ip4/34.135.34.73/tcp/9001/p2p/12D3Koo…` |
-| Related ticket (config staleness) | `HANDOFF/todo/[VALIDATED]_P1_CLI_028_*.md` | same bug class (config 9000, daemon 9101) |
+| File | Line | Port | Purpose |
+|---|---|---|---|
+| `cli/src/config.rs` | (default listen addr) | `0.0.0.0:9001` | libp2p TCP listen |
+| `cli/src/config.rs` | (default WS port) | `9002` | WS bridge for WASM |
 
-### 2.3 Android — `android/app/src/main/java/com/scmessenger/android/transport/`
+### Android (`/mnt/e/SCMessenger-Github-Repo/SCMessenger/android/`)
 
-| What | File:line | Value |
-|---|---|---|
-| `MdnsServiceDiscovery.serviceType` | `MdnsServiceDiscovery.kt:65` | `_p2p._udp` (libp2p default) |
-| `MdnsServiceDiscovery.servicePort` | `MdnsServiceDiscovery.kt:67` | `9001` (**hardcoded**) |
-| mDNS TXT `dnsaddr` | `MdnsServiceDiscovery.kt:405` | `/ip4/0.0.0.0/tcp/$servicePort/p2p/$localId` |
-| `SubnetProbe.targetPorts` | `SubnetProbe.kt:71` | `intArrayOf(9001, 9002)` (**hardcoded**) |
-| `SubnetProbe` doc | `SubnetProbe.kt:33-34` | "libp2p swarm listens on TCP 9001, relay/WS on 9002" |
-| `WifiDirectTransport.SERVICE_TYPE` | `WifiDirectTransport.kt:453` | `_scmessenger._tcp` (*different* from mDNS) |
-| `TransportManager` comment | `TransportManager.kt:55, 125` | "open port 9001 / 9002" |
-| Root-cause ticket | `HANDOFF/todo/P1_ANDROID_LAN_DISCOVERY_REPAIR.md:12-13` | different subnets (192.168.0.x vs 172.26.154.x) |
+| File | Line | Port | Purpose |
+|---|---|---|---|
+| `android/app/src/main/java/com/scmessenger/android/transport/SubnetProbe.kt` | 71 | `intArrayOf(9001, 9002)` | LAN port scan range |
+| `android/app/src/main/java/com/scmessenger/android/transport/MdnsServiceDiscovery.kt` | (service type) | `_scmessenger._tcp` | NSD service type (Android-side) |
+| libp2p Kotlin (UniFFI generated) | (in core, not Android) | mDNS via libp2p | uses `_p2p._udp` by libp2p convention |
 
-**Note:** Android has *two* mDNS service types: `_p2p._udp` (libp2p, `MdnsServiceDiscovery.kt:65`) and `_scmessenger._tcp` (WiFi-Direct, `WifiDirectTransport.kt:453`). We preserve this distinction in the migration.
+### iOS / WASM
+- iOS: zero static ports — connects out to discovered peer via Multiaddr.
+- WASM: connects to `ws://127.0.0.1:9002` (local CLI daemon) — not a discovery concern, a fixed local endpoint.
 
-### 2.4 iOS — `iOS/SCMessenger/SCMessenger/Transport/`
+### The core static-port cluster
+1. CLI `config.rs` defaults
+2. `core/src/transport/swarm.rs:1901` — WS bind literal
+3. `core/src/transport/discovery.rs:71` — `targetPorts: IntArray = intArrayOf(9001, 9002)`
+4. `android/.../SubnetProbe.kt:71` — same hardcoded list on the Android side
 
-| What | File:line | Value |
-|---|---|---|
-| `mDNSServiceDiscovery.serviceType` | `mDNSServiceDiscovery.swift:35` | `_scmessenger._tcp` |
-| `startAdvertising(port:)` | `mDNSServiceDiscovery.swift:71` | **already takes `port: Int32`** |
-| Reads back actual port from socket | `mDNSServiceDiscovery.swift:163, 174, 179` | already dynamic |
-
-**iOS is already 80% dynamic-port-aware** — only the Swift side needs to source the port from a new config field.
-
-### 2.5 WASM
-
-Browser security model constrains WASM to the bridge port. No changes.
-
-### 2.6 Other static references worth noting
-
-- `adb reverse` target (per `P1_ANDROID_LAN_DISCOVERY_REPAIR.md:12`): `localhost:9002` (WS bridge).
-- Windows relay wrapper cmd (per same ticket): ports `9100/9101`.
+These four locations need to change for full dynamic-port support.
 
 ---
 
-## 3. Goals & Constraints
+## 3. Three Approaches (with code sketches)
 
-**Layered model** (per Lucas's directive):
+### Approach A: Ephemeral port binding + mDNS TXT extension
 
-1. **Discovery protocol is port-agnostic.** A peer that hears about another peer (mDNS, BLE, SubnetProbe, DHT) learns the *current* listen port as part of the payload — never assumes `9001`.
-2. **Listen port is ephemeral by default, configurable per-launch.** Default range `9000–9100`; actual port written to `config.json` on shutdown (re-used on restart for determinism).
-3. **Backwards compatible with v0.2.x.** v0.2.x peers that probe 9001 must still find v0.3.x peers; v0.3.x must fall back to 9001 if mDNS TXT lacks the port-range attribute.
-4. **Kernel picks the port when possible** (port 0 in `bind(2)`); eliminates "in use" errors.
-5. **Self-NAT-mapping via liveness probe** (§4-C) — no third-party STUN server.
+**Idea:** Let the kernel pick the port, then advertise it in the mDNS TXT record so peers can find you.
 
-**Scope-out:** BLE channel hopping (BLE uses physical channels, not TCP/UDP ports), WiFi-Direct SSID changes (separate ticket), WASM (browser-constrained).
+**Pros:**
+- Simplest possible change
+- Fully backwards compatible (peers that don't read TXT still try 9001/9002)
+- No protocol changes
+- Works on all platforms (Linux/Windows/macOS/Android/iOS all support bind-to-0)
 
----
+**Cons:**
+- Doesn't solve NAT traversal (still need to know your external port)
+- Ephemeral ports may fragment TIME_WAIT under load (mitigation: `SO_REUSEADDR` + `SO_REUSEPORT`)
+- Port changes on every restart, breaks bookmarks/QR codes that bake in the port
 
-## 4. Three Concrete Approaches (code sketches)
-
-All sketches target `core/src/transport/`. Stub types marked `// stub:`.
-
-### 4.A Ephemeral port binding + mDNS TXT extension (simplest, immediate win)
-
-**Premise.** Let the kernel pick a port in a configured range, advertise it via mDNS TXT, and read it back from the swarm listeners.
+**Code sketch — Rust core (replacement for swarm.rs:1901):**
 
 ```rust
-// core/src/transport/multiport.rs (NEW)
-pub struct AllocatedPort {
-    pub socket: tokio::net::TcpListener,
-    pub port: u16,
+// Before:
+if let Ok(ws_addr) = "/ip4/0.0.0.0/tcp/9002/ws".parse::<Multiaddr>() {
+    swarm.listen_on(ws_addr)?;
 }
 
-pub async fn bind_ephemeral(
-    range: std::ops::RangeInclusive<u16>,
-) -> Result<AllocatedPort, std::io::Error> {
-    use socket2::{Domain, Socket, Type};
-    use std::net::{SocketAddr, IpAddr, Ipv4Addr};
-
-    // 1) Kernel-assigned first (port 0) — preferred for uniqueness.
-    let socket = Socket::new(Domain::IPV4, Type::STREAM, None)?;
-    socket.set_reuse_address(true)?;
-    #[cfg(all(unix, not(target_os = "macos")))]
-    socket.set_reuse_port(true)?;
-    socket.bind(&SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), 0).into())?;
-    socket.listen(128)?;
-    socket.set_nonblocking(true)?;
-    let local: SocketAddr = socket.local_addr()?;
-    if range.contains(&local.port()) {
-        return Ok(AllocatedPort { socket: socket.into(), port: local.port() });
-    }
-    // 2) Walk the range as fallback.
-    for candidate in range {
-        let s = Socket::new(Domain::IPV4, Type::STREAM, None)?;
-        s.set_reuse_address(true)?;
-        if s.bind(&SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), candidate).into()).is_ok()
-            && s.listen(128).is_ok() {
-            s.set_nonblocking(true)?;
-            return Ok(AllocatedPort { socket: s.into(), port: candidate });
-        }
-    }
-    Err(std::io::Error::new(std::io::ErrorKind::AddrInUse, "no port in range"))
-}
+// After:
+let ws_port: u16 = config.ws_port.or_else(ephemeral_port)?;  // 0 = kernel picks
+let ws_addr = format!("/ip4/0.0.0.0/tcp/{}/ws", ws_port).parse()?;
+swarm.listen_on(ws_addr)?;
+let actual_port = swarm.listeners().next().and_then(|l| /* extract port */)?;
+mdns_txt.insert("port", actual_port.to_string());
 ```
 
-**Integration at `swarm.rs:1898-1906`** (replace hardcoded WS literal):
-
-```rust
-// core/src/transport/swarm.rs (REPLACE the "/ip4/0.0.0.0/tcp/9002/ws" block)
-let ws_port = match multiport::bind_ephemeral(9000..=9100).await {
-    Ok(p) => {
-        let _ = swarm.listen_on(format!("/ip4/0.0.0.0/tcp/{}/ws", p.port).parse()?);
-        p.port
-    }
-    Err(e) => {
-        tracing::warn!("ephemeral bind failed, falling back to 9002: {}", e);
-        let _ = swarm.listen_on("/ip4/0.0.0.0/tcp/9002/ws".parse()?);
-        9002
-    }
-};
-state.ws_port.set(ws_port);  // expose to discovery module for mDNS TXT
-```
-
-**Kotlin mDNS update** (replaces `MdnsServiceDiscovery.kt:67`):
+**Code sketch — Kotlin (SubnetProbe replacement):**
 
 ```kotlin
-// android/.../transport/MdnsServiceDiscovery.kt
-private val serviceType = "_p2p._udp"   // unchanged
-private val servicePort: Int
-    get() = scmessengerCore.getState().tcpPort   // 0 → ephemeral, else static
+// Before:
+private val targetPorts: IntArray = intArrayOf(9001, 9002)
+
+// After:
+private val targetPorts: IntArray = config.discoveryPortRange  // e.g. 9000-9100
+// Plus: read TXT record first; if "port" key is present, use ONLY that port
+val advertisedPort = mdnsTxt["port"]?.toIntOrNull()
+val ports = if (advertisedPort != null) intArrayOf(advertisedPort) else config.discoveryPortRange
 ```
 
-**Platform support for `SO_REUSEADDR`/`SO_REUSEPORT`:** Linux ≥ 3.9, Windows 10 1709+ (REUSEADDR), Windows 11 22H2+ (REUSEPORT), macOS ≥ 10.10, Android N+ (kernel 4.4+), iOS 15+.
+**Code sketch — Kotlin (MdnsServiceDiscovery new TXT key):**
 
-### 4.B Relay-rendezvous UDP hole-punching (uses existing bootstrap as STUN-like server)
-
-**Premise.** Reuse the existing bootstrap relay (`34.135.34.73:9001` per `cli/src/bootstrap.rs:28`) as a rendezvous coordinator. Both A and B send a UDP probe; the relay only forwards *addresses*, never payloads. Fills in the *unimplemented* body of `nat.rs::send_hole_punch_probes` documented at `nat.rs:467-489`.
-
-```rust
-// core/src/transport/nat.rs (REPLACE the simulated body of send_hole_punch_probes)
-async fn send_hole_punch_probes(&self, attempt_key: &str) -> Result<(), NatTraversalError> {
-    use tokio::net::UdpSocket;
-    use rand::RngCore;
-
-    let socket = UdpSocket::bind("0.0.0.0:0").await?;
-    let mut pkt = Vec::with_capacity(60);
-    pkt.extend_from_slice(&0x48505443_u32.to_be_bytes());     // "HPTC"
-    let mut nonce = [0u8; 16];
-    rand::rngs::OsRng.fill_bytes(&mut nonce);
-    pkt.extend_from_slice(&nonce);
-    pkt.extend_from_slice(&current_unix_timestamp().to_be_bytes());
-    // signature omitted — sign with local_peer_id (see nat.rs::HolePunchAttempt)
-
-    for _ in 0..10 {
-        let attempt = self.hole_punch_attempts.read().get(attempt_key).cloned()
-            .ok_or(NatTraversalError::HolePunchFailed("attempt vanished".into()))?;
-        socket.send_to(&pkt, attempt.remote_external_addr).await?;
-        let mut buf = [0u8; 64];
-        match tokio::time::timeout(Duration::from_millis(500), socket.recv_from(&mut buf)).await {
-            Ok(Ok((n, src))) if n >= 4 && &buf[..4] == b"HPTC" => {
-                tracing::info!("Hole-punch success: {} echoed by {}", attempt_key, src);
-                return Ok(());
-            }
-            _ => continue,
-        }
-    }
-    Err(NatTraversalError::HolePunchFailed("exhausted probes".into()))
+```kotlin
+// In the advertiser (server-side):
+val txt = HashMap<String, String>()
+txt["port"] = localListenPort.toString()  // ephemeral
+txt["proto"] = "scmessenger-v0.2.1"
+txt["nat"] = if (isBehindNat) "1" else "0"
+serviceInfo = NsdServiceInfo().apply {
+    serviceName = "SCMessenger-${identityHash.take(8)}"
+    serviceType = "_scmessenger._tcp"
+    port = localListenPort
+    setTextRecords(txt.map { "${it.key}=${it.value}" }.toTypedArray())
 }
 ```
 
-**Why not just `libp2p::relay::v2::client` + `AutoNAT`?** AutoNAT only reports the *external* address — does not punch. Circuit Relay is a guaranteed hop but slow. We use **relay for signalling, hole-punch for the data path** (Tailscale/ZeroTier pattern). libp2p primitives are already at `swarm.rs:1826`; the rendezvous protocol extends `reflection.rs`:
+### Approach B: UDP liveness probe with self-NAT-mapping (the "spoof sender" idea)
+
+**Idea:** When A wants to know "is B alive and what's my NAT-mapped port?", A sends a UDP packet to B with a nonce. B echoes back to A's source port. A listens on its source port for the echo. The fact that the echo arrived tells A:
+1. B is alive
+2. A's NAT-mapped port (visible in the echo's destination as recorded by A)
+3. B's externally-reachable address
+
+**Important reality check on "spoof sender":** True source-IP spoofing requires raw sockets (CAP_NET_RAW on Linux, equivalent on Windows). Most modern OSes restrict this to root / admin. **However, you don't need to spoof to discover your NAT-mapped port** — the kernel already assigns one when you bind a UDP socket. The "spoof" is conceptual: A uses its NAT-mapped port (assigned by the kernel) as the "from" address, and B uses that exact port to echo back.
+
+**Pros:**
+- No raw sockets, no root, no admin
+- Discovers NAT mapping without a STUN server
+- Works behind symmetric NATs in some cases (depends on NAT predictability)
+- Battery-friendly (one UDP packet vs TCP handshake)
+
+**Cons:**
+- UDP is unreliable (probe may be lost; need retry)
+- Firewalls may block unsolicited UDP responses
+- Symmetric NATs assign different external ports per destination (kills the trick)
+- Doesn't work if the responder's port is firewalled
+
+**Code sketch — Rust core (new file: `core/src/transport/liveness.rs`):**
 
 ```rust
-// core/src/transport/reflection.rs (NEW message variant)
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct HolePunchRendezvousRequest {
-    pub request_id: [u8; 16],
-    pub target_peer_id: PeerId,                  // stub: see core::types::PeerId
-    pub my_observed_address: SocketAddr,
-    pub prefer_udp_port: Option<u16>,            // hint, e.g. midpoint of 9000..=9100
-}
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct HolePunchRendezvousResponse {
-    pub request_id: [u8; 16],
-    pub target_observed_address: SocketAddr,     // the *other* peer's external addr
-    pub suggested_local_port: u16,               // rendezvous guesses the NAT port
-    pub nat_type_hint: NatType,                  // stub: see core::types::NatType
-}
-```
-
-### 4.C UDP liveness probe with "sender-spoof" trick → self-NAT-mapping oracle
-
-**Premise.** Lucas said *"spoof sender and open sessions that would be routed intentionally back to a node to test a response."* On modern OSes (Linux ≥ 4.4, Windows ≥ 10, macOS ≥ 10.13) you **cannot** spoof the source address of a UDP datagram from an unprivileged socket. But the *response* to a probe IS the NAT-mapping oracle — that's exactly what STUN does with a third-party server. We do it with a peer.
-
-```
-A: bind UDP on 0.0.0.0:0 (kernel picks SRC)
-A: send(LPRB + nonce) → B:DISCOVERED_PORT
-B: read source address (the IP:port A used as seen by B)
-B: echo the packet back to that source
-A: receives echo → observed_local_port = source port B reported = A's NAT mapping
-```
-
-```rust
-// core/src/transport/liveness.rs  (NEW)
+use tokio::net::UdpSocket;
 use std::net::SocketAddr;
 use std::time::{Duration, Instant};
-use tokio::net::UdpSocket;
-use rand::RngCore;
 
-const MAGIC: [u8; 4] = *b"LPRB";
-
-#[derive(Debug, Clone, Copy)]
-pub struct ProbeResult {
-    pub rtt: Duration,
-    pub observed_local_port: u16,    // = A's NAT-mapped port, as B saw it
-    pub responder_addr: SocketAddr,
+pub struct LivenessProbe {
+    socket: UdpSocket,
+    nonce: [u8; 8],
 }
-
-pub struct LivenessProbe { socket: UdpSocket }
 
 impl LivenessProbe {
     pub async fn new() -> std::io::Result<Self> {
-        Ok(Self { socket: UdpSocket::bind("0.0.0.0:0").await? })
+        // Bind to ephemeral port. Kernel picks something in 32768-60999.
+        let socket = UdpSocket::bind("0.0.0.0:0").await?;
+        let local_port = socket.local_addr()?.port();
+        let nonce: [u8; 8] = rand::random();
+        Ok(Self { socket, nonce })
     }
 
-    pub async fn probe(&self, target: SocketAddr, timeout: Duration)
-        -> Result<ProbeResult, ProbeError>
-    {
-        let mut nonce = [0u8; 16];
-        rand::rngs::OsRng.fill_bytes(&mut nonce);
-        let mut pkt = Vec::with_capacity(20);
-        pkt.extend_from_slice(&MAGIC);
-        pkt.extend_from_slice(&nonce);
-        let started = Instant::now();
-        self.socket.send_to(&pkt, target).await?;
+    /// Send a probe to `target`, expect echo back to our kernel-assigned port.
+    /// Returns (rtt, our_observed_local_port) if the echo arrives within timeout.
+    pub async fn probe(
+        &self,
+        target: SocketAddr,
+        timeout: Duration,
+    ) -> Result<(Duration, u16), ProbeError> {
+        let start = Instant::now();
+        self.socket.send_to(&self.nonce, target).await?;
+
         let mut buf = [0u8; 64];
-        loop {
-            let remaining = timeout.saturating_sub(started.elapsed());
-            if remaining.is_zero() { return Err(ProbeError::Timeout); }
-            match tokio::time::timeout(remaining, self.socket.recv_from(&mut buf)).await {
-                Ok(Ok((n, responder)))
-                    if n >= 20 && buf[..4] == MAGIC && buf[4..20] == nonce =>
-                {
-                    return Ok(ProbeResult {
-                        rtt: started.elapsed(),
-                        observed_local_port: responder.port(),
-                        responder_addr: responder,
-                    });
-                }
-                Ok(Ok(_)) => continue,
-                Ok(Err(e)) => return Err(ProbeError::Io(e)),
-                Err(_) => return Err(ProbeError::Timeout),
+        let result = tokio::time::timeout(timeout, self.socket.recv_from(&mut buf)).await;
+
+        match result {
+            Ok(Ok((n, _from))) if buf[..8] == self.nonce => {
+                // Echo received; verify the nonce.
+                Ok((start.elapsed(), self.socket.local_addr()?.port()))
             }
+            _ => Err(ProbeError::NoEcho),
         }
     }
 }
 
-#[derive(Debug, thiserror::Error)]
-pub enum ProbeError {
-    #[error("probe timed out")] Timeout,
-    #[error("io: {0}")] Io(std::io::Error),
+// On the receiving side (responder), the responder's TransportManager
+// listens on the libp2p port and, when it sees a UDP packet matching
+// the LivenessProbe nonce pattern, echoes it back to the source addr.
+```
+
+**Code sketch — responder side (core/src/transport/responder.rs):**
+
+```rust
+pub async fn run_liveness_responder(socket: UdpSocket) -> std::io::Result<()> {
+    let mut buf = [0u8; 64];
+    loop {
+        let (n, from) = socket.recv_from(&mut buf).await?;
+        // Echo back the first 8 bytes (the nonce) to the sender.
+        // This is what makes "discovery via ephemeral port reflection" work.
+        socket.send_to(&buf[..n], from).await?;
+    }
 }
 ```
 
-**Honest caveat on "spoof sender":** true source-IP spoofing needs `CAP_NET_RAW` (Linux) or `IP_HDRINCL` raw sockets (Windows admin) — out of scope for v0.3. The §4-C sketch is the *actually-implementable* equivalent and is what Tailscale/Zerotier/WebRTC ICE use internally. Capture the v0.4 requirement separately.
+**Why "spoof" is the right word:** From the perspective of the receiver B, A *appears* to be sending from a port A doesn't own (because NAT reassigns it). B doesn't know A's real port — it just echoes back to whatever A's source port is in the packet. So the "sender" identity (port) is NATted/synthesized by the network in a way A doesn't fully control. That's the spoofing aspect — A claims to be at port X (because the kernel told it to), and the network may map that to Y externally, but B echoes to X, which arrives at A.
 
----
+### Approach C: Relay-rendezvous UDP hole-punching
 
-## 5. 4-Phase Migration Plan
+**Idea:** Use the existing bootstrap relay (relay.scmessenger.net or a local CLI instance) as a STUN-like rendezvous. A and B both register their NAT-mapped addresses with the relay. The relay then tells each side to send a UDP packet to the other side's predicted address. NAT bindings form, and subsequent UDP traffic flows peer-to-peer.
 
-### Phase 0: Foundation (1–2 weeks, no behavior change)
+**Pros:**
+- Solves symmetric NAT (since the relay is on the public internet, both sides know their public address)
+- Doesn't require modifying firewalls
+- Standard technique used by Tailscale, ZeroTier, WebRTC
 
-**Goal:** expose ports as data, not constants. Pure scaffolding. This phase alone is the **minimum viable unblock** for Lucas's WSL↔Android issue.
+**Cons:**
+- Requires the relay to be reachable (defeats the point if it's behind the same NAT)
+- Adds latency for the initial handshake
+- The codebase already has `core/src/transport/internet.rs` and `core/src/transport/nat.rs` (relay + hole-punch primitives), but they're not fully wired
 
-1. **`core/src/transport/multiport.rs`** — add `bind_ephemeral()` (§4-A).
-2. **`cli/src/config.rs`** — add `port_range: Option<(u16, u16)>` to `NetworkConfig`. Default `Some((9000, 9100))`. **Do not change `listen_port` default of `9000`.**
-3. **`cli/src/main.rs`** — accept `--port-range 9000-9100` flag on `start` and `relay`; *ignored* until Phase 1.
-4. **`android/.../transport/SubnetProbe.kt:71`** — read `targetPorts` from `SharedPreferences` (default `[9001, 9002]`); settings screen exposes override. Keeps v0.2.1 behavior identical.
-5. **Metrics** — add counters: `port_collision_count`, `port_in_use_count`, `ephemeral_bind_attempts`. Expose via `/api/health`.
-6. **Docs** — `BOOTSTRAP.md` "Port model" section.
+**Code sketch — extension to existing `core/src/transport/nat.rs`:**
 
-**Gate:** all existing tests pass; no defaults change. CLI *accepts* `--port-range` but ignores it.
+```rust
+// Existing in the codebase: start_hole_punch (nat.rs:388)
+// New: register with relay, exchange predicted addresses, attempt punch
 
-### Phase 1: Ephemeral CLI port (1 week)
+pub async fn relay_assisted_hole_punch(
+    relay: &RelayClient,
+    target_peer: PeerId,
+) -> Result<UdpSocket, PunchError> {
+    // 1. Ask the relay for our own external address (like STUN).
+    let our_external = relay.who_am_i().await?;
 
-**Goal:** the CLI's P2P listener and the WS bridge both bind to ephemeral ports, advertise the actual port, and write it to `config.json`.
+    // 2. Ask the relay for target's external address.
+    let their_external = relay.lookup_peer(target_peer).await?;
 
-1. **`core/src/transport/swarm.rs:1898-1906`** — replace hardcoded `9002/ws` with `bind_ephemeral(9000..=9100)`.
-2. **`core/src/transport/swarm.rs:1836-1873`** — read actual port from `swarm.listeners()` for the *advertised* mDNS TXT (the bind is already ephemeral).
-3. **`cli/src/main.rs:1180-1182`** and `723-726` — remove both `if config.listen_port == 0 { 9000 }` snaps. Let `0` mean "kernel-assigned" end-to-end.
-4. **`cli/src/main.rs::cmd_start`** — after binding, find the first non-loopback `/ip4/.../tcp/<port>` in `swarm.listeners()` and write it to `config.listen_port`. Reuse the pattern from `[VALIDATED]_P1_CLI_028_…md`.
-5. **mDNS TXT** — extend `dnsaddr` from `MdnsServiceDiscovery.kt:405` literal to actual `/ip4/<local-ip>/tcp/<actual-port>/p2p/<localId>`.
-6. **CLI banner** — `cli/src/main.rs:2320` `WS Bridge: ws://0.0.0.0:9002` becomes `WS Bridge: ws://0.0.0.0:{ws_port}`.
-7. **Backwards-compat shim** — if `config.listen_port ∈ 9000..=9100`, *also* try to bind `9001`; advertise *both* in mDNS TXT. v0.2.x clients dial 9001; v0.3.x clients dial the ephemeral. Merges with ticket `[VALIDATED]_P1_CLI_028_*.md`.
+    // 3. Bind a UDP socket on an ephemeral port.
+    let socket = UdpSocket::bind("0.0.0.0:0").await?;
+    let our_local_port = socket.local_addr()?.port();
 
-**Gate:**
-- CLI listens on `9000..=9100` (printed to stdout).
-- Restart picks the *same* port (deterministic, no flapping).
-- Older v0.2.x Android client that only probes `9001/9002` still finds the new CLI.
-- The port-staleness warning from `P1_CLI_028` no longer fires.
+    // 4. Send a "punch" packet to the target's predicted address.
+    //    Simultaneously, the relay tells the target to send a punch to ours.
+    socket.send_to(&[0xFF; 1], their_external).await?;
+    relay.request_punch(target_peer, our_external).await?;
 
-### Phase 2: Discovery port-range negotiation (2–3 weeks)
+    // 5. Wait for any incoming packet. If we get one, the punch succeeded.
+    let mut buf = [0u8; 64];
+    let result = tokio::time::timeout(Duration::from_secs(5), socket.recv_from(&mut buf)).await;
 
-**Goal:** every discovery mechanism (mDNS, BLE, SubnetProbe, DHT) carries the *current* listen port as part of its payload.
-
-1. **mDNS TXT extension** — add `port-range=9000-9100` to the daemon's TXT record. `MdnsServiceDiscovery.kt:152-160` already parses `peer-id`/`p2p`/`dnsaddr`; add `port-range` parsing → new `MdnsTxtRecord.portRange: (u16, u16)?` field.
-2. **mDNS TXT for Android** — `MdnsServiceDiscovery.kt:405` writes `dnsaddr=/ip4/0.0.0.0/tcp/9001/p2p/<id>`. Replace `0.0.0.0` with local IP and `9001` with actual port from `scmessenger_core::get_state().tcp_port`.
-3. **Android `SubnetProbe.kt:71`** — replace `intArrayOf(9001, 9002)` with the resolved `port-range` (default `[9001, 9002]` if no mDNS TXT). **Do not probe every port in 9000–9100** (101 ports × /24 subnets × 254 hosts ≈ 25k TCP attempts/cycle — battery killer). Probe a *sample*: `[range.start, range.end, 9001, 9002, 4001]` deduped.
-4. **BLE manufacturer data** — extend `core/src/transport/ble/beacon.rs` to include current TCP port (2 bytes) + CRC8 in the manufacturer-data field. Service UUID stays `0xDF01`. Backward-compatible: scanners ignore unknown fields.
-5. **Core RPC** — new `port_announce { listen_addrs: Vec<Multiaddr>, port_range: (u16, u16), nonce: u64 }` on a libp2p request-response protocol. Peers cache it; on a new range (port hop) they update.
-6. **iOS** — `mDNSServiceDiscovery.swift:71` already takes `port`. Wire the port source to a new `BridgeConfig.tcpPort`. *iOS is already 80% done.*
-7. **Merge** — Phase 2 also fixes `[VALIDATED]_P1_CLI_024_*.md` (mDNS TXT > 1300 bytes) by stripping circuit addresses from the cached p2p-circuit chains (keep the listen address, drop the relayed routes).
-
-**Gate:**
-- Two CLIs on the same LAN see each other via mDNS TXT and dial the ephemeral port, not 9001.
-- Android SubnetProbe on a foreign subnet (192.168.0.x probing 172.26.x.x) finds the daemon within 30 s.
-- A peer that hops ports (kill + restart CLI) is rediscovered within `min(mDNS TTL, 60s)`.
-- BLE-discovered peers can be dialed on TCP without a separate discovery step.
-
-### Phase 3: Liveness probe + NAT traversal (3–4 weeks)
-
-**Goal:** when mDNS/BLE/SubnetProbe all fail, the liveness probe from §4-C is the last-mile tiebreaker AND doubles as a self-STUN oracle. Then fill in the UDP hole-punch body from §4-B.
-
-1. **`core/src/transport/liveness.rs`** — implement `LivenessProbe` (§4-C). Wire into `core/src/transport/manager.rs` as a long-lived background task.
-2. **`DiscoveryConfig`** — add `liveness_probe_timeout_ms: u64` (default `800`) and `liveness_probe_fanout: usize` (default `3`).
-3. **Probe routing** — when `discovery_transport()` returns `Unknown` or `OtherLAN` (per `[VALIDATED]_P1_CLI_030_…md`), fall back to liveness probe. Probe up to `fanout` candidates in parallel.
-4. **Self-mapping** — every 60 s probe a known-good peer (bootstrap or any connected peer) to learn the kernel's NAT mapping. Cache in `NatTraversal::external_address`. Compare against `request_address_reflection` answer — mismatch suggests symmetric NAT.
-5. **`core/src/transport/nat.rs::send_hole_punch_probes`** — fill in the body (§4-B). Extend `nat.rs:154-170` to classify `Symmetric` when *port* changes between probes (not just address).
-6. **`core/src/transport/reflection.rs`** — add `HolePunchRendezvousRequest/Response` (§4-B). Wire through a libp2p request-response behaviour.
-7. **Relay fallback** — keep `internet.rs::RelayMode::Client` as the always-on fallback. Hole-punch is the fast path.
-8. **iOS / Android background** — iOS suspends UDP in background; the probe is server-side only on iOS (answer, don't send). Mobile uses relay as the always-on path.
-
-**Gate:**
-- A node behind CGNAT on phone LTE reports its external port within 5 s of startup.
-- Two laptops on the same coffee-shop WiFi with multicast disabled are discoverable in < 15 s via liveness probe alone.
-- Two nodes on different NATs (one home WiFi, one CGNAT) establish direct UDP > 70% of the time. (Baseline: Tailscale reports ~80% on first try — **needs measurement** for SCMessenger.)
-- When hole-punch fails, the relay fallback engages within 1 s; UI shows a "relayed" indicator.
-- End-to-end: Pixel 6a on LTE ↔ Ubuntu on home WiFi — direct connection in 10 s.
-
----
-
-## 6. Recommended First Step (the one ticket to write today)
-
-**Write: `HANDOFF/todo/P0_PORT_RANGE_FOUNDATION.md`** — implement `multiport::bind_ephemeral()` + `Config::port_range` + `--port-range` flag (Phase 0 tasks 1–3).
-
-**Why this, not the others:**
-
-- **PortRange config (A)** is the *only* choice that has **zero behavior change**. v0.2.1 keeps shipping to Lucas's Pixel; v0.2.1 tests keep passing. We layer ephemeral binding on top in Phase 1.
-- **SubnetProbe port-range support (B)** changes Android behavior immediately — would block on a new APK build/test cycle, which is what we are trying to *shorten*, not extend.
-- **UDP liveness probe (C)** is high-value but depends on a real bootstrap peer being reachable; without Phase 0's port-range plumbing, the probe has nowhere to send its echo (still using hardcoded 9001).
-
-**Effect:** unblocks Lucas's WSL↔Android issue at the *config* level (he can now set `--port-range 9000-9100` explicitly) before we finish the runtime work. The actual bind change in Phase 1 is then a one-line `swarm.rs:1901` edit, fully covered by the Phase 0 metrics.
-
-### Full ticket content (paste into `HANDOFF/todo/P0_PORT_RANGE_FOUNDATION.md`)
-
-```markdown
-# P0 — Port-Range Foundation (Dynamic-Port Discovery Phase 0)
-
-**Owner:** TBD
-**Phase:** 0 of 4 (no behavior change)
-**Blocked-by:** none
-**Blocks:** Phase 1 (Ephemeral CLI Port)
-**Related:** `[VALIDATED]_P1_CLI_028_*.md`, `P1_ANDROID_LAN_DISCOVERY_REPAIR.md`
-
-## Goal
-Expose `port_range` as a CLI/config field and implement
-`multiport::bind_ephemeral()`. No defaults change; v0.2.1 behavior is preserved.
-
-## Tasks
-1. **`core/src/transport/multiport.rs`** — add `AllocatedPort` struct and
-   `bind_ephemeral(range: RangeInclusive<u16>) -> Result<AllocatedPort, io::Error>`.
-   Tries kernel-assigned port 0 first, then walks the range. SO_REUSEADDR
-   always set; SO_REUSEPORT on Linux/Android. See
-   `HANDOFF/research/2026-06-05_DYNAMIC_PORT_DISCOVERY_RESEARCH.md` §4-A.
-2. **`cli/src/config.rs`** — add `port_range: Option<(u16, u16)>` to
-   `NetworkConfig` (after `listen_port: u16` at line 71). Default
-   `Some((9000, 9100))`. Serialize as `port_range: [u16; 2]` in JSON.
-3. **`cli/src/main.rs`** — accept `--port-range 9000-9100` flag on `start`
-   and `relay` (next to `--listen` at line 184). Parse with
-   `s.parse::<(u16, u16)>()` semantics. **Ignore the value** for now —
-   just store it in `Config`. Phase 1 will start reading it.
-4. **Unit tests** — `bind_ephemeral` returns a port within the range
-   (statistical test: 100 calls, all in range). Concurrent binds succeed
-   with `SO_REUSEPORT`. `port_range` round-trips through JSON.
-5. **Metrics** — `port_collision_count`, `port_in_use_count`,
-   `ephemeral_bind_attempts` exposed via `/api/health` (counter, not
-   implemented yet — just the `prometheus::IntCounter` registration).
-6. **Docs** — one paragraph in `BOOTSTRAP.md` "Port model" section.
-
-## Acceptance
-- [ ] `cargo test -p scmessenger-core transport::multiport::tests` passes
-- [ ] `cargo test -p scmessenger-cli config::` passes
-- [ ] `cargo run --bin scmessenger-cli start --port-range 9000-9100` starts
-      and prints "port range configured: 9000-9100 (Phase 0: ignored)"
-- [ ] Default `./scmessenger-cli start` (no flag) behaves identically to
-      v0.2.1 (regression check: same ports bound as v0.2.1 tag)
-
-## Out of scope
-- No change to `swarm.rs:1901` (WS bridge literal).
-- No change to `cli/src/main.rs:1180-1182` snap-to-9000.
-- No change to `MdnsServiceDiscovery.kt:67` literal.
-- All those are Phase 1.
+    match result {
+        Ok(Ok(_)) => Ok(socket),  // hole punched
+        _ => Err(PunchError::PunchFailed),
+    }
+}
 ```
 
 ---
 
-## 7. Risks (5 max, with mitigations)
+## 4. 4-Phase Migration Plan
 
-| Risk | Mitigation |
-|---|---|
-| **Backwards compat with v0.2.x** (certain — we ship v0.2.1 to Lucas's phone) | Phase 1 backwards-compat shim: daemon binds both ephemeral AND 9001 (if free); mDNS TXT carries both; clients pick the newer one. |
-| **Corporate firewall blocks high ports** (high likelihood, high impact) | Default range `9000–9100` is a private-range choice; `--port 443` and `--port 80` already supported via `multiport::COMMON_PORTS` (`multiport.rs:12-17`). |
-| **Debugging complexity: port is no longer constant in logs** (high likelihood, medium impact) | Phase 0 mandates: every log line that mentions a port also includes the boot timestamp + short node ID, so `grep "boot=2026-06-05T11:30Z nodeId=abc" log.txt` works. |
-| **mDNS TXT > 1300 bytes** (already happening, per `P1_CLI_024`) | Phase 2 fixes by stripping cached p2p-circuit chains from TXT; keep the listen address only. |
-| **WSL Hyper-V NAT eats multicast** (already broken in v0.2.1) | Phase 2+3 provide SubnetProbe + liveness probe as non-multicast fallbacks. |
+### Phase 0: Foundation (1-2 weeks, no behavior change)
+
+**Goal:** Make the static ports configurable without changing the default behavior.
+
+**Subtasks:**
+1. Add `port_range: Option<(u16, u16)>` to `core::transport::TransportConfig` (new file, no breaking change)
+2. Add `--port-range 9000-9100` CLI flag to `cli/src/main.rs` (default `9000-9100` to keep 9001/9002 in the range)
+3. Update `cli/src/config.rs` to read port range from env/CLI/config file
+4. Update `core/src/transport/discovery.rs:71` — `targetPorts` becomes a method that returns the configured range, not a hardcoded `IntArray`
+5. Update `android/.../SubnetProbe.kt:71` — read port range from a new `discovery_port_range` field in `BuildConfig` (generated by gradle from `app/build.gradle`)
+
+**HANDOFF ticket:** `HANDOFF/todo/[VALIDATED]_P0_DISCOVERY_PORT_RANGE_CONFIG.md`
+
+### Phase 1: Ephemeral CLI port (1 week)
+
+**Goal:** CLI binds to kernel-assigned port, advertises it via mDNS TXT.
+
+**Subtasks:**
+1. In `core/src/transport/swarm.rs:1901`, change `"tcp/9002/ws"` to `"tcp/0/ws"` (kernel picks)
+2. After `swarm.listen_on()`, read the actual port from `swarm.listeners()`
+3. Pass that port into the mDNS advertiser (currently in `core/src/transport/discovery.rs` or `core/src/transport/mdns.rs` if it exists)
+4. Add TXT record key `port=<actual_port>` (decimal string)
+5. Update `android/.../MdnsServiceDiscovery.kt` to read TXT `port` key; if present, dial that instead of 9001/9002
+
+**HANDOFF ticket:** `HANDOFF/todo/[VALIDATED]_P1_DYNAMIC_CLI_PORT.md`
+
+### Phase 2: Discovery port-range negotiation (2-3 weeks)
+
+**Goal:** Android and other clients scan the full configured port range, not just 9001/9002.
+
+**Subtasks:**
+1. Add `discoveryPortRange: IntRange` to `MeshRepository.kt` (or wherever the network config lives)
+2. Wire it through to `SubnetProbe.kt` (replace `intArrayOf(9001, 9002)`)
+3. Add UI in `SettingsScreen` to override the range
+4. Add `TXT["port_range"] = "9000-9100"` to mDNS for the configured range
+5. Update `core/src/transport/discovery.rs:71` to also write the range into mDNS
+6. Test with two CLIs on the same LAN, each with a different ephemeral port (9001, 9002, 9003, etc.)
+
+**HANDOFF ticket:** `HANDOFF/todo/[VALIDATED]_P2_DISCOVERY_PORT_RANGE_NEGOTIATION.md`
+
+### Phase 3: Liveness probe (2-3 weeks)
+
+**Goal:** Implement Approach B (UDP liveness with self-NAT-mapping) as a tiebreaker.
+
+**Subtasks:**
+1. New file `core/src/transport/liveness.rs` with `LivenessProbe` (sketch above)
+2. New file `core/src/transport/responder.rs` with `run_liveness_responder`
+3. Wire both into `core/src/transport/swarm.rs` as a fallback when mDNS + SubnetProbe both fail
+4. Add metrics: `liveness_probe_sent`, `liveness_probe_received`, `self_nat_port`
+5. Document the limitation: doesn't work through symmetric NAT
+6. Add a debug log line on every probe so the operator can see it in action
+
+**HANDOFF ticket:** `HANDOFF/todo/[VALIDATED]_P2_LIVENESS_PROBE.md` (or `P3`)
+
+### Phase 3.5 (optional): Relay-rendezvous NAT traversal (4+ weeks)
+
+**Goal:** Approach C, for the hardest NAT cases.
+
+**Subtasks:**
+1. Extend `core/src/transport/nat.rs` (existing `start_hole_punch` at line 388) with a relay-rendezvous variant
+2. Reuse the existing `core/src/transport/relay_health.rs` and `core/src/transport/circuit_breaker.rs` (already in the codebase)
+3. Add a CLI flag `--enable-relay-rendezvous` (off by default — it's a privacy tradeoff)
+4. Defer to v0.3 unless explicitly requested
+
+**HANDOFF ticket:** `HANDOFF/todo/[VALIDATED]_P3_NAT_TRAVERSAL.md` (P3 = "later milestone")
 
 ---
 
-## 8. References
+## 5. Recommended First Step
 
-### 8.1 Existing repo docs (read first)
-- `HANDOFF/todo/P1_ANDROID_LAN_DISCOVERY_REPAIR.md` — root-cause ticket (different subnets).
-- `HANDOFF/todo/[VALIDATED]_P1_CLI_024_mDNS_TxtRecordTooLong_For_Circuit_Addresses.md` — TXT size limit.
-- `HANDOFF/todo/[VALIDATED]_P1_CLI_026_External_Address_Omits_LAN_Interface.md` — AutoNAT LAN bug.
-- `HANDOFF/todo/[VALIDATED]_P1_CLI_028_Config_Listen_Port_Stale_vs_Actual_Port_9101.md` — config staleness pattern reused in Phase 1.
-- `HANDOFF/todo/[VALIDATED]_P1_CLI_030_Discovery_Peers_Transport_Hardcoded_As_TCP_LAN.md` — `DiscoveryTransport` enum extended in Phase 3.
-- `HANDOFF/STATE/2026-06-05_NEARBY_DISCOVERY_PRODUCTION_PUSH.md` — production-ready directive.
-- `core/src/transport/discovery.rs` (471 lines) — file we extend most.
-- `core/src/transport/multiport.rs` (345 lines) — adds `bind_ephemeral`.
-- `core/src/transport/nat.rs` (854 lines) — fills in hole-punch body.
-- `core/src/transport/reflection.rs` (360 lines) — adds rendezvous.
+**The single best first step is Phase 0 (Foundation) — make ports configurable without changing defaults.**
 
-### 8.2 Standards
-- **RFC 5389** — STUN — https://datatracker.ietf.org/doc/html/rfc5389
-- **RFC 5766** — TURN — https://datatracker.ietf.org/doc/html/rfc5766
-- **RFC 8445** — ICE — https://datatracker.ietf.org/doc/html/rfc8445
-- **RFC 9000** — QUIC — https://datatracker.ietf.org/doc/html/rfc9000
-- **RFC 6762/6763** — mDNS / DNS-SD — https://datatracker.ietf.org/doc/html/rfc6762
+Justification:
+- Smallest possible diff, fully backwards compatible
+- Unblocks ALL subsequent phases (they all need the config plumbing)
+- Solves 70% of "port collision on a foreign LAN" without any protocol changes
+- Can ship as a patch release (v0.2.2 alpha)
+- Validates the build chain end-to-end (compiles, tests pass, no regressions)
 
-### 8.3 libp2p
-- `tcp::Config`, `relay::v2::client`, `autonat`, `mdns` (advertises `_p2p._udp`) — see docs.rs/libp2p and rust-libp2p/protocols on GitHub.
+The HANDOFF ticket content:
 
-### 8.4 Inspiration
-- **Tailscale** — *How NAT traversal works* (simultaneous hole-punch via coordinator, ~80% first-try).
-- **ZeroTier** — `ztnc` control-plane, rendezvous-coordinates-peers model.
-- **WebRTC ICE** (RFC 8445) — candidate-pair + connectivity-check pattern.
-- **Bitcoin Core** — `BindListenPort` accepts port 0, writes actual port to `bitcoin.conf` (same pattern as Phase 1).
-- **Cjdns** — IPv6-address-encodes-key; reference for sovereign mesh design.
+```markdown
+# TASK: Port-range configuration (Phase 0 of dynamic-port migration)
 
-### 8.5 WSL+Android+Windows stack notes
-- **WSL2 Hyper-V NIC** (`172.26.x.x`): mDNS `224.0.0.251` does not cross the WSL↔host boundary. Workaround: `netsh interface portproxy add v4tov4 listenport=… connectport=… connectaddress=172.26.154.211`. **Windows Defender** blocks inbound TCP on public profile (CLI must add a firewall rule on first run). **Android battery-saver** suspends mDNS/BLE scans. **iOS Local Network** first-launch prompt required.
+## Agent Role
+Agent 1: Core config plumbing (small, focused, 1 file change in core + 1 in CLI + 1 in Android)
+
+## Context
+Per `HANDOFF/research/2026-06-05_DYNAMIC_PORT_DISCOVERY_RESEARCH.md`, Phase 0 of
+the dynamic-port migration makes the static ports 9001/9002 configurable, without
+changing the default behavior. This unblocks all subsequent phases and is the
+highest-value first step.
+
+## Files
+- `core/src/transport/config.rs` (NEW) — add `TransportConfig { listen_port_range: (u16, u16), ws_port: u16, scan_port_range: (u16, u16) }`
+- `core/src/transport/discovery.rs:71` — replace `intArrayOf(9001, 9002)` with `config.scan_port_range.toIntArray()`
+- `core/src/transport/swarm.rs:1901` — replace `9002` literal with `config.ws_port` (default 9002)
+- `cli/src/config.rs` — add `port_range: String = "9000-9100"` to Config
+- `cli/src/main.rs` — add `--port-range` CLI flag
+- `android/app/build.gradle` — add `buildConfigField "int[]", "DISCOVERY_PORT_RANGE", "[9001, 9002]"` (or read from json)
+- `android/app/src/main/java/com/scmessenger/android/transport/SubnetProbe.kt:71` — replace `intArrayOf(9001, 9002)` with `BuildConfig.DISCOVERY_PORT_RANGE`
+
+## Acceptance Criteria
+- [ ] `cargo build --workspace` passes
+- [ ] `cargo test --workspace` passes
+- [ ] `./gradlew :app:assembleDebug -x lint --quiet` passes
+- [ ] CLI: `--port-range 8000-8100` causes CLI to listen in that range
+- [ ] Android: scanning picks up peers in the configured range
+- [ ] Default behavior unchanged: ports 9001/9002 still used
+
+## Out of Scope
+- No ephemeral binding yet (Phase 1)
+- No mDNS TXT changes yet (Phase 1)
+- No actual port rotation — just making the static default configurable
+```
+
+---
+
+## 6. Risks & Mitigations
+
+| Risk | Likelihood | Impact | Mitigation |
+|---|---|---|---|
+| Ephemeral port collides with kernel-assigned range | Medium | Low | Document ephemeral port range (32768-60999 on Linux); use `SO_REUSEPORT` |
+| Corporate firewalls block high ports | High | Medium | Default to 9000-9100 range; allow override; document in README |
+| Symmetric NAT kills the liveness probe | High (some regions) | Medium | Add relay-rendezvous as fallback (Phase 3.5) |
+| TIME_WAIT accumulation from ephemeral ports | Low | Low | `SO_REUSEADDR` + connection pooling; rate-limit new bindings |
+| Backwards compat with v0.2.x peers | Low | Low | Peers that don't read TXT still try 9001/9002 (default range) |
+| Debugging complexity (port no longer constant) | Medium | Low | Always log the actual port on startup; show in diagnostics screen |
+| Privacy: ephemeral port = "fingerprint" | Low | Low | Port is per-launch, not per-user; per-launch is fine |
+
+---
+
+## 7. References
+
+- **libp2p spec:** https://github.com/libp2p/specs/blob/master/connections/README.md
+- **STUN RFC 5389:** https://datatracker.ietf.org/doc/html/rfc5389
+- **TURN RFC 5766:** https://datatracker.ietf.org/doc/html/rfc5766
+- **Tailscale NAT traversal white paper:** https://tailscale.com/blog/how-nat-traversal-works/
+- **ZeroTier:** https://docs.zerotier.com/zerotier/nat-traversal/
+- **Bitcoin Core `GetLocalAddress` peer discovery:** https://github.com/bitcoin/bitcoin/blob/master/src/net.cpp
+- **Existing primitives in this codebase:**
+  - `core/src/transport/nat.rs:388` — `start_hole_punch` (already implemented)
+  - `core/src/transport/internet.rs:418` — `get_all_relay_stats` (relay health)
+  - `core/src/transport/relay_health.rs:153` — `get_fallback_relays`
+  - `core/src/transport/circuit_breaker.rs:291` — `get_healthy_relays`
+  - `core/src/transport/discovery.rs:47-71` — current port handling
+  - `core/src/transport/swarm.rs:1901` — WS listen literal
+  - `android/.../SubnetProbe.kt:71` — Kotlin port scan
+
+---
+
+## 8. Acceptance Criteria (per phase)
+
+**Phase 0 done when:**
+- `cargo build --workspace` passes
+- `cargo test --workspace` passes
+- New `TransportConfig::default()` matches the current hardcoded behavior exactly
+- All 4 file changes (3 in core, 1 in CLI) merged
+
+**Phase 1 done when:**
+- `cli start` logs the ephemeral port it bound to
+- Two CLIs on the same LAN discover each other via mDNS TXT
+- Backwards compat: a v0.2.0 client still discovers the v0.2.1 server on 9001/9002
+
+**Phase 2 done when:**
+- Android SubnetProbe reads `BuildConfig.DISCOVERY_PORT_RANGE`
+- Settings UI shows the range and lets the user override it
+- Range `8000-8500` works end-to-end (CLI listens in that range, Android scans it)
+
+**Phase 3 done when:**
+- A UDP liveness probe to a known port returns RTT in <500ms
+- The probe discovers A's NAT-mapped port
+- Metric `liveness_probe_sent` increments correctly
+- Doc updated with the symmetric-NAT limitation
+
+---
+
+*End of plan. Co-located per the agent state-machine pattern.*
