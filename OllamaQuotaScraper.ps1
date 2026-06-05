@@ -6,7 +6,7 @@ param(
 
 $cookie = 'aid=bf5f45fb-b5ea-4b39-b61c-abacf9cc81bb; __Secure-session=YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0-IFgyNTUxOSA0US9BSEh5THJwNkVaa1VsZVJWTDR3UU9SRGZETVZqVFh5ZHRWUWl6b2g0CmV0dCs4aEFUT1BYWlNLQ0JqVmpoM05BeVRXQkd2WmY5enlBUXlwUWY5UXMKLS0tIHB6VTBTWnZvbTBybnp6ZitWaGNEQmIwblV3emxMSm9oR3NlbTBJTnloY0kKS1pTxMYSRROiBR0gy6DrFvbsPrd-Rmq5RLLRDLu_Z5HwZmAl2KDqJDLJtTL_8RyyTZoa_MfRR42Yz3GJoUoFhotn2vOyVUlwe9pFG-DoRF8V5cpu8EGZutiAasa1TnjdA1hXiNAK0cuXjVq1xZe6mUatp1wx2Q0uS5BJyyy0a5HGR1OZh-N8fkoH8A=='
 
-$baseDir     = "C:\Users\SCM_Dev\Documents\scmessenger"
+$baseDir     = "E:\SCMessenger-Github-Repo\SCMessenger"
 $jsonFile    = "$baseDir\.claude\quota_state.json"
 $debugFile   = "$baseDir\tmp\debug_ollama.html"
 
