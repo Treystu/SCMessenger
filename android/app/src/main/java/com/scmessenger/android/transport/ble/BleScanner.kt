@@ -552,6 +552,17 @@ class BleScanner(
     }
 
     /**
+     * Pause transport: stop scanning and clear the peer cache so a subsequent
+     * resume re-discovers everything (no stale entries from a previous session).
+     * Called when the app is backgrounded or the user explicitly pauses BLE.
+     */
+    suspend fun onTransportPause() = scanLock.withLock {
+        Timber.i("BLE transport paused — stopping scan and clearing peer cache")
+        stopScanning()
+        clearPeerCache()
+    }
+
+    /**
      * Clear the peer cache to allow re-discovery.
      */
     fun clearPeerCache() {
