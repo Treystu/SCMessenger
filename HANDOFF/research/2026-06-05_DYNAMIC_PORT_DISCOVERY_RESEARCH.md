@@ -502,5 +502,4 @@ Expose `port_range` as a CLI/config field and implement
 - **Cjdns** — IPv6-address-encodes-key; reference for sovereign mesh design.
 
 ### 8.5 WSL+Android+Windows stack notes
-- **WSL2 Hyper-V NIC** (`172.26.x.x`): mDNS `224.0.0.251` does not cross the WSL↔host boundary. Workaround: `netsh interface portproxy add v4tov4 listenport=… connectport=… connectaddress=172.26.154.211`. Phase 0+1's ephemeral ports still need this proxy for inbound-from-LAN.
-- **Windows Defender** blocks inbound TCP on public profile (CLI must add a firewall rule on first run). **Android battery-saver** suspends mDNS/BLE scans. **iOS Local Network** first-launch prompt required.
+- **WSL2 Hyper-V NIC** (`172.26.x.x`): mDNS `224.0.0.251` does not cross the WSL↔host boundary. Workaround: `netsh interface portproxy add v4tov4 listenport=… connectport=… connectaddress=172.26.154.211`. **Windows Defender** blocks inbound TCP on public profile (CLI must add a firewall rule on first run). **Android battery-saver** suspends mDNS/BLE scans. **iOS Local Network** first-launch prompt required.
