@@ -98,11 +98,11 @@ Browser security model constrains WASM to the bridge port. No changes.
 
 1. **Discovery protocol is port-agnostic.** A peer that hears about another peer (mDNS, BLE, SubnetProbe, DHT) learns the *current* listen port as part of the payload — never assumes `9001`.
 2. **Listen port is ephemeral by default, configurable per-launch.** Default range `9000–9100`; actual port written to `config.json` on shutdown (re-used on restart for determinism).
-3. **Backwards compatible with v0.2.x.** A v0.2.x peer that probes 9001 must still find a v0.3.x peer; v0.3.x must still fall back to 9001 if the mDNS TXT is missing the port-range attribute.
+3. **Backwards compatible with v0.2.x.** v0.2.x peers that probe 9001 must still find v0.3.x peers; v0.3.x must fall back to 9001 if mDNS TXT lacks the port-range attribute.
 4. **Kernel picks the port when possible** (port 0 in `bind(2)`); eliminates "in use" errors.
 5. **Self-NAT-mapping via liveness probe** (§4-C) — no third-party STUN server.
 
-**Scope-out:** BLE channel hopping (BLE uses physical channels, not TCP/UDP ports), WiFi-Direct SSID changes (separate ticket), WASM (constrained by browser).
+**Scope-out:** BLE channel hopping (BLE uses physical channels, not TCP/UDP ports), WiFi-Direct SSID changes (separate ticket), WASM (browser-constrained).
 
 ---
 
