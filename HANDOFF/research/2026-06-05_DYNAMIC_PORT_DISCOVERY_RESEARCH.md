@@ -14,7 +14,6 @@
 - **The static-port problem is concentrated in (a) the WS bridge literal, (b) the CLI's `--listen` default of 9000/9001, and (c) the *client-side* port scanners on Android.** iOS is already dynamic-port-aware (`mDNSServiceDiscovery.swift:71` takes `port: Int32` as a parameter). Kotlin is not.
 - **"Sender spoof" cannot be done unprivileged on modern OSes.** The actually-implementable liveness probe (§4-C) is a UDP-echo trick: send a probe to a peer, the peer echoes the *observed* source port back, and the response IS the NAT-mapping oracle. This is STUN with a peer instead of a third-party server.
 - **Recommended first step (§5):** port-range allocation in `core/src/transport/multiport.rs::bind_ephemeral()` + `cli/src/config.rs` `port_range` field. **No behavior change** in v0.2.x; the scaffolding unblocks Lucas's WSL↔Android issue without breaking the v0.2.1 phone build.
-- **Total cost:** ~6–10 weeks across 4 phases. Phases 0–1 (~3 weeks) deliver the immediate WSL↔Android↔Windows unblock Lucas is blocked on right now.
 
 ---
 
