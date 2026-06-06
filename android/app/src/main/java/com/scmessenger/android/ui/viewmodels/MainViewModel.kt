@@ -173,6 +173,16 @@ class MainViewModel @Inject constructor(
      * after identity creation (service may still be starting when first checked).
      */
     fun createIdentity(nickname: String, salt: ByteArray? = null) {
+        // P0_ANDROID_024: Re-entrancy guard. Compose recomposition or a fast double-tap on
+        // the "Generate Identity" button can fire createIdentity() multiple times before
+        // _isCreatingIdentity flips to true (it is set inside the coroutine, not before
+        // launch). Without this guard, two coroutines race through initializeIdentity,
+        // setNickname, and the _isReady / preferences writes, which can leave the
+        // onboarding flow in a broken intermediate state.
+        if (_isCreatingIdentity.value) {
+            Timber.d("createIdentity: ignored re-entrant call (already in progress)")
+            return
+        }
         viewModelScope.launch(Dispatchers.IO) {
             _isCreatingIdentity.value = true
             _identityError.value = null

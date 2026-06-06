@@ -536,7 +536,12 @@ class BleScanner(
 
     @SuppressLint("MissingPermission")
     suspend fun stopScanning() = scanLock.withLock {
-        if (currentScanSession == null || !isScanning) return@withLock
+        if (currentScanSession == null || !isScanning) {
+            // P1_ANDROID_022: even if we are not actively scanning, ensure any stale
+            // peer cache is purged so re-discovery can occur on the next session.
+            clearPeerCache()
+            return@withLock
+        }
 
         stopDutyCycle()
         fallbackPromotionRunnable?.let { handler.removeCallbacks(it) }
@@ -549,6 +554,10 @@ class BleScanner(
         } catch (e: Exception) {
             Timber.e(e, "Failed to stop BLE scan")
         }
+        // P1_ANDROID_022: drop stale cache entries on every stop so subsequent
+        // discovery sessions don't suppress already-seen peers (gratuitous
+        // persistence between runs). See P1_ANDROID_022_BLE_Stale_Cache_Cleanup.
+        clearPeerCache()
     }
 
     /**

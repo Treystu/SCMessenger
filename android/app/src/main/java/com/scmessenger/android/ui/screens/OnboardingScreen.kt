@@ -249,12 +249,15 @@ fun OnboardingScreen(
 
                     Spacer(modifier = Modifier.height(12.dp))
 
+                    // P0_ANDROID_024 defense-in-depth: also gate the Button on isCreatingIdentity
+                    // so a fast double-tap or recomposition cannot re-enter createIdentity().
+                    // The ViewModel also has a re-entrancy guard; this is belt-and-suspenders.
                     Button(
                         onClick = {
                             viewModel.clearIdentityError()
                             viewModel.createIdentity(nickname, touchEntropySalt)
                         },
-                        enabled = nickname.trim().isNotEmpty() && touchEntropySalt != null,
+                        enabled = nickname.trim().isNotEmpty() && touchEntropySalt != null && !isCreating,
                         modifier = Modifier.fillMaxWidth().height(56.dp)
                     ) {
                         Text("Generate Identity")
