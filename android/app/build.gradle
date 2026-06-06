@@ -131,11 +131,11 @@ android {
     
     packaging {
         resources {
-            excludes += '/META-INF/{AL2.0,LGPL2.1}'
-            excludes += 'META-INF/LICENSE.md'
-            excludes += 'META-INF/LICENSE-notice.md'
-            excludes += 'META-INF/LICENSE.txt'
-            excludes += 'META-INF/NOTICE.txt'
+            excludes.add('/META-INF/{AL2.0,LGPL2.1}')
+            excludes.add('META-INF/LICENSE.md')
+            excludes.add('META-INF/LICENSE-notice.md')
+            excludes.add('META-INF/LICENSE.txt')
+            excludes.add('META-INF/NOTICE.txt')
         }
         
         // JNI libraries from Rust
@@ -210,7 +210,7 @@ dependencies {
     // Testing
     testImplementation 'junit:junit:4.13.2'
     testImplementation 'org.jetbrains.kotlinx:kotlinx-coroutines-test:1.7.3'
-    testImplementation 'io.mockk:mockk-android:1.13.8'
+    testImplementation 'io.mockk:mockk:1.13.8'
     androidTestImplementation 'io.mockk:mockk-android:1.13.8'
     testImplementation 'androidx.arch.core:core-testing:2.2.0'
     
@@ -228,14 +228,12 @@ dependencies {
 // The GNU toolchain requires dlltool.exe on PATH, which lives in MSYS2.
 def msysUcrtBin = file('C:/msys64/ucrt64/bin').exists() ? 'C:/msys64/ucrt64/bin' : null
 
-// Read SDK path from local.properties for cargo-ndk
+// Read properties from local.properties if it exists
 def localPropsFile = rootProject.file("local.properties")
 def localProps = new Properties()
 if (localPropsFile.exists()) {
     localProps.load(new FileInputStream(localPropsFile))
 }
-def sdkDir = localProps.getProperty('sdk.dir') ?: System.getenv('ANDROID_HOME') ?: System.getenv('ANDROID_SDK_ROOT')
-def ndkDir = sdkDir ? "${sdkDir}/ndk/${android.ndkVersion}" : null
 
 // Task to build Rust library for all Android architectures
 task buildRustAndroid {
@@ -248,6 +246,24 @@ task buildRustAndroid {
     outputs.dir('../../core/target/android-libs')
 
     doLast {
+        // Resolve SDK and NDK paths. We prefer AGP's resolved paths but allow local.properties overrides.
+        def sdkDir = localProps.getProperty('sdk.dir') ?: android.sdkDirectory.absolutePath
+        def ndkDir = localProps.getProperty('ndk.dir') ?: android.ndkDirectory?.absolutePath
+
+        // Fallback for NDK if not automatically resolved by AGP
+        if (ndkDir == null || !file(ndkDir).exists()) {
+            ndkDir = "${sdkDir}/ndk/${android.ndkVersion}"
+        }
+
+        // Validate NDK exists before proceeding to avoid cryptic "cargo-ndk" errors
+        if (!file(ndkDir).exists()) {
+            throw new GradleException(
+                "Could not find NDK version ${android.ndkVersion} at $ndkDir.\n" +
+                "Please install it via Android Studio (Tools > SDK Manager > SDK Tools > Show Package Details > NDK (Side by side)) " +
+                "or via command line: sdkmanager \"ndk;${android.ndkVersion}\""
+            )
+        }
+
         def isWindows = System.getProperty('os.name').toLowerCase().contains('windows')
         def taskNames = project.gradle.startParameter.taskNames.join(",")
         def isRelease = taskNames.contains("Release") || taskNames.contains("Bundle")
@@ -256,6 +272,7 @@ task buildRustAndroid {
         def rustDir = isRelease ? "release" : "debug"
 
         println "Starting buildRustAndroid task (Profile: ${rustDir})..."
+        println "Using NDK: $ndkDir"
 
         // Targets to build
         def targets = ['aarch64-linux-android', 'armv7-linux-androideabi', 'x86_64-linux-android']
@@ -270,18 +287,21 @@ task buildRustAndroid {
             println "Building for $target ($abi)..."
 
             exec {
-                workingDir '../../'
+                workingDir project.file('../../')
                 // Ensure 16KB page alignment for Android 15+ compatibility
                 environment "RUSTFLAGS", "-C link-arg=-Wl,-z,max-page-size=16384"
                 environment "CARGO_INCREMENTAL", "0"
 
-                if (sdkDir) environment "ANDROID_HOME", sdkDir
-                if (ndkDir && file(ndkDir).exists()) environment "ANDROID_NDK_HOME", ndkDir
+                // Explicitly pass SDK and NDK paths to cargo-ndk
+                environment "ANDROID_HOME", sdkDir
+                environment "ANDROID_NDK_HOME", ndkDir
+
                 if (isWindows && msysUcrtBin) {
                     environment "PATH", "${msysUcrtBin};${System.getenv('PATH')}"
                 }
 
                 if (isWindows) {
+                    // cargo-ndk uses ANDROID_NDK_HOME env var
                     commandLine 'cmd', '/c', "cargo ndk -t $target build ${rustProfile.join(' ')} -p scmessenger-mobile"
                 } else {
                     def cmd = ['cargo', 'ndk', '-t', target, 'build']
@@ -339,7 +359,7 @@ task generateUniFFIBindings {
 
         // Step 1: build the host cdylib
         exec {
-            workingDir '../../'
+            workingDir project.file('../../')
             environment "RUSTFLAGS", ""
             environment "CARGO_INCREMENTAL", "0"
             if (isWindows) {
@@ -353,7 +373,8 @@ task generateUniFFIBindings {
         // dir. This survives subsequent cargo invocations that re-compile
         // scmessenger-core with different feature flags (which can otherwise
         // delete or move the cdylib in the incremental target dir).
-        def cargoTargetDir = System.getenv('CARGO_TARGET_DIR') ?: '../../target'
+        def cargoTargetDirStr = System.getenv('CARGO_TARGET_DIR') ?: '../../target'
+        def cargoTargetDir = project.file(cargoTargetDirStr)
         def stagedDir = file('../../core/target/staged-cdylib')
         stagedDir.mkdirs()
         def cdylibSrc = new File(cargoTargetDir, "debug/${cdylibName}")
@@ -367,7 +388,7 @@ task generateUniFFIBindings {
 
         // Step 3: build (do NOT run) the gen_kotlin binary
         exec {
-            workingDir '../../core'
+            workingDir project.file('../../core')
             environment "RUSTFLAGS", ""
             environment "CARGO_INCREMENTAL", "0"
             if (isWindows) {
@@ -385,8 +406,8 @@ task generateUniFFIBindings {
             throw new GradleException("gen_kotlin binary not found at ${genKotlinBin.absolutePath}")
         }
         exec {
-            workingDir '../../core'
-            environment "CARGO_MANIFEST_DIR", file('../../core').absolutePath
+            workingDir project.file('../../core')
+            environment "CARGO_MANIFEST_DIR", project.file('../../core').absolutePath
             environment "SCMESSENGER_CDYLIB_PATH", cdylibStaged.absolutePath
             environment "CARGO_INCREMENTAL", "0"
             if (isWindows) {
