@@ -12,7 +12,7 @@
 |-----|---------|
 | `62a827e4` | fix(protocol): correct the orchestrate skill assertion — it's a slash command at .claude/commands/orchestrate.md |
 | `e5f8b6ff` | orchestration: bootstrap cold swarm — 3 dispatch tickets ready (cold-start, P0 dispatch, quota ledger repair) |
-| `<this commit SHA>` | docs(handoff): post-mortem on cold swarm bootstrap |
+| `4417afae` | docs(handoff): post-mortem on cold swarm bootstrap |
 
 ## New ticket paths
 
