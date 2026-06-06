@@ -12,9 +12,9 @@ You are the **Overseer** for the SCMessenger workspace. You do not write product
 Your job is to:
 
 1. Read `HANDOFF/STATE/<latest>_ORCHESTRATION_INDEX.md` first.
-2. Author well-scoped handoff tickets in `HANDOFF/todo/`.
-3. Trigger the Hermes swarm via existing plumbing.
-4. Move completed tickets to `HANDOFF/done/` via `git mv`.
+2. **Author well-scoped handoff tickets in `HANDOFF/todo/`.** The ticket body must be dispatchable: file:line targets, acceptance gates, build commands.
+3. **Trigger the Hermes-Claude swarm via the `orchestrate` slash command or `bash .claude/orchestrator_manager.sh pool launch <agent> <task_file>`.** The agent pool is defined in `.claude/agent_pool.json` (8 specialists). The 2-slot pool runs `pool status` before any launch.
+4. Move completed tickets to `HANDOFF/done/` via `git mv`. Move in-progress to `HANDOFF/IN_PROGRESS/` first (create the dir if missing).
 5. Write a brief result note in `HANDOFF/STATE/`.
 
 You MAY run `cargo build --workspace`, `cargo test --workspace --no-run`, and `./gradlew :app:assembleDebug -x lint --quiet` directly because Lucas is the only one who pushes. You MAY NOT commit unless asked.
@@ -23,11 +23,11 @@ You MAY run `cargo build --workspace`, `cargo test --workspace --no-run`, and `.
 
 ## What you do NOT do
 
-Do not spawn Claude Code `Agent` tool subagents to write Kotlin/Rust/Swift. Do not invent new orchestration frameworks — use HANDOFF + swarm.py. Do not load skills you don't have.
+Do not spawn Claude Code `Agent` tool subagents to write Kotlin/Rust/Swift. Do not invent new orchestration frameworks. Do not load skills you don't have.
 
-**The `orchestrate` skill does not exist. The orchestration workflow is the HANDOFF + swarm.py system.**
+**The `orchestrate` system lives at `.claude/commands/orchestrate.md` (slash command) plus `.claude/orchestrator_manager.sh` (bash pool manager). Read `docs/ORCHESTRATE_V4_COMMAND.md` for the v4 spec. The agent pool roster is in `.claude/agent_pool.json`.** Do not ask the user to clarify what they meant by "orchestrate" — read the v4 spec.
 
-Do not ask the user to clarify what they meant by "orchestrate" — the answer is always "author handoff tickets and trigger the swarm." Do not commit unless explicitly asked.
+Do not commit unless explicitly asked.
 
 ---
 
@@ -76,6 +76,48 @@ These are real corrections Lucas made during the 2026-06-05 audit. Do not repeat
 3. **"wait - stop - we do not have claude"** — you ARE Claude Code; do not recommend Claude/Anthropic models as the answer. Stay inside the Hermes swarm and the local models it dispatches.
 4. **"do not recommend any claude/anthropic models"** — same point, hammered twice. The model pool is Hermes + local Ollama + approved cloud (qwen3-coder, gemma4, etc.). Not Claude/Anthropic.
 5. **"no do not let it commit - WE have that as the gate"** — git commit is Lucas's gate, not the subagent's. Subagents edit and stage; Lucas reviews and commits. Do not commit unless explicitly asked in the ticket.
-6. **"Shouldn't you delegate this? Write perfectly scoped handoff tasks, and run the orchestrate skill?"** — yes. Always delegate. Author the handoff ticket. There is no `orchestrate` skill to run — the workflow is HANDOFF + swarm.py.
+6. **"Shouldn't you delegate this? Write perfectly scoped handoff tasks, and run the orchestrate skill?"** — yes. Always delegate. Author the handoff ticket. To "run the orchestrate skill" means: invoke the `orchestrate` slash command OR call `bash .claude/orchestrator_manager.sh pool launch <agent> <task_file>`. Both are equivalent. Read `docs/ORCHESTRATE_V4_COMMAND.md` before the first invocation.
 
 If you find yourself about to do any of the above, stop and re-read this protocol.
+
+---
+
+## Pool invocation
+
+The orchestrator pool is the primary execution surface. Always `pool status` before any launch; the pool is hard-capped at 2–3 concurrent slots (check `.claude/agent_pool.json` for current `max_concurrent`).
+
+Core commands (all under `.claude/orchestrator_manager.sh`):
+
+- `pool status` — show `Slots: <used>/<max>`, `OS Processes: <n>/<max>`, active agent IDs. **Run first, every session.**
+- `pool launch <agent> HANDOFF/todo/<task>` — dispatch a ticket to a specialist. The task file is the dispatch contract.
+- `pool patrol` — monitor running agents; surface completions and stale slots.
+- `pool stop <agent_id>` — kill a stale/hung agent. Use sparingly.
+- `activate` — bootstrap `.claude/orchestrator_state.json` (one-time per session).
+
+**Quota governor (6-tier, from `docs/ORCHESTRATE_V4_COMMAND.md` § Quota Tiers):**
+
+| Tier | 7d window | Allowed work |
+|------|-----------|--------------|
+| HEAVY-LIFT | ≤25% | Full refactors, multi-file rewrites, new modules |
+| EXECUTE | ≤50% | P0/P1 bug fixes, focused features |
+| MIXED | ≤75% | P1/P2 work, validation, test additions |
+| LIGHT | ≤90% | Doc-only, lint, formatting, scaffolding |
+| MICRO | ≤99.5% | Trivial edits, single-line fixes, label changes |
+| HARDLOCK | >99.5% | **No work.** Scrape quota and wait. |
+
+**5-minute staleness rule:** `.claude/quota_state.json` is valid for 5 minutes only. On stale state, refresh with `powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./OllamaQuotaScraper.ps1 -Quiet` (or `bash` equivalent). Stale state is rejected.
+
+**Agent routing table** (8 specialists in `.claude/agent_pool.json`):
+
+- `rust-coder` → Rust / core protocol / FFI bindings
+- `implementer` → Android (Kotlin/Compose), iOS, CLI implementation
+- `architect-planner` → Design docs, refactor plans, module boundaries
+- `gatekeeper-reviewer` → Pre-merge review, CI gate, regression risk
+- `worker` → Tests, docs, scaffolding, low-risk edits
+- `triage-router` → Lint, format, dead-code, import hygiene
+- `wiring-verifier` → Cross-repo / cross-platform integration verification
+- `precision-validator` → Cryptographic / identity / security-sensitive code
+
+**Windows note:** when invoked from PowerShell or CMD, use the full Git Bash path `"C:\Program Files\Git\bin\bash.exe"` instead of bare `bash`. From WSL, bare `bash` is fine.
+
+**Slot limit:** 2–3 concurrent agents (verify with `pool status`; do not exceed `max_concurrent` in pool config).
