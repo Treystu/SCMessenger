@@ -1,15 +1,22 @@
 # ORCHESTRATION INDEX — Android/Windows/Ubuntu Production-Ready Push
-**Date:** 2026-06-05 13:25 PT  
-**Author:** Hermes Overseer session  
+**Date:** 2026-06-05 13:25 PT
+**Author:** Hermes Overseer session
 **Audience:** Claude Code (next session) + all subagents dispatched from this index
+
+---
+
+## Role & Protocol
+
+All Claude Code sessions on this workspace must read `HANDOFF/CLAUDE_CODE_PROTOCOL.md` first. It is the Overseer role anchor. The orchestration workflow is `HANDOFF/todo/` → swarm dispatch → `HANDOFF/done/` via `git mv`. No new frameworks.
 
 ---
 
 ## TL;DR
 
-1. **Android v0.2.2 is shipped and running on the user's Pixel 6a** (PID 7643 alive at 13:18 PT). Don't re-install unless asked.
-2. **7 Android tickets are the next delegation batch** (Subagent C ran out of tool budget before finishing them). See Batch 1.
-3. **2 P0 CLI tickets are blockers for cross-OS triangulation** (P0_CLI_023 key collision, P0_CLI_027 Drift dormancy). See Batch 2.
+1. **Android v0.2.3 is shipped and running on the user's Pixel 6a** (versionCode 7, installed 14:05 PT). v0.2.3 includes the UniFFI binding race fix from this session.
+2. **🔥 P0 NEW: Identity-generation regression reported on v0.2.3 onboarding** (14:20 PT, 2026-06-05). Logcat shows 8–10 `initializeIdentity` calls in 1 second — multi-component contention. Ticket: `HANDOFF/todo/P0_ANDROID_024_IDENTITY_GENERATION_REGRESSION.md`. **PROMOTE TO BATCH 1 — this is now highest priority.**
+3. **7 Android tickets are the next delegation batch** (Subagent C ran out of tool budget before finishing them). See Batch 1.
+4. **2 P0 CLI tickets are blockers for cross-OS triangulation** (P0_CLI_023 key collision, P0_CLI_027 Drift dormancy). See Batch 2.
 4. **Build chain is now reproducible from WSL** — full env below.
 5. **Dynamic-port migration is researched and ready to execute** — Phase 0 first.
 
