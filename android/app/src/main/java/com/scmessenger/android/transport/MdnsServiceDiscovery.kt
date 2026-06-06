@@ -29,23 +29,34 @@ class MdnsServiceDiscovery(
     private var nsdManager: NsdManager? = null
     private var registrationListener: NsdManager.RegistrationListener? = null
     private var discoveryListener: NsdManager.DiscoveryListener? = null
-    private var resolveListener: NsdManager.ResolveListener? = null
 
-    // Initialize resolveListener on demand (after API 26)
-    private fun getResolveListener(): NsdManager.ResolveListener {
-        if (resolveListener == null) {
-            resolveListener = object : NsdManager.ResolveListener {
-                override fun onResolveFailed(serviceInfo: NsdServiceInfo, errorCode: Int) {
-                    this@MdnsServiceDiscovery.onResolveFailed(serviceInfo, errorCode)
-                }
+    // P0_ANDROID_025: Track in-flight resolves by service name. NsdManager
+    // rejects resolveService() calls that reuse a listener while a previous
+    // resolve on the same listener is still in flight, throwing
+    // IllegalArgumentException("listener already in use") on the
+    // ConnectivityThread (crash). The previous code used a singleton listener
+    // and crashed on the second onServiceFound. The canonical fix: a fresh
+    // listener per resolveService() call, with the in-flight set guaranteeing
+    // the listener instance is GC-eligible only after onComplete fires.
+    private val inFlightResolves = ConcurrentHashMap<String, NsdManager.ResolveListener>()
 
-                override fun onServiceResolved(resolvedInfo: NsdServiceInfo) {
-                    this@MdnsServiceDiscovery.onServiceResolved(resolvedInfo)
-                }
+    // Build a per-call listener. Each call gets a unique instance, and
+    // the listener removes itself from the in-flight set on either terminal
+    // callback. This avoids the "listener already in use" race entirely.
+    private fun newResolveListener(serviceName: String): NsdManager.ResolveListener {
+        return object : NsdManager.ResolveListener {
+            override fun onResolveFailed(serviceInfo: NsdServiceInfo, errorCode: Int) {
+                inFlightResolves.remove(serviceName)
+                this@MdnsServiceDiscovery.onResolveFailed(serviceInfo, errorCode)
+            }
+
+            override fun onServiceResolved(resolvedInfo: NsdServiceInfo) {
+                inFlightResolves.remove(resolvedInfo.serviceName)
+                this@MdnsServiceDiscovery.onServiceResolved(resolvedInfo)
             }
         }
-        return resolveListener!!
     }
+
     private var multicastLock: android.net.wifi.WifiManager.MulticastLock? = null
 
     @Volatile private var isRunning = false
@@ -377,6 +388,11 @@ class MdnsServiceDiscovery(
             }
 
             discoveredPeers.clear()
+            // P0_ANDROID_025: clear any in-flight resolves so listeners held by
+            // NsdManager don't get a callback after we stop. The in-flight set
+            // would otherwise leak a few entries on stop-while-resolving, which
+            // is harmless (the listener self-removes on next callback) but tidy.
+            inFlightResolves.clear()
             Timber.i("mDNS service discovery stopped")
         } catch (e: SecurityException) {
             Timber.e(e, "Security exception stopping mDNS service discovery")
@@ -469,16 +485,23 @@ class MdnsServiceDiscovery(
      * libp2p multiaddr so SwarmBridge can dial it directly.
      */
     private fun resolveService(serviceInfo: NsdServiceInfo) {
+        // P0_ANDROID_025: NsdManager rejects reusing the same ResolveListener
+        // while a previous resolve is in flight. Create a fresh listener per
+        // call and track it in `inFlightResolves` so we never reuse one, and
+        // the listener's terminal callbacks will self-remove from the set.
+        val listener = newResolveListener(serviceInfo.serviceName)
+        inFlightResolves[serviceInfo.serviceName] = listener
+
         // resolveService with Listener is deprecated in API 33; requires Executor overload
         // Use SDK version gate to support minSdk 26 while avoiding deprecation warnings on API 33+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
             // API 28+ has Context.getMainExecutor(), use Executor overload
-            nsdManager?.resolveService(serviceInfo, context.getMainExecutor(), getResolveListener())
+            nsdManager?.resolveService(serviceInfo, context.getMainExecutor(), listener)
         } else {
             // Legacy API for API < 28 (minSdk 26, so this covers 26-27)
             // Kept for completeness but will not be called on API 28+
             @Suppress("DEPRECATION")
-            nsdManager?.resolveService(serviceInfo, getResolveListener())
+            nsdManager?.resolveService(serviceInfo, listener)
         }
     }
 
