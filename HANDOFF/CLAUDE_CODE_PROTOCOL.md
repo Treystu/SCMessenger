@@ -25,7 +25,7 @@ You MAY run `cargo build --workspace`, `cargo test --workspace --no-run`, and `.
 
 Do not spawn Claude Code `Agent` tool subagents to write Kotlin/Rust/Swift. Do not invent new orchestration frameworks. Do not load skills you don't have.
 
-**The `orchestrate` system lives at `.claude/commands/orchestrate.md` (slash command) plus `.claude/orchestrator_manager.sh` (bash pool manager). Read `docs/ORCHESTRATE_V4_COMMAND.md` for the v4 spec. The agent pool roster is in `.claude/agent_pool.json`.** Do not ask the user to clarify what they meant by "orchestrate" — read the v4 spec.
+**The `orchestrate` system lives at `.claude/commands/orchestrate.md` (slash command) plus `.claude/orchestrator_manager.sh` (bash pool manager). Read `docs/ORCHESTRATE_V4_COMMAND.md` for the v4 spec. The agent pool roster is in `.claude/agent_pool.json`.** Do not ask the user to clarify what you meant by "orchestrate" — read the v4 spec.
 
 Do not commit unless explicitly asked.
 
@@ -47,17 +47,25 @@ Reference: `HANDOFF/STATE/2026-06-05_ORCHESTRATION_INDEX.md` § Build Environmen
 
 ```bash
 export CARGO_INCREMENTAL=0
-cd /home/scmessenger/scmessenger-build
+cd /home/scemessenger/scmessenger-build
 cargo build --workspace                    # ~3-5 min
 cargo test --workspace --no-run           # compile gate
-cd /home/scmessenger/scmessenger-build/android
+cd /home/scemessenger/scmessenger-build/android
 ./gradlew :app:assembleDebug -x lint --quiet  # ~6-8 min, APK ~291MB
 ```
 
 Verified env:
-- JDK 17 at `/home/scmessenger/.local/jdk/jdk-17.0.12+7`
+- JDK 17 at `/home/scemessenger/.local/jdk/jdk-17.0.12+7`
 - NDK r26b at `/home/scemessenger/android-sdk/ndk/26.1.10909125`
-- Source mirror at `/home/scmessenger/scmessenger-build/`
+- Source mirror at `/home/scemessenger/scmessenger-build/`
+
+**Windows-side NDK (verified 2026-06-05 21:06 PT, build OK):**
+- NDK r26b at `E:\build-tools\android-sdk\ndk\26.1.10909125` (the only installed NDK on E:)
+- `android/app/build.gradle` pins `ndkVersion = '30.0.14904198'` but NDK 30 is NOT installed on this machine
+- **Override flag for any Windows build:** `./gradlew :app:assembleDebug -x lint -Pandroid.ndkVersion=26.1.10909125`
+- NDK 26b is functionally equivalent for our compileSdk=35 + minSdk=26 + arm64/armv7/x86_64
+- See `HANDOFF/STATE/2026-06-05_ANDROID_P0_024_P1_022_BUILD_VERIFIED.md` for the full Windows build command (env, NDK, JDK, gradle flags)
+- JDK 17 Windows path: `E:\build-tools\jdk17\jdk-17.0.14` (NOT the JBR at `E:\Android\android-studio\jbr` which is JDK 21)
 
 ---
 
@@ -77,6 +85,7 @@ These are real corrections Lucas made during the 2026-06-05 audit. Do not repeat
 4. **"do not recommend any claude/anthropic models"** — same point, hammered twice. The model pool is Hermes + local Ollama + approved cloud (qwen3-coder, gemma4, etc.). Not Claude/Anthropic.
 5. **"no do not let it commit - WE have that as the gate"** — git commit is Lucas's gate, not the subagent's. Subagents edit and stage; Lucas reviews and commits. Do not commit unless explicitly asked in the ticket.
 6. **"Shouldn't you delegate this? Write perfectly scoped handoff tasks, and run the orchestrate skill?"** — yes. Always delegate. Author the handoff ticket. To "run the orchestrate skill" means: invoke the `orchestrate` slash command OR call `bash .claude/orchestrator_manager.sh pool launch <agent> <task_file>`. Both are equivalent. Read `docs/ORCHESTRATE_V4_COMMAND.md` before the first invocation.
+7. **"do not ask me things like this — if you need to ask me anything, write a handoff file to telegram and then monitor for a response and sleep until then"** — Blocking decisions go to `HANDOFF/TELEGRAM_OUT_*.md`. Hermes forwards to Telegram DM 6014795323. Watch `HANDOFF/*REPLY*.md` for the answer. Do not poll the user in chat; do not ask clarifying questions in chat when a Telegram reply is pending. Idle (do not exit) until the watcher fires.
 
 If you find yourself about to do any of the above, stop and re-read this protocol.
 
