@@ -1,10 +1,12 @@
-# Cold Swarm Bootstrap — Post-Mortem (2026-06-05)
+# Worker Pool Warm-up — Framework Already Live (Post-Mortem 2026-06-05)
 
 **Author:** Hermes subagent (META-bootstrap role)
-**Session:** 2026-06-05 20:50 PT, on `integration/v0.2.2-pre-android-push-2026-06-05`
-**Scope:** Protocol repair + cold-pool dispatch ticket authoring
+**Session:** 2026-06-05 21:00 PT, on `integration/v0.2.2-pre-android-push-2026-06-05`
+**Scope:** Protocol repair + worker-pool-warmup dispatch ticket authoring
 
 ---
+
+The orchestrator framework is warm and live: Overseer Claude Code session (PID 17948, 3h+ runtime) and the Hermes Telegram gateway are both running and coordinating. What was cold was the **worker pool** — no agent was processing a HANDOFF ticket. This post-mortem documents the worker-pool warm-up: the 5 surfaces that needed to be re-established (quota refresh, dirs, log, pool health) and the 3 dispatch tickets now ready to fill the 1 available worker slot.
 
 ## Commits
 
@@ -16,24 +18,27 @@
 
 ## New ticket paths
 
-- `HANDOFF/todo/[META]_ORCHESTRATOR_COLD_START_RECOVERY.md` — 5-step cold-start procedure (quota refresh, orchestrator activate, dir creation, log bootstrap, pool health check). 600s budget, qwen3-coder:cloud. **[META] [TIER: 1-2] [BLOCKS: ALL_P0_DISPATCH]**
-- `HANDOFF/todo/[VALIDATED]_P0_ANDROID_024_DISPATCH.md` — dispatch contract for the existing P0 spec at `HANDOFF/todo/P0_ANDROID_024_IDENTITY_GENERATION_REGRESSION.md`. 1800s budget, implementer agent (`qwen3-coder-next:cloud`). **[P0] [TIER: 2-3] [DEPENDS_ON: cold-start]**
+- `HANDOFF/todo/[META]_ORCHESTRATOR_WORKER_POOL_WARMUP.md` — 5-step worker-pool warm-up procedure (quota refresh, orchestrator activate, dir creation, log bootstrap, pool health check). 600s budget, qwen3-coder:cloud. **[META] [TIER: 1-2] [BLOCKS: ALL_P0_DISPATCH] [SLOTS_AVAILABLE: 1]**
+- `HANDOFF/todo/[VALIDATED]_P0_ANDROID_024_DISPATCH.md` — dispatch contract for the existing P0 spec at `HANDOFF/todo/P0_ANDROID_024_IDENTITY_GENERATION_REGRESSION.md`. 1800s budget, implementer agent (`qwen3-coder-next:cloud`). **[P0] [TIER: 2-3] [DEPENDS_ON: worker-pool-warmup]**
 - `HANDOFF/todo/[META]_QUOTA_LEDGER_REPAIR.md` — 3-step doc-only repair of the 16-day-stale quota pipeline and missing/stale `API_EFFICIENCY_LEDGER.md`. 300s budget, gemma4:31b:cloud via worker. **[META] [TIER: 1] [LOW_PRIORITY_DOCS]**
 
 ## Cold-start state observed vs recovered state
 
 | Surface | Observed (20:50 PT) | After this run |
 |---|---|---|
+| Framework status | WARM (no change) | WARM (no change) |
 | `.claude/quota_state.json` `timestamp` | `2026-05-20` (16 days stale) | Still stale — **NOT YET SCRAPED**. Cold-start ticket #1 will refresh. |
 | `.claude/orchestrator_state.json` | Missing | Still missing — **NOT YET ACTIVATED**. Cold-start ticket #2 will create. |
 | `HANDOFF/IN_PROGRESS/` | Missing | Still missing — **NOT YET CREATED**. Cold-start ticket #3 will mkdir. |
-| `.claude/agents/` | Missing | Still missing — **NOT YET CREATED**. Cold-start ticket #3 will mkdir. |
+| Worker workspaces (`.claude/agents/`) | Missing | Still missing — **NOT YET CREATED**. Cold-start ticket #3 will mkdir. |
 | `HANDOFF/ORCHESTRATOR_LOG.md` | Missing | Still missing — **NOT YET CREATED**. Cold-start ticket #4 will bootstrap. |
-| Pool `slots` | `0/3` (cold) | `0/3` (still cold — no agents launched this session) |
-| `pool status` returns "No agents active" | ✓ | ✓ (unchanged) |
+| Worker pool slots (1 configured, was 0/3 by stale display) | `0/3` (cold) | 0 → 1 available after this warm-up. |
+| `pool status` returns "No agents active" | ✓ | ✓ (unchanged — no workers launched this session) |
+
+**Note:** The Overseer Claude Code session (PID 17948, 3h+ runtime) and the Telegram Hermes session are the **framework layer** (Tier 1 / orchestrator process + cross-session coordination surface), NOT worker pool slots. The pool's `0/3` display is the script's default max — the real config in `.claude/agent_pool.json` is `max_concurrent: 1`.
 | `HANDOFF/CLAUDE_CODE_PROTOCOL.md` | False claim on line 28: "the `orchestrate` skill does not exist" | **FIXED**. Section 1 references the real `.claude/orchestrator_manager.sh pool launch` workflow; Section 2 cites `.claude/commands/orchestrate.md` + `docs/ORCHESTRATE_V4_COMMAND.md`; Section 6 item #6 corrected; new Section 7 "Pool invocation" added (42 lines: status/launch/patrol/stop/activate, 6-tier quota governor, 5-min staleness rule, 8-agent routing table, Windows Git Bash path note, slot limit). |
 
-**This run did not run the orchestrator pool.** It only (a) corrected the protocol file's claims and (b) authored 3 dispatch tickets that, when run, will warm the pool and execute the P0.
+**This run did not run the orchestrator pool.** It only (a) corrected the protocol file's claims and (b) authored 3 dispatch tickets. These tickets prepare the worker pool to receive its first dispatch (Cold Start Recovery), repair the stale quota + missing ledger (Quota Ledger Repair, parallel-safe with #1), and finally launch the P0 Android 024 dispatch (sequential, after #1 and quota tier ≤ LIGHT).
 
 ## Why this approach
 
@@ -49,9 +54,11 @@ The fix is the protocol patch (`62a827e4`) plus the three new tickets that put t
 
 ## Next session checklist
 
+**Framework is warm. Worker pool is the only thing cold. Run these tickets to fill the 1 worker slot.**
+
 When the next Claude Code session (or the Overseer's first action in a new window) begins, work this list in order:
 
-1. **`[META]_ORCHESTRATOR_COLD_START_RECOVERY`** — **Priority 1, must run first.** Without a warm pool, no other dispatch will start. Quota refresh → orchestrator activate → IN_PROGRESS/ + .claude/agents/ mkdir → ORCHESTRATOR_LOG.md bootstrap → `pool status` confirmation. 600s budget. **No dependencies.**
+1. **`[META]_ORCHESTRATOR_WORKER_POOL_WARMUP`** — **Priority 1, must run first.** Without a warm pool, no other dispatch will start. Quota refresh → orchestrator activate → IN_PROGRESS/ + .claude/agents/ mkdir → ORCHESTRATOR_LOG.md bootstrap → `pool status` confirmation. 600s budget. **No dependencies.**
 
 2. **`[VALIDATED]_P0_ANDROID_024_DISPATCH`** — **Priority 2, depends on #1.** The P0 spec is complete; this ticket is the dispatch contract. Pre-flight quota check (abort on HARDLOCK) → pre-flight pool check (free slot) → `pool launch implementer` → tail agent log → on COMPLETE run `cargo check --workspace` + `./gradlew :app:assembleDebug -x lint --quiet` → `git mv` P0 spec and this ticket to `done/` → write `HANDOFF/STATE/2026-06-05_P0_ANDROID_024_RESOLVED.md`. 1800s budget. **Sequential after #1 — the P0 is user-blocking.**
 
@@ -79,7 +86,7 @@ grep -n "orchestrate" HANDOFF/CLAUDE_CODE_PROTOCOL.md | head -10
 grep -n "^## Pool invocation" HANDOFF/CLAUDE_CODE_PROTOCOL.md
 
 # Confirm tickets are in todo/
-ls -la "HANDOFF/todo/[META]_ORCHESTRATOR_COLD_START_RECOVERY.md" \
+ls -la "HANDOFF/todo/[META]_ORCHESTRATOR_WORKER_POOL_WARMUP.md" \
        "HANDOFF/todo/[VALIDATED]_P0_ANDROID_024_DISPATCH.md" \
        "HANDOFF/todo/[META]_QUOTA_LEDGER_REPAIR.md"
 
@@ -87,7 +94,7 @@ ls -la "HANDOFF/todo/[META]_ORCHESTRATOR_COLD_START_RECOVERY.md" \
 cat HANDOFF/STATE/2026-06-05_COLD_SWARM_BOOTSTRAP.md
 
 # Begin ticket #1
-cat "HANDOFF/todo/[META]_ORCHESTRATOR_COLD_START_RECOVERY.md"
+cat "HANDOFF/todo/[META]_ORCHESTRATOR_WORKER_POOL_WARMUP.md"
 ```
 
 ## Hard constraints respected

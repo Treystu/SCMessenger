@@ -2,26 +2,21 @@
 # BUDGET: 600
 # token_budget: 6000
 
-# META_ORCHESTRATOR_COLD_START_RECOVERY
+# META_ORCHESTRATOR_WORKER_POOL_WARMUP
 
 **Status:** VERIFIED REMAINING WORK
 **Agent:** qwen3-coder (META bootstrap; pre-dispatch for all P0 work)
 **Budget:** 600s (LIGHT tier)
-**Phase:** Orchestration bootstrap
-**Source:** 2026-06-05 20:50 PT audit — pool cold, Overseer session 3h+ in extended thinking, no `orchestrate` skill invocation this session
-**Depends on:** nothing (this IS the cold-start edge)
+**Phase:** Worker pool warm-up (framework is already warm: Overseer Claude PID 17948 + Hermes Telegram active)
+**Source:** 2026-06-05 21:00 PT audit — framework warm (Overseer Claude + Hermes Telegram both running), but worker pool is empty (no agent currently processing a HANDOFF ticket)
+**Depends on:** nothing (this IS the worker-pool-warmup edge)
 **Blocks:** `HANDOFF/todo/[VALIDATED]_P0_ANDROID_024_DISPATCH.md`, all P0/P1 dispatches, swarm re-warm
 
 ---
 
 ## Verified Gap
 
-The Hermes-Claude swarm pool is cold. Three preconditions for dispatch are broken or missing:
-
-1. **Quota state is 16 days stale** — `.claude/quota_state.json` `timestamp` is 2026-05-20; current time is 2026-06-05. The 5-min staleness rule (per `docs/ORCHESTRATE_V4_COMMAND.md`) would reject this on any read.
-2. **Orchestrator state is uninitialized** — `.claude/orchestrator_state.json` does not exist; `bash .claude/orchestrator_manager.sh pool status` returns "No agents active" because the orchestrator itself was never `activate`d this session.
-3. **State-machine directories missing** — `HANDOFF/IN_PROGRESS/` and `.claude/agents/` do not exist. Without `IN_PROGRESS/`, in-flight tickets have no parked location; without `.claude/agents/`, dispatched agents have no log workspace.
-4. **Orchestrator log absent** — `HANDOFF/ORCHESTRATOR_LOG.md` is referenced by `orchestrate.md` and `ORCHESTRATOR_DIRECTIVE.md` but does not exist. The audit trail is missing.
+The orchestrator framework is warm and live: Overseer Claude Code session (PID 17948, 3h+ runtime) and the Hermes Telegram gateway are both running. However, the **worker pool is empty** — no agent is currently processing a HANDOFF ticket. `bash .claude/orchestrator_manager.sh pool status` shows `Slots: 0/3` (the script's default max display, not the config truth) and `OS Processes: 0/3`. The real config: `.claude/agent_pool.json` sets `max_concurrent: 1` — only one worker can run at a time. `.claude/orchestrator_state.json` shows `active_native_agents: []`, `active_tasks: []`. The 5 surfaces that need to be re-established before the worker pool can fill its slot are: (1) quota state must be within the 5-min staleness rule, (2) `.claude/agents/` directory must exist for worker workspaces, (3) `HANDOFF/IN_PROGRESS/` must exist for the in-progress state machine step, (4) `HANDOFF/ORCHESTRATOR_LOG.md` must exist for action logging, (5) `pool status` must confirm the slot is free.
 
 **Verified environment facts:**
 - Branch: `integration/v0.2.2-pre-android-push-2026-06-05` (NOT `main`).
@@ -30,6 +25,8 @@ The Hermes-Claude swarm pool is cold. Three preconditions for dispatch are broke
 - Quota state: `fiveHour: 70.9, sevenDay: 89.1` — at the stale-snapshot tier (MIXED→LIGHT), but data is rejected due to staleness.
 
 ## Scope
+
+**The orchestrator framework is already warm. These 5 steps prepare the worker pool to fill its 1 available slot.**
 
 5 sub-tasks, in order. All commands must run on the `integration/v0.2.2-pre-android-push-2026-06-05` branch from `/mnt/e/SCMessenger-Github-Repo/SCMessenger`.
 
@@ -99,7 +96,7 @@ bash .claude/orchestrator_manager.sh pool status  # expect 0/2 or 0/3
 
 ## Acceptance Gates
 
-1. `.claude/quota_state.json` `timestamp` is within 5 minutes of "now".
+1. Quota state refreshed and within 5-min staleness rule. **Worker pool ready to launch the first ticket.**
 2. `.claude/orchestrator_state.json` exists with `orchestrator_active: true`.
 3. `HANDOFF/IN_PROGRESS/` and `.claude/agents/` both exist.
 4. `HANDOFF/ORCHESTRATOR_LOG.md` exists with the 5-line preamble in place.
@@ -109,11 +106,11 @@ bash .claude/orchestrator_manager.sh pool status  # expect 0/2 or 0/3
 ## CRITICAL
 
 You are forbidden from considering this task 'complete' until you:
-1. Execute `git mv HANDOFF/todo/[META]_ORCHESTRATOR_COLD_START_RECOVERY.md HANDOFF/done/` (after editing `HANDOFF/done/` placement if needed).
+1. Execute `git mv HANDOFF/todo/[META]_ORCHESTRATOR_WORKER_POOL_WARMUP.md HANDOFF/done/` (after editing `HANDOFF/done/` placement if needed).
 2. Append the post-recovery line to `HANDOFF/ORCHESTRATOR_LOG.md`.
 
 If you do not move the file, the Orchestrator assumes you failed.
 
 ## Routing
 
-`[REQUIRES: QWEN3-CODER] [PHASE: META] [TIER: 1-2] [BLOCKS: ALL_P0_DISPATCH]`
+`[REQUIRES: QWEN3-CODER] [PHASE: WORKER_POOL_WARMUP] [TIER: 1-2] [BLOCKS: ALL_P0_DISPATCH] [SLOTS_AVAILABLE: 1]`
