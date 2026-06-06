@@ -22,3 +22,5 @@ Token usage tracking for DeepSeek Master Orchestrator wake cycles.
 [2026-05-20] - Wake Cycle (kimi-k2.6:cloud) - State: Idle - Tokens: -
 [2026-05-20] - Wake Cycle 001 (kimi-k2.6:cloud) - Tier 3 - Reason: malformed task(s) need triage in todo/ - Tokens: ~6
 
+
+[2026-06-06] - Wake Cycle (minimax-m3:cloud) - State: HEAVY-LIFT (5h=25%, 7d=96.4%) - Tokens: 0/0 - Lucas directive: iterate on all unfinished work product overnight
