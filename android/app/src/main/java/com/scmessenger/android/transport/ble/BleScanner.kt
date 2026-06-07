@@ -140,7 +140,7 @@ class BleScanner(
                 Timber.v("Discovered peer: $peerId (RSSI: $rssi, Data: ${serviceData.size} bytes)")
                 // Notify discovery
                 onPeerDiscovered(peerId)
-                // Notify data reception
+                // Notify data received
                 onDataReceived(peerId, serviceData)
             } else {
                 // Just discovery (legacy or beacon)
@@ -545,11 +545,19 @@ class BleScanner(
 
     @SuppressLint("MissingPermission")
     suspend fun stopScanning() = scanLock.withLock {
+        stopScanningLocked()
+    }
+
+    /**
+     * Internal stop-scan logic that MUST be called while holding the scanLock.
+     */
+    @SuppressLint("MissingPermission")
+    private fun stopScanningLocked() {
         if (currentScanSession == null || !isScanning) {
             // P1_ANDROID_022: even if we are not actively scanning, ensure any stale
             // peer cache is purged so re-discovery can occur on the next session.
             clearPeerCache()
-            return@withLock
+            return
         }
 
         stopDutyCycle()
@@ -576,7 +584,7 @@ class BleScanner(
      */
     suspend fun onTransportPause() = scanLock.withLock {
         Timber.i("BLE transport paused — stopping scan and clearing peer cache")
-        stopScanning()
+        stopScanningLocked()
         clearPeerCache()
     }
 

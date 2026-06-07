@@ -323,7 +323,7 @@ open class MeshRepository(private val context: Context) {
     open val messageUpdates = _messageUpdates.asSharedFlow()
 
     // Compatibility for notifications (incoming only)
-    val incomingMessages = messageUpdates.filter { it.direction == uniffi.api.MessageDirection.RECEIVED }
+    open val incomingMessages = messageUpdates.filter { it.direction == uniffi.api.MessageDirection.RECEIVED }
 
     private val repoScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO + kotlinx.coroutines.SupervisorJob())
     private var pendingOutboxRetryJob: kotlinx.coroutines.Job? = null
@@ -461,7 +461,7 @@ open class MeshRepository(private val context: Context) {
 
     // Track discovered peers (both headless and full)
     private val _discoveredPeers = MutableStateFlow<Map<String, PeerDiscoveryInfo>>(emptyMap())
-    val discoveredPeers: StateFlow<Map<String, PeerDiscoveryInfo>> = _discoveredPeers.asStateFlow()
+    open val discoveredPeers: StateFlow<Map<String, PeerDiscoveryInfo>> = _discoveredPeers.asStateFlow()
 
     data class PeerDiscoveryInfo(
         val peerId: String,          // Key (libp2p or canonical)
@@ -684,7 +684,7 @@ open class MeshRepository(private val context: Context) {
     /**
      * Safely increment the attempt count for a message with proper synchronization.
      */
-    suspend fun incrementAttemptCount(messageId: String) {
+    open suspend fun incrementAttemptCount(messageId: String) {
         retryLock.withLock {
             val tracking = getMessageIdTracking(messageId)
             tracking.recordFailure(null)
@@ -3954,7 +3954,7 @@ open class MeshRepository(private val context: Context) {
         }
     }
 
-    suspend fun sendMessage(peerId: String, content: String) {
+    open suspend fun sendMessage(peerId: String, content: String) {
         kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
             val routingPeerId = PeerIdValidator.normalize(peerId)
             val initialMessageId = java.util.UUID.randomUUID().toString()
@@ -4257,7 +4257,7 @@ open class MeshRepository(private val context: Context) {
         }
     }
 
-    suspend fun dial(multiaddr: String) {
+    open suspend fun dial(multiaddr: String) {
         kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
             try {
                 // Attempt Swarm Dial
@@ -4270,7 +4270,7 @@ open class MeshRepository(private val context: Context) {
         }
     }
 
-    suspend fun dialPeer(multiaddr: String) = dial(multiaddr)
+    open suspend fun dialPeer(multiaddr: String) = dial(multiaddr)
 
     // Identity Management
     /**
@@ -4370,7 +4370,7 @@ open class MeshRepository(private val context: Context) {
         }
     }
 
-    suspend fun createIdentity(customSalt: ByteArray? = null) {
+    open suspend fun createIdentity(customSalt: ByteArray? = null) {
         kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
             try {
                 if (!ensureServiceInitialized() || ironCore == null) {
@@ -8112,7 +8112,7 @@ open class MeshRepository(private val context: Context) {
     /** Extract port number from a libp2p multiaddr string. */
     private fun extractPortFromMultiaddr(multiaddr: String): Int? {
         // e.g. "/ip4/34.135.34.73/tcp/9001/p2p/..." → 9001
-        // e.g. "/dns4/bootstrap.scmessenger.net/tcp/443/ws/p2p/..." → 443
+        // e.g. "/dns4/bootstrap.example.com/tcp/443/ws/p2p/..." → 443
         val portRegex = Regex("""/tcp/(\d+)""").find(multiaddr)
             ?: Regex("""/udp/(\d+)""").find(multiaddr)
         return portRegex?.groupValues?.get(1)?.toIntOrNull()

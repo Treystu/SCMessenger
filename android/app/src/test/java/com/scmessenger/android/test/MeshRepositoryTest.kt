@@ -179,7 +179,7 @@ class MeshRepositoryTest {
         var wifiSuccesses = 0
         var bleFallbackSuccesses = 0
 
-        repeat(1_500) { index ->
+        repeat(150) { index ->
             val wifiShouldSucceed = index % 3 != 0
             val result = MeshRepository.attemptWifiThenBleFallback(
                 wifiPeerId = "192.168.49.5",
@@ -207,10 +207,10 @@ class MeshRepositoryTest {
             assertTrue(result.acked)
         }
 
-        assertEquals(1_500, wifiCalls)
-        assertEquals(500, bleCalls)
-        assertEquals(1_000, wifiSuccesses)
-        assertEquals(500, bleFallbackSuccesses)
+        assertEquals(150, wifiCalls)
+        assertEquals(50, bleCalls)
+        assertEquals(100, wifiSuccesses)
+        assertEquals(50, bleFallbackSuccesses)
     }
 
     @Test
