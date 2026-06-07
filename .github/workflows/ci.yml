@@ -186,6 +186,29 @@ jobs:
           cargo test -p scmessenger-core --test integration_receipt_convergence
           cargo test -p scmessenger-core --test integration_relay_custody -- --include-ignored
 
+  clippy:
+    name: Cargo clippy strict
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: path-filter
+    if: needs.path-filter.outputs.core == 'true' || needs.path-filter.outputs.ci == 'true'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+          components: clippy
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ubuntu-latest-rust-clippy-${{ hashFiles('**/Cargo.lock') }}
+          cache-on-failure: true
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+
+      - name: Cargo clippy strict
+        run: cargo clippy --workspace --lib --bins --examples -- -D warnings -A clippy::empty_line_after_doc_comments
+
   check-wasm:
     name: WASM / Web
     runs-on: ubuntu-latest

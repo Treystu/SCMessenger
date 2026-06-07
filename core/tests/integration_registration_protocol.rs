@@ -1,18 +1,17 @@
 use libp2p::{identity::Keypair, Multiaddr, PeerId};
 use scmessenger_core::identity::IdentityKeys;
-use scmessenger_core::transport::swarm::SwarmEvent2;
-use scmessenger_core::transport::{start_swarm, DeregistrationRequest, RegistrationRequest};
+use scmessenger_core::transport::{start_swarm, DeregistrationRequest, RegistrationRequest, SwarmEvent};
 use tokio::sync::mpsc;
 use tokio::time::{timeout, Duration};
 
 async fn wait_for_tcp_listener(
-    rx: &mut mpsc::Receiver<SwarmEvent2>,
+    rx: &mut mpsc::Receiver<SwarmEvent>,
     max_wait: Duration,
 ) -> Multiaddr {
     timeout(max_wait, async {
         loop {
             match rx.recv().await {
-                Some(SwarmEvent2::ListeningOn(addr)) if addr.to_string().contains("/tcp/") => {
+                Some(SwarmEvent::ListeningOn(addr)) if addr.to_string().contains("/tcp/") => {
                     return addr;
                 }
                 Some(_) => {}
@@ -25,7 +24,7 @@ async fn wait_for_tcp_listener(
 }
 
 async fn wait_for_peer_ready(
-    rx: &mut mpsc::Receiver<SwarmEvent2>,
+    rx: &mut mpsc::Receiver<SwarmEvent>,
     expected_peer: PeerId,
     max_wait: Duration,
 ) {
@@ -34,10 +33,10 @@ async fn wait_for_peer_ready(
         let mut identified = false;
         loop {
             match rx.recv().await {
-                Some(SwarmEvent2::PeerDiscovered(peer_id)) if peer_id == expected_peer => {
+                Some(SwarmEvent::PeerDiscovered(peer_id)) if peer_id == expected_peer => {
                     discovered = true;
                 }
-                Some(SwarmEvent2::PeerIdentified { peer_id, .. }) if peer_id == expected_peer => {
+                Some(SwarmEvent::PeerIdentified { peer_id, .. }) if peer_id == expected_peer => {
                     identified = true;
                 }
                 Some(_) => {}
