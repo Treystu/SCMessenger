@@ -16,6 +16,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
@@ -24,9 +26,9 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.google.mlkit.vision.barcode.common.Barcode
 import com.google.mlkit.vision.codescanner.GmsBarcodeScannerOptions
 import com.google.mlkit.vision.codescanner.GmsBarcodeScanning
-import androidx.compose.ui.res.stringResource
 import com.scmessenger.android.R
 import com.scmessenger.android.ui.viewmodels.MainViewModel
+import com.scmessenger.android.ui.identity.IdentityCreationFlow
 import timber.log.Timber
 
 @OptIn(com.google.accompanist.permissions.ExperimentalPermissionsApi::class)
@@ -66,10 +68,8 @@ fun OnboardingScreen(
     val identityError by viewModel.identityError.collectAsState()
     var showImportDialog by remember { mutableStateOf(false) }
     var importCode by remember { mutableStateOf("") }
-    var nickname by remember { mutableStateOf("") }
     var hasAcceptedConsent by remember { mutableStateOf(false) }
     var consentChecked by remember { mutableStateOf(false) }
-    var touchEntropySalt by remember { mutableStateOf<ByteArray?>(null) }
 
     LaunchedEffect(isReady) {
         if (isReady) {
@@ -132,7 +132,8 @@ fun OnboardingScreen(
             Text(
                 text = "Welcome to SCMessenger",
                 style = MaterialTheme.typography.headlineMedium,
-                textAlign = TextAlign.Center
+                textAlign = TextAlign.Center,
+                modifier = Modifier.testTag("onboarding_welcome_title")
             )
 
             Spacer(modifier = Modifier.height(16.dp))
@@ -190,7 +191,8 @@ fun OnboardingScreen(
                         ) {
                             Checkbox(
                                 checked = consentChecked,
-                                onCheckedChange = { consentChecked = it }
+                                onCheckedChange = { consentChecked = it },
+                                modifier = Modifier.testTag("consent_checkbox")
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
@@ -205,7 +207,9 @@ fun OnboardingScreen(
                                 viewModel.grantConsent()
                             },
                             enabled = consentChecked,
-                            modifier = Modifier.fillMaxWidth()
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("onboarding_continue_button")
                         ) {
                             Text(stringResource(R.string.onboarding_action_continue))
                         }
@@ -219,49 +223,22 @@ fun OnboardingScreen(
                     Text(stringResource(R.string.onboarding_generating_keys))
                 } else {
                     val focusManager = LocalFocusManager.current
-                    
-                    OutlinedTextField(
-                        value = nickname,
-                        onValueChange = { 
-                            nickname = it 
-                            touchEntropySalt = null // Reset salt when nickname changes
+
+                    IdentityCreationFlow(
+                        isCreating = isCreating,
+                        onCreate = { nickname, salt ->
+                            viewModel.createIdentity(nickname, salt)
                         },
-                        label = { Text(stringResource(R.string.onboarding_label_nickname)) },
-                        placeholder = { Text(stringResource(R.string.onboarding_placeholder_nickname)) },
-                        singleLine = true,
-                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                        keyboardActions = KeyboardActions(
-                            onDone = { focusManager.clearFocus() }
-                        ),
+                        onImport = {
+                            importCode = ""
+                            viewModel.clearImportState()
+                            showImportDialog = true
+                        },
+                        showImportButton = true,
                         modifier = Modifier
                             .fillMaxWidth()
                             .imePadding()
                     )
-
-                    if (nickname.trim().isNotEmpty()) {
-                        Spacer(modifier = Modifier.height(16.dp))
-                        com.scmessenger.android.ui.components.EntropyCanvas(
-                            onEntropyComplete = { salt ->
-                                touchEntropySalt = salt
-                            }
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    // P0_ANDROID_024 defense-in-depth: also gate the Button on isCreatingIdentity
-                    // so a fast double-tap or recomposition cannot re-enter createIdentity().
-                    // The ViewModel also has a re-entrancy guard; this is belt-and-suspenders.
-                    Button(
-                        onClick = {
-                            viewModel.clearIdentityError()
-                            viewModel.createIdentity(nickname, touchEntropySalt)
-                        },
-                        enabled = nickname.trim().isNotEmpty() && touchEntropySalt != null && !isCreating,
-                        modifier = Modifier.fillMaxWidth().height(56.dp)
-                    ) {
-                        Text("Generate Identity")
-                    }
 
                     Spacer(modifier = Modifier.height(8.dp))
 
@@ -298,19 +275,6 @@ fun OnboardingScreen(
                         ) {
                             Text(stringResource(R.string.onboarding_action_grant_permissions))
                         }
-                    }
-
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    OutlinedButton(
-                        onClick = {
-                            importCode = ""
-                            viewModel.clearImportState()
-                            showImportDialog = true
-                        },
-                        modifier = Modifier.fillMaxWidth().height(56.dp)
-                    ) {
-                        Text(stringResource(R.string.onboarding_button_import_join))
                     }
                 }
             } // end consent else

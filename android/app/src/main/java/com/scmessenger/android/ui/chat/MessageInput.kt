@@ -8,6 +8,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 
 import androidx.compose.ui.res.stringResource
@@ -43,7 +44,9 @@ fun MessageInput(
             OutlinedTextField(
                 value = value,
                 onValueChange = onValueChange,
-                modifier = Modifier.weight(1f),
+                modifier = Modifier
+                    .weight(1f)
+                    .testTag("message_input"),
                 placeholder = { Text(stringResource(R.string.chat_placeholder_type_message)) },
                 enabled = enabled,
                 maxLines = 5,
@@ -53,7 +56,9 @@ fun MessageInput(
             // Send button
             FloatingActionButton(
                 onClick = onSend,
-                modifier = Modifier.size(48.dp),
+                modifier = Modifier
+                    .size(48.dp)
+                    .testTag("send_button"),
                 containerColor = if (enabled && value.isNotBlank()) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
                 contentColor = if (enabled && value.isNotBlank()) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
             ) {
