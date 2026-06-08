@@ -298,6 +298,15 @@ open class MeshRepository(private val context: Context) {
     // Swarm Bridge (Internet/Libp2p)
     @Volatile private var swarmBridge: uniffi.api.SwarmBridge? = null
 
+    // P0_ANDROID_024: Serializes identity creation to prevent the concurrent
+    // initializeIdentity() race observed in production logs (4 threads in 12ms).
+    // Pairs with the _isCreating gate in IdentityViewModel.
+    private val identityCreationMutex = kotlinx.coroutines.sync.Mutex()
+
+    // P0: Latch ensureLocalIdentityFederation's persistIdentityBackup to once per process
+    // lifecycle. The lazy path was triggering 10+ redundant backup writes in 30s.
+    private val identityBackupLatch = java.util.concurrent.atomic.AtomicBoolean(false)
+
     // Wifi Transport
     @Volatile private var wifiTransportManager: com.scmessenger.android.transport.WifiTransportManager? = null
 
@@ -821,13 +830,20 @@ open class MeshRepository(private val context: Context) {
             // This will be used to enable/disable transports when settings change
             transportManager = TransportManager(
                 context = context,
-                onPeerDiscovered = { peerId, transport ->
+                onPeerDiscovered = { peerId, _ ->
                     // TransportManager peers are handled by MeshService via onPeerDiscovered
                     meshService?.onPeerDiscovered(peerId)
                 },
-                onDataReceived = { peerId, data, transport ->
+                onDataReceived = { peerId, data, _ ->
                     // TransportManager data is handled by MeshService via onDataReceived
                     meshService?.onDataReceived(peerId, data)
+                },
+                // P1 (Bug 5): forward mDNS peer-loss to MeshService so the dedup/
+                // prune/emit pipeline in onPeerDisconnected runs for mDNS-only
+                // peers. Without this, mDNS-discovered peers stayed marked as
+                // "connected" forever in the UI/connection state.
+                onPeerDisconnected = { peerId, _ ->
+                    meshService?.onPeerDisconnected(peerId)
                 },
                 onLanAddressResolved = { multiaddr ->
                     repoScope.launch {
@@ -2994,7 +3010,16 @@ open class MeshRepository(private val context: Context) {
             // P0: Cache identity fields for instant UI load on next startup
             cacheIdentityFields(info)
             if (nickname.isNotEmpty()) {
-                persistIdentityBackup(core)
+                // P2 (Bug 4): Latch the lazy-path persistIdentityBackup so a flurry of
+                // post-startup ensureLocalIdentityFederation() calls (each touching
+                // SharedPreferences and writing the sentinel file) collapses to one.
+                // The explicit createIdentity() path is unchanged and still writes
+                // immediately. compareAndSet returns true exactly once per process.
+                if (identityBackupLatch.compareAndSet(false, true)) {
+                    persistIdentityBackup(core)
+                } else {
+                    Timber.d("ensureLocalIdentityFederation: backup already persisted this process; skipping")
+                }
             }
         } catch (e: Exception) {
             Timber.w("Failed to ensure local identity federation: ${e.message}")
@@ -4371,27 +4396,43 @@ open class MeshRepository(private val context: Context) {
     }
 
     open suspend fun createIdentity(customSalt: ByteArray? = null) {
-        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-            try {
-                if (!ensureServiceInitialized() || ironCore == null) {
-                    Timber.e("IronCore is null after ensureServiceInitialized! Cannot create identity.")
-                    return@withContext
+        // P0_ANDROID_024: Serialize concurrent createIdentity() calls. Log evidence
+        // showed 4 threads invoking initializeIdentity() within 12ms; the second
+        // through Nth callers would race on sled writes and could produce a half-
+        // initialized identity. The mutex also makes the early-return pre-check
+        // safe against TOCTOU between "check initialized" and "call initialize".
+        identityCreationMutex.withLock {
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                try {
+                    if (!ensureServiceInitialized() || ironCore == null) {
+                        Timber.e("IronCore is null after ensureServiceInitialized! Cannot create identity.")
+                        return@withContext
+                    }
+                    // P0_ANDROID_024 (Bug 3): Skip if identity is already initialized.
+                    // Multiple UI surfaces (Onboarding, Settings) and onRuntimePermissionsGranted
+                    // can each trigger createIdentity(); without this guard we'd clobber the
+                    // existing identity with a fresh one on every entry point.
+                    val current = ironCore?.getIdentityInfo()
+                    if (current?.initialized == true) {
+                        Timber.d("createIdentity: identity already initialized (id=${current.identityId?.take(8)}); skipping")
+                        return@withContext
+                    }
+                    // P0_ANDROID_010: Grant consent before identity initialization.
+                    // The Rust core requires consent_granted=true for initialize_identity().
+                    // OnboardingScreen's consent checkbox gates the UI; this propagates consent to the core.
+                    ironCore?.grantConsent()
+                    Timber.d("Calling ironCore.initializeIdentity()...")
+                    ironCore?.initializeIdentity()
+                    ensureLocalIdentityFederation()
+                    persistIdentityBackup(ironCore, customSalt)
+                    Timber.i("Identity created successfully")
+                    // Identity is now available; bring up internet transport if it was deferred.
+                    initializeAndStartSwarm()
+                    updateBleIdentityBeacon()
+                } catch (e: Exception) {
+                    Timber.e(e, "Failed to create identity")
+                    throw e
                 }
-                // P0_ANDROID_010: Grant consent before identity initialization.
-                // The Rust core requires consent_granted=true for initialize_identity().
-                // OnboardingScreen's consent checkbox gates the UI; this propagates consent to the core.
-                ironCore?.grantConsent()
-                Timber.d("Calling ironCore.initializeIdentity()...")
-                ironCore?.initializeIdentity()
-                ensureLocalIdentityFederation()
-                persistIdentityBackup(ironCore, customSalt)
-                Timber.i("Identity created successfully")
-                // Identity is now available; bring up internet transport if it was deferred.
-                initializeAndStartSwarm()
-                updateBleIdentityBeacon()
-            } catch (e: Exception) {
-                Timber.e(e, "Failed to create identity")
-                throw e
             }
         }
     }

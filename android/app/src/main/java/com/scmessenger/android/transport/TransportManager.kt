@@ -29,6 +29,7 @@ class TransportManager @JvmOverloads constructor(
     private val context: Context,
     private val onPeerDiscovered: (peerId: String, transport: TransportType) -> Unit,
     private val onDataReceived: (peerId: String, data: ByteArray, transport: TransportType) -> Unit,
+    private val onPeerDisconnected: ((peerId: String, transport: TransportType) -> Unit)? = null,
     private val onLanAddressResolved: ((multiaddr: String) -> Unit)? = null,
     private val getLocalPeerId: (() -> String?)? = null
 ) {
@@ -148,6 +149,14 @@ class TransportManager @JvmOverloads constructor(
                 onDataReceived = { peerId, data ->
                     onDataReceived(peerId, data, TransportType.TCP_MDNS)
                 },
+                // P1 (Bug 5): propagate mDNS peer loss upward so MeshRepository
+                // can prune the peer and emit disconnect events. Previously the
+                // upper layer never learned about mDNS-only disconnects.
+                onPeerDisconnected = { peerId ->
+                    Timber.d("mDNS peer disconnected: $peerId")
+                    activeTransports[TransportType.TCP_MDNS] = activeTransports[TransportType.TCP_MDNS] == true
+                    this@TransportManager.onPeerDisconnected?.invoke(peerId, TransportType.TCP_MDNS)
+                },
                 onLanPeerResolved = { peerId, host, port ->
                     Timber.i("mDNS LAN peer resolved: $peerId at $host:$port — feeding to SwarmBridge")
                     val multiaddr = if (peerId.startsWith("12D3Koo")) {
@@ -180,7 +189,7 @@ class TransportManager @JvmOverloads constructor(
         if (probe == null) {
             probe = SubnetProbe(
                 context = context,
-                onLanAddressResolved = { multiaddr, transport ->
+                onLanAddressResolved = { multiaddr, _ ->
                     Timber.i("SubnetProbe: LAN address resolved -> $multiaddr — feeding to SwarmBridge")
                     onLanAddressResolved?.invoke(multiaddr)
                     activeTransports[TransportType.TCP_MDNS] = true
