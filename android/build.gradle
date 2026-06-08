@@ -21,8 +21,8 @@ buildscript {
         ksp_version = '1.9.20-1.0.14'
         
         // Application versioning (synced from Cargo.toml via scripts/sync_version.sh)
-        versionCode = 7
-        versionName = '0.2.1'
+        versionCode = 8
+        versionName = '0.3.0'
     }
     
     repositories {
