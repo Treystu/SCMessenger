@@ -1,132 +1,432 @@
-# [VALIDATED] P0_ANDROID — Agy Handoff: Identity Stability & UI Bundle (6 bugs, 1 ops ref)
-
-**Status:** READY-FOR-DISPATCH
-**Priority:** P0 (1 race) + P1 (4) + P2 (1) — all ship-block
-**Source:** Agy (Gemini Pro) ran 2026-06-07 19:46 → 20:24 PT. Full handoff in `HANDOFF/IN_PROGRESS/IN_PROGRESS_task_agy_android_stability_complete_handoff_2026-06-07.md`
-**Agy process:** STOPPED (PID 19276, 20:24 PT)
-**Quota state:** 5h=1.2%, 7d=0.2% — TIER 1, 240 min to reset
-**Slots:** 3/3 free (Agy didn't count; local LLMs don't count)
-
----
-
-## What's in this bundle (from Agy's 35-min investigation)
-
-Agy did real on-device Android testing + local swarm testing. Findings are concrete, evidence-backed, and ready to land.
-
-### Bug 1 (P0) — Concurrent `createIdentity()` race
-**File:** `android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt`
-**Symptom:** 4 threads call `ironCore.initializeIdentity()` simultaneously. Log evidence (01:48:19) shows 4 entries in 12ms.
-**Fix:** Add `private val identityCreationMutex = Mutex()` and wrap `createIdentity()` body in `mutex.withLock { ... }`.
-**Pre-check:** Skip if `ironCore?.getIdentityInfo()?.initialized == true`.
-
-### Bug 2 (P1) — `IdentityViewModel` re-entrancy guard missing
-**File:** `android/app/src/main/java/com/scmessenger/android/ui/identity/IdentityViewModel.kt`
-**Fix:** Add `_isCreating` StateFlow gate.
-
-### Bug 3 (P1) — `createIdentity()` fires when identity already exists
-**Same fix as Bug 1 (pre-check).**
-
-### Bug 4 (P2) — Redundant backup writes (10+ in 30s)
-**File:** `MeshRepository.kt` `ensureLocalIdentityFederation()` lazy path.
-**Fix:** AtomicBoolean latch, run once per process lifecycle.
-
-### Bug 5 (P1) — Brief identity "disappearance" (UI flash)
-**File:** `MeshRepository.kt` `isIdentityInitialized()` returns `true` before restore completes.
-**Fix:** Await the restore job before returning.
-
-### Bug 6 (P1) — mDNS / discovered peers disconnect
-**File:** `android/app/src/main/java/com/scmessenger/android/discovery/MdnsServiceDiscovery.kt`
-**Symptom:** `MdnsServiceDiscovery: mDNS peer removed from discovered list...`
-**Live signature from Agy's task-115.log (dozens of `os error 10061 — No connection could be made because the target machine actively refused it`):**
-```
-2026-06-07T08:51:18Z ⚠ Outgoing connection error to 12D3KooWPD7Mkc9k5Xjyk6BJW2zUKCQpAXEFxv6PvyWCjwiB9z98: ...tcp/9001: : No connection could be made because the target machine actively refused it. (os error 10061)
-```
-**Likely cause:** Listener-port mismatch between mDNS-advertised port and SwarmBridge's expected port. Audit both sides.
-
-### UI Bug A (P2) — Left column not weighted in `ContactItem`
-**File:** `android/app/src/main/java/com/scmessenger/android/ui/screens/ContactsScreen.kt` line 333
-**Fix:** `Column(modifier = Modifier.weight(1f)) { ... }` (matches `NearbyPeerCard` at `AddContactScreen.kt:617`).
-
-### UI Bug B (P2) — Missing bottom padding for `+` FAB
-**File:** `ContactsScreen.kt` (LazyColumn) + `MeshApp.kt` (outer Scaffold)
-**Fix:** Apply `paddingValues` to LazyColumn contentPadding so the FAB doesn't overlap the last list item.
-
-### Bonus — CLI Operations Reference
-**Source:** Agy's structured message `e854a371-f1dd-482e-a6e4-83edd6f144bb.json`
-Full CLI command list, port map (9000/9001/9002), config.json schema, bootstrap nodes, 4 ways to start the node. **Promote to `docs/CLI_OPERATIONS_REFERENCE.md` after a worker validates against current source.**
-
----
-
-## Recommended dispatch
-
-**Option A — Single worker (1 slot, ~1800s budget):** Land Bugs 1–5 + UI A/B in one go. All touch overlapping files (MeshRepository, IdentityViewModel, ContactsScreen). Use `rust-coder:7b` or `scm-coder:7b`. Bug 6 is the riskiest (mDNS) — keep it for a separate verification pass.
-
-**Option B — Two workers (2 slots):**
-- **Slot 1 (scm-coder:7b):** Bugs 1–5 + UI A/B (single Kotlin/Android workstream)
-- **Slot 2 (scm-thinker:14b):** Audit Bug 6 (mDNS listener port vs SwarmBridge) — read-only review, write a fix plan to `HANDOFF/done/`
-
-**Option C — Cloud override (free cloud slot, your "fire on all cylinders" mode):**
-- Flip `agent_pool.json` policy from `local_only` to `mixed`
-- **Slot 1:** `qwen3-coder-next:cloud` (or `glm-5.1:cloud`) — implement Bugs 1–5 + UI A/B
-- **Slot 2:** `qwen3-coder:480b:cloud` (or `minimax-m3:cloud`) — audit Bug 6 with deep architecture review
-- **Slot 3:** `deepseek-v3.2:cloud` — review the mDNS fix for security/correctness
-
----
-
-## Pre-flight artifacts
-
-| File | Purpose |
-|---|---|
-| `HANDOFF/IN_PROGRESS/IN_PROGRESS_task_agy_android_stability_complete_handoff_2026-06-07.md` | **Full ticket** — read this first |
-| `C:\Users\SCMessenger\.gemini\antigravity-cli\brain\1f072aa0-…\android_issue_catalog.md` | Original 6-bug catalog with log evidence |
-| `C:\Users\SCMessenger\.gemini\antigravity-cli\brain\1f072aa0-…\.system_generated\messages\a8e8635e-…` | Contact UI research |
-| `C:\Users\SCMessenger\.gemini\antigravity-cli\brain\1f072aa0-…\.system_generated\messages\e854a371-…` | CLI Setup research |
-| `C:\Users\SCMessenger\.gemini\antigravity-cli\brain\1f072aa0-…\.system_generated\tasks\task-115.log` | Overnight swarm test (152 KB) |
-| `C:\Users\SCMessenger\.gemini\antigravity-cli\brain\1f072aa0-…\.system_generated\tasks\task-389.log` | Current session swarm test (528 KB) |
-
-All WSL-readable at `/mnt/c/Users/SCMessenger/.gemini/antigravity-cli/...`
-
----
-
-## Verification gates (must pass before moving to `done/`)
-
-- [ ] `cargo check --workspace` — clean
-- [ ] `./gradlew assembleDebug` — builds
-- [ ] `./gradlew :app:testDebugUnitTest` — passes
-- [ ] `clippy --workspace -D warnings` — no new warnings
-- [ ] No new uncommitted files (the 2 dirty test files from 2026-06-05 must be either committed or stashed)
-- [ ] `./scripts/docs_sync_check.sh` — passes
-- [ ] If Bug 6 fix lands, manual verification: 2 CLI nodes start, mDNS peer stays connected for ≥60s (requires Pixel 6a back online, currently blocked)
-
----
-
-## Do NOT do
-
-- ❌ Don't reopen the uncommitted test files (`MeshRepositoryHistoryTest.kt`, `BleScannerTest.kt`) — they're leftover from the 2026-06-05 P0_024 fix and should be in their own commit
-- ❌ Don't delete the `IN_PROGRESS_task_agy_android_stability_complete_handoff_2026-06-07.md` file — it's the source of truth for the work
-- ❌ Don't use `local_only` override without Lucas's explicit GO
-
----
-
-## Orchestrator decision tree
-
-```
-If quota is TIER 1 and Lucas hasn't said "fire on all cylinders":
-    Use Option A (single local worker, scm-coder:7b)
-If Lucas says "fire on all cylinders" or "use the cloud slot":
-    Use Option C (cloud override, 2-3 slots)
-If Pixel 6a is offline AND Bug 6 needs live retest:
-    Land Bugs 1–5 + UI A/B now, defer Bug 6 to a verification slot
-```
-
----
-
-*Dispatched by Hermes (passive audit) on behalf of Lucas — 2026-06-07 20:27 PT*
-
-
 # REPO_MAP Context for Task: [VALIDATED]_P0_ANDROID_AGY_HANDOFF_2026-06-07_Identity_Stability_Bundle
 
 **Target function: `[VALIDATED]_P0_ANDROID_AGY_HANDOFF_2026-06-07_Identity_Stability_Bundle`**
+
+## android/app/src/main/java/com/scmessenger/android/transport/ble/BleAdvertiser.kt (2 chunks, 376 lines)
+Function `[VALIDATED]_P0_ANDROID_AGY_HANDOFF_2026-06-07_Identity_Stability_Bundle` not found in REPO_MAP chunks. Full file listing below.
+
+### Summary
+android/app/src/main/java/com/scmessenger/android/transport/ble/BleAdvertiser.kt: Defines 1 types: BleAdvertiser; 15 functions; 14 imports android/app/src/main/java/com/scmessenger/android/transport/ble/BleAdvertiser.kt: Defines 1 types: BleAdvertiser; 15 functions; 14 imports
+
+### Structs/Classes
+- BleAdvertiser
+
+### Functions
+| Function | Line | Calls Out To |
+|----------|------|-------------|
+| `onStartSuccess` | 55 | w, successfully, stopAdvertising, onStartFailure, i, minOf, e |
+| `onStartFailure` | 67 | w, stopAdvertising, minOf, e |
+| `applyAdvertiseSettings` | 111 | d, stopAdvertising, AdvertiseCallback, onStartSuccess, startAdvertising |
+| `onStartSuccess` | 139 | d, setIdentityData, stopAdvertising, onStartFailure, onStartSuccess, advertise, contentEquals, startAdvertising |
+| `onStartFailure` | 142 | d, setIdentityData, stopAdvertising, onStartFailure, advertise, contentEquals, startAdvertising |
+| `setIdentityData` | 151 | d, updateIdentityBeacon, setIdentityData, stopAdvertising, contentEquals, startAdvertising |
+| `updateIdentityBeacon` | 175 | SuppressLint, d, setAdvertiseMode, w, startRotation, setIdentityData, setRotationInterval, Builder, startAdvertising, hasAdvertisePermission |
+| `setRotationInterval` | 182 | SuppressLint, d, setAdvertiseMode, w, setTxPowerLevel, addServiceUuid, startRotation, build, Builder, ParcelUuid |
+| `startAdvertising` | 192 | advertising, setAdvertiseMode, w, setTxPowerLevel, addServiceUuid, addServiceData, build, Builder, ParcelUuid, setTimeout |
+| `startRotation` | 238 | setAdvertiseMode, run, w, setTxPowerLevel, addServiceUuid, stopRotation, startRotation, build, stopAdvertising, Builder |
+| `run` | 244 | setAdvertiseMode, w, setTxPowerLevel, addServiceUuid, addServiceData, build, stopAdvertising, Builder, ParcelUuid, setTimeout |
+| `stopRotation` | 294 | removeCallbacks, SuppressLint, catch, w, e, stopRotation, stopAdvertising, i, hasAdvertisePermission |
+| `stopAdvertising` | 301 | SuppressLint, catch, w, e, stopRotation, stopAdvertising, i, sendData, hasAdvertisePermission |
+| `sendData` | 327 | advertising, setAdvertiseMode, w, addServiceUuid, setTxPowerLevel, addServiceData, build, stopAdvertising, Builder, ParcelUuid |
+| `hasAdvertisePermission` | 368 | checkSelfPermission, hasAdvertisePermission |
+| `onStartSuccess` | 55 | onStartFailure, successfully, minOf, i, stopAdvertising, w, e |
+| `onStartFailure` | 67 | minOf, stopAdvertising, w, e |
+| `applyAdvertiseSettings` | 111 | d, AdvertiseCallback, onStartSuccess, stopAdvertising, startAdvertising |
+| `onStartSuccess` | 139 | advertise, d, onStartFailure, onStartSuccess, contentEquals, stopAdvertising, startAdvertising, setIdentityData |
+| `onStartFailure` | 142 | advertise, d, onStartFailure, contentEquals, stopAdvertising, startAdvertising, setIdentityData |
+| `setIdentityData` | 151 | d, contentEquals, stopAdvertising, startAdvertising, updateIdentityBeacon, setIdentityData |
+| `updateIdentityBeacon` | 175 | d, startRotation, setConnectable, hasAdvertisePermission, setRotationInterval, setAdvertiseMode, Builder, startAdvertising, SuppressLint, w |
+| `setRotationInterval` | 182 | setIncludeDeviceName, d, setTimeout, startRotation, setConnectable, ParcelUuid, hasAdvertisePermission, build, setAdvertiseMode, Builder |
+| `startAdvertising` | 192 | setIncludeDeviceName, setTimeout, setConnectable, ParcelUuid, hasAdvertisePermission, advertising, build, setAdvertiseMode, addServiceData, Builder |
+| `startRotation` | 238 | setIncludeDeviceName, setTimeout, startRotation, setConnectable, ParcelUuid, hasAdvertisePermission, build, setAdvertiseMode, stopRotation, run |
+| `run` | 244 | setIncludeDeviceName, setTimeout, setConnectable, ParcelUuid, hasAdvertisePermission, build, setAdvertiseMode, addServiceData, stopAdvertising, Builder |
+| `stopRotation` | 294 | hasAdvertisePermission, catch, i, removeCallbacks, stopRotation, stopAdvertising, SuppressLint, w, e |
+| `stopAdvertising` | 301 | hasAdvertisePermission, sendData, catch, i, stopRotation, stopAdvertising, SuppressLint, w, e |
+| `sendData` | 327 | setIncludeDeviceName, ParcelUuid, setConnectable, advertising, hasAdvertisePermission, build, setAdvertiseMode, addServiceData, Builder, addServiceUuid |
+| `hasAdvertisePermission` | 368 | hasAdvertisePermission, checkSelfPermission |
+
+### Imports
+- `import android.Manifest`
+- `import android.annotation.SuppressLint`
+- `import android.bluetooth.BluetoothManager`
+- `import android.bluetooth.le.AdvertiseCallback`
+- `import android.bluetooth.le.AdvertiseData`
+- `import android.bluetooth.le.AdvertiseSettings`
+- `import android.content.Context`
+- `import android.content.pm.PackageManager`
+- `import android.os.Build`
+- `import android.os.Handler`
+- `import android.os.Looper`
+- `import android.os.ParcelUuid`
+- `import androidx.core.content.ContextCompat`
+- `import timber.log.Timber`
+---
+
+## android/app/src/main/java/com/scmessenger/android/transport/ble/BleBackoffStrategy.kt (2 chunks, 47 lines)
+Function `[VALIDATED]_P0_ANDROID_AGY_HANDOFF_2026-06-07_Identity_Stability_Bundle` not found in REPO_MAP chunks. Full file listing below.
+
+### Summary
+android/app/src/main/java/com/scmessenger/android/transport/ble/BleBackoffStrategy.kt: Defines 1 types: BleBackoffStrategy; 3 functions; 4 imports android/app/src/main/java/com/scmessenger/android/transport/ble/BleBackoffStrategy.kt: Defines 1 types: BleBackoffStrategy; 3 functions; 4 imports
+
+### Structs/Classes
+- BleBackoffStrategy
+
+### Functions
+| Function | Line | Calls Out To |
+|----------|------|-------------|
+| `nextDelay` | 23 | reset, pow, max, nextLong, minOf, jitter, nextDelay, getCurrentDelay, toDouble, toLong |
+| `reset` | 40 | reset, getCurrentDelay |
+| `getCurrentDelay` | 45 | getCurrentDelay |
+| `nextDelay` | 23 | jitter, getCurrentDelay, pow, reset, nextDelay, toDouble, minOf, toLong, max, nextLong |
+| `reset` | 40 | getCurrentDelay, reset |
+| `getCurrentDelay` | 45 | getCurrentDelay |
+
+### Imports
+- `import kotlin.math.max`
+- `import kotlin.math.min`
+- `import kotlin.random.Random`
+- `import timber.log.Timber`
+---
+
+## android/app/src/main/java/com/scmessenger/android/transport/ble/BleGattClient.kt (2 chunks, 872 lines)
+Function `[VALIDATED]_P0_ANDROID_AGY_HANDOFF_2026-06-07_Identity_Stability_Bundle` not found in REPO_MAP chunks. Full file listing below.
+
+### Summary
+android/app/src/main/java/com/scmessenger/android/transport/ble/BleGattClient.kt: Defines 4 types: BleGattClient, GattOpGate, BleGattClientStats, ConnectionState; 21 functions; 12 imports android/app/src/main/java/com/scmessenger/android/transport/ble/BleGattClient.kt: Defines 4 types: BleGattClient, GattOpGate, BleGattClientStats, ConnectionState; 21 functions; 12 imports
+
+### Structs/Classes
+- BleGattClient
+- BleGattClientStats
+- ConnectionState
+- GattOpGate
+
+### Functions
+| Function | Line | Calls Out To |
+|----------|------|-------------|
+| `gattQueue` | 120 | GattOpGate, catch, set, acquire, getOrPut, op, releaseGattOp, e, AtomicInteger |
+| `enqueueGattOp` | 154 | trySend, compareAndSet, w, incrementAndGet, release, releaseGattOp, path, s, gattQueue |
+| `releaseGattOp` | 167 | compareAndSet, release, incrementAndGet, w, catch, checkBluetoothAddress, connect, rejected, s, e |
+| `connect` | 195 | checkBluetoothAddress, d, incrementAndGet, w, mismatch, full, containsKey, coerceAtLeast, currentTimeMillis |
+| `disconnect` | 287 | d, catch, close, incrementAndGet, remove, disconnect, e |
+| `sendData` | 322 | w, toList, connect, first |
+| `reconnectAfterWriteFailure` | 428 | w, delay, fragmentData, failure, listOf, coerceAtLeast, total_fragments, connect, minOf, reconnectAfterWriteFailure |
+| `fragmentData` | 441 | disconnectAll, fragmentData, fragment_index, listOf, add, coerceAtLeast, total_fragments, minOf, ByteArray, toByte |
+| `disconnectAll` | 471 | d, catch, incrementAndGet, toList, requestMtu, onConnectionStateChange, BluetoothGattCallback, disconnect, e, AtomicInteger |
+| `onConnectionStateChange` | 477 | d, catch, incrementAndGet, requestMtu, onConnectionStateChange, disconnect, e, AtomicInteger |
+| `onServicesDiscovered` | 509 | d, incrementAndGet, w, set, readIdentityBeacon, getService, AtomicInteger, getOrPut, onServicesDiscovered, enableMessageNotifications |
+| `onCharacteristicRead` | 571 | d, onIdentityReceived, delay, Supported, onCharacteristicRead, error, e |
+| `onCharacteristicWrite` | 610 | get, incrementAndGet, set, decrementAndGet, v, coerceAtLeast, s, onCharacteristicWrite |
+| `onDescriptorWrite` | 653 | d, w, releaseGattOp, onDescriptorWrite, onCharacteristicChanged, e, packet |
+| `onCharacteristicChanged` | 669 | clear, start, w, v, onCharacteristicChanged, RX, getOrPut, toInt, or, deviceAddress |
+| `onMtuChanged` | 718 | d, catch, w, discoverServices, disconnect, getClientStats, requestConnectionPriority, onMtuChanged, e |
+| `getClientStats` | 747 | get, readCharacteristic, catch, readIdentityBeacon, e, releaseGattOp, getService, getClientStats, getCharacteristic, enqueueGattOp |
+| `readIdentityBeacon` | 763 | readCharacteristic, catch, delay, readIdentityBeacon, releaseGattOp, getService, getCharacteristic, ordering, enqueueGattOp, e |
+| `scheduleIdentityRefreshReads` | 784 | delay, readIdentityBeacon, enqueueGattOp, releaseGattOp, getService, getCharacteristic, routing, enableMessageNotifications, ordering, setCharacteristicNotification |
+| `enableMessageNotifications` | 801 | catch, w, writeDescriptor, releaseGattOp, getCharacteristic, getService, routing, getDescriptor, enableMessageNotifications, enqueueGattOp |
+| `cleanup` | 839 | cleanup, cancel, disconnectAll |
+| `gattQueue` | 120 | releaseGattOp, AtomicInteger, set, op, catch, GattOpGate, acquire, getOrPut, e |
+| `enqueueGattOp` | 154 | releaseGattOp, trySend, path, compareAndSet, release, incrementAndGet, w, gattQueue, s |
+| `releaseGattOp` | 167 | connect, catch, compareAndSet, release, incrementAndGet, rejected, w, checkBluetoothAddress, e, s |
+| `connect` | 195 | coerceAtLeast, d, currentTimeMillis, containsKey, incrementAndGet, mismatch, full, w, checkBluetoothAddress |
+| `disconnect` | 287 | d, close, remove, catch, disconnect, incrementAndGet, e |
+| `sendData` | 322 | connect, w, first, toList |
+| `reconnectAfterWriteFailure` | 428 | fragmentData, coerceAtLeast, connect, failure, disconnect, minOf, listOf, delay, copyOfRange, toByte |
+| `fragmentData` | 441 | fragmentData, coerceAtLeast, disconnectAll, add, listOf, minOf, copyOfRange, toByte, total_fragments, ByteArray |
+| `disconnectAll` | 471 | d, requestMtu, AtomicInteger, catch, toList, disconnect, incrementAndGet, e, onConnectionStateChange, BluetoothGattCallback |
+| `onConnectionStateChange` | 477 | d, requestMtu, AtomicInteger, catch, disconnect, incrementAndGet, e, onConnectionStateChange |
+| `onServicesDiscovered` | 509 | d, enableMessageNotifications, AtomicInteger, set, w, getService, onServicesDiscovered, scheduleIdentityRefreshReads, incrementAndGet, readIdentityBeacon |
+| `onCharacteristicRead` | 571 | d, onIdentityReceived, delay, error, onCharacteristicRead, Supported, e |
+| `onCharacteristicWrite` | 610 | coerceAtLeast, set, decrementAndGet, onCharacteristicWrite, v, incrementAndGet, get, s |
+| `onDescriptorWrite` | 653 | releaseGattOp, d, onCharacteristicChanged, packet, onDescriptorWrite, w, e |
+| `onCharacteristicChanged` | 669 | toInt, packet, onCharacteristicChanged, deviceAddress, getOrPut, clear, RX, copyOfRange, v, totalFrags |
+| `onMtuChanged` | 718 | d, discoverServices, catch, disconnect, getClientStats, requestConnectionPriority, w, e, onMtuChanged |
+| `getClientStats` | 747 | releaseGattOp, enqueueGattOp, getCharacteristic, readCharacteristic, getService, catch, BleGattClientStats, getClientStats, readIdentityBeacon, e |
+| `readIdentityBeacon` | 763 | releaseGattOp, ordering, enqueueGattOp, getCharacteristic, readCharacteristic, getService, catch, delay, scheduleIdentityRefreshReads, readIdentityBeacon |
+| `scheduleIdentityRefreshReads` | 784 | routing, releaseGattOp, ordering, enableMessageNotifications, enqueueGattOp, getCharacteristic, getService, setCharacteristicNotification, delay, scheduleIdentityRefreshReads |
+| `enableMessageNotifications` | 801 | routing, releaseGattOp, enableMessageNotifications, enqueueGattOp, getCharacteristic, writeDescriptor, getDescriptor, getService, catch, setCharacteristicNotification |
+| `cleanup` | 839 | disconnectAll, cleanup, cancel |
+
+### Imports
+- `import android.bluetooth.*`
+- `import android.content.Context`
+- `import java.util.UUID`
+- `import java.util.concurrent.ConcurrentHashMap`
+- `import java.util.concurrent.CountDownLatch`
+- `import java.util.concurrent.TimeUnit`
+- `import java.util.concurrent.atomic.AtomicBoolean`
+- `import java.util.concurrent.atomic.AtomicInteger`
+- `import kotlinx.coroutines.*`
+- `import kotlinx.coroutines.channels.Channel`
+- `import kotlinx.coroutines.sync.Semaphore`
+- `import timber.log.Timber`
+---
+
+## android/app/src/main/java/com/scmessenger/android/transport/ble/BleGattServer.kt (2 chunks, 554 lines)
+Function `[VALIDATED]_P0_ANDROID_AGY_HANDOFF_2026-06-07_Identity_Stability_Bundle` not found in REPO_MAP chunks. Full file listing below.
+
+### Summary
+android/app/src/main/java/com/scmessenger/android/transport/ble/BleGattServer.kt: Defines 1 types: BleGattServer; 16 functions; 9 imports android/app/src/main/java/com/scmessenger/android/transport/ble/BleGattServer.kt: Defines 1 types: BleGattServer; 16 functions; 9 imports
+
+### Structs/Classes
+- BleGattServer
+
+### Functions
+| Function | Line | Calls Out To |
+|----------|------|-------------|
+| `setIdentityData` | 61 | start, d, w, set, openGattServer, getSystemService, e, BluetoothGattService |
+| `start` | 65 | start, BluetoothGattCharacteristic, w, characteristic, openGattServer, getSystemService, e, BluetoothGattService |
+| `stop` | 138 | clear, catch, cancelConnection, w, close, i, stop, e |
+| `sendData` | 172 | w, getService, getCharacteristic, contains, sendFragmented, notifyCharacteristicChangedSafe, e |
+| `getConnectedDeviceAddresses` | 219 | toList, coerceAtLeast, sendFragmented, keys, minOf, ByteArray, notifyCharacteristicChangedSafe, getConnectedDeviceAddresses, toByte, copyOfRange |
+| `sendFragmented` | 223 | coerceAtLeast, sendFragmented, minOf, ByteArray, notifyCharacteristicChangedSafe, toByte, copyOfRange |
+| `onConnectionStateChange` | 262 | onCharacteristicReadRequest, d, remove, onConnectionStateChange |
+| `onCharacteristicReadRequest` | 284 | onCharacteristicReadRequest, sendResponseSafe, ByteArray, copyOfRange, toByteArray |
+| `onCharacteristicWriteRequest` | 335 | d, onDataReceived, sendResponseSafe, message, handleReassembly, onCharacteristicWriteRequest |
+| `onDescriptorWriteRequest` | 382 | d, sendResponseSafe, add, getOrPut, remove, newKeySet, contentEquals, onDescriptorWriteRequest |
+| `handleReassembly` | 425 | clear, start, w, v, getOrPut, mutableMapOf, arraycopy, ByteArray, toInt, handleReassembly |
+| `onMtuChanged` | 464 | d, onDataReceived, hasBluetoothConnectPermission, sendResponseSafe, checkSelfPermission, remove, onMtuChanged, onExecuteWrite |
+| `onExecuteWrite` | 470 | d, onDataReceived, hasBluetoothConnectPermission, sendResponseSafe, checkSelfPermission, remove, onExecuteWrite |
+| `hasBluetoothConnectPermission` | 491 | catch, hasBluetoothConnectPermission, w, sendResponseSafe, checkSelfPermission, e, notifyCharacteristicChangedSafe, sendResponse |
+| `sendResponseSafe` | 499 | catch, hasBluetoothConnectPermission, w, sendResponseSafe, notifyCharacteristicChanged, e, notifyCharacteristicChangedSafe, sendResponse |
+| `notifyCharacteristicChangedSafe` | 517 | catch, hasBluetoothConnectPermission, w, fromString, notifyCharacteristicChanged, UUID, notifyCharacteristicChangedSafe, e, Descriptor |
+| `setIdentityData` | 61 | d, set, BluetoothGattService, getSystemService, openGattServer, start, w, e |
+| `start` | 65 | characteristic, BluetoothGattService, BluetoothGattCharacteristic, getSystemService, openGattServer, start, w, e |
+| `stop` | 138 | close, catch, clear, cancelConnection, i, w, e, stop |
+| `sendData` | 172 | sendFragmented, getCharacteristic, getService, w, e, notifyCharacteristicChangedSafe, contains |
+| `getConnectedDeviceAddresses` | 219 | coerceAtLeast, sendFragmented, keys, getConnectedDeviceAddresses, minOf, copyOfRange, toByte, ByteArray, notifyCharacteristicChangedSafe, toList |
+| `sendFragmented` | 223 | coerceAtLeast, sendFragmented, minOf, copyOfRange, toByte, ByteArray, notifyCharacteristicChangedSafe |
+| `onConnectionStateChange` | 262 | d, remove, onCharacteristicReadRequest, onConnectionStateChange |
+| `onCharacteristicReadRequest` | 284 | ByteArray, toByteArray, copyOfRange, onCharacteristicReadRequest, sendResponseSafe |
+| `onCharacteristicWriteRequest` | 335 | d, onDataReceived, handleReassembly, message, onCharacteristicWriteRequest, sendResponseSafe |
+| `onDescriptorWriteRequest` | 382 | newKeySet, d, add, remove, onDescriptorWriteRequest, contentEquals, getOrPut, sendResponseSafe |
+| `handleReassembly` | 425 | toInt, packet, deviceAddress, ByteArray, mutableMapOf, arraycopy, getOrPut, clear, handleReassembly, copyOfRange |
+| `onMtuChanged` | 464 | hasBluetoothConnectPermission, d, onDataReceived, onExecuteWrite, remove, checkSelfPermission, sendResponseSafe, onMtuChanged |
+| `onExecuteWrite` | 470 | hasBluetoothConnectPermission, d, onExecuteWrite, onDataReceived, remove, checkSelfPermission, sendResponseSafe |
+| `hasBluetoothConnectPermission` | 491 | hasBluetoothConnectPermission, catch, notifyCharacteristicChangedSafe, checkSelfPermission, w, sendResponseSafe, e, sendResponse |
+| `sendResponseSafe` | 499 | hasBluetoothConnectPermission, notifyCharacteristicChanged, catch, notifyCharacteristicChangedSafe, w, sendResponseSafe, e, sendResponse |
+| `notifyCharacteristicChangedSafe` | 517 | hasBluetoothConnectPermission, Descriptor, notifyCharacteristicChanged, fromString, catch, UUID, w, notifyCharacteristicChangedSafe, e |
+
+### Imports
+- `import android.Manifest`
+- `import android.bluetooth.*`
+- `import android.content.Context`
+- `import android.content.pm.PackageManager`
+- `import android.os.Build`
+- `import androidx.core.content.ContextCompat`
+- `import java.util.UUID`
+- `import java.util.concurrent.ConcurrentHashMap`
+- `import timber.log.Timber`
+---
+
+## android/app/src/main/java/com/scmessenger/android/transport/ble/BleL2capManager.kt (2 chunks, 286 lines)
+Function `[VALIDATED]_P0_ANDROID_AGY_HANDOFF_2026-06-07_Identity_Stability_Bundle` not found in REPO_MAP chunks. Full file listing below.
+
+### Summary
+android/app/src/main/java/com/scmessenger/android/transport/ble/BleL2capManager.kt: Defines 1 types: BleL2capManager; 11 functions; 9 imports android/app/src/main/java/com/scmessenger/android/transport/ble/BleL2capManager.kt: Defines 1 types: BleL2capManager; 11 functions; 9 imports
+
+### Structs/Classes
+- BleL2capManager
+
+### Functions
+| Function | Line | Calls Out To |
+|----------|------|-------------|
+| `isSupported` | 45 | w, device, startListening, isSupported, i, listenUsingInsecureL2capChannel, e |
+| `startListening` | 52 | w, device, accept, isSupported, handleIncomingConnection, i, listenUsingInsecureL2capChannel, e |
+| `stopListening` | 103 | catch, d, close, w, containsKey, isSupported, connect, i, e |
+| `connect` | 123 | d, w, containsKey, L2capConnection, startReading, isSupported, connect, getRemoteDevice, e, createInsecureL2capChannel |
+| `disconnect` | 170 | d, cancel, close, w, toList, remove, shutdown, stopListening, handleIncomingConnection, send |
+| `sendData` | 179 | d, cancel, w, containsKey, close, toList, handleIncomingConnection, shutdown, stopListening, send |
+| `shutdown` | 191 | d, cancel, w, containsKey, close, toList, L2capConnection, startReading, handleIncomingConnection, stopListening |
+| `handleIncomingConnection` | 199 | d, w, containsKey, close, L2capConnection, startReading, handleIncomingConnection |
+| `startReading` | 227 | d, onDataReceived, catch, close, startReading, ByteArray, read, e, copyOfRange |
+| `send` | 259 | d, catch, close, flush, w, write, remove, send, synchronized, e |
+| `close` | 273 | catch, close, remove, w |
+| `isSupported` | 45 | startListening, listenUsingInsecureL2capChannel, device, i, w, e, isSupported |
+| `startListening` | 52 | accept, handleIncomingConnection, listenUsingInsecureL2capChannel, device, i, w, e, isSupported |
+| `stopListening` | 103 | d, connect, close, catch, i, containsKey, w, e, isSupported |
+| `connect` | 123 | d, connect, getRemoteDevice, createInsecureL2capChannel, L2capConnection, startReading, containsKey, w, e, isSupported |
+| `disconnect` | 170 | d, handleIncomingConnection, close, sendData, remove, cancel, disconnect, send, stopListening, w |
+| `sendData` | 179 | handleIncomingConnection, d, close, cancel, disconnect, send, containsKey, stopListening, w, shutdown |
+| `shutdown` | 191 | handleIncomingConnection, d, close, disconnect, L2capConnection, startReading, containsKey, stopListening, w, cancel |
+| `handleIncomingConnection` | 199 | handleIncomingConnection, d, close, L2capConnection, startReading, containsKey, w |
+| `startReading` | 227 | d, onDataReceived, read, close, catch, startReading, copyOfRange, ByteArray, e |
+| `send` | 259 | d, close, remove, catch, synchronized, send, write, flush, w, e |
+| `close` | 273 | w, catch, remove, close |
+
+### Imports
+- `import android.annotation.TargetApi`
+- `import android.bluetooth.*`
+- `import android.content.Context`
+- `import android.os.Build`
+- `import java.io.InputStream`
+- `import java.io.OutputStream`
+- `import java.util.concurrent.ConcurrentHashMap`
+- `import kotlinx.coroutines.*`
+- `import timber.log.Timber`
+---
+
+## android/app/src/main/java/com/scmessenger/android/transport/ble/BleQuotaManager.kt (2 chunks, 65 lines)
+Function `[VALIDATED]_P0_ANDROID_AGY_HANDOFF_2026-06-07_Identity_Stability_Bundle` not found in REPO_MAP chunks. Full file listing below.
+
+### Summary
+android/app/src/main/java/com/scmessenger/android/transport/ble/BleQuotaManager.kt: Defines 1 types: BleQuotaManager; 4 functions; 1 imports android/app/src/main/java/com/scmessenger/android/transport/ble/BleQuotaManager.kt: Defines 1 types: BleQuotaManager; 4 functions; 1 imports
+
+### Structs/Classes
+- BleQuotaManager
+
+### Functions
+| Function | Line | Calls Out To |
+|----------|------|-------------|
+| `checkQuota` | 22 | exhausted, w, recordScanStart, currentCount, maxOf, currentTimeMillis, addLast, pruneOldTimestamps, first |
+| `recordScanStart` | 40 | currentCount, addLast, currentTimeMillis, pruneOldTimestamps, removeFirst, isNotEmpty, first |
+| `currentCount` | 50 | currentTimeMillis, pruneOldTimestamps, removeFirst, isNotEmpty, first |
+| `pruneOldTimestamps` | 54 | pruneOldTimestamps, removeFirst, isNotEmpty, first |
+| `checkQuota` | 22 | recordScanStart, currentCount, currentTimeMillis, maxOf, pruneOldTimestamps, exhausted, addLast, w, first |
+| `recordScanStart` | 40 | currentCount, isNotEmpty, currentTimeMillis, removeFirst, pruneOldTimestamps, addLast, first |
+| `currentCount` | 50 | isNotEmpty, currentTimeMillis, removeFirst, pruneOldTimestamps, first |
+| `pruneOldTimestamps` | 54 | isNotEmpty, removeFirst, pruneOldTimestamps, first |
+
+### Imports
+- `import timber.log.Timber`
+---
+
+## android/app/src/main/java/com/scmessenger/android/transport/ble/BleScanner.kt (2 chunks, 628 lines)
+Function `[VALIDATED]_P0_ANDROID_AGY_HANDOFF_2026-06-07_Identity_Stability_Bundle` not found in REPO_MAP chunks. Full file listing below.
+
+### Summary
+android/app/src/main/java/com/scmessenger/android/transport/ble/BleScanner.kt: Defines 2 types: BleScanner, BleDiscoveryStats; 25 functions; 20 imports android/app/src/main/java/com/scmessenger/android/transport/ble/BleScanner.kt: Defines 2 types: BleScanner, BleDiscoveryStats; 25 functions; 20 imports
+
+### Structs/Classes
+- BleDiscoveryStats
+- BleScanner
+
+### Functions
+| Function | Line | Calls Out To |
+|----------|------|-------------|
+| `onScanResult` | 107 | pruneOldPeers, incrementAndGet, set, getServiceData, matchesMeshAdvertisement, currentTimeMillis |
+| `onScanFailed` | 158 | catch, incrementAndGet, w, delay, invoke, startScanning, errorCode, stopScanning, e |
+| `handleScanFailure` | 210 | catch, w, postDelayed, cycle, startScanning, minOf, applyScanSettings, maxOf, setScanDutyCycle, nextDelay |
+| `applyScanSettings` | 233 | d, ScanCallback, onScanFailed, minOf, maxOf, setScanDutyCycle, onScanResult, toLong |
+| `onScanResult` | 244 | d, setBackgroundMode, onScanFailed, startScanning, mode, setScanDutyCycle, stopScanning, onScanResult |
+| `onScanFailed` | 247 | d, setBackgroundMode, onScanFailed, startScanning, mode, setScanDutyCycle, stopScanning |
+| `setScanDutyCycle` | 256 | d, setBackgroundMode, startScanning, mode, i, setScanDutyCycle, stopScanning |
+| `setBackgroundMode` | 273 | SuppressLint, d, w, startScanning, restart, i, setScanDutyCycle |
+| `startScanning` | 288 | d, checkQuota, w, postDelayed, restart |
+| `startDutyCycle` | 374 | d, run, postDelayed, stopDutyCycle, startScanningInternal, startDutyCycle, stopScanningInternal |
+| `run` | 380 | removeCallbacks, d, postDelayed, stopDutyCycle, startScanningInternal, stopScanningInternal |
+| `stopDutyCycle` | 405 | removeCallbacks, setScanMode, setCallbackType, setServiceUuid, stopDutyCycle, listOf, setNumOfMatches, build, currentFilters, buildScanSettings |
+| `currentFilters` | 410 | removeCallbacks, setScanMode, setCallbackType, setServiceUuid, listOf, setNumOfMatches, build, currentFilters, buildScanSettings, Builder |
+| `buildScanSettings` | 422 | removeCallbacks, setScanMode, setCallbackType, get, w, setNumOfMatches, build, buildScanSettings, Builder, currentTimeMillis |
+| `scheduleFallbackPromotion` | 437 | removeCallbacks, get, SuppressLint, catch, w, postDelayed, restartActiveScan, stopScan, currentTimeMillis, scheduleFallbackPromotion |
+| `restartActiveScan` | 462 | SuppressLint, catch, getServiceData, trim, startScanningInternal, stopScan, currentFilters, buildScanSettings, i, matchesMeshAdvertisement |
+| `matchesMeshAdvertisement` | 477 | SuppressLint, catch, getServiceData, e, startScanningInternal, v, currentFilters, buildScanSettings, matchesMeshAdvertisement, startScan |
+| `startScanningInternal` | 490 | SuppressLint, catch, v, currentFilters, buildScanSettings, stopScan, startScan, e, stopScanningInternal |
+| `stopScanningInternal` | 505 | catch, w, postDelayed, nextDelay, v, forceRestartScanning, startScanning, stopScan, i, e |
+| `forceRestartScanning` | 521 | removeCallbacks, SuppressLint, catch, w, postDelayed, stopDutyCycle, startScanning, stopScan, i, nextDelay |
+| `stopScanning` | 538 | removeCallbacks, clear, catch, d, get, BleDiscoveryStats, stopDutyCycle, clearPeerCache, stopScan, i |
+| `clearPeerCache` | 557 | clear, get, d, iterator, BleDiscoveryStats, currentCount, getQuotaCount, remove, hasNext, next |
+| `getDiscoveryStats` | 561 | get, iterator, BleDiscoveryStats, currentCount, getQuotaCount, remove, hasNext, next, getDiscoveryStats, pruneOldPeers |
+| `getQuotaCount` | 575 | iterator, currentCount, remove, hasNext, next, pruneOldPeers |
+| `pruneOldPeers` | 582 | iterator, remove, hasNext, next |
+| `onScanResult` | 107 | set, matchesMeshAdvertisement, currentTimeMillis, pruneOldPeers, getServiceData, incrementAndGet |
+| `onScanFailed` | 158 | stopScanning, w, catch, errorCode, delay, incrementAndGet, invoke, e, startScanning |
+| `handleScanFailure` | 210 | applyScanSettings, catch, nextDelay, maxOf, minOf, postDelayed, toLong, cycle, setScanDutyCycle, w |
+| `applyScanSettings` | 233 | d, maxOf, minOf, ScanCallback, toLong, onScanResult, onScanFailed, setScanDutyCycle |
+| `onScanResult` | 244 | d, stopScanning, mode, onScanFailed, onScanResult, setScanDutyCycle, setBackgroundMode, startScanning |
+| `onScanFailed` | 247 | d, stopScanning, mode, onScanFailed, setScanDutyCycle, setBackgroundMode, startScanning |
+| `setScanDutyCycle` | 256 | d, stopScanning, mode, i, setScanDutyCycle, setBackgroundMode, startScanning |
+| `setBackgroundMode` | 273 | d, i, SuppressLint, w, restart, setScanDutyCycle, startScanning |
+| `startScanning` | 288 | d, checkQuota, postDelayed, w, restart |
+| `startDutyCycle` | 374 | d, stopScanningInternal, postDelayed, startScanningInternal, run, stopDutyCycle, startDutyCycle |
+| `run` | 380 | d, stopScanningInternal, postDelayed, removeCallbacks, startScanningInternal, stopDutyCycle |
+| `stopDutyCycle` | 405 | setServiceUuid, ParcelUuid, emptyList, setCallbackType, setMatchMode, buildScanSettings, build, setScanMode, listOf, setNumOfMatches |
+| `currentFilters` | 410 | setServiceUuid, ParcelUuid, emptyList, setCallbackType, scheduleFallbackPromotion, setMatchMode, buildScanSettings, build, setScanMode, listOf |
+| `buildScanSettings` | 422 | setCallbackType, scheduleFallbackPromotion, setMatchMode, buildScanSettings, setScanMode, setNumOfMatches, build, currentTimeMillis, removeCallbacks, Builder |
+| `scheduleFallbackPromotion` | 437 | stopScan, scheduleFallbackPromotion, currentTimeMillis, restartActiveScan, catch, postDelayed, removeCallbacks, SuppressLint, w, get |
+| `restartActiveScan` | 462 | startScan, stopScan, restarted, matchesMeshAdvertisement, buildScanSettings, catch, getServiceData, trim, i, startScanningInternal |
+| `matchesMeshAdvertisement` | 477 | startScan, matchesMeshAdvertisement, stopScanningInternal, buildScanSettings, catch, getServiceData, trim, v, startScanningInternal, SuppressLint |
+| `startScanningInternal` | 490 | startScan, stopScan, stopScanningInternal, buildScanSettings, catch, v, SuppressLint, e, currentFilters |
+| `stopScanningInternal` | 505 | stopScan, catch, nextDelay, postDelayed, i, v, forceRestartScanning, w, e, startScanning |
+| `forceRestartScanning` | 521 | stopDutyCycle, stopScanning, stopScan, catch, nextDelay, postDelayed, i, removeCallbacks, SuppressLint, w |
+| `stopScanning` | 538 | d, stopScan, catch, clearPeerCache, BleDiscoveryStats, getDiscoveryStats, get, i, removeCallbacks, clear |
+| `clearPeerCache` | 557 | d, currentCount, next, pruneOldPeers, remove, getQuotaCount, BleDiscoveryStats, hasNext, getDiscoveryStats, iterator |
+| `getDiscoveryStats` | 561 | currentCount, next, pruneOldPeers, remove, getQuotaCount, BleDiscoveryStats, hasNext, getDiscoveryStats, iterator, get |
+| `getQuotaCount` | 575 | currentCount, next, pruneOldPeers, remove, hasNext, iterator |
+| `pruneOldPeers` | 582 | next, remove, hasNext, iterator |
+
+### Imports
+- `import android.annotation.SuppressLint`
+- `import android.bluetooth.BluetoothAdapter`
+- `import android.bluetooth.BluetoothManager`
+- `import android.bluetooth.le.ScanCallback`
+- `import android.bluetooth.le.ScanFilter`
+- `import android.bluetooth.le.ScanResult`
+- `import android.bluetooth.le.ScanSettings`
+- `import android.content.Context`
+- `import android.os.Handler`
+- `import android.os.Looper`
+- `import android.os.ParcelUuid`
+- `import com.scmessenger.android.utils.BackoffStrategy`
+- `import java.util.UUID`
+- `import java.util.concurrent.ConcurrentHashMap`
+- `import java.util.concurrent.atomic.AtomicInteger`
+- `import java.util.concurrent.atomic.AtomicLong`
+- `import kotlinx.coroutines.*`
+- `import kotlinx.coroutines.sync.Mutex`
+- `import kotlinx.coroutines.sync.withLock`
+- `import timber.log.Timber`
+---
+
+## android/app/src/main/java/com/scmessenger/android/ui/contacts/ContactDetailScreen.kt (2 chunks, 362 lines)
+Function `[VALIDATED]_P0_ANDROID_AGY_HANDOFF_2026-06-07_Identity_Stability_Bundle` not found in REPO_MAP chunks. Full file listing below.
+
+### Summary
+android/app/src/main/java/com/scmessenger/android/ui/contacts/ContactDetailScreen.kt: 4 functions; 31 imports android/app/src/main/java/com/scmessenger/android/ui/contacts/ContactDetailScreen.kt: 4 functions; 31 imports
+
+### Functions
+| Function | Line | Calls Out To |
+|----------|------|-------------|
+| `ContactDetailScreen` | 45 | Text, TopAppBar, remember, Icon, IconButton, hiltViewModel, mutableStateOf, collectAsState, Scaffold |
+| `ContactDetailContent` | 192 | rememberScrollState, padding, verticalScroll, fillMaxSize, ErrorBanner, Column, spacedBy, IdenticonFromPeerId, fillMaxWidth |
+| `MetadataRow` | 340 | Text, toEpochMillis, formatTimestamp, Row, Date, SimpleDateFormat, format, getDefault, fillMaxWidth |
+| `formatTimestamp` | 356 | formatTimestamp, Date, SimpleDateFormat, format, getDefault, toEpochMillis |
+| `ContactDetailScreen` | 45 | Text, IconButton, mutableStateOf, collectAsState, Icon, hiltViewModel, remember, TopAppBar, Scaffold |
+| `ContactDetailContent` | 192 | padding, Column, fillMaxSize, ErrorBanner, fillMaxWidth, spacedBy, IdenticonFromPeerId, verticalScroll, rememberScrollState |
+| `MetadataRow` | 340 | Text, Date, getDefault, SimpleDateFormat, fillMaxWidth, toEpochMillis, format, formatTimestamp, Row |
+| `formatTimestamp` | 356 | Date, getDefault, SimpleDateFormat, toEpochMillis, format, formatTimestamp |
+
+### Imports
+- `import androidx.compose.foundation.layout.*`
+- `import androidx.compose.foundation.rememberScrollState`
+- `import androidx.compose.foundation.verticalScroll`
+- `import androidx.compose.material.icons.Icons`
+- `import androidx.compose.material.icons.automirrored.filled.ArrowBack`
+- `import androidx.compose.material.icons.automirrored.filled.Send`
+- `import androidx.compose.material.icons.filled.*`
+- `import androidx.compose.material3.*`
+- `import androidx.compose.runtime.*`
+- `import androidx.compose.ui.Alignment`
+- `import androidx.compose.ui.Modifier`
+- `import androidx.compose.ui.focus.FocusRequester`
+- `import androidx.compose.ui.focus.focusRequester`
+- `import androidx.compose.ui.res.stringResource`
+- `import androidx.compose.ui.text.font.FontFamily`
+- `import androidx.compose.ui.text.font.FontWeight`
+- `import androidx.compose.ui.unit.dp`
+- `import androidx.hilt.navigation.compose.hiltViewModel`
+- `import com.scmessenger.android.R`
+- `import com.scmessenger.android.ui.components.CopyableText`
+- `import com.scmessenger.android.ui.components.ErrorBanner`
+- `import com.scmessenger.android.ui.components.IdenticonFromHex`
+- `import com.scmessenger.android.ui.components.IdenticonFromPeerId`
+- `import com.scmessenger.android.ui.components.LabeledCopyableText`
+- `import com.scmessenger.android.ui.components.TruncatedCopyableText`
+- `import com.scmessenger.android.ui.theme.StatusOffline`
+- `import com.scmessenger.android.ui.theme.StatusOnline`
+- `import com.scmessenger.android.ui.viewmodels.ContactsViewModel`
+- `import com.scmessenger.android.utils.toEpochMillis`
+- `import java.text.SimpleDateFormat`
+---
 
 ## android/app/src/main/java/com/scmessenger/android/ui/screens/ContactsScreen.kt (2 chunks, 771 lines)
 Function `[VALIDATED]_P0_ANDROID_AGY_HANDOFF_2026-06-07_Identity_Stability_Bundle` not found in REPO_MAP chunks. Full file listing below.
@@ -291,6 +591,132 @@ android/app/src/main/java/com/scmessenger/android/ui/screens/DashboardScreen.kt:
 - `import androidx.navigation.NavHostController`
 - `import com.scmessenger.android.ui.dashboard.PeerListScreen`
 - `import com.scmessenger.android.ui.dashboard.TopologyScreen`
+---
+
+## android/app/src/main/java/com/scmessenger/android/ui/viewmodels/DashboardViewModel.kt (2 chunks, 407 lines)
+Function `[VALIDATED]_P0_ANDROID_AGY_HANDOFF_2026-06-07_Identity_Stability_Bundle` not found in REPO_MAP chunks. Full file listing below.
+
+### Summary
+android/app/src/main/java/com/scmessenger/android/ui/viewmodels/DashboardViewModel.kt: Defines 5 types: DashboardViewModel, PeerInfo, NetworkTopology, TopologyNode, TopologyEdge; 11 functions; 17 imports android/app/src/main/java/com/scmessenger/android/ui/viewmodels/DashboardViewModel.kt: Defines 5 types: DashboardViewModel, PeerInfo, NetworkTopology, TopologyNode, TopologyEdge; 11 functions; 17 imports
+
+### Structs/Classes
+- DashboardViewModel
+- NetworkTopology
+- PeerInfo
+- TopologyEdge
+- TopologyNode
+
+### Functions
+| Function | Line | Calls Out To |
+|----------|------|-------------|
+| `refreshData` | 89 | buildTopology, d, catch, launch, loadPeers, e |
+| `loadPeers` | 117 | toMap, PeerInfo, getDialableAddresses, isNotEmpty, trim, deduplicateDiscoveredPeers, normalizePublicKey |
+| `deduplicateDiscoveredPeers` | 204 | copy, maxOf, trim, isEmpty, deduplicateDiscoveredPeers |
+| `normalizePublicKey` | 235 | buildTopology, add, lowercase, TopologyNode, getIdentityInfo, trim, normalizePublicKey |
+| `buildTopology` | 246 | add, TopologyNode, getIdentityInfo, TopologyEdge |
+| `observeNetworkEvents` | 296 | withContext, observeNetworkStats, repository, refreshData, observeLiveNetworkStats |
+| `observeLiveNetworkStats` | 317 | observeLivePeers, observeNetworkStats, observePeers, getString, determineTransport |
+| `observeLivePeers` | 328 | observePeers, isRecent, toEpochSeconds, getString, determineTransport, currentTimeMillis, recent |
+| `determineTransport` | 339 | isRecent, toEpochSeconds, getString, clearError, currentTimeMillis, recent |
+| `isRecent` | 352 | toEpochSeconds, clearError, PeerInfo, currentTimeMillis |
+| `clearError` | 363 | PeerInfo, NetworkTopology, emptyList, node |
+| `refreshData` | 89 | d, loadPeers, buildTopology, catch, launch, e |
+| `loadPeers` | 117 | toMap, isNotEmpty, normalizePublicKey, deduplicateDiscoveredPeers, trim, PeerInfo, getDialableAddresses |
+| `deduplicateDiscoveredPeers` | 204 | deduplicateDiscoveredPeers, trim, maxOf, copy, isEmpty |
+| `normalizePublicKey` | 235 | lowercase, normalizePublicKey, getIdentityInfo, add, buildTopology, trim, TopologyNode |
+| `buildTopology` | 246 | TopologyEdge, getIdentityInfo, add, TopologyNode |
+| `observeNetworkEvents` | 296 | observeLiveNetworkStats, refreshData, withContext, observeNetworkStats, repository |
+| `observeLiveNetworkStats` | 317 | observeLivePeers, getString, observePeers, determineTransport, observeNetworkStats |
+| `observeLivePeers` | 328 | currentTimeMillis, getString, observePeers, toEpochSeconds, isRecent, determineTransport, recent |
+| `determineTransport` | 339 | currentTimeMillis, getString, toEpochSeconds, isRecent, recent, clearError |
+| `isRecent` | 352 | currentTimeMillis, PeerInfo, toEpochSeconds, clearError |
+| `clearError` | 363 | PeerInfo, NetworkTopology, emptyList, node |
+
+### Imports
+- `import android.content.Context`
+- `import androidx.lifecycle.ViewModel`
+- `import androidx.lifecycle.viewModelScope`
+- `import com.scmessenger.android.R`
+- `import com.scmessenger.android.data.MeshRepository`
+- `import com.scmessenger.android.service.MeshEventBus`
+- `import com.scmessenger.android.service.PeerEvent`
+- `import com.scmessenger.android.service.StatusEvent`
+- `import com.scmessenger.android.utils.toEpochSeconds`
+- `import dagger.hilt.android.lifecycle.HiltViewModel`
+- `import dagger.hilt.android.qualifiers.ApplicationContext`
+- `import javax.inject.Inject`
+- `import kotlinx.coroutines.Dispatchers`
+- `import kotlinx.coroutines.flow.*`
+- `import kotlinx.coroutines.launch`
+- `import kotlinx.coroutines.withContext`
+- `import timber.log.Timber`
+---
+
+## android/app/src/main/java/com/scmessenger/android/ui/chat/DeliveryStateSurface.kt (2 chunks, 64 lines)
+Function `[VALIDATED]_P0_ANDROID_AGY_HANDOFF_2026-06-07_Identity_Stability_Bundle` not found in REPO_MAP chunks. Full file listing below.
+
+### Summary
+android/app/src/main/java/com/scmessenger/android/ui/chat/DeliveryStateSurface.kt: Defines 4 types: PendingDeliverySnapshot, DeliveryStateSurface, DeliveryStatePresentation, DeliveryStateMapper; 1 functions android/app/src/main/java/com/scmessenger/android/ui/chat/DeliveryStateSurface.kt: Defines 4 types: PendingDeliverySnapshot, DeliveryStateSurface, DeliveryStatePresentation, DeliveryStateMapper; 1 functions
+
+### Structs/Classes
+- DeliveryStateMapper
+- DeliveryStatePresentation
+- DeliveryStateSurface
+- PendingDeliverySnapshot
+
+### Functions
+| Function | Line | Calls Out To |
+|----------|------|-------------|
+| `resolve` | 39 | DeliveryStatePresentation |
+| `resolve` | 39 | DeliveryStatePresentation |
+
+---
+
+## android/app/src/main/java/com/scmessenger/android/ui/components/ErrorBanner.kt (2 chunks, 191 lines)
+Function `[VALIDATED]_P0_ANDROID_AGY_HANDOFF_2026-06-07_Identity_Stability_Bundle` not found in REPO_MAP chunks. Full file listing below.
+
+### Summary
+android/app/src/main/java/com/scmessenger/android/ui/components/ErrorBanner.kt: Defines 1 types: BannerSeverity; 5 functions; 21 imports android/app/src/main/java/com/scmessenger/android/ui/components/ErrorBanner.kt: Defines 1 types: BannerSeverity; 5 functions; 21 imports
+
+### Structs/Classes
+- BannerSeverity
+
+### Functions
+| Function | Line | Calls Out To |
+|----------|------|-------------|
+| `ErrorBanner` | 36 | shrinkVertically, Icon, AnimatedVisibility, padding, Row, fadeIn, size, expandVertically, fadeOut, Surface |
+| `mapErrorToMessage` | 120 | mapErrorToMessage, ErrorBanner, ErrorState, contains |
+| `ErrorState` | 138 | WarningBanner, mapErrorToMessage, ErrorBanner |
+| `WarningBanner` | 157 | ErrorBanner, InfoBanner |
+| `InfoBanner` | 176 | ErrorBanner |
+| `ErrorBanner` | 36 | shrinkVertically, padding, fadeIn, expandVertically, fadeOut, size, fillMaxWidth, AnimatedVisibility, Row, Icon |
+| `mapErrorToMessage` | 120 | ErrorBanner, contains, mapErrorToMessage, ErrorState |
+| `ErrorState` | 138 | WarningBanner, mapErrorToMessage, ErrorBanner |
+| `WarningBanner` | 157 | InfoBanner, ErrorBanner |
+| `InfoBanner` | 176 | ErrorBanner |
+
+### Imports
+- `import androidx.compose.animation.AnimatedVisibility`
+- `import androidx.compose.animation.expandVertically`
+- `import androidx.compose.animation.fadeIn`
+- `import androidx.compose.animation.fadeOut`
+- `import androidx.compose.animation.shrinkVertically`
+- `import androidx.compose.foundation.background`
+- `import androidx.compose.foundation.layout.*`
+- `import androidx.compose.material.icons.Icons`
+- `import androidx.compose.material.icons.filled.Close`
+- `import androidx.compose.material.icons.filled.Error`
+- `import androidx.compose.material.icons.filled.Info`
+- `import androidx.compose.material.icons.filled.Warning`
+- `import androidx.compose.material3.*`
+- `import androidx.compose.runtime.Composable`
+- `import androidx.compose.ui.Alignment`
+- `import androidx.compose.ui.Modifier`
+- `import androidx.compose.ui.graphics.Color`
+- `import androidx.compose.ui.graphics.vector.ImageVector`
+- `import androidx.compose.ui.unit.dp`
+- `import com.scmessenger.android.ui.theme.StatusError`
+- `import com.scmessenger.android.ui.theme.StatusWarning`
 ---
 
 ## android/app/src/main/java/com/scmessenger/android/transport/MdnsServiceDiscovery.kt (2 chunks, 513 lines)
@@ -1035,6 +1461,193 @@ android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt: Define
 - `import timber.log.Timber`
 ---
 
+## android/app/src/main/java/com/scmessenger/android/ui/chat/MessageInput.kt (2 chunks, 68 lines)
+Function `[VALIDATED]_P0_ANDROID_AGY_HANDOFF_2026-06-07_Identity_Stability_Bundle` not found in REPO_MAP chunks. Full file listing below.
+
+### Summary
+android/app/src/main/java/com/scmessenger/android/ui/chat/MessageInput.kt: 1 functions; 9 imports android/app/src/main/java/com/scmessenger/android/ui/chat/MessageInput.kt: 1 functions; 9 imports
+
+### Functions
+| Function | Line | Calls Out To |
+|----------|------|-------------|
+| `MessageInput` | 20 | Text, OutlinedTextField, padding, weight, Row, spacedBy, Surface, fillMaxWidth |
+| `MessageInput` | 20 | padding, Text, weight, OutlinedTextField, fillMaxWidth, spacedBy, Row, Surface |
+
+### Imports
+- `import androidx.compose.foundation.layout.*`
+- `import androidx.compose.foundation.shape.CircleShape`
+- `import androidx.compose.material.icons.Icons`
+- `import androidx.compose.material.icons.automirrored.filled.Send`
+- `import androidx.compose.material3.*`
+- `import androidx.compose.runtime.*`
+- `import androidx.compose.ui.Alignment`
+- `import androidx.compose.ui.Modifier`
+- `import androidx.compose.ui.unit.dp`
+---
+
+## android/app/src/main/java/com/scmessenger/android/transport/NetworkDetector.kt (2 chunks, 384 lines)
+Function `[VALIDATED]_P0_ANDROID_AGY_HANDOFF_2026-06-07_Identity_Stability_Bundle` not found in REPO_MAP chunks. Full file listing below.
+
+### Summary
+android/app/src/main/java/com/scmessenger/android/transport/NetworkDetector.kt: Defines 4 types: NetworkDetector, NetworkType, FallbackTransport, NetworkDiagnostics; 13 functions; 22 imports android/app/src/main/java/com/scmessenger/android/transport/NetworkDetector.kt: Defines 4 types: NetworkDetector, NetworkType, FallbackTransport, NetworkDiagnostics; 13 functions; 22 imports
+
+### Structs/Classes
+- FallbackTransport
+- NetworkDetector
+- NetworkDiagnostics
+- NetworkType
+
+### Functions
+| Function | Line | Calls Out To |
+|----------|------|-------------|
+| `startMonitoring` | 91 | d, onAvailable, detectNetworkType, onCapabilitiesChanged, build, remove, Builder, redetectCurrentNetwork, NetworkCallback, onLost |
+| `onAvailable` | 102 | detectNetworkType, d, onCapabilitiesChanged, remove, i, redetectCurrentNetwork, onLost, registerNetworkCallback |
+| `onLost` | 105 | d, detectNetworkType, onCapabilitiesChanged, remove, i, redetectCurrentNetwork, onLost, registerNetworkCallback, unregisterNetworkCallback, stopMonitoring |
+| `onCapabilitiesChanged` | 111 | detectNetworkType, cancel, onCapabilitiesChanged, i, redetectCurrentNetwork, registerNetworkCallback, unregisterNetworkCallback, stopMonitoring |
+| `stopMonitoring` | 133 | detectNetworkType, cancel, i, classifyNetworkType, getNetworkCapabilities, unregisterNetworkCallback |
+| `detectNetworkType` | 150 | cancel, w, delay, emptySet, classifyNetworkType, i, s, detected, getNetworkCapabilities, cellular |
+| `redetectCurrentNetwork` | 189 | detectNetworkType, hasTransport, hasCapability, classifyNetworkType, emptySet |
+| `classifyNetworkType` | 202 | isPortLikelyBlocked, hasCapability, hasTransport |
+| `isPortLikelyBlocked` | 230 | listOf, WebSocket, TCP, getTransportPriority |
+| `getTransportPriority` | 242 | listOf |
+| `getNetworkDiagnostics` | 287 | NetworkDiagnostics, hasCapability, reachability, getNetworkCapabilities, getTransportPriority, probePorts |
+| `probePorts` | 313 | catch, d, close, InetSocketAddress, Socket, awaitAll, toMap, connect, async, toInt |
+| `toLogString` | 375 | trimMargin, joinToString |
+| `startMonitoring` | 91 | d, redetectCurrentNetwork, detectNetworkType, onAvailable, remove, build, registerNetworkCallback, NetworkCallback, onLost, addCapability |
+| `onAvailable` | 102 | d, redetectCurrentNetwork, detectNetworkType, remove, registerNetworkCallback, onLost, i, onCapabilitiesChanged |
+| `onLost` | 105 | d, redetectCurrentNetwork, detectNetworkType, stopMonitoring, remove, registerNetworkCallback, onLost, i, onCapabilitiesChanged, unregisterNetworkCallback |
+| `onCapabilitiesChanged` | 111 | redetectCurrentNetwork, detectNetworkType, stopMonitoring, registerNetworkCallback, i, onCapabilitiesChanged, unregisterNetworkCallback, cancel |
+| `stopMonitoring` | 133 | detectNetworkType, getNetworkCapabilities, classifyNetworkType, i, unregisterNetworkCallback, cancel |
+| `detectNetworkType` | 150 | getNetworkCapabilities, classifyNetworkType, delay, i, detected, w, cellular, emptySet, cancel, s |
+| `redetectCurrentNetwork` | 189 | detectNetworkType, hasCapability, hasTransport, emptySet, classifyNetworkType |
+| `classifyNetworkType` | 202 | hasCapability, hasTransport, isPortLikelyBlocked |
+| `isPortLikelyBlocked` | 230 | TCP, listOf, WebSocket, getTransportPriority |
+| `getTransportPriority` | 242 | listOf |
+| `getNetworkDiagnostics` | 287 | hasCapability, reachability, getNetworkCapabilities, getTransportPriority, probePorts, NetworkDiagnostics |
+| `probePorts` | 313 | async, toInt, d, toMap, connect, close, catch, InetSocketAddress, awaitAll, Socket |
+| `toLogString` | 375 | joinToString, trimMargin |
+
+### Imports
+- `import android.content.Context`
+- `import android.net.ConnectivityManager`
+- `import android.net.Network`
+- `import android.net.NetworkCapabilities`
+- `import android.net.NetworkRequest`
+- `import android.os.Build`
+- `import java.util.concurrent.ConcurrentHashMap`
+- `import javax.inject.Inject`
+- `import javax.inject.Singleton`
+- `import kotlinx.coroutines.CoroutineScope`
+- `import kotlinx.coroutines.Dispatchers`
+- `import kotlinx.coroutines.Job`
+- `import kotlinx.coroutines.SupervisorJob`
+- `import kotlinx.coroutines.async`
+- `import kotlinx.coroutines.awaitAll`
+- `import kotlinx.coroutines.coroutineScope`
+- `import kotlinx.coroutines.delay`
+- `import kotlinx.coroutines.flow.MutableStateFlow`
+- `import kotlinx.coroutines.flow.StateFlow`
+- `import kotlinx.coroutines.flow.asStateFlow`
+- `import kotlinx.coroutines.launch`
+- `import timber.log.Timber`
+---
+
+## android/app/src/main/java/com/scmessenger/android/ui/dialogs/NetworkStatusDialog.kt (2 chunks, 240 lines)
+Function `[VALIDATED]_P0_ANDROID_AGY_HANDOFF_2026-06-07_Identity_Stability_Bundle` not found in REPO_MAP chunks. Full file listing below.
+
+### Summary
+android/app/src/main/java/com/scmessenger/android/ui/dialogs/NetworkStatusDialog.kt: 3 functions; 30 imports android/app/src/main/java/com/scmessenger/android/ui/dialogs/NetworkStatusDialog.kt: 3 functions; 30 imports
+
+### Functions
+| Function | Line | Calls Out To |
+|----------|------|-------------|
+| `NetworkStatusDialog` | 41 | Text, catch, AlertDialog, rememberScrollState, LaunchedEffect, verticalScroll, generateReport, Column, spacedBy, DiagnosticRow |
+| `DiagnosticRow` | 141 | Text, width, weight, stringResource, size, Row, formatNetworkType, Spacer, Cellular, fillMaxWidth |
+| `formatNetworkType` | 159 | stringResource, Cellular, Fi |
+| `NetworkStatusDialog` | 41 | Text, Column, LaunchedEffect, catch, fillMaxWidth, DiagnosticRow, generateReport, spacedBy, verticalScroll, rememberScrollState |
+| `DiagnosticRow` | 141 | Text, weight, formatNetworkType, Fi, Cellular, stringResource, size, fillMaxWidth, Row, width |
+| `formatNetworkType` | 159 | Cellular, Fi, stringResource |
+
+### Imports
+- `import androidx.compose.foundation.layout.Arrangement`
+- `import androidx.compose.foundation.layout.Column`
+- `import androidx.compose.foundation.layout.Row`
+- `import androidx.compose.foundation.layout.Spacer`
+- `import androidx.compose.foundation.layout.fillMaxWidth`
+- `import androidx.compose.foundation.layout.height`
+- `import androidx.compose.foundation.layout.padding`
+- `import androidx.compose.foundation.layout.size`
+- `import androidx.compose.foundation.layout.width`
+- `import androidx.compose.foundation.rememberScrollState`
+- `import androidx.compose.foundation.verticalScroll`
+- `import androidx.compose.material3.AlertDialog`
+- `import androidx.compose.material3.Button`
+- `import androidx.compose.material3.HorizontalDivider`
+- `import androidx.compose.material3.MaterialTheme`
+- `import androidx.compose.material3.OutlinedButton`
+- `import androidx.compose.material3.Text`
+- `import androidx.compose.runtime.Composable`
+- `import androidx.compose.runtime.LaunchedEffect`
+- `import androidx.compose.runtime.getValue`
+- `import androidx.compose.runtime.mutableStateOf`
+- `import androidx.compose.runtime.remember`
+- `import androidx.compose.runtime.setValue`
+- `import androidx.compose.ui.Alignment`
+- `import androidx.compose.ui.Modifier`
+- `import androidx.compose.ui.res.stringResource`
+- `import androidx.compose.ui.unit.dp`
+- `import com.scmessenger.android.R`
+- `import com.scmessenger.android.network.DiagnosticsReporter`
+- `import com.scmessenger.android.network.DiagnosticsReporter.NetworkDiagnosticsReport`
+---
+
+## android/app/src/main/java/com/scmessenger/android/ui/dashboard/PeerListScreen.kt (2 chunks, 260 lines)
+Function `[VALIDATED]_P0_ANDROID_AGY_HANDOFF_2026-06-07_Identity_Stability_Bundle` not found in REPO_MAP chunks. Full file listing below.
+
+### Summary
+android/app/src/main/java/com/scmessenger/android/ui/dashboard/PeerListScreen.kt: 4 functions; 26 imports android/app/src/main/java/com/scmessenger/android/ui/dashboard/PeerListScreen.kt: 4 functions; 26 imports
+
+### Functions
+| Function | Line | Calls Out To |
+|----------|------|-------------|
+| `PeerListScreen` | 40 | Text, TopAppBar, Icon, LaunchedEffect, IconButton, refreshData, hiltViewModel, collectAsState, Scaffold, Box |
+| `PeerCard` | 144 | Text, Card, padding, weight, take, Row, Column, spacedBy, IdenticonFromPeerId, fillMaxWidth |
+| `TransportBadge` | 212 | Text, padding, stringResource, formatTimestamp, Date, Surface, toEpochMillis |
+| `formatTimestamp` | 238 | formatTimestamp, Date, SimpleDateFormat, format, getDefault, toEpochMillis |
+| `PeerListScreen` | 40 | Text, LaunchedEffect, IconButton, collectAsState, refreshData, hiltViewModel, Icon, TopAppBar, Box, Scaffold |
+| `PeerCard` | 144 | Card, padding, Column, weight, Text, fillMaxWidth, spacedBy, take, Row, IdenticonFromPeerId |
+| `TransportBadge` | 212 | padding, Text, stringResource, Date, toEpochMillis, formatTimestamp, Surface |
+| `formatTimestamp` | 238 | Date, getDefault, SimpleDateFormat, toEpochMillis, format, formatTimestamp |
+
+### Imports
+- `import androidx.compose.foundation.layout.*`
+- `import androidx.compose.foundation.lazy.LazyColumn`
+- `import androidx.compose.foundation.lazy.items`
+- `import androidx.compose.material.icons.Icons`
+- `import androidx.compose.material.icons.automirrored.filled.ArrowBack`
+- `import androidx.compose.material.icons.filled.Refresh`
+- `import androidx.compose.material3.*`
+- `import androidx.compose.runtime.*`
+- `import androidx.compose.ui.Alignment`
+- `import androidx.compose.ui.Modifier`
+- `import androidx.compose.ui.res.stringResource`
+- `import androidx.compose.ui.text.font.FontFamily`
+- `import androidx.compose.ui.text.font.FontWeight`
+- `import androidx.compose.ui.unit.dp`
+- `import androidx.hilt.navigation.compose.hiltViewModel`
+- `import com.scmessenger.android.R`
+- `import com.scmessenger.android.service.ConnectionQuality`
+- `import com.scmessenger.android.ui.components.ConnectionQualityIndicator`
+- `import com.scmessenger.android.ui.components.ErrorBanner`
+- `import com.scmessenger.android.ui.components.IdenticonFromPeerId`
+- `import com.scmessenger.android.ui.components.StatusIndicator`
+- `import com.scmessenger.android.ui.theme.*`
+- `import com.scmessenger.android.ui.viewmodels.DashboardViewModel`
+- `import com.scmessenger.android.utils.toEpochMillis`
+- `import java.text.SimpleDateFormat`
+- `import java.util.*`
+---
+
 ## android/app/src/main/java/com/scmessenger/android/data/PreferencesRepository.kt (2 chunks, 217 lines)
 Function `[VALIDATED]_P0_ANDROID_AGY_HANDOFF_2026-06-07_Identity_Stability_Bundle` not found in REPO_MAP chunks. Full file listing below.
 
@@ -1157,6 +1770,30 @@ android/app/src/main/java/com/scmessenger/android/ui/screens/SettingsScreen.kt: 
 - `import kotlinx.coroutines.launch`
 ---
 
+## android/app/src/main/java/com/scmessenger/android/ui/components/StorageWarningBanner.kt (2 chunks, 47 lines)
+Function `[VALIDATED]_P0_ANDROID_AGY_HANDOFF_2026-06-07_Identity_Stability_Bundle` not found in REPO_MAP chunks. Full file listing below.
+
+### Summary
+android/app/src/main/java/com/scmessenger/android/ui/components/StorageWarningBanner.kt: 1 functions; 9 imports android/app/src/main/java/com/scmessenger/android/ui/components/StorageWarningBanner.kt: 1 functions; 9 imports
+
+### Functions
+| Function | Line | Calls Out To |
+|----------|------|-------------|
+| `StorageWarningBanner` | 17 | Text, Icon, width, padding, Row, size, Spacer, Surface, fillMaxWidth |
+| `StorageWarningBanner` | 17 | padding, Text, size, fillMaxWidth, Spacer, Row, width, Icon, Surface |
+
+### Imports
+- `import androidx.compose.foundation.background`
+- `import androidx.compose.foundation.layout.*`
+- `import androidx.compose.material.icons.Icons`
+- `import androidx.compose.material.icons.filled.Warning`
+- `import androidx.compose.material3.*`
+- `import androidx.compose.runtime.Composable`
+- `import androidx.compose.ui.Alignment`
+- `import androidx.compose.ui.Modifier`
+- `import androidx.compose.ui.unit.dp`
+---
+
 ## android/app/src/main/java/com/scmessenger/android/data/TopicManager.kt (2 chunks, 166 lines)
 Function `[VALIDATED]_P0_ANDROID_AGY_HANDOFF_2026-06-07_Identity_Stability_Bundle` not found in REPO_MAP chunks. Full file listing below.
 
@@ -1195,6 +1832,423 @@ android/app/src/main/java/com/scmessenger/android/data/TopicManager.kt: Defines 
 - `import kotlinx.coroutines.flow.StateFlow`
 - `import kotlinx.coroutines.flow.asStateFlow`
 - `import timber.log.Timber`
+---
+
+## android/app/src/main/java/com/scmessenger/android/transport/TransportManager.kt (2 chunks, 620 lines)
+Function `[VALIDATED]_P0_ANDROID_AGY_HANDOFF_2026-06-07_Identity_Stability_Bundle` not found in REPO_MAP chunks. Full file listing below.
+
+### Summary
+android/app/src/main/java/com/scmessenger/android/transport/TransportManager.kt: Defines 1 types: TransportManager; 20 functions; 8 imports android/app/src/main/java/com/scmessenger/android/transport/TransportManager.kt: Defines 1 types: TransportManager; 20 functions; 8 imports
+
+### Structs/Classes
+- TransportManager
+
+### Functions
+| Function | Line | Calls Out To |
+|----------|------|-------------|
+| `initialize` | 64 | TransportManager, w, initializeWifiDirect, i, initializeWifiAware, initializeBle, startAll |
+| `startAll` | 90 | start, d, onDataReceived, w, startListening, startScanning, discovery, onPeerDiscovered, MdnsServiceDiscovery, startAdvertising |
+| `stopAll` | 135 | clear, stopAdvertising, stopListening, i, stop, stopScanning |
+| `sendData` | 166 | sendViaTransport, shouldUseTransport |
+| `sendViaTransport` | 204 | d, sendViaTransport, getConnectedDeviceAddresses, sendData, first |
+| `attemptEscalation` | 252 | isAvailable, d, getAvailableTransports, toList, getActiveTransports |
+| `getActiveTransports` | 275 | isAvailable, getAvailableTransports, add, toList, BleScanner, initializeBle |
+| `getAvailableTransports` | 282 | isAvailable, d, add, attemptEscalation, BleScanner, onPeerDiscovered, initializeBle |
+| `initializeBle` | 299 | d, onDataReceived, BleGattClient, attemptEscalation, BleScanner, onPeerDiscovered, BleAdvertiser, initializeBle, BleGattServer |
+| `initializeWifiAware` | 347 | isAvailable, d, onDataReceived, catch, initializeWifiDirect, onPeerDiscovered, initializeWifiAware, WifiDirectTransport, WifiAwareTransport, e |
+| `initializeWifiDirect` | 374 | d, onDataReceived, catch, enableTransport, startScanning, onPeerDiscovered, initializeWifiDirect, WifiDirectTransport, startAdvertising, e |
+| `enableTransport` | 400 | start, onDataReceived, startScanning, onPeerDiscovered, MdnsServiceDiscovery, startAdvertising |
+| `disableTransport` | 436 | cleanup, remove, stopAdvertising, stop, stopAll, stopScanning |
+| `cleanup` | 463 | cleanup, cancel, getBleQuotaCount, getQuotaCount, setBleComponents, shutdown, i, initialization, stopAll |
+| `getBleQuotaCount` | 481 | d, setBleComponents, getQuotaCount, applyScanSettings, initialization |
+| `setBleComponents` | 490 | d, applyScanSettings, applyAdvertiseSettings |
+| `applyScanSettings` | 506 | d, w, handleBleFailure, remove, stopAdvertising, transports, applyScanSettings, i, stopScanning, applyAdvertiseSettings |
+| `applyAdvertiseSettings` | 514 | d, w, handleBleFailure, remove, stopAdvertising, transports, i, stopScanning, applyAdvertiseSettings |
+| `handleBleFailure` | 523 | d, w, attemptBleRecovery, startScanning, transports, stopAdvertising, remove, i, startAdvertising, stopScanning |
+| `attemptBleRecovery` | 546 | d, startScanning, i, startAdvertising |
+| `initialize` | 64 | initializeBle, initializeWifiDirect, startAll, w, i, initializeWifiAware, TransportManager |
+| `startAll` | 90 | d, onDataReceived, MdnsServiceDiscovery, startListening, onPeerDiscovered, discovery, startAdvertising, start, w, startScanning |
+| `stopAll` | 135 | stopScanning, i, stopAdvertising, stopListening, clear, stop |
+| `sendData` | 166 | shouldUseTransport, sendViaTransport |
+| `sendViaTransport` | 204 | d, getConnectedDeviceAddresses, sendData, sendViaTransport, first |
+| `attemptEscalation` | 252 | d, isAvailable, getActiveTransports, getAvailableTransports, toList |
+| `getActiveTransports` | 275 | initializeBle, add, isAvailable, BleScanner, getAvailableTransports, toList |
+| `getAvailableTransports` | 282 | attemptEscalation, d, initializeBle, add, isAvailable, BleScanner, onPeerDiscovered |
+| `initializeBle` | 299 | attemptEscalation, d, initializeBle, onDataReceived, BleAdvertiser, BleGattServer, BleGattClient, BleScanner, onPeerDiscovered |
+| `initializeWifiAware` | 347 | d, onDataReceived, initializeWifiDirect, catch, WifiDirectTransport, onPeerDiscovered, isAvailable, initializeWifiAware, e, WifiAwareTransport |
+| `initializeWifiDirect` | 374 | d, onDataReceived, initializeWifiDirect, catch, WifiDirectTransport, startAdvertising, onPeerDiscovered, enableTransport, e, startScanning |
+| `enableTransport` | 400 | onDataReceived, MdnsServiceDiscovery, startAdvertising, start, onPeerDiscovered, startScanning |
+| `disableTransport` | 436 | stopScanning, cleanup, stopAll, remove, stopAdvertising, stop |
+| `cleanup` | 463 | initialization, cleanup, shutdown, stopAll, getQuotaCount, getBleQuotaCount, i, setBleComponents, cancel |
+| `getBleQuotaCount` | 481 | initialization, d, applyScanSettings, getQuotaCount, setBleComponents |
+| `setBleComponents` | 490 | d, applyScanSettings, applyAdvertiseSettings |
+| `applyScanSettings` | 506 | d, stopScanning, applyScanSettings, remove, transports, applyAdvertiseSettings, i, handleBleFailure, stopAdvertising, w |
+| `applyAdvertiseSettings` | 514 | d, stopScanning, remove, transports, applyAdvertiseSettings, i, handleBleFailure, stopAdvertising, w |
+| `handleBleFailure` | 523 | d, stopScanning, remove, transports, i, stopAdvertising, attemptBleRecovery, startAdvertising, w, startScanning |
+| `attemptBleRecovery` | 546 | d, i, startAdvertising, startScanning |
+
+### Imports
+- `import android.content.Context`
+- `import com.scmessenger.android.service.TransportType`
+- `import com.scmessenger.android.transport.ble.*`
+- `import java.util.concurrent.ConcurrentHashMap`
+- `import kotlinx.coroutines.*`
+- `import timber.log.Timber`
+- `import uniffi.api.AdjustmentProfile`
+- `import uniffi.api.BleAdjustment`
+---
+
+## android/app/src/main/java/com/scmessenger/android/ui/theme/Type.kt (2 chunks, 31 lines)
+Function `[VALIDATED]_P0_ANDROID_AGY_HANDOFF_2026-06-07_Identity_Stability_Bundle` not found in REPO_MAP chunks. Full file listing below.
+
+### Summary
+android/app/src/main/java/com/scmessenger/android/ui/theme/Type.kt: 5 imports android/app/src/main/java/com/scmessenger/android/ui/theme/Type.kt: 5 imports
+
+### Imports
+- `import androidx.compose.material3.Typography`
+- `import androidx.compose.ui.text.TextStyle`
+- `import androidx.compose.ui.text.font.FontFamily`
+- `import androidx.compose.ui.text.font.FontWeight`
+- `import androidx.compose.ui.unit.sp`
+---
+
+## android/app/src/main/java/com/scmessenger/android/transport/SmartTransportRouter.kt (1 chunks, 476 lines)
+Function `[VALIDATED]_P0_ANDROID_AGY_HANDOFF_2026-06-07_Identity_Stability_Bundle` not found in REPO_MAP chunks. Full file listing below.
+
+### Summary
+android/app/src/main/java/com/scmessenger/android/transport/SmartTransportRouter.kt: Defines 6 types: SmartTransportRouter, TransportType, TransportDeliveryResult, TransportHealth, MessageDedupEntry; 14 functions; 6 imports
+
+### Structs/Classes
+- MessageDedupEntry
+- SmartTransportRouter
+- TransportAttempt
+- TransportDeliveryResult
+- TransportHealth
+- TransportType
+
+### Functions
+| Function | Line | Calls Out To |
+|----------|------|-------------|
+| `fromValue` | 34 | TransportHealth, currentTimeMillis, TransportDeliveryResult, rate, get |
+| `recordSuccess` | 117 | recordFailure, currentTimeMillis, toDouble, setHealth, format, i, tag, take, getHealth |
+| `recordFailure` | 142 | TransportHealth, peer, currentTimeMillis, getOrPut, ConcurrentHashMap, setHealth, format, tag, take, w |
+| `getHealth` | 157 | TransportHealth, peer, getPreferredTransport, ConcurrentHashMap, setHealth, getOrPut, getHealth |
+| `setHealth` | 165 | getPreferredTransport, peer, ConcurrentHashMap, getOrPut, getHealth |
+| `getPreferredTransport` | 174 | score, getAvailableTransportsSorted, getHealth |
+| `getAvailableTransportsSorted` | 202 | isNotEmpty, available, toList, checkAndRecordMessage, Triple, getAvailableTransports, getHealth, data |
+| `getAvailableTransports` | 213 | data, cleanupDedupCache, isNotEmpty, currentTimeMillis, checkAndRecordMessage, Triple, toList |
+| `checkAndRecordMessage` | 230 | cleanupDedupCache, mutableListOf, currentTimeMillis, add, i, Triple, tag, take, MessageDedupEntry |
+| `getDedupStats` | 274 | currentTimeMillis, cleanupDedupCache, Suppress, attemptDelivery |
+| `cleanupDedupCache` | 281 | currentTimeMillis, attemptDelivery, Suppress, suspend |
+| `attemptDelivery` | 296 | suspend, TransportAttempt, isNotEmpty, currentTimeMillis, add, trim, Suppress, tryWifi |
+| `getHealthSummary` | 447 | peer, remove, i, resetHealth, tag, take, mapOf |
+| `resetHealth` | 471 | remove, i, take, tag |
+
+### Imports
+- `import java.util.concurrent.ConcurrentHashMap`
+- `import java.util.concurrent.atomic.AtomicLong`
+- `import kotlinx.coroutines.*`
+- `import kotlinx.coroutines.sync.Mutex`
+- `import kotlinx.coroutines.sync.withLock`
+- `import timber.log.Timber`
+---
+
+## android/app/src/main/java/com/scmessenger/android/transport/TransportHealthMonitor.kt (1 chunks, 73 lines)
+Function `[VALIDATED]_P0_ANDROID_AGY_HANDOFF_2026-06-07_Identity_Stability_Bundle` not found in REPO_MAP chunks. Full file listing below.
+
+### Summary
+android/app/src/main/java/com/scmessenger/android/transport/TransportHealthMonitor.kt: Defines 2 types: TransportHealthMonitor, TransportHealth; 6 functions; 1 imports
+
+### Structs/Classes
+- TransportHealth
+- TransportHealthMonitor
+
+### Functions
+| Function | Line | Calls Out To |
+|----------|------|-------------|
+| `recordSuccess` | 22 | TransportHealth, recordFailure, w, currentTimeMillis, recordSuccess, shouldUseTransport, getOrPut, getHealth |
+| `recordFailure` | 30 | TransportHealth, recordFailure, w, currentTimeMillis, toDouble, shouldUseTransport, getOrPut, getHealth |
+| `getHealth` | 41 | toMap, TransportHealth, getSummary, toDouble, isDegraded, shouldUseTransport, getHealth |
+| `shouldUseTransport` | 50 | toMap, getSummary, toDouble, isDegraded, getHealth |
+| `isDegraded` | 61 | toMap, getSummary, getHealth |
+| `getSummary` | 65 | toMap, getSummary |
+
+### Imports
+- `import timber.log.Timber`
+---
+
+## android/app/src/main/java/com/scmessenger/android/transport/WifiAwareTransport.kt (1 chunks, 458 lines)
+Function `[VALIDATED]_P0_ANDROID_AGY_HANDOFF_2026-06-07_Identity_Stability_Bundle` not found in REPO_MAP chunks. Full file listing below.
+
+### Summary
+android/app/src/main/java/com/scmessenger/android/transport/WifiAwareTransport.kt: Defines 1 types: WifiAwareTransport; 22 functions; 13 imports
+
+### Structs/Classes
+- WifiAwareTransport
+
+### Functions
+| Function | Line | Calls Out To |
+|----------|------|-------------|
+| `isAvailable` | 59 | catch, attach, i, isAvailable, start, w, e |
+| `start` | 67 | stop, catch, attach, i, isAvailable, w, e |
+| `stop` | 91 | close, w, catch, synchronized, clear, unregisterNetworkCallback, cancel, toList |
+| `sendData` | 135 | onAttachFailed, AttachCallback, onAttached, send, i, startSubscribing, w, e, startPublishing |
+| `onAttached` | 145 | onAttachFailed, d, onAttached, build, setServiceName, i, startSubscribing, publish, Builder, setPublishType |
+| `onAttachFailed` | 159 | onAttachFailed, d, setSubscribeType, build, catch, setServiceName, publish, startSubscribing, Builder, setPublishType |
+| `startPublishing` | 166 | d, setSubscribeType, subscribe, build, catch, setServiceName, publish, startSubscribing, Builder, setPublishType |
+| `startSubscribing` | 182 | d, setSubscribeType, subscribe, build, catch, onServiceDiscovered, onPublishStarted, setServiceName, i, startSubscribing |
+| `onPublishStarted` | 200 | d, initiateDataPath, w, DiscoverySessionCallback, onServiceDiscovered, onPublishStarted, RESPONDER, i, onSubscribeStarted, toString |
+| `onServiceDiscovered` | 205 | d, initiateDataPath, w, DiscoverySessionCallback, onServiceDiscovered, RESPONDER, i, onSubscribeStarted, toString, onPeerDiscovered |
+| `onSubscribeStarted` | 228 | d, initiateDataPath, w, INITIATOR, onServiceDiscovered, i, onSubscribeStarted, toString, onPeerDiscovered, RequiresApi |
+| `onServiceDiscovered` | 233 | d, initiateDataPath, w, build, INITIATOR, onServiceDiscovered, Builder, toString, onPeerDiscovered, RequiresApi |
+| `initiateDataPath` | 256 | onAvailable, build, NetworkCallback, i, setNetworkSpecifier, Builder, createResponderSocket, onCapabilitiesChanged, addTransportType, peerIdString |
+| `onAvailable` | 271 | d, onAvailable, i, containsKey, createInitiatorSocket, onCapabilitiesChanged, createResponderSocket, peerIdString |
+| `onCapabilitiesChanged` | 283 | d, close, remove, catch, synchronized, onLost, containsKey, createInitiatorSocket, onCapabilitiesChanged, unregisterNetworkCallback |
+| `onLost` | 302 | d, close, remove, catch, synchronized, onLost, put, w, unregisterNetworkCallback, requestNetwork |
+| `createResponderSocket` | 338 | d, accept, close, ServerSocket, catch, startReading, AwareConnection, i, withContext, Subscriber |
+| `createInitiatorSocket` | 369 | connect, getInputStream, catch, getOutputStream, InetSocketAddress, createSocket, AwareConnection, startReading, i, withContext |
+| `startReading` | 398 | onDataReceived, read, close, catch, startReading, send, copyOfRange, ByteArray, e |
+| `send` | 426 | cleanup, stop, close, catch, cancel, send, write, flush, w, e |
+| `close` | 437 | cleanup, close, catch, cancel, w, stop |
+| `cleanup` | 447 | cleanup, cancel, stop |
+
+### Imports
+- `import android.content.Context`
+- `import android.net.*`
+- `import android.net.wifi.aware.*`
+- `import android.os.Build`
+- `import androidx.annotation.RequiresApi`
+- `import java.io.InputStream`
+- `import java.io.OutputStream`
+- `import java.net.InetSocketAddress`
+- `import java.net.ServerSocket`
+- `import java.net.Socket`
+- `import java.util.concurrent.ConcurrentHashMap`
+- `import kotlinx.coroutines.*`
+- `import timber.log.Timber`
+---
+
+## android/app/src/main/java/com/scmessenger/android/transport/WifiDirectTransport.kt (1 chunks, 456 lines)
+Function `[VALIDATED]_P0_ANDROID_AGY_HANDOFF_2026-06-07_Identity_Stability_Bundle` not found in REPO_MAP chunks. Full file listing below.
+
+### Summary
+android/app/src/main/java/com/scmessenger/android/transport/WifiDirectTransport.kt: Defines 1 types: WifiDirectTransport; 23 functions; 16 imports
+
+### Structs/Classes
+- WifiDirectTransport
+
+### Functions
+| Function | Line | Calls Out To |
+|----------|------|-------------|
+| `start` | 54 | registerReceiver, initialize, addAction, w, e, IntentFilter |
+| `stop` | 102 | unregisterReceiver, clearLocalServices, close, removeGroup, i, clear, stopPeerDiscovery |
+| `sendData` | 143 | d, startServiceDiscovery, newInstance, send, setDnsSdResponseListeners, onPeerDiscovered, connectToPeer, w |
+| `startServiceDiscovery` | 151 | d, startPeerDiscovery, onSuccess, startServiceDiscovery, newInstance, setDnsSdResponseListeners, addServiceRequest, connectToPeer, onPeerDiscovered, e |
+| `onSuccess` | 175 | d, discoverPeers, startPeerDiscovery, onSuccess, catch, e, onFailure |
+| `onFailure` | 179 | discoverPeers, d, startPeerDiscovery, onSuccess, catch, e, onFailure |
+| `startPeerDiscovery` | 190 | d, discoverPeers, startPeerDiscovery, onSuccess, catch, newInstance, put, registerService, e, onFailure |
+| `onSuccess` | 196 | d, catch, newInstance, put, addLocalService, registerService, e, onFailure |
+| `onFailure` | 199 | d, onSuccess, catch, newInstance, put, addLocalService, registerService, e, onFailure |
+| `registerService` | 210 | d, onSuccess, catch, newInstance, put, addLocalService, registerService, e, onFailure |
+| `onSuccess` | 227 | d, connect, onSuccess, catch, connectToPeer, containsKey, WifiP2pConfig, e, onFailure |
+| `onFailure` | 230 | d, connect, onSuccess, catch, connectToPeer, containsKey, WifiP2pConfig, e, onFailure |
+| `connectToPeer` | 241 | d, connect, onSuccess, catch, connectToPeer, containsKey, WifiP2pConfig, e, onFailure |
+| `onSuccess` | 257 | d, catch, getIntExtra, Suppress, onReceive, BroadcastReceiver, getParcelableExtra, e, onFailure |
+| `onFailure` | 260 | d, catch, getIntExtra, Suppress, onReceive, BroadcastReceiver, getParcelableExtra, e, onFailure |
+| `onReceive` | 273 | d, requestConnectionInfo, handleConnectionInfo, getIntExtra, Suppress, getParcelableExtra |
+| `handleConnectionInfo` | 306 | d, connectToGroupOwner, accept, P2pConnection, startServer, ServerSocket, handleConnectionInfo, startReading, i |
+| `startServer` | 320 | accept, d, connectToGroupOwner, P2pConnection, connect, startServer, ServerSocket, catch, startReading, InetSocketAddress |
+| `connectToGroupOwner` | 345 | connectToGroupOwner, connect, P2pConnection, getInputStream, catch, getOutputStream, InetSocketAddress, startReading, i, Socket |
+| `startReading` | 375 | onDataReceived, read, startReading, wrap, ByteArray, e |
+| `send` | 419 | allocate, cleanup, stop, putInt, close, w, remove, catch, synchronized, cancel |
+| `close` | 434 | cleanup, close, remove, catch, cancel, w, stop |
+| `cleanup` | 445 | cleanup, cancel, stop |
+
+### Imports
+- `import android.content.BroadcastReceiver`
+- `import android.content.Context`
+- `import android.content.Intent`
+- `import android.content.IntentFilter`
+- `import android.net.wifi.p2p.*`
+- `import android.net.wifi.p2p.nsd.WifiP2pDnsSdServiceInfo`
+- `import android.net.wifi.p2p.nsd.WifiP2pDnsSdServiceRequest`
+- `import androidx.core.content.IntentCompat`
+- `import java.io.InputStream`
+- `import java.io.OutputStream`
+- `import java.net.InetSocketAddress`
+- `import java.net.ServerSocket`
+- `import java.net.Socket`
+- `import java.util.concurrent.ConcurrentHashMap`
+- `import kotlinx.coroutines.*`
+- `import timber.log.Timber`
+---
+
+## android/app/src/main/java/com/scmessenger/android/transport/WifiTransportManager.kt (1 chunks, 177 lines)
+Function `[VALIDATED]_P0_ANDROID_AGY_HANDOFF_2026-06-07_Identity_Stability_Bundle` not found in REPO_MAP chunks. Full file listing below.
+
+### Summary
+android/app/src/main/java/com/scmessenger/android/transport/WifiTransportManager.kt: Defines 1 types: WifiTransportManager; 12 functions; 11 imports
+
+### Structs/Classes
+- WifiTransportManager
+
+### Functions
+| Function | Line | Calls Out To |
+|----------|------|-------------|
+| `onReceive` | 35 | d, requestPeers, initialize, WifiDirectTransport, startDiscovery, invoke, e, getMainLooper |
+| `initialize` | 42 | d, initialize, w, WifiDirectTransport, startDiscovery, start, invoke, e, getMainLooper, hasDiscoveryPermissions |
+| `startDiscovery` | 60 | registerReceiver, d, discoverPeers, onSuccess, catch, i, startDiscovery, start, w, e |
+| `onSuccess` | 75 | registerReceiver, stopDiscovery, w, onSuccess, catch, i, stopPeerDiscovery, e, onFailure |
+| `onFailure` | 80 | unregisterReceiver, stopDiscovery, w, onSuccess, catch, i, stopPeerDiscovery, e, onFailure |
+| `stopDiscovery` | 91 | unregisterReceiver, stopDiscovery, stop, registerReceiver, onSuccess, catch, i, w, stopPeerDiscovery, IntentFilter |
+| `onSuccess` | 97 | unregisterReceiver, registerReceiver, catch, i, addAction, w, stop, IntentFilter, onFailure |
+| `onFailure` | 101 | unregisterReceiver, registerReceiver, requestPeers, catch, addAction, w, stop, IntentFilter, hasDiscoveryPermissions |
+| `registerReceiver` | 118 | registerReceiver, requestPeers, catch, peerId, onPeerDiscovered, v, addAction, w, e, IntentFilter |
+| `requestPeers` | 128 | requestPeers, catch, peerId, onPeerDiscovered, v, checkSelfPermission, w, e, hasDiscoveryPermissions |
+| `hasDiscoveryPermissions` | 147 | d, sendData, trim, isEmpty, checkSelfPermission, w, hasDiscoveryPermissions |
+| `sendData` | 160 | d, sendData, trim, isEmpty, w |
+
+### Imports
+- `import android.Manifest`
+- `import android.content.BroadcastReceiver`
+- `import android.content.Context`
+- `import android.content.Intent`
+- `import android.content.IntentFilter`
+- `import android.content.pm.PackageManager`
+- `import android.net.wifi.p2p.WifiP2pManager`
+- `import android.os.Build`
+- `import android.os.Looper`
+- `import androidx.core.content.ContextCompat`
+- `import timber.log.Timber`
+---
+
+## android/app/src/main/java/com/scmessenger/android/ui/chat/MessageBubble.kt (1 chunks, 108 lines)
+Function `[VALIDATED]_P0_ANDROID_AGY_HANDOFF_2026-06-07_Identity_Stability_Bundle` not found in REPO_MAP chunks. Full file listing below.
+
+### Summary
+android/app/src/main/java/com/scmessenger/android/ui/chat/MessageBubble.kt: 3 functions; 13 imports
+
+### Functions
+| Function | Line | Calls Out To |
+|----------|------|-------------|
+| `MessageBubble` | 24 | padding, Column, fillMaxWidth, RoundedCornerShape, Row, width, widthIn, Spacer, Surface |
+| `formatTimestamp` | 85 | Date, getDefault, SimpleDateFormat, toEpochMillis, format, getInstance, get, isSameDay |
+| `isSameDay` | 102 | getInstance, get |
+
+### Imports
+- `import androidx.compose.foundation.layout.*`
+- `import androidx.compose.foundation.shape.RoundedCornerShape`
+- `import androidx.compose.material3.*`
+- `import androidx.compose.runtime.Composable`
+- `import androidx.compose.ui.Alignment`
+- `import androidx.compose.ui.Modifier`
+- `import androidx.compose.ui.text.font.FontWeight`
+- `import androidx.compose.ui.unit.dp`
+- `import androidx.compose.ui.unit.sp`
+- `import com.scmessenger.android.ui.theme.*`
+- `import com.scmessenger.android.utils.toEpochMillis`
+- `import java.text.SimpleDateFormat`
+- `import java.util.*`
+---
+
+## android/app/src/main/java/com/scmessenger/android/ui/components/CopyableText.kt (1 chunks, 180 lines)
+Function `[VALIDATED]_P0_ANDROID_AGY_HANDOFF_2026-06-07_Identity_Stability_Bundle` not found in REPO_MAP chunks. Full file listing below.
+
+### Summary
+android/app/src/main/java/com/scmessenger/android/ui/components/CopyableText.kt: 4 functions; 19 imports
+
+### Functions
+| Function | Line | Calls Out To |
+|----------|------|-------------|
+| `CopyableText` | 34 | Text, Column, combinedClickable, mutableStateOf, lines, fillMaxWidth, copyToClipboard |
+| `LabeledCopyableText` | 89 | padding, Text, Column, combinedClickable, fillMaxWidth, copyToClipboard, height, Spacer |
+| `TruncatedCopyableText` | 130 | Text, weight, IconButton, take, Row, copyToClipboard |
+| `copyToClipboard` | 174 | getSystemService, setPrimaryClip, newPlainText, show, makeText |
+
+### Imports
+- `import android.content.ClipData`
+- `import android.content.ClipboardManager`
+- `import android.content.Context`
+- `import android.widget.Toast`
+- `import androidx.compose.foundation.ExperimentalFoundationApi`
+- `import androidx.compose.foundation.combinedClickable`
+- `import androidx.compose.foundation.layout.*`
+- `import androidx.compose.material.icons.Icons`
+- `import androidx.compose.material.icons.filled.ContentCopy`
+- `import androidx.compose.material.icons.filled.ExpandLess`
+- `import androidx.compose.material.icons.filled.ExpandMore`
+- `import androidx.compose.material3.*`
+- `import androidx.compose.runtime.*`
+- `import androidx.compose.ui.Alignment`
+- `import androidx.compose.ui.Modifier`
+- `import androidx.compose.ui.platform.LocalContext`
+- `import androidx.compose.ui.text.font.FontFamily`
+- `import androidx.compose.ui.text.style.TextOverflow`
+- `import androidx.compose.ui.unit.dp`
+---
+
+## android/app/src/main/java/com/scmessenger/android/ui/components/Identicon.kt (1 chunks, 194 lines)
+Function `[VALIDATED]_P0_ANDROID_AGY_HANDOFF_2026-06-07_Identity_Stability_Bundle` not found in REPO_MAP chunks. Full file listing below.
+
+### Summary
+android/app/src/main/java/com/scmessenger/android/ui/components/Identicon.kt: 6 functions; 13 imports
+
+### Functions
+| Function | Line | Calls Out To |
+|----------|------|-------------|
+| `Identicon` | 29 | drawCircle, toFloat, Canvas, size, cos, background, clip, sin, generatePattern, generateColors |
+| `generateColors` | 77 | toInt, hsv, List, listOf, isEmpty, generatePattern |
+| `generatePattern` | 100 | toInt, toByteArray, chunked, Identicon, List, catch, toByte, isEmpty, IdenticonFromHex, ByteArray |
+| `IdenticonFromHex` | 115 | toInt, toByteArray, Identicon, catch, toByte, IdenticonFromPeerId, chunked, ByteArray |
+| `IdenticonFromPeerId` | 135 | toArgb, drawCircle, notifications, Canvas, Identicon, toByteArray, generateIdenticonBitmap, createBitmap, Paint, generatePattern |
+| `generateIdenticonBitmap` | 148 | toArgb, drawCircle, Canvas, toFloat, last, cos, Paint, createBitmap, sin, generatePattern |
+
+### Imports
+- `import androidx.compose.foundation.Canvas`
+- `import androidx.compose.foundation.background`
+- `import androidx.compose.foundation.layout.Box`
+- `import androidx.compose.foundation.layout.size`
+- `import androidx.compose.foundation.shape.CircleShape`
+- `import androidx.compose.runtime.Composable`
+- `import androidx.compose.ui.Modifier`
+- `import androidx.compose.ui.draw.clip`
+- `import androidx.compose.ui.geometry.Offset`
+- `import androidx.compose.ui.graphics.Color`
+- `import androidx.compose.ui.unit.Dp`
+- `import androidx.compose.ui.unit.dp`
+- `import kotlin.math.absoluteValue`
+---
+
+## android/app/src/main/java/com/scmessenger/android/ui/components/StatusIndicator.kt (1 chunks, 143 lines)
+Function `[VALIDATED]_P0_ANDROID_AGY_HANDOFF_2026-06-07_Identity_Stability_Bundle` not found in REPO_MAP chunks. Full file listing below.
+
+### Summary
+android/app/src/main/java/com/scmessenger/android/ui/components/StatusIndicator.kt: 4 functions; 15 imports
+
+### Functions
+| Function | Line | Calls Out To |
+|----------|------|-------------|
+| `StatusIndicator` | 32 | PulsingDot, dot, Box, StaticDot |
+| `StaticDot` | 64 | PulsingDot, tween, rememberInfiniteTransition, size, animateFloat, background, clip, infiniteRepeatable, Box |
+| `PulsingDot` | 81 | tween, rememberInfiniteTransition, size, animateFloat, scale, infiniteRepeatable, Box |
+| `ConnectionQualityIndicator` | 122 | StatusIndicator |
+
+### Imports
+- `import androidx.compose.animation.core.*`
+- `import androidx.compose.foundation.background`
+- `import androidx.compose.foundation.layout.Box`
+- `import androidx.compose.foundation.layout.size`
+- `import androidx.compose.foundation.shape.CircleShape`
+- `import androidx.compose.runtime.Composable`
+- `import androidx.compose.runtime.getValue`
+- `import androidx.compose.ui.Modifier`
+- `import androidx.compose.ui.draw.clip`
+- `import androidx.compose.ui.draw.scale`
+- `import androidx.compose.ui.graphics.Color`
+- `import androidx.compose.ui.unit.Dp`
+- `import androidx.compose.ui.unit.dp`
+- `import com.scmessenger.android.service.TransportType`
+- `import com.scmessenger.android.ui.theme.*`
 ---
 
 ## android/app/src/main/java/com/scmessenger/android/ui/contacts/AddContactScreen.kt (1 chunks, 689 lines)
@@ -1244,6 +2298,73 @@ android/app/src/main/java/com/scmessenger/android/ui/contacts/AddContactScreen.k
 - `import timber.log.Timber`
 ---
 
+## android/app/src/main/java/com/scmessenger/android/ui/dashboard/TopologyScreen.kt (1 chunks, 366 lines)
+Function `[VALIDATED]_P0_ANDROID_AGY_HANDOFF_2026-06-07_Identity_Stability_Bundle` not found in REPO_MAP chunks. Full file listing below.
+
+### Summary
+android/app/src/main/java/com/scmessenger/android/ui/dashboard/TopologyScreen.kt: 7 functions; 26 imports
+
+### Functions
+| Function | Line | Calls Out To |
+|----------|------|-------------|
+| `TopologyScreen` | 40 | Text, LaunchedEffect, IconButton, collectAsState, refreshData, hiltViewModel, Icon, TopAppBar, Box, Scaffold |
+| `TopologyStats` | 141 | padding, fillMaxWidth, StatItem, Row, toString, Surface |
+| `StatItem` | 174 | Text, Column, TopologyGraph |
+| `TopologyGraph` | 198 | toFloat, Canvas, cos, Offset, background, minOf, sin |
+| `TopologyLegend` | 285 | Card, padding, Column, Text, HorizontalDivider, fillMaxWidth, spacedBy, LegendItem |
+| `LegendItem` | 330 | Text, size, background, spacedBy, getTransportColor, Row, Box |
+| `getTransportColor` | 356 |  |
+
+### Imports
+- `import androidx.compose.foundation.Canvas`
+- `import androidx.compose.foundation.background`
+- `import androidx.compose.foundation.layout.*`
+- `import androidx.compose.foundation.rememberScrollState`
+- `import androidx.compose.foundation.verticalScroll`
+- `import androidx.compose.material.icons.Icons`
+- `import androidx.compose.material.icons.automirrored.filled.ArrowBack`
+- `import androidx.compose.material.icons.filled.Refresh`
+- `import androidx.compose.material3.*`
+- `import androidx.compose.runtime.*`
+- `import androidx.compose.ui.Alignment`
+- `import androidx.compose.ui.Modifier`
+- `import androidx.compose.ui.geometry.Offset`
+- `import androidx.compose.ui.graphics.Color`
+- `import androidx.compose.ui.graphics.StrokeCap`
+- `import androidx.compose.ui.graphics.drawscope.Stroke`
+- `import androidx.compose.ui.text.font.FontWeight`
+- `import androidx.compose.ui.unit.dp`
+- `import androidx.hilt.navigation.compose.hiltViewModel`
+- `import com.scmessenger.android.ui.components.ErrorBanner`
+- `import com.scmessenger.android.ui.theme.*`
+- `import com.scmessenger.android.ui.viewmodels.DashboardViewModel`
+- `import com.scmessenger.android.ui.viewmodels.NetworkTopology`
+- `import com.scmessenger.android.ui.viewmodels.TopologyNode`
+- `import kotlin.math.cos`
+- `import kotlin.math.sin`
+---
+
+## android/app/src/main/java/com/scmessenger/android/ui/diagnostics/DiagnosticsBundleFormatter.kt (1 chunks, 66 lines)
+Function `[VALIDATED]_P0_ANDROID_AGY_HANDOFF_2026-06-07_Identity_Stability_Bundle` not found in REPO_MAP chunks. Full file listing below.
+
+### Summary
+android/app/src/main/java/com/scmessenger/android/ui/diagnostics/DiagnosticsBundleFormatter.kt: Defines 2 types: DiagnosticsBundleInput, DiagnosticsBundleFormatter; 1 functions; 3 imports
+
+### Structs/Classes
+- DiagnosticsBundleFormatter
+- DiagnosticsBundleInput
+
+### Functions
+| Function | Line | Calls Out To |
+|----------|------|-------------|
+| `format` | 22 | Date, format, joinToString, isEmpty, Bundle |
+
+### Imports
+- `import java.text.SimpleDateFormat`
+- `import java.util.Date`
+- `import java.util.Locale`
+---
+
 ## android/app/src/main/java/com/scmessenger/android/ui/identity/IdentityScreen.kt (1 chunks, 311 lines)
 Function `[VALIDATED]_P0_ANDROID_AGY_HANDOFF_2026-06-07_Identity_Stability_Bundle` not found in REPO_MAP chunks. Full file listing below.
 
@@ -1286,6 +2407,109 @@ android/app/src/main/java/com/scmessenger/android/ui/identity/IdentityScreen.kt:
 - `import com.scmessenger.android.ui.components.ErrorBanner`
 - `import com.scmessenger.android.ui.components.IdenticonFromPeerId`
 - `import com.scmessenger.android.ui.viewmodels.IdentityViewModel`
+- `import timber.log.Timber`
+---
+
+## android/app/src/main/java/com/scmessenger/android/ui/join/JoinMeshScreen.kt (1 chunks, 445 lines)
+Function `[VALIDATED]_P0_ANDROID_AGY_HANDOFF_2026-06-07_Identity_Stability_Bundle` not found in REPO_MAP chunks. Full file listing below.
+
+### Summary
+android/app/src/main/java/com/scmessenger/android/ui/join/JoinMeshScreen.kt: Defines 1 types: JoinState; 7 functions; 24 imports
+
+### Structs/Classes
+- JoinState
+
+### Functions
+| Function | Line | Calls Out To |
+|----------|------|-------------|
+| `JoinMeshScreen` | 47 | padding, Column, fillMaxSize, QrScannerView, mutableStateOf, parseAndJoin, rememberCoroutineScope |
+| `QrScannerView` | 121 | Text, Column, fillMaxSize, OutlinedButton, height, Spacer |
+| `ParsingView` | 186 | Text, Column, ConnectingView, rememberInfiniteTransition, tween, animateFloat, infiniteRepeatable, CircularProgressIndicator, height, Spacer |
+| `ConnectingView` | 201 | Text, Column, tween, rememberInfiniteTransition, size, animateFloat, rotate, Spacer, height, Icon |
+| `SuccessView` | 256 | Text, Column, LaunchedEffect, size, Color, delay, height, Icon, onComplete, Spacer |
+| `ErrorView` | 287 | Text, Column, size, height, Icon, Spacer |
+| `parseAndJoin` | 339 | d, isNotEmpty, bundle, JSON, find, trim, toRegex, split, removeSurrounding, withContext |
+
+### Imports
+- `import androidx.compose.animation.core.*`
+- `import androidx.compose.foundation.layout.*`
+- `import androidx.compose.material.icons.Icons`
+- `import androidx.compose.material.icons.filled.CheckCircle`
+- `import androidx.compose.material.icons.filled.Error`
+- `import androidx.compose.material3.*`
+- `import androidx.compose.runtime.*`
+- `import androidx.compose.ui.Alignment`
+- `import androidx.compose.ui.Modifier`
+- `import androidx.compose.ui.draw.rotate`
+- `import androidx.compose.ui.graphics.Color`
+- `import androidx.compose.ui.platform.LocalContext`
+- `import androidx.compose.ui.text.style.TextAlign`
+- `import androidx.compose.ui.unit.dp`
+- `import com.google.android.gms.common.api.CommonStatusCodes`
+- `import com.google.mlkit.common.MlKitException`
+- `import com.google.mlkit.vision.barcode.common.Barcode`
+- `import com.google.mlkit.vision.codescanner.GmsBarcodeScannerOptions`
+- `import com.google.mlkit.vision.codescanner.GmsBarcodeScanning`
+- `import com.scmessenger.android.data.MeshRepository`
+- `import kotlinx.coroutines.Dispatchers`
+- `import kotlinx.coroutines.launch`
+- `import kotlinx.coroutines.withContext`
+- `import timber.log.Timber`
+---
+
+## android/app/src/main/java/com/scmessenger/android/ui/MainActivity.kt (1 chunks, 383 lines)
+Function `[VALIDATED]_P0_ANDROID_AGY_HANDOFF_2026-06-07_Identity_Stability_Bundle` not found in REPO_MAP chunks. Full file listing below.
+
+### Summary
+android/app/src/main/java/com/scmessenger/android/ui/MainActivity.kt: Defines 1 types: MainActivity; 10 functions; 37 imports
+
+### Structs/Classes
+- MainActivity
+
+### Functions
+| Function | Line | Calls Out To |
+|----------|------|-------------|
+| `schedulePermissionReset` | 81 | d, isSystemInDarkTheme, onCreate, set, collectAsState, SCMessengerTheme, setDecorFitsSystemWindows, startAnrMonitoring, postDelayed, checkPermissions |
+| `onCreate` | 88 | d, fillMaxSize, isSystemInDarkTheme, onCreate, collectAsState, SCMessengerTheme, setDecorFitsSystemWindows, startAnrMonitoring, checkPermissions, Surface |
+| `startAnrMonitoring` | 141 | AnrWatchdog, d, initializeRepository, catch, compareAndSet, i, checkPermissions, start, w, e |
+| `initializeUiComponents` | 155 | d, mutableListOf, initializeRepository, add, catch, compareAndSet, checkPermissions, e, repository |
+| `checkPermissions` | 166 | d, mutableListOf, set, add, compareAndSet, checkPermissions, isEmpty, checkSelfPermission |
+| `showPermissionRationale` | 216 | d, getRationale, launch, onResume, notifyForeground, setNegativeButton, schedulePermissionReset, i, Builder, w |
+| `onResume` | 242 | d, notifyBackground, handleDeepLink, onResume, checkPermissions, notifyForeground, hasRequiredRuntimePermissions, onPause, onDestroy, onRuntimePermissionsGranted |
+| `onNewIntent` | 252 | d, notifyBackground, handleDeepLink, catch, w, onDestroy, stop, onPause, onNewIntent |
+| `onPause` | 264 | d, notifyBackground, catch, w, onDestroy, stop, onPause |
+| `onDestroy` | 270 | d, catch, w, onDestroy, stop |
+
+### Imports
+- `import android.Manifest`
+- `import android.content.Intent`
+- `import android.content.pm.PackageManager`
+- `import android.os.Build`
+- `import android.os.Bundle`
+- `import android.os.Handler`
+- `import android.os.Looper`
+- `import androidx.activity.ComponentActivity`
+- `import androidx.activity.compose.setContent`
+- `import androidx.activity.result.contract.ActivityResultContracts`
+- `import androidx.activity.viewModels`
+- `import androidx.appcompat.app.AlertDialog`
+- `import androidx.compose.foundation.layout.fillMaxSize`
+- `import androidx.compose.material3.MaterialTheme`
+- `import androidx.compose.material3.Surface`
+- `import androidx.compose.ui.Modifier`
+- `import androidx.core.content.ContextCompat`
+- `import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen`
+- `import androidx.core.view.WindowCompat`
+- `import androidx.lifecycle.lifecycleScope`
+- `import com.scmessenger.android.data.MeshRepository`
+- `import com.scmessenger.android.service.AndroidPlatformBridge`
+- `import com.scmessenger.android.service.AnrWatchdog`
+- `import com.scmessenger.android.ui.theme.SCMessengerTheme`
+- `import com.scmessenger.android.ui.viewmodels.MainViewModel`
+- `import com.scmessenger.android.utils.Permissions`
+- `import dagger.hilt.android.AndroidEntryPoint`
+- `import java.util.concurrent.atomic.AtomicBoolean`
+- `import javax.inject.Inject`
 - `import timber.log.Timber`
 ---
 
@@ -1510,6 +2734,112 @@ android/app/src/main/java/com/scmessenger/android/ui/screens/OnboardingScreen.kt
 - `import com.scmessenger.android.ui.viewmodels.MainViewModel`
 ---
 
+## android/app/src/main/java/com/scmessenger/android/ui/settings/MeshSettingsScreen.kt (1 chunks, 387 lines)
+Function `[VALIDATED]_P0_ANDROID_AGY_HANDOFF_2026-06-07_Identity_Stability_Bundle` not found in REPO_MAP chunks. Full file listing below.
+
+### Summary
+android/app/src/main/java/com/scmessenger/android/ui/settings/MeshSettingsScreen.kt: 5 functions; 15 imports
+
+### Functions
+| Function | Line | Calls Out To |
+|----------|------|-------------|
+| `MeshSettingsScreen` | 33 | padding, Text, Column, fillMaxSize, rememberScrollState, LaunchedEffect, IconButton, collectAsState, hiltViewModel, loadSettings |
+| `SettingsSection` | 223 | padding, Text, Column, SwitchSetting, fillMaxWidth, content, Row, HorizontalDivider |
+| `SwitchSetting` | 244 | padding, Text, Column, weight, Switch, fillMaxWidth, Row |
+| `SliderSetting` | 281 | padding, Text, Column, fillMaxWidth, Row |
+| `DiscoveryModeSetting` | 331 | padding, Text, Column, fillMaxWidth, listOf, height, Spacer |
+
+### Imports
+- `import androidx.compose.foundation.layout.*`
+- `import androidx.compose.foundation.rememberScrollState`
+- `import androidx.compose.foundation.verticalScroll`
+- `import androidx.compose.material.icons.Icons`
+- `import androidx.compose.material.icons.automirrored.filled.ArrowBack`
+- `import androidx.compose.material3.*`
+- `import androidx.compose.runtime.*`
+- `import androidx.compose.ui.Alignment`
+- `import androidx.compose.ui.Modifier`
+- `import androidx.compose.ui.text.font.FontWeight`
+- `import androidx.compose.ui.unit.dp`
+- `import androidx.hilt.navigation.compose.hiltViewModel`
+- `import com.scmessenger.android.ui.components.ErrorBanner`
+- `import com.scmessenger.android.ui.components.WarningBanner`
+- `import com.scmessenger.android.ui.viewmodels.SettingsViewModel`
+---
+
+## android/app/src/main/java/com/scmessenger/android/ui/settings/PowerSettingsScreen.kt (1 chunks, 472 lines)
+Function `[VALIDATED]_P0_ANDROID_AGY_HANDOFF_2026-06-07_Identity_Stability_Bundle` not found in REPO_MAP chunks. Full file listing below.
+
+### Summary
+android/app/src/main/java/com/scmessenger/android/ui/settings/PowerSettingsScreen.kt: 6 functions; 20 imports
+
+### Functions
+| Function | Line | Calls Out To |
+|----------|------|-------------|
+| `PowerSettingsScreen` | 36 | Text, Column, fillMaxSize, LaunchedEffect, IconButton, mutableStateOf, collectAsState, hiltViewModel, loadSettings, Icon |
+| `SettingsSection` | 269 | padding, Text, Column, SwitchSetting, fillMaxWidth, content, Row, HorizontalDivider |
+| `SwitchSetting` | 290 | padding, Text, Column, weight, Switch, fillMaxWidth, Row |
+| `SliderSetting` | 327 | padding, Text, Column, fillMaxWidth, Row |
+| `ProfileSelector` | 377 | padding, Text, Column, onProfileSelected, Standard, fillMaxWidth, listOf, Row, Maximum, RadioButton |
+| `InfoCard` | 412 | Card, padding, Column, cardColors, Text, fillMaxWidth, height, Spacer |
+
+### Imports
+- `import androidx.compose.foundation.layout.*`
+- `import androidx.compose.foundation.rememberScrollState`
+- `import androidx.compose.foundation.verticalScroll`
+- `import androidx.compose.material.icons.Icons`
+- `import androidx.compose.material.icons.automirrored.filled.ArrowBack`
+- `import androidx.compose.material3.*`
+- `import androidx.compose.runtime.*`
+- `import androidx.compose.ui.Alignment`
+- `import androidx.compose.ui.Modifier`
+- `import androidx.compose.ui.text.font.FontWeight`
+- `import androidx.compose.ui.unit.dp`
+- `import androidx.hilt.navigation.compose.hiltViewModel`
+- `import com.scmessenger.android.ui.components.ErrorBanner`
+- `import com.scmessenger.android.ui.components.ErrorState`
+- `import com.scmessenger.android.ui.components.IdenticonFromHex`
+- `import com.scmessenger.android.ui.components.InfoBanner`
+- `import com.scmessenger.android.ui.components.LabeledCopyableText`
+- `import com.scmessenger.android.ui.components.TruncatedCopyableText`
+- `import com.scmessenger.android.ui.components.WarningBanner`
+- `import com.scmessenger.android.ui.viewmodels.SettingsViewModel`
+---
+
+## android/app/src/main/java/com/scmessenger/android/ui/theme/Color.kt (1 chunks, 60 lines)
+Function `[VALIDATED]_P0_ANDROID_AGY_HANDOFF_2026-06-07_Identity_Stability_Bundle` not found in REPO_MAP chunks. Full file listing below.
+
+### Summary
+android/app/src/main/java/com/scmessenger/android/ui/theme/Color.kt: 1 imports
+
+### Imports
+- `import androidx.compose.ui.graphics.Color`
+---
+
+## android/app/src/main/java/com/scmessenger/android/ui/theme/Theme.kt (1 chunks, 62 lines)
+Function `[VALIDATED]_P0_ANDROID_AGY_HANDOFF_2026-06-07_Identity_Stability_Bundle` not found in REPO_MAP chunks. Full file listing below.
+
+### Summary
+android/app/src/main/java/com/scmessenger/android/ui/theme/Theme.kt: 1 functions; 10 imports
+
+### Functions
+| Function | Line | Calls Out To |
+|----------|------|-------------|
+| `SCMessengerTheme` | 27 | toArgb, MaterialTheme, isSystemInDarkTheme, dynamicDarkColorScheme, dynamicLightColorScheme, Composable, Suppress, getInsetsController |
+
+### Imports
+- `import android.app.Activity`
+- `import android.os.Build`
+- `import androidx.compose.foundation.isSystemInDarkTheme`
+- `import androidx.compose.material3.*`
+- `import androidx.compose.runtime.Composable`
+- `import androidx.compose.runtime.SideEffect`
+- `import androidx.compose.ui.graphics.toArgb`
+- `import androidx.compose.ui.platform.LocalContext`
+- `import androidx.compose.ui.platform.LocalView`
+- `import androidx.core.view.WindowCompat`
+---
+
 ## android/app/src/main/java/com/scmessenger/android/ui/viewmodels/IdentityViewModel.kt (1 chunks, 152 lines)
 Function `[VALIDATED]_P0_ANDROID_AGY_HANDOFF_2026-06-07_Identity_Stability_Bundle` not found in REPO_MAP chunks. Full file listing below.
 
@@ -1532,6 +2862,356 @@ android/app/src/main/java/com/scmessenger/android/ui/viewmodels/IdentityViewMode
 - `import androidx.lifecycle.ViewModel`
 - `import androidx.lifecycle.viewModelScope`
 - `import com.scmessenger.android.data.MeshRepository`
+- `import dagger.hilt.android.lifecycle.HiltViewModel`
+- `import javax.inject.Inject`
+- `import kotlinx.coroutines.Dispatchers`
+- `import kotlinx.coroutines.flow.*`
+- `import kotlinx.coroutines.launch`
+- `import kotlinx.coroutines.withContext`
+- `import timber.log.Timber`
+---
+
+## android/app/src/main/java/com/scmessenger/android/ui/viewmodels/MainViewModel.kt (1 chunks, 358 lines)
+Function `[VALIDATED]_P0_ANDROID_AGY_HANDOFF_2026-06-07_Identity_Stability_Bundle` not found in REPO_MAP chunks. Full file listing below.
+
+### Summary
+android/app/src/main/java/com/scmessenger/android/ui/viewmodels/MainViewModel.kt: Defines 2 types: MainViewModel, DeepLinkData; 10 functions; 19 imports
+
+### Structs/Classes
+- DeepLinkData
+- MainViewModel
+
+### Functions
+| Function | Line | Calls Out To |
+|----------|------|-------------|
+| `grantConsent` | 124 | grantConsent, d, isIdentityInitialized, catch, compareAndSet, setInstallChoiceCompleted, launch, i, e, refreshIdentityState |
+| `refreshIdentityState` | 135 | d, isIdentityInitialized, set, setOnboardingCompleted, compareAndSet, setInstallChoiceCompleted, launch, refreshIdentityState |
+| `createIdentity` | 172 | isIdentityInitialized, getIdentityInfo, createIdentity, trim, launch, i, setNickname, isNullOrBlank, isEmpty, w |
+| `clearIdentityError` | 228 | d, JSONObject, importContact, clearIdentityError, isNotBlank, available, getAvailableStorageMB, launch, isBlank, optString |
+| `refreshStorageStatus` | 232 | d, JSONObject, importContact, length, isNotBlank, available, getString, getAvailableStorageMB, launch, isBlank |
+| `importContact` | 241 | emptyList, isNotEmpty, importContact, length, isNotBlank, Contact, getString, isBlank, append, joinToString |
+| `clearImportState` | 293 | getQueryParameter, handleDeepLink, skipOnboardingForRelayOnlyInstall, DeepLinkData, consumeDeepLink, setOnboardingCompleted, clearImportState, trim, setInstallChoiceCompleted, i |
+| `skipOnboardingForRelayOnlyInstall` | 298 | getQueryParameter, handleDeepLink, skipOnboardingForRelayOnlyInstall, DeepLinkData, consumeDeepLink, setOnboardingCompleted, trim, setInstallChoiceCompleted, i, isNullOrBlank |
+| `handleDeepLink` | 306 | getQueryParameter, handleDeepLink, consumeDeepLink, DeepLinkData, trim, i, isNullOrBlank, w |
+| `consumeDeepLink` | 322 | DeepLinkData, consumeDeepLink |
+
+### Imports
+- `import android.content.Context`
+- `import android.net.Uri`
+- `import androidx.lifecycle.ViewModel`
+- `import androidx.lifecycle.viewModelScope`
+- `import com.scmessenger.android.data.MeshRepository`
+- `import com.scmessenger.android.data.PreferencesRepository`
+- `import com.scmessenger.android.utils.StorageManager`
+- `import dagger.hilt.android.lifecycle.HiltViewModel`
+- `import dagger.hilt.android.qualifiers.ApplicationContext`
+- `import java.util.concurrent.atomic.AtomicBoolean`
+- `import javax.inject.Inject`
+- `import kotlinx.coroutines.Dispatchers`
+- `import kotlinx.coroutines.flow.*`
+- `import kotlinx.coroutines.flow.MutableStateFlow`
+- `import kotlinx.coroutines.flow.StateFlow`
+- `import kotlinx.coroutines.flow.asStateFlow`
+- `import kotlinx.coroutines.launch`
+- `import kotlinx.coroutines.withContext`
+- `import timber.log.Timber`
+---
+
+## android/app/src/main/java/com/scmessenger/android/ui/viewmodels/MeshServiceViewModel.kt (1 chunks, 187 lines)
+Function `[VALIDATED]_P0_ANDROID_AGY_HANDOFF_2026-06-07_Identity_Stability_Bundle` not found in REPO_MAP chunks. Full file listing below.
+
+### Summary
+android/app/src/main/java/com/scmessenger/android/ui/viewmodels/MeshServiceViewModel.kt: Defines 1 types: MeshServiceViewModel; 8 functions; 14 imports
+
+### Structs/Classes
+- MeshServiceViewModel
+
+### Functions
+| Function | Line | Calls Out To |
+|----------|------|-------------|
+| `startService` | 71 | initialization, getIdentityInfo, startForegroundService, catch, startService, Intent, stopService, i, startMeshService, ensureServiceInitializedFireAndForget |
+| `stopService` | 95 | toggleService, catch, startService, Intent, stopService, i, w, e |
+| `toggleService` | 118 | d, catch, setServiceAutoStart, startService, stopService, setAutoStart, w, applyTransportSettings, e |
+| `setAutoStart` | 131 | d, getStatsText, catch, setServiceAutoStart, appendLine, formatBytes, applyTransportSettings, e |
+| `applyTransportSettings` | 142 | getStatsText, catch, appendLine, formatBytes, formatDuration, applyTransportSettings, e |
+| `getStatsText` | 155 | toLong, appendLine, formatDuration, formatBytes |
+| `formatBytes` | 165 | toLong, formatBytes, formatDuration |
+| `formatDuration` | 174 | toLong, formatDuration |
+
+### Imports
+- `import android.annotation.SuppressLint`
+- `import android.content.Context`
+- `import android.content.Intent`
+- `import androidx.lifecycle.ViewModel`
+- `import androidx.lifecycle.viewModelScope`
+- `import com.scmessenger.android.data.MeshRepository`
+- `import com.scmessenger.android.data.PreferencesRepository`
+- `import com.scmessenger.android.service.MeshForegroundService`
+- `import dagger.hilt.android.lifecycle.HiltViewModel`
+- `import dagger.hilt.android.qualifiers.ApplicationContext`
+- `import javax.inject.Inject`
+- `import kotlinx.coroutines.flow.*`
+- `import kotlinx.coroutines.launch`
+- `import timber.log.Timber`
+---
+
+## android/app/src/main/java/com/scmessenger/android/ui/viewmodels/SettingsViewModel.kt (1 chunks, 1124 lines)
+Function `[VALIDATED]_P0_ANDROID_AGY_HANDOFF_2026-06-07_Identity_Stability_Bundle` not found in REPO_MAP chunks. Full file listing below.
+
+### Summary
+android/app/src/main/java/com/scmessenger/android/ui/viewmodels/SettingsViewModel.kt: Defines 1 types: SettingsViewModel; 75 functions; 18 imports
+
+### Structs/Classes
+- SettingsViewModel
+
+### Functions
+| Function | Line | Calls Out To |
+|----------|------|-------------|
+| `emitIdentityInfo` | 143 | FIX, MeshSettings |
+| `loadSettingsInternal` | 209 | d, loaded, catch, loadSettings, loadIdentityInternal, emitIdentityInfo, e |
+| `loadIdentityInternal` | 235 | loadIdentity, loaded, catch, launch, copy, setNickname, isNullOrBlank, getIdentityInfoNonBlocking, w, emitIdentityInfo |
+| `loadIdentity` | 261 | layer, refreshing, e, catch, launch, copy, setNickname, isNullOrBlank, getIdentityInfoNonBlocking, w |
+| `getIdentityExportString` | 292 | updateNickname, importIdentityBackup, getIdentityExportString, clearImportResult, catch, restoreIdentityFromBackup, launch, setNickname, withContext, e |
+| `importIdentityBackup` | 301 | updateNickname, clearImportResult, catch, restoreIdentityFromBackup, launch, setNickname, e, loadIdentity |
+| `clearImportResult` | 313 | updateNickname, clearImportResult, catch, launch, setNickname, loadSettings, e, loadIdentity |
+| `updateNickname` | 317 | updateNickname, d, catch, launch, setNickname, loadSettings, e, loadIdentity |
+| `loadSettings` | 337 | d, catch, nanoTime, FIX, get, loadSettings, debouncedUpdateSettings, e |
+| `debouncedUpdateSettings` | 361 | d, throttled, saved, w, catch, nanoTime, compareAndSet, saveSettings, i, validateSettings |
+| `updateSettings` | 401 | updateBleEnabled, communication, copy, updateBatteryFloor, updateRelayEnabled, applyTransportSettings, debouncedUpdateSettings, updateMaxRelayBudget |
+| `updateRelayEnabled` | 408 | updateBleEnabled, communication, copy, applyTransportSettings, updateBatteryFloor, updateWifiAwareEnabled, updateMaxRelayBudget, debouncedUpdateSettings |
+| `updateMaxRelayBudget` | 416 | updateWifiDirectEnabled, updateBleEnabled, applyTransportSettings, copy, updateBatteryFloor, updateWifiAwareEnabled, updateMaxRelayBudget, debouncedUpdateSettings |
+| `updateBatteryFloor` | 422 | updateWifiDirectEnabled, updateBleEnabled, copy, updateBatteryFloor, updateWifiAwareEnabled, applyTransportSettings, debouncedUpdateSettings |
+| `updateBleEnabled` | 428 | updateWifiDirectEnabled, updateBleEnabled, copy, updateInternetEnabled, updateWifiAwareEnabled, applyTransportSettings, debouncedUpdateSettings |
+| `updateWifiAwareEnabled` | 436 | updateWifiDirectEnabled, updateDiscoveryMode, copy, updateInternetEnabled, updateWifiAwareEnabled, applyTransportSettings, debouncedUpdateSettings |
+| `updateWifiDirectEnabled` | 444 | updateWifiDirectEnabled, updateDiscoveryMode, launch, copy, getDefaultSettings, updateInternetEnabled, resetSettingsToDefault, applyTransportSettings, debouncedUpdateSettings |
+| `updateInternetEnabled` | 452 | updateDiscoveryMode, catch, launch, i, copy, getDefaultSettings, updateInternetEnabled, resetSettingsToDefault, applyTransportSettings, debouncedUpdateSettings |
+| `updateDiscoveryMode` | 460 | updateDiscoveryMode, catch, launch, i, copy, getDefaultSettings, resetSettingsToDefault, debouncedUpdateSettings, e |
+| `resetSettingsToDefault` | 470 | catch, setServiceAutoStart, launch, i, setVpnMode, getDefaultSettings, setAutoStart, debouncedUpdateSettings, e |
+| `setAutoStart` | 491 | setServiceAutoStart, setThemeMode, setShowPeerCount, setVpnMode, setAutoStart, setNotificationsEnabled |
+| `setVpnMode` | 497 | setThemeMode, setShowPeerCount, setVpnMode, setAutoAdjust, setNotificationsEnabled |
+| `setThemeMode` | 503 | setAutoAdjustEnabled, setThemeMode, setShowPeerCount, clearAdjustmentOverrides, setAutoAdjust, setNotificationsEnabled |
+| `setNotificationsEnabled` | 509 | setAutoAdjustEnabled, setManualProfile, setShowPeerCount, clearAdjustmentOverrides, setManualAdjustmentProfile, setAutoAdjust, setNotificationsEnabled |
+| `setShowPeerCount` | 515 | setAutoAdjustEnabled, setManualProfile, setShowPeerCount, setManualAdjustmentProfile, setAutoAdjust, clearAdjustmentOverrides |
+| `setAutoAdjust` | 525 | setAutoAdjustEnabled, setManualProfile, overrideRelayMax, overrideBleInterval, overrideBleScanInterval, setManualAdjustmentProfile, setAutoAdjust, clearAdjustmentOverrides |
+| `setManualProfile` | 534 | setManualProfile, overrideBleInterval, overrideBleScanInterval, clearAdjustmentOverrides, setManualAdjustmentProfile, overrideRelayMax |
+| `overrideBleScanInterval` | 545 | getLedgerSummary, overrideRelayMax, overrideBleInterval, overrideBleScanInterval, clearAdjustmentOverrides, clearError |
+| `overrideRelayMax` | 549 | getLedgerSummary, overrideRelayMax, clearAdjustmentOverrides, getConnectionPathState, clearError |
+| `clearAdjustmentOverrides` | 553 | getLedgerSummary, getNatStatus, clearAdjustmentOverrides, getConnectionPathState, clearError |
+| `clearError` | 565 | getLedgerSummary, getNatStatus, exportDiagnosticsAsync, getDiagnosticsLogPath, FIX, exportDiagnostics, getConnectionPathState |
+| `getLedgerSummary` | 572 | getLedgerSummary, getNatStatus, exportDiagnosticsAsync, getDiagnosticsLogPath, getDiagnosticsLogs, FIX, exportDiagnostics, withContext, getConnectionPathState |
+| `getConnectionPathState` | 575 | getNatStatus, exportDiagnosticsAsync, getDiagnosticsLogPath, getDiagnosticsLogs, FIX, exportDiagnostics, withContext, getConnectionPathState |
+| `getNatStatus` | 579 | getNatStatus, getDiagnosticsLogPath, exportDiagnosticsAsync, getDiagnosticsLogs, FIX, exportDiagnostics, withContext, clearDiagnosticsLogs |
+| `exportDiagnostics` | 588 | retryBootstrap, exportDiagnosticsAsync, getDiagnosticsLogPath, bootstrapWithFallbackStrategy, catch, getDiagnosticsLogs, FIX, i, withContext, clearDiagnosticsLogs |
+| `getDiagnosticsLogPath` | 591 | retryBootstrap, getDiagnosticsLogPath, bootstrapWithFallbackStrategy, catch, getDiagnosticsLogs, FIX, i, withContext, clearDiagnosticsLogs, e |
+| `getDiagnosticsLogs` | 600 | retryBootstrap, bootstrapWithFallbackStrategy, catch, getDiagnosticsLogs, FIX, i, withContext, getMissingRuntimePermissions, clearDiagnosticsLogs, buildTesterDiagnosticsBundle |
+| `clearDiagnosticsLogs` | 605 | getPermissionName, retryBootstrap, DiagnosticsBundleInput, currentTimeMillis, bootstrapWithFallbackStrategy, catch, FIX, format, i, withContext |
+| `retryBootstrap` | 611 | getPermissionName, getNatStatus, DiagnosticsBundleInput, loadPendingOutbox, currentTimeMillis, bootstrapWithFallbackStrategy, catch, getServiceStateName, FIX, format |
+| `buildTesterDiagnosticsBundle` | 627 | getPermissionName, getNatStatus, DiagnosticsBundleInput, getNetworkDiagnosticsReport, loadPendingOutbox, currentTimeMillis, getServiceStateName, getDiagnosticsLogs, format, exportDiagnostics |
+| `getNetworkDiagnosticsReport` | 657 | getBlockedCount, catch, getInboxCount, generateReport, e, getContactCount |
+| `getContactCount` | 672 | getBlockedCount, getInboxCount, getTransportHealthSummary, getBootstrapNodesForSettings, getContactCount |
+| `getBlockedCount` | 679 | getBlockedCount, getNetworkDiagnosticsSnapshot, getInboxCount, getTransportHealthSummary, getBootstrapNodesForSettings |
+| `getInboxCount` | 686 | getNetworkDiagnosticsSnapshot, getInboxCount, getNetworkFailureSummary, getTransportHealthSummary, getBootstrapNodesForSettings |
+| `getBootstrapNodesForSettings` | 693 | getNetworkDiagnosticsSnapshot, getNetworkFailureSummary, getTransportHealthSummary, getBootstrapNodesForSettings, resetServiceStats |
+| `getTransportHealthSummary` | 700 | getActiveTransports, getNetworkDiagnosticsSnapshot, getNetworkFailureSummary, getTransportHealthSummary, resetServiceStats |
+| `getNetworkDiagnosticsSnapshot` | 707 | getActiveTransports, type, getNetworkDiagnosticsSnapshot, getNetworkFailureSummary, resetServiceStats |
+| `getNetworkFailureSummary` | 714 | getActiveTransports, type, shouldUseTransport, getNetworkFailureSummary, resetServiceStats |
+| `resetServiceStats` | 721 | d, getActiveTransports, type, shouldUseTransport, handleBleFailure, resetServiceStats |
+| `getActiveTransports` | 728 | d, type, catch, shouldUseTransport, handleBleFailure, getActiveTransports, e |
+| `shouldUseTransport` | 739 | d, catch, shouldUseTransport, handleBleFailure, attemptBleRecovery, e |
+| `handleBleFailure` | 747 | d, catch, handleBleFailure, attemptBleRecovery, forceRestartScanning, e |
+| `attemptBleRecovery` | 762 | d, catch, clearPeerCache, forceRestartScanning, attemptBleRecovery, e |
+| `forceRestartScanning` | 776 | d, catch, clearPeerCache, forceRestartScanning, testLedgerRelayConnectivity, e |
+| `clearPeerCache` | 790 | d, catch, clearPeerCache, getMessageCount, testLedgerRelayConnectivity, e |
+| `testLedgerRelayConnectivity` | 805 | d, incrementAttemptCount, catch, getMessage, getMessageCount, testLedgerRelayConnectivity |
+| `getMessageCount` | 812 | d, incrementAttemptCount, catch, getMessage, getMessageCount, e |
+| `getMessage` | 822 | d, outcome, incrementAttemptCount, logMessageDeliveryAttempt, catch, getMessage, e |
+| `incrementAttemptCount` | 830 | d, outcome, incrementAttemptCount, logMessageDeliveryAttempt, catch, e |
+| `logMessageDeliveryAttempt` | 848 | d, type, logMessageDeliveryAttempt, catch, recordConnectionFailure, e |
+| `recordConnectionFailure` | 863 | d, type, catch, recordConnectionFailure, recordTransportEvent, e |
+| `recordTransportEvent` | 881 | d, primeRelayBootstrapConnectionsLegacy, catch, i, observePeers, recordTransportEvent, e, primeRelayBootstrapConnections |
+| `primeRelayBootstrapConnections` | 896 | primeRelayBootstrapConnectionsLegacy, catch, observePeers, i, e, observeNetworkStats, query |
+| `observePeers` | 911 | searchContacts, nickname, observePeers, setContactNickname, observeNetworkStats, query |
+| `observeNetworkStats` | 919 | d, searchContacts, catch, nickname, setContactNickname, e, observeNetworkStats, query |
+| `searchContacts` | 929 | d, searchContacts, updateContactDeviceId, associate, catch, nickname, setContactNickname, e |
+| `setContactNickname` | 939 | d, updateContactDeviceId, associate, catch, setContactNickname, e |
+| `updateContactDeviceId` | 956 | d, updateContactDeviceId, catch, shouldRetryMessage, loadPendingOutboxAsync, e |
+| `shouldRetryMessage` | 973 | catch, shouldRetryMessage, markMessageCorrupted, loadPendingOutboxAsync, w, e |
+| `loadPendingOutboxAsync` | 981 | PRIVACY, exportDiagnosticsAsync, catch, markMessageCorrupted, loadPendingOutboxAsync, w, e |
+| `markMessageCorrupted` | 991 | PRIVACY, setBleRotationIntervalSec, exportDiagnosticsAsync, catch, setBleRotationEnabled, markMessageCorrupted, w, e |
+| `exportDiagnosticsAsync` | 1006 | PRIVACY, clearAll, setBleRotationIntervalSec, exportDiagnosticsAsync, setBleRotationEnabled, resetAllData |
+| `setBleRotationEnabled` | 1013 | clearAll, setBleRotationIntervalSec, catch, setBleRotationEnabled, i, resetAllData, e, data |
+| `setBleRotationIntervalSec` | 1019 | clearAll, setBleRotationIntervalSec, catch, i, resetAllData, e, data |
+| `resetAllData` | 1029 | clearAll, catch, i, resetAllData, e, data |
+
+### Imports
+- `import androidx.lifecycle.ViewModel`
+- `import androidx.lifecycle.viewModelScope`
+- `import com.scmessenger.android.BuildConfig`
+- `import com.scmessenger.android.data.MeshRepository`
+- `import com.scmessenger.android.data.PreferencesRepository`
+- `import com.scmessenger.android.network.DiagnosticsReporter`
+- `import com.scmessenger.android.ui.diagnostics.DiagnosticsBundleFormatter`
+- `import com.scmessenger.android.ui.diagnostics.DiagnosticsBundleInput`
+- `import com.scmessenger.android.utils.Permissions`
+- `import dagger.hilt.android.lifecycle.HiltViewModel`
+- `import java.util.concurrent.atomic.AtomicLong`
+- `import javax.inject.Inject`
+- `import kotlin.concurrent.Volatile`
+- `import kotlinx.coroutines.Dispatchers`
+- `import kotlinx.coroutines.delay`
+- `import kotlinx.coroutines.flow.*`
+- `import kotlinx.coroutines.launch`
+- `import timber.log.Timber`
+---
+
+## android/app/src/main/java/com/scmessenger/android/ui/viewmodels/ChatViewModel.kt (1 chunks, 453 lines)
+Function `[VALIDATED]_P0_ANDROID_AGY_HANDOFF_2026-06-07_Identity_Stability_Bundle` not found in REPO_MAP chunks. Full file listing below.
+
+### Summary
+android/app/src/main/java/com/scmessenger/android/ui/viewmodels/ChatViewModel.kt: Defines 1 types: ChatViewModel; 21 functions; 12 imports
+
+### Structs/Classes
+- ChatViewModel
+
+### Functions
+| Function | Line | Calls Out To |
+|----------|------|-------------|
+| `setPeer` | 82 | addAll, getConversation, loadMessages, loadContact, abs, toLong |
+| `loadMessages` | 92 | addAll, currentPeer, getConversation, add, catch, d, abs, toLong |
+| `loadContact` | 134 | w, catch, e, getContact, trim, isEmpty, sendMessage |
+| `sendMessage` | 153 | toString, normalize, currentTimeMillis, toULong, isEmpty, trim, randomUUID, MessageRecord |
+| `sendMessage` | 214 | clearInput, isNotBlank, updateInputText, clearError, sendMessage |
+| `updateInputText` | 222 | clearInput, isNotBlank, peer, clearError, isSame, observeMessageEvents, orEmpty |
+| `clearInput` | 230 | updateMessageStatus, peer, loadMessages, clearError, isSame, observeMessageEvents, orEmpty |
+| `clearError` | 238 | w, orEmpty, updateMessageStatus, peer, loadMessages, isSame, observeMessageEvents |
+| `observeMessageEvents` | 245 | w, observeIncomingMessages, orEmpty, updateMessageStatus, peer, loadMessages, isSame |
+| `observeIncomingMessages` | 274 | equals, orEmpty, observeMessageUpdates, timestamp, toMutableList, updates, loadMessages, d, abs, take |
+| `observeMessageUpdates` | 287 | timestamp, toMutableList, add, d, abs, take, isSame, toLong, orEmpty |
+| `observePeerEvents` | 323 | observePeerEvents, catch, e, loadPendingOutboxCount, display, loadPendingOutboxAsync |
+| `loadPendingOutboxCount` | 344 | getRetryDelay, count, getRetryDelayForAttempt, catch, shouldRetryMessage, incrementAttemptCount, e, loadPendingOutboxAsync |
+| `getRetryDelayForAttempt` | 358 | getRetryDelay, outcome, catch, shouldRetryMessage, incrementAttemptCount, d, e |
+| `shouldRetryMessage` | 365 | outcome, catch, logMessageDeliveryAttempt, shouldRetryMessage, incrementAttemptCount, e, d |
+| `incrementAttemptCount` | 372 | outcome, catch, logMessageDeliveryAttempt, incrementAttemptCount, e, d |
+| `logMessageDeliveryAttempt` | 390 | catch, logMessageDeliveryAttempt, d, e, MessageRecord, updateMessageStatus |
+| `updateMessageStatus` | 404 | Date, loadMessages, loadMoreMessages, formatTimestamp, toEpochMillis, MessageRecord |
+| `loadMoreMessages` | 423 | getInstance, Date, isSameDay, loadMessages, loadMoreMessages, SimpleDateFormat, formatTimestamp, get, getDefault, format |
+| `formatTimestamp` | 432 | getInstance, Date, toEpochMillis, SimpleDateFormat, format, get, getDefault, isSameDay |
+| `isSameDay` | 445 | get, getInstance, isSameDay |
+
+### Imports
+- `import androidx.lifecycle.ViewModel`
+- `import androidx.lifecycle.viewModelScope`
+- `import com.scmessenger.android.data.MeshRepository`
+- `import com.scmessenger.android.service.MeshEventBus`
+- `import com.scmessenger.android.service.MessageEvent`
+- `import com.scmessenger.android.utils.PeerIdValidator`
+- `import com.scmessenger.android.utils.toEpochMillis`
+- `import dagger.hilt.android.lifecycle.HiltViewModel`
+- `import javax.inject.Inject`
+- `import kotlinx.coroutines.flow.*`
+- `import kotlinx.coroutines.launch`
+- `import timber.log.Timber`
+---
+
+## android/app/src/main/java/com/scmessenger/android/ui/viewmodels/ContactsViewModel.kt (1 chunks, 767 lines)
+Function `[VALIDATED]_P0_ANDROID_AGY_HANDOFF_2026-06-07_Identity_Stability_Bundle` not found in REPO_MAP chunks. Full file listing below.
+
+### Summary
+android/app/src/main/java/com/scmessenger/android/ui/viewmodels/ContactsViewModel.kt: Defines 2 types: NearbyPeer, ContactsViewModel; 24 functions; 15 imports
+
+### Structs/Classes
+- ContactsViewModel
+- NearbyPeer
+
+### Functions
+| Function | Line | Calls Out To |
+|----------|------|-------------|
+| `normalizeNickname` | 102 | isNotEmpty, selectAuthoritativeNickname, startsWith, isSyntheticFallbackNickname, lowercase, isBlePeerId, trim, normalizeNickname |
+| `isSyntheticFallbackNickname` | 106 | fromString, selectAuthoritativeNickname, startsWith, isSyntheticFallbackNickname, lowercase, isEmpty, isBlePeerId, trim, normalizeNickname, orEmpty |
+| `selectAuthoritativeNickname` | 111 | fromString, selectStablePeerId, selectAuthoritativeNickname, isSyntheticFallbackNickname, isEmpty, isBlePeerId, trim, normalizeNickname, orEmpty |
+| `isBlePeerId` | 131 | isLibp2pPeerId, orEmpty, fromString, selectStablePeerId, isIdentityId, isEmpty, isBlePeerId, trim |
+| `selectStablePeerId` | 137 | isLibp2pPeerId, orEmpty, selectStablePeerId, isIdentityId, isEmpty, 256, isBlePeerId, Hash, trim |
+| `isSameNearbyIdentity` | 170 | isNotEmpty, normalize, isSame, matching, trim, orEmpty |
+| `isNearbyPeerContact` | 206 | matching, observeNearbyPeers, isBootstrapRelayPeer, isSame |
+| `observeNearbyPeers` | 227 | isNearbyPeerContact, startup, getContact, isBootstrapRelayPeer, NearbyPeer, cancelPendingNearbyRemoval |
+| `cancelPendingNearbyRemoval` | 344 | observeServiceState, orEmpty, scheduleNearbyRemoval, delay, stops, isEmpty, remove, isSame, cancelPendingNearbyRemoval, trim |
+| `scheduleNearbyRemoval` | 350 | observeServiceState, scheduleNearbyRemoval, delay, emptyList, clear, remove, isSame, cancelPendingNearbyRemoval, stops, cancel |
+| `observeServiceState` | 371 | loadContacts, emptyList, clear, d, listContacts, cancel |
+| `loadContacts` | 390 | addContact, isNearbyPeerContact, catch, d, e, listContacts |
+| `addContact` | 418 | listOfNotNull, isNullOrEmpty, emptyList, isEmpty, characters, trim, joinToString |
+| `removeContact` | 498 | loadContacts, delay, updates, catch, e, removeContact, setLocalNickname, i, cancel |
+| `setLocalNickname` | 519 | loadContacts, delay, catch, d, e, setNickname, remove, setLocalNickname, peerId, cancel |
+| `setNickname` | 545 | getBlockedCount, loadContacts, catch, setContactNickname, d, e, setNickname, setLocalNickname, level |
+| `getBlockedCount` | 554 | getBlockedCount, updateContactDeviceId, loadContacts, catch, setContactNickname, d, e, ID, level |
+| `setContactNickname` | 562 | updateContactDeviceId, loadContacts, catch, setContactNickname, d, e, ID |
+| `updateContactDeviceId` | 581 | isNotBlank, setSearchQuery, updateContactDeviceId, searchContacts, catch, d, e |
+| `setSearchQuery` | 597 | isNotBlank, searchContacts, clearSearch, catch, d, e, clearError |
+| `clearSearch` | 616 | addContact, importContact, clearError, parseContactImportPayload |
+| `clearError` | 623 | addContact, importContact, isNotEmpty, parseContactImportPayload |
+| `importContact` | 635 | connectToPeer, addContact, isNotEmpty, peer, catch, onCleared, parseContactImportPayload, i |
+| `onCleared` | 664 | clear, cancel, onCleared |
+
+### Imports
+- `import androidx.lifecycle.ViewModel`
+- `import androidx.lifecycle.viewModelScope`
+- `import com.scmessenger.android.data.MeshRepository`
+- `import com.scmessenger.android.service.MeshEventBus`
+- `import com.scmessenger.android.service.PeerEvent`
+- `import com.scmessenger.android.utils.ContactImportParseResult`
+- `import com.scmessenger.android.utils.PeerIdValidator`
+- `import com.scmessenger.android.utils.parseContactImportPayload`
+- `import dagger.hilt.android.lifecycle.HiltViewModel`
+- `import javax.inject.Inject`
+- `import kotlinx.coroutines.Job`
+- `import kotlinx.coroutines.delay`
+- `import kotlinx.coroutines.flow.*`
+- `import kotlinx.coroutines.launch`
+- `import timber.log.Timber`
+---
+
+## android/app/src/main/java/com/scmessenger/android/ui/viewmodels/ConversationsViewModel.kt (1 chunks, 448 lines)
+Function `[VALIDATED]_P0_ANDROID_AGY_HANDOFF_2026-06-07_Identity_Stability_Bundle` not found in REPO_MAP chunks. Full file listing below.
+
+### Summary
+android/app/src/main/java/com/scmessenger/android/ui/viewmodels/ConversationsViewModel.kt: Defines 1 types: ConversationsViewModel; 20 functions; 16 imports
+
+### Structs/Classes
+- ConversationsViewModel
+
+### Functions
+| Function | Line | Calls Out To |
+|----------|------|-------------|
+| `loadMessages` | 97 | getConversation, catch, emit, d, e, getInboxCount, getRecentMessages, loadConversation |
+| `loadConversation` | 120 | getConversation, withContext, catch, emit, normalize, d, e, emptyList, sendMessage |
+| `sendMessage` | 139 | i, withContext, catch, normalize, loadMessages, d, e, sendMessage |
+| `markDelivered` | 171 | catch, loadMessages, e, d, clearConversation, markMessageDelivered, i |
+| `clearConversation` | 187 | catch, clearHistory, loadMessages, e, clearConversation, clearAllHistory, loadStats, i |
+| `clearAllHistory` | 204 | getContactForPeer, catch, messaged, clearHistory, loadMessages, e, isPeerAvailable, loadStats, i |
+| `isPeerAvailable` | 223 | getPeerInfo, getContactForPeer, equals, blockPeer, key, take, loadBlockedPeers |
+| `getPeerInfo` | 235 | equals, blockPeer, key, catch, unblockPeer, e, take, loadBlockedPeers, i |
+| `blockPeer` | 249 | blockPeer, catch, unblockPeer, e, blockAndDeletePeer, loadBlockedPeers, i, messages |
+| `unblockPeer` | 264 | unblockPeer, catch, loadMessages, e, blockAndDeletePeer, loadBlockedPeers, i, messages |
+| `blockAndDeletePeer` | 279 | isBlocked, catch, loadMessages, e, blockAndDeletePeer, loadBlockedPeers, i |
+| `isBlocked` | 295 | isBlocked, catch, d, e, loadBlockedPeers, listBlockedPeers |
+| `loadBlockedPeers` | 311 | catch, d, e, getHistoryStats, loadStats, listBlockedPeers |
+| `loadStats` | 326 | catch, d, e, getHistoryStats, loadInboxCount, getInboxCount, searchMessages |
+| `loadInboxCount` | 342 | peer, peerId, catch, emit, d, e, getInboxCount, emptyList, searchMessages |
+| `searchMessages` | 355 | getContactForPeer, canonicalContactId, peer, peerId, catch, emit, d, e, emptyList, getContact |
+| `getContactForPeer` | 377 | equals, catch, d, getContact, clearError, lookup, isSame |
+| `clearError` | 403 | getMessageCount, resolveDeliveryState, getPendingDeliverySnapshot, getPendingTerminalFailureCode, currentTimeMillis, resolve, PendingDeliverySnapshot |
+| `getMessageCount` | 410 | getMessageCount, resolveDeliveryState, getPendingDeliverySnapshot, getPendingTerminalFailureCode, currentTimeMillis, resolve, PendingDeliverySnapshot |
+| `resolveDeliveryState` | 413 | resolveDeliveryState, getPendingDeliverySnapshot, getPendingTerminalFailureCode, currentTimeMillis, resolve, PendingDeliverySnapshot |
+
+### Imports
+- `import androidx.lifecycle.ViewModel`
+- `import androidx.lifecycle.viewModelScope`
+- `import com.scmessenger.android.data.MeshRepository`
+- `import com.scmessenger.android.service.MeshEventBus`
+- `import com.scmessenger.android.service.MessageEvent`
+- `import com.scmessenger.android.ui.chat.DeliveryStateMapper`
+- `import com.scmessenger.android.ui.chat.DeliveryStatePresentation`
+- `import com.scmessenger.android.ui.chat.PendingDeliverySnapshot`
+- `import com.scmessenger.android.utils.PeerIdValidator`
 - `import dagger.hilt.android.lifecycle.HiltViewModel`
 - `import javax.inject.Inject`
 - `import kotlinx.coroutines.Dispatchers`
