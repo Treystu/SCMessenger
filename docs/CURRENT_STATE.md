@@ -1,8 +1,86 @@
 # SCMessenger Current State (Verified)
 
 Status: Active
-Last updated: 2026-05-18 (Mycorrhizal Routing activation verified)
-Last verified: **2026-05-18** (WS13 Tight Pairing complete; WS13.6 landed with compat mode, migration tests, risk triage; Mycorrhizal Routing confirmed active in live send path)
+Last updated: 2026-06-08 (v0.3.4 P0 Android hotfix released)
+Last verified: **2026-06-08** (v0.3.4 identity-generation crash fixed, APK built and installed on Pixel 6a, integration branch fully pushed to GitHub)
+
+**Active release line:** v0.3.4 (versionCode 12, versionName 0.3.4) on branch
+`integration/v0.2.2-pre-android-push-2026-06-05` (HEAD `3b78fd16`).
+Tag: `v0.3.4` (local; push pending git credentials in WSL).
+
+---
+
+## 2026-06-08: v0.3.4 — P0 Android Identity-Generation Hotfix
+
+**Status:** COMPLETE — Crash fixed, APK installed on Pixel 6a, branch fully pushed to GitHub.
+
+### What was broken
+v0.3.2 and v0.3.3 both shipped a `MutableStateFlow<IdentityProgressStage?>` in
+`IdentityViewModel` and `MainViewModel`. Compose recomposition in
+`IdentityScreen` could not preserve the null smart-cast across recomposition,
+so `ProofOfWorkList(currentStage = progressStage)` was called with a null
+`currentStage` despite the non-nullable parameter type. Result:
+`NullPointerException: Attempt to invoke virtual method
+'int com.scmessenger.android.ui.viewmodels.IdentityProgressStage.getId()'
+on a null object reference` at `IdentityScreen.kt:234` (and a parallel crash
+in the bypass path: View QR Code on uninitialized identity → click generate).
+
+### What v0.3.3 tried (and why it was rejected)
+v0.3.3 added a `?: return` early-return at the top of `ProofOfWorkList` to
+bail on null. This was a defense-in-depth patch, **not** a type-system fix.
+User rejected it as "bail on null" rather than a real fix.
+
+### What v0.3.4 does (the actual fix)
+**Type-system invariant restoration** via a sentinel `Idle` data object:
+
+1. New file `android/app/src/main/java/com/scmessenger/android/ui/viewmodels/IdentityProgressStage.kt`
+   adds `data object Idle : IdentityProgressStage(id=0, label="", detail="", etaMs=0L)`.
+   `Idle` is **NOT** in the `ALL` list (UI still renders 6 progress rows when
+   active; `Idle` is sentinel-only).
+2. `IdentityViewModel._progressStage` and `MainViewModel._identityProgressStage`
+   changed from `MutableStateFlow<IdentityProgressStage?>(null)` to
+   `MutableStateFlow<IdentityProgressStage>(IdentityProgressStage.Idle)`.
+   `finally` blocks reset to `Idle` (not `null`).
+3. `IdentityScreen.kt` 4 call-site changes: nullable `progressStage` parameter
+   in `IdentityNotInitializedView` and `ProofOfWorkList` is now non-nullable;
+   all `if (progressStage != null)` checks become
+   `if (progressStage !is IdentityProgressStage.Idle)` and
+   `progressStage is IdentityProgressStage.Idle` (no more null at all).
+4. `OnboardingScreen.kt` was updated to consume the new non-nullable contract.
+
+### Version bumps
+- Android `versionCode` 11 → 12
+- Android `versionName` 0.3.3 → 0.3.4
+- Cargo workspace `version` 0.3.0 → 0.3.4 (per CLAUDE.md, synced with Android
+  `build.gradle`; individual crates inherit via `version.workspace = true`)
+
+### Files changed (v0.3.4 commit `3b78fd16`)
+11 files, +785 / -69:
+- `android/app/src/main/java/com/scmessenger/android/ui/identity/IdentityScreen.kt` (+232)
+- `android/app/src/main/java/com/scmessenger/android/ui/screens/OnboardingScreen.kt` (+113/-57)
+- `android/app/src/main/java/com/scmessenger/android/ui/viewmodels/IdentityProgressStage.kt` (+109, new file)
+- `android/app/src/main/java/com/scmessenger/android/ui/viewmodels/IdentityViewModel.kt` (+95)
+- `android/app/src/main/java/com/scmessenger/android/ui/viewmodels/MainViewModel.kt` (+57)
+- `android/app/build.gradle` (+14, versionCode/versionName)
+- `Cargo.toml` (workspace version)
+- `Cargo.lock` (regenerated for version bump)
+- 3 new `HANDOFF/IN_PROGRESS/` swarm-bookkeeping files
+
+### Verification
+- ✅ Branch fully in sync with `origin/integration/v0.2.2-pre-android-push-2026-06-05` (0/0 delta)
+- ✅ Gradle build: `BUILD SUCCESSFUL in 7m 18s`, 45 tasks (16 executed, 29 up-to-date)
+- ✅ APK: 225,324,632 bytes, SHA-256 `6a5559bae8cce21048f54336303495a450eb7852ea4c35451ad4183def307fdc`
+- ✅ Installed on Pixel 6a (`adb-26261JEGR01896-6pHTac._adb-tls-connect._tcp`)
+  as versionCode 12 / versionName 0.3.4 (verified via `dumpsys package`)
+- ✅ Logcat cleared, ready for fresh repro test
+
+### Open follow-ups (next session)
+- Lucas to run both identity paths on v0.3.4: (a) Settings → Create Identity,
+  (b) bypass path: View QR Code → generate
+- Cross-platform connectivity test: Linux + Windows CLI daemons ↔ Android v0.3.4
+- 24 Tier C test failures + 16 unit tests deferred from prior sweep
+- Tag `v0.3.4` to be pushed to origin (local-only; needs git credentials in
+  WSL or push from Windows shell with creds)
 
 ---
 
