@@ -23,6 +23,7 @@ class MdnsServiceDiscovery(
     private val context: Context,
     private val onPeerDiscovered: (peerId: String) -> Unit,
     private val onDataReceived: (peerId: String, data: ByteArray) -> Unit,
+    private val onPeerDisconnected: ((peerId: String) -> Unit)? = null,
     private val onLanPeerResolved: ((peerId: String, host: String, port: Int) -> Unit)? = null,
     private val getLocalPeerId: (() -> String?)? = null
 ) {
@@ -120,17 +121,46 @@ class MdnsServiceDiscovery(
     /**
      * Called when an mDNS service is lost (peer disconnected).
      * Wired from NsdManager.DiscoveryListener.onServiceLost.
-     * Removes the peer from the discovered list and notifies upper layers.
+     * Removes the peer from the discovered list and notifies upper layers
+     * via onPeerDisconnected.
+     *
+     * P1 (Bug 5): Previously this only removed the entry from the local
+     * `discoveredPeers` cache and never propagated the loss upward, so
+     * MeshRepository.peersDisconnected never fired for mDNS-only peers and
+     * the UI/connection state showed them as "connected" indefinitely. We
+     * now derive the same peer-id that was emitted in onServiceResolved()
+     * (TXT peer-id if present, else "mdns-<serviceName>") and forward the
+     * disconnect to the upper layer.
      */
     fun onServiceLost(serviceInfo: NsdServiceInfo) {
         val serviceName = serviceInfo.serviceName
         Timber.d("mDNS service lost: $serviceName")
 
-        // Remove peer from discovered list
+        // Remove peer from discovered list. If the peer was never resolved
+        // (e.g. lost between onServiceFound and onServiceResolved), the
+        // entry is absent — that's fine, we still forward a disconnect
+        // hint below using the same id derivation.
         val removed = discoveredPeers.remove(serviceName)
         if (removed != null) {
             Timber.i("mDNS peer removed from discovered list: $serviceName")
         }
+
+        // Also drop any in-flight resolve for this service so the listener
+        // can't fire a stale onServiceResolved after we've already reported
+        // the peer as gone (TOCTOU between lost and resolved).
+        inFlightResolves.remove(serviceName)
+
+        // Derive the same peer-id that onServiceResolved would have used,
+        // so the upper layer can match by peer-id.
+        val cachedAttributes = removed?.attributes
+        val cachedPeerId = cachedAttributes?.get("peer-id")?.let { String(it, Charsets.UTF_8) }
+            ?: cachedAttributes?.get("p2p")?.let { String(it, Charsets.UTF_8) }
+        val peerId = if (!cachedPeerId.isNullOrBlank()) {
+            cachedPeerId
+        } else {
+            "mdns-$serviceName"
+        }
+        onPeerDisconnected?.invoke(peerId)
     }
 
     /**

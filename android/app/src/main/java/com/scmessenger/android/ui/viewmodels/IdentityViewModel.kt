@@ -30,6 +30,13 @@ class IdentityViewModel @Inject constructor(
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
 
+    // P1: Re-entrancy guard for createIdentity(). createIdentity() in the
+    // repository is also mutex-guarded, but rejecting at the ViewModel layer
+    // gives us a single deterministic early-return + prevents duplicate
+    // "Identity created successfully" success messages and redundant UI work.
+    private val _isCreating = MutableStateFlow(false)
+    val isCreating: StateFlow<Boolean> = _isCreating.asStateFlow()
+
     // Error state
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error.asStateFlow()
@@ -89,6 +96,13 @@ class IdentityViewModel @Inject constructor(
      * Create a new identity (first-time setup).
      */
     fun createIdentity(nickname: String? = null) {
+        // P1: Re-entrancy guard. _isCreating transitions are synchronized via
+        // MutableStateFlow which is thread-safe; the first caller wins and
+        // subsequent callers drop into the no-op branch until completion.
+        if (!_isCreating.compareAndSet(expect = false, update = true)) {
+            Timber.d("createIdentity: re-entrant call dropped (already in progress)")
+            return
+        }
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 _isLoading.value = true
@@ -114,6 +128,7 @@ class IdentityViewModel @Inject constructor(
                 Timber.e(e, "Failed to create identity")
             } finally {
                 _isLoading.value = false
+                _isCreating.value = false
             }
         }
     }

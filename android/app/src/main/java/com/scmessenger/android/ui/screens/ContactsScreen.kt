@@ -157,7 +157,13 @@ fun ContactsScreen(
             } else {
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
+                    // UI Fix B: bottom padding (~88dp) leaves clearance for the
+                    // outer Scaffold's contacts "+" FAB so the last list item
+                    // isn't hidden behind the FAB. FAB default size is 56dp
+                    // with 16dp margin -> 72dp; we add a small extra to keep
+                    // the swipe-to-dismiss affordance on the last row visible.
+                    // PaddingValues(start, top, end, bottom) is the 4-arg form.
+                    contentPadding = PaddingValues(start = 16.dp, top = 8.dp, end = 16.dp, bottom = 88.dp)
                 ) {
                     // Nearby peers section — discovered but not yet saved
                     if (nearbyPeers.isNotEmpty()) {
@@ -330,7 +336,11 @@ fun ContactItem(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Column {
+                // UI Fix A: weight(1f) on the left column so the nickname/peer-id
+                // text takes all available width and the trailing action icons
+                // stay right-aligned instead of being pushed off-screen by the
+                // ID text. Matches the pattern in NearbyPeerItem (line 543).
+                Column(modifier = Modifier.weight(1f)) {
                     val unknownFallback = stringResource(R.string.unknown_contact)
                     val currentNickname = contact.localNickname ?: contact.nickname ?: ""
                     Text(

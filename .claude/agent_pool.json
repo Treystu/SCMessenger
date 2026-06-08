@@ -1,141 +1,153 @@
 {
-  "version": "2.3",
-  "policy": "local_only",
-  "policy_note": "Per Lucas directive 2026-06-06: NO cloud models, NO :cloud suffix, all models must be local Ollama-resident at 127.0.0.1:11434",
-  "max_concurrent": 1,
+  "version": "2.4",
+  "policy": "cloud_only",
+  "policy_note": "Per Lucas directive 2026-06-08: CLOUD MODELS ONLY until local turbo-quant is verified as functional with proper context. All agents must use :cloud suffix models via 127.0.0.1:11434 (which proxies to ollama.com). 41 cloud models available (full catalog in model_capability_mapping.json); local models are OFF LIMITS.",
+  "max_concurrent": 2,
   "default_agent": "orchestrator",
   "launch_mode": "cli_only",
   "ollama_base_url": "http://127.0.0.1:11434/v1",
   "available_local_models": [
-    {"name": "scm-thinker:14b", "size_gb": 4.7, "best_for": "orchestration, deep reasoning"},
-    {"name": "scm-coder:7b", "size_gb": 4.7, "best_for": "rust, general coding"},
-    {"name": "qwen2.5-coder:7b", "size_gb": 4.7, "best_for": "coding worker"},
-    {"name": "deepseek-r1-distill-14b-iq2xs", "size_gb": 4.7, "best_for": "deep analysis, low-RAM"},
-    {"name": "qwen2.5-coder:1.5b", "size_gb": 1.0, "best_for": "micro/batch tasks"},
-    {"name": "llama3.2:3b", "size_gb": 2.0, "best_for": "trivial fallback"}
+    {"name": "scm-thinker:14b", "size_gb": 4.7, "best_for": "DISABLED — local models off-limits until turbo-quant verified"},
+    {"name": "scm-coder:7b", "size_gb": 4.7, "best_for": "DISABLED — local models off-limits until turbo-quant verified"},
+    {"name": "qwen2.5-coder:7b", "size_gb": 4.7, "best_for": "DISABLED — local models off-limits until turbo-quant verified"},
+    {"name": "deepseek-r1-distill-14b-iq2xs", "size_gb": 4.7, "best_for": "DISABLED — local models off-limits until turbo-quant verified"},
+    {"name": "qwen2.5-coder:1.5b", "size_gb": 1.0, "best_for": "DISABLED — local models off-limits until turbo-quant verified"},
+    {"name": "llama3.2:3b", "size_gb": 2.0, "best_for": "DISABLED — local models off-limits until turbo-quant verified"}
+  ],
+  "available_cloud_models": [
+    {"name": "minimax-m3:cloud", "best_for": "default orchestrator, multimodal (vision), 512K ctx"},
+    {"name": "qwen3-coder:480b:cloud", "best_for": "heavy Rust + Android code generation, 256K ctx"},
+    {"name": "qwen3-coder-next:cloud", "best_for": "lightweight coding worker, 256K ctx"},
+    {"name": "glm-5.1:cloud", "best_for": "full-stack architecture, 198K ctx"},
+    {"name": "kimi-k2-thinking:cloud", "best_for": "deep reasoning + planning, 256K ctx"},
+    {"name": "kimi-k2.6:cloud", "best_for": "vision + thinking, 256K ctx"},
+    {"name": "gemini-3-flash-preview:cloud", "best_for": "fast triage + vision, 1024K ctx"},
+    {"name": "gemma4:31b:cloud", "best_for": "mid-size code review, 256K ctx vision"},
+    {"name": "devstral-2:123b:cloud", "best_for": "code generation, 256K ctx"},
+    {"name": "mistral-large-3:675b:cloud", "best_for": "heavy code review, 256K ctx vision"},
+    {"name": "nemotron-3-ultra:cloud", "best_for": "deep reasoning + tools, 256K ctx"}
   ],
   "agents": [
     {
       "name": "orchestrator",
       "launch_type": "cli",
-      "model": "scm-thinker:14b",
-      "fallback_model": "scm-coder:7b",
-      "purpose": "Lead coordinator: tracks progress across all phases, delegates tasks, verifies completion, manages HANDOFF state. LOCAL ONLY.",
+      "model": "minimax-m3:cloud",
+      "fallback_model": "qwen3-coder-next:cloud",
+      "purpose": "Lead coordinator: tracks progress across all phases, delegates tasks, verifies completion, manages HANDOFF state. CLOUD ONLY.",
       "task_patterns": ["ORCHESTRATE", "COORDINATE", "DELEGATE", "VERIFY", "TRACK"],
       "file_domains": ["HANDOFF/", ".claude/", "scripts/", "docs/"],
       "max_per_type": 1,
-      "cloud_allowed": false
+      "cloud_allowed": true
     },
     {
       "name": "architect-planner",
       "launch_type": "cli",
-      "model": "scm-thinker:14b",
-      "fallback_model": "scm-coder:7b",
-      "purpose": "High-level architecture planning AND precision validation. LOCAL 14B replaces cloud 480B flagship.",
+      "model": "qwen3-coder:480b:cloud",
+      "fallback_model": "glm-5.1:cloud",
+      "purpose": "High-level architecture planning AND precision validation. CLOUD 480B flagship for v0.3.0 push.",
       "task_patterns": ["ARCHITECTURE", "PLAN", "DESIGN", "VALIDATE", "SECURITY", "CRYPTO", "AUDIT", "REVIEW"],
       "file_domains": ["docs/", "REMAINING_WORK_TRACKING.md", "core/src/crypto/", "core/src/privacy/"],
       "max_per_type": 1,
-      "cloud_allowed": false
+      "cloud_allowed": true
     },
     {
       "name": "rust-coder",
       "launch_type": "cli",
-      "model": "scm-coder:7b",
-      "fallback_model": "qwen2.5-coder:7b",
-      "purpose": "Rust core implementation: identity, crypto, transport, store, relay. Best local Rust per prior benchmark.",
+      "model": "qwen3-coder:480b:cloud",
+      "fallback_model": "qwen3-coder-next:cloud",
+      "purpose": "Rust core implementation: identity, crypto, transport, store, relay. CLOUD flagship for v0.3.0.",
       "task_patterns": ["RUST", "CORE", "PROTOCOL", "CRYPTO_IMPL", "WASM", "MOBILE_BRIDGE"],
       "file_domains": ["core/", "wasm/"],
       "max_per_type": 1,
-      "cloud_allowed": false
+      "cloud_allowed": true
     },
     {
       "name": "implementer",
       "launch_type": "cli",
-      "model": "scm-coder:7b",
-      "fallback_model": "qwen2.5-coder:7b",
-      "purpose": "Rapid feature landing: general coding, bug fixes, platform client implementation.",
+      "model": "qwen3-coder-next:cloud",
+      "fallback_model": "gemini-3-flash-preview:cloud",
+      "purpose": "Rapid feature landing: general coding, bug fixes, platform client implementation. CLOUD.",
       "task_patterns": ["IMPLEMENTATION", "BUG", "FIX", "FEATURE", "CLI", "PLATFORM"],
       "file_domains": ["android/", "cli/src/", "mobile/src/", "iOS/"],
       "max_per_type": 2,
-      "cloud_allowed": false
+      "cloud_allowed": true
     },
     {
       "name": "gatekeeper-reviewer",
       "launch_type": "cli",
-      "model": "scm-thinker:14b",
-      "fallback_model": "scm-coder:7b",
-      "purpose": "Pre-merge verification: final code review gate, ensures build passes, tests pass, docs synced. LOCAL REVIEW.",
+      "model": "kimi-k2-thinking:cloud",
+      "fallback_model": "mistral-large-3:675b:cloud",
+      "purpose": "Pre-merge verification: final code review gate, ensures build passes, tests pass, docs synced. CLOUD.",
       "task_patterns": ["MERGE", "RELEASE", "FINAL_REVIEW", "GATE"],
       "file_domains": [],
       "max_per_type": 1,
-      "cloud_allowed": false
+      "cloud_allowed": true
     },
     {
       "name": "worker",
       "launch_type": "cli",
-      "model": "qwen2.5-coder:7b",
-      "fallback_model": "llama3.2:3b",
-      "purpose": "Unit tests, UniFFI bindings, documentation, platform engineering, small changes under 200 LOC.",
+      "model": "gemini-3-flash-preview:cloud",
+      "fallback_model": "qwen3-coder-next:cloud",
+      "purpose": "Unit tests, UniFFI bindings, documentation, platform engineering, small changes under 200 LOC. CLOUD.",
       "task_patterns": ["PLATFORM", "BINDINGS", "TEST", "DOCS", "GRADLE"],
       "file_domains": ["core/tests/", "android/app/src/", "android/app/build.gradle", "android/app/build.gradle.kts", "android/app/src/main/java/", "android/app/src/test/", "android/app/src/androidTest/"],
       "max_per_type": 1,
-      "cloud_allowed": false
+      "cloud_allowed": true
     },
     {
       "name": "triage-router",
       "launch_type": "cli",
-      "model": "qwen2.5-coder:1.5b",
-      "fallback_model": "llama3.2:3b",
-      "purpose": "Quick triage, lint fixes, minor edits under 50 LOC, CI gatekeeping, parsing. 1.5B is plenty for triage.",
+      "model": "gemini-3-flash-preview:cloud",
+      "fallback_model": "qwen3-coder-next:cloud",
+      "purpose": "Quick triage, lint fixes, minor edits under 50 LOC, CI gatekeeping, parsing. CLOUD.",
       "task_patterns": ["LINT", "TRIAGE", "QUICK", "CI", "FMT"],
       "file_domains": [],
       "max_per_type": 1,
-      "cloud_allowed": false
+      "cloud_allowed": true
     },
     {
       "name": "micro-batch-processor",
       "launch_type": "cli",
-      "model": "qwen2.5-coder:1.5b",
-      "fallback_model": "llama3.2:3b",
-      "purpose": "Process batches of micro-tasks (lint, quick fixes, formatting) to reduce overhead.",
+      "model": "gemini-3-flash-preview:cloud",
+      "fallback_model": "qwen3-coder-next:cloud",
+      "purpose": "Process batches of micro-tasks (lint, quick fixes, formatting) to reduce overhead. CLOUD.",
       "task_patterns": ["BATCH", "MICRO_BATCH"],
       "file_domains": ["HANDOFF/batches/"],
       "max_per_type": 1,
-      "cloud_allowed": false
+      "cloud_allowed": true
     },
     {
       "name": "wiring-verifier",
       "launch_type": "cli",
-      "model": "deepseek-r1-distill-14b-iq2xs",
-      "fallback_model": "scm-thinker:14b",
-      "purpose": "Full repo-wide wiring verification: checks all module connections, IronCore entry points, cross-module dependencies. DeepSeek R1 distill for the deep traversal.",
+      "model": "glm-5.1:cloud",
+      "fallback_model": "kimi-k2-thinking:cloud",
+      "purpose": "Full repo-wide wiring verification: checks all module connections, IronCore entry points, cross-module dependencies. CLOUD.",
       "task_patterns": ["WIRING", "VERIFY", "INTEGRATION", "CONNECTIVITY"],
       "file_domains": [],
       "max_per_type": 1,
-      "cloud_allowed": false
+      "cloud_allowed": true
     },
     {
       "name": "CLIBetaTester",
       "launch_type": "cli",
-      "model": "scm-coder:7b",
-      "fallback_model": "qwen2.5-coder:7b",
-      "purpose": "Aggressive Beta User against the Rust Core daemon. JSON-RPC bridge, libp2p mesh stress.",
+      "model": "qwen3-coder-next:cloud",
+      "fallback_model": "gemini-3-flash-preview:cloud",
+      "purpose": "Aggressive Beta User against the Rust Core daemon. JSON-RPC bridge, libp2p mesh stress. CLOUD.",
       "task_patterns": ["BETA", "CLI", "CORE_TEST", "CRASH", "STRESS"],
       "file_domains": [],
       "max_per_type": 1,
-      "cloud_allowed": false
+      "cloud_allowed": true
     },
     {
       "name": "vision-analyst",
       "launch_type": "cli",
-      "model": null,
-      "fallback_model": null,
-      "purpose": "DISABLED — no local multimodal model is loaded. Screenshot/UI review tasks must be deferred to human or wait for local vision model to be added.",
+      "model": "gemini-3-flash-preview:cloud",
+      "fallback_model": "kimi-k2.6:cloud",
+      "purpose": "Screenshot/UI review. CLOUD vision-capable models.",
       "task_patterns": ["VISION", "SCREENSHOT", "UI_REVIEW", "DIAGRAM"],
       "file_domains": [],
-      "max_per_type": 0,
-      "cloud_allowed": false,
-      "status": "disabled_pending_local_vision"
+      "max_per_type": 1,
+      "cloud_allowed": true
     }
   ]
 }
