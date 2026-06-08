@@ -7,7 +7,8 @@
 **Sweep ID:** `IN_PROGRESS/IN_PROGRESS_handoff_unblock_test_build_verify_2026-06-08.md` (this sweep)
 **Authority:** Lucas directive 2026-06-08 ("I want it all fixed")
 **Decided by:** Claude Code (Overseer)
-**Run time:** 2026-06-08 01:33 PT → ongoing
+**Run time:** 2026-06-08 01:33 PT → 02:15 PT
+**Final commit:** `340b4034`
 
 ---
 
@@ -181,9 +182,11 @@ Per handoff §2 Phase 4: "for every ticket that claims 'code change shipped' in 
 - The 2 SHIPPED tickets I moved to `done/` (P0_024 + P1_022) are verified: both fixes in `0fa8dea8` ("fix(android): re-entrancy guard on createIdentity + BLE peer cache cleanup"), merged at `23174061`. 3 source files: `MainViewModel.kt` (10 lines), `OnboardingScreen.kt` (5 lines), `BleScanner.kt` (11 lines). Per `HANDOFF/STATE/2026-06-05_ANDROID_P0_024_P1_022_BUILD_VERIFIED.md` the build was green at that time.
 - Worktrees `E:\SCMessenger-build-p0-024\` and `E:\SCMessenger-build-p0-025\` referenced by Hermes §4 — only p0-025 exists on disk and is an empty `android/` subdir. The actual fix commits are already on the main integration branch (the worktrees are stale mirrors). No additional verification needed.
 
-## Phase 5 — Commit and roll up (PENDING)
+## Phase 5 — Commit and roll up (DONE)
 
-Will commit with explicit `git add <path>...` (not `git add -A`) per handoff §2 Phase 5 hard rule #3. Commit message draft in handoff §2.
+- Commit `340b4034` on `integration/v0.2.2-pre-android-push-2026-06-05` (local, no push per Lucas's gate).
+- 48 files changed, 1815 insertions, 4 deletions.
+- Commit message includes comprehensive build status per handoff §2 Phase 5 template.
 
 ## Outstanding blockers
 
@@ -206,4 +209,4 @@ Will commit with explicit `git add <path>...` (not `git add -A`) per handoff §2
 
 ---
 
-*End of sweep results (in-progress). Final commit SHA will be appended on Phase 5 completion.*
+*End of sweep results. Commit `340b4034` on `integration/v0.2.2-pre-android-push-2026-06-05` (local). No push.*
