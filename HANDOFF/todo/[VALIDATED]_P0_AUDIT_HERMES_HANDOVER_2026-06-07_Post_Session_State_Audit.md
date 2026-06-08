@@ -1,3 +1,17 @@
+## Triage Decision — 2026-06-08
+
+**Status:** META
+**Bucket:** audit-rollup
+**Decided by:** Claude Code (Overseer) sweep
+
+**Rationale:** This is not a dispatch ticket. It is Hermes's 2026-06-07 22:25 PT
+handover audit. On sweep completion it should be moved to `HANDOFF/STATE/`
+(named `2026-06-07_HERMES_HANDOFF_AUDIT.md`) for archival, not dispatched as
+work. Its content has been folded into
+`HANDOFF/STATE/2026-06-08_UNIFIED_BACKLOG.md` (this sweep's source of truth).
+
+---
+
 # Hermes → Claude Code HANDOVER AUDIT — 2026-06-07 22:25 PT
 
 **From:** Hermes (overwatch, TIER 1 light, Telegram gateway)

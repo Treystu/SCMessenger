@@ -1,3 +1,24 @@
+## Triage Decision — 2026-06-08
+
+**Status:** ready
+**Bucket:** pending-dispatch
+**Priority:** P0 (1 race) + P1 (4) + P2 (1) + UI A/B + CLI ops ref
+**Recommended scope:** Bugs 1-5 + UI A/B single worker pass; defer Bug 6 (mDNS) to verification pass (Pixel 6a offline)
+**Decided by:** Claude Code (Overseer) sweep
+
+**Rationale:** Full handoff is in `HANDOFF/IN_PROGRESS/IN_PROGRESS_task_agy_android_stability_complete_handoff_2026-06-07.md`
+(13.7 KB, source-of-truth for the 6 bugs + 2 UI findings + CLI ops ref). This
+ticket is the dispatch wrapper. Agy (Gemini Pro worker) ran 19:46 → 20:24 PT
+on 2026-06-07 and is now dead. Per Lucas directive, this track is explicitly
+authorized for dispatch.
+
+**Blocker reminder:** Dispatch still blocked from inside the current Claude
+session by the `Claude=` env var (env contamination, halt memo at
+`HANDOFF/TELEGRAM_OUT_2026-06-07_22-05_PT_ORCHESTRATOR_HALT.md`). Restart in a
+fresh shell to unblock.
+
+---
+
 # [VALIDATED] P0_ANDROID — Agy Handoff: Identity Stability & UI Bundle (6 bugs, 1 ops ref)
 
 **Status:** READY-FOR-DISPATCH

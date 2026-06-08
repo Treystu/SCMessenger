@@ -1,3 +1,16 @@
+## Triage Decision -- 2026-06-08
+
+**Status:** ready
+**Bucket:** pending-dispatch
+**Cross-ref:** see `HANDOFF/STATE/2026-06-08_UNIFIED_BACKLOG.md`
+**Decided by:** Claude Code (Overseer) sweep
+
+**Rationale:** Ticket is a real remaining work item with no shipped code on the
+integration branch. No blocker identified. Ready for `/orchestrate` dispatch on
+the next cloud slot allocation. Per Lucas directive 2026-06-08 "I want it all
+fixed," this is part of the ~30-ticket remaining backlog.
+
+---
 # MODEL: gemma4:31b:cloud
 # BUDGET: 1200
 # token_budget: 12000
