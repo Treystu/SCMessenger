@@ -1,3 +1,22 @@
+## Triage Decision — 2026-06-08
+
+**Status:** SHIPPED
+**Bucket:** done (on integration/v0.2.2-pre-android-push-2026-06-05)
+**Commit SHA:** 0fa8dea8 (merged at 23174061 "Merge fix/p0-android-024-identity")
+**Decided by:** Claude Code (Overseer) sweep
+
+**Rationale:** Fix is already on the integration branch in commit `0fa8dea8`
+("fix(android): re-entrancy guard on createIdentity + BLE peer cache cleanup"),
+merged at `23174061`. 2 source files: `MainViewModel.kt` (10-line guard on
+`createIdentity()`) + `OnboardingScreen.kt` (5-line `&& !isCreating` on the
+Generate Identity button). Per `HANDOFF/STATE/2026-06-05_ANDROID_P0_024_P1_022_BUILD_VERIFIED.md`
+the build is green. This ticket should be moved to `HANDOFF/done/`.
+
+The companion `P0_ANDROID_024_IDENTITY_GENERATION_REGRESSION.md` (non-VALIDATED)
+should also be moved to `done/` for the same reason.
+
+---
+
 # MODEL: qwen3-coder-next:cloud
 # BUDGET: 1800
 # token_budget: 18000
