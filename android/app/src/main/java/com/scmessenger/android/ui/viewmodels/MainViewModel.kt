@@ -17,6 +17,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import timber.log.Timber
 import com.scmessenger.android.utils.StorageManager
+import java.security.SecureRandom
 import java.util.concurrent.atomic.AtomicBoolean
 import javax.inject.Inject
 
@@ -54,6 +55,20 @@ class MainViewModel @Inject constructor(
 
     private val _identityError = MutableStateFlow<String?>(null)
     val identityError = _identityError.asStateFlow()
+
+    // P0_ANDROID_IDENTITY_PROOF_OF_WORK: high-level proof-of-work stages emitted
+    // by createIdentity() — single source of truth shared with IdentityViewModel.
+    //
+    // v0.3.4 (P0_ANDROID_CRASHFIX): changed from MutableStateFlow<IdentityProgressStage?>(null)
+    // to MutableStateFlow<IdentityProgressStage>(Idle). See the long comment in
+    // IdentityViewModel for the full rationale. The previous nullable type caused
+    // the NPE in IdentityScreen.ProofOfWorkList at `currentStage.id` line 234
+    // because the screen rendered IdentityNotInitializedView before the user
+    // tapped Create (when progressStage was still null), and the smart-cast at
+    // the call site could not survive Compose's recomposition. Type-system
+    // enforcement via Idle is the only durable fix.
+    private val _identityProgressStage = MutableStateFlow<IdentityProgressStage>(IdentityProgressStage.Idle)
+    val identityProgressStage: StateFlow<IdentityProgressStage> = _identityProgressStage.asStateFlow()
 
     private val _importError = MutableStateFlow<String?>(null)
     val importError = _importError.asStateFlow()
@@ -179,13 +194,27 @@ class MainViewModel @Inject constructor(
         // launch). Without this guard, two coroutines race through initializeIdentity,
         // setNickname, and the _isReady / preferences writes, which can leave the
         // onboarding flow in a broken intermediate state.
-        if (_isCreatingIdentity.value) {
+        //
+        // P0_ANDROID_IDENTITY_PROGRESS: We now set _isCreatingIdentity.value = true
+        // SYNCHRONOUSLY on the Main thread (compareAndSet is atomic and thread-safe)
+        // BEFORE the IO coroutine launches. Previously the state flipped to true inside
+        // the IO coroutine, so there was a 5-50ms window between the button tap and the
+        // first recomposition where the user saw no progress indication at all. The
+        // button looked frozen for a few seconds until the FFI call returned.
+        if (!_isCreatingIdentity.compareAndSet(expect = false, update = true)) {
             Timber.d("createIdentity: ignored re-entrant call (already in progress)")
             return
         }
+        // Mirror the state flip on the Main thread immediately so Compose recomposes
+        // before any IO work begins. (compareAndSet above already updated the StateFlow
+        // atomically; this comment exists to make the synchronous-flip intent explicit
+        // for future maintainers.)
+        _identityError.value = null
+        // P0_ANDROID_IDENTITY_PROOF_OF_WORK: emit the first proof-of-work stage
+        // SYNCHRONOUSLY so the UI recomposes with stage 1 visible before the IO
+        // coroutine begins. This is the single source of truth for "we are working".
+        _identityProgressStage.value = IdentityProgressStage.PreparingStorage
         viewModelScope.launch(Dispatchers.IO) {
-            _isCreatingIdentity.value = true
-            _identityError.value = null
             try {
                 val trimmedNickname = nickname.trim()
                 if (trimmedNickname.isEmpty()) {
@@ -194,9 +223,19 @@ class MainViewModel @Inject constructor(
                     _isReady.value = false
                     return@launch
                 }
-                Timber.i("Creating identity for nickname: $trimmedNickname with salt: ${salt != null}")
-                meshRepository.createIdentity(salt)
+                // P0_ANDROID_IDENTITY_PROOF_OF_WORK: salt. If the entropy canvas
+                // produced a salt, use that; otherwise draw 32 bytes of fresh entropy
+                // from the platform CSPRNG. This guarantees every call (onboarding
+                // AND in-settings) gets a random salt — fixing the regression where
+                // the in-settings path was silently dropping the salt parameter.
+                val effectiveSalt = salt ?: com.scmessenger.android.ui.viewmodels.IdentityViewModel.generateSecureRandomSalt()
+                Timber.i("P0_IDENTITY: effective salt size=${effectiveSalt.size} bytes (user_entropy=${salt != null})")
+                _identityProgressStage.value = IdentityProgressStage.GeneratingSalt
+
+                _identityProgressStage.value = IdentityProgressStage.GeneratingKeypair
+                meshRepository.createIdentity(effectiveSalt)
                 meshRepository.setNickname(trimmedNickname)
+                _identityProgressStage.value = IdentityProgressStage.ComputingFingerprint
 
                 // Verify nickname persisted (defensive: catch silent Rust-core failures)
                 var info = meshRepository.getIdentityInfo()
@@ -209,6 +248,7 @@ class MainViewModel @Inject constructor(
                 // Issue #5: Retry loop for _isReady verification
                 // The service may still be starting, so we poll for up to 2 seconds
                 // to ensure _isReady accurately reflects the identity state.
+                _identityProgressStage.value = IdentityProgressStage.PersistingToStorage
                 var initialized = meshRepository.isIdentityInitialized()
                 var retryCount = 0
                 val maxRetries = 5
@@ -221,6 +261,7 @@ class MainViewModel @Inject constructor(
                     Timber.d("isIdentityInitialized retry $retryCount/$maxRetries: $initialized")
                 }
 
+                _identityProgressStage.value = IdentityProgressStage.VerifyingIdentity
                 Timber.i("Identity creation result initialized: $initialized; nickname=${info?.nickname}; retries=$retryCount")
                 _isReady.value = initialized
                 if (_isReady.value) {
@@ -235,6 +276,12 @@ class MainViewModel @Inject constructor(
                 _isReady.value = false
             } finally {
                 _isCreatingIdentity.value = false
+                // Hold the final stage visible for a moment so the user can see
+                // the proof-of-work completed.
+                // v0.3.4: set to Idle (was null) — see type-system comment on
+                // _identityProgressStage above. Non-nullable contract.
+                kotlinx.coroutines.delay(600)
+                _identityProgressStage.value = IdentityProgressStage.Idle
             }
         }
     }

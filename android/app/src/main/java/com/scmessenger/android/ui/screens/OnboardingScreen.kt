@@ -217,64 +217,87 @@ fun OnboardingScreen(
                 }
             } else {
 
+                IdentityCreationFlow(
+                    isCreating = isCreating,
+                    onCreate = { nickname, salt ->
+                        viewModel.createIdentity(nickname, salt)
+                    },
+                    onImport = {
+                        importCode = ""
+                        viewModel.clearImportState()
+                        showImportDialog = true
+                    },
+                    showImportButton = true,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .imePadding()
+                )
+
+                // P0_ANDROID_IDENTITY_PROGRESS: Secondary status line so the user
+                // always sees a clear "we are working on it" indicator when they tap
+                // Create Identity. The button itself also shows an inline spinner
+                // (handled inside IdentityCreationFlow when isCreating is true), but
+                // adding a small status text below the form makes the in-progress
+                // state visible from anywhere on the screen, not just next to the
+                // button. The previous implementation replaced the entire form with a
+                // single CircularProgressIndicator when isCreating was true — that
+                // branch never visibly executed because _isCreatingIdentity flipped
+                // inside the IO coroutine, so the user saw a frozen button.
                 if (isCreating) {
-                    CircularProgressIndicator()
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Text(stringResource(R.string.onboarding_generating_keys))
-                } else {
-                    val focusManager = LocalFocusManager.current
-
-                    IdentityCreationFlow(
-                        isCreating = isCreating,
-                        onCreate = { nickname, salt ->
-                            viewModel.createIdentity(nickname, salt)
-                        },
-                        onImport = {
-                            importCode = ""
-                            viewModel.clearImportState()
-                            showImportDialog = true
-                        },
-                        showImportButton = true,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .imePadding()
-                    )
-
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    OutlinedButton(
-                        onClick = { viewModel.skipOnboardingForRelayOnlyInstall() },
-                        modifier = Modifier.fillMaxWidth().height(56.dp)
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center,
+                        modifier = Modifier.fillMaxWidth()
                     ) {
-                        Text("Skip for Relay-Only Install")
-                    }
-
-                    identityError?.let { error ->
-                        Spacer(modifier = Modifier.height(8.dp))
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(16.dp),
+                            strokeWidth = 2.dp
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = error,
+                            text = stringResource(R.string.onboarding_generating_keys),
                             style = MaterialTheme.typography.bodySmall,
-                            textAlign = TextAlign.Center,
-                            color = MaterialTheme.colorScheme.error
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
+                }
 
+                Spacer(modifier = Modifier.height(8.dp))
+
+                OutlinedButton(
+                    onClick = { viewModel.skipOnboardingForRelayOnlyInstall() },
+                    enabled = !isCreating,
+                    modifier = Modifier.fillMaxWidth().height(56.dp)
+                ) {
+                    Text("Skip for Relay-Only Install")
+                }
+
+                identityError?.let { error ->
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        text = "You can create an identity later from Settings > Identity without reinstalling.",
+                        text = error,
                         style = MaterialTheme.typography.bodySmall,
                         textAlign = TextAlign.Center,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = MaterialTheme.colorScheme.error
                     )
+                }
 
-                    if (!permissionsState.allPermissionsGranted) {
-                        Spacer(modifier = Modifier.height(12.dp))
-                        OutlinedButton(
-                            onClick = { permissionsState.launchMultiplePermissionRequest() },
-                            modifier = Modifier.fillMaxWidth().height(52.dp)
-                        ) {
-                            Text(stringResource(R.string.onboarding_action_grant_permissions))
-                        }
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "You can create an identity later from Settings > Identity without reinstalling.",
+                    style = MaterialTheme.typography.bodySmall,
+                    textAlign = TextAlign.Center,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                if (!permissionsState.allPermissionsGranted) {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    OutlinedButton(
+                        onClick = { permissionsState.launchMultiplePermissionRequest() },
+                        modifier = Modifier.fillMaxWidth().height(52.dp)
+                    ) {
+                        Text(stringResource(R.string.onboarding_action_grant_permissions))
                     }
                 }
             } // end consent else

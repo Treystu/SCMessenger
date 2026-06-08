@@ -9,6 +9,7 @@ import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import timber.log.Timber
+import java.security.SecureRandom
 import javax.inject.Inject
 
 /**
@@ -44,6 +45,38 @@ class IdentityViewModel @Inject constructor(
     // Success message (for export/copy operations)
     private val _successMessage = MutableStateFlow<String?>(null)
     val successMessage: StateFlow<String?> = _successMessage.asStateFlow()
+
+    // P0_ANDROID_IDENTITY_PROOF_OF_WORK: High-level proof-of-work stage emitted
+    // by createIdentity() so the UI can show the user exactly which step of the
+    // cryptographic pipeline is currently running. Single source of truth shared
+    // with MainViewModel via IdentityProgressStage.
+    //
+    // v0.3.4 (P0_ANDROID_CRASHFIX): changed from MutableStateFlow<IdentityProgressStage?>(null)
+    // to MutableStateFlow<IdentityProgressStage>(Idle). The previous nullable type
+    // was the root cause of the NPE crash in IdentityScreen.ProofOfWorkList at
+    // `currentStage.id` line 234 — the screen rendered IdentityNotInitializedView
+    // even when progressStage was null (e.g. on first load before user tapped
+    // Create), and the smart-cast at the call site could not survive Compose's
+    // recomposition. With non-nullable Idle, the type system guarantees
+    // progressStage is always a valid stage, and the call site can use a clean
+    // `if (progressStage !is Idle)` check instead of nullable branching.
+    private val _progressStage = MutableStateFlow<IdentityProgressStage>(IdentityProgressStage.Idle)
+    val progressStage: StateFlow<IdentityProgressStage> = _progressStage.asStateFlow()
+
+    // Companion object: shared SecureRandom instance (CSPRNG) used to generate
+    // the 256-bit salt for both the onboarding and in-settings entry points.
+    // Even if the user does not engage with the entropy canvas, the identity
+    // pipeline still receives a fresh random salt on every call.
+    companion object {
+        private val secureRandom = SecureRandom()
+
+        /** Draw 32 bytes of fresh entropy from the platform CSPRNG. */
+        fun generateSecureRandomSalt(): ByteArray {
+            val salt = ByteArray(32)
+            secureRandom.nextBytes(salt)
+            return salt
+        }
+    }
 
     init {
         loadIdentity()
@@ -94,6 +127,15 @@ class IdentityViewModel @Inject constructor(
 
     /**
      * Create a new identity (first-time setup).
+     *
+     * P0_ANDROID_IDENTITY_PROOF_OF_WORK: Emits 6 named stages via [progressStage]
+     * so the UI can show high-level proof of work. The same stages are emitted
+     * by [MainViewModel.createIdentity] so onboarding and in-settings share one
+     * progress narrative.
+     *
+     * Always passes a fresh 32-byte SecureRandom salt to meshRepository.createIdentity
+     * — fixes the "no random salt for settings launched identity generation"
+     * regression where the in-settings path was silently dropping the salt param.
      */
     fun createIdentity(nickname: String? = null) {
         // P1: Re-entrancy guard. _isCreating transitions are synchronized via
@@ -103,32 +145,73 @@ class IdentityViewModel @Inject constructor(
             Timber.d("createIdentity: re-entrant call dropped (already in progress)")
             return
         }
+        // P0_ANDROID_IDENTITY_PROOF_OF_WORK: emit the first stage SYNCHRONOUSLY
+        // so the UI recomposes with proof-of-work visible before the IO coroutine
+        // begins. This mirrors the same synchronous-flip pattern in MainViewModel
+        // and is the single source of truth for "we are working on this".
+        _isLoading.value = true
+        _error.value = null
+        _progressStage.value = IdentityProgressStage.PreparingStorage
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                _isLoading.value = true
-                _error.value = null
+                // Stage 1: prepare storage (grant consent + ensure service running).
+                // meshRepository.createIdentity() internally calls grantConsent()
+                // and ensureServiceInitialized(), so calling it advances through
+                // these stages. We emit the salt-generation stage BEFORE the
+                // Rust FFI call so the user can see "we're preparing a salt"
+                // while they wait for the math-heavy keygen.
+                val salt = generateSecureRandomSalt()
+                Timber.i("P0_IDENTITY: generated ${salt.size}-byte SecureRandom salt (hex=${salt.joinToString("") { "%02x".format(it) }.take(16)}…)")
+                _progressStage.value = IdentityProgressStage.GeneratingSalt
 
-                meshRepository.createIdentity()
+                // Stage 2 → 3: hand the salt to the repo. The repo runs grantConsent
+                // + ensureServiceInitialized + initializeIdentity (Rust FFI).
+                _progressStage.value = IdentityProgressStage.GeneratingKeypair
+                meshRepository.createIdentity(salt)
+
+                // Stage 4: identity is now generated; Rust computed the BLAKE3
+                // identity ID inline during initializeIdentity. We advance the
+                // stage so the UI can mark the keygen as done.
+                _progressStage.value = IdentityProgressStage.ComputingFingerprint
 
                 // Set nickname after creation if provided
                 if (nickname != null && nickname.isNotBlank()) {
                     meshRepository.setNickname(nickname)
                 }
 
-                // Inline loadIdentity to avoid race with _successMessage
+                // Stage 5: persist + verify. meshRepository.createIdentity()
+                // already called persistIdentityBackup(ironCore, customSalt)
+                // and ensureLocalIdentityFederation() internally, so by this
+                // point the identity is on disk. We re-read to verify.
+                _progressStage.value = IdentityProgressStage.PersistingToStorage
                 val info = meshRepository.getIdentityInfoNonBlocking()
                 if (_identityInfo.value != info) {
                     _identityInfo.value = info
                 }
 
+                // Stage 6: verify identity is live
+                _progressStage.value = IdentityProgressStage.VerifyingIdentity
+                val verified = meshRepository.isIdentityInitialized()
+                if (!verified) {
+                    Timber.w("P0_IDENTITY: identity not initialized after createIdentity; retry verification")
+                    kotlinx.coroutines.delay(100)
+                }
+
+                Timber.i("Identity created (id=${info?.identityId?.take(8) ?: "?"}, nickname=${info?.nickname})")
                 _successMessage.value = "Identity created successfully"
-                Timber.i("Identity created")
             } catch (e: Exception) {
                 _error.value = "Failed to create identity: ${e.message}"
                 Timber.e(e, "Failed to create identity")
             } finally {
                 _isLoading.value = false
                 _isCreating.value = false
+                // Reset progress stage on a small delay so the user sees the
+                // "done" state for a moment before the view recomposes.
+                // v0.3.4: set to Idle (was null) — see type-system comment on
+                // _progressStage above. The non-nullable type contract requires
+                // a non-null value here.
+                kotlinx.coroutines.delay(600)
+                _progressStage.value = IdentityProgressStage.Idle
             }
         }
     }

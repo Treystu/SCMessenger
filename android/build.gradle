@@ -21,8 +21,18 @@ buildscript {
         ksp_version = '1.9.20-1.0.14'
         
         // Application versioning (synced from Cargo.toml via scripts/sync_version.sh)
-        versionCode = 8
-        versionName = '0.3.0'
+        // v0.3.4 (P0_ANDROID_CRASHFIX): full type-system fix for the NPE crash
+        // that was suppressed-but-not-fixed in v0.3.3. v0.3.4 changes
+        // IdentityViewModel._progressStage and MainViewModel._identityProgressStage
+        // from MutableStateFlow<IdentityProgressStage?>(null) to
+        // MutableStateFlow<IdentityProgressStage>(IdentityProgressStage.Idle) and
+        // adds the Idle data object to the sealed class. This is a contract
+        // invariant: the type system now guarantees progressStage is never null
+        // at runtime, eliminating the v0.3.2 NPE at
+        // IdentityScreen.ProofOfWorkList.currentStage.id that the v0.3.3 defense-
+        // in-depth `?: return` workaround merely silenced.
+        versionCode = 12
+        versionName = '0.3.4'
     }
     
     repositories {
