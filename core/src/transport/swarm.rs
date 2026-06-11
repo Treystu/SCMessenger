@@ -113,6 +113,32 @@ fn is_discoverable_multiaddr(addr: &Multiaddr) -> bool {
     has_ip && !ip_is_restricted
 }
 
+/// Filter mDNS-advertised addresses to exclude circuit addresses that are too long for TXT records.
+///
+/// The libp2p mDNS implementation has a 1300-byte limit on TXT records. Circuit addresses
+/// (e.g., /p2p-circuit/p2p/.../p2p-circuit/p2p/...) can easily exceed this limit when
+/// a node has used relay multiple times, causing mDNS to silently drop them.
+///
+/// This function filters out:
+/// - p2p-circuit addresses (contain "/p2p-circuit/")
+/// - WebSocket relay addresses (contain "/ws/" or "/wss/")
+///
+/// Only direct IP addresses (IPv4 or IPv6) are advertised via mDNS.
+pub fn build_mdns_advertised_addrs(all_listeners: &[Multiaddr]) -> Vec<Multiaddr> {
+    all_listeners
+        .iter()
+        .filter(|a| {
+            // Only advertise addresses a LAN peer can actually reach us on:
+            //  - /ip4/ or /ip6/ direct
+            //  - NO p2p-circuit
+            //  - NO /ws/ websocket relay
+            let s = a.to_string();
+            !s.contains("/p2p-circuit/") && !s.contains("/ws/") && !s.contains("/wss/")
+        })
+        .cloned()
+        .collect()
+}
+
 #[cfg(not(target_arch = "wasm32"))]
 fn relay_reservation_multiaddr(base: &Multiaddr, relay_peer_id: PeerId) -> Multiaddr {
     use libp2p::multiaddr::Protocol;
@@ -5554,6 +5580,18 @@ mod tests {
             let map = super::last_identified_log().read();
             assert_eq!(map.len(), 1, "Dedup map should retain the original entry");
         }
+    }
+
+    #[test]
+    fn mdns_filter_drops_circuit_addresses() {
+        let addrs = vec![
+            "/ip4/192.168.0.230/tcp/9101".parse().unwrap(),
+            "/ip4/172.26.144.1/tcp/9101/p2p/12D3KooWJk8KPYRVn8SaqHxq5fFJnT9VYjW7pNvGHgL8F6ShzW3T/p2p-circuit/p2p/12D3KooWJk8KPYRVn8SaqHxq5fFJnT9VYjW7pNvGHgL8F6ShzW3T".parse().unwrap(),
+            "/ip4/172.26.154.211/tcp/9002/ws/p2p/12D3KooWJk8KPYRVn8SaqHxq5fFJnT9VYjW7pNvGHgL8F6ShzW3T/p2p-circuit/p2p/12D3KooWJk8KPYRVn8SaqHxq5fFJnT9VYjW7pNvGHgL8F6ShzW3T".parse().unwrap(),
+        ];
+        let filtered = super::build_mdns_advertised_addrs(&addrs);
+        assert_eq!(filtered.len(), 1);
+        assert!(filtered[0].to_string().starts_with("/ip4/192.168.0.230/tcp/9101"));
     }
 }
 
