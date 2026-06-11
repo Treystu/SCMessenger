@@ -518,8 +518,19 @@ class MdnsServiceDiscovery(
         // while a previous resolve is in flight. Create a fresh listener per
         // call and track it in `inFlightResolves` so we never reuse one, and
         // the listener's terminal callbacks will self-remove from the set.
-        val listener = newResolveListener(serviceInfo.serviceName)
-        inFlightResolves[serviceInfo.serviceName] = listener
+
+        val serviceName = serviceInfo.serviceName
+        if (inFlightResolves.containsKey(serviceName)) {
+            Timber.d("mDNS resolve already in flight for $serviceName, skipping redundant call")
+            return
+        }
+
+        val listener = newResolveListener(serviceName)
+        // Double-check with putIfAbsent to avoid race between containsKey and put
+        if (inFlightResolves.putIfAbsent(serviceName, listener) != null) {
+            Timber.d("mDNS resolve just started by another thread for $serviceName, skipping")
+            return
+        }
 
         // P0: NsdManager.resolveService with Executor was added in API 34 (Android 14).
         // The Listener-only signature was deprecated in API 33 but is the ONLY option on

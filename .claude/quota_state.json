@@ -1,7 +1,7 @@
-﻿{
-    "status":  "ok",
-    "timestamp":  "2026-06-08T02:05:36.0631476-07:00",
-    "resetMinutes":  180,
-    "fiveHour":  20.9,
-    "sevenDay":  12.2
+{
+    "fiveHour": 55.8,
+    "sevenDay": 86.5,
+    "resetMinutes": 120,
+    "timestamp": "2026-06-11T00:52:34.072007-07:00",
+    "status": "ok"
 }

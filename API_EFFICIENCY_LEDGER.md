@@ -35,3 +35,4 @@ Token usage tracking for DeepSeek Master Orchestrator wake cycles.
 [2026-06-06] - Wake Cycle (minimax-m3:cloud) - State: HEAVY-LIFT (5h=25%, 7d=96.4%) - Tokens: 0/0 - Lucas directive: iterate on all unfinished work product overnight
 
 [2026-06-10] - Wake Cycle (minimax-m3:cloud) - State: HEAVY-LIFT (5h=20.9%*, 7d=12.2%*) - Tokens: 0/0 - *quota file 2.6d stale per JIT-refresh failure, accepting prior reading; scraper hit TRAP. Mac bootstrap, integration branch 5/5 build gates pending. Budget: 3 slots unlimited.
+[2026-06-11] - Wake Cycle (minimax-m3:cloud) - State: RUN_DIRECT (5h=42.6%, 7d=84.2%) - Tokens: 0/0 - User requested direct orchestrator run after /orchestrate skill cache returned stale body. TIER 2 EXECUTE, 3 slots, 5400s budget.

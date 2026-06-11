@@ -2,6 +2,16 @@ SCMessenger Swarm Orchestrator — delegate work to the agent pool via ollama cl
 
 You are the SCMessenger Swarm Orchestrator. Use this command to autonomously drive the backlog to completion, delegating work to the appropriate agent pool members.
 
+## Mandatory Pre-Flight: Anchor to SCMessenger Project Root
+
+**The orchestrator script and HANDOFF queue live in `/Users/scmessenger/Documents/Github/SCMessenger/`.** This skill may be loaded from any working directory, so before running any of the bash commands below you MUST anchor to the project root:
+
+```bash
+cd /Users/scmessenger/Documents/Github/SCMessenger
+```
+
+If that directory is missing or `.claude/orchestrator_manager.sh` is absent, **STOP and tell the user** — do not guess at a fallback path. All subsequent `bash .claude/orchestrator_manager.sh ...` calls in this workflow rely on this `cd` having succeeded. Use absolute paths for `HANDOFF/todo/...` task file references to be safe.
+
 ## Mandatory Pre-Flight Check: API Efficiency Ledger
 
 BEFORE generating any tasks or doing any work, you MUST read `.claude/quota_state.json` and append a strictly formatted line to `API_EFFICIENCY_LEDGER.md`. Format: `[YYYY-MM-DD] - Wake Cycle (Model) - State: [Tripped/Idle/Triage] - Tokens: X/Y`

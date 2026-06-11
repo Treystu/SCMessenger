@@ -78,14 +78,108 @@ ORCHESTRATOR_PID_FILE=".claude/orchestrator.pid"
 # This MUST be checked BEFORE every agent launch.
 
 count_os_claude_processes() {
-    # macOS port (2026-06-10): count processes whose basename is "claude" (any path).
-    # pgrep -f matches against the full command line, which catches `~/.local/bin/claude`
-    # and any ollama-launched wrappers that exec claude.
-    local count=$(pgrep -f "/bin/claude|/local/bin/claude|^claude" 2>/dev/null | wc -l | tr -d ' ')
+    # 2026-06-11 macOS port fix: `pgrep -f` silently returns 0 lines on this
+    # host even when a `claude` process is alive (sandbox/PID-namespace issue
+    # in the shell context that runs the script), which made MAX_SUBAGENTS
+    # always evaluate to MAX_OS_PROCESSES and report 3 free slots even when
+    # Claude Code + Hermes were already occupying 2 of them.
+    #
+    # Strategy: enumerate via `ps -axo pid,args` (which works reliably on
+    # macOS for processes visible to the current shell), then count processes
+    # that fall into the LLM-worker category:
+    #
+    #   1. Claude CLI binary — basename of $2 == "claude" (catches any install
+    #      path: ~/.local/bin/claude, /usr/local/bin/claude, ollama-launched
+    #      wrappers that exec the same binary).
+    #   2. Hermes slash worker — argv contains "tui_gateway.slash_worker"
+    #      AND a "--model" flag (proves it's holding an LLM session, not a
+    #      dashboard or background helper).
+    #   3. ollama launch wrappers with a --model flag pointing to a :cloud
+    #      model (catches ollama-launched child processes that proxy to the
+    #      cloud API and consume the same quota budget).
+    #
+    # Why basename for claude, substring for Hermes/ollama:
+    #   - `comm` is BSD-truncated to 15 chars on macOS, so the full path
+    #     never appears. `args` is the full command line.
+    #   - For `claude` we want the binary path's basename, excluding
+    #     `ollama launch claude ...` (the parent wrapper, whose basename is
+    #     `ollama` not `claude`).
+    #   - For Hermes/ollama we look at the full argv since their relevant
+    #     tokens are flags, not the binary name.
+    #
+    # Fallback: if `ps` returns nothing for total processes (extremely
+    # restricted shell), return MAX_OS_PROCESSES to fail CLOSED — never
+    # inflate the free-slot count on a blind counter.
+    local count
+    count=$(ps -axo pid,etime,args 2>/dev/null | awk '
+        function parse_etime(s,    n, parts, i, total) {
+            # ps etime formats: "MM:SS", "HH:MM:SS", or "DD-HH:MM:SS".
+            # Convert to total seconds; missing prefix defaults to 0.
+            if (index(s, "-") > 0) {
+                n = split(s, parts, "-")
+                total = parts[1] * 86400
+                s = parts[2]
+            } else {
+                total = 0
+            }
+            n = split(s, parts, ":")
+            if (n == 2) {
+                total += parts[1] * 60 + parts[2]
+            } else if (n == 3) {
+                total += parts[1] * 3600 + parts[2] * 60 + parts[3]
+            }
+            return total
+        }
+        {
+            # ps -axo pid,etime,args: $1=PID, $2=etime, $3+=args
+            age = parse_etime($2)
+
+            # Skip transient one-shots (claude --print, eval-from-shell, etc).
+            # A long-running quota consumer has been alive for minutes-to-hours;
+            # a one-shot CLI call is typically <60s. Threshold of 5 minutes
+            # gives a generous margin while excluding ad-hoc `claude --print`
+            # invocations and quick evaluation calls.
+            if (age < 300) next
+
+            bin = $3
+            n = split(bin, parts, "/")
+            base = parts[n]
+            full = $0
+
+            # 1. Claude CLI binary — counts as one slot regardless of
+            #    whether it was launched by ollama, a shell, or directly.
+            if (base == "claude") { c++; next }
+
+            # 2. Hermes slash worker: must be a python process running
+            #    tui_gateway.slash_worker with --model set. Requiring the
+            #    binary basename to be "python" excludes zsh/awk wrappers
+            #    whose argv happens to contain those tokens (which would
+            #    otherwise self-match this very script).
+            if ((base == "python" || base == "python3") \
+                && index(full, "tui_gateway.slash_worker") > 0 \
+                && index(full, "--model") > 0) { c++; next }
+
+            # NOTE: We deliberately do NOT count the `ollama launch claude
+            # --model ...` parent wrapper. It is a transit process; the
+            # actual quota consumer is the claude child, which rule 1
+            # already counts. Including the parent would double-count
+            # every Claude Code session that was launched via ollama.
+        }
+        END { print c+0 }
+    ')
     if [ -z "$count" ] || ! [[ "$count" =~ ^[0-9]+$ ]]; then
-        echo "0"
+        count=0
+    fi
+
+    # Verification: if `ps` itself returned 0 processes total, something is
+    # wrong with the environment. Fail closed.
+    local total
+    total=$(ps -axo pid 2>/dev/null | wc -l | tr -d ' ')
+    if [ -z "$total" ] || ! [[ "$total" =~ ^[0-9]+$ ]] || [ "$total" -lt 5 ]; then
+        echo "$MAX_OS_PROCESSES"  # fail closed: assume full
         return
     fi
+
     echo "$count"
 }
 

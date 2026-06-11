@@ -8,7 +8,7 @@ set -euo pipefail
 
 QUOTA_STALE_SECONDS=300
 QUOTA_STATE_FILE=".claude/quota_state.json"
-QUOTA_SCRAPER="powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./OllamaQuotaScraper.ps1 -Quiet"
+QUOTA_SCRAPER='./OllamaQuotaScraper.sh --quiet'
 
 # --- lazy_quota_refresh ---
 # Checks quota_state.json timestamp. If missing or older than
@@ -45,9 +45,18 @@ lazy_quota_refresh() {
     fi
 
     # Convert ISO-8601 to epoch seconds.
-    # Git Bash date -d handles ISO-8601 with timezone offsets.
+    # macOS BSD date does NOT support -d and rejects .NET-style fractional+TZ format.
+    # Use python3 (always available via the venv) which handles ISO-8601 correctly.
     local ts_epoch
-    ts_epoch=$(date -d "$ts_value" +%s 2>/dev/null || echo "0")
+    ts_epoch=$(python3 -c "
+import sys
+from datetime import datetime
+try:
+    print(int(datetime.fromisoformat(sys.argv[1]).timestamp()))
+except Exception:
+    print(0)
+" "$ts_value" 2>/dev/null)
+    ts_epoch="${ts_epoch:-0}"
 
     if [ "$ts_epoch" = "0" ] || [ -z "$ts_epoch" ]; then
         echo "QUOTA: could not parse timestamp '$ts_value' -- running scraper..."
