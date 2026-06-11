@@ -4185,7 +4185,7 @@ dependencies = [
 
 [[package]]
 name = "scmessenger-cli"
-version = "0.3.1"
+version = "0.3.4"
 dependencies = [
  "anyhow",
  "axum",
@@ -4220,7 +4220,7 @@ dependencies = [
 
 [[package]]
 name = "scmessenger-core"
-version = "0.3.1"
+version = "0.3.4"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -4273,7 +4273,7 @@ dependencies = [
 
 [[package]]
 name = "scmessenger-desktop-bridge"
-version = "0.3.1"
+version = "0.3.4"
 dependencies = [
  "dirs",
  "tokio",
@@ -4283,7 +4283,7 @@ dependencies = [
 
 [[package]]
 name = "scmessenger-mobile"
-version = "0.3.1"
+version = "0.3.4"
 dependencies = [
  "scmessenger-core",
  "uniffi",
@@ -4291,7 +4291,7 @@ dependencies = [
 
 [[package]]
 name = "scmessenger-wasm"
-version = "0.3.1"
+version = "0.3.4"
 dependencies = [
  "anyhow",
  "console_error_panic_hook",
