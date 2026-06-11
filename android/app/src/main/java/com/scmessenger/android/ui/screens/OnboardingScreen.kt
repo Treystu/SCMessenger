@@ -66,6 +66,12 @@ fun OnboardingScreen(
     val onboardingCompleted by viewModel.onboardingCompleted.collectAsState()
     val isCreating by viewModel.isCreatingIdentity.collectAsState()
     val identityError by viewModel.identityError.collectAsState()
+    // P0_ANDROID_IDENTITY_PROGRESS: subscribe to the high-level progress stage so
+    // the onboarding flow shows the user exactly which step of the cryptographic
+    // pipeline is running, with a percent-complete bar + ETA. Without this, the
+    // user sees a tiny spinner + "Generating Identity keys..." for 3-5 seconds
+    // with no indication of progress, which feels like a hang.
+    val identityProgressStage by viewModel.identityProgressStage.collectAsState()
     var showImportDialog by remember { mutableStateOf(false) }
     var importCode by remember { mutableStateOf("") }
     var hasAcceptedConsent by remember { mutableStateOf(false) }
@@ -233,34 +239,20 @@ fun OnboardingScreen(
                         .imePadding()
                 )
 
-                // P0_ANDROID_IDENTITY_PROGRESS: Secondary status line so the user
-                // always sees a clear "we are working on it" indicator when they tap
-                // Create Identity. The button itself also shows an inline spinner
-                // (handled inside IdentityCreationFlow when isCreating is true), but
-                // adding a small status text below the form makes the in-progress
-                // state visible from anywhere on the screen, not just next to the
-                // button. The previous implementation replaced the entire form with a
-                // single CircularProgressIndicator when isCreating was true — that
-                // branch never visibly executed because _isCreatingIdentity flipped
-                // inside the IO coroutine, so the user saw a frozen button.
-                if (isCreating) {
-                    Spacer(modifier = Modifier.height(12.dp))
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.Center,
+                // P0_ANDROID_IDENTITY_PROGRESS: full 6-stage proof-of-work display
+                // so the user sees real progress feedback (step counter, percent
+                // bar, ETA, per-stage list) during the 3-5 second Ed25519 keygen.
+                // The previous tiny spinner + "Generating Identity keys..." text
+                // gave no progress indication, which felt like a hang. The display
+                // is gated on `!is Idle` so it only appears while creation is
+                // actively running.
+                if (isCreating &&
+                    identityProgressStage !is com.scmessenger.android.ui.viewmodels.IdentityProgressStage.Idle) {
+                    Spacer(modifier = Modifier.height(16.dp))
+                    com.scmessenger.android.ui.identity.IdentityProgressDisplay(
+                        currentStage = identityProgressStage,
                         modifier = Modifier.fillMaxWidth()
-                    ) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(16.dp),
-                            strokeWidth = 2.dp
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = stringResource(R.string.onboarding_generating_keys),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
+                    )
                 }
 
                 Spacer(modifier = Modifier.height(8.dp))

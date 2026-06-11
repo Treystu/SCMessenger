@@ -60,6 +60,22 @@ fun IdentityScreen(
         }
     }
 
+    // P0_ANDROID_QR_FIX: belt-and-suspenders poll. IdentityViewModel.loadIdentity
+    // has its own retry loop (~1.55s) but the Rust core may hydrate LATER if the
+    // service transitions to RUNNING *after* the VM was constructed (e.g., a slow
+    // cold start where the user reaches Settings before MeshService.onCreate finished).
+    // This LaunchedEffect is keyed on identityInfo itself, so it re-fires whenever
+    // the state changes — but it also fires once on first composition. We schedule
+    // two delayed polls (2s, 4s) to catch late hydration without busy-spinning.
+    LaunchedEffect(identityInfo?.initialized) {
+        if (identityInfo?.initialized != true) {
+            kotlinx.coroutines.delay(2_000L)
+            viewModel.loadIdentity(forceRefresh = true)
+            kotlinx.coroutines.delay(2_000L)
+            viewModel.loadIdentity(forceRefresh = true)
+        }
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -218,7 +234,7 @@ private fun IdentityNotInitializedView(
         // and the !is Idle check enforces "we are creating right now".
         if (progressStage !is com.scmessenger.android.ui.viewmodels.IdentityProgressStage.Idle) {
             Spacer(modifier = Modifier.height(8.dp))
-            ProofOfWorkList(
+            IdentityProgressDisplay(
                 currentStage = progressStage,
                 modifier = Modifier.fillMaxWidth(0.95f)
             )
@@ -239,135 +255,6 @@ private fun IdentityNotInitializedView(
  *   - a "About Ns remaining" hint that updates as the active stage changes
  *   - a percent-complete number that climbs as stages complete
  */
-@Composable
-private fun ProofOfWorkList(
-    // v0.3.4 (P0_ANDROID_CRASHFIX): parameter is now non-nullable. The previous
-    // `IdentityProgressStage?` allowed a null to reach `currentStage.id` at
-    // line 234, crashing the activity. With IdentityViewModel._progressStage
-    // typed as non-nullable StateFlow<IdentityProgressStage> and the
-    // IdentityNotInitializedView call site gated on `!is Idle`, the compiler
-    // now enforces non-null at this call site.
-    currentStage: com.scmessenger.android.ui.viewmodels.IdentityProgressStage,
-    modifier: Modifier = Modifier
-) {
-    // v0.3.4: the previous `val stage = currentStage ?: return` defense-in-depth
-    // is no longer needed — the type system guarantees currentStage is non-null.
-    // Replaced with a direct alias for readability of the lines below.
-    val stage = currentStage
-    val allStages = com.scmessenger.android.ui.viewmodels.IdentityProgressStage.ALL
-
-    // Sum of etaMs for stages strictly before the current one, divided by total.
-    // The bar fills as stages complete, regardless of how long each actually
-    // takes on this device.
-    val completedEtaMs = allStages
-        .filter { it.id < stage.id }
-        .sumOf { it.etaMs }
-    val rawFraction = completedEtaMs.toFloat() /
-        com.scmessenger.android.ui.viewmodels.IdentityProgressStage.TOTAL_ETA_MS.toFloat()
-    val fraction = rawFraction.coerceIn(0f, 1f)
-    val percentComplete = (fraction * 100f).toInt().coerceIn(0, 99)
-
-    // ETA: total minus the sum of completed etas. Floor at "a few seconds" so
-    // the user never sees "About 0s remaining" while the spinner is still
-    // running on the longest step.
-    val remainingMs = (com.scmessenger.android.ui.viewmodels.IdentityProgressStage.TOTAL_ETA_MS - completedEtaMs)
-        .coerceAtLeast(500L)
-    val remainingSec = (remainingMs + 999L) / 1000L // round up
-    val etaText = if (remainingSec <= 1L) "Less than a second remaining"
-                  else "About $remainingSec seconds remaining"
-
-    Card(
-        modifier = modifier,
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant
-        )
-    ) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            // Header row: step counter + percent-complete
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "Step ${stage.id} of ${com.scmessenger.android.ui.viewmodels.IdentityProgressStage.TOTAL} — ${stage.label}",
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.weight(1f)
-                )
-                Text(
-                    text = "$percentComplete%",
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary
-                )
-            }
-            // Smooth progress bar
-            LinearProgressIndicator(
-                progress = { fraction },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(6.dp),
-                color = MaterialTheme.colorScheme.primary,
-                trackColor = MaterialTheme.colorScheme.surfaceVariant,
-            )
-            // Detail line: what the current step is doing
-            Text(
-                text = stage.detail,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            // ETA hint
-            Text(
-                text = etaText,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Spacer(modifier = Modifier.height(4.dp))
-            // 6-row stage list
-            allStages.forEach { s ->
-                ProofOfWorkRow(
-                    stage = s,
-                    isDone = s.id < stage.id,
-                    isActive = s.id == stage.id
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun ProofOfWorkRow(
-    stage: com.scmessenger.android.ui.viewmodels.IdentityProgressStage,
-    isDone: Boolean,
-    isActive: Boolean
-) {
-    val rowColor = when {
-        isDone -> MaterialTheme.colorScheme.primary
-        isActive -> MaterialTheme.colorScheme.onSurface
-        else -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
-    }
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        when {
-            isDone -> Text("✓", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
-            isActive -> CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp)
-            else -> Text("·", color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f), fontWeight = FontWeight.Bold)
-        }
-        Text(
-            text = "${stage.id}. ${stage.label}",
-            style = MaterialTheme.typography.bodyMedium,
-            color = rowColor,
-            fontWeight = if (isActive) FontWeight.SemiBold else FontWeight.Normal
-        )
-    }
-}
-
 @Composable
 private fun IdentityContent(
     identityInfo: uniffi.api.IdentityInfo,

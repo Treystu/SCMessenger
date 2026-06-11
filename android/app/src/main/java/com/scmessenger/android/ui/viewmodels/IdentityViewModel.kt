@@ -23,7 +23,14 @@ class IdentityViewModel @Inject constructor(
     private val meshRepository: MeshRepository
 ) : ViewModel() {
 
-    // Identity info
+    // P0_SHARED_IDENTITY: IdentityViewModel now observes the centralized
+    // meshRepository.identityInfo StateFlow. There is no longer a private
+    // _identityInfo; instead we mirror the repo's flow into a derived local
+    // StateFlow so the existing UI (identityInfo.collectAsState()) keeps
+    // working without any Compose-side changes. The centralized flow replays
+    // its latest value to new subscribers, so a fresh IdentityViewModel
+    // constructed after the repo has been hydrated (the common case after
+    // onboarding) immediately sees the real identity without polling.
     private val _identityInfo = MutableStateFlow<uniffi.api.IdentityInfo?>(null)
     val identityInfo: StateFlow<uniffi.api.IdentityInfo?> = _identityInfo.asStateFlow()
 
@@ -79,6 +86,25 @@ class IdentityViewModel @Inject constructor(
     }
 
     init {
+        // P0_SHARED_IDENTITY: Mirror the centralized meshRepository.identityInfo
+        // StateFlow into the local _identityInfo. Because StateFlow has replay=1
+        // semantics through the repo (the repo's flow was set to MutableStateFlow
+        // which always replays its current value to new subscribers), this means
+        // a fresh IdentityViewModel constructed after the repo has been hydrated
+        // immediately gets the real identity without polling. This is the core
+        // fix for the "Show Identity QR -> not initialized" bug.
+        viewModelScope.launch(Dispatchers.IO) {
+            meshRepository.identityInfo.collect { info ->
+                if (_identityInfo.value != info) {
+                    _identityInfo.value = info
+                }
+            }
+        }
+
+        // Also kick a loadIdentity() to trigger an FFI read (which will publish
+        // to meshRepository.identityInfo, propagating back here via the observer
+        // above). loadIdentity() also handles the retry-with-backoff case where
+        // the Rust core is still hydrating.
         loadIdentity()
 
         // P0: Refresh identity from Rust core when service transitions to RUNNING,
@@ -88,8 +114,8 @@ class IdentityViewModel @Inject constructor(
             meshRepository.serviceState.collect { state ->
                 if (state == uniffi.api.ServiceState.RUNNING &&
                     lastServiceState != uniffi.api.ServiceState.RUNNING) {
-                    Timber.d("IdentityViewModel: service -> RUNNING, refreshing identity")
-                    loadIdentity()
+                    Timber.d("IdentityViewModel: service -> RUNNING, force-refreshing identity")
+                    loadIdentity(forceRefresh = true)
                 }
                 lastServiceState = state
             }
@@ -98,21 +124,40 @@ class IdentityViewModel @Inject constructor(
 
     /**
      * Load identity information.
+     *
+     * P0_ANDROID_QR_FIX: When the user navigates from Settings -> Identity QR, the
+     * IdentityViewModel is constructed fresh. Its `init` calls `loadIdentity()` which
+     * uses `getIdentityInfoNonBlocking()`. On a cold start, the ironCore may be null
+     * or `core.getIdentityInfo()` may return null because the service is still spinning
+     * up — even though the identity is fully on disk in SharedPreferences backup. The
+     * old code returned null in that case and the user saw "Identity not initialized"
+     * on the QR screen, even though the mesh was working and identity was real.
+     *
+     * The fix:
+     *   1. Retry with exponential backoff for up to ~1.55s total if the first read
+     *      returns null/uninitialized. The Rust core typically hydrates within 100-500ms
+     *      on a warm start.
+     *   2. As a defensive check, use `meshRepository.isIdentityInitialized()` to know
+     *      whether the SharedPreferences backup exists. If no backup, identity was
+     *      never created on this device — short-circuit, no retry.
+     *   3. The `forceRefresh` flag (used on service RUNNING transition) bypasses the
+     *      in-VM cache and re-reads from the Rust core.
      */
-    fun loadIdentity() {
+    fun loadIdentity(forceRefresh: Boolean = false) {
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 _isLoading.value = true
                 _error.value = null
 
-                // Use non-blocking variant to avoid triggering service init from UI layer
-                val identity = meshRepository.getIdentityInfoNonBlocking()
+                // P0_ANDROID_QR_FIX: bounded retry-with-backoff so the QR screen
+                // doesn't show "not initialized" during a normal cold start.
+                val identity = readIdentityWithRetry(forceRefresh = forceRefresh)
                 if (_identityInfo.value != identity) {
                     _identityInfo.value = identity
                 }
 
                 if (identity == null || !identity.initialized) {
-                    Timber.w("Identity not initialized")
+                    Timber.w("P0_QR_FIX: Identity not initialized after retry loop")
                 } else {
                     Timber.d("Identity loaded: ${identity.identityId ?: "Unknown"}")
                 }
@@ -123,6 +168,60 @@ class IdentityViewModel @Inject constructor(
                 _isLoading.value = false
             }
         }
+    }
+
+    /**
+     * P0_ANDROID_QR_FIX: Read identity with bounded retry-with-backoff.
+     *
+     * Strategy:
+     *   - First attempt: use `getIdentityInfoNonBlocking()` (no service init).
+     *   - If null/uninitialized AND `isIdentityInitialized()` (backup check) says
+     *     identity exists on disk, retry up to 5 times with exponential backoff
+     *     (50ms, 100ms, 200ms, 400ms, 800ms = ~1.55s total). The Rust core typically
+     *     hydrates from sled within the first 1-2 retries.
+     *   - If `isIdentityInitialized()` returns false, identity was never created
+     *     on this device — short-circuit immediately, no retry, render create form.
+     */
+    private suspend fun readIdentityWithRetry(forceRefresh: Boolean): uniffi.api.IdentityInfo? {
+        val firstAttempt = meshRepository.getIdentityInfoNonBlocking()
+        if (firstAttempt != null && firstAttempt.initialized) {
+            return firstAttempt
+        }
+        // Identity not yet visible via non-blocking read. Check the backup before
+        // retrying: if the SharedPreferences backup is missing, identity was never
+        // created here and we should render the create form, not spin forever.
+        val backupExists = try {
+            meshRepository.isIdentityInitialized()
+        } catch (e: Exception) {
+            Timber.w(e, "P0_QR_FIX: isIdentityInitialized() threw during retry check")
+            false
+        }
+        if (!backupExists) {
+            Timber.d("P0_QR_FIX: no identity backup on disk; rendering create form")
+            return firstAttempt // null or uninitialized
+        }
+        // Backup exists but the core returned null. Retry with backoff so the QR
+        // screen doesn't show "not initialized" during a normal cold start.
+        if (!forceRefresh && _identityInfo.value?.initialized == true) {
+            // Already have initialized data in this VM; don't churn.
+            return _identityInfo.value
+        }
+        val backoffMs = longArrayOf(50L, 100L, 200L, 400L, 800L)
+        for ((index, delay) in backoffMs.withIndex()) {
+            kotlinx.coroutines.delay(delay)
+            val attempt = try {
+                meshRepository.getIdentityInfoNonBlocking()
+            } catch (e: Exception) {
+                Timber.w(e, "P0_QR_FIX: retry $index threw")
+                continue
+            }
+            if (attempt != null && attempt.initialized) {
+                Timber.d("P0_QR_FIX: identity hydrated on retry $index after ${backoffMs.take(index + 1).sum()}ms")
+                return attempt
+            }
+        }
+        Timber.w("P0_QR_FIX: identity not visible from Rust core after retry loop; backup exists but core unhydrated")
+        return firstAttempt
     }
 
     /**

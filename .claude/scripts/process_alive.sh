@@ -3,12 +3,11 @@
 # Usage: source this file, then call process_alive <pid>
 # Returns 0 if alive, 1 if dead
 #
-# On Windows Git Bash (MSYS2), PIDs exist in the MSYS2 namespace.
-# PowerShell can only see Windows native PIDs. We try kill -0 first
-# (works for MSYS2 PIDs), then fall back to PowerShell (for Windows PIDs).
+# macOS port (2026-06-10): replaced PowerShell Get-Process calls with `ps`.
+# `kill -0` is the primary check (works for any Unix process); `ps -p` is
+# the fallback (catches macOS process PID namespaces if kill -0 fails).
 #
 # Cache: per-PID files in .claude/process_cache/<pid> with 5-sec TTL.
-# Aligned with SwarmHeartbeat.ps1's 3-second cache for consistency.
 
 PROCESS_CACHE_DIR=".claude/process_cache"
 PROCESS_CACHE_TTL=5  # seconds
@@ -34,12 +33,12 @@ process_alive() {
 
     # Cache miss or expired — do actual check
     local alive=1
-    # Try MSYS2/Git Bash PID first — works for processes spawned from bash
+    # Primary: kill -0 (works for any process in our PID namespace)
     if kill -0 "$pid" 2>/dev/null; then
         alive=0
     else
-        # Fallback to PowerShell for Windows native PIDs (e.g., claude.exe)
-        if powershell.exe -NoProfile -Command "if (Get-Process -Id $pid -ErrorAction SilentlyContinue) { exit 0 } else { exit 1 }" 2>/dev/null; then
+        # Fallback: ps -p (works even if kill -0 is blocked by SIP/permissions)
+        if ps -p "$pid" >/dev/null 2>&1; then
             alive=0
         fi
     fi
@@ -67,13 +66,13 @@ process_cache_clear() {
     rm -rf "$PROCESS_CACHE_DIR" 2>/dev/null
 }
 
-# Check if a PID is actually a claude process (not a reused PID like svchost).
-# On Windows PIDs are aggressively reused; kill -0 alone is not sufficient.
+# Check if a PID is actually a claude process (not a reused PID).
+# On macOS PIDs can be reused; kill -0 alone is not sufficient.
 process_is_claude() {
     local pid="$1"
     if [ -z "$pid" ]; then return 1; fi
     local name
-    name=$(powershell.exe -NoProfile -Command "(Get-Process -Id $pid -ErrorAction SilentlyContinue).ProcessName" 2>/dev/null)
+    name=$(ps -p "$pid" -o comm= 2>/dev/null)
     if [ "$name" = "claude" ]; then
         return 0
     fi
@@ -83,12 +82,11 @@ process_is_claude() {
 process_memory_kb() {
     local pid="$1"
     if [ -z "$pid" ]; then echo "0"; return; fi
-    # PowerShell can only measure Windows native PIDs
-    local bytes=$(powershell.exe -NoProfile -Command "(Get-Process -Id $pid -ErrorAction SilentlyContinue).WorkingSet64" 2>/dev/null || echo "0")
-    bytes=$(echo "$bytes" | tr -d '[:space:]')
-    if [ -z "$bytes" ] || ! [[ "$bytes" =~ ^[0-9]+$ ]]; then
+    # macOS: ps -o rss gives resident set size in kilobytes
+    local rss=$(ps -p "$pid" -o rss= 2>/dev/null | tr -d ' ')
+    if [ -z "$rss" ] || ! [[ "$rss" =~ ^[0-9]+$ ]]; then
         echo "0"
         return
     fi
-    echo $((bytes / 1024))
+    echo "$rss"
 }

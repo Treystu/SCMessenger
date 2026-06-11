@@ -137,6 +137,23 @@ class MainViewModel @Inject constructor(
             }
         }
 
+        // P0_SHARED_IDENTITY: observe the centralized identityInfo flow. This
+        // ensures _isReady (which drives hasIdentity → showOnboarding → MeshApp
+        // nav graph) flips true the moment the repo knows about the identity,
+        // even if it happens via a different code path (e.g., IdentityViewModel's
+        // own loadIdentity call publishes first). This eliminates the race where
+        // a freshly created VM reads hasIdentity=false because its own
+        // refreshIdentityState hasn't run yet.
+        viewModelScope.launch {
+            meshRepository.identityInfo.collect { info ->
+                val initialized = info?.initialized == true
+                if (initialized && !_isReady.value) {
+                    Timber.d("P0_SHARED_IDENTITY: meshRepository.identityInfo reports initialized; updating _isReady")
+                    _isReady.value = true
+                }
+            }
+        }
+
         refreshIdentityState()
     }
 

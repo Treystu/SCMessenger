@@ -323,6 +323,31 @@ open class MeshRepository(private val context: Context) {
     private val _serviceState = MutableStateFlow(uniffi.api.ServiceState.STOPPED)
     open val serviceState: StateFlow<uniffi.api.ServiceState> = _serviceState.asStateFlow()
 
+    // P0_SHARED_IDENTITY: Centralized identity StateFlow. All ViewModels (Main,
+    // Identity, Settings, MeshService, Dashboard) should observe this single
+    // source of truth instead of maintaining independent _identityInfo flows.
+    // Publishing happens at every read/mutation point via publishIdentityInfo().
+    // Replay = 1 so a late subscriber immediately sees the current value (this
+    // eliminates the "first load returns null then re-fires" race in any VM
+    // constructed after the identity was already hydrated).
+    private val _identityInfo = MutableStateFlow<uniffi.api.IdentityInfo?>(null)
+    open val identityInfo: StateFlow<uniffi.api.IdentityInfo?> = _identityInfo.asStateFlow()
+
+    // P0_SHARED_IDENTITY: Publish identity changes to all subscribers. Called
+    // from every code path that reads or mutates identity (getIdentityInfo,
+    // getIdentityInfoNonBlocking, setNickname, createIdentity,
+    // restoreIdentityFromBackup). Equality-checked so we don't churn downstream
+    // collectors on structurally-equal updates (e.g., the Rust core re-emitting
+    // the same IdentityInfo after a nickname set).
+    private fun publishIdentityInfo(info: uniffi.api.IdentityInfo?) {
+        if (_identityInfo.value != info) {
+            if (info != null && info.initialized) {
+                cacheIdentityFields(info)
+            }
+            _identityInfo.value = info
+        }
+    }
+
     // Service stats
     private val _serviceStats = MutableStateFlow<uniffi.api.ServiceStats?>(null)
     open val serviceStats: StateFlow<uniffi.api.ServiceStats?> = _serviceStats.asStateFlow()
@@ -3034,6 +3059,12 @@ open class MeshRepository(private val context: Context) {
         return try {
             core.importIdentityBackup(backup, "")
             Timber.i("Restored identity from Android backup payload")
+            // P0_SHARED_IDENTITY: publish restored identity to all subscribers
+            val restored = core.getIdentityInfo()
+            if (restored != null && restored.initialized) {
+                cacheIdentityFields(restored)
+            }
+            publishIdentityInfo(restored)
             true
         } catch (e: Exception) {
             Timber.w("Identity backup restore failed; fallback to new identity: ${e.message}")
@@ -3049,6 +3080,12 @@ open class MeshRepository(private val context: Context) {
         }
         core.importIdentityBackup(backup, "")
         Timber.i("Restored identity from manually pasted backup payload")
+        // P0_SHARED_IDENTITY: publish the restored identity to all subscribers
+        val restored = core.getIdentityInfo()
+        if (restored != null && restored.initialized) {
+            cacheIdentityFields(restored)
+        }
+        publishIdentityInfo(restored)
     }
 
     private fun persistIdentityBackup(core: uniffi.api.IronCore?, customSalt: ByteArray? = null) {
@@ -3826,6 +3863,8 @@ open class MeshRepository(private val context: Context) {
             if (info != null && info.initialized) {
                 cacheIdentityFields(info)
             }
+            // P0_SHARED_IDENTITY: publish to all subscribers (Main/Identity/Settings VMs)
+            publishIdentityInfo(info)
             return info
         }
         // P0: Fall back to cached identity fields when Rust core isn't ready yet.
@@ -3833,6 +3872,8 @@ open class MeshRepository(private val context: Context) {
         val cached = readCachedIdentityFields()
         if (cached != null) {
             Timber.d("getIdentityInfoNonBlocking: using cached identity (core not ready)")
+            // P0_SHARED_IDENTITY: also publish cached identity so subscribers see it
+            publishIdentityInfo(cached)
             return cached
         }
         // Last resort: only return null if there's truly no core available and no cache.
@@ -3859,6 +3900,8 @@ open class MeshRepository(private val context: Context) {
         if (result != null && result.initialized) {
             cacheIdentityFields(result)
         }
+        // P0_SHARED_IDENTITY: publish to all subscribers
+        publishIdentityInfo(result)
         return result
     }
 
@@ -3888,6 +3931,8 @@ open class MeshRepository(private val context: Context) {
             if (info != null && info.initialized) {
                 cacheIdentityFields(info)
             }
+            // P0_SHARED_IDENTITY: publish to all subscribers (Main/Identity/Settings VMs)
+            publishIdentityInfo(info)
         } catch (e: Exception) {
             Timber.e(e, "Rust core failed to set nickname")
             return
@@ -4426,6 +4471,14 @@ open class MeshRepository(private val context: Context) {
                     ensureLocalIdentityFederation()
                     persistIdentityBackup(ironCore, customSalt)
                     Timber.i("Identity created successfully")
+                    // P0_SHARED_IDENTITY: publish the freshly-created identity to all
+                    // subscribers (Main/Identity/Settings VMs) so any open screen
+                    // showing "not initialized" immediately gets the new state.
+                    val created = ironCore?.getIdentityInfo()
+                    if (created != null && created.initialized) {
+                        cacheIdentityFields(created)
+                    }
+                    publishIdentityInfo(created)
                     // Identity is now available; bring up internet transport if it was deferred.
                     initializeAndStartSwarm()
                     updateBleIdentityBeacon()
