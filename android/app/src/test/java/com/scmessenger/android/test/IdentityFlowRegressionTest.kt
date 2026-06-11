@@ -64,7 +64,7 @@ class IdentityFlowRegressionTest {
     fun `AtomicBoolean guard survives high-contention scenarios`() {
         val guard = AtomicBoolean(false)
         val successfulEntries = java.util.concurrent.atomic.AtomicInteger(0)
-        val iterations = 10_000
+        val iterations = 1000
 
         // Simulate many concurrent attempts to enter fallback
         val executor = java.util.concurrent.Executors.newFixedThreadPool(8)

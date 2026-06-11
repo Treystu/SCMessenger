@@ -8,6 +8,7 @@
 # Source cross-platform process helpers
 
 # Python detection: prefer python3, then python, then py -3 (Windows launcher)
+# macOS port (2026-06-10): py -3 is kept as last-resort fallback only.
 detect_python() {
     if command -v python3 &>/dev/null && python3 --version &>/dev/null; then
         echo "python3"
@@ -33,21 +34,37 @@ source "$SCRIPT_DIR/scripts/quota_lib.sh"
 trap 'echo "[TRAP] Script exiting with code $? at line $LINENO"' EXIT
 
 # Reliable cross-platform process kill.
-# PowerShell Stop-Process is the ONLY method that reliably kills claude.exe on Windows.
+# macOS port (2026-06-10): walk the process tree via ps, kill children first,
+# then the parent. No PowerShell/Taskkill needed.
 force_kill_pid() {
     local pid="$1"
     [ -z "$pid" ] && return 0
-    # Precise recursive tree kill via PowerShell — ensures claude.exe children die
-    powershell.exe -NoProfile -Command "
-        function Kill-Tree([int]\$p) {
-            Get-CimInstance Win32_Process -Filter \"ParentProcessId = \$p\" | ForEach-Object { Kill-Tree \$_.ProcessId }
-            Stop-Process -Id \$p -Force -ErrorAction SilentlyContinue
-        }
-        Kill-Tree $pid
-    " 2>/dev/null || true
-    # Fallbacks
+    # Find all descendants of $pid (process tree) and kill them, then kill $pid.
+    # ps -axo pid,ppid gives us parent->child links; we recurse to find the full tree.
+    local descendants
+    descendants=$(ps -axo pid,ppid 2>/dev/null \
+        | awk -v root="$pid" '
+            function walk(p,    line) {
+                for (key in children) {
+                    split(key, arr, SUBSEP)
+                    if (arr[1] == p) {
+                        child = arr[2]
+                        if (!seen[child]++) {
+                            print child
+                            walk(child)
+                        }
+                    }
+                }
+            }
+            $1 != "" && $2 != "" { children[$2, $1] = 1 }
+            END { walk(root) }
+        ')
+    # Kill descendants in reverse order (deepest first)
+    for cpid in $descendants; do
+        kill -9 "$cpid" 2>/dev/null || true
+    done
+    # Kill the root
     kill -9 "$pid" 2>/dev/null || true
-    taskkill //F //T //PID "$pid" 2>/dev/null || true
 }
 
 STATE_FILE=".claude/orchestrator_state.json"
@@ -61,8 +78,10 @@ ORCHESTRATOR_PID_FILE=".claude/orchestrator.pid"
 # This MUST be checked BEFORE every agent launch.
 
 count_os_claude_processes() {
-    # Count actual claude.exe processes via PowerShell (Windows)
-    local count=$(powershell.exe -NoProfile -Command "@(Get-Process -Name claude -ErrorAction SilentlyContinue).Count" 2>/dev/null)
+    # macOS port (2026-06-10): count processes whose basename is "claude" (any path).
+    # pgrep -f matches against the full command line, which catches `~/.local/bin/claude`
+    # and any ollama-launched wrappers that exec claude.
+    local count=$(pgrep -f "/bin/claude|/local/bin/claude|^claude" 2>/dev/null | wc -l | tr -d ' ')
     if [ -z "$count" ] || ! [[ "$count" =~ ^[0-9]+$ ]]; then
         echo "0"
         return
@@ -128,28 +147,32 @@ store_orchestrator_pid() {
 
     local found_pid=""
 
-    # Strategy 1: Parent-chain walk via PowerShell.
-    # $PPID on Windows Git Bash may point to an MSYS2 intermediate; PowerShell
-    # can only resolve Windows-native PIDs. Validate PPID before attempting.
+    # Strategy 1: Parent-chain walk via ps.
+    # macOS port (2026-06-10): walk ppid chain up to (but not past) PID 1.
     local ppid="$PPID"
     if [ -n "$ppid" ] && [ "$ppid" != "1" ] && [ "$ppid" != "0" ]; then
-        found_pid=$(powershell.exe -NoProfile -Command "
-            \$p = Get-Process -Id $ppid -ErrorAction SilentlyContinue
-            while (\$p -and \$p.ProcessName -ne 'claude') {
-                \$parentId = \$p.ParentId
-                if (-not \$parentId -or \$parentId -eq 0 -or \$parentId -eq \$p.Id) { break }
-                \$p = Get-Process -Id \$parentId -ErrorAction SilentlyContinue
-            }
-            if (\$p -and \$p.ProcessName -eq 'claude') { Write-Output \$p.Id }
-        " 2>/dev/null | tr -d '[:space:]')
+        found_pid=$(bash -c "
+            p=$ppid
+            while [ -n \"\$p\" ] && [ \"\$p\" != \"1\" ] && [ \"\$p\" != \"0\" ]; do
+                comm=\$(ps -p \"\$p\" -o comm= 2>/dev/null)
+                if [ \"\$comm\" = \"claude\" ]; then
+                    echo \"\$p\"
+                    exit 0
+                fi
+                p=\$(ps -p \"\$p\" -o ppid= 2>/dev/null | tr -d ' ')
+            done
+            exit 1
+        " 2>/dev/null)
     fi
 
-    # Strategy 2: Oldest claude.exe (orchestrator is always the first Claude process)
+    # Strategy 2: Oldest claude (orchestrator is always the first Claude process)
     if [ -z "$found_pid" ]; then
-        found_pid=$(powershell.exe -NoProfile -Command "
-            \$procs = @(Get-Process -Name claude -ErrorAction SilentlyContinue | Sort-Object StartTime)
-            if (\$procs.Count -gt 0) { Write-Output \$procs[0].Id }
-        " 2>/dev/null | tr -d '[:space:]')
+        # On macOS, ps -o lstart= gives start time; sort and take the oldest
+        found_pid=$(ps -axo pid,comm,lstart 2>/dev/null \
+            | awk '$2 == "claude" { print $1, $5, $6, $7, $8, $9 }' \
+            | sort -k2,5 \
+            | head -1 \
+            | awk '{ print $1 }')
     fi
 
     # Strategy 3: Mark unknown — NEVER store PID 0, 1, or empty
@@ -535,9 +558,11 @@ except Exception as e:
                     echo "FRESHNESS GATE: Stale files detected. Triggering targeted re-index..."
                     echo "Files: $stale_files"
 
-                    powershell.exe -NoProfile -ExecutionPolicy Bypass \
-                        -File ".claude/scripts/targeted_reindex.ps1" \
-                        -Files "$stale_files" || true
+                    # macOS port (2026-06-10): no PowerShell reindex script available.
+                    # The freshness gate already did its check; we log and continue.
+                    # If we ever need a targeted reindex on macOS, it can be ported
+                    # to repo_map_health_check.sh (the existing bash version).
+                    echo "FRESHNESS GATE: $stale_files marked stale; skipping reindex (no macOS equivalent of targeted_reindex.ps1)"
 
                     echo "DEBUG E: reindex done"
                 fi
@@ -929,30 +954,35 @@ pool_launch_clean() {
         fi
     done
 
-    # Self-preservation: discover ALL claude.exe processes that host our infrastructure.
-    # Add the parent-chain ancestor AND the oldest claude.exe to the tracked set.
+    # Self-preservation: discover ALL claude processes that host our infrastructure.
+    # Add the parent-chain ancestor AND the oldest claude to the tracked set.
+    # macOS port (2026-06-10): use ps for parent-chain walk and oldest-by-lstart.
     local host_claude_pid=""
     local ppid="$PPID"
     if [ -n "$ppid" ] && [ "$ppid" != "1" ] && [ "$ppid" != "0" ]; then
-        host_claude_pid=$(powershell.exe -NoProfile -Command "
-            \$p = Get-Process -Id $ppid -ErrorAction SilentlyContinue
-            while (\$p -and \$p.ProcessName -ne 'claude') {
-                \$parentId = \$p.ParentId
-                if (-not \$parentId -or \$parentId -eq 0 -or \$parentId -eq \$p.Id) { break }
-                \$p = Get-Process -Id \$parentId -ErrorAction SilentlyContinue
-            }
-            if (\$p -and \$p.ProcessName -eq 'claude') { Write-Output \$p.Id }
-        " 2>/dev/null | tr -d '[:space:]')
+        host_claude_pid=$(bash -c "
+            p=$ppid
+            while [ -n \"\$p\" ] && [ \"\$p\" != \"1\" ] && [ \"\$p\" != \"0\" ]; do
+                comm=\$(ps -p \"\$p\" -o comm= 2>/dev/null)
+                if [ \"\$comm\" = \"claude\" ]; then
+                    echo \"\$p\"
+                    exit 0
+                fi
+                p=\$(ps -p \"\$p\" -o ppid= 2>/dev/null | tr -d ' ')
+            done
+            exit 1
+        " 2>/dev/null)
     fi
     if [ -n "$host_claude_pid" ]; then
         tracked_pids="$tracked_pids $host_claude_pid"
     fi
 
-    # Also add the oldest claude.exe as a safety net
-    local oldest_claude=$(powershell.exe -NoProfile -Command "
-        \$procs = @(Get-Process -Name claude -ErrorAction SilentlyContinue | Sort-Object StartTime)
-        if (\$procs.Count -gt 0) { Write-Output \$procs[0].Id }
-    " 2>/dev/null | tr -d '[:space:]')
+    # Also add the oldest claude as a safety net
+    local oldest_claude=$(ps -axo pid,comm,lstart 2>/dev/null \
+        | awk '$2 == "claude" { print $1, $5, $6, $7, $8, $9 }' \
+        | sort -k2,5 \
+        | head -1 \
+        | awk '{ print $1 }')
     if [ -n "$oldest_claude" ]; then
         tracked_pids="$tracked_pids $oldest_claude"
     fi
@@ -962,27 +992,30 @@ pool_launch_clean() {
     if [ "$orch_pid" = "unknown" ] || [ -z "$orch_pid" ]; then
         echo "HYGIENE: Orchestrator PID unknown — skipping untracked-process cleanup (safety first)."
     else
-        local untracked=$(powershell.exe -NoProfile -Command "
-            \$tracked = @($(echo "$tracked_pids" | tr ' ' ',' | sed 's/^,//' | sed 's/,$//'))
-            Get-Process -Name claude -ErrorAction SilentlyContinue | Where-Object {
-                \$tracked -notcontains \$_.Id
-            } | ForEach-Object { Write-Output \$_.Id }
-        " 2>/dev/null)
+        # Build a list of tracked PIDs (space-separated ints) and a regex alternation
+        local tracked_regex
+        tracked_regex=$(echo "$tracked_pids" | tr ' ' '|' | sed 's/^|//; s/|$//')
+        local untracked
+        if [ -n "$tracked_regex" ]; then
+            untracked=$(ps -axo pid,comm 2>/dev/null \
+                | awk -v re="^($tracked_regex)$" '$2 == "claude" && $1 !~ re { print $1 }')
+        else
+            untracked=$(ps -axo pid,comm 2>/dev/null | awk '$2 == "claude" { print $1 }')
+        fi
 
         if [ -n "$untracked" ]; then
-            echo "HYGIENE: Untracked claude.exe processes: $untracked"
+            echo "HYGIENE: Untracked claude processes: $untracked"
             for pid in $untracked; do
                 # FINAL SAFETY CHECK: never kill a PID that is in our tracked set
                 if echo "$tracked_pids" | grep -qw "$pid"; then
                     echo "HYGIENE: SKIPPING PID $pid (in tracked set — safety guard tripped)"
                     continue
                 fi
-                echo "HYGIENE: Terminating stale claude.exe PID $pid"
-                kill -9 $pid 2>/dev/null || true
-                taskkill //F //T //PID $pid 2>/dev/null || true
+                echo "HYGIENE: Terminating stale claude PID $pid"
+                force_kill_pid "$pid"
             done
         else
-            echo "HYGIENE: No untracked claude.exe processes"
+            echo "HYGIENE: No untracked claude processes"
         fi
     fi
 
@@ -1225,8 +1258,7 @@ pool_patrol() {
                         local pid=$(cat "$pid_file")
                         if process_alive "$pid" && process_is_claude "$pid"; then
                             echo "PATROL: Agent $agent_id process $pid still alive — terminating zombie"
-                            kill -9 "$pid" 2>/dev/null || true
-                            taskkill //F //T //PID "$pid" 2>/dev/null || true
+                            force_kill_pid "$pid"
                         fi
                     fi
                     # Write completion marker on behalf of the agent

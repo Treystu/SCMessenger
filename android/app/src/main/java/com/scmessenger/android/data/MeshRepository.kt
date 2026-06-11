@@ -298,6 +298,15 @@ open class MeshRepository(private val context: Context) {
     // Swarm Bridge (Internet/Libp2p)
     @Volatile private var swarmBridge: uniffi.api.SwarmBridge? = null
 
+    // P0_ANDROID_024: Serializes identity creation to prevent the concurrent
+    // initializeIdentity() race observed in production logs (4 threads in 12ms).
+    // Pairs with the _isCreating gate in IdentityViewModel.
+    private val identityCreationMutex = kotlinx.coroutines.sync.Mutex()
+
+    // P0: Latch ensureLocalIdentityFederation's persistIdentityBackup to once per process
+    // lifecycle. The lazy path was triggering 10+ redundant backup writes in 30s.
+    private val identityBackupLatch = java.util.concurrent.atomic.AtomicBoolean(false)
+
     // Wifi Transport
     @Volatile private var wifiTransportManager: com.scmessenger.android.transport.WifiTransportManager? = null
 
@@ -314,6 +323,31 @@ open class MeshRepository(private val context: Context) {
     private val _serviceState = MutableStateFlow(uniffi.api.ServiceState.STOPPED)
     open val serviceState: StateFlow<uniffi.api.ServiceState> = _serviceState.asStateFlow()
 
+    // P0_SHARED_IDENTITY: Centralized identity StateFlow. All ViewModels (Main,
+    // Identity, Settings, MeshService, Dashboard) should observe this single
+    // source of truth instead of maintaining independent _identityInfo flows.
+    // Publishing happens at every read/mutation point via publishIdentityInfo().
+    // Replay = 1 so a late subscriber immediately sees the current value (this
+    // eliminates the "first load returns null then re-fires" race in any VM
+    // constructed after the identity was already hydrated).
+    private val _identityInfo = MutableStateFlow<uniffi.api.IdentityInfo?>(null)
+    open val identityInfo: StateFlow<uniffi.api.IdentityInfo?> = _identityInfo.asStateFlow()
+
+    // P0_SHARED_IDENTITY: Publish identity changes to all subscribers. Called
+    // from every code path that reads or mutates identity (getIdentityInfo,
+    // getIdentityInfoNonBlocking, setNickname, createIdentity,
+    // restoreIdentityFromBackup). Equality-checked so we don't churn downstream
+    // collectors on structurally-equal updates (e.g., the Rust core re-emitting
+    // the same IdentityInfo after a nickname set).
+    private fun publishIdentityInfo(info: uniffi.api.IdentityInfo?) {
+        if (_identityInfo.value != info) {
+            if (info != null && info.initialized) {
+                cacheIdentityFields(info)
+            }
+            _identityInfo.value = info
+        }
+    }
+
     // Service stats
     private val _serviceStats = MutableStateFlow<uniffi.api.ServiceStats?>(null)
     open val serviceStats: StateFlow<uniffi.api.ServiceStats?> = _serviceStats.asStateFlow()
@@ -323,7 +357,7 @@ open class MeshRepository(private val context: Context) {
     open val messageUpdates = _messageUpdates.asSharedFlow()
 
     // Compatibility for notifications (incoming only)
-    val incomingMessages = messageUpdates.filter { it.direction == uniffi.api.MessageDirection.RECEIVED }
+    open val incomingMessages = messageUpdates.filter { it.direction == uniffi.api.MessageDirection.RECEIVED }
 
     private val repoScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO + kotlinx.coroutines.SupervisorJob())
     private var pendingOutboxRetryJob: kotlinx.coroutines.Job? = null
@@ -461,7 +495,7 @@ open class MeshRepository(private val context: Context) {
 
     // Track discovered peers (both headless and full)
     private val _discoveredPeers = MutableStateFlow<Map<String, PeerDiscoveryInfo>>(emptyMap())
-    val discoveredPeers: StateFlow<Map<String, PeerDiscoveryInfo>> = _discoveredPeers.asStateFlow()
+    open val discoveredPeers: StateFlow<Map<String, PeerDiscoveryInfo>> = _discoveredPeers.asStateFlow()
 
     data class PeerDiscoveryInfo(
         val peerId: String,          // Key (libp2p or canonical)
@@ -684,7 +718,7 @@ open class MeshRepository(private val context: Context) {
     /**
      * Safely increment the attempt count for a message with proper synchronization.
      */
-    suspend fun incrementAttemptCount(messageId: String) {
+    open suspend fun incrementAttemptCount(messageId: String) {
         retryLock.withLock {
             val tracking = getMessageIdTracking(messageId)
             tracking.recordFailure(null)
@@ -821,13 +855,20 @@ open class MeshRepository(private val context: Context) {
             // This will be used to enable/disable transports when settings change
             transportManager = TransportManager(
                 context = context,
-                onPeerDiscovered = { peerId, transport ->
+                onPeerDiscovered = { peerId, _ ->
                     // TransportManager peers are handled by MeshService via onPeerDiscovered
                     meshService?.onPeerDiscovered(peerId)
                 },
-                onDataReceived = { peerId, data, transport ->
+                onDataReceived = { peerId, data, _ ->
                     // TransportManager data is handled by MeshService via onDataReceived
                     meshService?.onDataReceived(peerId, data)
+                },
+                // P1 (Bug 5): forward mDNS peer-loss to MeshService so the dedup/
+                // prune/emit pipeline in onPeerDisconnected runs for mDNS-only
+                // peers. Without this, mDNS-discovered peers stayed marked as
+                // "connected" forever in the UI/connection state.
+                onPeerDisconnected = { peerId, _ ->
+                    meshService?.onPeerDisconnected(peerId)
                 },
                 onLanAddressResolved = { multiaddr ->
                     repoScope.launch {
@@ -2994,7 +3035,16 @@ open class MeshRepository(private val context: Context) {
             // P0: Cache identity fields for instant UI load on next startup
             cacheIdentityFields(info)
             if (nickname.isNotEmpty()) {
-                persistIdentityBackup(core)
+                // P2 (Bug 4): Latch the lazy-path persistIdentityBackup so a flurry of
+                // post-startup ensureLocalIdentityFederation() calls (each touching
+                // SharedPreferences and writing the sentinel file) collapses to one.
+                // The explicit createIdentity() path is unchanged and still writes
+                // immediately. compareAndSet returns true exactly once per process.
+                if (identityBackupLatch.compareAndSet(false, true)) {
+                    persistIdentityBackup(core)
+                } else {
+                    Timber.d("ensureLocalIdentityFederation: backup already persisted this process; skipping")
+                }
             }
         } catch (e: Exception) {
             Timber.w("Failed to ensure local identity federation: ${e.message}")
@@ -3009,6 +3059,12 @@ open class MeshRepository(private val context: Context) {
         return try {
             core.importIdentityBackup(backup, "")
             Timber.i("Restored identity from Android backup payload")
+            // P0_SHARED_IDENTITY: publish restored identity to all subscribers
+            val restored = core.getIdentityInfo()
+            if (restored != null && restored.initialized) {
+                cacheIdentityFields(restored)
+            }
+            publishIdentityInfo(restored)
             true
         } catch (e: Exception) {
             Timber.w("Identity backup restore failed; fallback to new identity: ${e.message}")
@@ -3024,6 +3080,12 @@ open class MeshRepository(private val context: Context) {
         }
         core.importIdentityBackup(backup, "")
         Timber.i("Restored identity from manually pasted backup payload")
+        // P0_SHARED_IDENTITY: publish the restored identity to all subscribers
+        val restored = core.getIdentityInfo()
+        if (restored != null && restored.initialized) {
+            cacheIdentityFields(restored)
+        }
+        publishIdentityInfo(restored)
     }
 
     private fun persistIdentityBackup(core: uniffi.api.IronCore?, customSalt: ByteArray? = null) {
@@ -3801,6 +3863,8 @@ open class MeshRepository(private val context: Context) {
             if (info != null && info.initialized) {
                 cacheIdentityFields(info)
             }
+            // P0_SHARED_IDENTITY: publish to all subscribers (Main/Identity/Settings VMs)
+            publishIdentityInfo(info)
             return info
         }
         // P0: Fall back to cached identity fields when Rust core isn't ready yet.
@@ -3808,6 +3872,8 @@ open class MeshRepository(private val context: Context) {
         val cached = readCachedIdentityFields()
         if (cached != null) {
             Timber.d("getIdentityInfoNonBlocking: using cached identity (core not ready)")
+            // P0_SHARED_IDENTITY: also publish cached identity so subscribers see it
+            publishIdentityInfo(cached)
             return cached
         }
         // Last resort: only return null if there's truly no core available and no cache.
@@ -3834,6 +3900,8 @@ open class MeshRepository(private val context: Context) {
         if (result != null && result.initialized) {
             cacheIdentityFields(result)
         }
+        // P0_SHARED_IDENTITY: publish to all subscribers
+        publishIdentityInfo(result)
         return result
     }
 
@@ -3863,6 +3931,8 @@ open class MeshRepository(private val context: Context) {
             if (info != null && info.initialized) {
                 cacheIdentityFields(info)
             }
+            // P0_SHARED_IDENTITY: publish to all subscribers (Main/Identity/Settings VMs)
+            publishIdentityInfo(info)
         } catch (e: Exception) {
             Timber.e(e, "Rust core failed to set nickname")
             return
@@ -3954,7 +4024,7 @@ open class MeshRepository(private val context: Context) {
         }
     }
 
-    suspend fun sendMessage(peerId: String, content: String) {
+    open suspend fun sendMessage(peerId: String, content: String) {
         kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
             val routingPeerId = PeerIdValidator.normalize(peerId)
             val initialMessageId = java.util.UUID.randomUUID().toString()
@@ -4257,7 +4327,7 @@ open class MeshRepository(private val context: Context) {
         }
     }
 
-    suspend fun dial(multiaddr: String) {
+    open suspend fun dial(multiaddr: String) {
         kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
             try {
                 // Attempt Swarm Dial
@@ -4270,7 +4340,7 @@ open class MeshRepository(private val context: Context) {
         }
     }
 
-    suspend fun dialPeer(multiaddr: String) = dial(multiaddr)
+    open suspend fun dialPeer(multiaddr: String) = dial(multiaddr)
 
     // Identity Management
     /**
@@ -4370,28 +4440,52 @@ open class MeshRepository(private val context: Context) {
         }
     }
 
-    suspend fun createIdentity(customSalt: ByteArray? = null) {
-        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-            try {
-                if (!ensureServiceInitialized() || ironCore == null) {
-                    Timber.e("IronCore is null after ensureServiceInitialized! Cannot create identity.")
-                    return@withContext
+    open suspend fun createIdentity(customSalt: ByteArray? = null) {
+        // P0_ANDROID_024: Serialize concurrent createIdentity() calls. Log evidence
+        // showed 4 threads invoking initializeIdentity() within 12ms; the second
+        // through Nth callers would race on sled writes and could produce a half-
+        // initialized identity. The mutex also makes the early-return pre-check
+        // safe against TOCTOU between "check initialized" and "call initialize".
+        identityCreationMutex.withLock {
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                try {
+                    if (!ensureServiceInitialized() || ironCore == null) {
+                        Timber.e("IronCore is null after ensureServiceInitialized! Cannot create identity.")
+                        return@withContext
+                    }
+                    // P0_ANDROID_024 (Bug 3): Skip if identity is already initialized.
+                    // Multiple UI surfaces (Onboarding, Settings) and onRuntimePermissionsGranted
+                    // can each trigger createIdentity(); without this guard we'd clobber the
+                    // existing identity with a fresh one on every entry point.
+                    val current = ironCore?.getIdentityInfo()
+                    if (current?.initialized == true) {
+                        Timber.d("createIdentity: identity already initialized (id=${current.identityId?.take(8)}); skipping")
+                        return@withContext
+                    }
+                    // P0_ANDROID_010: Grant consent before identity initialization.
+                    // The Rust core requires consent_granted=true for initialize_identity().
+                    // OnboardingScreen's consent checkbox gates the UI; this propagates consent to the core.
+                    ironCore?.grantConsent()
+                    Timber.d("Calling ironCore.initializeIdentity()...")
+                    ironCore?.initializeIdentity()
+                    ensureLocalIdentityFederation()
+                    persistIdentityBackup(ironCore, customSalt)
+                    Timber.i("Identity created successfully")
+                    // P0_SHARED_IDENTITY: publish the freshly-created identity to all
+                    // subscribers (Main/Identity/Settings VMs) so any open screen
+                    // showing "not initialized" immediately gets the new state.
+                    val created = ironCore?.getIdentityInfo()
+                    if (created != null && created.initialized) {
+                        cacheIdentityFields(created)
+                    }
+                    publishIdentityInfo(created)
+                    // Identity is now available; bring up internet transport if it was deferred.
+                    initializeAndStartSwarm()
+                    updateBleIdentityBeacon()
+                } catch (e: Exception) {
+                    Timber.e(e, "Failed to create identity")
+                    throw e
                 }
-                // P0_ANDROID_010: Grant consent before identity initialization.
-                // The Rust core requires consent_granted=true for initialize_identity().
-                // OnboardingScreen's consent checkbox gates the UI; this propagates consent to the core.
-                ironCore?.grantConsent()
-                Timber.d("Calling ironCore.initializeIdentity()...")
-                ironCore?.initializeIdentity()
-                ensureLocalIdentityFederation()
-                persistIdentityBackup(ironCore, customSalt)
-                Timber.i("Identity created successfully")
-                // Identity is now available; bring up internet transport if it was deferred.
-                initializeAndStartSwarm()
-                updateBleIdentityBeacon()
-            } catch (e: Exception) {
-                Timber.e(e, "Failed to create identity")
-                throw e
             }
         }
     }
@@ -8112,7 +8206,7 @@ open class MeshRepository(private val context: Context) {
     /** Extract port number from a libp2p multiaddr string. */
     private fun extractPortFromMultiaddr(multiaddr: String): Int? {
         // e.g. "/ip4/34.135.34.73/tcp/9001/p2p/..." → 9001
-        // e.g. "/dns4/bootstrap.scmessenger.net/tcp/443/ws/p2p/..." → 443
+        // e.g. "/dns4/bootstrap.example.com/tcp/443/ws/p2p/..." → 443
         val portRegex = Regex("""/tcp/(\d+)""").find(multiaddr)
             ?: Regex("""/udp/(\d+)""").find(multiaddr)
         return portRegex?.groupValues?.get(1)?.toIntOrNull()

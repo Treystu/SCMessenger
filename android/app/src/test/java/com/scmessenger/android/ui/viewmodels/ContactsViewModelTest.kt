@@ -40,6 +40,7 @@ class ContactsViewModelTest {
         every { mockMeshRepository.serviceState } returns MutableStateFlow(
             uniffi.api.ServiceState.STOPPED
         )
+        every { mockMeshRepository.discoveredPeers } returns MutableStateFlow(emptyMap())
         every { mockMeshRepository.listContacts() } returns emptyList()
         every { mockMeshRepository.getContact(any<String>()) } returns null
         every { mockMeshRepository.isBootstrapRelayPeer(any<String>()) } returns false

@@ -16,6 +16,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
@@ -24,9 +26,9 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.google.mlkit.vision.barcode.common.Barcode
 import com.google.mlkit.vision.codescanner.GmsBarcodeScannerOptions
 import com.google.mlkit.vision.codescanner.GmsBarcodeScanning
-import androidx.compose.ui.res.stringResource
 import com.scmessenger.android.R
 import com.scmessenger.android.ui.viewmodels.MainViewModel
+import com.scmessenger.android.ui.identity.IdentityCreationFlow
 import timber.log.Timber
 
 @OptIn(com.google.accompanist.permissions.ExperimentalPermissionsApi::class)
@@ -64,12 +66,16 @@ fun OnboardingScreen(
     val onboardingCompleted by viewModel.onboardingCompleted.collectAsState()
     val isCreating by viewModel.isCreatingIdentity.collectAsState()
     val identityError by viewModel.identityError.collectAsState()
+    // P0_ANDROID_IDENTITY_PROGRESS: subscribe to the high-level progress stage so
+    // the onboarding flow shows the user exactly which step of the cryptographic
+    // pipeline is running, with a percent-complete bar + ETA. Without this, the
+    // user sees a tiny spinner + "Generating Identity keys..." for 3-5 seconds
+    // with no indication of progress, which feels like a hang.
+    val identityProgressStage by viewModel.identityProgressStage.collectAsState()
     var showImportDialog by remember { mutableStateOf(false) }
     var importCode by remember { mutableStateOf("") }
-    var nickname by remember { mutableStateOf("") }
     var hasAcceptedConsent by remember { mutableStateOf(false) }
     var consentChecked by remember { mutableStateOf(false) }
-    var touchEntropySalt by remember { mutableStateOf<ByteArray?>(null) }
 
     LaunchedEffect(isReady) {
         if (isReady) {
@@ -132,7 +138,8 @@ fun OnboardingScreen(
             Text(
                 text = "Welcome to SCMessenger",
                 style = MaterialTheme.typography.headlineMedium,
-                textAlign = TextAlign.Center
+                textAlign = TextAlign.Center,
+                modifier = Modifier.testTag("onboarding_welcome_title")
             )
 
             Spacer(modifier = Modifier.height(16.dp))
@@ -190,7 +197,8 @@ fun OnboardingScreen(
                         ) {
                             Checkbox(
                                 checked = consentChecked,
-                                onCheckedChange = { consentChecked = it }
+                                onCheckedChange = { consentChecked = it },
+                                modifier = Modifier.testTag("consent_checkbox")
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
@@ -205,7 +213,9 @@ fun OnboardingScreen(
                                 viewModel.grantConsent()
                             },
                             enabled = consentChecked,
-                            modifier = Modifier.fillMaxWidth()
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("onboarding_continue_button")
                         ) {
                             Text(stringResource(R.string.onboarding_action_continue))
                         }
@@ -213,101 +223,73 @@ fun OnboardingScreen(
                 }
             } else {
 
-                if (isCreating) {
-                    CircularProgressIndicator()
+                IdentityCreationFlow(
+                    isCreating = isCreating,
+                    onCreate = { nickname, salt ->
+                        viewModel.createIdentity(nickname, salt)
+                    },
+                    onImport = {
+                        importCode = ""
+                        viewModel.clearImportState()
+                        showImportDialog = true
+                    },
+                    showImportButton = true,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .imePadding()
+                )
+
+                // P0_ANDROID_IDENTITY_PROGRESS: full 6-stage proof-of-work display
+                // so the user sees real progress feedback (step counter, percent
+                // bar, ETA, per-stage list) during the 3-5 second Ed25519 keygen.
+                // The previous tiny spinner + "Generating Identity keys..." text
+                // gave no progress indication, which felt like a hang. The display
+                // is gated on `!is Idle` so it only appears while creation is
+                // actively running.
+                if (isCreating &&
+                    identityProgressStage !is com.scmessenger.android.ui.viewmodels.IdentityProgressStage.Idle) {
                     Spacer(modifier = Modifier.height(16.dp))
-                    Text(stringResource(R.string.onboarding_generating_keys))
-                } else {
-                    val focusManager = LocalFocusManager.current
-                    
-                    OutlinedTextField(
-                        value = nickname,
-                        onValueChange = { 
-                            nickname = it 
-                            touchEntropySalt = null // Reset salt when nickname changes
-                        },
-                        label = { Text(stringResource(R.string.onboarding_label_nickname)) },
-                        placeholder = { Text(stringResource(R.string.onboarding_placeholder_nickname)) },
-                        singleLine = true,
-                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                        keyboardActions = KeyboardActions(
-                            onDone = { focusManager.clearFocus() }
-                        ),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .imePadding()
+                    com.scmessenger.android.ui.identity.IdentityProgressDisplay(
+                        currentStage = identityProgressStage,
+                        modifier = Modifier.fillMaxWidth()
                     )
+                }
 
-                    if (nickname.trim().isNotEmpty()) {
-                        Spacer(modifier = Modifier.height(16.dp))
-                        com.scmessenger.android.ui.components.EntropyCanvas(
-                            onEntropyComplete = { salt ->
-                                touchEntropySalt = salt
-                            }
-                        )
-                    }
+                Spacer(modifier = Modifier.height(8.dp))
 
-                    Spacer(modifier = Modifier.height(12.dp))
+                OutlinedButton(
+                    onClick = { viewModel.skipOnboardingForRelayOnlyInstall() },
+                    enabled = !isCreating,
+                    modifier = Modifier.fillMaxWidth().height(56.dp)
+                ) {
+                    Text("Skip for Relay-Only Install")
+                }
 
-                    Button(
-                        onClick = {
-                            viewModel.clearIdentityError()
-                            viewModel.createIdentity(nickname, touchEntropySalt)
-                        },
-                        enabled = nickname.trim().isNotEmpty() && touchEntropySalt != null,
-                        modifier = Modifier.fillMaxWidth().height(56.dp)
-                    ) {
-                        Text("Generate Identity")
-                    }
-
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    OutlinedButton(
-                        onClick = { viewModel.skipOnboardingForRelayOnlyInstall() },
-                        modifier = Modifier.fillMaxWidth().height(56.dp)
-                    ) {
-                        Text("Skip for Relay-Only Install")
-                    }
-
-                    identityError?.let { error ->
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = error,
-                            style = MaterialTheme.typography.bodySmall,
-                            textAlign = TextAlign.Center,
-                            color = MaterialTheme.colorScheme.error
-                        )
-                    }
-
+                identityError?.let { error ->
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        text = "You can create an identity later from Settings > Identity without reinstalling.",
+                        text = error,
                         style = MaterialTheme.typography.bodySmall,
                         textAlign = TextAlign.Center,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = MaterialTheme.colorScheme.error
                     )
+                }
 
-                    if (!permissionsState.allPermissionsGranted) {
-                        Spacer(modifier = Modifier.height(12.dp))
-                        OutlinedButton(
-                            onClick = { permissionsState.launchMultiplePermissionRequest() },
-                            modifier = Modifier.fillMaxWidth().height(52.dp)
-                        ) {
-                            Text(stringResource(R.string.onboarding_action_grant_permissions))
-                        }
-                    }
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "You can create an identity later from Settings > Identity without reinstalling.",
+                    style = MaterialTheme.typography.bodySmall,
+                    textAlign = TextAlign.Center,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
 
-                    Spacer(modifier = Modifier.height(16.dp))
-
+                if (!permissionsState.allPermissionsGranted) {
+                    Spacer(modifier = Modifier.height(12.dp))
                     OutlinedButton(
-                        onClick = {
-                            importCode = ""
-                            viewModel.clearImportState()
-                            showImportDialog = true
-                        },
-                        modifier = Modifier.fillMaxWidth().height(56.dp)
+                        onClick = { permissionsState.launchMultiplePermissionRequest() },
+                        modifier = Modifier.fillMaxWidth().height(52.dp)
                     ) {
-                        Text(stringResource(R.string.onboarding_button_import_join))
+                        Text(stringResource(R.string.onboarding_action_grant_permissions))
                     }
                 }
             } // end consent else

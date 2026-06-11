@@ -56,6 +56,10 @@ class ContactsViewModelTest {
         val serviceStateFlow = kotlinx.coroutines.flow.MutableStateFlow(uniffi.api.ServiceState.STOPPED)
         every { repository.serviceState } returns serviceStateFlow
 
+        // Setup discoveredPeers flow to avoid NPE in addContact
+        val discoveredPeersFlow = kotlinx.coroutines.flow.MutableStateFlow<Map<String, MeshRepository.PeerDiscoveryInfo>>(emptyMap())
+        every { repository.discoveredPeers } returns discoveredPeersFlow
+
         every { repository.listContacts() } returns listOf(
             contact("peer-alice", "Alice"),
             contact("peer-bob", "Bob")

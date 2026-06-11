@@ -166,25 +166,35 @@ fun MeshNavHost(
     ) {
         if (hasIdentity) {
             composable(Screen.Conversations.route) {
-                ConversationsScreen(
-                    onNavigateToChat = { peerId ->
-                        navController.navigate("chat/$peerId")
-                    }
-                )
+                // P0_LAYOUT_FIX: apply bottomPadding so the bottom NavigationBar
+                // (rendered by the outer Scaffold) doesn't overlap the last
+                // message row. Previously only SettingsScreen got this padding,
+                // so Contacts/Conversations were partially covered by the navbar.
+                Box(modifier = Modifier.padding(bottomPadding)) {
+                    ConversationsScreen(
+                        onNavigateToChat = { peerId ->
+                            navController.navigate("chat/$peerId")
+                        }
+                    )
+                }
             }
 
             composable(Screen.Contacts.route) {
-                ContactsScreen(
-                    onNavigateToChat = { peerId ->
-                        navController.navigate("chat/$peerId")
-                    },
-                    onNavigateToAddContact = {
-                        navController.navigate(Screen.AddContact.route)
-                    },
-                    onNavigateToContactDetail = { contactId ->
-                        navController.navigate("contact/$contactId")
-                    }
-                )
+                // P0_LAYOUT_FIX: see ConversationsScreen comment. Without this
+                // the search bar and last list row were covered by the navbar.
+                Box(modifier = Modifier.padding(bottomPadding)) {
+                    ContactsScreen(
+                        onNavigateToChat = { peerId ->
+                            navController.navigate("chat/$peerId")
+                        },
+                        onNavigateToAddContact = {
+                            navController.navigate(Screen.AddContact.route)
+                        },
+                        onNavigateToContactDetail = { contactId ->
+                            navController.navigate("contact/$contactId")
+                        }
+                    )
+                }
             }
 
             composable(
@@ -192,13 +202,17 @@ fun MeshNavHost(
                 arguments = listOf(androidx.navigation.navArgument("contactId") { type = androidx.navigation.NavType.StringType })
             ) { backStackEntry ->
                 val contactId = backStackEntry.arguments?.getString("contactId") ?: return@composable
-                ContactDetailScreen(
-                    contactId = contactId,
-                    onNavigateBack = { navController.popBackStack() },
-                    onNavigateToChat = { peerId ->
-                        navController.navigate("chat/$peerId")
-                    }
-                )
+                // P0_LAYOUT_FIX: contact detail is pushed via the bottom nav so it
+                // also needs the bottom padding.
+                Box(modifier = Modifier.padding(bottomPadding)) {
+                    ContactDetailScreen(
+                        contactId = contactId,
+                        onNavigateBack = { navController.popBackStack() },
+                        onNavigateToChat = { peerId ->
+                            navController.navigate("chat/$peerId")
+                        }
+                    )
+                }
             }
 
             composable(Screen.AddContact.route) {
@@ -215,14 +229,17 @@ fun MeshNavHost(
         }
 
         composable(Screen.Dashboard.route) {
-            DashboardScreen(
-                onNavigateToPeerList = {
-                    navController.navigate("peer_list")
-                },
-                onNavigateToTopology = {
-                    navController.navigate("topology")
-                }
-            )
+            // P0_LAYOUT_FIX: Dashboard is on the bottom nav, so apply padding.
+            Box(modifier = Modifier.padding(bottomPadding)) {
+                DashboardScreen(
+                    onNavigateToPeerList = {
+                        navController.navigate("peer_list")
+                    },
+                    onNavigateToTopology = {
+                        navController.navigate("topology")
+                    }
+                )
+            }
         }
 
         composable(

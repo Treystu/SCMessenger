@@ -2,6 +2,10 @@
 
 **You are a subagent or Claude Code session picking up SCMessenger work.**
 
+## Role & Protocol
+
+**Read `CLAUDE_CODE_PROTOCOL.md` after the orchestration index.** It defines your role, what you may/may not do, build commands, and the OODA discipline. This is the Overseer role anchor — do not skip.
+
 The full state of this project, the work that's been done today, the work that
 remains, and the exact build commands to use are all in:
 

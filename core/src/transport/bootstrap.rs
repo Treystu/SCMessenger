@@ -28,15 +28,11 @@ use web_time::{Duration, SystemTime};
 pub const CORE_BOOTSTRAP_NODES: &[&str] = &[
     // TCP on non-standard port (may be blocked by carriers)
     "/ip4/34.135.34.73/tcp/9001",
-    "/dns4/bootstrap.scmessenger.net/tcp/9001",
+    "/ip4/34.135.34.74/tcp/9001",
     // WebSocket fallback on standard HTTP ports (cellular-friendly)
-    "/dns4/bootstrap.scmessenger.net/tcp/443/ws",
-    "/dns4/bootstrap.scmessenger.net/tcp/80/ws",
-    // Additional backup WebSocket endpoints
     "/ip4/34.135.34.73/tcp/443/ws",
-    "/dns4/backup1.scmessenger.net/tcp/443/ws",
-    "/dns4/backup2.scmessenger.net/tcp/80/ws",
-    "/dns4/backup3.scmessenger.net/tcp/443/ws",
+    "/ip4/104.28.216.43/tcp/443/ws",
+    "/ip4/34.135.34.74/tcp/443/ws",
 ];
 
 /// Configuration for bootstrap recovery
@@ -523,21 +519,8 @@ fn resolve_env_bootstrap_nodes() -> Vec<Multiaddr> {
 /// DNS-based bootstrap node discovery
 /// Attempts to resolve bootstrap nodes via SRV records and A records
 fn discover_dns_bootstrap() -> Result<Vec<Multiaddr>, String> {
-    let mut addrs = Vec::new();
-
-    // Try well-known bootstrap domain
-    let known_hosts = ["bootstrap.scmessenger.net", "relay.scmessenger.net"];
-
-    for host in &known_hosts {
-        // Try common ports
-        for port in [9001, 4001] {
-            if let Ok(addr) = format!("/dns4/{}/tcp/{}", host, port).parse() {
-                addrs.push(addr);
-            }
-        }
-    }
-
-    Ok(addrs)
+    // DNS discovery is disabled in sovereign mode since no centralized domain exists.
+    Ok(Vec::new())
 }
 
 /// Local network peer discovery
@@ -559,25 +542,7 @@ fn discover_local_peers() -> Result<Vec<Multiaddr>, String> {
 fn discover_websocket_bootstrap() -> Vec<Multiaddr> {
     let mut addrs = Vec::new();
 
-    // Known relay hosts with WebSocket support on standard ports
-    let ws_hosts = [
-        ("bootstrap.scmessenger.net", 443u16),
-        ("bootstrap.scmessenger.net", 80u16),
-        ("relay.scmessenger.net", 443u16),
-        // Additional backup WebSocket endpoints
-        ("backup1.scmessenger.net", 443u16),
-        ("backup2.scmessenger.net", 80u16),
-        ("backup3.scmessenger.net", 443u16),
-    ];
-
-    for (host, port) in &ws_hosts {
-        // /dns4/{host}/tcp/{port}/ws — WebSocket on standard port
-        if let Ok(addr) = format!("/dns4/{}/tcp/{}/ws", host, port).parse() {
-            addrs.push(addr);
-        }
-    }
-
-    // Also add direct IP fallback for GCP relay and backup relays
+    // Direct IP fallback for GCP relay and backup relays
     let ip_ws_addrs = [
         "/ip4/34.135.34.73/tcp/443/ws",
         "/ip4/104.28.216.43/tcp/443/ws",
@@ -600,18 +565,11 @@ fn discover_websocket_bootstrap() -> Vec<Multiaddr> {
 fn discover_hardcoded_backup_relays() -> Vec<Multiaddr> {
     let mut addrs = Vec::new();
 
-    // Hardcoded backup relay addresses for emergency fallback
+    // Hardcoded backup relay addresses for emergency fallback (raw IP direct routing)
     let backup_nodes = [
-        // Primary backup relay - WebSocket on standard ports
-        "/dns4/backup1.scmessenger.net/tcp/443/ws/p2p/12D3KooWBackup1RelayNode0000000000000000000000000000",
-        "/dns4/backup1.scmessenger.net/tcp/80/ws/p2p/12D3KooWBackup1RelayNode0000000000000000000000000000",
-
         // Secondary backup relay - Direct TCP/QUIC
         "/ip4/34.135.34.74/tcp/9001/p2p/12D3KooWBackup2RelayNode0000000000000000000000000000",
         "/ip4/34.135.34.74/udp/9001/quic-v1/p2p/12D3KooWBackup2RelayNode0000000000000000000000000000",
-
-        // Tertiary backup relay - Alternative provider
-        "/dns4/backup3.scmessenger.org/tcp/443/ws/p2p/12D3KooWBackup3RelayNode0000000000000000000000000000",
     ];
 
     for node in backup_nodes.iter() {
@@ -696,10 +654,7 @@ mod tests {
     #[test]
     fn test_dns_discovery() {
         let addrs = discover_dns_bootstrap().unwrap();
-        assert!(!addrs.is_empty());
-        assert!(addrs
-            .iter()
-            .any(|a| a.to_string().contains("bootstrap.scmessenger.net")));
+        assert!(addrs.is_empty(), "DNS bootstrap discovery should be empty in sovereign mode");
     }
 
     #[test]

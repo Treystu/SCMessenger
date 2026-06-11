@@ -17,7 +17,7 @@ import javax.inject.Singleton
  * probe results from the bootstrap fallback system.
  */
 @Singleton
-class DiagnosticsReporter @Inject constructor(
+open class DiagnosticsReporter @Inject constructor(
     @ApplicationContext private val context: Context,
     private val networkDiagnostics: NetworkDiagnostics,
     private val networkTypeDetector: NetworkTypeDetector,
@@ -46,7 +46,7 @@ class DiagnosticsReporter @Inject constructor(
         val portProbeResults: Map<String, Boolean>
     )
 
-    suspend fun generateReport(): NetworkDiagnosticsReport {
+    open suspend fun generateReport(): NetworkDiagnosticsReport {
         val testResults = networkDiagnostics.testNetworkConnectivity()
         val networkType = networkTypeDetector.detectNetworkType()
         val failureSummary = failureMetrics.getSummary()

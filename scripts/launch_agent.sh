@@ -10,22 +10,34 @@ source "$SCRIPT_DIR/../.claude/scripts/process_alive.sh"
 source "$SCRIPT_DIR/../.claude/scripts/quota_lib.sh"
 
 # Reliable cross-platform process kill.
-# PowerShell Stop-Process is the ONLY method that reliably kills claude.exe on Windows.
-# Unix kill and taskkill are kept as belt-and-suspenders fallbacks.
+# macOS port (2026-06-10): walk the process tree via ps, kill children first,
+# then the parent. No PowerShell/Taskkill needed.
 force_kill_pid() {
     local pid="$1"
     [ -z "$pid" ] && return 0
-    # Precise recursive tree kill via PowerShell — ensures claude.exe children die
-    powershell.exe -NoProfile -Command "
-        function Kill-Tree([int]\$p) {
-            Get-CimInstance Win32_Process -Filter \"ParentProcessId = \$p\" | ForEach-Object { Kill-Tree \$_.ProcessId }
-            Stop-Process -Id \$p -Force -ErrorAction SilentlyContinue
-        }
-        Kill-Tree $pid
-    " 2>/dev/null || true
-    # Fallbacks
+    # Find all descendants of $pid (process tree) and kill them, then kill $pid.
+    local descendants
+    descendants=$(ps -axo pid,ppid 2>/dev/null \
+        | awk -v root="$pid" '
+            function walk(p,    line) {
+                for (key in children) {
+                    split(key, arr, SUBSEP)
+                    if (arr[1] == p) {
+                        child = arr[2]
+                        if (!seen[child]++) {
+                            print child
+                            walk(child)
+                        }
+                    }
+                }
+            }
+            $1 != "" && $2 != "" { children[$2, $1] = 1 }
+            END { walk(root) }
+        ')
+    for cpid in $descendants; do
+        kill -9 "$cpid" 2>/dev/null || true
+    done
     kill -9 "$pid" 2>/dev/null || true
-    taskkill //F //T //PID "$pid" 2>/dev/null || true
 }
 
 # Configuration

@@ -46,9 +46,9 @@ class BleScanner(
         val peerCacheSize: Int
     )
 
-    private val bluetoothManager = context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
-    private val bluetoothAdapter = bluetoothManager.adapter
-    private val scanner = bluetoothAdapter?.bluetoothLeScanner
+    private val bluetoothManager by lazy { context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager }
+    private val bluetoothAdapter by lazy { bluetoothManager.adapter }
+    private val scanner by lazy { bluetoothAdapter?.bluetoothLeScanner }
 
     // Scan session management
     private var currentScanSession: android.bluetooth.le.BluetoothLeScanner? = null
@@ -60,7 +60,7 @@ class BleScanner(
     // Duty cycle management
     private var scanWindowMs: Long = 10000L  // 10 seconds
     private var scanIntervalMs: Long = 30000L  // 30 seconds
-    private val handler = Handler(Looper.getMainLooper())
+    private val handler by lazy { Handler(Looper.getMainLooper()) }
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private var dutyCycleRunnable: Runnable? = null
 
@@ -140,7 +140,7 @@ class BleScanner(
                 Timber.v("Discovered peer: $peerId (RSSI: $rssi, Data: ${serviceData.size} bytes)")
                 // Notify discovery
                 onPeerDiscovered(peerId)
-                // Notify data reception
+                // Notify data received
                 onDataReceived(peerId, serviceData)
             } else {
                 // Just discovery (legacy or beacon)
@@ -302,6 +302,12 @@ class BleScanner(
             currentScanSession = bluetoothAdapter?.bluetoothLeScanner
         }
 
+        val session = currentScanSession
+        if (session == null) {
+            Timber.w("Bluetooth Scanner not available")
+            return@withLock false
+        }
+
         // Check if Bluetooth is enabled
         if (bluetoothAdapter?.isEnabled != true) {
             Timber.w("Bluetooth is not enabled, cannot start scanning")
@@ -335,12 +341,12 @@ class BleScanner(
             // Stop any existing scan first to avoid SCAN_FAILED_ALREADY_STARTED
             // This is safe even if no scan is running (idempotent)
             try {
-                currentScanSession?.stopScan(scanCallback)
+                session.stopScan(scanCallback)
             } catch (_: Exception) {
                 // Ignore errors from stopping non-existent scan
             }
 
-            currentScanSession?.startScan(currentFilters(), buildScanSettings(), scanCallback)
+            session.startScan(currentFilters(), buildScanSettings(), scanCallback)
             isScanning = true
             quotaManager.recordScanStart()
             backoffStrategy.reset()
@@ -460,15 +466,16 @@ class BleScanner(
 
     @SuppressLint("MissingPermission")
     private fun restartActiveScan() {
-        if (scanner == null || !isScanning) return
+        val s = scanner
+        if (s == null || !isScanning) return
 
         try {
-            scanner.stopScan(scanCallback)
+            s.stopScan(scanCallback)
         } catch (_: Exception) {
         }
 
         try {
-            scanner.startScan(currentFilters(), buildScanSettings(), scanCallback)
+            s.startScan(currentFilters(), buildScanSettings(), scanCallback)
             Timber.i("BLE scan restarted (background=$isBackgroundMode, fallback=$fallbackScanEnabled)")
         } catch (e: Exception) {
             Timber.e(e, "Failed to restart BLE scan")
@@ -488,10 +495,11 @@ class BleScanner(
 
     @SuppressLint("MissingPermission")
     private fun startScanningInternal() {
-        if (scanner == null || isScanning) return
+        val s = scanner
+        if (s == null || isScanning) return
 
         try {
-            scanner.startScan(currentFilters(), buildScanSettings(), scanCallback)
+            s.startScan(currentFilters(), buildScanSettings(), scanCallback)
             isScanning = true
             Timber.v("BLE scan window started")
         } catch (e: Exception) {
@@ -503,10 +511,11 @@ class BleScanner(
 
     @SuppressLint("MissingPermission")
     private fun stopScanningInternal() {
-        if (scanner == null) return
+        val s = scanner
+        if (s == null) return
 
         try {
-            scanner.stopScan(scanCallback)
+            s.stopScan(scanCallback)
             Timber.v("BLE scan window ended")
         } catch (e: Exception) {
             Timber.e(e, "Failed to stop BLE scan window")
@@ -536,7 +545,20 @@ class BleScanner(
 
     @SuppressLint("MissingPermission")
     suspend fun stopScanning() = scanLock.withLock {
-        if (currentScanSession == null || !isScanning) return@withLock
+        stopScanningLocked()
+    }
+
+    /**
+     * Internal stop-scan logic that MUST be called while holding the scanLock.
+     */
+    @SuppressLint("MissingPermission")
+    private fun stopScanningLocked() {
+        if (currentScanSession == null || !isScanning) {
+            // P1_ANDROID_022: even if we are not actively scanning, ensure any stale
+            // peer cache is purged so re-discovery can occur on the next session.
+            clearPeerCache()
+            return
+        }
 
         stopDutyCycle()
         fallbackPromotionRunnable?.let { handler.removeCallbacks(it) }
@@ -549,6 +571,10 @@ class BleScanner(
         } catch (e: Exception) {
             Timber.e(e, "Failed to stop BLE scan")
         }
+        // P1_ANDROID_022: drop stale cache entries on every stop so subsequent
+        // discovery sessions don't suppress already-seen peers (gratuitous
+        // persistence between runs). See P1_ANDROID_022_BLE_Stale_Cache_Cleanup.
+        clearPeerCache()
     }
 
     /**
@@ -558,7 +584,7 @@ class BleScanner(
      */
     suspend fun onTransportPause() = scanLock.withLock {
         Timber.i("BLE transport paused — stopping scan and clearing peer cache")
-        stopScanning()
+        stopScanningLocked()
         clearPeerCache()
     }
 

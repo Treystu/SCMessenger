@@ -607,10 +607,10 @@ Re-enabled v0.2.1 notification functionality that was previously rolled back to 
 **Stability first, features second.** Will re-evaluate notification completeness through comprehensive real-world testing before next version advancement.
 
 ### Version Details
-- **Current Version**: v0.2.1
-- **GitHub Release**: https://github.com/Treystu/SCMessenger/releases/tag/v0.2.1
-- **Android**: versionCode 7, versionName '0.2.1'
-- **iOS**: CFBundleShortVersionString 0.2.1, CFBundleVersion 5
+- **Current Version**: v0.3.0
+- **GitHub Release**: https://github.com/Treystu/SCMessenger/releases/tag/v0.3.0
+- **Android**: versionCode 8, versionName '0.3.0'
+- **iOS**: CFBundleShortVersionString 0.3.0, CFBundleVersion 6
 
 ---
 

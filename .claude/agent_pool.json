@@ -1,413 +1,153 @@
 {
-  "version": "2.2",
-  "max_concurrent": 1,
+  "version": "2.4",
+  "policy": "cloud_only",
+  "policy_note": "Per Lucas directive 2026-06-08: CLOUD MODELS ONLY until local turbo-quant is verified as functional with proper context. All agents must use :cloud suffix models via 127.0.0.1:11434 (which proxies to ollama.com). 41 cloud models available (full catalog in model_capability_mapping.json); local models are OFF LIMITS.",
+  "max_concurrent": 2,
   "default_agent": "orchestrator",
   "launch_mode": "cli_only",
+  "ollama_base_url": "http://127.0.0.1:11434/v1",
+  "available_local_models": [
+    {"name": "scm-thinker:14b", "size_gb": 4.7, "best_for": "DISABLED — local models off-limits until turbo-quant verified"},
+    {"name": "scm-coder:7b", "size_gb": 4.7, "best_for": "DISABLED — local models off-limits until turbo-quant verified"},
+    {"name": "qwen2.5-coder:7b", "size_gb": 4.7, "best_for": "DISABLED — local models off-limits until turbo-quant verified"},
+    {"name": "deepseek-r1-distill-14b-iq2xs", "size_gb": 4.7, "best_for": "DISABLED — local models off-limits until turbo-quant verified"},
+    {"name": "qwen2.5-coder:1.5b", "size_gb": 1.0, "best_for": "DISABLED — local models off-limits until turbo-quant verified"},
+    {"name": "llama3.2:3b", "size_gb": 2.0, "best_for": "DISABLED — local models off-limits until turbo-quant verified"}
+  ],
+  "available_cloud_models": [
+    {"name": "minimax-m3:cloud", "best_for": "default orchestrator, multimodal (vision), 512K ctx"},
+    {"name": "qwen3-coder:480b:cloud", "best_for": "heavy Rust + Android code generation, 256K ctx"},
+    {"name": "qwen3-coder-next:cloud", "best_for": "lightweight coding worker, 256K ctx"},
+    {"name": "glm-5.1:cloud", "best_for": "full-stack architecture, 198K ctx"},
+    {"name": "kimi-k2-thinking:cloud", "best_for": "deep reasoning + planning, 256K ctx"},
+    {"name": "kimi-k2.6:cloud", "best_for": "vision + thinking, 256K ctx"},
+    {"name": "gemini-3-flash-preview:cloud", "best_for": "fast triage + vision, 1024K ctx"},
+    {"name": "gemma4:31b:cloud", "best_for": "mid-size code review, 256K ctx vision"},
+    {"name": "devstral-2:123b:cloud", "best_for": "code generation, 256K ctx"},
+    {"name": "mistral-large-3:675b:cloud", "best_for": "heavy code review, 256K ctx vision"},
+    {"name": "nemotron-3-ultra:cloud", "best_for": "deep reasoning + tools, 256K ctx"}
+  ],
   "agents": [
     {
       "name": "orchestrator",
       "launch_type": "cli",
       "model": "minimax-m3:cloud",
-      "fallback_model": "mistral-large-3:675b:cloud",
-      "purpose": "Lead coordinator: tracks progress across all phases, delegates tasks, verifies completion, manages HANDOFF state, ensures the swarm stays on track",
-      "task_patterns": [
-        "ORCHESTRATE",
-        "COORDINATE",
-        "DELEGATE",
-        "VERIFY",
-        "TRACK"
-      ],
-      "file_domains": [
-        "HANDOFF/",
-        ".claude/",
-        "scripts/",
-        "docs/"
-      ],
-      "max_per_type": 1
+      "fallback_model": "qwen3-coder-next:cloud",
+      "purpose": "Lead coordinator: tracks progress across all phases, delegates tasks, verifies completion, manages HANDOFF state. CLOUD ONLY.",
+      "task_patterns": ["ORCHESTRATE", "COORDINATE", "DELEGATE", "VERIFY", "TRACK"],
+      "file_domains": ["HANDOFF/", ".claude/", "scripts/", "docs/"],
+      "max_per_type": 1,
+      "cloud_allowed": true
     },
     {
       "name": "architect-planner",
       "launch_type": "cli",
       "model": "qwen3-coder:480b:cloud",
-      "fallback_model": "qwen3.5:397b:cloud",
-      "purpose": "High-level architecture planning AND precision validation: designs system architecture, plans implementation order, validates correctness of crypto/protocol/security code, performs adversarial review",
-      "task_patterns": [
-        "ARCHITECTURE",
-        "PLAN",
-        "DESIGN",
-        "VALIDATE",
-        "SECURITY",
-        "CRYPTO",
-        "AUDIT",
-        "REVIEW"
-      ],
-      "file_domains": [
-        "docs/",
-        "REMAINING_WORK_TRACKING.md",
-        "core/src/crypto/",
-        "core/src/privacy/"
-      ],
-      "max_per_type": 1
+      "fallback_model": "glm-5.1:cloud",
+      "purpose": "High-level architecture planning AND precision validation. CLOUD 480B flagship for v0.3.0 push.",
+      "task_patterns": ["ARCHITECTURE", "PLAN", "DESIGN", "VALIDATE", "SECURITY", "CRYPTO", "AUDIT", "REVIEW"],
+      "file_domains": ["docs/", "REMAINING_WORK_TRACKING.md", "core/src/crypto/", "core/src/privacy/"],
+      "max_per_type": 1,
+      "cloud_allowed": true
     },
     {
       "name": "rust-coder",
       "launch_type": "cli",
-      "model": "glm-5.1:cloud",
+      "model": "qwen3-coder:480b:cloud",
       "fallback_model": "qwen3-coder-next:cloud",
-      "purpose": "Rust core implementation: identity, crypto, transport, store, relay modules. glm-5.1 has proven Rust output quality",
-      "task_patterns": [
-        "RUST",
-        "CORE",
-        "PROTOCOL",
-        "CRYPTO_IMPL",
-        "WASM",
-        "MOBILE_BRIDGE"
-      ],
-      "file_domains": [
-        "core/",
-        "wasm/"
-      ],
-      "max_per_type": 1
+      "purpose": "Rust core implementation: identity, crypto, transport, store, relay. CLOUD flagship for v0.3.0.",
+      "task_patterns": ["RUST", "CORE", "PROTOCOL", "CRYPTO_IMPL", "WASM", "MOBILE_BRIDGE"],
+      "file_domains": ["core/", "wasm/"],
+      "max_per_type": 1,
+      "cloud_allowed": true
     },
     {
       "name": "implementer",
       "launch_type": "cli",
       "model": "qwen3-coder-next:cloud",
-      "fallback_model": "glm-5.1:cloud",
-      "purpose": "Rapid feature landing: general coding, bug fixes, platform client implementation",
-      "task_patterns": [
-        "IMPLEMENTATION",
-        "BUG",
-        "FIX",
-        "FEATURE",
-        "CLI",
-        "PLATFORM"
-      ],
-      "file_domains": [
-        "android/",
-        "cli/src/",
-        "mobile/src/",
-        "iOS/"
-      ],
-      "max_per_type": 2
+      "fallback_model": "gemini-3-flash-preview:cloud",
+      "purpose": "Rapid feature landing: general coding, bug fixes, platform client implementation. CLOUD.",
+      "task_patterns": ["IMPLEMENTATION", "BUG", "FIX", "FEATURE", "CLI", "PLATFORM"],
+      "file_domains": ["android/", "cli/src/", "mobile/src/", "iOS/"],
+      "max_per_type": 2,
+      "cloud_allowed": true
     },
     {
       "name": "gatekeeper-reviewer",
       "launch_type": "cli",
       "model": "kimi-k2-thinking:cloud",
-      "fallback_model": "kimi-k2.6:cloud",
-      "purpose": "Pre-merge verification: final code review gate, ensures build passes, tests pass, docs synced",
-      "task_patterns": [
-        "MERGE",
-        "RELEASE",
-        "FINAL_REVIEW",
-        "GATE"
-      ],
+      "fallback_model": "mistral-large-3:675b:cloud",
+      "purpose": "Pre-merge verification: final code review gate, ensures build passes, tests pass, docs synced. CLOUD.",
+      "task_patterns": ["MERGE", "RELEASE", "FINAL_REVIEW", "GATE"],
       "file_domains": [],
-      "max_per_type": 1
+      "max_per_type": 1,
+      "cloud_allowed": true
     },
     {
       "name": "worker",
       "launch_type": "cli",
-      "model": "gemma4:31b:cloud",
-      "fallback_model": "devstral-2:123b:cloud",
-      "purpose": "Unit tests, UniFFI bindings, documentation, platform engineering, small changes under 200 LOC",
-      "task_patterns": [
-        "PLATFORM",
-        "BINDINGS",
-        "TEST",
-        "DOCS",
-        "GRADLE"
-      ],
-      "file_domains": [
-        "core/tests/",
-        "android/app/src/",
-        "android/app/build.gradle",
-        "android/app/build.gradle.kts",
-        "android/app/src/main/java/",
-        "android/app/src/test/",
-        "android/app/src/androidTest/"
-      ],
-      "max_per_type": 1
+      "model": "gemini-3-flash-preview:cloud",
+      "fallback_model": "qwen3-coder-next:cloud",
+      "purpose": "Unit tests, UniFFI bindings, documentation, platform engineering, small changes under 200 LOC. CLOUD.",
+      "task_patterns": ["PLATFORM", "BINDINGS", "TEST", "DOCS", "GRADLE"],
+      "file_domains": ["core/tests/", "android/app/src/", "android/app/build.gradle", "android/app/build.gradle.kts", "android/app/src/main/java/", "android/app/src/test/", "android/app/src/androidTest/"],
+      "max_per_type": 1,
+      "cloud_allowed": true
     },
     {
       "name": "triage-router",
       "launch_type": "cli",
       "model": "gemini-3-flash-preview:cloud",
-      "fallback_model": "deepseek-v4-flash:cloud",
-      "purpose": "Quick triage, lint fixes, minor edits under 50 LOC, CI gatekeeping, parsing",
-      "task_patterns": [
-        "LINT",
-        "TRIAGE",
-        "QUICK",
-        "CI",
-        "FMT"
-      ],
+      "fallback_model": "qwen3-coder-next:cloud",
+      "purpose": "Quick triage, lint fixes, minor edits under 50 LOC, CI gatekeeping, parsing. CLOUD.",
+      "task_patterns": ["LINT", "TRIAGE", "QUICK", "CI", "FMT"],
       "file_domains": [],
-      "max_per_type": 1
+      "max_per_type": 1,
+      "cloud_allowed": true
     },
     {
       "name": "micro-batch-processor",
       "launch_type": "cli",
       "model": "gemini-3-flash-preview:cloud",
-      "fallback_model": "deepseek-v4-flash:cloud",
-      "purpose": "Process batches of micro-tasks (lint, quick fixes, formatting) to reduce API overhead",
-      "task_patterns": [
-        "BATCH",
-        "MICRO_BATCH"
-      ],
-      "file_domains": [
-        "HANDOFF/batches/"
-      ],
-      "max_per_type": 1
+      "fallback_model": "qwen3-coder-next:cloud",
+      "purpose": "Process batches of micro-tasks (lint, quick fixes, formatting) to reduce overhead. CLOUD.",
+      "task_patterns": ["BATCH", "MICRO_BATCH"],
+      "file_domains": ["HANDOFF/batches/"],
+      "max_per_type": 1,
+      "cloud_allowed": true
     },
     {
       "name": "wiring-verifier",
       "launch_type": "cli",
-      "model": "deepseek-v3.2:cloud",
-      "fallback_model": "deepseek-v3.2:cloud",
-      "purpose": "Full repo-wide wiring verification: checks all module connections, IronCore entry points, cross-module dependencies, API surface completeness",
-      "task_patterns": [
-        "WIRING",
-        "VERIFY",
-        "INTEGRATION",
-        "CONNECTIVITY"
-      ],
+      "model": "glm-5.1:cloud",
+      "fallback_model": "kimi-k2-thinking:cloud",
+      "purpose": "Full repo-wide wiring verification: checks all module connections, IronCore entry points, cross-module dependencies. CLOUD.",
+      "task_patterns": ["WIRING", "VERIFY", "INTEGRATION", "CONNECTIVITY"],
       "file_domains": [],
-      "max_per_type": 1
+      "max_per_type": 1,
+      "cloud_allowed": true
     },
     {
       "name": "CLIBetaTester",
       "launch_type": "cli",
-      "model": "glm-5.1:cloud",
-      "fallback_model": "glm-5.1:cloud",
-      "purpose": "Acts as an aggressive Beta User against the Rust Core daemon. Tests the JSON-RPC bridge and libp2p mesh.",
-      "task_patterns": [
-        "BETA",
-        "CLI",
-        "CORE_TEST",
-        "CRASH",
-        "STRESS"
-      ],
+      "model": "qwen3-coder-next:cloud",
+      "fallback_model": "gemini-3-flash-preview:cloud",
+      "purpose": "Aggressive Beta User against the Rust Core daemon. JSON-RPC bridge, libp2p mesh stress. CLOUD.",
+      "task_patterns": ["BETA", "CLI", "CORE_TEST", "CRASH", "STRESS"],
       "file_domains": [],
-      "max_per_type": 1
+      "max_per_type": 1,
+      "cloud_allowed": true
     },
     {
       "name": "vision-analyst",
       "launch_type": "cli",
-      "model": "qwen3-vl:235b:cloud",
-      "fallback_model": "nemotron-3-super:cloud",
-      "purpose": "Visual analysis of screenshots, diagrams, UI mockups, log visualizations",
-      "task_patterns": [
-        "VISION",
-        "SCREENSHOT",
-        "UI_REVIEW",
-        "DIAGRAM"
-      ],
+      "model": "gemini-3-flash-preview:cloud",
+      "fallback_model": "kimi-k2.6:cloud",
+      "purpose": "Screenshot/UI review. CLOUD vision-capable models.",
+      "task_patterns": ["VISION", "SCREENSHOT", "UI_REVIEW", "DIAGRAM"],
       "file_domains": [],
-      "max_per_type": 1
-    }
-  ],
-  "available_models": [
-    {
-      "name": "glm-5.1",
-      "params": "1.5T",
-      "specialty": "general reasoning, Rust"
-    },
-    {
-      "name": "deepseek-v4-pro",
-      "params": "1.6T",
-      "specialty": "deep analysis"
-    },
-    {
-      "name": "deepseek-v4-flash",
-      "params": "140B",
-      "specialty": "fast reasoning"
-    },
-    {
-      "name": "kimi-k2.6",
-      "params": "595B",
-      "specialty": "latest Kimi"
-    },
-    {
-      "name": "kimi-k2-thinking",
-      "params": "1.1T",
-      "specialty": "extended thinking"
-    },
-    {
-      "name": "qwen3-coder:480b",
-      "params": "510B",
-      "specialty": "coding"
-    },
-    {
-      "name": "qwen3-coder-next",
-      "params": "81B",
-      "specialty": "next-gen coding"
-    },
-    {
-      "name": "qwen3.5:397b",
-      "params": "397B",
-      "specialty": "general fallback"
-    },
-    {
-      "name": "mistral-large-3:675b",
-      "params": "682B",
-      "specialty": "pipeline coordination"
-    },
-    {
-      "name": "cogito-2.1:671b",
-      "params": "688B",
-      "specialty": "deliberative reasoning"
-    },
-    {
-      "name": "deepseek-v3.2",
-      "params": "688B",
-      "specialty": "crypto/math/protocol"
-    },
-    {
-      "name": "deepseek-v3.1:671b",
-      "params": "688B",
-      "specialty": "previous flagship"
-    },
-    {
-      "name": "gemma4:31b",
-      "params": "31B",
-      "specialty": "lightweight worker"
-    },
-    {
-      "name": "gemini-3-flash-preview",
-      "params": "variable",
-      "specialty": "quick triage"
-    },
-    {
-      "name": "glm-5",
-      "params": "756B",
-      "specialty": "GLM 5 base"
-    },
-    {
-      "name": "glm-4.7",
-      "params": "696B",
-      "specialty": "previous GLM"
-    },
-    {
-      "name": "glm-4.6",
-      "params": "696B",
-      "specialty": "earlier GLM"
-    },
-    {
-      "name": "minimax-m3",
-      "params": "480B",
-      "specialty": "orchestration, coordination, general reasoning"
-    },
-    {
-      "name": "minimax-m2.7",
-      "params": "480B",
-      "specialty": "latest MiniMax"
-    },
-    {
-      "name": "minimax-m2.5",
-      "params": "230B",
-      "specialty": "MiniMax v2.5"
-    },
-    {
-      "name": "minimax-m2.1",
-      "params": "230B",
-      "specialty": "MiniMax v2.1"
-    },
-    {
-      "name": "minimax-m2",
-      "params": "230B",
-      "specialty": "MiniMax base"
-    },
-    {
-      "name": "nemotron-3-super",
-      "params": "230B",
-      "specialty": "strong validation"
-    },
-    {
-      "name": "devstral-2:123b",
-      "params": "128B",
-      "specialty": "developer tooling"
-    },
-    {
-      "name": "devstral-small-2:24b",
-      "params": "51B",
-      "specialty": "lightweight dev"
-    },
-    {
-      "name": "qwen3-vl:235b",
-      "params": "470B",
-      "specialty": "vision-language"
-    },
-    {
-      "name": "gpt-oss:120b",
-      "params": "65B",
-      "specialty": "open-source GPT"
-    },
-    {
-      "name": "gpt-oss:20b",
-      "params": "13B",
-      "specialty": "lightweight GPT"
-    },
-    {
-      "name": "gemma3:27b",
-      "params": "55B",
-      "specialty": "Gemma 27B"
-    },
-    {
-      "name": "gemma3:12b",
-      "params": "24B",
-      "specialty": "Gemma 12B"
-    },
-    {
-      "name": "gemma3:4b",
-      "params": "8.6B",
-      "specialty": "Gemma 4B"
-    },
-    {
-      "name": "ministral-3:14b",
-      "params": "15.7B",
-      "specialty": "minimal Mistral"
-    },
-    {
-      "name": "ministral-3:8b",
-      "params": "10.4B",
-      "specialty": "minimal Mistral"
-    },
-    {
-      "name": "ministral-3:3b",
-      "params": "4.7B",
-      "specialty": "minimal Mistral"
-    },
-    {
-      "name": "rnj-1:8b",
-      "params": "16B",
-      "specialty": "lightweight"
-    },
-    {
-      "name": "kimi-k2:1t",
-      "params": "1.1T",
-      "specialty": "Kimi K2 base"
-    },
-    {
-      "name": "kimi-k2.5",
-      "params": "1.1T",
-      "specialty": "Kimi K2.5"
-    },
-    {
-      "name": "nemotron-3-nano:30b",
-      "params": "32B",
-      "specialty": "lightweight validation"
-    },
-    {
-      "name": "qwen3-next:80b",
-      "params": "81B",
-      "specialty": "next-gen general 80B"
-    },
-    {
-      "name": "qwen3-vl:235b-instruct",
-      "params": "470B",
-      "specialty": "vision-language instruct"
+      "max_per_type": 1,
+      "cloud_allowed": true
     }
   ]
 }

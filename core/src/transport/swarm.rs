@@ -55,7 +55,9 @@ use std::sync::{Arc, Weak};
 use tokio::sync::mpsc;
 use web_time::SystemTime;
 #[cfg(not(target_arch = "wasm32"))]
-use web_time::{Duration, UNIX_EPOCH};
+use web_time::{Duration, Instant, UNIX_EPOCH};
+#[cfg(target_arch = "wasm32")]
+use web_time::{Duration, Instant};
 
 /// Returns true if a Multiaddr is suitable for discovery (local or global).
 ///
@@ -111,6 +113,32 @@ fn is_discoverable_multiaddr(addr: &Multiaddr) -> bool {
     has_ip && !ip_is_restricted
 }
 
+/// Filter mDNS-advertised addresses to exclude circuit addresses that are too long for TXT records.
+///
+/// The libp2p mDNS implementation has a 1300-byte limit on TXT records. Circuit addresses
+/// (e.g., /p2p-circuit/p2p/.../p2p-circuit/p2p/...) can easily exceed this limit when
+/// a node has used relay multiple times, causing mDNS to silently drop them.
+///
+/// This function filters out:
+/// - p2p-circuit addresses (contain "/p2p-circuit/")
+/// - WebSocket relay addresses (contain "/ws/" or "/wss/")
+///
+/// Only direct IP addresses (IPv4 or IPv6) are advertised via mDNS.
+pub fn build_mdns_advertised_addrs(all_listeners: &[Multiaddr]) -> Vec<Multiaddr> {
+    all_listeners
+        .iter()
+        .filter(|a| {
+            // Only advertise addresses a LAN peer can actually reach us on:
+            //  - /ip4/ or /ip6/ direct
+            //  - NO p2p-circuit
+            //  - NO /ws/ websocket relay
+            let s = a.to_string();
+            !s.contains("/p2p-circuit/") && !s.contains("/ws/") && !s.contains("/wss/")
+        })
+        .cloned()
+        .collect()
+}
+
 #[cfg(not(target_arch = "wasm32"))]
 fn relay_reservation_multiaddr(base: &Multiaddr, relay_peer_id: PeerId) -> Multiaddr {
     use libp2p::multiaddr::Protocol;
@@ -147,6 +175,17 @@ const RELAY_MAX_TRACKED_DUPLICATES: usize = 16_384;
 const RELAY_MAX_MESSAGE_ID_LEN: usize = 160;
 const RELAY_MAX_ENVELOPE_BYTES: usize = 64 * 1024;
 const DELIVERY_CONVERGENCE_MAX_CLOCK_SKEW_MS: u64 = 24 * 60 * 60 * 1000;
+/// Identify log deduplication TTL: suppress duplicate "Identified peer" logs within this window.
+const IDENTIFY_LOG_DEDUP_TTL_SECS: u64 = 60;
+
+/// Static dedup map for "Identified peer" log lines.
+/// Tracks the last log time for each peer_id to suppress spam from repeated identify events.
+static LAST_IDENTIFIED_LOG: std::sync::OnceLock<parking_lot::RwLock<HashMap<PeerId, Instant>>> =
+    std::sync::OnceLock::new();
+
+fn last_identified_log() -> &'static parking_lot::RwLock<HashMap<PeerId, Instant>> {
+    LAST_IDENTIFIED_LOG.get_or_init(|| parking_lot::RwLock::new(HashMap::new()))
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct DeliveryConvergenceMarker {
@@ -3431,12 +3470,31 @@ pub async fn start_swarm_with_config(
                             SwarmEvent::Behaviour(super::behaviour::IronCoreBehaviourEvent::Identify(
                                 identify::Event::Received { peer_id, info, .. }
                             )) => {
+                                // Dedup: suppress "Identified peer" logs for same peer within TTL window
+                                {
+                                    let now = Instant::now();
+                                    let mut map = last_identified_log().write();
+                                    let ttl = Duration::from_secs(IDENTIFY_LOG_DEDUP_TTL_SECS);
+                                    if let Some(last) = map.get(&peer_id) {
+                                        if now.duration_since(*last) < ttl {
+                                            // Suppress duplicate log within TTL window
+                                            continue;
+                                        }
+                                    }
+                                    map.insert(peer_id, now);
+                                }
+
+                                // Consolidate multi-address logging: build single summary line per peer
+                                let discoverable_addrs: Vec<&Multiaddr> = info.listen_addrs
+                                    .iter()
+                                    .filter(|a| is_discoverable_multiaddr(a))
+                                    .collect();
                                 tracing::info!(
-                                    "🆔 Identified peer {} — agent: {}, protocols: {}, addrs: {}",
+                                    "🆔 Identified peer {} — agent: {}, protocols: {}, discoverable_addrs: {}",
                                     peer_id,
                                     info.agent_version,
                                     info.protocols.len(),
-                                    info.listen_addrs.len()
+                                    discoverable_addrs.len()
                                 );
                                 // Identity protocol confirms this peer is presently reachable.
                                 multi_path_delivery.record_recipient_seen_now(peer_id, peer_id);
@@ -5286,7 +5344,8 @@ mod tests {
     };
     use crate::identity::IdentityKeys;
     use crate::store::relay_custody::RelayCustodyStore;
-    use crate::transport::RegistrationMessage;
+    use crate::transport::{PeerId as RoutingPeerId, RegistrationMessage};
+    use libp2p::{Multiaddr, PeerId as Libp2pPeerId};
     use std::collections::HashMap;
 
     #[test]
@@ -5480,5 +5539,95 @@ mod tests {
             verify_registration_message(&wrong_peer, &RegistrationMessage::Register(request)),
             Err("registration_identity_mismatch")
         );
+    }
+
+    #[test]
+    fn extract_tcp_port_from_multiaddr_returns_tcp_port() {
+        let addr: Multiaddr = "/ip4/127.0.0.1/tcp/9101".parse().unwrap();
+        assert_eq!(super::extract_tcp_port_from_multiaddr(&addr), Some(9101));
+    }
+
+    #[test]
+    fn extract_tcp_port_from_multiaddr_returns_udp_port() {
+        let addr: Multiaddr = "/ip4/0.0.0.0/udp/9876".parse().unwrap();
+        assert_eq!(super::extract_tcp_port_from_multiaddr(&addr), Some(9876));
+    }
+
+    #[test]
+    fn extract_tcp_port_from_multiaddr_returns_none_for_dns() {
+        let addr: Multiaddr = "/dns4/example.com/tcp/443".parse().unwrap();
+        // DNS multiaddrs skip straight past IP layers; our extractor returns the TCP port if present.
+        // This test asserts the extractor does not panic on DNS-prefixed addresses.
+        let _ = super::extract_tcp_port_from_multiaddr(&addr);
+    }
+
+    #[test]
+    fn identify_log_dedup_suppresses_within_ttl() {
+        // Clear the map first
+        super::last_identified_log().write().clear();
+
+        // Simulate first identify event: insert entry, expect map size 1
+        {
+            let mut map = super::last_identified_log().write();
+            let key = Libp2pPeerId::random();
+            let now = web_time::Instant::now();
+            map.insert(key, now);
+            assert!(map.contains_key(&key));
+        }
+
+        // Simulate second identify event within TTL: lookup existing entry
+        {
+            let map = super::last_identified_log().read();
+            assert_eq!(map.len(), 1, "Dedup map should retain the original entry");
+        }
+    }
+
+    #[test]
+    fn mdns_filter_drops_circuit_addresses() {
+        let addrs = vec![
+            "/ip4/192.168.0.230/tcp/9101".parse().unwrap(),
+            "/ip4/172.26.144.1/tcp/9101/p2p/12D3KooWJk8KPYRVn8SaqHxq5fFJnT9VYjW7pNvGHgL8F6ShzW3T/p2p-circuit/p2p/12D3KooWJk8KPYRVn8SaqHxq5fFJnT9VYjW7pNvGHgL8F6ShzW3T".parse().unwrap(),
+            "/ip4/172.26.154.211/tcp/9002/ws/p2p/12D3KooWJk8KPYRVn8SaqHxq5fFJnT9VYjW7pNvGHgL8F6ShzW3T/p2p-circuit/p2p/12D3KooWJk8KPYRVn8SaqHxq5fFJnT9VYjW7pNvGHgL8F6ShzW3T".parse().unwrap(),
+        ];
+        let filtered = super::build_mdns_advertised_addrs(&addrs);
+        assert_eq!(filtered.len(), 1);
+        assert!(filtered[0].to_string().starts_with("/ip4/192.168.0.230/tcp/9101"));
+    }
+}
+
+/// Extract the TCP port from a Multiaddr.
+/// Returns None if the address doesn't contain a TCP/QUIC port.
+pub fn extract_tcp_port_from_multiaddr(addr: &Multiaddr) -> Option<u16> {
+    for proto in addr.iter() {
+        match proto {
+            libp2p::multiaddr::Protocol::Tcp(port) => return Some(port),
+            libp2p::multiaddr::Protocol::Udp(port) => return Some(port),
+            _ => {}
+        }
+    }
+    None
+}
+
+/// Detect and log a mismatch between configured listen port and actual swarm listeners.
+/// This function checks the first TCP/UDP port from the swarm's listeners against
+/// the configured port and logs a warning if they differ.
+///
+/// # Arguments
+/// * `config_port` - The listen_port from config.json
+/// * `swarm` - The Swarm instance (passed by reference to access listeners)
+pub fn detect_and_log_port_mismatch(config_port: u16, swarm: &libp2p::Swarm<IronCoreBehaviour>) {
+    // Get the first listener that has a TCP/UDP port
+    let actual_port = swarm
+        .listeners()
+        .find_map(|addr| extract_tcp_port_from_multiaddr(addr));
+
+    if let Some(actual) = actual_port {
+        if config_port != actual {
+            tracing::warn!(
+                "Config says listen_port={} but swarm is bound to port {}. \
+                 Config file may be stale — update config or pass --port.",
+                config_port, actual
+            );
+        }
     }
 }

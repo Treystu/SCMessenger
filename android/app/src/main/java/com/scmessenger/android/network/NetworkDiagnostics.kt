@@ -78,7 +78,7 @@ class NetworkDiagnostics @Inject constructor(
         val domains = listOf(
             "google.com",
             "cloudflare.com",
-            "relay.scmessenger.net"
+            "github.com"
         )
         return domains.associateWith { domain ->
             try {

@@ -1,3 +1,21 @@
+## Triage Decision — 2026-06-08
+
+**Status:** SHIPPED
+**Bucket:** done (on integration/v0.2.2-pre-android-push-2026-06-05)
+**Commit SHA:** 0fa8dea8 (same commit as P0_024; both fixes in one commit, merged at 23174061)
+**Decided by:** Claude Code (Overseer) sweep
+
+**Rationale:** Fix shipped in commit `0fa8dea8` (file:
+`android/app/src/main/java/com/scmessenger/android/transport/ble/BleScanner.kt`,
+11-line `clearPeerCache()` call in `stopScanning()`). Per
+`HANDOFF/STATE/2026-06-05_ANDROID_P0_024_P1_022_BUILD_VERIFIED.md` the build is
+green and tests pass. This ticket should be moved to `HANDOFF/done/`.
+
+The companion test file `android/app/src/test/java/com/scmessenger/android/transport/ble/BleScannerTest.kt`
+was created by gemini on 2026-06-05 20:17 PT.
+
+---
+
 # MODEL: qwen3-coder-next:cloud
 # BUDGET: 600
 # token_budget: 6000

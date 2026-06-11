@@ -167,6 +167,19 @@ class SettingsViewModel @Inject constructor(
     }
 
     init {
+        // P0_SHARED_IDENTITY: mirror the centralized meshRepository.identityInfo
+        // StateFlow into the local _identityInfo so any identity change from
+        // anywhere (MainVM, IdentityVM, manual import) propagates here without
+        // needing to call loadIdentity() again.
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            meshRepository.identityInfo.collect { info ->
+                if (_identityInfo.value != info) {
+                    _identityInfo.value = info
+                    cachedIdentityInfo = info
+                }
+            }
+        }
+
         // ANR FIX (P0_ANDROID_017): Defer heavy initialization to background thread
         // Settings screen should appear within 500ms for good UX
         // Set defaults immediately so UI never shows missing sections

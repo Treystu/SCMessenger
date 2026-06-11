@@ -44,6 +44,11 @@ fun IdentityScreen(
     val isLoading by viewModel.isLoading.collectAsState()
     val error by viewModel.error.collectAsState()
     val successMessage by viewModel.successMessage.collectAsState()
+    // P0_ANDROID_IDENTITY_PROOF_OF_WORK: pull the high-level proof-of-work stage
+    // out of the ViewModel so we can show 6 named stages instead of a tiny
+    // centered spinner. The user can see exactly which step of the cryptographic
+    // pipeline is currently running.
+    val progressStage by viewModel.progressStage.collectAsState()
 
     // Collect QR code data from a coroutine to avoid blocking Main thread on FFI calls
     var qrCodeData by remember { mutableStateOf<String?>(null) }
@@ -52,6 +57,22 @@ fun IdentityScreen(
             qrCodeData = viewModel.getQrCodeData()
         } else {
             qrCodeData = null
+        }
+    }
+
+    // P0_ANDROID_QR_FIX: belt-and-suspenders poll. IdentityViewModel.loadIdentity
+    // has its own retry loop (~1.55s) but the Rust core may hydrate LATER if the
+    // service transitions to RUNNING *after* the VM was constructed (e.g., a slow
+    // cold start where the user reaches Settings before MeshService.onCreate finished).
+    // This LaunchedEffect is keyed on identityInfo itself, so it re-fires whenever
+    // the state changes — but it also fires once on first composition. We schedule
+    // two delayed polls (2s, 4s) to catch late hydration without busy-spinning.
+    LaunchedEffect(identityInfo?.initialized) {
+        if (identityInfo?.initialized != true) {
+            kotlinx.coroutines.delay(2_000L)
+            viewModel.loadIdentity(forceRefresh = true)
+            kotlinx.coroutines.delay(2_000L)
+            viewModel.loadIdentity(forceRefresh = true)
         }
     }
 
@@ -78,7 +99,19 @@ fun IdentityScreen(
                 .padding(paddingValues)
         ) {
             when {
-                isLoading -> {
+                // P0_ANDROID_IDENTITY_PROOF_OF_WORK: distinguish between "initial
+                // load" (isLoading + Idle progress stage) and "active creation"
+                // (progressStage != Idle). The old code conflated them and
+                // replaced the entire form with a tiny centered spinner during
+                // creation, hiding the button + form + everything from the user.
+                // Now we only show the centered spinner during the very first
+                // identityInfo load; once we know identity is not initialized,
+                // we render the form WITH the proof-of-work stages inline.
+                //
+                // v0.3.4 (P0_ANDROID_CRASHFIX): `progressStage == null` became
+                // `progressStage is IdentityProgressStage.Idle` because
+                // _progressStage is now non-nullable in IdentityViewModel.
+                isLoading && progressStage is com.scmessenger.android.ui.viewmodels.IdentityProgressStage.Idle && identityInfo == null -> {
                     CircularProgressIndicator(
                         modifier = Modifier.align(Alignment.Center)
                     )
@@ -86,7 +119,12 @@ fun IdentityScreen(
 
                 identityInfo == null || identityInfo?.initialized != true -> {
                     // Identity not initialized
+                    // P0_ANDROID_IDENTITY_PROOF_OF_WORK: pass the progress stage
+                    // down to IdentityNotInitializedView so the user sees the 6
+                    // named stages of cryptographic work, not just a spinner.
                     IdentityNotInitializedView(
+                        isCreating = isLoading,
+                        progressStage = progressStage,
                         onCreateIdentity = { nickname -> viewModel.createIdentity(nickname) },
                         modifier = Modifier.align(Alignment.Center)
                     )
@@ -111,13 +149,24 @@ fun IdentityScreen(
 
 @Composable
 private fun IdentityNotInitializedView(
+    isCreating: Boolean,
+    // v0.3.4 (P0_ANDROID_CRASHFIX): parameter is now non-nullable. The previous
+    // `IdentityProgressStage?` was the root cause of the NPE crash at
+    // ProofOfWorkList.currentStage.id — the call site relied on a smart-cast
+    // through a `if (progressStage != null)` guard that did not survive
+    // Compose's recomposition, so a null value reached the call site. With
+    // IdentityViewModel._progressStage typed as non-nullable StateFlow<IdentityProgressStage>
+    // and initialized to IdentityProgressStage.Idle, the type system guarantees
+    // progressStage is always a valid stage here. The Idle check below is the
+    // only remaining null-equivalent branch we need.
+    progressStage: com.scmessenger.android.ui.viewmodels.IdentityProgressStage,
     onCreateIdentity: (nickname: String) -> Unit,
     modifier: Modifier = Modifier
 ) {
     var nickname by remember { mutableStateOf("") }
 
     Column(
-        modifier = modifier.padding(32.dp),
+        modifier = modifier.padding(32.dp).verticalScroll(rememberScrollState()),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
@@ -137,15 +186,75 @@ private fun IdentityNotInitializedView(
             onValueChange = { nickname = it },
             label = { Text(stringResource(R.string.identity_label_nickname)) },
             modifier = Modifier.fillMaxWidth(0.8f),
-            singleLine = true
+            singleLine = true,
+            enabled = !isCreating
         )
 
-        Button(onClick = { onCreateIdentity(nickname) }) {
-            Text(stringResource(R.string.identity_action_create))
+        // P0_ANDROID_IDENTITY_PROOF_OF_WORK: Inline progress indicator. The
+        // button now mirrors IdentityCreationFlow's pattern: while the FFI call
+        // runs (several seconds for Ed25519 keygen + entropy + storage write),
+        // the button shows a CircularProgressIndicator + "Generating Identity
+        // keys…" text, and the button itself is disabled. Previously this button
+        // had no progress indication at all, which made the in-settings
+        // identity creation flow feel broken.
+        Button(
+            onClick = { onCreateIdentity(nickname) },
+            enabled = nickname.isNotBlank() && !isCreating,
+            modifier = Modifier.fillMaxWidth(0.8f).height(56.dp)
+        ) {
+            if (isCreating) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(20.dp),
+                    strokeWidth = 2.dp,
+                    color = MaterialTheme.colorScheme.onPrimary
+                )
+                Spacer(modifier = Modifier.size(8.dp))
+                Text(stringResource(R.string.onboarding_generating_keys))
+            } else {
+                Text(stringResource(R.string.identity_action_create))
+            }
+        }
+
+        // P0_ANDROID_IDENTITY_PROOF_OF_WORK: render the 6 named proof-of-work
+        // stages below the button. Each stage shows:
+        //   - ✓ checkmark (done)
+        //   - spinner + label (active)
+        //   - dimmed label (pending)
+        //   - detail text under the active stage explaining what is happening
+        //
+        // This is the "high level proof of work" the user asked for. The user
+        // can see exactly which step of the cryptographic pipeline is currently
+        // running, and the 6 stages match MainViewModel/IdentityViewModel one
+        // for one, so onboarding + in-settings have a unified narrative.
+        // P0_ANDROID_CRASHFIX: full fix landed in v0.3.4. The previous
+        // `progressStage?.let { stage -> ... }` was a defense-in-depth
+        // workaround for the NPE; the real fix is to type the StateFlow as
+        // non-nullable with Idle as the sentinel. Now the gate is a clean
+        // `if (progressStage !is Idle)` — the type system enforces non-null,
+        // and the !is Idle check enforces "we are creating right now".
+        if (progressStage !is com.scmessenger.android.ui.viewmodels.IdentityProgressStage.Idle) {
+            Spacer(modifier = Modifier.height(8.dp))
+            IdentityProgressDisplay(
+                currentStage = progressStage,
+                modifier = Modifier.fillMaxWidth(0.95f)
+            )
         }
     }
 }
 
+/**
+ * Renders the 6-stage identity-generation proof-of-work list. Each stage is
+ * marked as "done" (✓), "active" (spinner), or "pending" (dimmed), with the
+ * current active stage's detail text displayed below the list so the user can
+ * see exactly what cryptographic work is happening.
+ *
+ * Includes:
+ *   - a stage counter "Step X of 6" so the user sees numeric progress
+ *   - a LinearProgressIndicator driven by the per-stage etaMs so the bar moves
+ *     smoothly even when the Rust FFI call blocks (the longest single step)
+ *   - a "About Ns remaining" hint that updates as the active stage changes
+ *   - a percent-complete number that climbs as stages complete
+ */
 @Composable
 private fun IdentityContent(
     identityInfo: uniffi.api.IdentityInfo,
