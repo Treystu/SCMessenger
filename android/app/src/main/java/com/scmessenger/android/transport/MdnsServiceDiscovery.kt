@@ -521,14 +521,20 @@ class MdnsServiceDiscovery(
         val listener = newResolveListener(serviceInfo.serviceName)
         inFlightResolves[serviceInfo.serviceName] = listener
 
-        // resolveService with Listener is deprecated in API 33; requires Executor overload
-        // Use SDK version gate to support minSdk 26 while avoiding deprecation warnings on API 33+
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            // API 28+ has Context.getMainExecutor(), use Executor overload
+        // P0: NsdManager.resolveService with Executor was added in API 34 (Android 14).
+        // The Listener-only signature was deprecated in API 33 but is the ONLY option on
+        // API 26-33. We previously gated on API 28 (P) which is wrong — on API 28-33
+        // there is no `resolveService(NsdServiceInfo, Executor, ResolveListener)` method,
+        // so the call throws NoSuchMethodError and crashes the process when an mDNS service
+        // is discovered. The fix: use the Executor overload only on API 34+ and fall back
+        // to the legacy single-arg signature on API 26-33. See lines 183, 220 for the same
+        // pattern applied to NsdServiceInfo.host getter.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            // API 34+ has the Executor overload, use it to avoid the deprecation warning
             nsdManager?.resolveService(serviceInfo, context.getMainExecutor(), listener)
         } else {
-            // Legacy API for API < 28 (minSdk 26, so this covers 26-27)
-            // Kept for completeness but will not be called on API 28+
+            // Legacy API for API 26-33. Listener-only signature still works on these
+            // versions; the Executor overload was only added in API 34.
             @Suppress("DEPRECATION")
             nsdManager?.resolveService(serviceInfo, listener)
         }
