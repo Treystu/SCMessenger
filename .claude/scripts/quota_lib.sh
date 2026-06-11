@@ -24,8 +24,9 @@ lazy_quota_refresh() {
 
     # Extract the "timestamp" string value from the JSON.
     # Looks for: "timestamp": "2026-05-14T13:53:23.6274464-10:00"
+    # Note: macOS BSD grep/sed does NOT support \s in BRE; use [ \t] and -E for ERE.
     local ts_line
-    ts_line=$(grep -o '"timestamp"\s*:\s*"[^"]*"' "$QUOTA_STATE_FILE" 2>/dev/null | head -1)
+    ts_line=$(grep -E -o '"timestamp"[ \t]*:[ \t]*"[^"]*"' "$QUOTA_STATE_FILE" 2>/dev/null | head -1)
 
     if [ -z "$ts_line" ]; then
         echo "QUOTA: timestamp field missing from quota_state.json -- running scraper..."
@@ -35,7 +36,7 @@ lazy_quota_refresh() {
 
     # Extract just the ISO-8601 value between the quotes
     local ts_value
-    ts_value=$(echo "$ts_line" | sed 's/.*"timestamp"\s*:\s*"\([^"]*\)".*/\1/')
+    ts_value=$(echo "$ts_line" | sed -E 's/.*"timestamp"[ \t]*:[ \t]*"([^"]*)".*/\1/')
 
     if [ -z "$ts_value" ] || [ "$ts_value" = "null" ]; then
         echo "QUOTA: timestamp is null or empty -- running scraper..."
@@ -90,28 +91,28 @@ EOF
 
     # Extract status field
     local status_raw
-    status_raw=$(grep -o '"status"\s*:\s*"[^"]*"' "$QUOTA_STATE_FILE" 2>/dev/null | head -1 | sed 's/.*"status"\s*:\s*"\([^"]*\)".*/\1/')
+    status_raw=$(grep -E -o '"status"[ \t]*:[ \t]*"[^"]*"' "$QUOTA_STATE_FILE" 2>/dev/null | head -1 | sed -E 's/.*"status"[ \t]*:[ \t]*"([^"]*)".*/\1/')
     if [ -n "$status_raw" ]; then
         status="$status_raw"
     fi
 
     # Extract fiveHour (may be a number or null)
     local fh_raw
-    fh_raw=$(grep -o '"fiveHour"\s*:\s*[^,}\n]*' "$QUOTA_STATE_FILE" 2>/dev/null | head -1 | sed 's/.*"fiveHour"\s*:\s*\([^,}]*\).*/\1/' | tr -d '[:space:]')
+    fh_raw=$(grep -E -o '"fiveHour"[ \t]*:[ \t]*[^,}\n]*' "$QUOTA_STATE_FILE" 2>/dev/null | head -1 | sed -E 's/.*"fiveHour"[ \t]*:[ \t]*([^,}]*).*/\1/' | tr -d '[:space:]')
     if [ -n "$fh_raw" ] && [ "$fh_raw" != "null" ] && [ "$fh_raw" != "?" ]; then
         five_hour="$fh_raw"
     fi
 
     # Extract sevenDay
     local sd_raw
-    sd_raw=$(grep -o '"sevenDay"\s*:\s*[^,}\n]*' "$QUOTA_STATE_FILE" 2>/dev/null | head -1 | sed 's/.*"sevenDay"\s*:\s*\([^,}]*\).*/\1/' | tr -d '[:space:]')
+    sd_raw=$(grep -E -o '"sevenDay"[ \t]*:[ \t]*[^,}\n]*' "$QUOTA_STATE_FILE" 2>/dev/null | head -1 | sed -E 's/.*"sevenDay"[ \t]*:[ \t]*([^,}]*).*/\1/' | tr -d '[:space:]')
     if [ -n "$sd_raw" ] && [ "$sd_raw" != "null" ] && [ "$sd_raw" != "?" ]; then
         seven_day="$sd_raw"
     fi
 
     # Extract resetMinutes (may be a number or null)
     local rm_raw
-    rm_raw=$(grep -o '"resetMinutes"\s*:\s*[^,}\n]*' "$QUOTA_STATE_FILE" 2>/dev/null | head -1 | sed 's/.*"resetMinutes"\s*:\s*\([^,}]*\).*/\1/' | tr -d '[:space:]')
+    rm_raw=$(grep -E -o '"resetMinutes"[ \t]*:[ \t]*[^,}\n]*' "$QUOTA_STATE_FILE" 2>/dev/null | head -1 | sed -E 's/.*"resetMinutes"[ \t]*:[ \t]*([^,}]*).*/\1/' | tr -d '[:space:]')
     if [ -n "$rm_raw" ] && [ "$rm_raw" != "null" ] && [ "$rm_raw" != "?" ]; then
         reset_minutes="$rm_raw"
     fi
