@@ -47,6 +47,13 @@ import com.scmessenger.android.ui.viewmodels.IdentityProgressStage
 @Composable
 fun IdentityProgressDisplay(
     currentStage: IdentityProgressStage,
+    // P0_ANDROID_PROGRESS_CALLBACK: transient sub-stage detail string the
+    // MeshRepository.createIdentity callback passes through. Renders as a
+    // smaller, dimmer line UNDER the active stage's `detail` so the user sees
+    // motion during otherwise-blocking work (e.g. "Committing to encrypted
+    // storage…" during the SharedPreferences commit() in
+    // persistIdentityBackup). Null/blank = hide.
+    subStageDetail: String? = null,
     modifier: Modifier = Modifier
 ) {
     val stage = currentStage
@@ -116,6 +123,19 @@ fun IdentityProgressDisplay(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
+            // P0_ANDROID_PROGRESS_CALLBACK: transient sub-stage detail line
+            // that the repo fires from inside the FFI call (e.g. "Committing
+            // to encrypted storage…" during the blocking SharedPreferences
+            // commit()). Render only when non-blank so the layout doesn't
+            // shift for callers that don't pass a sub-detail.
+            if (!subStageDetail.isNullOrBlank()) {
+                Text(
+                    text = subStageDetail,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.primary,
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
             // ETA hint
             Text(
                 text = etaText,

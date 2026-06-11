@@ -3088,9 +3088,20 @@ open class MeshRepository(private val context: Context) {
         publishIdentityInfo(restored)
     }
 
-    private fun persistIdentityBackup(core: uniffi.api.IronCore?, customSalt: ByteArray? = null) {
+    private fun persistIdentityBackup(
+        core: uniffi.api.IronCore?,
+        customSalt: ByteArray? = null,
+        // P0_ANDROID_PROGRESS_CALLBACK: drive the UI through the 3 sub-points
+        // of the persist flow. The SharedPreferences commit() and the sentinel
+        // createNewFile() are both blocking syscalls; the XChaCha20-Poly1305
+        // export is a Rust FFI call that takes a few hundred ms on Pixel 6a.
+        // Firing a callback before each one gives the user motion during the
+        // otherwise-silent "Saving to encrypted storage" stage.
+        progress: IdentityProgressCallback = { _, _ -> },
+    ) {
         val activeCore = core ?: return
         try {
+            progress(IdentityCreationEvent.PersistingToStorage, "Encrypting with XChaCha20-Poly1305…")
             val backup = if (customSalt != null) {
                 activeCore.exportIdentityBackupWithSalt("", customSalt)
             } else {
@@ -3099,6 +3110,7 @@ open class MeshRepository(private val context: Context) {
             // P0_ANDROID_010: Use commit() for synchronous write.
             // apply() is async and can lose the backup if the process is killed
             // before the disk write completes (e.g., during an ANR crash).
+            progress(IdentityCreationEvent.PersistingToStorage, "Committing to encrypted storage…")
             val committed = identityBackupPrefs.edit().putString(IDENTITY_BACKUP_KEY, backup).commit()
             if (!committed) {
                 Timber.e("Failed to commit identity backup to SharedPreferences")
@@ -3107,6 +3119,7 @@ open class MeshRepository(private val context: Context) {
             // P0_ANDROID_IDENTITY_003: Create disk-based sentinel file as backup redundancy.
             // If SharedPreferences backup is lost (app data clear, migration, corruption),
             // the sentinel file serves as a secondary indicator of prior identity creation.
+            progress(IdentityCreationEvent.PersistingToStorage, "Writing sentinel file…")
             val sentinelFile = File(storagePath, IDENTITY_BACKUP_PREFS + ".sentinel")
             try {
                 sentinelFile.createNewFile()
@@ -4440,7 +4453,20 @@ open class MeshRepository(private val context: Context) {
         }
     }
 
-    open suspend fun createIdentity(customSalt: ByteArray? = null) {
+    open suspend fun createIdentity(
+        customSalt: ByteArray? = null,
+        // P0_ANDROID_PROGRESS_CALLBACK: surface sub-stage progress to the caller
+        // so the UI's 6-stage IdentityProgressDisplay actually advances during
+        // the ~10 s createIdentity flow instead of sitting on stage 3 for the
+        // entire wall (Ed25519 keygen + persistIdentityBackup +
+        // initializeAndStartSwarm + updateBleIdentityBeacon all happen inside
+        // the single FFI call from the caller's perspective). Defaulted to a
+        // no-op so existing call sites (and unit tests that mock the
+        // single-arg signature) continue to compile. Second slot is a
+        // transient sub-detail string the UI can render under the active
+        // stage's detail line; null when not applicable.
+        progress: IdentityProgressCallback = { _, _ -> },
+    ) {
         // P0_ANDROID_024: Serialize concurrent createIdentity() calls. Log evidence
         // showed 4 threads invoking initializeIdentity() within 12ms; the second
         // through Nth callers would race on sled writes and could produce a half-
@@ -4449,6 +4475,12 @@ open class MeshRepository(private val context: Context) {
         identityCreationMutex.withLock {
             kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
                 try {
+                    // P0_ANDROID_PROGRESS_CALLBACK: stage 1 — visible during the
+                    // up-to-10s ensureServiceInitialized wait, which is the longest
+                    // blocking piece on a cold start and the wall the user
+                    // perceives as a hang. Fire it before the wait so the UI
+                    // recomposes immediately.
+                    progress(IdentityCreationEvent.PreparingStorage, "Waking the encrypted key vault…")
                     if (!ensureServiceInitialized() || ironCore == null) {
                         Timber.e("IronCore is null after ensureServiceInitialized! Cannot create identity.")
                         return@withContext
@@ -4460,16 +4492,33 @@ open class MeshRepository(private val context: Context) {
                     val current = ironCore?.getIdentityInfo()
                     if (current?.initialized == true) {
                         Timber.d("createIdentity: identity already initialized (id=${current.identityId?.take(8)}); skipping")
+                        // P0_ANDROID_PROGRESS_CALLBACK: drive the UI to the final
+                        // stage instead of vanishing mid-way on subsequent clicks.
+                        // The display will hold on VerifyingIdentity briefly before
+                        // the MainViewModel's 600ms tail-delay and Idle flip.
+                        progress(IdentityCreationEvent.VerifyingIdentity, "Identity already on disk; verifying…")
                         return@withContext
                     }
                     // P0_ANDROID_010: Grant consent before identity initialization.
                     // The Rust core requires consent_granted=true for initialize_identity().
                     // OnboardingScreen's consent checkbox gates the UI; this propagates consent to the core.
+                    progress(IdentityCreationEvent.GeneratingSalt, "Recording your consent in the vault…")
                     ironCore?.grantConsent()
+                    // P0_ANDROID_PROGRESS_CALLBACK: stage 3 — Ed25519 keygen is
+                    // the longest single step (~3s on Pixel 6a) and the spot
+                    // where users most need to see "yes, work is happening."
+                    progress(IdentityCreationEvent.GeneratingKeypair, null)
                     Timber.d("Calling ironCore.initializeIdentity()...")
                     ironCore?.initializeIdentity()
                     ensureLocalIdentityFederation()
-                    persistIdentityBackup(ironCore, customSalt)
+                    // P0_ANDROID_PROGRESS_CALLBACK: stage 4 — fingerprint is
+                    // computed by the Rust core during initializeIdentity; we
+                    // emit ComputingFingerprint here so the user sees the
+                    // transition from "Creating your identity key" to
+                    // "Deriving your identity fingerprint" between the two
+                    // FFI calls. The actual hash work is sub-millisecond.
+                    progress(IdentityCreationEvent.ComputingFingerprint, "Hashing your key…")
+                    persistIdentityBackup(ironCore, customSalt, progress)
                     Timber.i("Identity created successfully")
                     // P0_SHARED_IDENTITY: publish the freshly-created identity to all
                     // subscribers (Main/Identity/Settings VMs) so any open screen
@@ -4479,6 +4528,12 @@ open class MeshRepository(private val context: Context) {
                         cacheIdentityFields(created)
                     }
                     publishIdentityInfo(created)
+                    // P0_ANDROID_PROGRESS_CALLBACK: stage 6 — final verification
+                    // step that starts the libp2p swarm listener and updates
+                    // the BLE beacon. The libp2p TCP bind on port 9001 can
+                    // take a few hundred ms; showing "Starting swarm
+                    // listener…" gives the user motion during that wait.
+                    progress(IdentityCreationEvent.VerifyingIdentity, "Starting swarm listener…")
                     // Identity is now available; bring up internet transport if it was deferred.
                     initializeAndStartSwarm()
                     updateBleIdentityBeacon()

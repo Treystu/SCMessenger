@@ -49,6 +49,11 @@ fun IdentityScreen(
     // centered spinner. The user can see exactly which step of the cryptographic
     // pipeline is currently running.
     val progressStage by viewModel.progressStage.collectAsState()
+    // P0_ANDROID_PROGRESS_CALLBACK: transient sub-stage detail from inside the
+    // FFI call. Renders as a smaller brighter line under the active stage's
+    // `detail` in IdentityProgressDisplay so the user sees motion during the
+    // SharedPreferences commit() and the libp2p swarm bind.
+    val progressSubDetail by viewModel.progressSubDetail.collectAsState()
 
     // Collect QR code data from a coroutine to avoid blocking Main thread on FFI calls
     var qrCodeData by remember { mutableStateOf<String?>(null) }
@@ -125,6 +130,12 @@ fun IdentityScreen(
                     IdentityNotInitializedView(
                         isCreating = isLoading,
                         progressStage = progressStage,
+                        // P0_ANDROID_PROGRESS_CALLBACK: pass the parent's
+                        // collected sub-stage detail down to the leaf
+                        // composable so it can be passed to
+                        // IdentityProgressDisplay. Collecting here keeps
+                        // the leaf stateless w.r.t. the ViewModel.
+                        progressSubDetail = progressSubDetail,
                         onCreateIdentity = { nickname -> viewModel.createIdentity(nickname) },
                         modifier = Modifier.align(Alignment.Center)
                     )
@@ -160,6 +171,11 @@ private fun IdentityNotInitializedView(
     // progressStage is always a valid stage here. The Idle check below is the
     // only remaining null-equivalent branch we need.
     progressStage: com.scmessenger.android.ui.viewmodels.IdentityProgressStage,
+    // P0_ANDROID_PROGRESS_CALLBACK: transient sub-stage detail from inside the
+    // FFI call. Passed down from the parent composable (which collects from
+    // IdentityViewModel.progressSubDetail) so we can render the secondary
+    // line under the active stage's `detail`.
+    progressSubDetail: String?,
     onCreateIdentity: (nickname: String) -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -236,6 +252,10 @@ private fun IdentityNotInitializedView(
             Spacer(modifier = Modifier.height(8.dp))
             IdentityProgressDisplay(
                 currentStage = progressStage,
+                // P0_ANDROID_PROGRESS_CALLBACK: in-settings create flow uses
+                // the same callback plumbing as the onboarding flow, so the
+                // sub-stage detail reaches the display here too.
+                subStageDetail = progressSubDetail,
                 modifier = Modifier.fillMaxWidth(0.95f)
             )
         }

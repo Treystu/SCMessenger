@@ -72,6 +72,11 @@ fun OnboardingScreen(
     // user sees a tiny spinner + "Generating Identity keys..." for 3-5 seconds
     // with no indication of progress, which feels like a hang.
     val identityProgressStage by viewModel.identityProgressStage.collectAsState()
+    // P0_ANDROID_PROGRESS_CALLBACK: transient sub-stage detail from inside the
+    // FFI call. Renders as a smaller brighter line under the active stage's
+    // `detail` so the user sees motion during the SharedPreferences commit()
+    // and the libp2p swarm bind in persistIdentityBackup / initializeAndStartSwarm.
+    val identityProgressSubDetail by viewModel.identityProgressSubDetail.collectAsState()
     var showImportDialog by remember { mutableStateOf(false) }
     var importCode by remember { mutableStateOf("") }
     var hasAcceptedConsent by remember { mutableStateOf(false) }
@@ -251,6 +256,11 @@ fun OnboardingScreen(
                     Spacer(modifier = Modifier.height(16.dp))
                     com.scmessenger.android.ui.identity.IdentityProgressDisplay(
                         currentStage = identityProgressStage,
+                        // P0_ANDROID_PROGRESS_CALLBACK: pass the repo's
+                        // sub-stage detail through MainViewModel (the second
+                        // slot of the createIdentity callback) so the user
+                        // sees motion during the FFI call.
+                        subStageDetail = identityProgressSubDetail,
                         modifier = Modifier.fillMaxWidth()
                     )
                 }

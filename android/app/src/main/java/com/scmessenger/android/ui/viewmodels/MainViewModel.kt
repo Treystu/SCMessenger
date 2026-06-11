@@ -70,6 +70,16 @@ class MainViewModel @Inject constructor(
     private val _identityProgressStage = MutableStateFlow<IdentityProgressStage>(IdentityProgressStage.Idle)
     val identityProgressStage: StateFlow<IdentityProgressStage> = _identityProgressStage.asStateFlow()
 
+    // P0_ANDROID_PROGRESS_CALLBACK: second slot of the createIdentity callback
+    // (transient sub-stage detail). Drives the smaller, brighter line that
+    // appears UNDER the active stage's `detail` in IdentityProgressDisplay so
+    // the user sees motion during the ~10s FFI block (e.g. "Committing to
+    // encrypted storage…" during the SharedPreferences commit() in
+    // persistIdentityBackup). Reset to null in the finally block alongside
+    // _identityProgressStage.
+    private val _identityProgressSubDetail = MutableStateFlow<String?>(null)
+    val identityProgressSubDetail: StateFlow<String?> = _identityProgressSubDetail.asStateFlow()
+
     private val _importError = MutableStateFlow<String?>(null)
     val importError = _importError.asStateFlow()
 
@@ -249,10 +259,36 @@ class MainViewModel @Inject constructor(
                 Timber.i("P0_IDENTITY: effective salt size=${effectiveSalt.size} bytes (user_entropy=${salt != null})")
                 _identityProgressStage.value = IdentityProgressStage.GeneratingSalt
 
-                _identityProgressStage.value = IdentityProgressStage.GeneratingKeypair
-                meshRepository.createIdentity(effectiveSalt)
+                // P0_ANDROID_PROGRESS_CALLBACK: stages 3-6 are now driven by the
+                // callback fired from inside MeshRepository.createIdentity, so the
+                // UI sees real progress (Ed25519 keygen, persistIdentityBackup
+                // sub-steps, initializeAndStartSwarm) instead of a frozen stage
+                // for the entire ~10s FFI block. The repo's callback translates
+                // IdentityCreationEvent -> IdentityProgressStage via a 1:1 map.
+                // The 2 pre-call assignments above (PreparingStorage,
+                // GeneratingSalt) cover the <1ms window before the IO coroutine
+                // starts dispatching callbacks; the post-call assignments we
+                // used to do here (GeneratingKeypair/ComputingFingerprint/
+                // PersistingToStorage/VerifyingIdentity) are gone — the callback
+                // is the single source of truth for stages 3-6.
+                meshRepository.createIdentity(effectiveSalt) { event, subDetail ->
+                    _identityProgressStage.value = when (event) {
+                        is com.scmessenger.android.data.IdentityCreationEvent.PreparingStorage ->
+                            IdentityProgressStage.PreparingStorage
+                        is com.scmessenger.android.data.IdentityCreationEvent.GeneratingSalt ->
+                            IdentityProgressStage.GeneratingSalt
+                        is com.scmessenger.android.data.IdentityCreationEvent.GeneratingKeypair ->
+                            IdentityProgressStage.GeneratingKeypair
+                        is com.scmessenger.android.data.IdentityCreationEvent.ComputingFingerprint ->
+                            IdentityProgressStage.ComputingFingerprint
+                        is com.scmessenger.android.data.IdentityCreationEvent.PersistingToStorage ->
+                            IdentityProgressStage.PersistingToStorage
+                        is com.scmessenger.android.data.IdentityCreationEvent.VerifyingIdentity ->
+                            IdentityProgressStage.VerifyingIdentity
+                    }
+                    _identityProgressSubDetail.value = subDetail
+                }
                 meshRepository.setNickname(trimmedNickname)
-                _identityProgressStage.value = IdentityProgressStage.ComputingFingerprint
 
                 // Verify nickname persisted (defensive: catch silent Rust-core failures)
                 var info = meshRepository.getIdentityInfo()
@@ -265,7 +301,6 @@ class MainViewModel @Inject constructor(
                 // Issue #5: Retry loop for _isReady verification
                 // The service may still be starting, so we poll for up to 2 seconds
                 // to ensure _isReady accurately reflects the identity state.
-                _identityProgressStage.value = IdentityProgressStage.PersistingToStorage
                 var initialized = meshRepository.isIdentityInitialized()
                 var retryCount = 0
                 val maxRetries = 5
@@ -278,7 +313,6 @@ class MainViewModel @Inject constructor(
                     Timber.d("isIdentityInitialized retry $retryCount/$maxRetries: $initialized")
                 }
 
-                _identityProgressStage.value = IdentityProgressStage.VerifyingIdentity
                 Timber.i("Identity creation result initialized: $initialized; nickname=${info?.nickname}; retries=$retryCount")
                 _isReady.value = initialized
                 if (_isReady.value) {
@@ -299,6 +333,9 @@ class MainViewModel @Inject constructor(
                 // _identityProgressStage above. Non-nullable contract.
                 kotlinx.coroutines.delay(600)
                 _identityProgressStage.value = IdentityProgressStage.Idle
+                // P0_ANDROID_PROGRESS_CALLBACK: clear the transient sub-detail
+                // so a subsequent click on Create starts from a clean slate.
+                _identityProgressSubDetail.value = null
             }
         }
     }
