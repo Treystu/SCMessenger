@@ -366,4 +366,5 @@ namespace api {
     BlockedIdentity blocked_identity_with_device_id(BlockedIdentity blocked, string device_id);
     BlockedIdentity blocked_identity_with_reason(BlockedIdentity blocked, string reason);
     BlockedIdentity blocked_identity_with_notes(BlockedIdentity blocked, string notes);
+    string compute_safety_number(string first_pubkey_hex, string second_pubkey_hex);
 };

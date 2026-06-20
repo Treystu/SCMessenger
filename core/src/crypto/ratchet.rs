@@ -141,6 +141,7 @@ impl RatchetSession {
         sending_chain: Option<Chain>,
         receiving_chain: Option<Chain>,
         dh_step_count: u32,
+        skipped_keys: HashMap<([u8; 32], u32), RatchetKey>,
         initialized: bool,
         our_identity_secret: Option<X25519StaticSecret>,
     ) -> Self {
@@ -152,10 +153,14 @@ impl RatchetSession {
             sending_chain,
             receiving_chain,
             dh_step_count,
-            skipped_keys: HashMap::new(),
+            skipped_keys,
             initialized,
             our_identity_secret,
         }
+    }
+
+    pub fn skipped_keys(&self) -> &HashMap<([u8; 32], u32), RatchetKey> {
+        &self.skipped_keys
     }
 
     pub(crate) fn our_dh_secret_bytes(&self) -> [u8; 32] {

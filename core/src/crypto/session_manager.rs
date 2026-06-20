@@ -181,6 +181,8 @@ pub struct SerializableRatchetSession {
     pub has_identity_secret: bool,
     /// Identity secret (hex-encoded), only present before first DH ratchet
     pub identity_secret_hex: Option<String>,
+    /// Skipped message keys: (their_dh_public_bytes_hex, message_number) -> message_key_hex
+    pub skipped_keys: HashMap<String, String>,
 }
 
 /// Serializable chain state.
@@ -193,6 +195,12 @@ pub struct ChainState {
 impl SerializableRatchetSession {
     /// Create a serializable snapshot from a live session.
     pub fn from_session(session: &RatchetSession) -> Self {
+        let mut skipped_keys = HashMap::new();
+        for ((their_dh_pub, msg_num), key) in session.skipped_keys() {
+            let key_str = format!("{}:{}", hex::encode(their_dh_pub), msg_num);
+            skipped_keys.insert(key_str, hex::encode(key.as_bytes()));
+        }
+
         Self {
             our_dh_secret_hex: hex::encode(session.our_dh_secret_bytes()),
             our_dh_public_hex: hex::encode(session.our_public_key()),
@@ -214,6 +222,7 @@ impl SerializableRatchetSession {
             initialized: session.is_initialized(),
             has_identity_secret: session.has_identity_secret(),
             identity_secret_hex: session.identity_secret_bytes().map(hex::encode),
+            skipped_keys,
         }
     }
 
@@ -288,6 +297,33 @@ impl SerializableRatchetSession {
             None
         };
 
+        let mut skipped_keys = HashMap::new();
+        for (key_str, val_str) in self.skipped_keys {
+            let parts: Vec<&str> = key_str.split(':').collect();
+            if parts.len() != 2 {
+                continue;
+            }
+            let their_dh_bytes = hex::decode(parts[0])
+                .map_err(|e| anyhow::anyhow!("Invalid skipped key hex: {}", e))?;
+            if their_dh_bytes.len() != 32 {
+                continue;
+            }
+            let msg_num: u32 = parts[1].parse()
+                .map_err(|e| anyhow::anyhow!("Invalid skipped key msg number: {}", e))?;
+            let mut key_arr = [0u8; 32];
+            key_arr.copy_from_slice(&their_dh_bytes);
+
+            let val_bytes = hex::decode(val_str)
+                .map_err(|e| anyhow::anyhow!("Invalid skipped key val hex: {}", e))?;
+            if val_bytes.len() != 32 {
+                continue;
+            }
+            let mut val_arr = [0u8; 32];
+            val_arr.copy_from_slice(&val_bytes);
+
+            skipped_keys.insert((key_arr, msg_num), RatchetKey::from_bytes(val_arr));
+        }
+
         Ok(RatchetSession::reconstruct(
             our_dh_secret,
             our_dh_public,
@@ -296,6 +332,7 @@ impl SerializableRatchetSession {
             sending_chain,
             receiving_chain,
             self.dh_step_count,
+            skipped_keys,
             self.initialized,
             our_identity_secret,
         ))
@@ -342,4 +379,74 @@ mod tests {
         assert_eq!(manager2.session_count(), 1);
         assert!(manager2.get_session(peer_id).is_some());
     }
+
+    #[test]
+    fn test_manager_persistence_roundtrip_with_skipped_keys() {
+        let backend = Arc::new(MemoryStorage::new());
+        let mut manager = RatchetSessionManager::with_backend(backend.clone());
+
+        let our_key = generate_signing_key();
+        let their_key = generate_signing_key();
+        let their_x25519_secret = crate::crypto::encrypt::ed25519_to_x25519_secret(&their_key);
+        let their_x25519_pub = X25519PublicKey::from(&their_x25519_secret);
+        let peer_id = "peer-1";
+
+        let session = manager
+            .get_or_create_session(peer_id, &our_key, &their_x25519_pub)
+            .unwrap();
+
+        // Let's create a receiver session to generate some skipped keys.
+        let mut receiver_manager = RatchetSessionManager::new();
+        let our_x25519_secret = crate::crypto::encrypt::ed25519_to_x25519_secret(&our_key);
+        let our_x25519_pub = X25519PublicKey::from(&our_x25519_secret);
+
+        let receiver_session = receiver_manager
+            .create_receiver_session("peer-2", &their_key, &our_x25519_pub)
+            .unwrap();
+
+        // Encrypt multiple messages from sender to receiver
+        let enc1 = session.encrypt(b"msg 1", b"aad").unwrap();
+        let enc2 = session.encrypt(b"msg 2", b"aad").unwrap();
+        let enc3 = session.encrypt(b"msg 3", b"aad").unwrap();
+
+        // Decrypt only msg 3 on receiver. This forces receiver to skip msg 1 and msg 2, caching their keys.
+        let dec3 = receiver_session
+            .decrypt(&enc3.our_dh_public, enc3.message_number, &enc3.nonce, &enc3.ciphertext, b"aad")
+            .unwrap();
+        assert_eq!(dec3, b"msg 3");
+
+        // Verify that receiver session has 2 skipped keys
+        assert_eq!(receiver_session.skipped_keys().len(), 2);
+
+        // Associate backend with receiver_manager, save it, load it in receiver_manager2
+        let mut r_manager = RatchetSessionManager::with_backend(backend.clone());
+        r_manager.create_receiver_session("peer-2", &their_key, &our_x25519_pub).unwrap();
+        // Overwrite the session with the one that has skipped keys
+        r_manager.remove_session("peer-2");
+        r_manager.deserialize_sessions(&receiver_manager.serialize_sessions().unwrap()).unwrap();
+
+        assert_eq!(r_manager.get_session("peer-2").unwrap().skipped_keys().len(), 2);
+        r_manager.save().unwrap();
+
+        let mut r_manager2 = RatchetSessionManager::with_backend(backend);
+        r_manager2.load().unwrap();
+
+        let loaded_session = r_manager2.get_session_mut("peer-2").unwrap();
+        assert_eq!(loaded_session.skipped_keys().len(), 2);
+
+        // Decrypt skipped message 1 and 2 to prove the keys are valid and persistent
+        let dec1 = loaded_session
+            .decrypt(&enc1.our_dh_public, enc1.message_number, &enc1.nonce, &enc1.ciphertext, b"aad")
+            .unwrap();
+        assert_eq!(dec1, b"msg 1");
+
+        let dec2 = loaded_session
+            .decrypt(&enc2.our_dh_public, enc2.message_number, &enc2.nonce, &enc2.ciphertext, b"aad")
+            .unwrap();
+        assert_eq!(dec2, b"msg 2");
+
+        // After decryption, skipped keys should be removed from cache
+        assert_eq!(loaded_session.skipped_keys().len(), 0);
+    }
 }
+

@@ -81,7 +81,7 @@ pub use settings::{DiscoveryMode, MeshSettings};
 #[cfg(not(target_arch = "wasm32"))]
 pub use blocked_bridge::{
     blocked_identity_new, blocked_identity_with_device_id, blocked_identity_with_notes,
-    blocked_identity_with_reason, BlockedIdentity, BlockedManager,
+    blocked_identity_with_reason, compute_safety_number, BlockedIdentity, BlockedManager,
 };
 #[cfg(not(target_arch = "wasm32"))]
 pub use contacts_bridge::{Contact, ContactManager};
