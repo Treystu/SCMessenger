@@ -264,13 +264,31 @@ pub async fn run_ble_central_ingress(
 }
 
 /// Run peripheral advertising.
-/// Note: btleplug doesn't fully support advertising cross-platform native.
-/// This logs intention for mobile peripheral discovery.
+///
+/// This is intentionally a no-op stub, not a partial implementation:
+/// btleplug is central-only on desktop (no cross-platform peripheral/GATT-
+/// server API), and there is no other portable Rust crate for this. Making
+/// the CLI advertise as a BLE peripheral would need a separate
+/// platform-specific implementation per OS (BlueZ D-Bus GATT server +
+/// LEAdvertisingManager1 on Linux, CoreBluetooth's CBPeripheralManager via
+/// Objective-C/Swift FFI on macOS, WinRT's GattServiceProvider +
+/// BluetoothLEAdvertisementPublisher on Windows) — each independently
+/// substantial and, critically, unverifiable without physical BLE hardware
+/// per platform, which was not available when this was investigated. See
+/// `tasks/T1.8/progress.md` for the full writeup and recommendation.
+///
+/// This does not block real BLE connectivity: by design, mobile/native
+/// peers are the peripherals (they advertise) and this CLI is the central
+/// (it scans and connects) — see `run_ble_central_ingress`. The gap is
+/// only desktop-CLI-to-desktop-CLI discovery over BLE specifically.
 pub async fn run_ble_peripheral_advertising(_core: Arc<IronCore>) {
     #[cfg(any(target_os = "linux", target_os = "windows", target_os = "macos"))]
     {
-        tracing::info!(
-            "BLE: GATT advertising stub started for service {:x} (Awaiting full platform advertising support).",
+        tracing::warn!(
+            "BLE: peripheral advertising for service {:x} is not implemented on this platform \
+             (known limitation, not a bug — see tasks/T1.8/progress.md). This CLI still discovers \
+             and connects to BLE peripherals normally (mobile/native peers); it just cannot itself \
+             be discovered by another desktop CLI over BLE.",
             GATT_SERVICE_UUID
         );
 

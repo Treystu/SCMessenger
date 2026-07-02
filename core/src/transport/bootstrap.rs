@@ -25,15 +25,7 @@ use web_time::{Duration, SystemTime};
 /// for cellular networks that block non-standard ports.
 /// P0_NETWORK_002: Added enhanced error diagnostics for connectivity failures
 /// and extended WebSocket fallback endpoints.
-pub const CORE_BOOTSTRAP_NODES: &[&str] = &[
-    // TCP on non-standard port (may be blocked by carriers)
-    "/ip4/34.135.34.73/tcp/9001",
-    "/ip4/34.135.34.74/tcp/9001",
-    // WebSocket fallback on standard HTTP ports (cellular-friendly)
-    "/ip4/34.135.34.73/tcp/443/ws",
-    "/ip4/104.28.216.43/tcp/443/ws",
-    "/ip4/34.135.34.74/tcp/443/ws",
-];
+pub const CORE_BOOTSTRAP_NODES: &[&str] = &[];
 
 /// Configuration for bootstrap recovery
 #[derive(Debug, Clone)]
@@ -503,9 +495,9 @@ impl BootstrapManager {
     }
 }
 
-/// Resolve bootstrap nodes from SCMESSENGER_BOOTSTRAP_NODES environment variable
+/// Resolve bootstrap nodes from SC_BOOTSTRAP_NODES environment variable
 fn resolve_env_bootstrap_nodes() -> Vec<Multiaddr> {
-    if let Ok(nodes_str) = std::env::var("SCMESSENGER_BOOTSTRAP_NODES") {
+    if let Ok(nodes_str) = std::env::var("SC_BOOTSTRAP_NODES") {
         if !nodes_str.trim().is_empty() {
             return nodes_str
                 .split(',')
@@ -540,22 +532,7 @@ fn discover_local_peers() -> Result<Vec<Multiaddr>, String> {
 /// These addresses use /ws suffix to indicate WebSocket transport.
 /// P0_NETWORK_002: Extended with additional backup WebSocket endpoints.
 fn discover_websocket_bootstrap() -> Vec<Multiaddr> {
-    let mut addrs = Vec::new();
-
-    // Direct IP fallback for GCP relay and backup relays
-    let ip_ws_addrs = [
-        "/ip4/34.135.34.73/tcp/443/ws",
-        "/ip4/104.28.216.43/tcp/443/ws",
-        "/ip4/34.135.34.74/tcp/443/ws", // Backup relay
-    ];
-
-    for addr_str in &ip_ws_addrs {
-        if let Ok(addr) = addr_str.parse() {
-            addrs.push(addr);
-        }
-    }
-
-    addrs
+    Vec::new()
 }
 
 /// P0_NETWORK_002: Hardcoded backup relay addresses
@@ -563,22 +540,7 @@ fn discover_websocket_bootstrap() -> Vec<Multiaddr> {
 /// Provides fallback relay addresses when all other discovery methods fail.
 /// These addresses are hardcoded as a last-resort fallback mechanism.
 fn discover_hardcoded_backup_relays() -> Vec<Multiaddr> {
-    let mut addrs = Vec::new();
-
-    // Hardcoded backup relay addresses for emergency fallback (raw IP direct routing)
-    let backup_nodes = [
-        // Secondary backup relay - Direct TCP/QUIC
-        "/ip4/34.135.34.74/tcp/9001/p2p/12D3KooWBackup2RelayNode0000000000000000000000000000",
-        "/ip4/34.135.34.74/udp/9001/quic-v1/p2p/12D3KooWBackup2RelayNode0000000000000000000000000000",
-    ];
-
-    for node in backup_nodes.iter() {
-        if let Ok(addr) = node.parse() {
-            addrs.push(addr);
-        }
-    }
-
-    addrs
+    Vec::new()
 }
 
 #[cfg(test)]
@@ -654,7 +616,10 @@ mod tests {
     #[test]
     fn test_dns_discovery() {
         let addrs = discover_dns_bootstrap().unwrap();
-        assert!(addrs.is_empty(), "DNS bootstrap discovery should be empty in sovereign mode");
+        assert!(
+            addrs.is_empty(),
+            "DNS bootstrap discovery should be empty in sovereign mode"
+        );
     }
 
     #[test]
@@ -668,16 +633,8 @@ mod tests {
     fn test_websocket_discovery() {
         let addrs = discover_websocket_bootstrap();
         assert!(
-            !addrs.is_empty(),
-            "WebSocket fallback should provide addresses"
-        );
-        assert!(
-            addrs.iter().any(|a| a.to_string().contains("/ws")),
-            "Should contain WebSocket multiaddrs with /ws suffix"
-        );
-        assert!(
-            addrs.iter().any(|a| a.to_string().contains("443")),
-            "Should contain addresses on standard HTTPS port"
+            addrs.is_empty(),
+            "WebSocket fallback should be empty when no hardcoded IPs exist"
         );
     }
 }

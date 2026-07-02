@@ -10,6 +10,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 #[derive(Debug, Clone)]
 pub struct ReputationTracker {
     scores: HashMap<u64, i64>,
+    #[allow(dead_code)] // Phase 2: decay scoring
     decay_half_life: Duration,
 }
 

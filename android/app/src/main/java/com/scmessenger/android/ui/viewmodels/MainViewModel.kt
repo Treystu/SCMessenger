@@ -25,6 +25,7 @@ import javax.inject.Inject
 class MainViewModel @Inject constructor(
     private val meshRepository: MeshRepository,
     private val preferencesRepository: PreferencesRepository,
+    private val identityCreationCoordinator: com.scmessenger.android.data.IdentityCreationCoordinator,
     @ApplicationContext private val context: Context
 ) : ViewModel() {
 
@@ -50,35 +51,15 @@ class MainViewModel @Inject constructor(
         initialValue = true
     )
 
-    private val _isCreatingIdentity = MutableStateFlow(false)
-    val isCreatingIdentity = _isCreatingIdentity.asStateFlow()
+    val isCreatingIdentity: StateFlow<Boolean> = identityCreationCoordinator.identityState.map {
+        it == com.scmessenger.android.data.IdentityState.Restoring || it == com.scmessenger.android.data.IdentityState.CachedPendingHydration
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
 
-    private val _identityError = MutableStateFlow<String?>(null)
-    val identityError = _identityError.asStateFlow()
+    val identityError: StateFlow<String?> = identityCreationCoordinator.error
 
-    // P0_ANDROID_IDENTITY_PROOF_OF_WORK: high-level proof-of-work stages emitted
-    // by createIdentity() — single source of truth shared with IdentityViewModel.
-    //
-    // v0.3.4 (P0_ANDROID_CRASHFIX): changed from MutableStateFlow<IdentityProgressStage?>(null)
-    // to MutableStateFlow<IdentityProgressStage>(Idle). See the long comment in
-    // IdentityViewModel for the full rationale. The previous nullable type caused
-    // the NPE in IdentityScreen.ProofOfWorkList at `currentStage.id` line 234
-    // because the screen rendered IdentityNotInitializedView before the user
-    // tapped Create (when progressStage was still null), and the smart-cast at
-    // the call site could not survive Compose's recomposition. Type-system
-    // enforcement via Idle is the only durable fix.
-    private val _identityProgressStage = MutableStateFlow<IdentityProgressStage>(IdentityProgressStage.Idle)
-    val identityProgressStage: StateFlow<IdentityProgressStage> = _identityProgressStage.asStateFlow()
+    val identityProgressStage: StateFlow<IdentityProgressStage> = identityCreationCoordinator.progressStage
 
-    // P0_ANDROID_PROGRESS_CALLBACK: second slot of the createIdentity callback
-    // (transient sub-stage detail). Drives the smaller, brighter line that
-    // appears UNDER the active stage's `detail` in IdentityProgressDisplay so
-    // the user sees motion during the ~10s FFI block (e.g. "Committing to
-    // encrypted storage…" during the SharedPreferences commit() in
-    // persistIdentityBackup). Reset to null in the finally block alongside
-    // _identityProgressStage.
-    private val _identityProgressSubDetail = MutableStateFlow<String?>(null)
-    val identityProgressSubDetail: StateFlow<String?> = _identityProgressSubDetail.asStateFlow()
+    val identityProgressSubDetail: StateFlow<String?> = identityCreationCoordinator.progressSubDetail
 
     private val _importError = MutableStateFlow<String?>(null)
     val importError = _importError.asStateFlow()
@@ -190,7 +171,7 @@ class MainViewModel @Inject constructor(
                 Timber.d("refreshIdentityState() called")
                 val initialized = meshRepository.isIdentityInitialized()
                 Timber.d("Identity initialized state: $initialized")
-                _identityError.value = null
+                identityCreationCoordinator.clearError()
                 _isReady.value = initialized
 
                 if (initialized) {
@@ -211,137 +192,18 @@ class MainViewModel @Inject constructor(
 
     /**
      * Create a new identity with retry logic for _isReady verification.
-     * Issue #5: Added retry/verify loop to ensure _isReady reflects actual state
-     * after identity creation (service may still be starting when first checked).
      */
     fun createIdentity(nickname: String, salt: ByteArray? = null) {
-        // P0_ANDROID_024: Re-entrancy guard. Compose recomposition or a fast double-tap on
-        // the "Generate Identity" button can fire createIdentity() multiple times before
-        // _isCreatingIdentity flips to true (it is set inside the coroutine, not before
-        // launch). Without this guard, two coroutines race through initializeIdentity,
-        // setNickname, and the _isReady / preferences writes, which can leave the
-        // onboarding flow in a broken intermediate state.
-        //
-        // P0_ANDROID_IDENTITY_PROGRESS: We now set _isCreatingIdentity.value = true
-        // SYNCHRONOUSLY on the Main thread (compareAndSet is atomic and thread-safe)
-        // BEFORE the IO coroutine launches. Previously the state flipped to true inside
-        // the IO coroutine, so there was a 5-50ms window between the button tap and the
-        // first recomposition where the user saw no progress indication at all. The
-        // button looked frozen for a few seconds until the FFI call returned.
-        if (!_isCreatingIdentity.compareAndSet(expect = false, update = true)) {
-            Timber.d("createIdentity: ignored re-entrant call (already in progress)")
-            return
-        }
-        // Mirror the state flip on the Main thread immediately so Compose recomposes
-        // before any IO work begins. (compareAndSet above already updated the StateFlow
-        // atomically; this comment exists to make the synchronous-flip intent explicit
-        // for future maintainers.)
-        _identityError.value = null
-        // P0_ANDROID_IDENTITY_PROOF_OF_WORK: emit the first proof-of-work stage
-        // SYNCHRONOUSLY so the UI recomposes with stage 1 visible before the IO
-        // coroutine begins. This is the single source of truth for "we are working".
-        _identityProgressStage.value = IdentityProgressStage.PreparingStorage
-        viewModelScope.launch(Dispatchers.IO) {
-            try {
-                val trimmedNickname = nickname.trim()
-                if (trimmedNickname.isEmpty()) {
-                    Timber.w("Refusing identity creation with blank nickname")
-                    _identityError.value = "Nickname is required"
-                    _isReady.value = false
-                    return@launch
-                }
-                // P0_ANDROID_IDENTITY_PROOF_OF_WORK: salt. If the entropy canvas
-                // produced a salt, use that; otherwise draw 32 bytes of fresh entropy
-                // from the platform CSPRNG. This guarantees every call (onboarding
-                // AND in-settings) gets a random salt — fixing the regression where
-                // the in-settings path was silently dropping the salt parameter.
-                val effectiveSalt = salt ?: com.scmessenger.android.ui.viewmodels.IdentityViewModel.generateSecureRandomSalt()
-                Timber.i("P0_IDENTITY: effective salt size=${effectiveSalt.size} bytes (user_entropy=${salt != null})")
-                _identityProgressStage.value = IdentityProgressStage.GeneratingSalt
-
-                // P0_ANDROID_PROGRESS_CALLBACK: stages 3-6 are now driven by the
-                // callback fired from inside MeshRepository.createIdentity, so the
-                // UI sees real progress (Ed25519 keygen, persistIdentityBackup
-                // sub-steps, initializeAndStartSwarm) instead of a frozen stage
-                // for the entire ~10s FFI block. The repo's callback translates
-                // IdentityCreationEvent -> IdentityProgressStage via a 1:1 map.
-                // The 2 pre-call assignments above (PreparingStorage,
-                // GeneratingSalt) cover the <1ms window before the IO coroutine
-                // starts dispatching callbacks; the post-call assignments we
-                // used to do here (GeneratingKeypair/ComputingFingerprint/
-                // PersistingToStorage/VerifyingIdentity) are gone — the callback
-                // is the single source of truth for stages 3-6.
-                meshRepository.createIdentity(effectiveSalt) { event, subDetail ->
-                    _identityProgressStage.value = when (event) {
-                        is com.scmessenger.android.data.IdentityCreationEvent.PreparingStorage ->
-                            IdentityProgressStage.PreparingStorage
-                        is com.scmessenger.android.data.IdentityCreationEvent.GeneratingSalt ->
-                            IdentityProgressStage.GeneratingSalt
-                        is com.scmessenger.android.data.IdentityCreationEvent.GeneratingKeypair ->
-                            IdentityProgressStage.GeneratingKeypair
-                        is com.scmessenger.android.data.IdentityCreationEvent.ComputingFingerprint ->
-                            IdentityProgressStage.ComputingFingerprint
-                        is com.scmessenger.android.data.IdentityCreationEvent.PersistingToStorage ->
-                            IdentityProgressStage.PersistingToStorage
-                        is com.scmessenger.android.data.IdentityCreationEvent.VerifyingIdentity ->
-                            IdentityProgressStage.VerifyingIdentity
-                    }
-                    _identityProgressSubDetail.value = subDetail
-                }
-                meshRepository.setNickname(trimmedNickname)
-
-                // Verify nickname persisted (defensive: catch silent Rust-core failures)
-                var info = meshRepository.getIdentityInfo()
-                if (info?.nickname.isNullOrBlank()) {
-                    Timber.w("Nickname was blank after setNickname; retrying once")
-                    meshRepository.setNickname(trimmedNickname)
-                    info = meshRepository.getIdentityInfo()
-                }
-
-                // Issue #5: Retry loop for _isReady verification
-                // The service may still be starting, so we poll for up to 2 seconds
-                // to ensure _isReady accurately reflects the identity state.
-                var initialized = meshRepository.isIdentityInitialized()
-                var retryCount = 0
-                val maxRetries = 5
-                val retryDelayMs = 100L
-
-                while (!initialized && retryCount < maxRetries) {
-                    kotlinx.coroutines.delay(retryDelayMs)
-                    initialized = meshRepository.isIdentityInitialized()
-                    retryCount++
-                    Timber.d("isIdentityInitialized retry $retryCount/$maxRetries: $initialized")
-                }
-
-                Timber.i("Identity creation result initialized: $initialized; nickname=${info?.nickname}; retries=$retryCount")
-                _isReady.value = initialized
-                if (_isReady.value) {
-                    preferencesRepository.setOnboardingCompleted(true)
-                    preferencesRepository.setInstallChoiceCompleted(true)
-                    // Defensive: cache nickname in DataStore as fallback for Rust-core regression
-                    preferencesRepository.setIdentityNickname(trimmedNickname)
-                }
-            } catch (e: Exception) {
-                Timber.e(e, "Failed to create identity")
-                _identityError.value = e.message ?: "Failed to create identity"
-                _isReady.value = false
-            } finally {
-                _isCreatingIdentity.value = false
-                // Hold the final stage visible for a moment so the user can see
-                // the proof-of-work completed.
-                // v0.3.4: set to Idle (was null) — see type-system comment on
-                // _identityProgressStage above. Non-nullable contract.
-                kotlinx.coroutines.delay(600)
-                _identityProgressStage.value = IdentityProgressStage.Idle
-                // P0_ANDROID_PROGRESS_CALLBACK: clear the transient sub-detail
-                // so a subsequent click on Create starts from a clean slate.
-                _identityProgressSubDetail.value = null
+        viewModelScope.launch {
+            val success = identityCreationCoordinator.createIdentity(nickname, salt)
+            if (success) {
+                refreshIdentityState()
             }
         }
     }
 
     fun clearIdentityError() {
-        _identityError.value = null
+        identityCreationCoordinator.clearError()
     }
 
     fun refreshStorageStatus() {
@@ -390,7 +252,9 @@ class MainViewModel @Inject constructor(
                     addedAt = (System.currentTimeMillis() / 1000).toULong(),
                     lastSeen = null,
                     notes = notes,
-                    lastKnownDeviceId = null
+                    lastKnownDeviceId = null,
+                    verifiedAt = null,
+                    isTombstone = false
                 )
                 meshRepository.addContact(contact)
                 Timber.i("Contact imported: ${identityId.take(8)}...")

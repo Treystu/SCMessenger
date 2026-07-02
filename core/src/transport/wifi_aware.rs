@@ -4,9 +4,9 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use libp2p::PeerId;
-use tracing::{info, warn};
 use parking_lot::RwLock;
 use thiserror::Error;
+use tracing::{info, warn};
 
 // ERROR TYPES
 // ============================================================================
@@ -375,23 +375,26 @@ impl WifiAwareTransport {
 
         let peer_id_str = peer_id.to_string();
 
-        // Check if peer is discovered
-        let discovered = self.discovered_peers.read();
-        let peer = discovered
-            .get(&peer_id_str)
-            .ok_or_else(|| WifiAwareError::PeerNotFound(peer_id_str.clone()))?
-            .clone();
-        drop(discovered);
+        // Check if peer is discovered (guard dropped before any await)
+        let peer = {
+            let discovered = self.discovered_peers.read();
+            discovered
+                .get(&peer_id_str)
+                .ok_or_else(|| WifiAwareError::PeerNotFound(peer_id_str.clone()))?
+                .clone()
+        };
 
         // Check if we're at capacity
-        let mut paths = self.data_paths.write();
-        if paths.len() >= self.config.max_data_paths {
-            return Err(WifiAwareError::DataPathFailed(
-                "Maximum data paths reached".to_string(),
-            ));
+        {
+            let paths = self.data_paths.read();
+            if paths.len() >= self.config.max_data_paths {
+                return Err(WifiAwareError::DataPathFailed(
+                    "Maximum data paths reached".to_string(),
+                ));
+            }
         }
 
-        // Create data path via platform bridge
+        // Create data path via platform bridge (no locks held during await)
         let socket_addr = self.bridge.create_data_path(&peer_id_str, pmk).await?;
 
         let data_path_info = DataPathInfo {
@@ -402,7 +405,9 @@ impl WifiAwareTransport {
             is_publisher: false,
         };
 
-        paths.insert(peer_id_str.clone(), data_path_info.clone());
+        self.data_paths
+            .write()
+            .insert(peer_id_str.clone(), data_path_info.clone());
         *self.state.write() = WifiAwareState::DataPathActive;
 
         info!(
@@ -487,10 +492,11 @@ impl WifiAwareTransport {
                     service_info,
                     rssi,
                 };
-                discovered_peers
-                    .write()
-                    .insert(peer_id.to_string(), peer);
-                info!("Auto-discovered WiFi Aware peer: {} (RSSI: {})", peer_id, rssi);
+                discovered_peers.write().insert(peer_id.to_string(), peer);
+                info!(
+                    "Auto-discovered WiFi Aware peer: {} (RSSI: {})",
+                    peer_id, rssi
+                );
             },
         ));
     }
@@ -530,7 +536,7 @@ fn estimate_bandwidth_from_rssi(rssi: i32) -> u64 {
     const RSSI_EXCELLENT: i32 = -40;
     const RSSI_POOR: i32 = -120;
 
-    let rssi = rssi.max(RSSI_POOR).min(RSSI_EXCELLENT);
+    let rssi = rssi.clamp(RSSI_POOR, RSSI_EXCELLENT);
     let ratio = (rssi - RSSI_POOR) as f64 / (RSSI_EXCELLENT - RSSI_POOR) as f64;
     let bandwidth = MIN_BANDWIDTH as f64 + (MAX_BANDWIDTH - MIN_BANDWIDTH) as f64 * ratio;
 

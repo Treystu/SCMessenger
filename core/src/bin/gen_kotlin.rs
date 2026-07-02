@@ -44,12 +44,12 @@ fn main() {
 
     if let Ok(target_dir) = std::env::var("CARGO_TARGET_DIR") {
         let target_dir = Utf8PathBuf::from(target_dir);
-        candidate_paths.push(target_dir.join("debug/libscmessenger_mobile.so"));
-        candidate_paths.push(target_dir.join("release/libscmessenger_mobile.so"));
-        candidate_paths.push(target_dir.join("debug/scmessenger_mobile.dll"));
-        candidate_paths.push(target_dir.join("release/scmessenger_mobile.dll"));
-        candidate_paths.push(target_dir.join("debug/libscmessenger_mobile.dylib"));
-        candidate_paths.push(target_dir.join("release/libscmessenger_mobile.dylib"));
+        candidate_paths.push(target_dir.join("debug/libscmessenger_core.so"));
+        candidate_paths.push(target_dir.join("release/libscmessenger_core.so"));
+        candidate_paths.push(target_dir.join("debug/scmessenger_core.dll"));
+        candidate_paths.push(target_dir.join("release/scmessenger_core.dll"));
+        candidate_paths.push(target_dir.join("debug/libscmessenger_core.dylib"));
+        candidate_paths.push(target_dir.join("release/libscmessenger_core.dylib"));
         // Android per-ABI build outputs (the cdylib compiled for android targets
         // lives under <CARGO_TARGET_DIR>/<triple>/.../<name>.so).
         for triple in &[
@@ -58,10 +58,9 @@ fn main() {
             "x86_64-linux-android",
             "i686-linux-android",
         ] {
+            candidate_paths.push(target_dir.join(format!("{triple}/debug/libscmessenger_core.so")));
             candidate_paths
-                .push(target_dir.join(format!("{triple}/debug/libscmessenger_mobile.so")));
-            candidate_paths
-                .push(target_dir.join(format!("{triple}/release/libscmessenger_mobile.so")));
+                .push(target_dir.join(format!("{triple}/release/libscmessenger_core.so")));
         }
     }
 
@@ -69,14 +68,14 @@ fn main() {
         [
             host_triple_dir.as_str(),
             host_triple_dir_release.as_str(),
-            "../target/x86_64-pc-windows-msvc/debug/scmessenger_mobile.dll",
-            "../target/x86_64-pc-windows-msvc/release/scmessenger_mobile.dll",
-            "../target/debug/scmessenger_mobile.dll",
-            "../target/release/scmessenger_mobile.dll",
-            "../target/debug/libscmessenger_mobile.so",
-            "../target/release/libscmessenger_mobile.so",
-            "../target/debug/libscmessenger_mobile.dylib",
-            "../target/release/libscmessenger_mobile.dylib",
+            "../target/x86_64-pc-windows-msvc/debug/scmessenger_core.dll",
+            "../target/x86_64-pc-windows-msvc/release/scmessenger_core.dll",
+            "../target/debug/scmessenger_core.dll",
+            "../target/release/scmessenger_core.dll",
+            "../target/debug/libscmessenger_core.so",
+            "../target/release/libscmessenger_core.so",
+            "../target/debug/libscmessenger_core.dylib",
+            "../target/release/libscmessenger_core.dylib",
         ]
         .iter()
         .map(|p| manifest_path.join(p)),
@@ -87,7 +86,7 @@ fn main() {
         .find(|p| p.exists())
         .unwrap_or_else(|| {
             panic!(
-                "scmessenger_mobile cdylib not found. \
+                "scmessenger_core cdylib not found. \
                  Please run: cargo build -p scmessenger-mobile"
             )
         });

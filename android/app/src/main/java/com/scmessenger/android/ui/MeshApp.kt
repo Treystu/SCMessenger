@@ -41,8 +41,7 @@ import com.scmessenger.android.ui.settings.PowerSettingsScreen
  * Sets up the navigation graph and bottom navigation bar.
  */
 @Composable
-fun MeshApp() {
-    val mainViewModel: MainViewModel = hiltViewModel()
+fun MeshApp(mainViewModel: MainViewModel = hiltViewModel()) {
     val hasIdentity by mainViewModel.hasIdentity.collectAsState()
     val showOnboarding by mainViewModel.showOnboarding.collectAsState()
     val isStorageLow by mainViewModel.isStorageLow.collectAsState()
@@ -210,7 +209,23 @@ fun MeshNavHost(
                         onNavigateBack = { navController.popBackStack() },
                         onNavigateToChat = { peerId ->
                             navController.navigate("chat/$peerId")
+                        },
+                        onNavigateToVerify = { peerId ->
+                            navController.navigate("verify_safety_number/$peerId")
                         }
+                    )
+                }
+            }
+
+            composable(
+                route = "verify_safety_number/{contactId}",
+                arguments = listOf(androidx.navigation.navArgument("contactId") { type = androidx.navigation.NavType.StringType })
+            ) { backStackEntry ->
+                val contactId = backStackEntry.arguments?.getString("contactId") ?: return@composable
+                Box(modifier = Modifier.padding(bottomPadding)) {
+                    com.scmessenger.android.ui.contacts.VerifySafetyNumberScreen(
+                        contactId = contactId,
+                        onNavigateBack = { navController.popBackStack() }
                     )
                 }
             }

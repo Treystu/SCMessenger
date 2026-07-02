@@ -1,7 +1,5 @@
 package com.scmessenger.android.ui.identity
 
-import android.graphics.Bitmap
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -12,21 +10,19 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
-import com.google.zxing.BarcodeFormat
-import com.google.zxing.qrcode.QRCodeWriter
 import com.scmessenger.android.R
 import com.scmessenger.android.ui.components.CopyableText
 import com.scmessenger.android.ui.components.ErrorBanner
 import com.scmessenger.android.ui.components.IdenticonFromPeerId
 import com.scmessenger.android.ui.viewmodels.IdentityViewModel
-import timber.log.Timber
+
+import com.scmessenger.android.data.IdentityState
 
 /**
  * Identity screen - Display public key, QR code, and export options.
@@ -41,6 +37,7 @@ fun IdentityScreen(
     viewModel: IdentityViewModel = hiltViewModel()
 ) {
     val identityInfo by viewModel.identityInfo.collectAsState()
+    val identityState by viewModel.identityState.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
     val error by viewModel.error.collectAsState()
     val successMessage by viewModel.successMessage.collectAsState()
@@ -103,54 +100,58 @@ fun IdentityScreen(
                 .fillMaxSize()
                 .padding(paddingValues)
         ) {
-            when {
-                // P0_ANDROID_IDENTITY_PROOF_OF_WORK: distinguish between "initial
-                // load" (isLoading + Idle progress stage) and "active creation"
-                // (progressStage != Idle). The old code conflated them and
-                // replaced the entire form with a tiny centered spinner during
-                // creation, hiding the button + form + everything from the user.
-                // Now we only show the centered spinner during the very first
-                // identityInfo load; once we know identity is not initialized,
-                // we render the form WITH the proof-of-work stages inline.
-                //
-                // v0.3.4 (P0_ANDROID_CRASHFIX): `progressStage == null` became
-                // `progressStage is IdentityProgressStage.Idle` because
-                // _progressStage is now non-nullable in IdentityViewModel.
-                isLoading && progressStage is com.scmessenger.android.ui.viewmodels.IdentityProgressStage.Idle && identityInfo == null -> {
-                    CircularProgressIndicator(
-                        modifier = Modifier.align(Alignment.Center)
-                    )
+            when (identityState) {
+                IdentityState.CachedPendingHydration -> {
+                    Column(
+                        modifier = Modifier.align(Alignment.Center),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        CircularProgressIndicator()
+                        Text(
+                            text = "Restoring your identity…",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
 
-                identityInfo == null || identityInfo?.initialized != true -> {
-                    // Identity not initialized
-                    // P0_ANDROID_IDENTITY_PROOF_OF_WORK: pass the progress stage
-                    // down to IdentityNotInitializedView so the user sees the 6
-                    // named stages of cryptographic work, not just a spinner.
+                IdentityState.Restoring -> {
                     IdentityNotInitializedView(
-                        isCreating = isLoading,
+                        isCreating = true,
                         progressStage = progressStage,
-                        // P0_ANDROID_PROGRESS_CALLBACK: pass the parent's
-                        // collected sub-stage detail down to the leaf
-                        // composable so it can be passed to
-                        // IdentityProgressDisplay. Collecting here keeps
-                        // the leaf stateless w.r.t. the ViewModel.
                         progressSubDetail = progressSubDetail,
                         onCreateIdentity = { nickname -> viewModel.createIdentity(nickname) },
                         modifier = Modifier.align(Alignment.Center)
                     )
                 }
 
+                IdentityState.Ready -> {
+                    val resolvedIdentity = identityInfo
+                    if (resolvedIdentity != null && resolvedIdentity.initialized) {
+                        IdentityContent(
+                            identityInfo = resolvedIdentity,
+                            qrCodeData = qrCodeData,
+                            error = error,
+                            successMessage = successMessage,
+                            onClearError = { viewModel.clearError() },
+                            onClearSuccess = { viewModel.clearSuccessMessage() }
+                        )
+                    } else {
+                        // Fallback in case state claims ready but info is not here yet
+                        CircularProgressIndicator(
+                            modifier = Modifier.align(Alignment.Center)
+                        )
+                    }
+                }
+
                 else -> {
-                    // Show identity — identityInfo is non-null and initialized here
-                    val resolvedIdentity = identityInfo ?: return@Box
-                    IdentityContent(
-                        identityInfo = resolvedIdentity,
-                        qrCodeData = qrCodeData,
-                        error = error,
-                        successMessage = successMessage,
-                        onClearError = { viewModel.clearError() },
-                        onClearSuccess = { viewModel.clearSuccessMessage() }
+                    IdentityNotInitializedView(
+                        isCreating = progressStage !is com.scmessenger.android.ui.viewmodels.IdentityProgressStage.Idle,
+                        progressStage = progressStage,
+                        progressSubDetail = progressSubDetail,
+                        onCreateIdentity = { nickname -> viewModel.createIdentity(nickname) },
+                        modifier = Modifier.align(Alignment.Center)
                     )
                 }
             }
@@ -323,8 +324,9 @@ private fun IdentityContent(
 
         // QR Code
         qrCodeData?.let { data ->
-            QRCodeDisplay(
+            com.scmessenger.android.ui.components.QrCodeImage(
                 data = data,
+                contentDescription = stringResource(R.string.identity_label_qr_code),
                 modifier = Modifier.align(Alignment.CenterHorizontally)
             )
         }
@@ -385,56 +387,3 @@ private fun IdentityContent(
     }
 }
 
-/**
- * QR Code display component.
- */
-@Composable
-private fun QRCodeDisplay(
-    data: String,
-    modifier: Modifier = Modifier
-) {
-    val bitmap = remember(data) {
-        try {
-            generateQRCode(data, 512)
-        } catch (e: Exception) {
-            Timber.e(e, "Failed to generate QR code")
-            null
-        }
-    }
-
-    bitmap?.let {
-        Card(modifier = modifier) {
-            Image(
-                bitmap = it.asImageBitmap(),
-                contentDescription = stringResource(R.string.identity_label_qr_code),
-                modifier = Modifier
-                    .size(256.dp)
-                    .padding(16.dp)
-            )
-        }
-    }
-}
-
-/**
- * Generate QR code bitmap from string data.
- */
-private fun generateQRCode(data: String, size: Int): Bitmap {
-    val writer = QRCodeWriter()
-    val bitMatrix = writer.encode(data, BarcodeFormat.QR_CODE, size, size)
-
-    val width = bitMatrix.width
-    val height = bitMatrix.height
-    val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.RGB_565)
-
-    for (x in 0 until width) {
-        for (y in 0 until height) {
-            bitmap.setPixel(
-                x,
-                y,
-                if (bitMatrix[x, y]) android.graphics.Color.BLACK else android.graphics.Color.WHITE
-            )
-        }
-    }
-
-    return bitmap
-}

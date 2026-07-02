@@ -2,6 +2,8 @@ package com.scmessenger.android.ui.chat
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -17,8 +19,8 @@ import java.util.*
 /**
  * Message bubble component for chat UI.
  *
- * Zero-Status Architecture: displays only message content (text)
- * and the sender-assigned message timestamp (`senderTimestamp`). No delivery status indicators.
+ * Displays message content and, for sent messages, a delivery status indicator
+ * derived from the MessageStatus enum (Queued → InCustody → Sent → Delivered).
  */
 @Composable
 fun MessageBubble(
@@ -71,6 +73,14 @@ fun MessageBubble(
                 fontWeight = FontWeight.Normal,
                 modifier = Modifier.padding(top = 4.dp, start = 8.dp, end = 8.dp)
             )
+
+            // Delivery status indicator (sent messages only)
+            if (isSent) {
+                DeliveryStatusIndicator(
+                    status = message.status,
+                    modifier = Modifier.padding(top = 2.dp, start = 8.dp, end = 8.dp)
+                )
+            }
         }
 
         if (isSent) {
@@ -105,4 +115,51 @@ private fun isSameDay(date1: Date, date2: Date): Boolean {
 
     return cal1.get(Calendar.YEAR) == cal2.get(Calendar.YEAR) &&
            cal1.get(Calendar.DAY_OF_YEAR) == cal2.get(Calendar.DAY_OF_YEAR)
+}
+
+@Composable
+private fun DeliveryStatusIndicator(
+    status: uniffi.api.MessageStatus,
+    modifier: Modifier = Modifier
+) {
+    val (icon, tint, description) = when (status) {
+        uniffi.api.MessageStatus.QUEUED -> Triple(
+            Icons.Filled.Schedule,
+            StatusOffline,
+            "Queued"
+        )
+        uniffi.api.MessageStatus.IN_CUSTODY -> Triple(
+            Icons.Filled.Lock,
+            StatusWarning,
+            "In custody"
+        )
+        uniffi.api.MessageStatus.SENT -> Triple(
+            Icons.Filled.Check,
+            StatusOffline,
+            "Sent"
+        )
+        uniffi.api.MessageStatus.DELIVERED -> Triple(
+            Icons.Filled.DoneAll,
+            StatusSuccess,
+            "Delivered"
+        )
+    }
+
+    Row(
+        modifier = modifier,
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(2.dp)
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = description,
+            tint = tint,
+            modifier = Modifier.size(12.dp)
+        )
+        Text(
+            text = description,
+            color = tint,
+            fontSize = 10.sp
+        )
+    }
 }

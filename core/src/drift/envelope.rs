@@ -1,7 +1,7 @@
 /// Drift Envelope — compact binary format for mesh relay
 ///
-/// Fixed overhead: 186 bytes (18 + 14 + 152 + 2)
-/// Format: Header(18) + Routing(14) + Crypto(152) + Payload(2+N)
+/// Fixed overhead: 187 bytes (18 + 14 + 152 + 2 + 1)
+/// Format: Header(18) + Routing(14) + Crypto(152) + Payload(2+N) + RatchetFlag(1)
 ///
 /// Layout (little-endian, no padding):
 /// [1]  version
@@ -167,7 +167,7 @@ impl DriftEnvelope {
         buf.push(self.hop_count);
         buf.push(self.priority);
 
-        // Crypto header (120 bytes)
+        // Crypto header (152 bytes)
         buf.extend_from_slice(&self.sender_public_key);
         buf.extend_from_slice(&self.ephemeral_public_key);
         buf.extend_from_slice(&self.nonce);
@@ -252,7 +252,7 @@ impl DriftEnvelope {
         let priority = data[offset];
         offset += 1;
 
-        // Crypto header (120 bytes)
+        // Crypto header (152 bytes)
         let mut sender_public_key = [0u8; 32];
         sender_public_key.copy_from_slice(&data[offset..offset + 32]);
         offset += 32;
@@ -291,17 +291,24 @@ impl DriftEnvelope {
         let (ratchet_dh_public, ratchet_message_number) = if offset < data.len() {
             let ratchet_flag = data[offset];
             offset += 1;
-            if ratchet_flag == 0x01 && offset + 32 + 4 <= data.len() {
-                let mut dh_key = [0u8; 32];
-                dh_key.copy_from_slice(&data[offset..offset + 32]);
-                offset += 32;
-                let msg_num = u32::from_le_bytes([
-                    data[offset],
-                    data[offset + 1],
-                    data[offset + 2],
-                    data[offset + 3],
-                ]);
-                (Some(dh_key), Some(msg_num))
+            if ratchet_flag == 0x01 {
+                if offset + 32 + 4 <= data.len() {
+                    let mut dh_key = [0u8; 32];
+                    dh_key.copy_from_slice(&data[offset..offset + 32]);
+                    offset += 32;
+                    let msg_num = u32::from_le_bytes([
+                        data[offset],
+                        data[offset + 1],
+                        data[offset + 2],
+                        data[offset + 3],
+                    ]);
+                    (Some(dh_key), Some(msg_num))
+                } else {
+                    return Err(DriftError::BufferTooShort {
+                        need: offset + 32 + 4,
+                        got: data.len(),
+                    });
+                }
             } else {
                 (None, None)
             }

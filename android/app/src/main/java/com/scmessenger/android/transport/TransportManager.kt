@@ -31,7 +31,11 @@ class TransportManager @JvmOverloads constructor(
     private val onDataReceived: (peerId: String, data: ByteArray, transport: TransportType) -> Unit,
     private val onPeerDisconnected: ((peerId: String, transport: TransportType) -> Unit)? = null,
     private val onLanAddressResolved: ((multiaddr: String) -> Unit)? = null,
-    private val getLocalPeerId: (() -> String?)? = null
+    private val getLocalPeerId: (() -> String?)? = null,
+    private val onWifiAwarePeerDiscovered: ((peerId: String, serviceInfo: ByteArray, rssi: Int) -> Unit)? = null,
+    private val onWifiAwareDataPathConfirmed: ((peerId: String, ipAddress: String, port: Int) -> Unit)? = null,
+    private val onWifiDirectPeerDiscovered: ((peerId: String, deviceName: String, deviceAddress: String) -> Unit)? = null,
+    private val onWifiDirectConnectionInfo: ((peerId: String, groupOwnerIp: String, isGroupOwner: Boolean) -> Unit)? = null
 ) {
 
     // Transport health monitor for health-aware transport selection
@@ -425,14 +429,18 @@ class TransportManager @JvmOverloads constructor(
         try {
             wifiAware = WifiAwareTransport(
                 context,
-                onPeerDiscovered = { peerId ->
+                onPeerDiscovered = { peerId, serviceInfo, rssi ->
                     Timber.d("WiFi Aware peer discovered: $peerId")
                     activeTransports[TransportType.WIFI_AWARE] = true
                     peerTransports[peerId] = TransportType.WIFI_AWARE
                     onPeerDiscovered(peerId, TransportType.WIFI_AWARE)
+                    onWifiAwarePeerDiscovered?.invoke(peerId, serviceInfo ?: ByteArray(0), rssi)
                 },
                 onDataReceived = { peerId, data ->
                     onDataReceived(peerId, data, TransportType.WIFI_AWARE)
+                },
+                onDataPathConfirmed = { peerId, ipAddress, port ->
+                    onWifiAwareDataPathConfirmed?.invoke(peerId, ipAddress, port)
                 }
             )
 
@@ -452,14 +460,19 @@ class TransportManager @JvmOverloads constructor(
         try {
             wifiDirect = WifiDirectTransport(
                 context,
-                onPeerDiscovered = { peerId ->
-                    Timber.d("WiFi Direct peer discovered: $peerId")
+                getLocalPeerId = { getLocalPeerId?.invoke() },
+                onPeerDiscovered = { peerId, device ->
+                    Timber.d("WiFi Direct peer discovered: $peerId (address: ${device.deviceAddress})")
                     activeTransports[TransportType.WIFI_DIRECT] = true
                     peerTransports[peerId] = TransportType.WIFI_DIRECT
                     onPeerDiscovered(peerId, TransportType.WIFI_DIRECT)
+                    onWifiDirectPeerDiscovered?.invoke(peerId, device.deviceName, device.deviceAddress)
                 },
                 onDataReceived = { peerId, data ->
                     onDataReceived(peerId, data, TransportType.WIFI_DIRECT)
+                },
+                onConnectionInfo = { peerId, groupOwnerIp, isGroupOwner ->
+                    onWifiDirectConnectionInfo?.invoke(peerId, groupOwnerIp, isGroupOwner)
                 }
             )
 
@@ -525,6 +538,14 @@ class TransportManager @JvmOverloads constructor(
 
         activeTransports.remove(transport)
     }
+
+    fun getWifiAwareTransport(): WifiAwareTransport? = wifiAware
+
+    /**
+     * Get the WiFi Direct transport instance (for PlatformBridge FFI wiring).
+     * Returns null if WiFi Direct is not initialized or not available.
+     */
+    fun getWifiDirectTransport(): WifiDirectTransport? = wifiDirect
 
     /**
      * Cleanup all resources.

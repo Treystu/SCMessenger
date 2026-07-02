@@ -14,12 +14,10 @@ pub mod adaptive_ttl;
 pub mod engine;
 pub mod global;
 pub mod local;
-#[cfg(feature = "phase2_apis")]
 pub mod multipath;
 pub mod negative_cache;
 pub mod neighborhood;
 pub mod optimized_engine;
-#[cfg(feature = "phase2_apis")]
 pub mod reputation;
 pub mod resume_prefetch;
 pub mod smart_retry;
@@ -32,10 +30,11 @@ pub use engine::{
 };
 pub use global::{GlobalRoutes, RouteAdvertisement, RouteRequest};
 pub use local::{CellSummary, LocalCell, PeerEvent, PeerId, PeerInfo, PeerStatus, TransportType};
-#[cfg(feature = "phase2_apis")]
 pub use multipath::DeliveryPath;
 pub use negative_cache::{NegativeCache, NegativeCacheStats};
-pub use neighborhood::{GatewayInfo, NeighborhoodGossip, NeighborhoodSummary, NeighborhoodTable};
+pub use neighborhood::{
+    EnergyClass, GatewayInfo, NeighborhoodGossip, NeighborhoodSummary, NeighborhoodTable,
+};
 pub use optimized_engine::{OptimizedRoutingEngine, OptimizedRoutingMaintenance};
 pub use resume_prefetch::{
     FrequentPeer, PrefetchConfig, PrefetchStats, PrefetchStatus, PrefetchedRoute,

@@ -207,7 +207,9 @@ class SubnetProbe(
         if (!opened) return
 
         recentlyReported[key] = now
-        val multiaddr = "/ip4/$host/tcp/$port"
+        // Port 9002 is a WebSocket listener — append /ws so libp2p uses the
+        // correct transport. Port 9001 is raw TCP.
+        val multiaddr = if (port == 9002) "/ip4/$host/tcp/$port/ws" else "/ip4/$host/tcp/$port"
         Timber.i("SubnetProbe: open port $host:$port (likely SCMessenger peer) -> $multiaddr")
         try {
             onLanAddressResolved(multiaddr, TransportType.TCP_MDNS)

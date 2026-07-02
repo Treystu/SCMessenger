@@ -310,7 +310,7 @@ extension NotificationManager: UNUserNotificationCenterDelegate {
             logger.info("Permission: not determined, requesting...")
             let granted = await requestPermission()
             return PermissionVerificationResult(
-                status: granted ? .granted : .denied,
+                status: granted ? .authorized : .denied,
                 requiredAction: .requested,
                 success: granted
             )
@@ -342,8 +342,8 @@ extension NotificationManager: UNUserNotificationCenterDelegate {
     }
 
     /// Returns current notification permission status as a string
-    func currentPermissionStatus() -> String {
-        let settings = center.notificationSettings()
+    func currentPermissionStatus() async -> String {
+        let settings = await center.notificationSettings()
         switch settings.authorizationStatus {
         case .notDetermined:
             return "not_determined"
@@ -361,8 +361,8 @@ extension NotificationManager: UNUserNotificationCenterDelegate {
     }
 
     /// Returns whether notifications are currently enabled
-    func areNotificationsEnabled() -> Bool {
-        let settings = center.notificationSettings()
+    func areNotificationsEnabled() async -> Bool {
+        let settings = await center.notificationSettings()
         return settings.authorizationStatus == .authorized ||
                settings.authorizationStatus == .provisional ||
                settings.authorizationStatus == .ephemeral

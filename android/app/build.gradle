@@ -295,16 +295,16 @@ def runCargoNdkBuild(String target, String sdkDir, String ndkDir, String rustPro
 
         if (isWindows) {
             if (rustProfile) {
-                commandLine 'cmd', '/c', "cargo ndk -t $target build $rustProfile -p scmessenger-mobile"
+                commandLine 'cmd', '/c', "cargo ndk -t $target build $rustProfile -p scmessenger-core"
             } else {
-                commandLine 'cmd', '/c', "cargo ndk -t $target build -p scmessenger-mobile"
+                commandLine 'cmd', '/c', "cargo ndk -t $target build -p scmessenger-core"
             }
         } else {
             def cmd = ['cargo', 'ndk', '-t', target, 'build']
             if (rustProfile) {
                 cmd.add(rustProfile)
             }
-            cmd.addAll(['-p', 'scmessenger-mobile'])
+            cmd.addAll(['-p', 'scmessenger-core'])
             commandLine cmd
         }
     }
@@ -323,9 +323,6 @@ targetList.each { arch ->
 
         inputs.dir('../../core/src')
         inputs.file('../../core/Cargo.toml')
-        inputs.dir('../../mobile/src')
-        inputs.file('../../mobile/Cargo.toml')
-        outputs.file("../../core/target/android-libs/${arch.abi}/libscmessenger_mobile.so")
 
         doLast {
             def sdkDir = localProps.getProperty('sdk.dir') ?: android.sdkDirectory.absolutePath
@@ -350,7 +347,7 @@ targetList.each { arch ->
             runCargoNdkBuild(arch.target, sdkDir, ndkDir, rustProfile, rustDir, isWindows, msysUcrtBin)
 
             // Copy output to destination
-            def sourceFile = file("../../target/${arch.target}/${rustDir}/libscmessenger_mobile.so")
+            def sourceFile = file("../../target/${arch.target}/${rustDir}/libscmessenger_core.so")
             def destDir = file("../../core/target/android-libs/${arch.abi}")
             destDir.mkdirs()
             copy {
@@ -373,7 +370,7 @@ task buildRustAndroid {
 // Task to generate UniFFI Kotlin bindings
 //
 // Lifecycle (the order MATTERS — see comment on each step):
-//   1. cargo build -p scmessenger-mobile (host target) → cdylib for binding gen
+//   1. cargo build -p scmessenger-core (host target) → cdylib for binding gen
 //   2. STAGE the cdylib to a stable path outside the cargo target dir, so
 //      step 3's cargo invocation (which re-compiles scmessenger-core with the
 //      gen-bindings feature) cannot invalidate or move it
@@ -400,7 +397,7 @@ task generateUniFFIBindings {
         def isMac = System.getProperty('os.name').toLowerCase().contains('mac')
 
         // Resolve the host cdylib name
-        def cdylibName = isWindows ? 'scmessenger_mobile.dll' : (isMac ? 'libscmessenger_mobile.dylib' : 'libscmessenger_mobile.so')
+        def cdylibName = isWindows ? 'scmessenger_core.dll' : (isMac ? 'libscmessenger_core.dylib' : 'libscmessenger_core.so')
 
         // Step 1: build the host cdylib
         exec {
@@ -408,9 +405,9 @@ task generateUniFFIBindings {
             environment "RUSTFLAGS", ""
             environment "CARGO_INCREMENTAL", "0"
             if (isWindows) {
-                commandLine 'cmd', '/c', 'cargo build -p scmessenger-mobile'
+                commandLine 'cmd', '/c', 'cargo build -p scmessenger-core'
             } else {
-                commandLine 'cargo', 'build', '-p', 'scmessenger-mobile'
+                commandLine 'cargo', 'build', '-p', 'scmessenger-core'
             }
         }
 

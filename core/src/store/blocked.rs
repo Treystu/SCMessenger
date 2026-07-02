@@ -107,24 +107,8 @@ impl BlockedManager {
     /// block AND individual device-specific blocks for every device ID in the
     /// device registry for this peer. If a `device_id` is set, only that
     /// specific device is blocked.
-    ///
-    /// Implements LWW-register semantics: if an existing block has a higher
-    /// `blocked_at` timestamp, it is kept. Otherwise, the new block is written.
     pub fn block(&self, blocked: BlockedIdentity) -> Result<(), IronCoreError> {
         let key = blocked.storage_key();
-
-        // LWW-Register Check:
-        if let Some(existing_data) = self.backend
-            .get(key.as_bytes())
-            .map_err(|_| IronCoreError::StorageError)?
-        {
-            if let Ok(existing) = serde_json::from_slice::<BlockedIdentity>(&existing_data) {
-                if existing.blocked_at > blocked.blocked_at {
-                    return Ok(()); // Existing block is newer, keep it
-                }
-            }
-        }
-
         let value = serde_json::to_vec(&blocked).map_err(|_| IronCoreError::Internal)?;
         self.backend
             .put(key.as_bytes(), &value)
@@ -143,19 +127,6 @@ impl BlockedManager {
                     is_deleted: blocked.is_deleted,
                 };
                 let dkey = device_blocked.storage_key();
-                
-                // LWW-Register Check for device block:
-                if let Some(existing_data) = self.backend
-                    .get(dkey.as_bytes())
-                    .map_err(|_| IronCoreError::StorageError)?
-                {
-                    if let Ok(existing) = serde_json::from_slice::<BlockedIdentity>(&existing_data) {
-                        if existing.blocked_at > blocked.blocked_at {
-                            continue; // Existing device block is newer, keep it
-                        }
-                    }
-                }
-
                 let dvalue =
                     serde_json::to_vec(&device_blocked).map_err(|_| IronCoreError::Internal)?;
                 self.backend
@@ -166,15 +137,6 @@ impl BlockedManager {
 
         Ok(())
     }
-
-    /// Merge block list from another peer / sync source using LWW-register strategy.
-    pub fn merge(&self, incoming: &[BlockedIdentity]) -> Result<(), IronCoreError> {
-        for block_rec in incoming {
-            self.block(block_rec.clone())?;
-        }
-        Ok(())
-    }
-
 
     /// Block a peer AND mark them as deleted (cascade purge variant).
     ///
@@ -841,33 +803,5 @@ mod tests {
         assert!(manager.is_device_blocked(peer_id, "d1").unwrap());
         // Unknown device also blocked by peer-level block
         assert!(manager.is_device_blocked(peer_id, "unknown-dev").unwrap());
-    }
-
-    #[test]
-    fn test_block_lww_register() {
-        let backend = Arc::new(MemoryStorage::new());
-        let manager = BlockedManager::new(backend);
-
-        let peer_id = "peer-lww";
-        
-        let mut b1 = BlockedIdentity::new(peer_id.to_string());
-        b1.blocked_at = 100;
-        b1.reason = Some("Reason 100".to_string());
-        manager.block(b1).unwrap();
-
-        let mut b2 = BlockedIdentity::new(peer_id.to_string());
-        b2.blocked_at = 200;
-        b2.reason = Some("Reason 200".to_string());
-        manager.block(b2).unwrap();
-
-        // Older block (should be ignored)
-        let mut b3 = BlockedIdentity::new(peer_id.to_string());
-        b3.blocked_at = 150;
-        b3.reason = Some("Reason 150".to_string());
-        manager.block(b3).unwrap();
-
-        let active = manager.get(peer_id, None).unwrap().unwrap();
-        assert_eq!(active.blocked_at, 200);
-        assert_eq!(active.reason.as_deref(), Some("Reason 200"));
     }
 }

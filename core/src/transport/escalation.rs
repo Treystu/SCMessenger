@@ -13,7 +13,7 @@ use thiserror::Error;
 use tracing::debug;
 
 /// Escalation policy for transport selection
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum EscalationPolicy {
     /// Always escalate to highest bandwidth available
     PreferHighBandwidth,
@@ -22,13 +22,8 @@ pub enum EscalationPolicy {
     /// Prefer BLE over WiFi over Internet (power efficiency)
     PreferLowPower,
     /// Balanced: weighted combination of all factors
+    #[default]
     Balanced,
-}
-
-impl Default for EscalationPolicy {
-    fn default() -> Self {
-        EscalationPolicy::Balanced
-    }
 }
 
 /// Errors that can occur during escalation
@@ -111,7 +106,8 @@ impl EscalationEngine {
     pub fn should_escalate(&self, peer_id: [u8; 32]) -> bool {
         let states = self.states.read();
         if let Some(state) = states.get(&peer_id) {
-            let better = self.find_better_transport(&state.available_transports, state.current_transport);
+            let better =
+                self.find_better_transport(&state.available_transports, state.current_transport);
             better.is_some()
         } else {
             false
@@ -132,10 +128,7 @@ impl EscalationEngine {
         state.current_transport = target;
         state.last_escalation_attempt = Some(web_time::SystemTime::now());
 
-        debug!(
-            "Escalated peer {:x?} to {}",
-            &peer_id[..8], target
-        );
+        debug!("Escalated peer {:x?} to {}", &peer_id[..8], target);
         Ok(target)
     }
 
@@ -196,7 +189,9 @@ impl EscalationEngine {
             .max_by(|a, b| {
                 let score_a = self.escalation_score(**a, self.policy, &caps);
                 let score_b = self.escalation_score(**b, self.policy, &caps);
-                score_a.partial_cmp(&score_b).unwrap_or(std::cmp::Ordering::Equal)
+                score_a
+                    .partial_cmp(&score_b)
+                    .unwrap_or(std::cmp::Ordering::Equal)
             })
             .copied()
             .unwrap_or(available[0]);
@@ -211,7 +206,10 @@ impl EscalationEngine {
         policy: EscalationPolicy,
         caps: &HashMap<TransportType, TransportCapabilities>,
     ) -> f64 {
-        let cap = caps.get(&transport).cloned().unwrap_or(TransportCapabilities::for_transport(transport));
+        let cap = caps
+            .get(&transport)
+            .cloned()
+            .unwrap_or(TransportCapabilities::for_transport(transport));
 
         match policy {
             EscalationPolicy::PreferHighBandwidth => {
@@ -260,7 +258,9 @@ impl EscalationEngine {
             .max_by(|&&a, &&b| {
                 let score_a = self.escalation_score(a, self.policy, &caps);
                 let score_b = self.escalation_score(b, self.policy, &caps);
-                score_a.partial_cmp(&score_b).unwrap_or(std::cmp::Ordering::Equal)
+                score_a
+                    .partial_cmp(&score_b)
+                    .unwrap_or(std::cmp::Ordering::Equal)
             })
             .and_then(|&best| {
                 let best_score = self.escalation_score(best, self.policy, &caps);
@@ -287,7 +287,9 @@ impl EscalationEngine {
             .max_by(|&&a, &&b| {
                 let score_a = self.escalation_score(a, self.policy, &caps);
                 let score_b = self.escalation_score(b, self.policy, &caps);
-                score_a.partial_cmp(&score_b).unwrap_or(std::cmp::Ordering::Equal)
+                score_a
+                    .partial_cmp(&score_b)
+                    .unwrap_or(std::cmp::Ordering::Equal)
             })
             .and_then(|&best| {
                 let best_score = self.escalation_score(best, self.policy, &caps);
@@ -297,6 +299,22 @@ impl EscalationEngine {
                     None
                 }
             })
+    }
+
+    /// Get the recommended transport for a peer based on current state and policy.
+    /// Returns None if the peer is not tracked.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn recommended_transport(&self, peer_id: &[u8; 32]) -> Option<crate::ProximityTransport> {
+        let states = self.states.read();
+        states.get(peer_id).map(|state| {
+            let best = self.select_best_transport(&state.available_transports);
+            match best {
+                TransportType::BLE => crate::ProximityTransport::Ble,
+                TransportType::WiFiAware => crate::ProximityTransport::WifiAware,
+                TransportType::WiFiDirect => crate::ProximityTransport::WifiDirect,
+                _ => crate::ProximityTransport::Ble, // fallback to BLE for Internet/Local
+            }
+        })
     }
 
     /// Remove a peer from tracking
@@ -345,10 +363,7 @@ mod tests {
         let engine = EscalationEngine::new(EscalationPolicy::Balanced);
         let peer_id = create_peer_id(1);
 
-        let result = engine.init_peer(
-            peer_id,
-            vec![TransportType::BLE, TransportType::WiFiDirect],
-        );
+        let result = engine.init_peer(peer_id, vec![TransportType::BLE, TransportType::WiFiDirect]);
         assert!(result.is_ok());
     }
 
@@ -413,7 +428,11 @@ mod tests {
         engine
             .init_peer(
                 peer_id,
-                vec![TransportType::BLE, TransportType::WiFiDirect, TransportType::Internet],
+                vec![
+                    TransportType::BLE,
+                    TransportType::WiFiDirect,
+                    TransportType::Internet,
+                ],
             )
             .unwrap();
 
@@ -428,10 +447,7 @@ mod tests {
         let peer_id = create_peer_id(2);
 
         engine
-            .init_peer(
-                peer_id,
-                vec![TransportType::Internet, TransportType::Local],
-            )
+            .init_peer(peer_id, vec![TransportType::Internet, TransportType::Local])
             .unwrap();
 
         let current = engine.current_transport(peer_id).unwrap();
@@ -466,10 +482,7 @@ mod tests {
         let peer_id = create_peer_id(4);
 
         engine
-            .init_peer(
-                peer_id,
-                vec![TransportType::BLE, TransportType::WiFiDirect],
-            )
+            .init_peer(peer_id, vec![TransportType::BLE, TransportType::WiFiDirect])
             .unwrap();
 
         assert_eq!(
@@ -484,10 +497,7 @@ mod tests {
         let peer_id = create_peer_id(5);
 
         engine
-            .init_peer(
-                peer_id,
-                vec![TransportType::BLE, TransportType::WiFiDirect],
-            )
+            .init_peer(peer_id, vec![TransportType::BLE, TransportType::WiFiDirect])
             .unwrap();
 
         let fallback = engine.deescalate(peer_id).unwrap();
@@ -502,14 +512,23 @@ mod tests {
         engine
             .init_peer(
                 peer_id,
-                vec![TransportType::BLE, TransportType::WiFiDirect, TransportType::Internet],
+                vec![
+                    TransportType::BLE,
+                    TransportType::WiFiDirect,
+                    TransportType::Internet,
+                ],
             )
             .unwrap();
 
         // Init picks WiFiDirect (best for high bandwidth), which is already the best
         // So escalation should not be possible
         // To test escalation, we need to manually set peer to a worse transport first
-        engine.states.write().get_mut(&peer_id).unwrap().current_transport = TransportType::BLE;
+        engine
+            .states
+            .write()
+            .get_mut(&peer_id)
+            .unwrap()
+            .current_transport = TransportType::BLE;
 
         // Now should be able to escalate from BLE to WiFiDirect or Internet
         assert!(engine.should_escalate(peer_id));
@@ -533,9 +552,7 @@ mod tests {
         let engine = EscalationEngine::new(EscalationPolicy::Balanced);
         let peer_id = create_peer_id(8);
 
-        engine
-            .init_peer(peer_id, vec![TransportType::BLE])
-            .unwrap();
+        engine.init_peer(peer_id, vec![TransportType::BLE]).unwrap();
 
         let result = engine.update_available_transports(
             peer_id,
@@ -549,9 +566,7 @@ mod tests {
         let engine = EscalationEngine::new(EscalationPolicy::Balanced);
         let peer_id = create_peer_id(9);
 
-        engine
-            .init_peer(peer_id, vec![TransportType::BLE])
-            .unwrap();
+        engine.init_peer(peer_id, vec![TransportType::BLE]).unwrap();
 
         assert!(engine.current_transport(peer_id).is_some());
 
@@ -566,9 +581,7 @@ mod tests {
         let peer1 = create_peer_id(10);
         let peer2 = create_peer_id(11);
 
-        engine
-            .init_peer(peer1, vec![TransportType::BLE])
-            .unwrap();
+        engine.init_peer(peer1, vec![TransportType::BLE]).unwrap();
         engine
             .init_peer(peer2, vec![TransportType::WiFiDirect])
             .unwrap();
@@ -591,9 +604,7 @@ mod tests {
         engine.set_capabilities(TransportType::BLE, caps);
 
         let peer_id = create_peer_id(12);
-        engine
-            .init_peer(peer_id, vec![TransportType::BLE])
-            .unwrap();
+        engine.init_peer(peer_id, vec![TransportType::BLE]).unwrap();
         assert!(engine.current_transport(peer_id).is_some());
     }
 
@@ -609,7 +620,11 @@ mod tests {
             TransportType::Internet,
             TransportType::Local,
         ] {
-            let score = engine.escalation_score(*transport, EscalationPolicy::PreferHighBandwidth, &Default::default());
+            let score = engine.escalation_score(
+                *transport,
+                EscalationPolicy::PreferHighBandwidth,
+                &Default::default(),
+            );
             scores.push((transport, score));
         }
 
@@ -632,7 +647,11 @@ mod tests {
             TransportType::Internet,
             TransportType::Local,
         ] {
-            let score = engine.escalation_score(*transport, EscalationPolicy::PreferLowLatency, &Default::default());
+            let score = engine.escalation_score(
+                *transport,
+                EscalationPolicy::PreferLowLatency,
+                &Default::default(),
+            );
             scores.push((transport, score));
         }
 
@@ -654,7 +673,11 @@ mod tests {
             TransportType::WiFiDirect,
             TransportType::Internet,
         ] {
-            let score = engine.escalation_score(*transport, EscalationPolicy::PreferLowPower, &Default::default());
+            let score = engine.escalation_score(
+                *transport,
+                EscalationPolicy::PreferLowPower,
+                &Default::default(),
+            );
             scores.push((transport, score));
         }
 

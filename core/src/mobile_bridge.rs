@@ -1,12 +1,18 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
+use std::fmt;
 use std::str::FromStr;
 use std::sync::Arc;
 
+use async_trait::async_trait;
 use libp2p::{Multiaddr, PeerId};
 use parking_lot::{Mutex, RwLock};
 use serde::{Deserialize, Serialize};
 
 use crate::settings::MeshSettings;
+use crate::transport::wifi_aware::{
+    WifiAwareConfig, WifiAwareError, WifiAwarePlatformBridge, WifiAwareTransport,
+};
+use crate::transport::wifi_direct::{PlatformWifiDirectBridge, WifiDirectTransport};
 use crate::transport::SwarmHandle;
 
 // MOBILE SERVICE
@@ -43,6 +49,36 @@ pub enum MotionState {
     Running,
     Automotive,
     Unknown,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ProximityTransport {
+    Ble,
+    WifiAware,
+    WifiDirect,
+    Multipeer,
+}
+
+impl ProximityTransport {
+    pub fn max_payload_size(&self) -> usize {
+        match self {
+            ProximityTransport::Ble => 512,
+            ProximityTransport::WifiAware => 2048,
+            ProximityTransport::WifiDirect => 4096,
+            ProximityTransport::Multipeer => 4096,
+        }
+    }
+}
+
+impl fmt::Display for ProximityTransport {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            ProximityTransport::Ble => write!(f, "BLE"),
+            ProximityTransport::WifiAware => write!(f, "WiFiAware"),
+            ProximityTransport::WifiDirect => write!(f, "WiFiDirect"),
+            ProximityTransport::Multipeer => write!(f, "Multipeer"),
+        }
+    }
 }
 
 /// Network connectivity type reported by the platform.
@@ -140,12 +176,13 @@ pub struct MeshService {
     relay_budget: std::sync::Arc<Mutex<u32>>,
     swarm_headless_mode: std::sync::Arc<Mutex<Option<bool>>>,
     current_device_profile: Mutex<Option<DeviceProfile>>,
-    /// Current device state snapshot — drives threshold-based behavior.
-    /// Stored behind a `parking_lot::RwLock` so reads (very frequent) never
-    /// contend with writes (infrequent platform callbacks).
     device_state: RwLock<Option<DeviceState>>,
-    /// Engine for computing adaptive mesh behavior based on device state.
     auto_adjust: Arc<AutoAdjustEngine>,
+    wifi_aware_bridge: Arc<Mutex<Option<Arc<PlatformWifiAwareBridge>>>>,
+    wifi_direct_bridge: Arc<Mutex<Option<Arc<PlatformWifiDirectBridge>>>>,
+    wifi_aware_transport: Arc<Mutex<Option<Arc<crate::transport::wifi_aware::WifiAwareTransport>>>>,
+    wifi_direct_transport:
+        Arc<Mutex<Option<Arc<crate::transport::wifi_direct::WifiDirectTransport>>>>,
     /// Platform-provided delegate for decentralized protocol events (Phase 4).
     external_delegate: Arc<Mutex<Option<Box<dyn crate::CoreDelegate>>>>,
 }
@@ -171,6 +208,10 @@ impl MeshService {
             auto_adjust: Arc::new(AutoAdjustEngine::new()),
             nearby_ble_peers: Arc::new(Mutex::new(HashSet::new())),
             external_delegate: Arc::new(Mutex::new(None)),
+            wifi_aware_bridge: Arc::new(Mutex::new(None)),
+            wifi_direct_bridge: Arc::new(Mutex::new(None)),
+            wifi_aware_transport: Arc::new(Mutex::new(None)),
+            wifi_direct_transport: Arc::new(Mutex::new(None)),
         }
     }
 
@@ -194,6 +235,10 @@ impl MeshService {
             auto_adjust: Arc::new(AutoAdjustEngine::new()),
             nearby_ble_peers: Arc::new(Mutex::new(HashSet::new())),
             external_delegate: Arc::new(Mutex::new(None)),
+            wifi_aware_bridge: Arc::new(Mutex::new(None)),
+            wifi_direct_bridge: Arc::new(Mutex::new(None)),
+            wifi_aware_transport: Arc::new(Mutex::new(None)),
+            wifi_direct_transport: Arc::new(Mutex::new(None)),
         }
     }
 
@@ -221,6 +266,10 @@ impl MeshService {
             auto_adjust: Arc::new(AutoAdjustEngine::new()),
             nearby_ble_peers: Arc::new(Mutex::new(HashSet::new())),
             external_delegate: Arc::new(Mutex::new(None)),
+            wifi_aware_bridge: Arc::new(Mutex::new(None)),
+            wifi_direct_bridge: Arc::new(Mutex::new(None)),
+            wifi_aware_transport: Arc::new(Mutex::new(None)),
+            wifi_direct_transport: Arc::new(Mutex::new(None)),
         }
     }
 
@@ -295,6 +344,76 @@ impl MeshService {
             core.drift_activate();
         }
 
+        // Initialize WiFi Aware and WiFi Direct transports if enabled and platform bridge is set
+        if self.platform_bridge.lock().is_some() {
+            let aware_bridge = Arc::new(PlatformWifiAwareBridge::new_platform_ref(
+                self.platform_bridge.clone(),
+            ));
+            *self.wifi_aware_bridge.lock() = Some(aware_bridge.clone());
+            tracing::info!("WiFi Aware bridge adapter initialized");
+
+            let direct_bridge = Arc::new(PlatformWifiDirectBridge::new_platform_ref(
+                self.platform_bridge.clone(),
+            ));
+            *self.wifi_direct_bridge.lock() = Some(direct_bridge.clone());
+            tracing::info!("WiFi Direct bridge adapter initialized");
+
+            // Load settings using MeshSettingsManager
+            let settings = if let Some(ref path) = self.storage_path {
+                let manager = MeshSettingsManager::new(path.clone());
+                manager.load().unwrap_or_default()
+            } else {
+                MeshSettings::default()
+            };
+
+            // WiFi Aware Transport
+            if settings.wifi_aware_enabled {
+                let config = WifiAwareConfig {
+                    publish_enabled: true,
+                    subscribe_enabled: true,
+                    ..Default::default()
+                };
+                if let Ok(transport) = WifiAwareTransport::new(config, aware_bridge) {
+                    let transport = Arc::new(transport);
+                    let transport_clone = transport.clone();
+                    let rt = self.swarm_bridge.get_runtime_handle();
+                    rt.spawn(async move {
+                        if let Err(e) = transport_clone.initialize().await {
+                            tracing::error!("WiFi Aware transport initialization failed: {:?}", e);
+                        } else {
+                            transport_clone.wire_discovery_callback();
+                            if let Err(e) = transport_clone.publish_service().await {
+                                tracing::error!("WiFi Aware publish failed: {:?}", e);
+                            }
+                            if let Err(e) = transport_clone.subscribe().await {
+                                tracing::error!("WiFi Aware subscribe failed: {:?}", e);
+                            }
+                        }
+                    });
+                    *self.wifi_aware_transport.lock() = Some(transport);
+                }
+            }
+
+            // WiFi Direct Transport
+            if settings.wifi_direct_enabled {
+                let transport = WifiDirectTransport::new(direct_bridge);
+                let transport = Arc::new(transport);
+                let transport_clone = transport.clone();
+                let rt = self.swarm_bridge.get_runtime_handle();
+                rt.spawn(async move {
+                    if let Err(e) = transport_clone.initialize().await {
+                        tracing::error!("WiFi Direct transport initialization failed: {:?}", e);
+                    } else {
+                        transport_clone.wire_callbacks();
+                        if let Err(e) = transport_clone.start_discovery().await {
+                            tracing::error!("WiFi Direct start discovery failed: {:?}", e);
+                        }
+                    }
+                });
+                *self.wifi_direct_transport.lock() = Some(transport);
+            }
+        }
+
         // Update state
         *self.state.lock() = ServiceState::Running;
 
@@ -317,16 +436,16 @@ impl MeshService {
         *state = ServiceState::Stopping;
         drop(state);
 
-        // Stop the core
-        if let Some(ref core) = *self.core.lock() {
+        // Stop the core and clear the reference atomically
+        let core = self.core.lock().take();
+        if let Some(core) = core {
             core.stop();
         }
 
         // Shutdown the swarm bridge gracefully
         self.swarm_bridge.shutdown();
 
-        // Clear the core instance
-        *self.core.lock() = None;
+        // Clear headless mode
         *self.swarm_headless_mode.lock() = None;
 
         // Update state
@@ -367,6 +486,26 @@ impl MeshService {
 
     pub fn set_platform_bridge(&self, bridge: Option<Box<dyn PlatformBridge>>) {
         *self.platform_bridge.lock() = bridge;
+    }
+
+    /// Update keepalive interval for a peer connection.
+    pub fn update_keepalive(
+        &self,
+        peer_id: String,
+        interval_secs: u64,
+    ) -> Result<(), crate::IronCoreError> {
+        let peer_id_parsed: PeerId = peer_id
+            .parse()
+            .map_err(|_| crate::IronCoreError::InvalidInput)?;
+        let handle = self
+            .swarm_bridge
+            .handle
+            .lock()
+            .clone()
+            .ok_or(crate::IronCoreError::NetworkError)?;
+        let rt = self.swarm_bridge.get_runtime_handle();
+        rt.block_on(handle.update_keepalive(peer_id_parsed, interval_secs))
+            .map_err(|_| crate::IronCoreError::NetworkError)
     }
 
     /// Get current NAT status string.
@@ -466,7 +605,11 @@ impl MeshService {
         payload.to_string()
     }
 
-    pub fn start_swarm(&self, listen_addr: String, bootstrap_addrs: Vec<String>) -> Result<(), crate::IronCoreError> {
+    pub fn start_swarm(
+        &self,
+        listen_addr: String,
+        bootstrap_addrs: Vec<String>,
+    ) -> Result<(), crate::IronCoreError> {
         // Extract keys while holding the lock, then DROP the lock before any
         // runtime/thread work.  This is critical: if anything below panics
         // while the lock is held, parking_lot will NOT poison it (unlike
@@ -523,7 +666,10 @@ impl MeshService {
             .filter_map(|s| s.parse().ok())
             .collect();
         if !parsed_bootstrap.is_empty() {
-            tracing::info!("📱 Mobile bridge: {} bootstrap addrs configured", parsed_bootstrap.len());
+            tracing::info!(
+                "📱 Mobile bridge: {} bootstrap addrs configured",
+                parsed_bootstrap.len()
+            );
         }
 
         let swarm_bridge = self.swarm_bridge.clone();
@@ -996,8 +1142,7 @@ impl MeshService {
         }
 
         // If swarm is already running, forward the budget update immediately
-        let handle_guard = self.swarm_bridge.handle.lock();
-        if let Some(ref handle) = *handle_guard {
+        if let Some(handle) = self.swarm_bridge.handle.lock().clone() {
             let rt = self.swarm_bridge.get_runtime_handle();
             rt.block_on(handle.set_relay_budget(messages_per_hour)).ok();
         }
@@ -1124,14 +1269,174 @@ impl MeshService {
     }
 
     pub fn on_ble_data_received(&self, peer_id: String, data: Vec<u8>) {
-        tracing::info!("BLE data received from {}", peer_id);
-        self.nearby_ble_peers.lock().insert(peer_id.clone());
+        self.on_proximity_data_received(peer_id, ProximityTransport::Ble, data);
+    }
+
+    pub fn on_proximity_data_received(
+        &self,
+        peer_id: String,
+        transport: ProximityTransport,
+        data: Vec<u8>,
+    ) {
+        tracing::info!("{} data received from {}", transport, peer_id);
+        if data.len() > transport.max_payload_size() {
+            tracing::warn!(
+                "{} payload from {} exceeds max ({} > {}), dropping",
+                transport,
+                peer_id,
+                data.len(),
+                transport.max_payload_size()
+            );
+            return;
+        }
+        if transport == ProximityTransport::Ble {
+            self.nearby_ble_peers.lock().insert(peer_id.clone());
+        }
         self.on_data_received(peer_id, data);
     }
 
     /// Helper to get the core instance exposed to UniFFI
     pub fn get_core(&self) -> Option<std::sync::Arc<crate::IronCore>> {
         self.core.lock().clone()
+    }
+
+    /// Run a bounded drift maintenance cycle within the given time budget.
+    pub fn run_maintenance_cycle(&self, budget_ms: u32) -> String {
+        if let Some(core) = self.get_core() {
+            core.run_maintenance_cycle(budget_ms)
+        } else {
+            r#"{"work_done":0,"elapsed_ms":0,"budget_ms":0,"remaining":false}"#.to_string()
+        }
+    }
+
+    pub fn on_wifi_aware_peer_discovered(&self, peer_id: String, service_info: Vec<u8>, rssi: i32) {
+        if let Some(transport) = self.wifi_aware_transport.lock().as_ref() {
+            transport.add_discovered_peer(peer_id.clone(), service_info.clone(), rssi);
+        }
+        if let Some(aware_bridge) = self.wifi_aware_bridge.lock().as_ref() {
+            aware_bridge.handle_service_discovered(peer_id.clone(), service_info, rssi);
+        }
+
+        let transport_opt = self.wifi_aware_transport.lock().clone();
+        let swarm_bridge = self.swarm_bridge.clone();
+        if let Some(transport) = transport_opt {
+            let rt = swarm_bridge.get_runtime_handle();
+            rt.spawn(async move {
+                if let Ok(peer_id_parsed) = peer_id.parse::<libp2p::PeerId>() {
+                    let pmk = blake3::derive_key("SCMessenger Wi-Fi Aware PMK", &[0x42u8; 32]);
+                    if let Ok(path_info) = transport.create_data_path(peer_id_parsed, &pmk).await {
+                        let multiaddr_str = if path_info.ip_address.contains(':') {
+                            format!("/ip6/{}/tcp/{}", path_info.ip_address, path_info.port)
+                        } else {
+                            format!("/ip4/{}/tcp/{}", path_info.ip_address, path_info.port)
+                        };
+                        let _ = swarm_bridge.dial_async(multiaddr_str).await;
+                    }
+                }
+            });
+        }
+    }
+
+    pub fn on_wifi_aware_data_path_confirmed(
+        &self,
+        peer_id: String,
+        ip_address: String,
+        port: u16,
+    ) {
+        if let Some(aware_bridge) = self.wifi_aware_bridge.lock().as_ref() {
+            aware_bridge.handle_data_path_confirmed(peer_id, ip_address, port);
+        }
+    }
+
+    pub fn on_wifi_direct_peer_discovered(
+        &self,
+        peer_id: String,
+        device_name: String,
+        device_address: String,
+        rssi: i32,
+    ) {
+        if let Ok(peer_id_parsed) = peer_id.parse::<libp2p::PeerId>() {
+            let peer = crate::transport::wifi_direct::WifiDirectPeer {
+                peer_id: peer_id_parsed,
+                device_name,
+                device_address,
+                rssi,
+            };
+            if let Some(transport) = self.wifi_direct_transport.lock().as_ref() {
+                transport.register_peer(peer.clone());
+            }
+            if let Some(direct_bridge) = self.wifi_direct_bridge.lock().as_ref() {
+                direct_bridge.handle_peers_changed(vec![peer]);
+            }
+        }
+    }
+
+    pub fn on_wifi_direct_connection_info(
+        &self,
+        _peer_id: String,
+        group_owner_ip: String,
+        is_group_owner: bool,
+    ) {
+        let info = crate::transport::wifi_direct::GroupInfo {
+            group_owner: is_group_owner,
+            group_owner_ip: Some(group_owner_ip.clone()),
+            client_ips: vec![],
+            interface_name: "wlan0".to_string(),
+        };
+
+        if let Some(transport) = self.wifi_direct_transport.lock().as_ref() {
+            transport.set_group_info(info.clone());
+        }
+        if let Some(direct_bridge) = self.wifi_direct_bridge.lock().as_ref() {
+            direct_bridge.handle_connection_info(info);
+        }
+
+        if !is_group_owner {
+            let swarm_bridge = self.swarm_bridge.clone();
+            let rt = swarm_bridge.get_runtime_handle();
+            rt.spawn(async move {
+                let multiaddr_str = format!("/ip4/{}/tcp/9001", group_owner_ip);
+                let _ = swarm_bridge.dial_async(multiaddr_str).await;
+            });
+        }
+    }
+
+    pub fn export_identity_backup(
+        &self,
+        passphrase: String,
+    ) -> Result<String, crate::IronCoreError> {
+        let core = self
+            .core
+            .lock()
+            .clone()
+            .ok_or(crate::IronCoreError::NotInitialized)?;
+        core.export_identity_backup(passphrase)
+    }
+
+    pub fn export_identity_backup_with_salt(
+        &self,
+        passphrase: String,
+        salt: Vec<u8>,
+    ) -> Result<String, crate::IronCoreError> {
+        let core = self
+            .core
+            .lock()
+            .clone()
+            .ok_or(crate::IronCoreError::NotInitialized)?;
+        core.export_identity_backup_with_salt(passphrase, Some(salt))
+    }
+
+    pub fn import_identity_backup(
+        &self,
+        backup: String,
+        passphrase: String,
+    ) -> Result<(), crate::IronCoreError> {
+        let core = self
+            .core
+            .lock()
+            .clone()
+            .ok_or(crate::IronCoreError::NotInitialized)?;
+        core.import_identity_backup(backup, passphrase)
     }
 
     // Group 1: IronCore entrypoints (methods not in #[uniffi::export] block)
@@ -1245,8 +1550,28 @@ impl MeshService {
 
     /// Helper to dispatch a packet via BLE bridge
     pub fn dispatch_ble_packet(&self, peer_id: String, data: Vec<u8>) {
+        self.dispatch_proximity_packet(peer_id, ProximityTransport::Ble, data);
+    }
+
+    /// Helper to dispatch a packet via any proximity transport
+    pub fn dispatch_proximity_packet(
+        &self,
+        peer_id: String,
+        transport: ProximityTransport,
+        data: Vec<u8>,
+    ) {
+        if data.len() > transport.max_payload_size() {
+            tracing::warn!(
+                "{} payload to {} exceeds max ({} > {}), dropping",
+                transport,
+                peer_id,
+                data.len(),
+                transport.max_payload_size()
+            );
+            return;
+        }
         if let Some(bridge) = self.platform_bridge.lock().as_ref() {
-            bridge.send_ble_packet(peer_id, data);
+            bridge.send_proximity_packet(peer_id, transport, data);
         }
     }
 }
@@ -1441,6 +1766,206 @@ pub trait PlatformBridge: Send + Sync {
     fn on_entering_background(&self);
     fn on_entering_foreground(&self);
     fn send_ble_packet(&self, peer_id: String, data: Vec<u8>);
+    fn on_proximity_data_received(
+        &self,
+        peer_id: String,
+        transport: ProximityTransport,
+        data: Vec<u8>,
+    );
+    fn send_proximity_packet(&self, peer_id: String, transport: ProximityTransport, data: Vec<u8>);
+    fn wifi_aware_publish(&self, service_name: String, service_info: Vec<u8>) -> bool;
+    fn wifi_aware_subscribe(&self, service_name: String) -> bool;
+    fn wifi_aware_create_data_path(&self, peer_id: String, pmk: Vec<u8>) -> bool;
+    fn wifi_aware_stop(&self);
+    fn wifi_direct_discover_peers(&self) -> bool;
+    fn wifi_direct_stop_discovery(&self);
+    fn wifi_direct_connect(&self, device_address: String) -> bool;
+    fn wifi_direct_create_group(&self, group_name: String) -> bool;
+    fn wifi_direct_remove_group(&self);
+}
+
+pub trait WifiAwareCallback: Send + Sync {
+    fn on_service_discovered(&self, peer_id: String, service_info: Vec<u8>, rssi: i32);
+    fn on_data_path_confirmed(&self, peer_id: String, ip_address: String, port: u16);
+}
+
+// ============================================================================
+// WIFI AWARE PLATFORM BRIDGE ADAPTER
+// ============================================================================
+
+/// Adapter that bridges the synchronous UniFFI PlatformBridge to the async
+/// WifiAwarePlatformBridge trait used by WifiAwareTransport.
+///
+/// Control commands (publish, subscribe, create_data_path) are forwarded to
+/// the platform via PlatformBridge methods. Callbacks from the platform are
+/// routed through channels to satisfy async await patterns.
+#[allow(clippy::type_complexity)]
+pub struct PlatformWifiAwareBridge {
+    platform_bridge: std::sync::Arc<Mutex<Option<Box<dyn PlatformBridge>>>>,
+    discovered_peers: Arc<Mutex<HashMap<String, (Vec<u8>, i32)>>>,
+    data_path_results:
+        Arc<Mutex<HashMap<String, tokio::sync::oneshot::Sender<std::net::SocketAddr>>>>,
+    on_service_discovered: Arc<Mutex<Option<Box<dyn Fn(String, Vec<u8>, i32) + Send + Sync>>>>,
+}
+
+impl PlatformWifiAwareBridge {
+    pub fn new_platform_ref(
+        platform_bridge: std::sync::Arc<Mutex<Option<Box<dyn PlatformBridge>>>>,
+    ) -> Self {
+        Self {
+            platform_bridge,
+            discovered_peers: Arc::new(Mutex::new(HashMap::new())),
+            data_path_results: Arc::new(Mutex::new(HashMap::new())),
+            on_service_discovered: Arc::new(Mutex::new(None)),
+        }
+    }
+
+    fn with_platform<F, R>(&self, f: F) -> Option<R>
+    where
+        F: FnOnce(&dyn PlatformBridge) -> R,
+    {
+        self.platform_bridge.lock().as_ref().map(|b| f(b.as_ref()))
+    }
+
+    pub fn handle_service_discovered(&self, peer_id: String, service_info: Vec<u8>, rssi: i32) {
+        self.discovered_peers
+            .lock()
+            .insert(peer_id.clone(), (service_info.clone(), rssi));
+        if let Some(cb) = self.on_service_discovered.lock().as_ref() {
+            cb(peer_id, service_info, rssi);
+        }
+    }
+
+    pub fn handle_data_path_confirmed(&self, peer_id: String, ip_address: String, port: u16) {
+        // Build SocketAddr from the parsed IpAddr rather than formatting
+        // "ip:port" and parsing that as a whole: an unbracketed IPv6 string
+        // formatted that way (e.g. "fe80::1234:8765") is not valid SocketAddr
+        // syntax (IPv6 needs "[ip]:port"), so every IPv6 confirmation would
+        // silently fail to parse and never resolve create_data_path's future.
+        match ip_address.parse::<std::net::IpAddr>() {
+            Ok(ip) => {
+                let addr = std::net::SocketAddr::new(ip, port);
+                let mut results = self.data_path_results.lock();
+                if let Some(tx) = results.remove(&peer_id) {
+                    let _ = tx.send(addr);
+                }
+            }
+            Err(e) => {
+                tracing::warn!(
+                    "WiFi Aware data path confirmed with unparseable IP '{}': {}",
+                    ip_address,
+                    e
+                );
+            }
+        }
+    }
+
+    pub fn get_discovered_peer(&self, peer_id: &str) -> Option<(Vec<u8>, i32)> {
+        self.discovered_peers.lock().get(peer_id).cloned()
+    }
+}
+
+#[async_trait]
+impl WifiAwarePlatformBridge for PlatformWifiAwareBridge {
+    async fn is_available(&self) -> Result<bool, WifiAwareError> {
+        Ok(self.with_platform(|_| true).unwrap_or(false))
+    }
+
+    async fn publish_service(
+        &self,
+        service_name: &str,
+        service_info: &[u8],
+    ) -> Result<(), WifiAwareError> {
+        let ok = self
+            .with_platform(|b| {
+                b.wifi_aware_publish(service_name.to_string(), service_info.to_vec())
+            })
+            .unwrap_or(false);
+        if ok {
+            Ok(())
+        } else {
+            Err(WifiAwareError::PlatformError("Publish failed".into()))
+        }
+    }
+
+    async fn subscribe_to_services(
+        &self,
+        service_name: &str,
+        _match_filter: Option<&[u8]>,
+    ) -> Result<(), WifiAwareError> {
+        let ok = self
+            .with_platform(|b| b.wifi_aware_subscribe(service_name.to_string()))
+            .unwrap_or(false);
+        if ok {
+            Ok(())
+        } else {
+            Err(WifiAwareError::PlatformError("Subscribe failed".into()))
+        }
+    }
+
+    async fn unpublish_service(&self) -> Result<(), WifiAwareError> {
+        if let Some(b) = self.platform_bridge.lock().as_ref() {
+            b.wifi_aware_stop();
+        }
+        Ok(())
+    }
+
+    async fn unsubscribe_from_services(&self) -> Result<(), WifiAwareError> {
+        if let Some(b) = self.platform_bridge.lock().as_ref() {
+            b.wifi_aware_stop();
+        }
+        Ok(())
+    }
+
+    async fn create_data_path(
+        &self,
+        peer_id: &str,
+        pmk: &[u8; 32],
+    ) -> Result<std::net::SocketAddr, WifiAwareError> {
+        let (tx, rx) = tokio::sync::oneshot::channel();
+        self.data_path_results
+            .lock()
+            .insert(peer_id.to_string(), tx);
+
+        let ok = self
+            .with_platform(|b| b.wifi_aware_create_data_path(peer_id.to_string(), pmk.to_vec()))
+            .unwrap_or(false);
+
+        if !ok {
+            self.data_path_results.lock().remove(peer_id);
+            return Err(WifiAwareError::DataPathFailed(
+                "Platform rejected data path creation".into(),
+            ));
+        }
+
+        // Await (not block) the confirmation: this runs on a shared tokio
+        // worker thread, and a blocking wait here would starve other tasks
+        // (including the swarm's own event loop) whenever multiple peers are
+        // discovered concurrently.
+        tokio::time::timeout(std::time::Duration::from_secs(30), rx)
+            .await
+            .map_err(|_| {
+                self.data_path_results.lock().remove(peer_id);
+                WifiAwareError::DataPathFailed("Data path confirmation timed out".into())
+            })?
+            .map_err(|_| WifiAwareError::DataPathFailed("Confirmation sender dropped".into()))
+    }
+
+    async fn close_data_path(&self, _peer_id: &str) -> Result<(), WifiAwareError> {
+        Ok(())
+    }
+
+    fn set_on_service_discovered(&self, callback: Box<dyn Fn(String, Vec<u8>, i32) + Send + Sync>) {
+        *self.on_service_discovered.lock() = Some(callback);
+    }
+
+    fn set_on_message_received(&self, _callback: Box<dyn Fn(String, Vec<u8>) + Send + Sync>) {}
+
+    fn set_on_data_path_confirmed(
+        &self,
+        _callback: Box<dyn Fn(String, std::net::SocketAddr) + Send + Sync>,
+    ) {
+    }
 }
 
 // ============================================================================
@@ -1670,6 +2195,15 @@ pub enum MessageDirection {
     Received,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub enum MessageStatus {
+    #[default]
+    Queued,
+    InCustody,
+    Sent,
+    Delivered,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MessageRecord {
     pub id: String,
@@ -1680,9 +2214,8 @@ pub struct MessageRecord {
     #[serde(default)]
     pub sender_timestamp: u64,
     pub delivered: bool,
-    /// When `true` the message is from a blocked-only peer and is retained for
-    /// evidentiary purposes but must be filtered out of all UI-facing queries.
-    /// The flag is cleared when the peer is unblocked.
+    #[serde(default)]
+    pub status: MessageStatus,
     #[serde(default)]
     pub hidden: bool,
 }
@@ -2255,6 +2788,10 @@ pub struct SwarmBridge {
     /// Callback for dispatching BLE packets to the platform layer.
     #[allow(clippy::type_complexity)]
     dispatch_ble_fn: Arc<Mutex<Option<Arc<dyn Fn(String, Vec<u8>) + Send + Sync>>>>,
+    /// Callback for dispatching proximity packets (any transport) to the platform layer.
+    #[allow(clippy::type_complexity)]
+    dispatch_proximity_fn:
+        Arc<Mutex<Option<Arc<dyn Fn(String, ProximityTransport, Vec<u8>) + Send + Sync>>>>,
 }
 
 impl Default for SwarmBridge {
@@ -2281,16 +2818,28 @@ fn get_global_runtime() -> tokio::runtime::Handle {
 
     tracing::info!("Initializing global Tokio runtime for mobile mesh...");
     #[cfg(not(target_arch = "wasm32"))]
-    let rt = tokio::runtime::Builder::new_multi_thread()
+    let rt = match tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()
-        .expect("Failed to create global Tokio runtime");
+    {
+        Ok(rt) => rt,
+        Err(e) => {
+            tracing::error!(
+                "Failed to create multi-thread Tokio runtime: {}, falling back to current-thread",
+                e
+            );
+            tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .expect("Failed to create any Tokio runtime — critical failure")
+        }
+    };
 
     #[cfg(target_arch = "wasm32")]
     let rt = tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
-        .expect("Failed to create global Tokio runtime");
+        .expect("Failed to create Tokio runtime on WASM");
     let handle = rt.handle().clone();
     *rt_write = Some(rt);
     handle
@@ -2305,6 +2854,7 @@ impl SwarmBridge {
             captured_handle: Some(get_global_runtime()),
             nearby_ble_peers: Arc::new(Mutex::new(HashSet::new())),
             dispatch_ble_fn: Arc::new(Mutex::new(None)),
+            dispatch_proximity_fn: Arc::new(Mutex::new(None)),
         }
     }
 
@@ -2319,9 +2869,11 @@ impl SwarmBridge {
         recipient_identity_id: Option<String>,
         intended_device_id: Option<String>,
     ) -> Result<(), crate::IronCoreError> {
-        let handle_guard = self.handle.lock();
-        let handle = handle_guard
-            .as_ref()
+        // Clone handle and drop guard before block_on to prevent deadlock
+        let handle = self
+            .handle
+            .lock()
+            .clone()
             .ok_or(crate::IronCoreError::NetworkError)?;
 
         // Parse peer ID
@@ -2357,8 +2909,7 @@ impl SwarmBridge {
         recipient_identity_id: Option<String>,
         intended_device_id: Option<String>,
     ) -> Option<String> {
-        let handle_guard = self.handle.lock();
-        let handle = match handle_guard.as_ref() {
+        let handle = match self.handle.lock().clone() {
             Some(handle) => handle,
             None => return Some("swarm_bridge_unavailable".to_string()),
         };
@@ -2392,9 +2943,10 @@ impl SwarmBridge {
     /// Since messages are encrypted for a specific recipient, broadcasting to all peers is safe.
     /// Only the intended recipient can decrypt the payload.
     pub fn send_to_all_peers(&self, data: Vec<u8>) -> Result<(), crate::IronCoreError> {
-        let handle_guard = self.handle.lock();
-        let handle = handle_guard
-            .as_ref()
+        let handle = self
+            .handle
+            .lock()
+            .clone()
             .ok_or(crate::IronCoreError::NetworkError)?;
 
         let rt = self.get_runtime_handle();
@@ -2425,31 +2977,53 @@ impl SwarmBridge {
     }
 
     /// Dial a peer at a multiaddress.
+    ///
+    /// For FFI/sync callers only. Calling this from within an already-running
+    /// tokio task (e.g. a `rt.spawn`'d future) panics ("Cannot start a
+    /// runtime from within a runtime") because it blocks on the same
+    /// runtime that's driving the caller — use `dial_async` there instead.
     pub fn dial(&self, multiaddr: String) -> Result<(), crate::IronCoreError> {
-        let handle_guard = self.handle.lock();
-        let handle = handle_guard
-            .as_ref()
+        let handle = self
+            .handle
+            .lock()
+            .clone()
             .ok_or(crate::IronCoreError::NetworkError)?;
 
-        // Parse multiaddress
         let addr =
             Multiaddr::from_str(&multiaddr).map_err(|_| crate::IronCoreError::InvalidInput)?;
 
-        // Block on async operation
         let rt = self.get_runtime_handle();
         rt.block_on(handle.dial(addr))
             .map_err(|_| crate::IronCoreError::NetworkError)
     }
 
-    /// Get list of connected peer IDs.
+    /// Dial a peer at a multiaddress from within an already-running async
+    /// context (e.g. a task spawned to react to a proximity-transport
+    /// discovery callback). Awaits the dial directly instead of blocking the
+    /// current worker thread on it, so it's safe to call from `rt.spawn`'d
+    /// futures where `dial` is not.
+    pub(crate) async fn dial_async(&self, multiaddr: String) -> Result<(), crate::IronCoreError> {
+        let handle = self
+            .handle
+            .lock()
+            .clone()
+            .ok_or(crate::IronCoreError::NetworkError)?;
+
+        let addr =
+            Multiaddr::from_str(&multiaddr).map_err(|_| crate::IronCoreError::InvalidInput)?;
+
+        handle
+            .dial(addr)
+            .await
+            .map_err(|_| crate::IronCoreError::NetworkError)
+    }
+
     pub fn get_peers(&self) -> Vec<String> {
-        let handle_guard = self.handle.lock();
-        let handle = match handle_guard.as_ref() {
+        let handle = match self.handle.lock().clone() {
             Some(h) => h,
             None => return Vec::new(),
         };
 
-        // Block on async operation
         let rt = self.get_runtime_handle();
         rt.block_on(handle.get_peers())
             .unwrap_or_default()
@@ -2458,15 +3032,12 @@ impl SwarmBridge {
             .collect()
     }
 
-    /// Get list of listening addresses.
     pub fn get_listeners(&self) -> Vec<String> {
-        let handle_guard = self.handle.lock();
-        let handle = match handle_guard.as_ref() {
+        let handle = match self.handle.lock().clone() {
             Some(h) => h,
             None => return Vec::new(),
         };
 
-        // Block on async operation
         let rt = self.get_runtime_handle();
         rt.block_on(handle.get_listeners())
             .unwrap_or_default()
@@ -2475,18 +3046,8 @@ impl SwarmBridge {
             .collect()
     }
 
-    /// Get external addresses observed by peer nodes on the mesh.
-    ///
-    /// Uses the libp2p `identify` protocol: when any connected peer observes
-    /// the address from which we connected them, they report it back. These
-    /// addresses are NAT-mapped and confirmed by actual mesh peers — no
-    /// outside infrastructure required.
-    ///
-    /// Use for display/diagnostics only. Do NOT include in BLE beacons
-    /// (they are observed outbound NAT ports, not stable inbound addresses).
     pub fn get_external_addresses(&self) -> Vec<String> {
-        let handle_guard = self.handle.lock();
-        let handle = match handle_guard.as_ref() {
+        let handle = match self.handle.lock().clone() {
             Some(h) => h,
             None => return Vec::new(),
         };
@@ -2499,10 +3060,8 @@ impl SwarmBridge {
             .collect()
     }
 
-    /// Get list of subscribed Gossipsub topics.
     pub fn get_topics(&self) -> Vec<String> {
-        let handle_guard = self.handle.lock();
-        let handle = match handle_guard.as_ref() {
+        let handle = match self.handle.lock().clone() {
             Some(h) => h,
             None => return Vec::new(),
         };
@@ -2514,22 +3073,22 @@ impl SwarmBridge {
 
     /// Subscribe to a Gossipsub topic.
     pub fn subscribe_topic(&self, topic: String) -> Result<(), crate::IronCoreError> {
-        let handle_guard = self.handle.lock();
-        let handle = handle_guard
-            .as_ref()
+        let handle = self
+            .handle
+            .lock()
+            .clone()
             .ok_or(crate::IronCoreError::NetworkError)?;
 
-        // Block on async operation
         let rt = self.get_runtime_handle();
         rt.block_on(handle.subscribe_topic(topic))
             .map_err(|_| crate::IronCoreError::NetworkError)
     }
 
-    /// Unsubscribe from a Gossipsub topic.
     pub fn unsubscribe_topic(&self, topic: String) -> Result<(), crate::IronCoreError> {
-        let handle_guard = self.handle.lock();
-        let handle = handle_guard
-            .as_ref()
+        let handle = self
+            .handle
+            .lock()
+            .clone()
             .ok_or(crate::IronCoreError::NetworkError)?;
 
         let rt = self.get_runtime_handle();
@@ -2537,11 +3096,11 @@ impl SwarmBridge {
             .map_err(|_| crate::IronCoreError::NetworkError)
     }
 
-    /// Publish data to a Gossipsub topic.
     pub fn publish_topic(&self, topic: String, data: Vec<u8>) -> Result<(), crate::IronCoreError> {
-        let handle_guard = self.handle.lock();
-        let handle = handle_guard
-            .as_ref()
+        let handle = self
+            .handle
+            .lock()
+            .clone()
             .ok_or(crate::IronCoreError::NetworkError)?;
 
         let rt = self.get_runtime_handle();
@@ -2549,10 +3108,8 @@ impl SwarmBridge {
             .map_err(|_| crate::IronCoreError::NetworkError)
     }
 
-    /// Shutdown the swarm gracefully.
     pub fn shutdown(&self) {
-        let handle_guard = self.handle.lock();
-        if let Some(handle) = handle_guard.as_ref() {
+        if let Some(handle) = self.handle.lock().clone() {
             let rt = self.get_runtime_handle();
             let _ = rt.block_on(handle.shutdown());
         }
@@ -2576,8 +3133,23 @@ impl SwarmBridge {
 
     /// Dispatch a BLE packet to the platform layer.
     pub fn dispatch_ble_packet(&self, peer_id: String, data: Vec<u8>) {
-        if let Some(ref f) = *self.dispatch_ble_fn.lock() {
-            f(peer_id, data);
+        self.dispatch_proximity_packet(peer_id, ProximityTransport::Ble, data);
+    }
+
+    /// Dispatch a proximity packet via any transport to the platform layer.
+    pub fn dispatch_proximity_packet(
+        &self,
+        peer_id: String,
+        transport: ProximityTransport,
+        data: Vec<u8>,
+    ) {
+        if let Some(ref f) = *self.dispatch_proximity_fn.lock() {
+            f(peer_id, transport, data);
+        } else if let Some(ref f) = *self.dispatch_ble_fn.lock() {
+            // Fallback: if only BLE callback is set, use it for BLE transport
+            if transport == ProximityTransport::Ble {
+                f(peer_id, data);
+            }
         }
     }
 
@@ -2586,12 +3158,91 @@ impl SwarmBridge {
     pub fn set_dispatch_ble_fn(&self, f: Option<Arc<dyn Fn(String, Vec<u8>) + Send + Sync>>) {
         *self.dispatch_ble_fn.lock() = f;
     }
+
+    /// Set the proximity dispatch callback (supports all transports).
+    #[allow(clippy::type_complexity)]
+    pub fn set_dispatch_proximity_fn(
+        &self,
+        f: Option<Arc<dyn Fn(String, ProximityTransport, Vec<u8>) + Send + Sync>>,
+    ) {
+        *self.dispatch_proximity_fn.lock() = f;
+    }
+}
+
+static ESCALATION_ENGINE: std::sync::OnceLock<Arc<crate::transport::escalation::EscalationEngine>> =
+    std::sync::OnceLock::new();
+
+fn get_escalation_engine() -> &'static Arc<crate::transport::escalation::EscalationEngine> {
+    ESCALATION_ENGINE.get_or_init(|| {
+        Arc::new(crate::transport::escalation::EscalationEngine::new(
+            crate::transport::escalation::EscalationPolicy::Balanced,
+        ))
+    })
+}
+
+/// Get the recommended proximity transport for a peer based on current state.
+/// Consults the EscalationEngine when available, falls back to BLE.
+#[uniffi::export]
+pub fn recommended_transport(peer_id: String) -> ProximityTransport {
+    // Parse peer_id as bytes for EscalationEngine lookup
+    if let Ok(bytes) = hex::decode(&peer_id) {
+        if bytes.len() == 32 {
+            let mut arr = [0u8; 32];
+            arr.copy_from_slice(&bytes);
+            let engine = get_escalation_engine();
+            if let Some(transport) = engine.recommended_transport(&arr) {
+                return transport;
+            }
+        }
+    }
+    ProximityTransport::Ble
+}
+
+/// Update the available transports list for a peer in the authoritative EscalationEngine.
+#[uniffi::export]
+pub fn update_peer_transports(peer_id: String, transports: Vec<ProximityTransport>) {
+    if let Ok(bytes) = hex::decode(&peer_id) {
+        if bytes.len() == 32 {
+            let mut arr = [0u8; 32];
+            arr.copy_from_slice(&bytes);
+            let core_transports: Vec<crate::transport::abstraction::TransportType> = transports
+                .iter()
+                .map(|t| match t {
+                    ProximityTransport::Ble => crate::transport::abstraction::TransportType::BLE,
+                    ProximityTransport::WifiAware => {
+                        crate::transport::abstraction::TransportType::WiFiAware
+                    }
+                    ProximityTransport::WifiDirect => {
+                        crate::transport::abstraction::TransportType::WiFiDirect
+                    }
+                    ProximityTransport::Multipeer => {
+                        crate::transport::abstraction::TransportType::Internet
+                    }
+                })
+                .collect();
+            let engine = get_escalation_engine();
+            if engine.init_peer(arr, core_transports.clone()).is_err() {
+                let _ = engine.update_available_transports(arr, core_transports);
+            }
+        }
+    }
+}
+
+/// Generate a Signal-style safety number from two public keys (Ed25519 hex).
+/// Returns a 60-digit numeric string. Order-independent so both sides match.
+/// Returns an empty string if either key is malformed - an all-zero fallback
+/// looked like a real (matching) safety number that a user could "verify",
+/// which is unsafe for a value whose entire purpose is tamper detection.
+/// Callers must treat "" as an error state, not a value to display.
+#[uniffi::export]
+pub fn safety_number(our_pubkey_hex: String, their_pubkey_hex: String) -> String {
+    crate::identity::keys::safety_number(&our_pubkey_hex, &their_pubkey_hex).unwrap_or_default()
 }
 
 fn current_timestamp() -> u64 {
     web_time::SystemTime::now()
         .duration_since(web_time::UNIX_EPOCH)
-        .expect("system clock before UNIX_EPOCH")
+        .unwrap_or_default()
         .as_millis() as u64
 }
 
@@ -2611,6 +3262,30 @@ mod tests {
             network_type: NetworkType::Wifi,
             motion_state: motion,
         }
+    }
+
+    // -----------------------------------------------------------------------
+    // safety_number (S5)
+    // -----------------------------------------------------------------------
+
+    /// S5: a malformed key must produce an empty string, not an all-zero
+    /// 60-digit number that looks like a real (matching) safety number a
+    /// user could mistakenly "verify".
+    #[test]
+    fn test_safety_number_returns_empty_string_on_malformed_keys() {
+        assert_eq!(safety_number("not-hex".to_string(), "junk".to_string()), "");
+    }
+
+    #[test]
+    fn test_safety_number_is_order_independent_for_valid_keys() {
+        let a = hex::encode([1u8; 32]);
+        let b = hex::encode([2u8; 32]);
+
+        let forward = safety_number(a.clone(), b.clone());
+        let backward = safety_number(b, a);
+
+        assert!(!forward.is_empty());
+        assert_eq!(forward, backward);
     }
 
     #[test]
@@ -2655,6 +3330,71 @@ mod tests {
             second_keypair.public().to_peer_id(),
             "headless key should be stable across restarts"
         );
+    }
+
+    // -----------------------------------------------------------------------
+    // PlatformWifiAwareBridge::handle_data_path_confirmed tests
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_handle_data_path_confirmed_resolves_ipv4() {
+        let bridge = PlatformWifiAwareBridge::new_platform_ref(Arc::new(Mutex::new(None)));
+        let (tx, rx) = tokio::sync::oneshot::channel();
+        bridge
+            .data_path_results
+            .lock()
+            .insert("peer-1".to_string(), tx);
+
+        bridge.handle_data_path_confirmed("peer-1".to_string(), "127.0.0.1".to_string(), 4242);
+
+        let addr = tokio::runtime::Runtime::new()
+            .unwrap()
+            .block_on(rx)
+            .expect("oneshot must resolve");
+        assert_eq!(addr, "127.0.0.1:4242".parse().unwrap());
+    }
+
+    #[test]
+    fn test_handle_data_path_confirmed_resolves_ipv6_link_local() {
+        // Regression test: building SocketAddr via format!("{ip}:{port}") and
+        // parsing the whole string fails for any IPv6 address (needs
+        // "[ip]:port" bracket syntax), so this used to silently swallow every
+        // WiFi Aware confirmation with an IPv6 address and time out.
+        let bridge = PlatformWifiAwareBridge::new_platform_ref(Arc::new(Mutex::new(None)));
+        let (tx, rx) = tokio::sync::oneshot::channel();
+        bridge
+            .data_path_results
+            .lock()
+            .insert("peer-2".to_string(), tx);
+
+        bridge.handle_data_path_confirmed("peer-2".to_string(), "fe80::1234".to_string(), 8765);
+
+        let addr = tokio::runtime::Runtime::new()
+            .unwrap()
+            .block_on(rx)
+            .expect("oneshot must resolve for an IPv6 address");
+        assert_eq!(addr, "[fe80::1234]:8765".parse().unwrap());
+    }
+
+    #[test]
+    fn test_handle_data_path_confirmed_ignores_unparseable_ip_without_panicking() {
+        let bridge = PlatformWifiAwareBridge::new_platform_ref(Arc::new(Mutex::new(None)));
+        let (tx, mut rx) = tokio::sync::oneshot::channel();
+        bridge
+            .data_path_results
+            .lock()
+            .insert("peer-3".to_string(), tx);
+
+        bridge.handle_data_path_confirmed("peer-3".to_string(), "not-an-ip".to_string(), 1);
+
+        // A malformed IP must not resolve (or drop) the pending confirmation:
+        // the sender is left in place in data_path_results, matching the
+        // original pre-fix behavior for a parse failure.
+        assert!(
+            rx.try_recv().is_err(),
+            "malformed IP must not resolve the pending confirmation"
+        );
+        assert!(bridge.data_path_results.lock().contains_key("peer-3"));
     }
 
     #[test]
@@ -2913,6 +3653,7 @@ mod tests {
                     timestamp: 1_777_000_000,
                     sender_timestamp: 1_777_000_000,
                     delivered: false,
+                    status: MessageStatus::default(),
                     hidden: false,
                 })
                 .unwrap();
@@ -2944,6 +3685,7 @@ mod tests {
                 timestamp: 100,
                 sender_timestamp: 100,
                 delivered: false,
+                status: MessageStatus::default(),
                 hidden: false,
             })
             .unwrap();
@@ -2956,6 +3698,7 @@ mod tests {
                 timestamp: 200,
                 sender_timestamp: 200,
                 delivered: false,
+                status: MessageStatus::default(),
                 hidden: false,
             })
             .unwrap();
@@ -2968,6 +3711,7 @@ mod tests {
                 timestamp: 300,
                 sender_timestamp: 300,
                 delivered: true,
+                status: MessageStatus::Delivered,
                 hidden: false,
             })
             .unwrap();
@@ -3024,9 +3768,40 @@ mod tests {
         assert_eq!(settings.max_relay_budget, 200);
         assert_eq!(settings.battery_floor, 20);
         assert!(settings.ble_enabled);
-        assert!(settings.wifi_aware_enabled);
-        assert!(settings.wifi_direct_enabled);
+        assert!(!settings.wifi_aware_enabled);
+        assert!(!settings.wifi_direct_enabled);
         assert!(settings.internet_enabled);
         assert_eq!(settings.discovery_mode, crate::DiscoveryMode::Normal);
+    }
+
+    #[test]
+    fn message_status_monotone_progress() {
+        // Valid transitions: Queued → InCustody/Sent → Delivered
+        // Never regresses: Delivered never downgrades
+        let status = MessageStatus::default();
+        assert_eq!(status, MessageStatus::Queued);
+
+        // Queued → InCustody (valid)
+        let custody = MessageStatus::InCustody;
+        assert!(custody as u8 > MessageStatus::Queued as u8);
+
+        // Queued → Sent (valid)
+        let sent = MessageStatus::Sent;
+        assert!(sent as u8 > MessageStatus::Queued as u8);
+
+        // Sent → Delivered (valid)
+        let delivered = MessageStatus::Delivered;
+        assert!(delivered as u8 > MessageStatus::Sent as u8);
+
+        // Delivered is highest — no regression possible
+        assert_eq!(delivered as u8, 3);
+    }
+
+    #[test]
+    fn message_status_serialization_roundtrip() {
+        let status = MessageStatus::Delivered;
+        let json = serde_json::to_string(&status).unwrap();
+        let deserialized: MessageStatus = serde_json::from_str(&json).unwrap();
+        assert_eq!(status, deserialized);
     }
 }

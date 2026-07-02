@@ -25,6 +25,7 @@ logs/*
 *_log.txt
 *_logs.txt
 *.txt
+!scripts/ffi-snapshots/*.txt
 
 # Temporary migration/debug inventories
 docs/_ios_*
@@ -51,7 +52,8 @@ android/app/src/main/jniLibs/
 # UniFFI Generated
 core/target/generated-sources/
 core/target/android-libs/
-iOS/SCMessenger/SCMessenger/Generated/
+# NOTE: iOS Generated files are tracked because Xcode references them as source files.
+# iOS/SCMessenger/SCMessenger/Generated/
 *.a
 
 core/iOS/
@@ -111,6 +113,9 @@ AgentSwarmCline/scmessenger_swarm/.venv/
 AgentSwarmCline/scmessenger_swarm/swarm_logs/
 AgentSwarmCline/scmessenger_swarm/__pycache__/
 AgentSwarmCline/scmessenger_swarm/task_*.json
+
+# Repomix output (AI context dump, regeneratable)
+repomix-output.xml
 
 # Build outputs and artifacts (auto-generated, regeneratable)
 dist/wasm/*.wasm
@@ -269,10 +274,9 @@ playground.xcworkspace
 # Rust additional
 **/*.rs.bk
 *.pdb
-Cargo.lock
-# Keep Cargo.lock for applications, remove for libraries
-# Uncomment if this is a library:
-# Cargo.lock
+# Cargo.lock is committed: this workspace's root package is the cli binary
+# (plus wasm/mobile cdylib build targets), so it's an application for
+# lockfile purposes even though core is developed as a library within it.
 
 # Testing and coverage
 coverage/
@@ -315,3 +319,7 @@ pnpm-debug.log*
 *.orig
 *.tmp
 *~.nib
+
+# Python bytecode
+__pycache__/
+*.py[cod]

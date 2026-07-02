@@ -66,10 +66,21 @@ class MeshApplication : Application() {
         com.scmessenger.android.utils.NotificationHelper.createNotificationChannels(this)
         Timber.i("Notification channels created")
 
+        schedulePeriodicMaintenance()
+
         Timber.i("SCMessenger application started")
 
         // Application-level initialization
         // The actual mesh service will be started/stopped by user action
+    }
+
+    private fun schedulePeriodicMaintenance() {
+        androidx.work.WorkManager.getInstance(this).enqueueUniquePeriodicWork(
+            MESH_SYNC_WORK_NAME,
+            MESH_SYNC_WORK_POLICY,
+            buildMeshSyncWorkRequest()
+        )
+        Timber.i("Periodic background maintenance worker scheduled")
     }
 
     override fun onTerminate() {
@@ -131,6 +142,32 @@ class MeshApplication : Application() {
             // logcat is intentionally allowed for WARN+ so on-call engineers
             // can `adb logcat` to triage a release crash. No PII should be
             // logged at WARN+ level by the application code.
+        }
+    }
+
+    companion object {
+        internal const val MESH_SYNC_WORK_NAME = "com.scmessenger.mesh.maintenance"
+        internal const val MESH_SYNC_INTERVAL_MINUTES = 15L
+        internal val MESH_SYNC_WORK_POLICY = androidx.work.ExistingPeriodicWorkPolicy.KEEP
+
+        /**
+         * Builds the periodic [com.scmessenger.android.service.MeshSyncWorker]
+         * request: runs every [MESH_SYNC_INTERVAL_MINUTES] regardless of
+         * connectivity (the worker itself no-ops if the mesh service isn't
+         * running), but skips runs while the battery is low to avoid draining
+         * a device the user isn't actively using the mesh on.
+         */
+        internal fun buildMeshSyncWorkRequest(): androidx.work.PeriodicWorkRequest {
+            val constraints = androidx.work.Constraints.Builder()
+                .setRequiredNetworkType(androidx.work.NetworkType.NOT_REQUIRED)
+                .setRequiresBatteryNotLow(true)
+                .build()
+
+            return androidx.work.PeriodicWorkRequestBuilder<com.scmessenger.android.service.MeshSyncWorker>(
+                MESH_SYNC_INTERVAL_MINUTES, java.util.concurrent.TimeUnit.MINUTES
+            )
+                .setConstraints(constraints)
+                .build()
         }
     }
 }

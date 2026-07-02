@@ -38,10 +38,13 @@ impl RatchetSessionManager {
     /// Save all sessions to the persistent backend.
     pub fn save(&self) -> Result<()> {
         if let Some(backend) = &self.backend {
-            let json = self.serialize_sessions()?;
+            let mut json = self.serialize_sessions()?;
             backend
                 .put(b"ratchet_sessions_v1", json.as_bytes())
                 .map_err(|e| anyhow::anyhow!("Failed to save ratchet sessions: {}", e))?;
+            // Zeroize the JSON string containing all session secrets
+            use zeroize::Zeroize;
+            json.zeroize();
         }
         Ok(())
     }
@@ -135,6 +138,10 @@ impl RatchetSessionManager {
 
     /// Deserialize sessions from JSON and merge into the manager.
     /// Existing sessions for the same peer_id are NOT overwritten.
+    /// Per-entry conversion failures are silently skipped; this is meant
+    /// for best-effort startup loads (`load()`). Use
+    /// `deserialize_sessions_strict` for contexts (e.g. backup import)
+    /// that must fail on any corrupted entry instead of dropping it.
     pub fn deserialize_sessions(&mut self, json: &str) -> Result<()> {
         let map: HashMap<String, SerializableRatchetSession> = serde_json::from_str(json)
             .map_err(|e| anyhow::anyhow!("Failed to deserialize ratchet sessions: {}", e))?;
@@ -146,6 +153,30 @@ impl RatchetSessionManager {
             if let Ok(session) = serializable.into_session() {
                 self.sessions.insert(peer_id, session);
             }
+        }
+        Ok(())
+    }
+
+    /// Like `deserialize_sessions`, but aborts on the first per-entry
+    /// conversion failure instead of skipping it. Use where a corrupted
+    /// entry must fail the whole operation, e.g. validating and restoring
+    /// a backup.
+    pub fn deserialize_sessions_strict(&mut self, json: &str) -> Result<()> {
+        let map: HashMap<String, SerializableRatchetSession> = serde_json::from_str(json)
+            .map_err(|e| anyhow::anyhow!("Failed to deserialize ratchet sessions: {}", e))?;
+
+        let mut decoded = Vec::new();
+
+        for (peer_id, serializable) in map {
+            if self.sessions.contains_key(&peer_id) {
+                continue; // Don't overwrite existing in-memory sessions
+            }
+            let session = serializable.into_session()?;
+            decoded.push((peer_id, session));
+        }
+
+        for (peer_id, session) in decoded {
+            self.sessions.insert(peer_id, session);
         }
         Ok(())
     }
@@ -181,8 +212,6 @@ pub struct SerializableRatchetSession {
     pub has_identity_secret: bool,
     /// Identity secret (hex-encoded), only present before first DH ratchet
     pub identity_secret_hex: Option<String>,
-    /// Skipped message keys: (their_dh_public_bytes_hex, message_number) -> message_key_hex
-    pub skipped_keys: HashMap<String, String>,
 }
 
 /// Serializable chain state.
@@ -195,12 +224,6 @@ pub struct ChainState {
 impl SerializableRatchetSession {
     /// Create a serializable snapshot from a live session.
     pub fn from_session(session: &RatchetSession) -> Self {
-        let mut skipped_keys = HashMap::new();
-        for ((their_dh_pub, msg_num), key) in session.skipped_keys() {
-            let key_str = format!("{}:{}", hex::encode(their_dh_pub), msg_num);
-            skipped_keys.insert(key_str, hex::encode(key.as_bytes()));
-        }
-
         Self {
             our_dh_secret_hex: hex::encode(session.our_dh_secret_bytes()),
             our_dh_public_hex: hex::encode(session.our_public_key()),
@@ -222,19 +245,19 @@ impl SerializableRatchetSession {
             initialized: session.is_initialized(),
             has_identity_secret: session.has_identity_secret(),
             identity_secret_hex: session.identity_secret_bytes().map(hex::encode),
-            skipped_keys,
         }
     }
 
     /// Reconstruct a live session from a serialized snapshot.
     pub fn into_session(self) -> Result<RatchetSession> {
-        let our_dh_secret_bytes = hex::decode(&self.our_dh_secret_hex)
+        let mut our_dh_secret_bytes = hex::decode(&self.our_dh_secret_hex)
             .map_err(|e| anyhow::anyhow!("Invalid our_dh_secret_hex: {}", e))?;
         if our_dh_secret_bytes.len() != 32 {
             bail!("our_dh_secret must be 32 bytes");
         }
         let mut secret_arr = [0u8; 32];
         secret_arr.copy_from_slice(&our_dh_secret_bytes);
+        our_dh_secret_bytes.zeroize();
         let our_dh_secret = X25519StaticSecret::from(secret_arr);
         secret_arr.zeroize();
 
@@ -261,13 +284,14 @@ impl SerializableRatchetSession {
             None => None,
         };
 
-        let root_key_bytes = hex::decode(&self.root_key_hex)
+        let mut root_key_bytes = hex::decode(&self.root_key_hex)
             .map_err(|e| anyhow::anyhow!("Invalid root_key_hex: {}", e))?;
         if root_key_bytes.len() != 32 {
             bail!("root_key must be 32 bytes");
         }
         let mut rk_arr = [0u8; 32];
         rk_arr.copy_from_slice(&root_key_bytes);
+        root_key_bytes.zeroize();
         let root_key = RatchetKey::from_bytes(rk_arr);
 
         let sending_chain = self.sending_chain.map(|cs| {
@@ -283,46 +307,20 @@ impl SerializableRatchetSession {
         });
 
         let our_identity_secret = if let Some(ref hex_str) = self.identity_secret_hex {
-            let bytes = hex::decode(hex_str)
+            let mut bytes = hex::decode(hex_str)
                 .map_err(|e| anyhow::anyhow!("Invalid identity_secret_hex: {}", e))?;
             if bytes.len() != 32 {
                 bail!("identity_secret must be 32 bytes");
             }
             let mut arr = [0u8; 32];
             arr.copy_from_slice(&bytes);
+            bytes.zeroize();
             let secret = X25519StaticSecret::from(arr);
             arr.zeroize();
             Some(secret)
         } else {
             None
         };
-
-        let mut skipped_keys = HashMap::new();
-        for (key_str, val_str) in self.skipped_keys {
-            let parts: Vec<&str> = key_str.split(':').collect();
-            if parts.len() != 2 {
-                continue;
-            }
-            let their_dh_bytes = hex::decode(parts[0])
-                .map_err(|e| anyhow::anyhow!("Invalid skipped key hex: {}", e))?;
-            if their_dh_bytes.len() != 32 {
-                continue;
-            }
-            let msg_num: u32 = parts[1].parse()
-                .map_err(|e| anyhow::anyhow!("Invalid skipped key msg number: {}", e))?;
-            let mut key_arr = [0u8; 32];
-            key_arr.copy_from_slice(&their_dh_bytes);
-
-            let val_bytes = hex::decode(val_str)
-                .map_err(|e| anyhow::anyhow!("Invalid skipped key val hex: {}", e))?;
-            if val_bytes.len() != 32 {
-                continue;
-            }
-            let mut val_arr = [0u8; 32];
-            val_arr.copy_from_slice(&val_bytes);
-
-            skipped_keys.insert((key_arr, msg_num), RatchetKey::from_bytes(val_arr));
-        }
 
         Ok(RatchetSession::reconstruct(
             our_dh_secret,
@@ -332,7 +330,6 @@ impl SerializableRatchetSession {
             sending_chain,
             receiving_chain,
             self.dh_step_count,
-            skipped_keys,
             self.initialized,
             our_identity_secret,
         ))
@@ -381,72 +378,35 @@ mod tests {
     }
 
     #[test]
-    fn test_manager_persistence_roundtrip_with_skipped_keys() {
-        let backend = Arc::new(MemoryStorage::new());
-        let mut manager = RatchetSessionManager::with_backend(backend.clone());
-
+    fn test_deserialize_sessions_strict_rejects_corrupted_entry() {
+        let mut manager = RatchetSessionManager::new();
         let our_key = generate_signing_key();
-        let their_key = generate_signing_key();
-        let their_x25519_secret = crate::crypto::encrypt::ed25519_to_x25519_secret(&their_key);
-        let their_x25519_pub = X25519PublicKey::from(&their_x25519_secret);
-        let peer_id = "peer-1";
+        let their_pub = X25519PublicKey::from([1u8; 32]);
 
-        let session = manager
-            .get_or_create_session(peer_id, &our_key, &their_x25519_pub)
+        manager
+            .get_or_create_session("peer-good", &our_key, &their_pub)
             .unwrap();
+        let mut good_serializable: HashMap<String, SerializableRatchetSession> = manager
+            .sessions
+            .iter()
+            .map(|(k, v)| (k.clone(), SerializableRatchetSession::from_session(v)))
+            .collect();
 
-        // Let's create a receiver session to generate some skipped keys.
-        let mut receiver_manager = RatchetSessionManager::new();
-        let our_x25519_secret = crate::crypto::encrypt::ed25519_to_x25519_secret(&our_key);
-        let our_x25519_pub = X25519PublicKey::from(&our_x25519_secret);
+        // Corrupt the one entry's hex field so `into_session()` fails.
+        let mut corrupted = good_serializable.remove("peer-good").unwrap();
+        corrupted.our_dh_secret_hex = "not-hex".to_string();
+        let mut map = HashMap::new();
+        map.insert("peer-corrupted".to_string(), corrupted);
+        let json = serde_json::to_string(&map).unwrap();
 
-        let receiver_session = receiver_manager
-            .create_receiver_session("peer-2", &their_key, &our_x25519_pub)
-            .unwrap();
+        // Lenient path: silently skips the corrupted entry.
+        let mut lenient = RatchetSessionManager::new();
+        lenient.deserialize_sessions(&json).unwrap();
+        assert_eq!(lenient.session_count(), 0);
 
-        // Encrypt multiple messages from sender to receiver
-        let enc1 = session.encrypt(b"msg 1", b"aad").unwrap();
-        let enc2 = session.encrypt(b"msg 2", b"aad").unwrap();
-        let enc3 = session.encrypt(b"msg 3", b"aad").unwrap();
-
-        // Decrypt only msg 3 on receiver. This forces receiver to skip msg 1 and msg 2, caching their keys.
-        let dec3 = receiver_session
-            .decrypt(&enc3.our_dh_public, enc3.message_number, &enc3.nonce, &enc3.ciphertext, b"aad")
-            .unwrap();
-        assert_eq!(dec3, b"msg 3");
-
-        // Verify that receiver session has 2 skipped keys
-        assert_eq!(receiver_session.skipped_keys().len(), 2);
-
-        // Associate backend with receiver_manager, save it, load it in receiver_manager2
-        let mut r_manager = RatchetSessionManager::with_backend(backend.clone());
-        r_manager.create_receiver_session("peer-2", &their_key, &our_x25519_pub).unwrap();
-        // Overwrite the session with the one that has skipped keys
-        r_manager.remove_session("peer-2");
-        r_manager.deserialize_sessions(&receiver_manager.serialize_sessions().unwrap()).unwrap();
-
-        assert_eq!(r_manager.get_session("peer-2").unwrap().skipped_keys().len(), 2);
-        r_manager.save().unwrap();
-
-        let mut r_manager2 = RatchetSessionManager::with_backend(backend);
-        r_manager2.load().unwrap();
-
-        let loaded_session = r_manager2.get_session_mut("peer-2").unwrap();
-        assert_eq!(loaded_session.skipped_keys().len(), 2);
-
-        // Decrypt skipped message 1 and 2 to prove the keys are valid and persistent
-        let dec1 = loaded_session
-            .decrypt(&enc1.our_dh_public, enc1.message_number, &enc1.nonce, &enc1.ciphertext, b"aad")
-            .unwrap();
-        assert_eq!(dec1, b"msg 1");
-
-        let dec2 = loaded_session
-            .decrypt(&enc2.our_dh_public, enc2.message_number, &enc2.nonce, &enc2.ciphertext, b"aad")
-            .unwrap();
-        assert_eq!(dec2, b"msg 2");
-
-        // After decryption, skipped keys should be removed from cache
-        assert_eq!(loaded_session.skipped_keys().len(), 0);
+        // Strict path: fails instead of dropping the entry.
+        let mut strict = RatchetSessionManager::new();
+        assert!(strict.deserialize_sessions_strict(&json).is_err());
+        assert_eq!(strict.session_count(), 0);
     }
 }
-

@@ -2,11 +2,13 @@
 
 pub mod abstraction;
 pub mod behaviour;
+pub mod ble;
 pub mod bootstrap;
 pub mod capability;
 pub mod circuit_breaker;
 pub mod diagnostics;
 pub mod discovery;
+pub mod escalation;
 pub mod health;
 pub mod internet;
 pub mod manager;
@@ -22,6 +24,8 @@ pub mod routing;
 pub mod swarm;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod websocket;
+pub mod wifi_aware;
+pub mod wifi_direct;
 
 pub use behaviour::{
     DeregistrationPayload, DeregistrationRequest, IronCoreBehaviour, LedgerExchangeRequest,

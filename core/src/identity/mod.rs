@@ -1,6 +1,6 @@
 // Identity & Crypto - Foundation for KERI support (Phase 4)
 
-mod keys;
+pub mod keys;
 mod store;
 
 pub use keys::{IdentityKeys, KeyPair};

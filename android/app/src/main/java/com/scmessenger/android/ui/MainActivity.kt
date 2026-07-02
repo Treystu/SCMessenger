@@ -139,7 +139,7 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    MeshApp()
+                    MeshApp(mainViewModel = mainViewModel)
                 }
             }
         }

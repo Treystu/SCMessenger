@@ -447,20 +447,20 @@ mod tests {
     #[test]
     fn test_strip_peer_id() {
         assert_eq!(
-            strip_peer_id("/ip4/34.168.102.7/tcp/9001/p2p/12D3KooWGGdvGNJb3Jw"),
-            "/ip4/34.168.102.7/tcp/9001"
+            strip_peer_id("/ip4/1.2.3.4/tcp/9001/p2p/12D3KooWGGdvGNJb3Jw"),
+            "/ip4/1.2.3.4/tcp/9001"
         );
         assert_eq!(
-            strip_peer_id("/ip4/34.168.102.7/tcp/9001"),
-            "/ip4/34.168.102.7/tcp/9001"
+            strip_peer_id("/ip4/1.2.3.4/tcp/9001"),
+            "/ip4/1.2.3.4/tcp/9001"
         );
     }
 
     #[test]
     fn test_extract_ip_port() {
         assert_eq!(
-            extract_ip_port("/ip4/34.168.102.7/tcp/9001/p2p/12D3KooW"),
-            Some("34.168.102.7:9001".to_string())
+            extract_ip_port("/ip4/1.2.3.4/tcp/9001/p2p/12D3KooW"),
+            Some("1.2.3.4:9001".to_string())
         );
         assert_eq!(
             extract_ip_port("/ip4/10.0.0.1/tcp/4001"),
@@ -525,14 +525,14 @@ mod tests {
     fn test_ledger_crud() {
         let mut ledger = ConnectionLedger::default();
 
-        ledger.add_bootstrap("/ip4/34.168.102.7/tcp/9001/p2p/12D3KooW", None);
+        ledger.add_bootstrap("/ip4/1.2.3.4/tcp/9001/p2p/12D3KooW", None);
         assert_eq!(ledger.entries.len(), 1);
 
-        let entry = ledger.entries.get("/ip4/34.168.102.7/tcp/9001").unwrap();
+        let entry = ledger.entries.get("/ip4/1.2.3.4/tcp/9001").unwrap();
         assert!(entry.is_bootstrap);
 
-        ledger.record_connection("/ip4/34.168.102.7/tcp/9001", "NewPeerId");
-        let entry = ledger.entries.get("/ip4/34.168.102.7/tcp/9001").unwrap();
+        ledger.record_connection("/ip4/1.2.3.4/tcp/9001", "NewPeerId");
+        let entry = ledger.entries.get("/ip4/1.2.3.4/tcp/9001").unwrap();
         assert_eq!(entry.last_peer_id, Some("NewPeerId".to_string()));
     }
 

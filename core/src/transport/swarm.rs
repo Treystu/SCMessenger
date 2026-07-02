@@ -54,10 +54,10 @@ use std::net::SocketAddr;
 use std::sync::{Arc, Weak};
 use tokio::sync::mpsc;
 use web_time::SystemTime;
-#[cfg(not(target_arch = "wasm32"))]
-use web_time::{Duration, Instant, UNIX_EPOCH};
 #[cfg(target_arch = "wasm32")]
 use web_time::{Duration, Instant};
+#[cfg(not(target_arch = "wasm32"))]
+use web_time::{Duration, Instant, UNIX_EPOCH};
 
 /// Returns true if a Multiaddr is suitable for discovery (local or global).
 ///
@@ -244,7 +244,6 @@ impl BootstrapBackoffEntry {
 const BOOTSTRAP_BACKOFF_INITIAL_SECS: u64 = 60;
 /// Maximum bootstrap re-dial backoff in seconds (16 minutes).
 const BOOTSTRAP_BACKOFF_MAX_SECS: u64 = 960;
-
 
 struct RelayAbuseGuardrails {
     per_peer_buckets: HashMap<String, TokenBucketState>,
@@ -2391,7 +2390,7 @@ pub async fn start_swarm_with_config(
 
                                 // Exponential backoff gate: skip this addr if it's still
                                 // within its backoff window after a recent failure.
-                                if !bootstrap_backoff.get(addr).map_or(true, |e| e.is_eligible()) {
+                                if !bootstrap_backoff.get(addr).is_none_or(|e| e.is_eligible()) {
                                     continue;
                                 }
 
@@ -3916,8 +3915,8 @@ pub async fn start_swarm_with_config(
                                             }
                                         }
                                         let err_str = format!("{} {:?}", error, error);
-                                        let matched = ip_str.as_ref().map_or(false, |ip| err_str.contains(ip.as_str()))
-                                            && port_str.as_ref().map_or(false, |p| err_str.contains(p.as_str()));
+                                        let matched = ip_str.as_ref().is_some_and(|ip| err_str.contains(ip.as_str()))
+                                            && port_str.as_ref().is_some_and(|p| err_str.contains(p.as_str()));
                                         if matched {
                                             tracing::debug!("Bootstrap backoff match: addr {} in error", ba);
                                         }
@@ -5288,7 +5287,10 @@ pub async fn start_swarm_with_config(
 
                         // Exponential backoff gate: skip this addr if it is still
                         // within its backoff window after a recent failure.
-                        if !bootstrap_backoff.get(addr).map_or(true, |e| e.is_eligible()) {
+                        if !bootstrap_backoff
+                            .get(addr)
+                            .map_or(true, |e| e.is_eligible())
+                        {
                             continue;
                         }
 
@@ -5313,7 +5315,10 @@ pub async fn start_swarm_with_config(
                                     stripped_addr,
                                     e
                                 );
-                                bootstrap_backoff.entry(addr.clone()).or_insert_with(BootstrapBackoffEntry::new).on_failure();
+                                bootstrap_backoff
+                                    .entry(addr.clone())
+                                    .or_insert_with(BootstrapBackoffEntry::new)
+                                    .on_failure();
                             }
                         }
                     }
@@ -5591,7 +5596,9 @@ mod tests {
         ];
         let filtered = super::build_mdns_advertised_addrs(&addrs);
         assert_eq!(filtered.len(), 1);
-        assert!(filtered[0].to_string().starts_with("/ip4/192.168.0.230/tcp/9101"));
+        assert!(filtered[0]
+            .to_string()
+            .starts_with("/ip4/192.168.0.230/tcp/9101"));
     }
 }
 
@@ -5617,16 +5624,15 @@ pub fn extract_tcp_port_from_multiaddr(addr: &Multiaddr) -> Option<u16> {
 /// * `swarm` - The Swarm instance (passed by reference to access listeners)
 pub fn detect_and_log_port_mismatch(config_port: u16, swarm: &libp2p::Swarm<IronCoreBehaviour>) {
     // Get the first listener that has a TCP/UDP port
-    let actual_port = swarm
-        .listeners()
-        .find_map(|addr| extract_tcp_port_from_multiaddr(addr));
+    let actual_port = swarm.listeners().find_map(extract_tcp_port_from_multiaddr);
 
     if let Some(actual) = actual_port {
         if config_port != actual {
             tracing::warn!(
                 "Config says listen_port={} but swarm is bound to port {}. \
                  Config file may be stale — update config or pass --port.",
-                config_port, actual
+                config_port,
+                actual
             );
         }
     }

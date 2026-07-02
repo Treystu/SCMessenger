@@ -180,6 +180,7 @@ class ChatViewModel @Inject constructor(
                     timestamp = (System.currentTimeMillis() / 1000).toULong(),
                     senderTimestamp = (System.currentTimeMillis() / 1000).toULong(),
                     delivered = false,
+                    status = uniffi.api.MessageStatus.QUEUED,
                     hidden = false
                 )
 
@@ -412,6 +413,7 @@ class ChatViewModel @Inject constructor(
                     timestamp = msg.timestamp,
                     senderTimestamp = msg.senderTimestamp,
                     delivered = delivered,
+                    status = if (delivered) uniffi.api.MessageStatus.DELIVERED else msg.status,
                     hidden = msg.hidden
                 )
             } else {

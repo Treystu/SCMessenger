@@ -11,7 +11,6 @@
 /// The module is designed to work with platform-specific implementations (Swift/Kotlin)
 /// that handle the actual BLE hardware operations. The core logic here is testable
 /// without actual BLE hardware.
-
 pub mod beacon;
 pub mod gatt;
 pub mod l2cap;
@@ -19,21 +18,21 @@ pub mod scanner;
 
 // Re-export commonly used types
 pub use beacon::{
-    BeaconBuilder, BeaconParser, BleBeacon, BleBeaconError, DEFAULT_BEACON_ROTATION_SECS,
-    BLE_BEACON_SERVICE_UUID,
+    BeaconBuilder, BeaconParser, BleBeacon, BleBeaconError, BLE_BEACON_SERVICE_UUID,
+    DEFAULT_BEACON_ROTATION_SECS,
 };
 
 pub use gatt::{
-    GattCharacteristic, GattClient, GattError, GattFragmenter, GattFragmentHeader, GattReassembler,
-    GattServer, GattWriteQueue, GattWriteRequest, MAX_CHARACTERISTIC_SIZE, GATT_SERVICE_UUID,
+    GattCharacteristic, GattClient, GattError, GattFragmentHeader, GattFragmenter, GattReassembler,
+    GattServer, GattWriteQueue, GattWriteRequest, GATT_SERVICE_UUID, MAX_CHARACTERISTIC_SIZE,
 };
 
 pub use l2cap::{
-    ChannelState, FragmentHeader, L2capChannel, L2capConfig, L2capError, L2capFragmenter,
-    L2capReassembler, ProtocolServiceMultiplexer,
+    append_crc32, ChannelState, DropReason, FragmentHeader, L2capChannel, L2capConfig, L2capError,
+    L2capFragmenter, L2capReassembler, L2capReassemblyManager, ProtocolServiceMultiplexer,
 };
 
 pub use scanner::{
-    BatteryState, BleScanner, BleScanConfig, DutyCycleManager, ScanResult, ScannerError,
+    BatteryState, BleScanConfig, BleScanner, DutyCycleManager, ScanResult, ScannerError,
     ScannerState,
 };

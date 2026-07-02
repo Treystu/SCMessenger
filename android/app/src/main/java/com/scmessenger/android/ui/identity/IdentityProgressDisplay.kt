@@ -8,76 +8,57 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.scmessenger.android.ui.viewmodels.IdentityProgressStage
+import kotlinx.coroutines.delay
 
 /**
- * 6-stage proof-of-work progress display for identity creation.
+ * Honest progress display for identity creation.
  *
  * Shows:
- *  - Header row: "Step N of 6 — <stage label>" + percent complete
- *  - Linear progress bar
- *  - Detail line (what the current step is doing)
- *  - ETA hint ("About N seconds remaining")
- *  - Per-stage rows with checkmark / spinner / dim bullet
+ *  - A spinner + "Creating your identity…"
+ *  - Real elapsed time (updated every second)
+ *  - Optional sub-stage detail from the progress callback
  *
- * Extracted from IdentityScreen.kt (was private there) so OnboardingScreen
- * can also show it. The fix for the "Generating Identity Keys… hangs without
- * ETA" bug — the user now sees real progress feedback during the 3-5 second
- * Ed25519 keygen + storage persist.
- *
- * v0.3.4 (P0_ANDROID_CRASHFIX): parameter is non-nullable. See the long comment
- * in IdentityViewModel._progressStage for the full rationale — the previous
- * `IdentityProgressStage?` allowed a null to reach `currentStage.id`, crashing
- * the activity. With IdentityViewModel._progressStage typed as non-nullable
- * StateFlow<IdentityProgressStage> and the call sites gated on `!is Idle`,
- * the compiler now enforces non-null at this call site.
+ * Does NOT claim specific phases or show fake ETA countdowns.
+ * The elapsed timer starts when this composable first renders.
  */
 @Composable
 fun IdentityProgressDisplay(
     currentStage: IdentityProgressStage,
-    // P0_ANDROID_PROGRESS_CALLBACK: transient sub-stage detail string the
-    // MeshRepository.createIdentity callback passes through. Renders as a
-    // smaller, dimmer line UNDER the active stage's `detail` so the user sees
-    // motion during otherwise-blocking work (e.g. "Committing to encrypted
-    // storage…" during the SharedPreferences commit() in
-    // persistIdentityBackup). Null/blank = hide.
     subStageDetail: String? = null,
     modifier: Modifier = Modifier
 ) {
-    val stage = currentStage
-    val allStages = IdentityProgressStage.ALL
+    // Real elapsed time counter — starts when composable enters composition
+    var elapsedSeconds by remember { mutableLongStateOf(0L) }
+    val startTimeMs = remember { System.currentTimeMillis() }
 
-    // Sum of etaMs for stages strictly before the current one, divided by total.
-    // The bar fills as stages complete, regardless of how long each actually
-    // takes on this device.
-    val completedEtaMs = allStages
-        .filter { it.id < stage.id }
-        .sumOf { it.etaMs }
-    val rawFraction = completedEtaMs.toFloat() /
-        IdentityProgressStage.TOTAL_ETA_MS.toFloat()
-    val fraction = rawFraction.coerceIn(0f, 1f)
-    val percentComplete = (fraction * 100f).toInt().coerceIn(0, 99)
+    LaunchedEffect(Unit) {
+        while (true) {
+            elapsedSeconds = (System.currentTimeMillis() - startTimeMs) / 1000L
+            delay(1000L)
+        }
+    }
 
-    // ETA: total minus the sum of completed etas. Floor at "a few seconds" so
-    // the user never sees "About 0s remaining" while the spinner is still
-    // running on the longest step.
-    val remainingMs = (IdentityProgressStage.TOTAL_ETA_MS - completedEtaMs)
-        .coerceAtLeast(500L)
-    val remainingSec = (remainingMs + 999L) / 1000L // round up
-    val etaText = if (remainingSec <= 1L) "Less than a second remaining"
-                  else "About $remainingSec seconds remaining"
+    val elapsedText = when {
+        elapsedSeconds < 1L -> "Starting…"
+        elapsedSeconds < 60L -> "${elapsedSeconds}s elapsed"
+        else -> "${elapsedSeconds / 60}m ${elapsedSeconds % 60}s elapsed"
+    }
 
     Card(
         modifier = modifier,
@@ -89,45 +70,30 @@ fun IdentityProgressDisplay(
             modifier = Modifier.fillMaxWidth().padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            // Header row: step counter + percent-complete
+            // Header: spinner + status
             Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                Text(
-                    text = "Step ${stage.id} of ${IdentityProgressStage.TOTAL} — ${stage.label}",
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.weight(1f)
+                CircularProgressIndicator(
+                    modifier = Modifier.size(20.dp),
+                    strokeWidth = 2.dp
                 )
                 Text(
-                    text = "$percentComplete%",
+                    text = "Creating your identity…",
                     style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary
+                    fontWeight = FontWeight.Bold
                 )
             }
-            // Smooth progress bar
-            LinearProgressIndicator(
-                progress = { fraction },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(6.dp),
-                color = MaterialTheme.colorScheme.primary,
-                trackColor = MaterialTheme.colorScheme.surfaceVariant,
-            )
-            // Detail line: what the current step is doing
+
+            // Elapsed time
             Text(
-                text = stage.detail,
+                text = elapsedText,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
-            // P0_ANDROID_PROGRESS_CALLBACK: transient sub-stage detail line
-            // that the repo fires from inside the FFI call (e.g. "Committing
-            // to encrypted storage…" during the blocking SharedPreferences
-            // commit()). Render only when non-blank so the layout doesn't
-            // shift for callers that don't pass a sub-detail.
+
+            // Sub-stage detail from progress callback (if any)
             if (!subStageDetail.isNullOrBlank()) {
                 Text(
                     text = subStageDetail,
@@ -136,50 +102,15 @@ fun IdentityProgressDisplay(
                     fontWeight = FontWeight.SemiBold
                 )
             }
-            // ETA hint
-            Text(
-                text = etaText,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Spacer(modifier = Modifier.height(4.dp))
-            // 6-row stage list
-            allStages.forEach { s ->
-                IdentityProgressRow(
-                    stage = s,
-                    isDone = s.id < stage.id,
-                    isActive = s.id == stage.id
-                )
-            }
-        }
-    }
-}
 
-@Composable
-private fun IdentityProgressRow(
-    stage: IdentityProgressStage,
-    isDone: Boolean,
-    isActive: Boolean
-) {
-    val rowColor = when {
-        isDone -> MaterialTheme.colorScheme.primary
-        isActive -> MaterialTheme.colorScheme.onSurface
-        else -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
-    }
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        when {
-            isDone -> Text("✓", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
-            isActive -> CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp)
-            else -> Text("·", color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f), fontWeight = FontWeight.Bold)
+            Spacer(modifier = Modifier.height(4.dp))
+
+            // Single honest status line
+            Text(
+                text = "This may take a moment on first setup. Your device is generating cryptographic keys and starting the secure mesh service.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+            )
         }
-        Text(
-            text = "${stage.id}. ${stage.label}",
-            style = MaterialTheme.typography.bodyMedium,
-            color = rowColor,
-            fontWeight = if (isActive) FontWeight.SemiBold else FontWeight.Normal
-        )
     }
 }

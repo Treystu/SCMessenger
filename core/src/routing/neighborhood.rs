@@ -12,18 +12,59 @@ use super::local::{CellSummary, PeerId, TransportType};
 use std::collections::HashMap;
 use web_time::SystemTime;
 
+/// Energy class for hardware-aware routing (2-bit classification)
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize, Default,
+)]
+pub enum EnergyClass {
+    /// Device is charging — lowest routing cost
+    Charging,
+    /// Battery > 50% — normal routing cost
+    #[default]
+    High,
+    /// Battery 20-50% — elevated routing cost
+    Low,
+    /// Battery < 20% — highest routing cost, used only as last resort
+    Critical,
+}
+
+impl EnergyClass {
+    /// Cost multiplier for routing decisions
+    pub fn cost_multiplier(&self) -> f64 {
+        match self {
+            EnergyClass::Charging => 0.5,
+            EnergyClass::High => 1.0,
+            EnergyClass::Low => 2.0,
+            EnergyClass::Critical => 8.0,
+        }
+    }
+
+    /// Classify from battery percentage and charging state
+    pub fn from_battery(battery_pct: u8, is_charging: bool) -> Self {
+        if is_charging {
+            EnergyClass::Charging
+        } else if battery_pct > 50 {
+            EnergyClass::High
+        } else if battery_pct > 20 {
+            EnergyClass::Low
+        } else {
+            EnergyClass::Critical
+        }
+    }
+}
+
 /// Information about a gateway peer that connects to other cells
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct GatewayInfo {
     pub gateway_id: PeerId,
-    /// Summary of the cell beyond this gateway
     pub cell_summary: CellSummary,
-    /// Estimated hop count to reach that cell through this gateway
     pub hops_away: u8,
-    /// Last time this info was refreshed
     pub last_updated: u64,
-    /// Transport to reach the gateway from us
     pub transport: TransportType,
+    /// Energy class of the gateway peer (for hardware-aware routing)
+    /// Defaults to High for backward-compat with old peers that don't send energy class.
+    #[serde(default)]
+    pub energy_class: EnergyClass,
 }
 
 /// Neighborhood summary — what we know about cells 2-3 hops away
@@ -44,12 +85,13 @@ pub struct NeighborhoodSummary {
 /// Gossip message exchanged between peers for Layer 2 knowledge sharing
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct NeighborhoodGossip {
-    /// Source peer's local cell summary
     pub local_summary: CellSummary,
-    /// What the source peer knows about neighboring cells
     pub neighborhood_summaries: Vec<NeighborhoodSummary>,
-    /// Timestamp
     pub timestamp: u64,
+    /// Energy class of the gossiping peer
+    /// Defaults to High for backward-compat with old peers.
+    #[serde(default)]
+    pub energy_class: EnergyClass,
 }
 
 /// Layer 2: Neighborhood gossip table
@@ -99,6 +141,24 @@ impl NeighborhoodTable {
         hops: u8,
         transport: TransportType,
     ) {
+        self.update_gateway_with_energy(
+            gateway_id,
+            cell_summary,
+            hops,
+            transport,
+            EnergyClass::default(),
+        );
+    }
+
+    /// Update gateway info with explicit energy class
+    pub fn update_gateway_with_energy(
+        &mut self,
+        gateway_id: PeerId,
+        cell_summary: CellSummary,
+        hops: u8,
+        transport: TransportType,
+        energy_class: EnergyClass,
+    ) {
         // Reject gossip with unrealistic hop counts
         if hops > self.max_hops {
             return;
@@ -114,6 +174,7 @@ impl NeighborhoodTable {
                 hops_away: hops,
                 last_updated: now,
                 transport,
+                energy_class,
             },
         );
 
@@ -137,18 +198,21 @@ impl NeighborhoodTable {
     /// Get best gateway for a hint (lowest hops, highest reliability)
     pub fn best_gateway_for_hint(&self, hint: &[u8; 4]) -> Option<&GatewayInfo> {
         self.gateways_for_hint(hint).into_iter().min_by(|a, b| {
-            // Primary sort: fewest hops
-            match a.hops_away.cmp(&b.hops_away) {
-                std::cmp::Ordering::Equal => {
-                    // Secondary sort: highest reliability
-                    b.cell_summary
-                        .avg_reliability
-                        .partial_cmp(&a.cell_summary.avg_reliability)
-                        .unwrap_or(std::cmp::Ordering::Equal)
-                }
-                other => other,
-            }
+            let cost_a = self.gateway_cost(a);
+            let cost_b = self.gateway_cost(b);
+            cost_a
+                .partial_cmp(&cost_b)
+                .unwrap_or(std::cmp::Ordering::Equal)
         })
+    }
+
+    /// Compute routing cost for a gateway: lower is better.
+    /// cost = hops * energy_multiplier * (1 / reliability)
+    fn gateway_cost(&self, gw: &GatewayInfo) -> f64 {
+        let base_cost = gw.hops_away as f64;
+        let energy_mult = gw.energy_class.cost_multiplier();
+        let reliability = gw.cell_summary.avg_reliability.max(0.01);
+        base_cost * energy_mult / reliability
     }
 
     /// Process incoming gossip from a peer (they share their neighborhood knowledge)
@@ -231,6 +295,7 @@ impl NeighborhoodTable {
             local_summary,
             neighborhood_summaries,
             timestamp: current_timestamp(),
+            energy_class: EnergyClass::default(),
         }
     }
 
@@ -493,6 +558,7 @@ mod tests {
             local_summary,
             neighborhood_summaries: vec![neighborhood_summary],
             timestamp: current_timestamp(),
+            energy_class: EnergyClass::default(),
         };
 
         table.process_gossip(peer_id, gossip);
@@ -531,6 +597,7 @@ mod tests {
             local_summary,
             neighborhood_summaries: vec![distant_summary],
             timestamp: current_timestamp(),
+            energy_class: EnergyClass::default(),
         };
 
         table.process_gossip(peer_id, gossip);
@@ -698,6 +765,7 @@ mod tests {
             local_summary: a_local_summary,
             neighborhood_summaries: vec![a_neighborhood],
             timestamp: current_timestamp(),
+            energy_class: EnergyClass::default(),
         };
 
         // B processes this gossip
@@ -747,6 +815,7 @@ mod tests {
             local_summary: make_cell_summary(vec![]),
             neighborhood_summaries: vec![old_summary],
             timestamp: now - 100,
+            energy_class: EnergyClass::default(),
         };
         table.process_gossip(peer_id, gossip1);
 
@@ -755,6 +824,7 @@ mod tests {
             local_summary: make_cell_summary(vec![]),
             neighborhood_summaries: vec![new_summary],
             timestamp: now,
+            energy_class: EnergyClass::default(),
         };
         table.process_gossip(peer_id, gossip2);
 

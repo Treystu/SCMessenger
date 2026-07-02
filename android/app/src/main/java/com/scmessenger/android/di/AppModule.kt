@@ -31,9 +31,10 @@ object AppModule {
     @Provides
     @Singleton
     fun provideMeshRepository(
-        @ApplicationContext context: Context
+        @ApplicationContext context: Context,
+        preferencesRepository: PreferencesRepository
     ): MeshRepository {
-        return MeshRepository(context)
+        return MeshRepository(context, preferencesRepository)
     }
 
     @Provides
@@ -42,6 +43,15 @@ object AppModule {
         @ApplicationContext context: Context
     ): PreferencesRepository {
         return PreferencesRepository(context)
+    }
+
+    @Provides
+    @Singleton
+    fun provideIdentityCreationCoordinator(
+        meshRepository: MeshRepository,
+        preferencesRepository: PreferencesRepository
+    ): com.scmessenger.android.data.IdentityCreationCoordinator {
+        return com.scmessenger.android.data.IdentityCreationCoordinator(meshRepository, preferencesRepository)
     }
 
     @Provides

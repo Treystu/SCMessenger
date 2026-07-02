@@ -157,6 +157,14 @@ enum MotionState {
     "Unknown",
 };
 
+/// Proximity transport types for the unified data plane
+enum ProximityTransport {
+    "Ble",
+    "WifiAware",
+    "WifiDirect",
+    "Multipeer",
+};
+
 dictionary ServiceStats {
     u32 peers_discovered;
     u32 messages_relayed;
@@ -173,6 +181,17 @@ callback interface PlatformBridge {
     void on_entering_background();
     void on_entering_foreground();
     void send_ble_packet(string peer_id, bytes data);
+    void on_proximity_data_received(string peer_id, ProximityTransport transport, bytes data);
+    void send_proximity_packet(string peer_id, ProximityTransport transport, bytes data);
+    boolean wifi_aware_publish(string service_name, bytes service_info);
+    boolean wifi_aware_subscribe(string service_name);
+    boolean wifi_aware_create_data_path(string peer_id, bytes pmk);
+    void wifi_aware_stop();
+    boolean wifi_direct_discover_peers();
+    void wifi_direct_stop_discovery();
+    boolean wifi_direct_connect(string device_address);
+    boolean wifi_direct_create_group(string group_name);
+    void wifi_direct_remove_group();
 };
 
 // ============================================================================
@@ -248,13 +267,15 @@ dictionary MeshSettings {
 
 dictionary Contact {
     string peer_id;
-    string? nickname;       // Federated nickname (from the peer)
-    string? local_nickname; // Local override set by the user
+    string? nickname;
+    string? local_nickname;
     string public_key;
     u64 added_at;
     u64? last_seen;
     string? notes;
-    string? last_known_device_id; // WS13.2: Last known device ID for tight pairing
+    string? last_known_device_id;
+    u64? verified_at;
+    boolean is_tombstone;
 };
 
 
@@ -267,6 +288,15 @@ enum MessageDirection {
     "Received",
 };
 
+/// Canonical message status for UI rendering.
+/// Progress is monotone: Queued → InCustody/Sent → Delivered. Never regresses.
+enum MessageStatus {
+    "Queued",
+    "InCustody",
+    "Sent",
+    "Delivered",
+};
+
 dictionary MessageRecord {
     string id;
     MessageDirection direction;
@@ -275,8 +305,7 @@ dictionary MessageRecord {
     u64 timestamp;
     u64 sender_timestamp;
     boolean delivered;
-    /// When true, the message is from a blocked-only peer (evidentiary retention).
-    /// It is stored in the DB but hidden from all UI-facing queries.
+    MessageStatus status;
     boolean hidden;
 };
 
@@ -366,5 +395,4 @@ namespace api {
     BlockedIdentity blocked_identity_with_device_id(BlockedIdentity blocked, string device_id);
     BlockedIdentity blocked_identity_with_reason(BlockedIdentity blocked, string reason);
     BlockedIdentity blocked_identity_with_notes(BlockedIdentity blocked, string notes);
-    string compute_safety_number(string first_pubkey_hex, string second_pubkey_hex);
 };

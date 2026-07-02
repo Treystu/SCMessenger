@@ -62,6 +62,7 @@ mod tests {
             sender_id: sender.to_string(),
             payload: vec![1, 2, 3],
             received_at,
+            sender_public_key_hex: None,
         }
     }
 

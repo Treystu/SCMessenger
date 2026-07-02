@@ -33,7 +33,20 @@
     <string name="settings_status_active">Active</string>
     <string name="settings_title_import_identity">Import Identity Backup</string>
     <string name="settings_label_paste_backup">Paste backup string</string>
+    <string name="settings_label_backup_passphrase_optional">Passphrase (leave blank for this device\'s own backup)</string>
     <string name="settings_action_import">Import</string>
+
+    <string name="settings_action_export_identity_backup">Export Identity Backup</string>
+    <string name="settings_title_export_identity_backup">Export Identity Backup</string>
+    <string name="settings_export_backup_description">Choose a passphrase to encrypt your identity key, active conversations, and contacts. You\'ll need this exact passphrase to restore it later &#8212; write it down somewhere safe.</string>
+    <string name="settings_label_backup_passphrase">Passphrase</string>
+    <string name="settings_label_backup_passphrase_confirm">Confirm passphrase</string>
+    <string name="settings_error_passphrase_mismatch">Passphrases don\'t match</string>
+    <string name="settings_error_passphrase_too_short">Passphrase must be at least 8 characters</string>
+    <string name="settings_title_backup_ready">Backup Ready</string>
+    <string name="settings_backup_ready_description">Copy this and store it somewhere safe. Anyone with this string and your passphrase can restore your identity.</string>
+    <string name="settings_action_copy_backup">Copy Backup</string>
+    <string name="settings_backup_copied">Backup copied to clipboard</string>
     <string name="settings_title_reset_data">Reset All Data?</string>
     <string name="settings_reset_data_description">This will permanently delete your identity, messages, contacts, and settings.</string>
     <string name="settings_action_reset">RESET</string>
@@ -370,6 +383,18 @@
     <string name="contact_detail_label_added">Added</string>
     <string name="contact_detail_label_last_seen">Last Seen</string>
     <string name="contact_detail_label_notes">Notes:</string>
+    <string name="contact_detail_action_verify_safety_number">Verify Safety Number</string>
+    <string name="contact_detail_status_verified">Verified</string>
+    <string name="contact_detail_status_unverified">Not verified</string>
+
+    <string name="verify_safety_number_title">Verify Safety Number</string>
+    <string name="verify_safety_number_description">Compare this number with %1$s, in person or through another trusted channel. If they match, your conversation is secure from eavesdropping.</string>
+    <string name="verify_safety_number_qr_content_description">Safety number QR code</string>
+    <string name="verify_safety_number_action_mark_verified">Mark as Verified</string>
+    <string name="verify_safety_number_action_clear_verification">Clear Verification</string>
+    <string name="verify_safety_number_verified_since">Verified on %1$s</string>
+    <string name="verify_safety_number_error_no_identity">Your identity isn\'t initialized yet</string>
+    <string name="verify_safety_number_error_invalid_key_data">Safety number unavailable — key data invalid</string>
 
     <!-- Add Contact Screen Extensions -->
     <string name="add_contact_tab_manual">Manual Entry</string>

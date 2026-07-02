@@ -84,7 +84,7 @@ impl MeshServiceConfig {
 }
 
 /// Callback interface for platform events
-pub trait PlatformBridge: Send + Sync {
+pub trait LegacyPlatformBridge: Send + Sync {
     // BLE Operations
     fn request_ble_scan(&self) -> Result<(), String>;
     fn request_ble_advertise(&self) -> Result<(), String>;
@@ -129,7 +129,7 @@ pub struct ServiceStats {
 pub struct MeshService {
     config: MeshServiceConfig,
     state: Arc<RwLock<ServiceState>>,
-    platform: Arc<RwLock<Option<Arc<dyn PlatformBridge>>>>,
+    platform: Arc<RwLock<Option<Arc<dyn LegacyPlatformBridge>>>>,
     stats: Arc<RwLock<ServiceStats>>,
 }
 
@@ -147,7 +147,7 @@ impl MeshService {
     }
 
     /// Set the platform bridge
-    pub fn set_platform_bridge(&self, bridge: Option<Arc<dyn PlatformBridge>>) {
+    pub fn set_platform_bridge(&self, bridge: Option<Arc<dyn LegacyPlatformBridge>>) {
         *self.platform.write() = bridge;
     }
 
@@ -318,7 +318,7 @@ mod tests {
 
     struct MockPlatformBridge;
 
-    impl PlatformBridge for MockPlatformBridge {
+    impl LegacyPlatformBridge for MockPlatformBridge {
         fn request_ble_scan(&self) -> Result<(), String> {
             Ok(())
         }

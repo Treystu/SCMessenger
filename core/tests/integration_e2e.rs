@@ -107,6 +107,7 @@ fn test_e2e_message_flow_two_peers() {
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
             .as_secs(),
+        sender_public_key_hex: None,
     };
 
     assert!(bob_inbox.receive(received_msg), "Failed to receive message");
@@ -127,6 +128,7 @@ fn test_e2e_message_flow_two_peers() {
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
             .as_secs(),
+        sender_public_key_hex: None,
     };
 
     assert!(!bob_inbox.receive(duplicate_msg), "Deduplication failed");
@@ -247,6 +249,7 @@ fn test_e2e_persistent_message_flow() {
             sender_id: received_message.sender_id.clone(),
             payload: received_message.payload.clone(),
             received_at: 1,
+            sender_public_key_hex: None,
         };
 
         inbox.receive(received_msg);

@@ -71,10 +71,7 @@ final class MeshRepository {
     /// Static fallback bootstrap node multiaddrs for NAT traversal and internet roaming.
     /// These are used only if env override and remote fetch both fail/are absent.
     /// Priority order: GCP relay (cloud) → OSX relay (home/local backup).
-    private static let staticBootstrapNodes: [String] = [
-        // AWS Relay (Stable backup)
-        "/ip4/34.135.34.73/tcp/9001/p2p/12D3KooWETatHYo4xt9aufXEEDce719fyMEB7KmXJga1SYVUikaw",
-    ]
+    private static let staticBootstrapNodes: [String] = []
 
     /// Resolved bootstrap nodes using the core BootstrapResolver.
     /// Priority: SC_BOOTSTRAP_NODES env var → remote URL → static fallback.
@@ -637,7 +634,6 @@ final class MeshRepository {
                     }
                 }
 
-                meshService?.setBootstrapNodes(addrs: bootstrapAddrs)
                 // P0_TRANSPORT_001: Use static port 9001 for LAN connectivity with CLI daemon.
                 // This ensures both sides can dial each other using predictable addresses.
                 try? meshService?.startSwarm(listenAddr: "/ip4/0.0.0.0/tcp/9001", bootstrapAddrs: [])
@@ -795,7 +791,6 @@ final class MeshRepository {
         if settings?.internetEnabled == true {
             do {
                 // Configure bootstrap nodes for NAT traversal
-                meshService?.setBootstrapNodes(addrs: Self.defaultBootstrapNodes)
                 // P0_TRANSPORT_001: Use static port 9001 for LAN connectivity with CLI daemon.
                 try meshService?.startSwarm(listenAddr: "/ip4/0.0.0.0/tcp/9001", bootstrapAddrs: [])
                 broadcastIdentityBeacon()
@@ -817,10 +812,21 @@ final class MeshRepository {
     ///
     /// Intentionally lightweight — reads current ironCore state only.
     /// Do NOT call ensureServiceInitialized() here; this function is called
-    /// from inside startMeshService() and a recursive ensureServiceInitialized()
-    /// would destroy the service being started (nulling meshService/ironCore mid-flight).
+    /// Check if identity is initialized.
+    /// Multi-tier detection matching Android's approach:
+    /// 1. Rust core check (authoritative)
+    /// 2. Keychain backup check (fast path for cold starts where core hasn't hydrated)
+    /// Note: This is called from inside startMeshService() and a recursive
+    /// ensureServiceInitialized() would destroy the service being started.
     func isIdentityInitialized() -> Bool {
-        return ironCore?.getIdentityInfo().initialized == true
+        if ironCore?.getIdentityInfo().initialized == true {
+            return true
+        }
+        // P0: Check Keychain backup as fallback — matches Android's SharedPreferences
+        // backup check in MeshRepository.isIdentityInitialized(). On cold starts the
+        // Rust core may not have hydrated from sled yet, but the Keychain backup
+        // is immediately available.
+        return readIdentityBackupFromKeychain() != nil
     }
 
     /// Create a new identity (first-time setup)
@@ -835,6 +841,10 @@ final class MeshRepository {
                 throw MeshError.notInitialized("Mesh service initialization failed")
             }
 
+            // P0: Grant consent before identity initialization.
+            // The Rust core requires consent_granted=true for initialize_identity().
+            // Android already does this; adding for iOS parity.
+            ironCore.grantConsent()
             logVerbose("Calling ironCore.initializeIdentity()...")
             try ironCore.initializeIdentity()
             try ensureLocalIdentityFederation()
@@ -856,6 +866,11 @@ final class MeshRepository {
         if !info.initialized {
             let restored = restoreIdentityFromKeychain(ironCore: ironCore)
             if restored {
+                // P0: Grant consent after successful Keychain restore.
+                // The Rust core starts with consent_granted=false, but if we have a
+                // persisted identity backup, the user already consented in a prior session.
+                // Matches Android's pattern in MeshRepository.kt:3033.
+                ironCore.grantConsent()
                 info = ironCore.getIdentityInfo()
             }
         }
@@ -864,10 +879,45 @@ final class MeshRepository {
             return
         }
 
+        // P0: Ensure consent is granted whenever identity is initialized.
+        // This handles the case where identity was loaded from sled but consent wasn't set
+        // (e.g., after a process restart where consent_granted resets to false).
+        // grantConsent is idempotent — calling it when already granted is a no-op.
+        ironCore.grantConsent()
+
         let nickname = info.nickname?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         if !nickname.isEmpty {
             persistIdentityBackupToKeychain(ironCore: ironCore)
         }
+    }
+
+    private func getPlatformSecuredPassphrase() -> String {
+        let service = "com.scmessenger.identity.passphrase"
+        let account = "passphrase_v1"
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: account,
+            kSecReturnData as String: true,
+            kSecMatchLimit as String: kSecMatchLimitOne,
+        ]
+        var result: AnyObject?
+        let status = SecItemCopyMatching(query as CFDictionary, &result)
+        if status == errSecSuccess, let data = result as? Data, let passphrase = String(data: data, encoding: .utf8) {
+            return passphrase
+        }
+        let newPassphrase = UUID().uuidString + UUID().uuidString
+        if let data = newPassphrase.data(using: .utf8) {
+            let addQuery: [String: Any] = [
+                kSecClass as String: kSecClassGenericPassword,
+                kSecAttrService as String: service,
+                kSecAttrAccount as String: account,
+                kSecValueData as String: data,
+                kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly,
+            ]
+            _ = SecItemAdd(addQuery as CFDictionary, nil)
+        }
+        return newPassphrase
     }
 
     @discardableResult
@@ -875,20 +925,29 @@ final class MeshRepository {
         guard let backupPayload = readIdentityBackupFromKeychain() else {
             return false
         }
+        let passphrase = getPlatformSecuredPassphrase()
         do {
-            try ironCore.importIdentityBackup(backup: backupPayload)
+            try ironCore.importIdentityBackup(backup: backupPayload, passphrase: passphrase)
             logVerbose("Restored identity from iOS Keychain backup payload")
             return true
         } catch {
-            logger.warning("Identity Keychain restore failed: \(error.localizedDescription, privacy: .public)")
-            return false
+            // Legacy fallback if the backup was encrypted with the old placeholder
+            do {
+                try ironCore.importIdentityBackup(backup: backupPayload, passphrase: "SCMessenger-Backup-Placeholder")
+                logVerbose("Restored identity using legacy iOS Keychain backup placeholder passphrase")
+                return true
+            } catch {
+                logger.warning("Identity Keychain restore failed: \(error.localizedDescription, privacy: .public)")
+                return false
+            }
         }
     }
 
     private func persistIdentityBackupToKeychain(ironCore: IronCore?) {
         guard let ironCore else { return }
         do {
-            let backup = try ironCore.exportIdentityBackup()
+            let passphrase = getPlatformSecuredPassphrase()
+            let backup = try ironCore.exportIdentityBackup(passphrase: passphrase)
             writeIdentityBackupToKeychain(backup)
         } catch {
             logger.warning("Failed to persist identity backup payload: \(error.localizedDescription, privacy: .public)")
@@ -1052,7 +1111,12 @@ final class MeshRepository {
 
         // Prepare and send message (use trimmed key to handle any stored whitespace)
         let outboundContent = encodeMessageWithIdentityHints(content)
-        let prepared = try ironCore.prepareMessageWithId(recipientPublicKeyHex: trimmedKey, text: outboundContent)
+        let prepared = try ironCore.prepareMessageWithId(
+            recipientPublicKeyHex: trimmedKey,
+            text: outboundContent,
+            msgType: .text,
+            ttl: nil
+        )
         let messageId = prepared.messageId.trimmingCharacters(in: .whitespacesAndNewlines)
         if messageId.isEmpty {
             throw MeshError.notInitialized("Core returned empty message ID")
@@ -1068,6 +1132,7 @@ final class MeshRepository {
             timestamp: UInt64(Date().timeIntervalSince1970),
             senderTimestamp: UInt64(Date().timeIntervalSince1970),
             delivered: false,
+            status: .queued,
             hidden: false
         )
         try? historyManager?.add(record: messageRecord)
@@ -1254,7 +1319,9 @@ final class MeshRepository {
                     addedAt: UInt64(Date().timeIntervalSince1970),
                     lastSeen: UInt64(Date().timeIntervalSince1970),
                     notes: routeNotes,
-                    lastKnownDeviceId: verifiedHints?.deviceId
+                    lastKnownDeviceId: verifiedHints?.deviceId,
+                    verifiedAt: nil,
+                    isTombstone: false
                 )
                 do {
                     try contactManager?.add(contact: autoContact)
@@ -1310,7 +1377,9 @@ final class MeshRepository {
                     addedAt: existingContact.addedAt,
                     lastSeen: existingContact.lastSeen,
                     notes: updatedNotes,
-                    lastKnownDeviceId: verifiedHints?.deviceId ?? existingContact.lastKnownDeviceId
+                    lastKnownDeviceId: verifiedHints?.deviceId ?? existingContact.lastKnownDeviceId,
+                    verifiedAt: existingContact.verifiedAt,
+                    isTombstone: existingContact.isTombstone
                 )
                 try? contactManager?.add(contact: updatedContact)
                 contactManager?.flush()
@@ -1419,6 +1488,7 @@ final class MeshRepository {
                         timestamp: UInt64(obj["ts"] as? Int64 ?? 0),
                         senderTimestamp: UInt64(obj["sts"] as? Int64 ?? 0),
                         delivered: obj["del"] as? Bool ?? false,
+                        status: obj["del"] as? Bool ?? false ? .delivered : .queued,
                         hidden: false
                     )
                     try? historyManager?.add(record: record)
@@ -1474,6 +1544,7 @@ final class MeshRepository {
             timestamp: canonicalTimestamp,
             senderTimestamp: senderTimestamp,
             delivered: true,
+            status: .delivered,
             hidden: false
         )
 
@@ -1674,7 +1745,9 @@ final class MeshRepository {
                 let payload = encodeIdentitySyncPayload()
                 let prepared = try ironCore?.prepareMessageWithId(
                     recipientPublicKeyHex: recipientPublicKey,
-                    text: payload
+                    text: payload,
+                    msgType: .text,
+                    ttl: nil
                 )
                 guard let prepared = prepared else {
                     identitySyncSentPeers.remove(normalizedRoute)
@@ -1737,7 +1810,12 @@ final class MeshRepository {
 
             do {
                 let payload = encodeMeshMessagePayload(content: "", kind: "history_sync")
-                guard let prepared = try? ironCore?.prepareMessageWithId(recipientPublicKeyHex: recipientPublicKey, text: payload) else {
+                guard let prepared = try? ironCore?.prepareMessageWithId(
+                    recipientPublicKeyHex: recipientPublicKey,
+                    text: payload,
+                    msgType: .text,
+                    ttl: nil
+                ) else {
                     historySyncSentPeers.removeValue(forKey: normalizedRoute)
                     logDiagnostic("history_sync_request_failed_prepare route=\(normalizedRoute)")
                     logger.error("historySync request failed to prepare message")
@@ -1819,7 +1897,12 @@ final class MeshRepository {
                     }
 
                     let payload = encodeMeshMessagePayload(content: jsonStr, kind: "history_sync_data")
-                    guard let prepared = try? ironCore?.prepareMessageWithId(recipientPublicKeyHex: recipientPublicKey, text: payload) else {
+                    guard let prepared = try? ironCore?.prepareMessageWithId(
+                        recipientPublicKeyHex: recipientPublicKey,
+                        text: payload,
+                        msgType: .text,
+                        ttl: nil
+                    ) else {
                         self.logger.error("sendHistorySyncData prepareMessageWithId failed for batch \(batchIndex) (\(batch.count) msgs)")
                         continue
                     }
@@ -2386,8 +2469,8 @@ final class MeshRepository {
             maxRelayBudget: DefaultSettings.maxRelayBudget,
             batteryFloor: DefaultSettings.batteryFloor,
             bleEnabled: true,
-            wifiAwareEnabled: true,
-            wifiDirectEnabled: true,
+            wifiAwareEnabled: false,
+            wifiDirectEnabled: false,
             internetEnabled: true,
             discoveryMode: .normal,
             onionRouting: false,
@@ -2426,7 +2509,9 @@ final class MeshRepository {
             addedAt: existingContact.addedAt,
             lastSeen: existingContact.lastSeen,
             notes: removeRoutingHint(notes: existingContact.notes, key: NotificationNoteKey.requestPending),
-            lastKnownDeviceId: existingContact.lastKnownDeviceId
+            lastKnownDeviceId: existingContact.lastKnownDeviceId,
+            verifiedAt: existingContact.verifiedAt,
+            isTombstone: existingContact.isTombstone
         )
         try? contactManager?.add(contact: updated)
         contactManager?.flush()
@@ -2642,8 +2727,8 @@ final class MeshRepository {
     }
 
     func exportDiagnosticsAsync() async -> String {
-        return await Task.detached(priority: .utility) {
-            self.exportDiagnosticsInternal()
+        return await Task.detached(priority: .utility) { [weak self] in
+            await self?.exportDiagnosticsInternal() ?? ""
         }.value
     }
 
@@ -2749,9 +2834,13 @@ final class MeshRepository {
 
         // UNIFIED ID FIX: Canonicalize peerId to public_key_hex before storage.
         let canonicalPeerId: String
-        if let resolved = ironCore?.resolveIdentity(anyId: contact.peerId) {
-            canonicalPeerId = resolved
-        } else {
+        do {
+            if let resolved = try ironCore?.resolveIdentity(anyId: contact.peerId) {
+                canonicalPeerId = resolved
+            } else {
+                canonicalPeerId = contact.peerId
+            }
+        } catch {
             canonicalPeerId = contact.peerId
         }
 
@@ -2765,7 +2854,9 @@ final class MeshRepository {
                 addedAt: contact.addedAt,
                 lastSeen: contact.lastSeen,
                 notes: contact.notes,
-                lastKnownDeviceId: contact.lastKnownDeviceId
+                lastKnownDeviceId: contact.lastKnownDeviceId,
+                verifiedAt: contact.verifiedAt,
+                isTombstone: contact.isTombstone
             )
         } else {
             finalContact = contact
@@ -2825,6 +2916,34 @@ final class MeshRepository {
             throw MeshError.notInitialized("ContactManager not initialized")
         }
         return contactManager.count()
+    }
+
+    /// Mark a contact as verified after an out-of-band safety-number comparison.
+    func markContactVerified(peerId: String) throws {
+        guard let contactManager = contactManager else {
+            throw MeshError.notInitialized("ContactManager not initialized")
+        }
+        try contactManager.markVerified(peerId: peerId)
+        logger.info("✓ Contact marked verified: \(peerId)")
+    }
+
+    /// Clear a contact's verification status (e.g. after a key change).
+    func unverifyContact(peerId: String) throws {
+        guard let contactManager = contactManager else {
+            throw MeshError.notInitialized("ContactManager not initialized")
+        }
+        try contactManager.unverify(peerId: peerId)
+        logger.info("✓ Contact verification cleared: \(peerId)")
+    }
+
+    /// Compute the Signal-style safety number for comparing identities with
+    /// `theirPublicKeyHex` out-of-band. Returns nil if our own identity isn't
+    /// initialized yet, or an empty string if the underlying keys are
+    /// malformed (S5) - callers must treat both as error states, never
+    /// render an empty string as if it were a real safety number.
+    func computeSafetyNumber(theirPublicKeyHex: String) -> String? {
+        guard let ourKey = getIdentityInfo()?.publicKeyHex else { return nil }
+        return safetyNumber(ourPubkeyHex: ourKey, theirPubkeyHex: theirPublicKeyHex)
     }
 
     // MARK: - Message History
@@ -2949,7 +3068,7 @@ final class MeshRepository {
         guard let ironCore = ironCore else {
             throw MeshError.notInitialized("IronCore not initialized")
         }
-        try ironCore.blockPeer(peerId: peerId, reason: reason)
+        try ironCore.blockPeer(peerId: peerId, deviceId: nil, reason: reason)
         logger.info("✓ Blocked peer: \(peerId)")
     }
 
@@ -2958,7 +3077,7 @@ final class MeshRepository {
         guard let ironCore = ironCore else {
             throw MeshError.notInitialized("IronCore not initialized")
         }
-        try ironCore.unblockPeer(peerId: peerId)
+        try ironCore.unblockPeer(peerId: peerId, deviceId: nil)
         logger.info("✓ Unblocked peer: \(peerId)")
     }
 
@@ -2968,7 +3087,7 @@ final class MeshRepository {
         guard let ironCore = ironCore else {
             throw MeshError.notInitialized("IronCore not initialized")
         }
-        try ironCore.blockAndDeletePeer(peerId: peerId, reason: reason)
+        try ironCore.blockAndDeletePeer(peerId: peerId, deviceId: nil, reason: reason)
         logger.info("✓ Blocked and deleted peer: \(peerId)")
     }
 
@@ -2977,7 +3096,7 @@ final class MeshRepository {
         guard let ironCore = ironCore else {
             throw MeshError.notInitialized("IronCore not initialized")
         }
-        return try ironCore.isPeerBlocked(peerId: peerId)
+        return try ironCore.isPeerBlocked(peerId: peerId, deviceId: nil)
     }
 
     /// List all blocked peers.
@@ -3113,6 +3232,8 @@ final class MeshRepository {
 
         // 1. Report to Rust MeshService
         let profile = DeviceProfile(
+            peerId: nil,
+            deviceId: nil,
             batteryPct: pct,
             isCharging: charging,
             hasWifi: networkStatus.wifi,
@@ -3130,6 +3251,8 @@ final class MeshRepository {
 
         // Report to Rust
         let profile = DeviceProfile(
+            peerId: nil,
+            deviceId: nil,
             batteryPct: currentBatteryPct,
             isCharging: currentIsCharging,
             hasWifi: wifi,
@@ -3154,6 +3277,8 @@ final class MeshRepository {
 
         // Report to Rust
         let profile = DeviceProfile(
+            peerId: nil,
+            deviceId: nil,
             batteryPct: currentBatteryPct,
             isCharging: currentIsCharging,
             hasWifi: networkStatus.wifi,
@@ -3649,7 +3774,9 @@ final class MeshRepository {
                     addedAt: contact.addedAt,
                     lastSeen: UInt64(Date().timeIntervalSince1970),
                     notes: updatedNotes,
-                    lastKnownDeviceId: contact.lastKnownDeviceId
+                    lastKnownDeviceId: contact.lastKnownDeviceId,
+                    verifiedAt: contact.verifiedAt,
+                    isTombstone: contact.isTombstone
                 )
                 try? contactManager?.add(contact: updatedContact)
                 contactManager?.flush()
@@ -5367,7 +5494,9 @@ final class MeshRepository {
                 addedAt: contact.addedAt,
                 lastSeen: contact.lastSeen,
                 notes: withListeners,
-                lastKnownDeviceId: contact.lastKnownDeviceId
+                lastKnownDeviceId: contact.lastKnownDeviceId,
+                verifiedAt: contact.verifiedAt,
+                isTombstone: contact.isTombstone
             )
             try? contactManager?.add(contact: updated)
             contactManager?.flush()
@@ -5437,7 +5566,9 @@ final class MeshRepository {
             addedAt: existing?.addedAt ?? now,
             lastSeen: now,
             notes: notes,
-            lastKnownDeviceId: deviceId ?? existing?.lastKnownDeviceId
+            lastKnownDeviceId: deviceId ?? existing?.lastKnownDeviceId,
+            verifiedAt: existing?.verifiedAt,
+            isTombstone: existing?.isTombstone ?? false
         )
         try? contactManager?.add(contact: updated)
         contactManager?.flush()
@@ -5637,6 +5768,8 @@ final class MeshRepository {
         }
 
         let profile = DeviceProfile(
+            peerId: nil,
+            deviceId: nil,
             batteryPct: currentBatteryPct,
             isCharging: currentIsCharging,
             hasWifi: networkStatus.wifi,
@@ -6060,6 +6193,31 @@ final class MeshRepository {
         return ironCore?.getIdentityInfo()
     }
 
+    /// Export a passphrase-encrypted identity backup: the identity signing
+    /// key, active ratchet sessions, and contacts, encrypted with an
+    /// Argon2id-derived key. Distinct from `getIdentityExportString()`,
+    /// which exports the public identity card with no encryption.
+    func exportIdentityBackup(passphrase: String) throws -> String {
+        guard let ironCore else {
+            throw MeshError.notInitialized("IronCore not initialized")
+        }
+        return try ironCore.exportIdentityBackup(passphrase: passphrase)
+    }
+
+    /// Import an identity backup using a passphrase the user supplied
+    /// directly (as opposed to the device-bound Keychain auto-backup
+    /// passphrase used internally by `restoreIdentityFromKeychain`). A
+    /// wrong passphrase surfaces as an error with no fallback.
+    func importIdentityBackup(backup: String, passphrase: String) throws {
+        guard let ironCore else {
+            throw MeshError.notInitialized("IronCore not initialized")
+        }
+        try ironCore.importIdentityBackup(backup: backup, passphrase: passphrase)
+        if ironCore.getIdentityInfo().initialized {
+            ironCore.grantConsent()
+        }
+    }
+
     func getIdentityExportString() -> String {
         guard let identity = getFullIdentityInfo() else { return "{}" }
         var listeners = normalizeOutboundListenerHints(getListeningAddresses())
@@ -6186,7 +6344,9 @@ final class MeshRepository {
                             addedAt: contact.addedAt,
                             lastSeen: contact.lastSeen,
                             notes: contact.notes,
-                            lastKnownDeviceId: contact.lastKnownDeviceId
+                            lastKnownDeviceId: contact.lastKnownDeviceId,
+                            verifiedAt: contact.verifiedAt,
+                            isTombstone: contact.isTombstone
                          )
                          try contactManager.add(contact: newContact)
                     }
@@ -6208,6 +6368,7 @@ final class MeshRepository {
                         timestamp: msg.timestamp,
                         senderTimestamp: msg.senderTimestamp,
                         delivered: msg.delivered,
+                        status: msg.status,
                         hidden: msg.hidden
                     )
                     try historyManager.add(record: updatedMsg)

@@ -21,6 +21,7 @@ struct ContactsListView: View {
     @State private var pendingDeleteDisplayName: String = ""
     @State private var editingContact: Contact? = nil
     @State private var editNickname: String = ""
+    @State private var contactToVerify: Contact? = nil
 
     var body: some View {
         List {
@@ -61,6 +62,12 @@ struct ContactsListView: View {
                             editNickname = contact.localNickname ?? contact.nickname ?? ""
                         } label: {
                             Label("Edit Nickname", systemImage: "pencil")
+                        }
+
+                        Button {
+                            contactToVerify = contact
+                        } label: {
+                            Label("Verify Safety Number", systemImage: "checkmark.shield")
                         }
 
                         Button(role: .destructive) {
@@ -190,6 +197,14 @@ struct ContactsListView: View {
                 }
             }
         )
+        .sheet(isPresented: Binding(
+            get: { contactToVerify != nil },
+            set: { if !$0 { contactToVerify = nil } }
+        )) {
+            if let peerId = contactToVerify?.peerId, let viewModel {
+                VerifySafetyNumberSheet(peerId: peerId, viewModel: viewModel)
+            }
+        }
     }
 
     private func quickConnect(_ peer: NearbyPeer) {
@@ -222,7 +237,9 @@ struct ContactsListView: View {
             addedAt: UInt64(Date().timeIntervalSince1970),
             lastSeen: nil,
             notes: notesParts.isEmpty ? nil : notesParts.joined(separator: ";"),
-            lastKnownDeviceId: nil
+            lastKnownDeviceId: nil,
+            verifiedAt: nil,
+            isTombstone: false
         )
 
         do {
@@ -492,10 +509,14 @@ struct AddContactView: View {
         // UNIFIED ID FIX: Canonicalize peerId to public_key_hex before storage.
         // resolveIdentity handles all input formats (libp2p_peer_id, identity_id, public_key_hex).
         let canonicalPeerId: String
-        if let resolved = repository.ironCore?.resolveIdentity(anyId: finalPeerId) {
-            canonicalPeerId = resolved
-        } else {
-            // Fallback: publicKey is already validated as canonical hex
+        do {
+            if let resolved = try repository.ironCore?.resolveIdentity(anyId: finalPeerId) {
+                canonicalPeerId = resolved
+            } else {
+                // Fallback: publicKey is already validated as canonical hex
+                canonicalPeerId = finalPublicKey
+            }
+        } catch {
             canonicalPeerId = finalPublicKey
         }
 
@@ -507,7 +528,9 @@ struct AddContactView: View {
             addedAt: UInt64(Date().timeIntervalSince1970),
             lastSeen: nil,
             notes: notesValue,
-            lastKnownDeviceId: nil
+            lastKnownDeviceId: nil,
+            verifiedAt: nil,
+            isTombstone: false
         )
 
         do {

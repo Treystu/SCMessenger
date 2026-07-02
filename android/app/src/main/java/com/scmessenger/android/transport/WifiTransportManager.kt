@@ -50,7 +50,8 @@ class WifiTransportManager(
         if (wifiDirectTransport == null) {
             wifiDirectTransport = WifiDirectTransport(
                 context = context,
-                onPeerDiscovered = onPeerDiscovered,
+                getLocalPeerId = { null },
+                onPeerDiscovered = { peerId, _ -> onPeerDiscovered(peerId) },
                 onDataReceived = { peerId, data ->
                     onDataReceived?.invoke(peerId, data)
                 }

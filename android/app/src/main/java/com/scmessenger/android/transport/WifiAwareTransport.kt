@@ -8,6 +8,7 @@ import androidx.annotation.RequiresApi
 import timber.log.Timber
 import java.io.InputStream
 import java.io.OutputStream
+import java.net.InetAddress
 import java.net.InetSocketAddress
 import java.net.ServerSocket
 import java.net.Socket
@@ -31,8 +32,9 @@ import kotlinx.coroutines.*
  */
 class WifiAwareTransport(
     private val context: Context,
-    private val onPeerDiscovered: (peerId: String) -> Unit,
-    private val onDataReceived: (peerId: String, data: ByteArray) -> Unit
+    private val onPeerDiscovered: (peerId: String, serviceInfo: ByteArray?, rssi: Int) -> Unit,
+    private val onDataReceived: (peerId: String, data: ByteArray) -> Unit,
+    private val onDataPathConfirmed: ((peerId: String, ipAddress: String, port: Int) -> Unit)? = null
 ) {
 
     private val wifiAwareManager: WifiAwareManager? =
@@ -210,7 +212,7 @@ class WifiAwareTransport(
 
             // Notify discovery
             val peerIdString = peerId.toString()
-            onPeerDiscovered(peerIdString)
+            onPeerDiscovered(peerIdString, serviceSpecificInfo, 0)
 
             // Initiate data path — Publisher is the RESPONDER (server socket)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
@@ -238,7 +240,7 @@ class WifiAwareTransport(
 
             // Notify discovery
             val peerIdString = peerId.toString()
-            onPeerDiscovered(peerIdString)
+            onPeerDiscovered(peerIdString, serviceSpecificInfo, 0)
 
             // Initiate data path — Subscriber is the INITIATOR (client socket)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
@@ -333,7 +335,7 @@ class WifiAwareTransport(
     /**
      * Publisher (RESPONDER) path: open a ServerSocket bound to the Aware network,
      * accept the single incoming connection from the Subscriber, then close the
-     * server socket and hand the accepted socket to AwareConnection.
+     * server socket and hand the accepted socket to AwareConnection for proxying.
      */
     private suspend fun createResponderSocket(peerId: String) {
         withContext(Dispatchers.IO) {
@@ -349,11 +351,8 @@ class WifiAwareTransport(
                 val socket = serverSocket.accept()
                 serverSocket.close()
 
-                val connection = AwareConnection(peerId, socket)
-                activeConnections[peerId] = connection
-                connection.startReading()
-
                 Timber.i("WiFi Aware responder connected to $peerId")
+                startLoopbackProxy(peerId, socket)
             } catch (e: Exception) {
                 serverSocket?.close()
                 Timber.e(e, "Failed to create WiFi Aware responder socket for $peerId")
@@ -372,11 +371,8 @@ class WifiAwareTransport(
                 val socket = network.socketFactory.createSocket()
                 socket.connect(InetSocketAddress(peerIpv6, AWARE_PORT), CONNECT_TIMEOUT_MS)
 
-                val connection = AwareConnection(peerId, socket)
-                activeConnections[peerId] = connection
-                connection.startReading()
-
                 Timber.i("WiFi Aware initiator connected to $peerId at [$peerIpv6]:$AWARE_PORT")
+                startLoopbackProxy(peerId, socket)
             } catch (e: Exception) {
                 Timber.e(e, "Failed to create WiFi Aware initiator socket for $peerId at [$peerIpv6]")
             }
@@ -384,64 +380,150 @@ class WifiAwareTransport(
     }
 
     /**
-     * Represents an active WiFi Aware socket connection.
+     * Bridge [peerSocket] (the real cross-device WiFi Aware connection, on
+     * either the responder or initiator side) to a freshly-bound loopback
+     * TCP proxy, and report the loopback address to [onDataPathConfirmed]
+     * instead of the peer's real address.
+     *
+     * This exists because a plain link-local IPv6 address isn't directly
+     * dialable by libp2p: it requires an interface scope-id
+     * (`/ip6/<addr>%<scope>/tcp/<port>`) to be routable when the device has
+     * more than one active network interface, but libp2p's Multiaddr parser
+     * doesn't support the scope-id syntax at all (verified: both
+     * `%eth0` and percent-encoded `%25eth0` fail to parse). Android's
+     * WiFi Aware `Network` object already resolved the correct interface for
+     * [peerSocket] when it was created (via `network.socketFactory` on the
+     * initiator side, or by whichever interface the peer's connection
+     * arrived on for the responder side) — proxying through 127.0.0.1
+     * sidesteps the scope-id problem entirely rather than trying to smuggle
+     * a scope-id through libp2p's address format.
+     */
+    private suspend fun startLoopbackProxy(peerId: String, peerSocket: Socket) {
+        val server = try {
+            // Bind to the exact address reported to onDataPathConfirmed
+            // (LOOPBACK_ADDRESS, "127.0.0.1") rather than
+            // InetAddress.getLoopbackAddress(), which resolves to the IPv6
+            // loopback (::1) on IPv6-preferring devices - a dial to
+            // 127.0.0.1 would then find nobody listening.
+            ServerSocket(0, 1, InetAddress.getByName(LOOPBACK_ADDRESS))
+        } catch (e: Exception) {
+            Timber.e(e, "Failed to bind WiFi Aware loopback proxy for $peerId")
+            try { peerSocket.close() } catch (_: Exception) {}
+            return
+        }
+
+        val connection = AwareConnection(peerId, peerSocket, server)
+        activeConnections[peerId] = connection
+
+        val loopbackPort = server.localPort
+        Timber.d("WiFi Aware loopback proxy for $peerId listening on 127.0.0.1:$loopbackPort")
+        onDataPathConfirmed?.invoke(peerId, LOOPBACK_ADDRESS, loopbackPort)
+
+        scope.launch {
+            connection.acceptAndPump()
+        }
+    }
+
+    /**
+     * Owns a WiFi Aware peer connection and its loopback proxy counterpart.
+     * Once [acceptAndPump] accepts the local dial (from the Rust libp2p
+     * swarm, which dials the loopback address reported via
+     * [onDataPathConfirmed]), bytes are pumped bidirectionally between the
+     * two sockets until either side closes. [sendData]/[onDataReceived] are
+     * not used for WiFi Aware once this proxy is active: the raw
+     * peer-socket bytes ARE the libp2p connection (Noise handshake, Yamux
+     * multiplexing, and all higher protocol layers happen inside that
+     * byte stream), not a separate discrete-packet channel.
      */
     private inner class AwareConnection(
         val peerId: String,
-        private val socket: Socket
+        private val peerSocket: Socket,
+        private val loopbackServer: ServerSocket
     ) {
-        private val inputStream: InputStream = socket.getInputStream()
-        private val outputStream: OutputStream = socket.getOutputStream()
+        @Volatile private var loopbackSocket: Socket? = null
+        @Volatile private var closed = false
 
-        @Volatile
-        private var isReading = false
-
-        fun startReading() {
-            if (isReading) return
-
-            isReading = true
-
-            scope.launch {
-                try {
-                    val buffer = ByteArray(8192)
-
-                    while (isReading && socket.isConnected) {
-                        val bytesRead = inputStream.read(buffer)
-                        if (bytesRead > 0) {
-                            val data = buffer.copyOfRange(0, bytesRead)
-                            onDataReceived(peerId, data)
-                        } else if (bytesRead < 0) {
-                            break
-                        }
-                    }
+        suspend fun acceptAndPump() {
+            withContext(Dispatchers.IO) {
+                val accepted = try {
+                    loopbackServer.accept()
                 } catch (e: Exception) {
-                    if (isReading) {
-                        Timber.e(e, "WiFi Aware read error from $peerId")
+                    if (!closed) {
+                        Timber.w(e, "WiFi Aware loopback proxy accept failed for $peerId")
                     }
+                    return@withContext
                 } finally {
-                    close()
+                    try { loopbackServer.close() } catch (_: Exception) {}
+                }
+                loopbackSocket = accepted
+
+                Timber.d("WiFi Aware loopback proxy for $peerId accepted local dial; bridging streams")
+
+                val peerToLocal = scope.launch {
+                    pump(peerSocket.getInputStream(), accepted.getOutputStream(), "peer->local")
+                }
+                val localToPeer = scope.launch {
+                    pump(accepted.getInputStream(), peerSocket.getOutputStream(), "local->peer")
+                }
+                // Close the whole bridge as soon as either direction's pump
+                // finishes (that side's socket hit EOF or errored), not
+                // after both: each pump() loops on a blocking read() of its
+                // own input stream, so if only one side closed, the other
+                // direction's pump would otherwise block in read() forever
+                // on a socket nobody will write to again. close() is
+                // idempotent, so it's safe to call from whichever
+                // completion fires first.
+                peerToLocal.invokeOnCompletion { close() }
+                localToPeer.invokeOnCompletion { close() }
+                peerToLocal.join()
+                localToPeer.join()
+            }
+        }
+
+        private fun pump(input: InputStream, output: OutputStream, direction: String) {
+            try {
+                val buffer = ByteArray(8192)
+                while (!closed) {
+                    val bytesRead = input.read(buffer)
+                    if (bytesRead < 0) break
+                    if (bytesRead > 0) {
+                        output.write(buffer, 0, bytesRead)
+                        output.flush()
+                    }
+                }
+            } catch (e: Exception) {
+                if (!closed) {
+                    Timber.d("WiFi Aware proxy stream ended ($direction) for $peerId: ${e.message}")
                 }
             }
         }
 
+        /**
+         * Always fails: once the loopback proxy is active, delivery to
+         * [peerId] happens through libp2p's own dial into the loopback
+         * socket (see [startLoopbackProxy]'s doc comment), not through this
+         * discrete send() call - but [TransportManager] still routes
+         * `sendData`-capable callers through here first, so a silent
+         * `false` return there used to look like a generic "no route"
+         * rather than "this transport structurally cannot deliver this
+         * way anymore." Log at error level so that's visible instead of
+         * lost among routine warnings.
+         */
         fun send(data: ByteArray): Boolean {
-            return try {
-                outputStream.write(data)
-                outputStream.flush()
-                true
-            } catch (e: Exception) {
-                Timber.e(e, "Failed to send WiFi Aware data to $peerId")
-                false
-            }
+            Timber.e(
+                "WiFi Aware sendData() is permanently a no-op for $peerId once its loopback " +
+                    "proxy is active; delivery happens via libp2p dialing the loopback address " +
+                    "reported to onDataPathConfirmed, not via this call"
+            )
+            return false
         }
 
         fun close() {
-            isReading = false
-            try {
-                socket.close()
-            } catch (e: Exception) {
-                Timber.w(e, "Error closing WiFi Aware socket")
-            }
+            if (closed) return
+            closed = true
+            try { peerSocket.close() } catch (e: Exception) { Timber.w(e, "Error closing WiFi Aware peer socket") }
+            try { loopbackSocket?.close() } catch (e: Exception) { Timber.w(e, "Error closing WiFi Aware loopback socket") }
+            try { loopbackServer.close() } catch (_: Exception) {}
         }
     }
 
@@ -454,5 +536,6 @@ class WifiAwareTransport(
         private const val SERVICE_NAME = "scmessenger"
         private const val AWARE_PORT = 8765
         private const val CONNECT_TIMEOUT_MS = 5000
+        private const val LOOPBACK_ADDRESS = "127.0.0.1"
     }
 }

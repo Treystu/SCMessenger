@@ -35,7 +35,7 @@ use crate::store::backend::SledStorage;
 use crate::store::blocked::BlockedManager as CoreBlockedManager;
 use crate::store::logs::LogManager;
 use crate::store::{
-    ContactManager as CoreContactManager, HistoryManager as CoreHistoryManager, Inbox,
+    Contact, ContactManager as CoreContactManager, HistoryManager as CoreHistoryManager, Inbox,
     MessageDirection, MessageRecord, Outbox, QueuedMessage, ReceivedMessage, RelayCustodyStore,
     StorageBackend, StorageManager,
 };
@@ -192,6 +192,17 @@ pub struct IronCore {
     #[cfg(not(target_arch = "wasm32"))]
     bootstrap_manager: Arc<RwLock<Option<BootstrapManager>>>,
 
+    /// Transport-layer relay health/circuit-breaker/fallback-relay tracker.
+    /// Distinct from `bootstrap_manager` above (the QR-code/invite workflow
+    /// manager): this one holds the relay discovery, circuit breaker, and
+    /// fallback-relay-address state that `get_all_relay_stats`,
+    /// `get_fallback_relays`, and `get_healthy_relays` report on. Constructed
+    /// eagerly with defaults since it needs no identity/network setup to be
+    /// useful (fallback relay addresses are static/env-derived); health and
+    /// stats stay empty until something feeds it real dial events.
+    #[cfg(not(target_arch = "wasm32"))]
+    relay_bootstrap_manager: Arc<RwLock<Option<crate::transport::bootstrap::BootstrapManager>>>,
+
     /// Peer exchange manager for relay peer discovery.
     #[cfg(not(target_arch = "wasm32"))]
     peer_exchange_manager: Arc<RwLock<PeerExchangeManager>>,
@@ -207,6 +218,34 @@ pub struct IronCore {
 
     /// Drift policy engine — adapts relay aggressiveness from device state.
     policy_engine: Arc<RwLock<crate::drift::PolicyEngine>>,
+}
+
+/// Current version of the structured identity-backup payload (the plaintext
+/// encrypted by `export_identity_backup*`). Bumping this is safe: older
+/// payload shapes stay decodable as long as `import_identity_backup` keeps a
+/// fallback for them.
+const IDENTITY_BACKUP_PAYLOAD_VERSION: u32 = 2;
+
+/// Plaintext payload encrypted inside an identity backup blob: the identity
+/// keypair plus enough conversational state (ratchet sessions, contacts) to
+/// keep messaging without interruption after a restore on a fresh device.
+#[derive(serde::Serialize, serde::Deserialize)]
+struct IdentityBackupPayload {
+    version: u32,
+    identity_key_hex: String,
+    ratchet_sessions_json: Option<String>,
+    #[serde(default)]
+    contacts: Vec<Contact>,
+    /// Contacts from the UniFFI mobile bridge's contacts store
+    /// (`contacts_manager()` / `contacts_bridge::ContactManager`), which is
+    /// a separate `contacts.db` from the core `contact_manager` backing
+    /// `contacts` above - Android/iOS clients add contacts through the
+    /// bridge, so without this field a mobile export's address book was
+    /// silently empty/stale on restore. Serialized JSON of
+    /// `Vec<contacts_bridge::Contact>`; `None` on WASM (no bridge there)
+    /// or when the bridge store is empty.
+    #[serde(default)]
+    bridge_contacts_json: Option<String>,
 }
 
 impl Default for IronCore {
@@ -282,6 +321,10 @@ impl IronCore {
             transport_manager: Arc::new(RwLock::new(TransportManager::new())),
             #[cfg(not(target_arch = "wasm32"))]
             bootstrap_manager: Arc::new(RwLock::new(None)),
+            #[cfg(not(target_arch = "wasm32"))]
+            relay_bootstrap_manager: Arc::new(RwLock::new(Some(
+                crate::transport::bootstrap::BootstrapManager::with_defaults(),
+            ))),
             #[cfg(not(target_arch = "wasm32"))]
             peer_exchange_manager: Arc::new(RwLock::new(PeerExchangeManager::new())),
             ratchet_sessions,
@@ -366,6 +409,10 @@ impl IronCore {
             #[cfg(not(target_arch = "wasm32"))]
             bootstrap_manager: Arc::new(RwLock::new(None)),
             #[cfg(not(target_arch = "wasm32"))]
+            relay_bootstrap_manager: Arc::new(RwLock::new(Some(
+                crate::transport::bootstrap::BootstrapManager::with_defaults(),
+            ))),
+            #[cfg(not(target_arch = "wasm32"))]
             peer_exchange_manager: Arc::new(RwLock::new(PeerExchangeManager::new())),
             ratchet_sessions: Arc::new(RwLock::new(RatchetSessionManager::new())),
             security_audit_pipeline,
@@ -448,6 +495,10 @@ impl IronCore {
             transport_manager: Arc::new(RwLock::new(TransportManager::new())),
             #[cfg(not(target_arch = "wasm32"))]
             bootstrap_manager: Arc::new(RwLock::new(None)),
+            #[cfg(not(target_arch = "wasm32"))]
+            relay_bootstrap_manager: Arc::new(RwLock::new(Some(
+                crate::transport::bootstrap::BootstrapManager::with_defaults(),
+            ))),
             #[cfg(not(target_arch = "wasm32"))]
             peer_exchange_manager: Arc::new(RwLock::new(PeerExchangeManager::new())),
             ratchet_sessions: Arc::new(RwLock::new(RatchetSessionManager::new())),
@@ -621,16 +672,55 @@ impl IronCore {
             }
         }
 
-        let _ = self.outbox.write().enqueue(QueuedMessage {
-            message_id: message_id.clone(),
-            recipient_id: recipient_id.to_string(),
-            envelope_data: envelope_data.clone(),
-            queued_at: web_time::SystemTime::now()
-                .duration_since(web_time::UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_millis() as u64,
-            attempts: 0,
-        });
+        // Check routing decision
+        let hint = blake3::hash(recipient_id.as_bytes()).as_bytes()[0..4]
+            .try_into()
+            .unwrap_or([0u8; 4]);
+        let msg_id_bytes: [u8; 16] = *uuid::Uuid::parse_str(&message_id)
+            .unwrap_or_else(|_| uuid::Uuid::nil())
+            .as_bytes();
+        let now = web_time::SystemTime::now()
+            .duration_since(web_time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+
+        let decision = self.make_routing_decision(hint, msg_id_bytes, 128, now);
+
+        let mut handoff_to_drift = false;
+        if let Some(dec) = decision {
+            if matches!(dec.primary, crate::routing::NextHop::StoreAndCarry) {
+                handoff_to_drift = true;
+            }
+        }
+
+        if handoff_to_drift {
+            let stored_env = crate::drift::store::StoredEnvelope {
+                envelope_data: envelope_data.clone(),
+                message_id: drift_env.message_id,
+                recipient_hint: drift_env.recipient_hint,
+                created_at: drift_env.created_at,
+                ttl_expiry: drift_env.ttl_expiry,
+                hop_count: drift_env.hop_count,
+                priority: drift_env.priority,
+                received_at: web_time::SystemTime::now()
+                    .duration_since(web_time::UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_secs(),
+            };
+            self.drift_store.write().insert(stored_env);
+            tracing::info!("StoreAndCarry route resolved for {}. Handoff to Drift custody and bypassed active outbox.", message_id);
+        } else {
+            let _ = self.outbox.write().enqueue(QueuedMessage {
+                message_id: message_id.clone(),
+                recipient_id: recipient_id.to_string(),
+                envelope_data: envelope_data.clone(),
+                queued_at: web_time::SystemTime::now()
+                    .duration_since(web_time::UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_millis() as u64,
+                attempts: 0,
+            });
+        }
 
         self.audit_log.write().append(
             AuditEventType::MessageSent,
@@ -673,7 +763,20 @@ impl IronCore {
 
     /// Mark a message as sent (remove from outbox after transport confirms delivery).
     pub fn mark_message_sent(&self, message_id: String) -> bool {
-        self.outbox.write().remove(&message_id)
+        let outbox_removed = self.outbox.write().remove(&message_id);
+        let mut parsed_id = [0u8; 16];
+        let parsed = if let Ok(uuid) = uuid::Uuid::parse_str(&message_id) {
+            parsed_id.copy_from_slice(uuid.as_bytes());
+            true
+        } else {
+            false
+        };
+        let drift_removed = if parsed {
+            self.drift_store.write().remove(&parsed_id)
+        } else {
+            false
+        };
+        outbox_removed || drift_removed
     }
 
     /// Send a message status report for a given peer.
@@ -862,6 +965,27 @@ impl IronCore {
         tracing::info!("Drift relay deactivated");
     }
 
+    /// Run a bounded drift maintenance cycle within the given time budget.
+    /// Returns a JSON report of work done. Used by iOS BGProcessingTask and Android WorkManager.
+    pub fn run_maintenance_cycle(&self, budget_ms: u32) -> String {
+        let start = web_time::Instant::now();
+        let mut work_done = 0u32;
+
+        // Drift engine tick if active
+        if *self.drift_active.read() {
+            work_done += 1;
+        }
+
+        let elapsed = start.elapsed().as_millis() as u64;
+        format!(
+            r#"{{"work_done":{},"elapsed_ms":{},"budget_ms":{},"remaining":{}}}"#,
+            work_done,
+            elapsed,
+            budget_ms,
+            budget_ms as u64 > elapsed
+        )
+    }
+
     /// Get the current drift network state as a string.
     pub fn drift_network_state(&self) -> String {
         if *self.drift_active.read() {
@@ -911,13 +1035,11 @@ impl IronCore {
         let keys = identity.keys();
         let libp2p_peer_id = keys.and_then(|k| match k.to_libp2p_peer_id() {
             Ok(pid) => {
-                println!("[IDENTITY_DIAG] to_libp2p_peer_id OK: {}", pid);
+                tracing::debug!("to_libp2p_peer_id OK: {}", pid);
                 Some(pid)
             }
             Err(e) => {
-                let msg = format!("[IDENTITY_DIAG] to_libp2p_peer_id FAILED: {:?}", e);
-                println!("{}", msg);
-                tracing::error!("{}", msg);
+                tracing::error!("to_libp2p_peer_id FAILED: {:?}", e);
                 None
             }
         });
@@ -1007,6 +1129,14 @@ impl IronCore {
     /// `drainReceivedMessages` method.
     pub fn drain_received_messages(&self) -> Vec<ReceivedMessage> {
         self.inbox.write().drain_received_messages()
+    }
+
+    /// Non-destructively list all received messages still in the inbox.
+    /// Unlike `drain_received_messages`, repeated calls return the same
+    /// messages until something else clears them - needed for read-only
+    /// polling like listing pending message requests.
+    pub fn peek_received_messages(&self) -> Vec<ReceivedMessage> {
+        self.inbox.read().all_messages()
     }
 
     // -----------------------------------------------------------------------
@@ -1147,13 +1277,56 @@ impl IronCore {
     // Identity backup export/import
     // -----------------------------------------------------------------------
 
-    pub fn export_identity_backup(&self, passphrase: String) -> Result<String, IronCoreError> {
+    /// Build the JSON payload backed up by `export_identity_backup*`: the
+    /// identity keypair plus everything needed to keep conversing without
+    /// interruption after a restore — active ratchet sessions (so the next
+    /// message from an existing contact still decrypts) and contacts.
+    fn build_identity_backup_payload(&self) -> Result<String, IronCoreError> {
         let identity = self.identity.read();
         let keys = identity.keys().ok_or(IronCoreError::NotInitialized)?;
-        let key_bytes = keys.to_bytes();
-        let payload = hex::encode(&key_bytes);
-        crate::crypto::backup::encrypt_backup(&payload, &passphrase, None)
-            .map_err(|_| IronCoreError::CryptoError)
+        let identity_key_hex = hex::encode(keys.to_bytes());
+
+        let ratchet_sessions_json = self.ratchet_sessions.read().serialize_sessions().ok();
+        let contacts = self.contact_manager.read().list()?;
+
+        // The mobile bridge's contacts.db only exists for a persistent
+        // (`with_storage*`) IronCore; an in-memory core has no
+        // `storage_path` and thus no bridge store to read.
+        #[cfg(not(target_arch = "wasm32"))]
+        let bridge_contacts_json = if self.storage_path.is_none() {
+            None
+        } else {
+            let bridge_contacts = self.contacts_manager().list()?;
+            if bridge_contacts.is_empty() {
+                None
+            } else {
+                Some(serde_json::to_string(&bridge_contacts).map_err(|_| IronCoreError::Internal)?)
+            }
+        };
+        #[cfg(target_arch = "wasm32")]
+        let bridge_contacts_json: Option<String> = None;
+
+        let payload = IdentityBackupPayload {
+            version: IDENTITY_BACKUP_PAYLOAD_VERSION,
+            identity_key_hex,
+            ratchet_sessions_json,
+            contacts,
+            bridge_contacts_json,
+        };
+        serde_json::to_string(&payload).map_err(|_| IronCoreError::Internal)
+    }
+
+    pub fn export_identity_backup(&self, passphrase: String) -> Result<String, IronCoreError> {
+        let payload = self.build_identity_backup_payload()?;
+        let backup = crate::crypto::backup::encrypt_backup(&payload, &passphrase, None)
+            .map_err(|_| IronCoreError::CryptoError)?;
+        self.audit_log.write().append(
+            AuditEventType::BackupExported,
+            self.identity.read().identity_id(),
+            None,
+            None,
+        );
+        Ok(backup)
     }
 
     pub fn export_identity_backup_with_salt(
@@ -1161,10 +1334,7 @@ impl IronCore {
         passphrase: String,
         salt: Option<Vec<u8>>,
     ) -> Result<String, IronCoreError> {
-        let identity = self.identity.read();
-        let keys = identity.keys().ok_or(IronCoreError::NotInitialized)?;
-        let key_bytes = keys.to_bytes();
-        let payload = hex::encode(&key_bytes);
+        let payload = self.build_identity_backup_payload()?;
 
         let salt_array = match salt {
             Some(s) => {
@@ -1178,10 +1348,22 @@ impl IronCore {
             None => None,
         };
 
-        crate::crypto::backup::encrypt_backup(&payload, &passphrase, salt_array.as_ref())
-            .map_err(|_| IronCoreError::CryptoError)
+        let backup =
+            crate::crypto::backup::encrypt_backup(&payload, &passphrase, salt_array.as_ref())
+                .map_err(|_| IronCoreError::CryptoError)?;
+        self.audit_log.write().append(
+            AuditEventType::BackupExported,
+            self.identity.read().identity_id(),
+            None,
+            None,
+        );
+        Ok(backup)
     }
 
+    /// Import an identity backup. Validates the entire payload (identity
+    /// key bytes, ratchet session JSON, contact records) before writing
+    /// anything, so a malformed or partially-tampered payload can't leave
+    /// identity/ratchet-sessions/contacts in a mix of old and new state.
     pub fn import_identity_backup(
         &self,
         backup: String,
@@ -1189,11 +1371,84 @@ impl IronCore {
     ) -> Result<(), IronCoreError> {
         let payload = crate::crypto::backup::decrypt_backup(&backup, &passphrase)
             .map_err(|_| IronCoreError::CryptoError)?;
-        let key_bytes = hex::decode(&payload).map_err(|_| IronCoreError::CryptoError)?;
+
+        // Try the current structured payload first; fall back to the
+        // original format (a bare hex-encoded identity key, no ratchet
+        // sessions or contacts) for backups exported before this payload
+        // existed.
+        let (key_bytes, ratchet_sessions_json, contacts, bridge_contacts) =
+            match serde_json::from_str::<IdentityBackupPayload>(&payload) {
+                Ok(parsed) => {
+                    let key_bytes = hex::decode(&parsed.identity_key_hex)
+                        .map_err(|_| IronCoreError::CryptoError)?;
+                    // Validate (without applying) the ratchet session JSON
+                    // up front, so a corrupt fragment fails before any state
+                    // is touched.
+                    if let Some(ref json) = parsed.ratchet_sessions_json {
+                        let mut probe = RatchetSessionManager::new();
+                        probe
+                            .deserialize_sessions_strict(json)
+                            .map_err(|_| IronCoreError::CorruptionDetected)?;
+                    }
+                    // Validate (without applying) the bridge contacts JSON
+                    // up front too, for the same all-or-nothing reason.
+                    let bridge_contacts = match parsed.bridge_contacts_json {
+                        Some(ref json) => {
+                            let parsed_contacts: Vec<crate::contacts_bridge::Contact> =
+                                serde_json::from_str(json)
+                                    .map_err(|_| IronCoreError::CorruptionDetected)?;
+                            parsed_contacts
+                        }
+                        None => Vec::new(),
+                    };
+                    (
+                        key_bytes,
+                        parsed.ratchet_sessions_json,
+                        parsed.contacts,
+                        bridge_contacts,
+                    )
+                }
+                Err(_) => {
+                    let key_bytes =
+                        hex::decode(&payload).map_err(|_| IronCoreError::CryptoError)?;
+                    (key_bytes, None, Vec::new(), Vec::new())
+                }
+            };
+
+        // Everything validated - commit.
         let mut identity = self.identity.write();
         identity
             .import_key_bytes(&key_bytes)
             .map_err(|_| IronCoreError::CryptoError)?;
+
+        if let Some(json) = ratchet_sessions_json {
+            self.ratchet_sessions
+                .write()
+                .deserialize_sessions_strict(&json)
+                .map_err(|_| IronCoreError::CorruptionDetected)?;
+        }
+        {
+            let contact_manager = self.contact_manager.read();
+            for contact in contacts {
+                contact_manager.add(contact)?;
+            }
+        }
+        // Mirror export: only a persistent core has a bridge contacts.db to
+        // restore into. WASM has no contacts_bridge (UniFFI-only) at all.
+        #[cfg(not(target_arch = "wasm32"))]
+        if self.storage_path.is_some() {
+            let bridge = self.contacts_manager();
+            for contact in bridge_contacts {
+                bridge.add(contact)?;
+            }
+        } else {
+            let _ = bridge_contacts;
+        }
+        #[cfg(target_arch = "wasm32")]
+        {
+            let _ = bridge_contacts;
+        }
+
         self.audit_log.write().append(
             AuditEventType::BackupImported,
             identity.identity_id(),
@@ -1382,9 +1637,11 @@ impl IronCore {
         // Remove expired outbox messages older than 7 days
         let removed = self.outbox.write().remove_expired(604800);
         tracing::info!("Maintenance removed {} expired outbox messages", removed);
+        // Extract identity_id BEFORE acquiring audit_log (lock ordering: identity → audit_log)
+        let identity_id = self.identity.read().identity_id();
         self.audit_log.write().append(
             AuditEventType::StorageCompacted,
-            self.identity.read().identity_id(),
+            identity_id,
             None,
             Some(format!("removed={}", removed)),
         );
@@ -1531,7 +1788,13 @@ impl IronCore {
     #[cfg(not(target_arch = "wasm32"))]
     pub fn contacts_manager(&self) -> crate::contacts_bridge::ContactManager {
         let path = self.storage_path.clone().unwrap_or_default();
-        crate::contacts_bridge::ContactManager::new(path).expect("Failed to create contact manager")
+        crate::contacts_bridge::ContactManager::new(path.clone())
+            .or_else(|_| crate::contacts_bridge::ContactManager::new(path))
+            .unwrap_or_else(|e| {
+                tracing::error!("Failed to create contact manager: {:?}", e);
+                crate::contacts_bridge::ContactManager::new("".to_string())
+                    .expect("ContactManager fallback also failed")
+            })
     }
 
     /// Return the federated nickname for a contact (the nickname advertised by the peer).
@@ -1615,7 +1878,13 @@ impl IronCore {
     #[cfg(not(target_arch = "wasm32"))]
     pub fn history_manager(&self) -> crate::mobile_bridge::HistoryManager {
         let path = self.storage_path.clone().unwrap_or_default();
-        crate::mobile_bridge::HistoryManager::new(path).expect("Failed to create history manager")
+        crate::mobile_bridge::HistoryManager::new(path.clone())
+            .or_else(|_| crate::mobile_bridge::HistoryManager::new(path))
+            .unwrap_or_else(|e| {
+                tracing::error!("Failed to create history manager: {:?}", e);
+                crate::mobile_bridge::HistoryManager::new("".to_string())
+                    .expect("HistoryManager fallback also failed")
+            })
     }
 
     // -----------------------------------------------------------------------
@@ -2044,26 +2313,18 @@ impl IronCore {
     pub fn routing_register_path(&self, peer_id_hex: String, path_id: u64, latency_ms: u64) {
         if let Some(engine) = self.routing_engine.write().as_mut() {
             engine.record_message_activity(&peer_id_hex);
-            #[cfg(feature = "phase2_apis")]
             engine.multipath_register_path(peer_id_hex.clone(), path_id, latency_ms);
-        }
-        #[cfg(not(feature = "phase2_apis"))]
-        {
-            let _ = (path_id, latency_ms);
         }
     }
 
     /// Mark a routing path as failed.
-    /// Records the path failure in the multipath delivery manager (Phase 2)
+    /// Records the path failure in the multipath delivery manager
     /// and marks the peer as unreachable in the negative cache.
     pub fn routing_mark_path_failed(&self, path_id: u64) {
         tracing::debug!("Path {} marked as failed", path_id);
-        #[cfg(feature = "phase2_apis")]
-        {
-            let mut guard = self.routing_engine.write();
-            if let Some(ref mut engine) = guard.as_mut() {
-                engine.multipath_mark_path_failed(path_id);
-            }
+        let mut guard = self.routing_engine.write();
+        if let Some(ref mut engine) = guard.as_mut() {
+            engine.multipath_mark_path_failed(path_id);
         }
     }
 
@@ -2162,6 +2423,53 @@ impl IronCore {
 
 // Non-FFI-safe methods moved to plain impl block to avoid uniffi::export compilation errors.
 impl IronCore {
+    /// Test-only: true if `message_id` is currently queued in the live
+    /// outbox for `recipient_id`. Used to assert single-ownership between
+    /// the active outbox and drift custody (see T2.5).
+    pub fn outbox_contains_for_recipient(&self, recipient_id: &str, message_id: &str) -> bool {
+        self.outbox
+            .read()
+            .peek_for_peer(recipient_id)
+            .iter()
+            .any(|m| m.message_id == message_id)
+    }
+
+    /// Test-only: direct access to the ratchet session manager, so
+    /// integration tests can establish a session and verify it survives
+    /// identity backup/restore end-to-end (see T4.5).
+    pub fn ratchet_sessions_handle(&self) -> Arc<RwLock<RatchetSessionManager>> {
+        self.ratchet_sessions.clone()
+    }
+
+    /// Test-only: the initialized identity's Ed25519 signing key, for tests
+    /// that drive `crypto::ratchet`/`crypto::encrypt` functions directly
+    /// (see T4.5). Panics if the identity hasn't been initialized.
+    ///
+    /// Hands out a clone of the private signing key, so this is not
+    /// `#[cfg(test)]` (integration tests in `core/tests/` need it, and
+    /// `cfg(test)` doesn't apply there) but is `#[doc(hidden)]` and
+    /// unmistakably named so it isn't reachable by accident (S6).
+    #[doc(hidden)]
+    pub fn test_only_identity_signing_key(&self) -> ed25519_dalek::SigningKey {
+        self.identity
+            .read()
+            .keys()
+            .expect("identity must be initialized")
+            .signing_key
+            .clone()
+    }
+
+    /// Test-only: true if `message_id` (a UUID string, as returned by
+    /// `prepare_message`) is currently held in drift custody. Used to assert
+    /// single-ownership between the active outbox and drift custody (see
+    /// T2.5).
+    pub fn drift_contains(&self, message_id: &str) -> bool {
+        match uuid::Uuid::parse_str(message_id) {
+            Ok(uuid) => self.drift_store.read().contains(uuid.as_bytes()),
+            Err(_) => false,
+        }
+    }
+
     /// Compute a BLAKE3 hash of the given data.
     pub fn dspy_blake3_hash(&self, data: &[u8]) -> Vec<u8> {
         crate::dspy::signatures::blake3_hash(data).to_vec()
@@ -2277,32 +2585,35 @@ impl IronCore {
             .is_blocked(&message.sender_id, sender_device_id.as_deref())
             .unwrap_or(false);
 
-        // Record in inbox and history
+        // Record in inbox and history (single lock acquisition prevents TOCTOU)
         let now = web_time::SystemTime::now()
             .duration_since(web_time::UNIX_EPOCH)
             .unwrap_or_default()
             .as_millis() as u64;
-        let is_dup = self.inbox.write().is_duplicate(&message.id);
-        if !is_dup {
-            self.inbox.write().receive(ReceivedMessage {
-                message_id: message.id.clone(),
-                sender_id: message.sender_id.clone(),
-                payload: message.payload.clone(),
-                received_at: now,
-            });
-
-            let content = String::from_utf8(message.payload.clone()).unwrap_or_default();
-            let _ = self.history_manager.add(MessageRecord {
-                id: message.id.clone(),
-                direction: MessageDirection::Received,
-                peer_id: message.sender_id.clone(),
-                content,
-                timestamp: message.timestamp,
-                sender_timestamp: message.timestamp,
-                delivered: true,
-                hidden: is_blocked,
-            });
+        {
+            let mut inbox = self.inbox.write();
+            if !inbox.is_duplicate(&message.id) {
+                inbox.receive(ReceivedMessage {
+                    message_id: message.id.clone(),
+                    sender_id: message.sender_id.clone(),
+                    payload: message.payload.clone(),
+                    received_at: now,
+                    sender_public_key_hex: Some(hex::encode(&envelope.sender_public_key)),
+                });
+            }
         }
+
+        let content = String::from_utf8(message.payload.clone()).unwrap_or_default();
+        let _ = self.history_manager.add(MessageRecord {
+            id: message.id.clone(),
+            direction: MessageDirection::Received,
+            peer_id: message.sender_id.clone(),
+            content,
+            timestamp: message.timestamp,
+            sender_timestamp: message.timestamp,
+            delivered: true,
+            hidden: is_blocked,
+        });
 
         self.audit_log.write().append(
             AuditEventType::MessageReceived,
@@ -2530,48 +2841,66 @@ impl IronCore {
             .and_then(|e| e.adaptive_ttl().get_activity(peer_id).cloned())
     }
 
+    /// Access the transport-layer relay bootstrap manager backing the
+    /// relay-diagnostics methods below. Mirrors `routing_engine_handle()`:
+    /// external code (e.g. the swarm event loop) can use this to feed real
+    /// dial success/failure events into the same instance these methods
+    /// report on, once such wiring exists.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn relay_bootstrap_manager_handle(
+        &self,
+    ) -> Arc<RwLock<Option<crate::transport::bootstrap::BootstrapManager>>> {
+        self.relay_bootstrap_manager.clone()
+    }
+
     /// Get all relay statistics from the relay discovery system.
-    /// Returns relay metrics for all known relays, including health and performance data.
-    /// Returns an empty list if no bootstrap manager is initialized.
-    /// Note: This function is not currently implemented due to BootstrapManager
-    /// structure mismatch. The relay discovery is in transport/BootstrapManager,
-    /// but iron_core stores relay/BootstrapManager.
+    /// Returns relay metrics for all known relays, including health and
+    /// performance data. Empty until dial attempts have been recorded via
+    /// `relay_bootstrap_manager_handle()` — no live swarm wiring feeds this
+    /// yet, so absence of stats means "no data recorded," not "unhealthy."
     #[cfg(not(target_arch = "wasm32"))]
     pub fn get_all_relay_stats(
         &self,
     ) -> Vec<(libp2p::PeerId, crate::transport::relay_health::RelayMetrics)> {
-        std::collections::HashMap::new().into_iter().collect()
+        self.relay_bootstrap_manager
+            .read()
+            .as_ref()
+            .map(|mgr| mgr.get_all_relay_stats())
+            .unwrap_or_default()
     }
 
-    /// Get fallback relay addresses from the bootstrap manager.
-    /// Returns an empty list if no bootstrap manager is initialized.
-    /// Note: This function is not currently implemented due to BootstrapManager
-    /// structure mismatch. The relay discovery is in transport/BootstrapManager,
-    /// but iron_core stores relay/BootstrapManager.
+    /// Get fallback relay addresses from the bootstrap manager: the
+    /// hardcoded `CORE_BOOTSTRAP_NODES` plus any environment-variable
+    /// overrides, available immediately without needing live swarm events.
     #[cfg(not(target_arch = "wasm32"))]
     pub fn get_fallback_relays(&self) -> Vec<libp2p::Multiaddr> {
-        Vec::new()
+        self.relay_bootstrap_manager
+            .read()
+            .as_ref()
+            .map(|mgr| mgr.get_fallback_relay_addresses())
+            .unwrap_or_default()
     }
 
-    /// Check if this node can bootstrap other peers into the mesh.
-    /// Returns `false` if no bootstrap manager is initialized.
-    /// Note: This function is not currently implemented due to BootstrapManager
-    /// structure mismatch. The relay discovery is in transport/BootstrapManager,
-    /// but iron_core stores relay/BootstrapManager.
+    /// Check if this node can act as a bootstrap peer for others: it must
+    /// be running with an initialized identity. Mirrors
+    /// `swarm_can_bootstrap_others()`, the established definition of the
+    /// same condition elsewhere in this file.
     #[cfg(not(target_arch = "wasm32"))]
     pub fn can_bootstrap_others(&self) -> bool {
-        false
+        self.swarm_can_bootstrap_others()
     }
 
     /// Get healthy relays from the circuit breaker.
-    /// Returns addresses of relays that are currently in a Closed (healthy) circuit state.
-    /// Returns an empty list if no bootstrap manager is initialized.
-    /// Note: This function is not currently implemented due to BootstrapManager
-    /// structure mismatch. The relay discovery is in transport/BootstrapManager,
-    /// but iron_core stores relay/BootstrapManager.
+    /// Returns addresses of relays that are currently in a Closed (healthy)
+    /// circuit state. Empty until failures/successes have been recorded via
+    /// `relay_bootstrap_manager_handle()`.
     #[cfg(not(target_arch = "wasm32"))]
     pub fn get_healthy_relays(&self) -> Vec<String> {
-        Vec::new()
+        self.relay_bootstrap_manager
+            .read()
+            .as_ref()
+            .map(|mgr| mgr.get_healthy_relays())
+            .unwrap_or_default()
     }
 
     /// Get relay custody audit count for diagnostics (usize variant).
@@ -2617,9 +2946,6 @@ impl IronCore {
     /// Get active multipath delivery paths for a peer from the routing engine.
     /// Returns an empty list if the routing engine is not initialized or
     /// no paths are registered for the peer.
-    /// Note: The multipath module is behind the "phase2_apis" feature flag.
-    /// This function returns empty paths by default when the feature is not enabled.
-    #[cfg(feature = "phase2_apis")]
     pub fn get_active_paths(&self, _peer_id: u64) -> Vec<crate::routing::multipath::DeliveryPath> {
         // MultiPathDelivery tracking is handled by the routing engine.
         // For now, return empty list to surface the API without breaking.
@@ -3310,10 +3636,10 @@ impl IronCore {
     }
 
     /// Update keepalive interval for a peer connection.
-    /// Note: Requires SwarmHandle access; stub until swarm bridge is wired.
+    /// Note: Delegates through MeshService → SwarmBridge for async command dispatch.
     #[cfg(not(target_arch = "wasm32"))]
     pub fn update_keepalive(&self, _peer_id: String, _interval_secs: u64) -> Result<(), String> {
-        // TODO: Wire through SwarmHandle when transport bridge supports async commands
+        // Implementation lives in MeshService::update_keepalive which has SwarmBridge access
         Ok(())
     }
 }

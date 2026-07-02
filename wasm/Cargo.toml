@@ -31,6 +31,9 @@ console_error_panic_hook = "0.1"
 web-time = "1.1"
 gloo-timers = { version = "0.3", features = ["futures"] }
 
+[lints]
+workspace = true
+
 [dev-dependencies]
 wasm-bindgen-test = "0.3"
 

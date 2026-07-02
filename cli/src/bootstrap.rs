@@ -9,9 +9,9 @@
 // - Never reject a connection based on PeerID mismatch
 //
 // Build-time customization:
-// - Set SCMESSENGER_BOOTSTRAP_NODES environment variable during build
+// - Set SC_BOOTSTRAP_NODES environment variable during build
 // - Format: comma-separated multiaddrs
-// - Example: export SCMESSENGER_BOOTSTRAP_NODES="/ip4/1.2.3.4/tcp/9001/p2p/12D3Koo..."
+// - Example: export SC_BOOTSTRAP_NODES="/ip4/1.2.3.4/tcp/9001/p2p/12D3Koo..."
 
 use crate::ledger;
 
@@ -23,18 +23,7 @@ use crate::ledger;
 /// - Node 3: Tertiary relay (provider diversity)
 ///
 /// All nodes relay for the mesh. Connection attempts fail over automatically.
-pub const DEFAULT_BOOTSTRAP_NODES: &[&str] = &[
-    // Node 1: Primary GCP bootstrap (North America) - High availability
-    "/ip4/34.135.34.73/tcp/9001/p2p/12D3KooWETatHYo4xt9aufXEEDce719fyMEB7KmXJga1SYVUikaw",
-    // Node 2: Secondary relay (add when deployed)
-    // "/ip4/<IP>/tcp/9001/p2p/<PEER_ID>",
-
-    // Node 3: Tertiary relay (add when deployed)
-    // "/ip4/<IP>/tcp/9001/p2p/<PEER_ID>",
-
-    // Node 7: Community relay (add when deployed)
-    // "/ip4/<IP>/tcp/9001/p2p/<PEER_ID>",
-];
+pub const DEFAULT_BOOTSTRAP_NODES: &[&str] = &[];
 
 /// The "lobby" topic — a universal discovery channel.
 /// All nodes subscribe to this on startup to find the active mesh.
@@ -46,7 +35,7 @@ pub const MESH_TOPIC: &str = "sc-mesh";
 /// Get default bootstrap nodes, with optional build-time override
 pub fn default_bootstrap_nodes() -> Vec<String> {
     // 1. Check runtime environment variable (for Docker/Cloud)
-    if let Ok(nodes_str) = std::env::var("SCMESSENGER_BOOTSTRAP_NODES") {
+    if let Ok(nodes_str) = std::env::var("SC_BOOTSTRAP_NODES") {
         if !nodes_str.trim().is_empty() {
             return nodes_str
                 .split(',')
@@ -57,7 +46,7 @@ pub fn default_bootstrap_nodes() -> Vec<String> {
     }
 
     // 2. Check build-time override
-    let build_time_nodes = option_env!("SCMESSENGER_BOOTSTRAP_NODES");
+    let build_time_nodes = option_env!("SC_BOOTSTRAP_NODES");
 
     if let Some(nodes_str) = build_time_nodes {
         if nodes_str.trim().is_empty() {
@@ -144,13 +133,9 @@ mod tests {
 
     #[test]
     fn test_default_bootstrap_nodes() {
+        // Now returns empty unless env is set
         let nodes = default_bootstrap_nodes();
-        assert!(
-            !nodes.is_empty(),
-            "Should have at least one default bootstrap node"
-        );
-
-        // Verify basic multiaddr format
+        // Just verify basic multiaddr format if any are present
         for node in &nodes {
             assert!(
                 node.starts_with("/ip4/"),
@@ -180,9 +165,9 @@ mod tests {
     #[test]
     fn test_parse_bootstrap_addr() {
         let (stripped, peer_id) = parse_bootstrap_addr(
-            "/ip4/34.168.102.7/tcp/9001/p2p/12D3KooWGGdvGNJb3JwkNpmYuapgk7SAZ4DsBmQsU989yhvnTB8W",
+            "/ip4/1.2.3.4/tcp/9001/p2p/12D3KooWGGdvGNJb3JwkNpmYuapgk7SAZ4DsBmQsU989yhvnTB8W",
         );
-        assert_eq!(stripped, "/ip4/34.168.102.7/tcp/9001");
+        assert_eq!(stripped, "/ip4/1.2.3.4/tcp/9001");
         assert_eq!(
             peer_id,
             Some("12D3KooWGGdvGNJb3JwkNpmYuapgk7SAZ4DsBmQsU989yhvnTB8W".to_string())
@@ -197,14 +182,14 @@ mod tests {
     fn test_merge_deduplicates_by_ip() {
         // Same IP but different PeerIDs should be deduplicated
         let user_nodes = vec![
-            "/ip4/34.168.102.7/tcp/9001/p2p/DIFFERENT_PEER_ID".to_string(),
+            "/ip4/1.2.3.4/tcp/9001/p2p/DIFFERENT_PEER_ID".to_string(),
             "/ip4/10.0.0.1/tcp/9001/p2p/SomeNewPeer".to_string(),
         ];
         let merged = merge_bootstrap_nodes(user_nodes);
 
-        // Count entries for 34.168.102.7 — should only be 1
-        let gcp_count = merged.iter().filter(|n| n.contains("34.168.102.7")).count();
-        assert_eq!(gcp_count, 1, "Should deduplicate by IP:Port");
+        // Count entries for 1.2.3.4 — should only be 1
+        let ip_count = merged.iter().filter(|n| n.contains("1.2.3.4")).count();
+        assert_eq!(ip_count, 1, "Should deduplicate by IP:Port");
 
         // 10.0.0.1 is new, should be added
         assert!(merged.iter().any(|n| n.contains("10.0.0.1")));

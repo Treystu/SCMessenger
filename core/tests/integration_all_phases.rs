@@ -249,9 +249,8 @@ async fn test_all_six_phases_integrated() {
     println!("\n🎉 ALL 6 PHASES FULLY INTEGRATED AND FUNCTIONAL");
     println!("========================================\n");
 
-    // Cleanup
-    alice_handle.shutdown().await.ok();
-    bob_handle.shutdown().await.ok();
+    let _ = scmessenger_core::transport::swarm::SwarmHandle::shutdown(&alice_handle).await;
+    let _ = scmessenger_core::transport::swarm::SwarmHandle::shutdown(&bob_handle).await;
 }
 
 #[tokio::test]
@@ -326,7 +325,7 @@ async fn test_message_retry_on_failure() {
     println!("✓ PHASE 6 RETRY LOGIC VERIFIED");
     println!("========================================\n");
 
-    alice_handle.shutdown().await.ok();
+    let _ = scmessenger_core::transport::swarm::SwarmHandle::shutdown(&alice_handle).await;
 }
 
 #[tokio::test]
@@ -495,7 +494,7 @@ async fn test_relay_protocol() {
     println!("========================================\n");
 
     // Cleanup
-    alice_handle.shutdown().await.ok();
-    bob_handle.shutdown().await.ok();
-    charlie_handle.shutdown().await.ok();
+    let _ = scmessenger_core::transport::swarm::SwarmHandle::shutdown(&alice_handle).await;
+    let _ = scmessenger_core::transport::swarm::SwarmHandle::shutdown(&bob_handle).await;
+    let _ = scmessenger_core::transport::swarm::SwarmHandle::shutdown(&charlie_handle).await;
 }

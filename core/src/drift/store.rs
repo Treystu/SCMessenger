@@ -120,6 +120,11 @@ impl MeshStore {
     /// - Commutative: merge(A, B) == merge(B, A)
     /// - Idempotent: merge(A, A) == A
     /// - Associative: merge(merge(A, B), C) == merge(A, merge(B, C))
+    ///
+    /// NOTE: When the merged store exceeds `max_messages`, eviction occurs based
+    /// on priority score. This violates strict CRDT monotonic-growth — evicted
+    /// messages may be re-added by a subsequent merge. Use matching capacities
+    /// across peers for predictable behavior.
     pub fn merge(&mut self, other: &MeshStore) {
         for (id, envelope) in &other.messages {
             if !self.messages.contains_key(id) {
@@ -173,6 +178,11 @@ impl MeshStore {
         self.messages.is_empty()
     }
 
+    /// Remove a message by ID. Returns true if it was present.
+    pub fn remove(&mut self, id: &MessageId) -> bool {
+        self.messages.remove(id).is_some()
+    }
+
     /// Remove expired messages
     ///
     /// Returns the number of messages removed.
@@ -212,16 +222,6 @@ impl MeshStore {
         hex::encode(hasher.finalize().as_bytes())
     }
 
-    /// Verify a peer's proof against our expected proof.
-    ///
-    /// This is used when receiving a sync offer to ensure the peer
-    /// actually has the messages they claim to have.
-    ///
-    /// Returns true if the proof matches, false otherwise.
-    pub fn verify_proof(&self, proof: &str) -> bool {
-        self.generate_proof() == proof
-    }
-
     /// Evict lowest-priority messages when over budget
     fn evict_if_over_budget(&mut self) {
         while self.messages.len() > self.max_messages {
@@ -241,6 +241,45 @@ impl MeshStore {
                 break;
             }
         }
+    }
+
+    /// Save all messages to a persistent storage backend under a "drift/" prefix.
+    pub fn save(&self, backend: &dyn crate::store::backend::StorageBackend) -> Result<(), String> {
+        for (id, envelope) in &self.messages {
+            let key = [b"drift:", id.as_slice()].concat();
+            let value = bincode::serialize(envelope)
+                .map_err(|e| format!("Failed to serialize envelope: {}", e))?;
+            backend.put(&key, &value)?;
+        }
+        Ok(())
+    }
+
+    /// Load messages from a persistent storage backend.
+    /// Merges with existing messages (CRDT union).
+    pub fn load(
+        &mut self,
+        backend: &dyn crate::store::backend::StorageBackend,
+    ) -> Result<usize, String> {
+        let entries = backend.scan_prefix(b"drift:")?;
+        let mut loaded = 0;
+        let mut failed = 0;
+        for (_key, value) in entries {
+            match bincode::deserialize::<StoredEnvelope>(&value) {
+                Ok(envelope) => {
+                    if self.insert(envelope) {
+                        loaded += 1;
+                    }
+                }
+                Err(e) => {
+                    tracing::warn!("Failed to deserialize drift envelope: {}", e);
+                    failed += 1;
+                }
+            }
+        }
+        if failed > 0 {
+            tracing::warn!("MeshStore load: {} entries failed deserialization", failed);
+        }
+        Ok(loaded)
     }
 }
 

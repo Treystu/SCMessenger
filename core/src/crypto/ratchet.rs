@@ -30,7 +30,9 @@ const RATCHET_KDF_CONTEXT: &str = "iron-core ratchet v1 2026-04-15";
 const ROOT_KDF_CONTEXT: &str = "iron-core root-chain v1 2026-04-15";
 
 /// Maximum number of skipped message keys we'll store per session.
-const MAX_SKIP_KEYS: usize = 64;
+/// Signal Protocol recommends "a few hundred" for reliable out-of-order delivery.
+/// 256 provides good coverage for mesh networks with high latency variance.
+const MAX_SKIP_KEYS: usize = 256;
 
 /// Maximum number of DH ratchet steps before requiring re-initialization.
 const MAX_RATCHET_STEPS: u32 = 10_000;
@@ -141,7 +143,6 @@ impl RatchetSession {
         sending_chain: Option<Chain>,
         receiving_chain: Option<Chain>,
         dh_step_count: u32,
-        skipped_keys: HashMap<([u8; 32], u32), RatchetKey>,
         initialized: bool,
         our_identity_secret: Option<X25519StaticSecret>,
     ) -> Self {
@@ -153,14 +154,10 @@ impl RatchetSession {
             sending_chain,
             receiving_chain,
             dh_step_count,
-            skipped_keys,
+            skipped_keys: HashMap::new(),
             initialized,
             our_identity_secret,
         }
-    }
-
-    pub fn skipped_keys(&self) -> &HashMap<([u8; 32], u32), RatchetKey> {
-        &self.skipped_keys
     }
 
     pub(crate) fn our_dh_secret_bytes(&self) -> [u8; 32] {
@@ -374,7 +371,10 @@ impl RatchetSession {
         let first_dh_secret = if let Some(identity_secret) = self.our_identity_secret.take() {
             identity_secret
         } else {
-            X25519StaticSecret::from(self.our_dh_secret.to_bytes())
+            let mut dh_bytes = self.our_dh_secret.to_bytes();
+            let secret = X25519StaticSecret::from(dh_bytes);
+            dh_bytes.zeroize();
+            secret
         };
 
         let dh_output = first_dh_secret.diffie_hellman(their_new_dh);

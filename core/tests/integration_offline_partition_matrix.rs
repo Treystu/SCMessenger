@@ -1,19 +1,12 @@
-#[cfg(feature = "phase2_apis")]
 use libp2p::PeerId;
-#[cfg(feature = "phase2_apis")]
 use scmessenger_core::store::backend::SledStorage;
-#[cfg(feature = "phase2_apis")]
 use scmessenger_core::store::QueuedMessage;
-#[cfg(feature = "phase2_apis")]
 use scmessenger_core::store::{CustodyState, Outbox, RelayCustodyStore};
-#[cfg(feature = "phase2_apis")]
 use scmessenger_core::transport::mesh_routing::{
     MultiPathDelivery, ROUTE_REASON_DIRECT_FIRST, ROUTE_REASON_RELAY_RECENCY_SUCCESS,
 };
-#[cfg(feature = "phase2_apis")]
 use std::sync::Arc;
 
-#[cfg(feature = "phase2_apis")]
 fn now_secs() -> u64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -21,7 +14,6 @@ fn now_secs() -> u64 {
         .as_secs()
 }
 
-#[cfg(feature = "phase2_apis")]
 fn queued_message(message_id: &str, recipient_id: &str) -> QueuedMessage {
     QueuedMessage {
         message_id: message_id.to_string(),
@@ -32,7 +24,6 @@ fn queued_message(message_id: &str, recipient_id: &str) -> QueuedMessage {
     }
 }
 
-#[cfg(feature = "phase2_apis")]
 #[test]
 fn offline_partition_custody_and_outbox_survive_restart_until_reconnect_delivery() {
     let dir = tempfile::tempdir().unwrap();
@@ -132,7 +123,6 @@ fn offline_partition_custody_and_outbox_survive_restart_until_reconnect_delivery
     }
 }
 
-#[cfg(feature = "phase2_apis")]
 #[test]
 fn partition_recency_recovery_prefers_fresh_relays_deterministically() {
     let mut delivery = MultiPathDelivery::new();

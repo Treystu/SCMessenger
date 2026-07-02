@@ -8,6 +8,7 @@ import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.collectAsState
@@ -30,6 +31,8 @@ import com.scmessenger.android.ui.settings.MeshSettingsScreen
 import com.scmessenger.android.ui.settings.PowerSettingsScreen
 import com.scmessenger.android.ui.components.ErrorState
 import com.scmessenger.android.ui.components.WarningBanner
+import com.scmessenger.android.utils.BackupPassphraseValidation
+import com.scmessenger.android.utils.validateBackupPassphrase
 
 /**
  * Settings screen with mesh configuration and app preferences.
@@ -65,10 +68,17 @@ fun SettingsScreen(
     val scope = rememberCoroutineScope()
 
     val importResult by settingsViewModel.importResult.collectAsState()
+    val backupExportResult by settingsViewModel.backupExportResult.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
 
     var showImportDialog by remember { mutableStateOf(false) }
     var importText by remember { mutableStateOf("") }
+    var importPassphrase by remember { mutableStateOf("") }
+
+    var showExportBackupDialog by remember { mutableStateOf(false) }
+    var exportPassphrase by remember { mutableStateOf("") }
+    var exportPassphraseConfirm by remember { mutableStateOf("") }
+    var exportPassphraseError by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(importResult) {
         importResult?.let {
@@ -152,7 +162,17 @@ fun SettingsScreen(
                     }
                 },
                 onShowIdentityQr = onNavigateToIdentity,
-                onImportIdentity = { showImportDialog = true }
+                onImportIdentity = {
+                    importText = ""
+                    importPassphrase = ""
+                    showImportDialog = true
+                },
+                onExportIdentityBackup = {
+                    exportPassphrase = ""
+                    exportPassphraseConfirm = ""
+                    exportPassphraseError = null
+                    showExportBackupDialog = true
+                }
             )
         } else {
             IdentityUnavailableSection(
@@ -259,20 +279,32 @@ fun SettingsScreen(
             onDismissRequest = { showImportDialog = false },
             title = { Text(stringResource(R.string.settings_title_import_identity)) },
             text = {
-                OutlinedTextField(
-                    value = importText,
-                    onValueChange = { importText = it },
-                    label = { Text(stringResource(R.string.settings_label_paste_backup)) },
-                    minLines = 3,
-                    maxLines = 6
-                )
+                Column {
+                    OutlinedTextField(
+                        value = importText,
+                        onValueChange = { importText = it },
+                        label = { Text(stringResource(R.string.settings_label_paste_backup)) },
+                        minLines = 3,
+                        maxLines = 6
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = importPassphrase,
+                        onValueChange = { importPassphrase = it },
+                        label = { Text(stringResource(R.string.settings_label_backup_passphrase_optional)) },
+                        visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
             },
             confirmButton = {
                 TextButton(
                     onClick = {
-                        settingsViewModel.importIdentityBackup(importText)
+                        settingsViewModel.importIdentityBackup(importText, importPassphrase)
                         showImportDialog = false
                         importText = ""
+                        importPassphrase = ""
                     },
                     enabled = importText.isNotBlank()
                 ) {
@@ -281,6 +313,128 @@ fun SettingsScreen(
             },
             dismissButton = {
                 TextButton(onClick = { showImportDialog = false }) {
+                    Text(stringResource(R.string.cancel))
+                }
+            }
+        )
+    }
+
+    if (showExportBackupDialog) {
+        AlertDialog(
+            onDismissRequest = { showExportBackupDialog = false },
+            title = { Text(stringResource(R.string.settings_title_export_identity_backup)) },
+            text = {
+                Column {
+                    Text(
+                        text = stringResource(R.string.settings_export_backup_description),
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.padding(bottom = 12.dp)
+                    )
+                    OutlinedTextField(
+                        value = exportPassphrase,
+                        onValueChange = {
+                            exportPassphrase = it
+                            exportPassphraseError = null
+                        },
+                        label = { Text(stringResource(R.string.settings_label_backup_passphrase)) },
+                        visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = exportPassphraseConfirm,
+                        onValueChange = {
+                            exportPassphraseConfirm = it
+                            exportPassphraseError = null
+                        },
+                        label = { Text(stringResource(R.string.settings_label_backup_passphrase_confirm)) },
+                        visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    exportPassphraseError?.let {
+                        Text(
+                            text = it,
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodySmall,
+                            modifier = Modifier.padding(top = 4.dp)
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    when (validateBackupPassphrase(exportPassphrase, exportPassphraseConfirm)) {
+                        BackupPassphraseValidation.TooShort -> {
+                            exportPassphraseError = context.getString(R.string.settings_error_passphrase_too_short)
+                        }
+                        BackupPassphraseValidation.Mismatch -> {
+                            exportPassphraseError = context.getString(R.string.settings_error_passphrase_mismatch)
+                        }
+                        BackupPassphraseValidation.Valid -> {
+                            settingsViewModel.exportIdentityBackup(exportPassphrase)
+                            showExportBackupDialog = false
+                            exportPassphrase = ""
+                            exportPassphraseConfirm = ""
+                        }
+                    }
+                }) {
+                    Text(stringResource(R.string.settings_action_export_identity_backup))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showExportBackupDialog = false }) {
+                    Text(stringResource(R.string.cancel))
+                }
+            }
+        )
+    }
+
+    backupExportResult?.let { result ->
+        AlertDialog(
+            onDismissRequest = { settingsViewModel.clearBackupExportResult() },
+            title = { Text(stringResource(R.string.settings_title_backup_ready)) },
+            text = {
+                result.fold(
+                    onSuccess = { backup ->
+                        Column {
+                            Text(
+                                text = stringResource(R.string.settings_backup_ready_description),
+                                style = MaterialTheme.typography.bodySmall,
+                                modifier = Modifier.padding(bottom = 12.dp)
+                            )
+                            Text(
+                                text = backup,
+                                style = MaterialTheme.typography.bodySmall,
+                                fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(max = 160.dp)
+                                    .verticalScroll(rememberScrollState())
+                            )
+                        }
+                    },
+                    onFailure = { error ->
+                        Text("Failed to export backup: ${error.message}")
+                    }
+                )
+            },
+            confirmButton = {
+                result.getOrNull()?.let { backup ->
+                    TextButton(onClick = {
+                        val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                        val clip = android.content.ClipData.newPlainText("Identity Backup", backup)
+                        clipboard.setPrimaryClip(clip)
+                        scope.launch { snackbarHostState.showSnackbar(context.getString(R.string.settings_backup_copied)) }
+                        settingsViewModel.clearBackupExportResult()
+                    }) {
+                        Text(stringResource(R.string.settings_action_copy_backup))
+                    }
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { settingsViewModel.clearBackupExportResult() }) {
                     Text(stringResource(R.string.cancel))
                 }
             }
@@ -755,7 +909,8 @@ fun IdentitySection(
     onNicknameChange: (String) -> Unit,
     onCopyExport: () -> Unit,
     onShowIdentityQr: () -> Unit,
-    onImportIdentity: () -> Unit
+    onImportIdentity: () -> Unit,
+    onExportIdentityBackup: () -> Unit
 ) {
     val context = LocalContext.current
 
@@ -917,6 +1072,20 @@ fun IdentitySection(
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Text("Import Identity")
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Passphrase-encrypted private-key backup: distinct from the public
+            // "Copy Full Identity Export" above, which has no encryption and
+            // can't restore ratchet sessions or contacts.
+            OutlinedButton(
+                onClick = onExportIdentityBackup,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Icon(Icons.Default.Lock, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(stringResource(R.string.settings_action_export_identity_backup))
             }
         }
     }

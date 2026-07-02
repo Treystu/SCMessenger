@@ -113,6 +113,75 @@ final class IosPlatformBridge: PlatformBridge {
         withMeshRepositoryOnMain { $0.sendBlePacket(peerId: peerId, data: data) }
     }
 
+    // MARK: - Generic Proximity Transport (T1.1)
+
+    func onProximityDataReceived(peerId: String, transport: ProximityTransport, data: Data) {
+        logger.debug("Proximity data received from \(peerId) via \(String(describing: transport)): \(data.count) bytes")
+        // iOS only supports BLE and Multipeer; route to the appropriate transport
+        switch transport {
+        case .ble:
+            withMeshRepositoryOnMain { $0.onBleDataReceived(peerId: peerId, data: data) }
+        default:
+            logger.debug("Unsupported proximity transport on iOS: \(String(describing: transport))")
+        }
+    }
+
+    func sendProximityPacket(peerId: String, transport: ProximityTransport, data: Data) {
+        logger.debug("Rust requests proximity send to \(peerId) via \(String(describing: transport)): \(data.count) bytes")
+        switch transport {
+        case .ble:
+            withMeshRepositoryOnMain { $0.sendBlePacket(peerId: peerId, data: data) }
+        default:
+            logger.debug("Unsupported proximity transport on iOS: \(String(describing: transport))")
+        }
+    }
+
+    // MARK: - Wi-Fi Aware (Android-only; iOS has no API)
+
+    func wifiAwarePublish(serviceName: String, serviceInfo: Data) -> Bool {
+        logger.debug("Wi-Fi Aware publish requested for \(serviceName); not supported on iOS")
+        return false
+    }
+
+    func wifiAwareSubscribe(serviceName: String) -> Bool {
+        logger.debug("Wi-Fi Aware subscribe requested for \(serviceName); not supported on iOS")
+        return false
+    }
+
+    func wifiAwareCreateDataPath(peerId: String, pmk: Data) -> Bool {
+        logger.debug("Wi-Fi Aware data path requested for \(peerId); not supported on iOS")
+        return false
+    }
+
+    func wifiAwareStop() {
+        logger.debug("Wi-Fi Aware stop requested; not supported on iOS")
+    }
+
+    // MARK: - Wi-Fi Direct (Android-only; iOS has no API)
+
+    func wifiDirectDiscoverPeers() -> Bool {
+        logger.debug("Wi-Fi Direct discover peers requested; not supported on iOS")
+        return false
+    }
+
+    func wifiDirectStopDiscovery() {
+        logger.debug("Wi-Fi Direct stop discovery requested; not supported on iOS")
+    }
+
+    func wifiDirectConnect(deviceAddress: String) -> Bool {
+        logger.debug("Wi-Fi Direct connect requested for \(deviceAddress); not supported on iOS")
+        return false
+    }
+
+    func wifiDirectCreateGroup(groupName: String) -> Bool {
+        logger.debug("Wi-Fi Direct create group requested for \(groupName); not supported on iOS")
+        return false
+    }
+
+    func wifiDirectRemoveGroup() {
+        logger.debug("Wi-Fi Direct remove group requested; not supported on iOS")
+    }
+
     // MARK: - iOS System Monitoring
 
     private func startBatteryMonitoring() {

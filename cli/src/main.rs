@@ -1174,6 +1174,33 @@ async fn cmd_history(
     Ok(())
 }
 
+/// True if every port in `ports` can be bound on both loopback and
+/// all-interfaces (the same check `cmd_start` needs before it hands the
+/// ports to the real listeners).
+fn port_pair_available(ports: &[u16]) -> bool {
+    ports.iter().all(|&p| {
+        let addrs = [
+            std::net::SocketAddr::from(([127, 0, 0, 1], p)),
+            std::net::SocketAddr::from(([0, 0, 0, 0], p)),
+        ];
+        addrs
+            .iter()
+            .all(|addr| std::net::TcpListener::bind(addr).is_ok())
+    })
+}
+
+/// Scan forward from `start` for the next `(port, port + 1)` pair that's free,
+/// to suggest as a `--port` fallback when the requested port stays occupied.
+fn find_free_port_pair(start: u16) -> Option<u16> {
+    (1u16..=20)
+        .filter_map(|i| start.checked_add(i * 2))
+        .find(|&candidate| {
+            candidate
+                .checked_add(1)
+                .is_some_and(|next| port_pair_available(&[candidate, next]))
+        })
+}
+
 async fn cmd_start(port: Option<u16>) -> Result<()> {
     let config = config::Config::load()?;
     let ws_port = port.unwrap_or({
@@ -1194,23 +1221,50 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
         return Ok(());
     }
 
-    // 2. Check if ports are occupied by something else (v4, v6, and localhost)
+    // 2. Check if ports are occupied by something else (v4, v6, and localhost).
+    // A port can be transiently held by a process that's still exiting (e.g. a
+    // previous `scm start` shutting down after Ctrl+C), so retry with backoff
+    // before giving up — and offer the next free port pair as a fallback.
     let p2p_port = ws_port + 1;
     let check_ports = [ws_port, p2p_port];
+    const BIND_RETRIES: u32 = 5;
+
     for p in check_ports {
-        let addrs = [
-            std::net::SocketAddr::from(([127, 0, 0, 1], p)),
-            std::net::SocketAddr::from(([0, 0, 0, 0], p)),
-        ];
-        for addr in addrs {
-            if std::net::TcpListener::bind(addr).is_err() {
-                println!("{} Port {} is already in use.", "Error:".red(), p);
-                println!(
+        let mut bound = false;
+        for attempt in 0..BIND_RETRIES {
+            bound = port_pair_available(&[p]);
+            if bound {
+                break;
+            }
+            if attempt + 1 < BIND_RETRIES {
+                // Exponential backoff: 200ms, 400ms, 800ms, 1600ms
+                let delay_ms = 200u64 << attempt;
+                tracing::warn!(
+                    "Port {} still in use (attempt {}/{}), retrying in {}ms — \
+                     a previous node may still be shutting down",
+                    p,
+                    attempt + 1,
+                    BIND_RETRIES,
+                    delay_ms
+                );
+                tokio::time::sleep(tokio::time::Duration::from_millis(delay_ms)).await;
+            }
+        }
+
+        if !bound {
+            println!("{} Port {} is already in use.", "Error:".red(), p);
+            match find_free_port_pair(ws_port) {
+                Some(alt) => println!(
+                    "Try {} to use a free port instead, or run {} to stop a stale process.",
+                    format!("scm start --port {}", alt).bright_green(),
+                    "scm stop".bright_green()
+                ),
+                None => println!(
                     "Try running {} or checking for other processes on this port.",
                     "scm stop".bright_green()
-                );
-                return Ok(());
+                ),
             }
+            return Ok(());
         }
     }
 
@@ -2389,9 +2443,8 @@ async fn cmd_relay(listen_addr: String, http_port: u16, node_name: Option<String
         .collect();
     if !bootstrap_multiaddrs.is_empty() {
         println!(
-            "{} Auto-dialing {} bootstrap node(s)",
-            "📡".to_string(),
-            bootstrap_multiaddrs.len().to_string().bright_cyan()
+            "📡 Auto-dialing {} bootstrap node(s)",
+            bootstrap_multiaddrs.len()
         );
     }
 

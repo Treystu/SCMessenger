@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.net.wifi.p2p.*
+import android.os.BatteryManager
 import android.net.wifi.p2p.nsd.WifiP2pDnsSdServiceInfo
 import android.net.wifi.p2p.nsd.WifiP2pDnsSdServiceRequest
 import androidx.core.content.IntentCompat
@@ -30,8 +31,10 @@ import kotlinx.coroutines.*
  */
 class WifiDirectTransport(
     private val context: Context,
-    private val onPeerDiscovered: (peerId: String) -> Unit,
-    private val onDataReceived: (peerId: String, data: ByteArray) -> Unit
+    private val getLocalPeerId: () -> String?,
+    private val onPeerDiscovered: (peerId: String, device: WifiP2pDevice) -> Unit,
+    private val onDataReceived: (peerId: String, data: ByteArray) -> Unit,
+    private val onConnectionInfo: ((peerId: String, groupOwnerIp: String, isGroupOwner: Boolean) -> Unit)? = null
 ) {
 
     private val wifiP2pManager: WifiP2pManager? = context.getSystemService(Context.WIFI_P2P_SERVICE) as? WifiP2pManager
@@ -162,8 +165,9 @@ class WifiDirectTransport(
                     Timber.d("WiFi Direct service discovered: $fullDomainName from ${device.deviceName}")
 
                     if (record["service"] == SERVICE_TYPE) {
+                        val peerId = record["peer_id"] ?: device.deviceAddress
                         discoveredPeers[device.deviceAddress] = device
-                        onPeerDiscovered(device.deviceAddress)
+                        onPeerDiscovered(peerId, device)
 
                         // Initiate connection
                         connectToPeer(device)
@@ -212,9 +216,11 @@ class WifiDirectTransport(
         if (channel == null) return
 
         try {
+            val localPeerId = getLocalPeerId() ?: ""
             val record = mutableMapOf<String, String>().apply {
                 put("service", SERVICE_TYPE)
                 put("version", "1.0")
+                put("peer_id", localPeerId)
             }
 
             val serviceInfo = WifiP2pDnsSdServiceInfo.newInstance(
@@ -250,7 +256,7 @@ class WifiDirectTransport(
         try {
             val config = WifiP2pConfig().apply {
                 deviceAddress = device.deviceAddress
-                groupOwnerIntent = 0 // We want to be client if possible
+                groupOwnerIntent = computeGroupOwnerIntent()
             }
 
             wifiP2pManager?.connect(channel, config, object : WifiP2pManager.ActionListener {
@@ -309,12 +315,18 @@ class WifiDirectTransport(
 
         Timber.d("Connection info - Group owner: $isGroupOwner, Owner address: ${info.groupOwnerAddress}")
 
+        onConnectionInfo?.invoke(
+            "",
+            info.groupOwnerAddress?.hostAddress ?: "127.0.0.1",
+            info.isGroupOwner
+        )
+
         if (isGroupOwner) {
             // We are group owner - start server
             startServer()
         } else {
             // We are client - connect to group owner
-            connectToGroupOwner(info.groupOwnerAddress.hostAddress ?: "")
+            connectToGroupOwner(info.groupOwnerAddress?.hostAddress ?: "")
         }
     }
 
@@ -443,14 +455,116 @@ class WifiDirectTransport(
         }
     }
 
+    fun discoverPeers(): Boolean {
+        if (!isRunning) {
+            start()
+            return true
+        }
+        startPeerDiscovery()
+        return true
+    }
+
+    fun stopDiscovery() {
+        if (channel != null) {
+            try {
+                wifiP2pManager?.stopPeerDiscovery(channel, null)
+            } catch (e: SecurityException) {
+                Timber.e(e, "Security exception in stopDiscovery")
+            }
+        }
+    }
+
+    fun connect(deviceAddress: String): Boolean {
+        if (channel == null) return false
+        try {
+            val config = WifiP2pConfig().apply {
+                this.deviceAddress = deviceAddress
+                groupOwnerIntent = computeGroupOwnerIntent()
+            }
+            wifiP2pManager?.connect(channel, config, object : WifiP2pManager.ActionListener {
+                override fun onSuccess() {
+                    Timber.d("Connection initiated to $deviceAddress")
+                }
+                override fun onFailure(reason: Int) {
+                    Timber.e("Failed to connect to $deviceAddress: $reason")
+                }
+            })
+            return true
+        } catch (e: SecurityException) {
+            Timber.e(e, "Security exception in connect")
+            return false
+        }
+    }
+
+    fun createGroup(groupName: String): Boolean {
+        if (channel == null) return false
+        try {
+            wifiP2pManager?.createGroup(channel, object : WifiP2pManager.ActionListener {
+                override fun onSuccess() {
+                    Timber.d("Group created successfully: $groupName")
+                }
+                override fun onFailure(reason: Int) {
+                    Timber.e("Failed to create group: $reason")
+                }
+            })
+            return true
+        } catch (e: SecurityException) {
+            Timber.e(e, "Security exception in createGroup")
+            return false
+        }
+    }
+
+    fun removeGroup() {
+        if (channel != null) {
+            try {
+                wifiP2pManager?.removeGroup(channel, null)
+            } catch (e: Exception) {
+                Timber.e(e, "Failed to remove group")
+            }
+        }
+    }
+
     fun cleanup() {
         stop()
         scope.cancel()
+    }
+
+    /**
+     * Compute the WiFi P2P group-owner-intent bid (0-15) from live battery
+     * state: a charging or well-charged device bids higher so it wins GO
+     * negotiation and becomes the relay point. Mirrors
+     * `compute_group_owner_intent` in `core/src/transport/wifi_direct.rs`.
+     */
+    private fun computeGroupOwnerIntent(): Int {
+        val batteryStatus = context.registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+
+        val level = batteryStatus?.getIntExtra(BatteryManager.EXTRA_LEVEL, -1) ?: -1
+        val scale = batteryStatus?.getIntExtra(BatteryManager.EXTRA_SCALE, -1) ?: -1
+        val batteryPct = if (level >= 0 && scale > 0) {
+            ((level.toFloat() / scale.toFloat()) * 100).toInt()
+        } else {
+            100
+        }
+
+        val status = batteryStatus?.getIntExtra(BatteryManager.EXTRA_STATUS, -1) ?: -1
+        val isCharging = status == BatteryManager.BATTERY_STATUS_CHARGING ||
+            status == BatteryManager.BATTERY_STATUS_FULL
+
+        return if (isCharging || batteryPct > 50) {
+            GROUP_OWNER_INTENT_PREFERRED
+        } else {
+            GROUP_OWNER_INTENT_CLIENT
+        }
     }
 
     companion object {
         private const val SERVICE_NAME = "scmessenger"
         private const val SERVICE_TYPE = "_scmessenger._tcp"
         private const val P2P_PORT = 8888
+
+        // Android's groupOwnerIntent ranges 0-15; bid higher when charging or
+        // above 50% battery so this device is preferred as the relay point.
+        private const val GROUP_OWNER_INTENT_PREFERRED = 7
+        private const val GROUP_OWNER_INTENT_CLIENT = 0
     }
 }

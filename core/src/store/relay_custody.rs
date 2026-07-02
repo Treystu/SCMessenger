@@ -742,6 +742,14 @@ impl RelayCustodyStore {
         if record.state == CustodyState::Delivered {
             return Ok(());
         }
+        // Max delivery attempts guard — prevent infinite cycling
+        const MAX_DELIVERY_ATTEMPTS: u32 = 12;
+        if record.delivery_attempts >= MAX_DELIVERY_ATTEMPTS {
+            return Err(format!(
+                "Max delivery attempts ({}) exceeded for custody {}",
+                MAX_DELIVERY_ATTEMPTS, custody_id
+            ));
+        }
         let from_state = record.state;
         record.state = CustodyState::Dispatching;
         record.updated_at_ms = now_ms();

@@ -2,13 +2,12 @@
 ///
 /// This module provides GATT service abstractions with characteristic-based messaging,
 /// fragmentation, reassembly, and write queue management with backpressure.
-
 use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
 use thiserror::Error;
 
 /// GATT service UUID (0xDF01)
-pub const GATT_SERVICE_UUID: u128 = 0x0000_DF01_0000_1000_8000_00805F9B34FB;
+pub const GATT_SERVICE_UUID: u128 = 0x0000_0DF0_1000_1000_8000_0080_5F9B_34FB;
 
 /// Maximum GATT characteristic write size (protocol limitation)
 pub const MAX_CHARACTERISTIC_SIZE: usize = 512;
@@ -121,7 +120,7 @@ impl GattFragmenter {
             return Ok(vec![Vec::new()]);
         }
 
-        let total_fragments = (data.len() + max_payload - 1) / max_payload;
+        let total_fragments = data.len().div_ceil(max_payload);
 
         if total_fragments > u16::MAX as usize {
             return Err(GattError::FragmentationError(
@@ -289,8 +288,7 @@ pub trait GattServer: Send + Sync {
     fn on_read(&self, characteristic: GattCharacteristic) -> Result<Vec<u8>, GattError>;
 
     /// Notify subscribers of a characteristic change
-    fn notify(&mut self, characteristic: GattCharacteristic, data: &[u8])
-        -> Result<(), GattError>;
+    fn notify(&mut self, characteristic: GattCharacteristic, data: &[u8]) -> Result<(), GattError>;
 
     /// Check if the GATT service is enabled
     fn is_enabled(&self) -> bool;
@@ -299,11 +297,7 @@ pub trait GattServer: Send + Sync {
 /// GATT Client trait for platform implementations
 pub trait GattClient: Send + Sync {
     /// Write to a characteristic
-    fn write(
-        &mut self,
-        characteristic: GattCharacteristic,
-        data: &[u8],
-    ) -> Result<(), GattError>;
+    fn write(&mut self, characteristic: GattCharacteristic, data: &[u8]) -> Result<(), GattError>;
 
     /// Read from a characteristic
     fn read(&self, characteristic: GattCharacteristic) -> Result<Vec<u8>, GattError>;
@@ -545,12 +539,9 @@ mod tests {
     fn test_gatt_write_queue_fifo_order() {
         let mut queue = GattWriteQueue::new(10);
 
-        let request1 =
-            GattWriteRequest::new(GattCharacteristic::Write, vec![0x01]).expect("Valid");
-        let request2 =
-            GattWriteRequest::new(GattCharacteristic::Write, vec![0x02]).expect("Valid");
-        let request3 =
-            GattWriteRequest::new(GattCharacteristic::Write, vec![0x03]).expect("Valid");
+        let request1 = GattWriteRequest::new(GattCharacteristic::Write, vec![0x01]).expect("Valid");
+        let request2 = GattWriteRequest::new(GattCharacteristic::Write, vec![0x02]).expect("Valid");
+        let request3 = GattWriteRequest::new(GattCharacteristic::Write, vec![0x03]).expect("Valid");
 
         queue.enqueue(request1).expect("Enqueue 1");
         queue.enqueue(request2).expect("Enqueue 2");

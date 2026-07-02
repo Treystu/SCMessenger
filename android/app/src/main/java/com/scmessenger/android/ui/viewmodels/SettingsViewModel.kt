@@ -150,6 +150,10 @@ class SettingsViewModel @Inject constructor(
     private val _importResult = MutableStateFlow<String?>(null)
     val importResult: StateFlow<String?> = _importResult.asStateFlow()
 
+    // Encrypted identity backup export result (the backup string, or an error message)
+    private val _backupExportResult = MutableStateFlow<Result<String>?>(null)
+    val backupExportResult: StateFlow<Result<String>?> = _backupExportResult.asStateFlow()
+
     // ANR FIX: Cached settings to avoid re-calculating on every composition
     private var cachedSettings: uniffi.api.MeshSettings? = null
     private var cachedIdentityInfo: uniffi.api.IdentityInfo? = null
@@ -188,8 +192,8 @@ class SettingsViewModel @Inject constructor(
             maxRelayBudget = 200u,
             batteryFloor = 20u,
             bleEnabled = true,
-            wifiAwareEnabled = true,
-            wifiDirectEnabled = true,
+            wifiAwareEnabled = false,
+            wifiDirectEnabled = false,
             internetEnabled = true,
             discoveryMode = uniffi.api.DiscoveryMode.NORMAL,
             onionRouting = false,
@@ -311,6 +315,14 @@ class SettingsViewModel @Inject constructor(
                     emitIdentityInfo(cachedIdentityInfo)
                     return@launch
                 }
+                // P0_SHARED_IDENTITY: Check the published StateFlow first — this
+                // catches identity that was just created in another ViewModel
+                // (e.g., onboarding) before the non-blocking FFI path runs.
+                val published = meshRepository.identityInfo.value
+                if (published != null && published.initialized) {
+                    emitIdentityInfo(published)
+                    return@launch
+                }
                 // Use non-blocking variant to avoid triggering service init
                 // from the UI layer (prevents serviceState → loadIdentity loop).
                 val info = meshRepository.getIdentityInfoNonBlocking()
@@ -339,11 +351,17 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
-    /** P1_ANDROID_003: Import identity from a backup string. */
-    fun importIdentityBackup(backup: String) {
+    /**
+     * P1_ANDROID_003: Import identity from a backup string.
+     *
+     * If [passphrase] is blank, falls back to the device-bound auto-backup
+     * passphrase (for restoring this app's own local backup). If non-blank,
+     * it's used as-is to decrypt a backup created via [exportIdentityBackup].
+     */
+    fun importIdentityBackup(backup: String, passphrase: String = "") {
         viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
             try {
-                meshRepository.restoreIdentityFromBackup(backup)
+                meshRepository.restoreIdentityFromBackup(backup, passphrase.ifBlank { null })
                 _importResult.value = "Identity restored successfully"
                 loadIdentity() // Refresh UI after import
             } catch (e: Exception) {
@@ -355,6 +373,26 @@ class SettingsViewModel @Inject constructor(
 
     fun clearImportResult() {
         _importResult.value = null
+    }
+
+    /**
+     * Export a passphrase-encrypted identity backup (identity key + ratchet
+     * sessions + contacts). Distinct from [getIdentityExportString], which
+     * exports the public identity card with no encryption.
+     */
+    fun exportIdentityBackup(passphrase: String) {
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            _backupExportResult.value = try {
+                Result.success(meshRepository.exportIdentityBackup(passphrase))
+            } catch (e: Exception) {
+                Timber.e(e, "Failed to export identity backup")
+                Result.failure(e)
+            }
+        }
+    }
+
+    fun clearBackupExportResult() {
+        _backupExportResult.value = null
     }
 
     fun updateNickname(name: String) {

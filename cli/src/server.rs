@@ -332,7 +332,7 @@ async fn handle_ws_connection(
 
 /// Dispatch a single JSON-RPC request through the core intent parser and
 /// return a JSON-RPC response.
-async fn handle_jsonrpc_request(
+pub async fn handle_jsonrpc_request(
     raw: &str,
     ctx: &WebContext,
     _ui_cmd_tx: &mpsc::UnboundedSender<UiCommand>,
@@ -478,7 +478,7 @@ async fn handle_jsonrpc_request(
         // ── Contacts ──
         ClientIntent::GetContacts {} => {
             if let Some(ref core) = ctx.core {
-                let mgr = core.contacts_manager();
+                let mgr = core.contacts_store_manager();
                 match mgr.list() {
                     Ok(contacts) => {
                         let list: Vec<Value> = contacts
@@ -517,9 +517,9 @@ async fn handle_jsonrpc_request(
         }
         ClientIntent::AddContact { peer_id, nickname } => {
             if let Some(ref core) = ctx.core {
-                let mgr = core.contacts_manager();
+                let mgr = core.contacts_store_manager();
                 let mut contact =
-                    scmessenger_core::contacts_bridge::Contact::new(peer_id.clone(), String::new());
+                    scmessenger_core::store::Contact::new(peer_id.clone(), String::new());
                 if let Some(n) = nickname {
                     contact = contact.with_nickname(n);
                 }
@@ -551,7 +551,7 @@ async fn handle_jsonrpc_request(
         }
         ClientIntent::RemoveContact { peer_id } => {
             if let Some(ref core) = ctx.core {
-                let mgr = core.contacts_manager();
+                let mgr = core.contacts_store_manager();
                 match mgr.remove(peer_id) {
                     Ok(()) => {
                         let mut m = Map::new();
@@ -1325,38 +1325,163 @@ async fn handle_jsonrpc_request(
             }
         }
         // ── Message requests (P0) ──
-        // Note: get_pending_message_requests, accept_message_request, reject_message_request
-        // are not yet implemented in the core crate. They return a "not yet implemented" error.
-        ClientIntent::GetPendingMessageRequests {} => rpc_error(
-            id,
-            JsonRpcErrorBody {
-                code: -32001,
-                message: "get_pending_message_requests not yet implemented".to_string(),
-                data: None,
-            },
-        ),
-        ClientIntent::AcceptMessageRequest { request_id } => rpc_error(
-            id,
-            JsonRpcErrorBody {
-                code: -32001,
-                message: format!(
-                    "accept_message_request not yet implemented (request_id={})",
-                    request_id
-                ),
-                data: None,
-            },
-        ),
-        ClientIntent::RejectMessageRequest { request_id } => rpc_error(
-            id,
-            JsonRpcErrorBody {
-                code: -32001,
-                message: format!(
-                    "reject_message_request not yet implemented (request_id={})",
-                    request_id
-                ),
-                data: None,
-            },
-        ),
+        // A message request is an inbox message from a peer who isn't a
+        // contact (and isn't blocked) yet - mirrors Android's
+        // MeshRepository.getPendingMessageRequests()/RequestsInboxViewModel,
+        // but peeks the inbox instead of draining it so polling twice
+        // doesn't make requests vanish before the user acts on them.
+        ClientIntent::GetPendingMessageRequests {} => {
+            if let Some(ref core) = ctx.core {
+                let contacts = core.contacts_store_manager().list().unwrap_or_default();
+                let contact_peer_ids: std::collections::HashSet<String> =
+                    contacts.into_iter().map(|c| c.peer_id).collect();
+                let blocked_peer_ids: std::collections::HashSet<String> = core
+                    .list_blocked_peers()
+                    .unwrap_or_default()
+                    .into_iter()
+                    .map(|b| b.peer_id)
+                    .collect();
+
+                let inbox_messages = core.peek_received_messages();
+                let mut by_sender: HashMap<String, Vec<&scmessenger_core::store::ReceivedMessage>> =
+                    HashMap::new();
+                for msg in &inbox_messages {
+                    if !contact_peer_ids.contains(&msg.sender_id)
+                        && !blocked_peer_ids.contains(&msg.sender_id)
+                    {
+                        by_sender
+                            .entry(msg.sender_id.clone())
+                            .or_default()
+                            .push(msg);
+                    }
+                }
+
+                let mut requests: Vec<(u64, Value)> = by_sender
+                    .into_iter()
+                    .map(|(peer_id, msgs)| {
+                        let latest = msgs
+                            .iter()
+                            .max_by_key(|m| m.received_at)
+                            .expect("group has at least one message");
+                        let preview = String::from_utf8(latest.payload.clone())
+                            .unwrap_or_else(|_| "[binary]".to_string());
+                        let mut m = Map::new();
+                        m.insert("peerId".to_string(), peer_id.into());
+                        m.insert("nickname".to_string(), Value::Null);
+                        m.insert("messagePreview".to_string(), preview.into());
+                        m.insert("messageTimestamp".to_string(), latest.received_at.into());
+                        m.insert("messageCount".to_string(), msgs.len().into());
+                        (latest.received_at, Value::Object(m))
+                    })
+                    .collect();
+                requests.sort_by(|a, b| b.0.cmp(&a.0));
+
+                let mut m = Map::new();
+                m.insert(
+                    "requests".to_string(),
+                    Value::Array(requests.into_iter().map(|(_, v)| v).collect()),
+                );
+                rpc_result(id, Value::Object(m))
+            } else {
+                rpc_error(
+                    id,
+                    JsonRpcErrorBody {
+                        code: -32000,
+                        message: "Core not available".to_string(),
+                        data: None,
+                    },
+                )
+            }
+        }
+        // Accept = add the sender as a contact, using the Ed25519 public key
+        // captured from their message envelope at receive time (cryptographically
+        // verified there) rather than an unauthenticated discovery broadcast.
+        ClientIntent::AcceptMessageRequest { request_id } => {
+            if let Some(ref core) = ctx.core {
+                let public_key_hex = core
+                    .peek_received_messages()
+                    .into_iter()
+                    .find(|m| m.sender_id == request_id)
+                    .and_then(|m| m.sender_public_key_hex);
+
+                match public_key_hex {
+                    Some(public_key) => {
+                        let contact =
+                            scmessenger_core::store::Contact::new(request_id.clone(), public_key);
+                        match core.contacts_store_manager().add(contact) {
+                            Ok(()) => {
+                                let mut m = Map::new();
+                                m.insert("accepted".to_string(), true.into());
+                                rpc_result(id, Value::Object(m))
+                            }
+                            Err(e) => rpc_error(
+                                id,
+                                JsonRpcErrorBody {
+                                    code: -32000,
+                                    message: format!("Failed to accept message request: {:?}", e),
+                                    data: None,
+                                },
+                            ),
+                        }
+                    }
+                    None => rpc_error(
+                        id,
+                        JsonRpcErrorBody {
+                            code: -32002,
+                            message: format!(
+                                "No pending message request found from {}",
+                                request_id
+                            ),
+                            data: None,
+                        },
+                    ),
+                }
+            } else {
+                rpc_error(
+                    id,
+                    JsonRpcErrorBody {
+                        code: -32000,
+                        message: "Core not available".to_string(),
+                        data: None,
+                    },
+                )
+            }
+        }
+        // Reject = block the sender (matches Android's
+        // RequestsInboxViewModel.rejectRequest); list_blocked_peers filtering
+        // in GetPendingMessageRequests keeps them from reappearing.
+        ClientIntent::RejectMessageRequest { request_id } => {
+            if let Some(ref core) = ctx.core {
+                match core.block_peer(
+                    request_id.clone(),
+                    None,
+                    Some("message_request_rejected".to_string()),
+                ) {
+                    Ok(()) => {
+                        let mut m = Map::new();
+                        m.insert("rejected".to_string(), true.into());
+                        rpc_result(id, Value::Object(m))
+                    }
+                    Err(e) => rpc_error(
+                        id,
+                        JsonRpcErrorBody {
+                            code: -32000,
+                            message: format!("Failed to reject message request: {:?}", e),
+                            data: None,
+                        },
+                    ),
+                }
+            } else {
+                rpc_error(
+                    id,
+                    JsonRpcErrorBody {
+                        code: -32000,
+                        message: "Core not available".to_string(),
+                        data: None,
+                    },
+                )
+            }
+        }
         // ── History search/stats (P1) ──
         ClientIntent::SearchMessages { query, limit } => {
             if let Some(ref core) = ctx.core {

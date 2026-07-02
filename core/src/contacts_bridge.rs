@@ -15,14 +15,18 @@ use std::sync::Arc;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Contact {
     pub peer_id: String,
-    pub nickname: Option<String>, // Federated nickname (from the peer)
-    pub local_nickname: Option<String>, // Local override set by the user
+    pub nickname: Option<String>,
+    pub local_nickname: Option<String>,
     pub public_key: String,
     pub added_at: u64,
     pub last_seen: Option<u64>,
     pub notes: Option<String>,
     #[serde(default)]
-    pub last_known_device_id: Option<String>, // WS13.2: Last known device ID for tight pairing
+    pub last_known_device_id: Option<String>,
+    #[serde(default)]
+    pub verified_at: Option<u64>,
+    #[serde(default)]
+    pub is_tombstone: bool,
 }
 
 impl Contact {
@@ -36,6 +40,23 @@ impl Contact {
             last_seen: None,
             notes: None,
             last_known_device_id: None,
+            verified_at: None,
+            is_tombstone: false,
+        }
+    }
+
+    pub fn tombstone(peer_id: String) -> Self {
+        Self {
+            peer_id,
+            nickname: None,
+            local_nickname: None,
+            public_key: String::new(),
+            added_at: current_timestamp(),
+            last_seen: None,
+            notes: None,
+            last_known_device_id: None,
+            verified_at: None,
+            is_tombstone: true,
         }
     }
 
@@ -253,6 +274,56 @@ impl ContactManager {
             }
         }
         Ok(recovered)
+    }
+
+    /// Merge contacts from another device using LWW-register CRDT semantics.
+    /// Higher `added_at` timestamp wins. For blocks, block always wins over unblock.
+    /// Returns the number of contacts updated.
+    pub fn merge_remote_contacts(
+        &self,
+        remote_contacts: Vec<Contact>,
+    ) -> Result<u32, crate::IronCoreError> {
+        let mut updated = 0;
+        for remote in remote_contacts {
+            if let Some(local) = self.get(remote.peer_id.clone())? {
+                // LWW: higher timestamp wins
+                if remote.added_at > local.added_at {
+                    let mut merged = remote;
+                    // Preserve local-only fields that the remote doesn't know about
+                    if merged.local_nickname.is_none() && local.local_nickname.is_some() {
+                        merged.local_nickname = local.local_nickname;
+                    }
+                    if merged.verified_at.is_none() && local.verified_at.is_some() {
+                        merged.verified_at = local.verified_at;
+                    }
+                    self.add(merged)?;
+                    updated += 1;
+                }
+            } else {
+                // New contact from remote
+                self.add(remote)?;
+                updated += 1;
+            }
+        }
+        Ok(updated)
+    }
+
+    /// Mark a contact as verified (out-of-band verification completed).
+    pub fn mark_verified(&self, peer_id: String) -> Result<(), crate::IronCoreError> {
+        if let Some(mut contact) = self.get(peer_id)? {
+            contact.verified_at = Some(current_timestamp());
+            self.add(contact)?;
+        }
+        Ok(())
+    }
+
+    /// Clear verification status (e.g., when key changes).
+    pub fn unverify(&self, peer_id: String) -> Result<(), crate::IronCoreError> {
+        if let Some(mut contact) = self.get(peer_id)? {
+            contact.verified_at = None;
+            self.add(contact)?;
+        }
+        Ok(())
     }
 
     /// Count total contacts

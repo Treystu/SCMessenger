@@ -84,24 +84,28 @@ final class mDNSServiceDiscovery: NSObject {
         localService?.delegate = self
 
         // Set TXT records for cross-platform compatibility (match Android format)
-        if let identity = meshRepository?.getFullIdentityInfo(),
-           let peerId = identity.libp2pPeerId,
-           let publicKey = identity.publicKeyHex {
-            let txtRecord: [String: String] = [
-                "peer_id": peerId,
-                "pubkey": String(publicKey.prefix(16)) + "...",
-                "device_id": identity.deviceId ?? "",
-                "version": "1.0",
-                "transport": "tcp"
-            ]
-            if let txtData = NetService.dataFromTXTRecord(txtRecord) {
-                localService?.setTXTRecord(txtData)
-                logger.debug("mDNS TXT record set: \(txtRecord)")
+        Task { @MainActor [weak self] in
+            guard let self = self,
+                  let identity = self.meshRepository?.getFullIdentityInfo(),
+                  let peerId = identity.libp2pPeerId,
+                  let publicKey = identity.publicKeyHex else {
+                self?.localService?.publish()
+                self?.isAdvertising = true
+                return
             }
+            let txtRecord: [String: Data] = [
+                "peer_id": Data(peerId.utf8),
+                "pubkey": Data((String(publicKey.prefix(16)) + "...").utf8),
+                "device_id": Data((identity.deviceId ?? "").utf8),
+                "version": Data("1.0".utf8),
+                "transport": Data("tcp".utf8)
+            ]
+            let txtData = NetService.data(fromTXTRecord: txtRecord)
+            self.localService?.setTXTRecord(txtData)
+            self.localService?.publish()
+            self.isAdvertising = true
+            self.logger.debug("mDNS TXT record set: \(txtRecord.keys.sorted())")
         }
-
-        localService?.publish()
-        isAdvertising = true
     }
 
     func stopAdvertising() {
@@ -142,8 +146,8 @@ extension mDNSServiceDiscovery: NetServiceBrowserDelegate {
         isBrowsing = false
     }
 
-    func netServiceBrowser(_ browser: NetServiceBrowser, didNotSearch error: Error) {
-        logger.error("mDNS browser failed: \(error.localizedDescription)")
+    func netServiceBrowser(_ browser: NetServiceBrowser, didNotSearch errorDict: [String: NSNumber]) {
+        logger.error("mDNS browser failed: \(errorDict)")
         isBrowsing = false
     }
 }

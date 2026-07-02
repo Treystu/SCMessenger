@@ -1,0 +1,28 @@
+[Unit]
+Description=SCMessenger Cloud Orchestrator
+Documentation=https://github.com/nickshouse/SCMessenger
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=scm-orchestrator
+Group=scm-orchestrator
+WorkingDirectory=/opt/scm-orchestrator
+EnvironmentFile=/etc/scm-orchestrator.env
+ExecStart=/opt/scm-orchestrator/venv/bin/uvicorn cloud.orchestrator.main:app --host 0.0.0.0 --port 8080 --workers 1
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=scm-orchestrator
+
+# Security hardening
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/opt/scm-orchestrator/data
+PrivateTmp=yes
+
+[Install]
+WantedBy=multi-user.target

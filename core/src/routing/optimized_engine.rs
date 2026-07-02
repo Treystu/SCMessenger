@@ -12,7 +12,6 @@ use super::adaptive_ttl::AdaptiveTTLManager;
 use super::engine::*;
 use super::global::RouteAdvertisement;
 use super::local::PeerId;
-#[cfg(feature = "phase2_apis")]
 use super::multipath::MultiPathDelivery;
 use super::negative_cache::{NegativeCache, NegativeCacheStats};
 use super::resume_prefetch::{PrefetchStats, ResumePrefetchManager};
@@ -34,8 +33,7 @@ pub struct OptimizedRoutingEngine {
     prefetch_manager: ResumePrefetchManager,
     /// Adaptive TTL manager for activity-based route freshness
     adaptive_ttl: AdaptiveTTLManager,
-    /// Multipath delivery manager for redundant route tracking (Phase 2)
-    #[cfg(feature = "phase2_apis")]
+    /// Multipath delivery manager for redundant route tracking
     multipath: MultiPathDelivery,
     /// Our own peer ID
     #[allow(dead_code)]
@@ -58,7 +56,6 @@ impl OptimizedRoutingEngine {
             negative_cache: NegativeCache::with_defaults(),
             prefetch_manager: ResumePrefetchManager::with_defaults(),
             adaptive_ttl: AdaptiveTTLManager::with_defaults(),
-            #[cfg(feature = "phase2_apis")]
             multipath: MultiPathDelivery::new(),
             local_id,
             local_hint,
@@ -107,7 +104,6 @@ impl OptimizedRoutingEngine {
         // Phase 1.5: Check multipath delivery routes (Phase 2 optimization)
         // If we have active multipath routes for this peer, prefer the primary route
         // and use alternatives from the multipath manager.
-        #[cfg(feature = "phase2_apis")]
         {
             let active = self.multipath.active_paths(recipient_hint);
             if let Some(primary_path) = active.first() {
@@ -300,16 +296,8 @@ impl OptimizedRoutingEngine {
     }
 
     /// Get active multipath delivery paths for a recipient hint.
-    /// Returns an empty list when Phase 2 APIs are not enabled.
-    #[cfg(feature = "phase2_apis")]
     pub fn active_paths(&self, hint: &[u8; 4]) -> Vec<&super::multipath::DeliveryPath> {
         self.multipath.active_paths(hint)
-    }
-
-    /// Get active multipath delivery paths for a recipient hint (stub when Phase 2 not enabled).
-    #[cfg(not(feature = "phase2_apis"))]
-    pub fn active_paths(&self, _hint: &[u8; 4]) -> Vec<()> {
-        Vec::new()
     }
 
     /// Refresh delegate routes by re-querying the base engine's local cell.
@@ -374,20 +362,9 @@ impl OptimizedRoutingEngine {
     }
 
     /// Prune entries below a given reputation threshold.
-    /// When Phase 2 APIs are enabled, delegates to the MultiPathDelivery's
-    /// reputation tracker. Otherwise, cleans negative cache entries with
-    /// low confidence scores below the threshold.
     pub fn prune_below(&mut self, threshold: f64) {
-        #[cfg(feature = "phase2_apis")]
-        {
-            self.multipath.prune_below(threshold);
-        }
-        #[cfg(not(feature = "phase2_apis"))]
-        {
-            // Without Phase 2 multipath, prune negative cache entries that
-            // are below the threshold confidence level.
-            self.negative_cache.prune_below_confidence(threshold);
-        }
+        self.multipath.prune_below(threshold);
+        self.negative_cache.prune_below_confidence(threshold);
     }
 
     /// Check whether the timeout budget allows advancing to the next
@@ -396,14 +373,12 @@ impl OptimizedRoutingEngine {
         self.timeout_budget.should_advance()
     }
 
-    /// Mark a path as failed in the multipath delivery manager (Phase 2).
-    #[cfg(feature = "phase2_apis")]
+    /// Mark a path as failed in the multipath delivery manager.
     pub fn multipath_mark_path_failed(&mut self, path_id: u64) {
         self.multipath.mark_path_failed(path_id);
     }
 
-    /// Register a delivery path in the multipath delivery manager (Phase 2).
-    #[cfg(feature = "phase2_apis")]
+    /// Register a delivery path in the multipath delivery manager.
     pub fn multipath_register_path(&mut self, peer_id_hex: String, path_id: u64, latency_ms: u64) {
         use super::multipath::DeliveryPath;
         let bytes = hex::decode(&peer_id_hex).unwrap_or_default();

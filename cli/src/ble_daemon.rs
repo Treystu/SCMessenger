@@ -343,9 +343,9 @@ pub fn format_timestamp(timestamp: u64) -> String {
 /// This tries to prompt for Bluetooth permissions if available.
 #[cfg(target_os = "windows")]
 pub async fn try_enable_bluetooth() -> BleResult<()> {
-    use std::process::Command;
+    use tokio::process::Command;
 
-    let output = Command::new("sc").args(["query", "bthserv"]).output();
+    let output = Command::new("sc").args(["query", "bthserv"]).output().await;
 
     match output {
         Ok(output) => {

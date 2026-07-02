@@ -1,0 +1,414 @@
+class AlreadyRunning(message: String) : IronCoreException(message)
+class Blocked(message: String) : IronCoreException(message)
+class ByReference: RustBuffer(), Structure.ByReference
+class ByValue : ForeignBytes(), Structure.ByValue
+class ByValue: RustBuffer(), Structure.ByValue
+class ByValue: UniffiRustCallStatus(), Structure.ByValue
+class ConsentRequired(message: String) : IronCoreException(message)
+class CorruptionDetected(message: String) : IronCoreException(message)
+class CryptoException(message: String) : IronCoreException(message)
+class Internal(message: String) : IronCoreException(message)
+class InternalException(message: String) : kotlin.Exception(message)
+class InvalidInput(message: String) : IronCoreException(message)
+class NetworkException(message: String) : IronCoreException(message)
+class NotInitialized(message: String) : IronCoreException(message)
+class StorageException(message: String) : IronCoreException(message)
+class UniffiByValue(
+class UniffiByValue(
+class UniffiByValue(
+class UniffiByValue(
+class UniffiByValue(
+class UniffiByValue(
+class UniffiByValue(
+class UniffiByValue(
+class UniffiByValue(
+class UniffiByValue(
+class UniffiByValue(
+class UniffiByValue(
+class UniffiByValue(
+class UniffiByValue(
+class UniffiByValue(
+data class AuditEvent (
+data class BehaviorAdjustment (
+data class BleAdjustment (
+data class BlockedIdentity (
+data class Contact (
+data class DeviceProfile (
+data class DeviceState (
+data class DiskStats (
+data class HistoryStats (
+data class IdentityInfo (
+data class LedgerEntry (
+data class MeshServiceConfig (
+data class MeshSettings (
+data class MessageRecord (
+data class MessageRequest (
+data class NotificationDecision (
+data class NotificationMessageContext (
+data class NotificationUiState (
+data class PeelResult (
+data class PreparedMessage (
+data class ReceivedMessage (
+data class RegistrationStateInfo (
+data class RelayAdjustment (
+data class ServiceStats (
+data class SignatureResult (
+data class TtlConfig (
+enum class AdjustmentProfile {
+enum class AuditEventType {
+enum class ConnectionPathState {
+enum class DiscoveryMode {
+enum class MessageDirection {
+enum class MessageStatus {
+enum class MessageType {
+enum class MotionState {
+enum class NetworkType {
+enum class NotificationKind {
+enum class ProximityTransport {
+enum class ServiceState {
+fun `abuseOverallScore`(`peer`: kotlin.String): kotlin.Double?
+fun `add`(`contact`: Contact)
+fun `add`(`record`: MessageRecord)
+fun `allKnownTopics`(): List<kotlin.String>
+fun `annotateIdentity`(`multiaddr`: kotlin.String, `peerId`: kotlin.String, `publicKey`: kotlin.String?, `nickname`: kotlin.String?)
+fun `blockAndDeletePeer`(`peerId`: kotlin.String, `deviceId`: kotlin.String?, `reason`: kotlin.String?)
+fun `blockPeer`(`peerId`: kotlin.String, `deviceId`: kotlin.String?, `reason`: kotlin.String?)
+fun `blockedCount`(): kotlin.UInt
+fun `blockedIdentityNew`(`peerId`: kotlin.String): BlockedIdentity {
+fun `blockedIdentityWithDeviceId`(`blocked`: BlockedIdentity, `deviceId`: kotlin.String): BlockedIdentity {
+fun `blockedIdentityWithNotes`(`blocked`: BlockedIdentity, `notes`: kotlin.String): BlockedIdentity {
+fun `blockedIdentityWithReason`(`blocked`: BlockedIdentity, `reason`: kotlin.String): BlockedIdentity {
+fun `blockedOnlyPeerIds`(): List<kotlin.String>
+fun `buildIdentityBackupPayload`(): kotlin.String
+fun `classifyNotification`(`message`: NotificationMessageContext, `uiState`: NotificationUiState, `settings`: MeshSettings): NotificationDecision
+fun `clearConversation`(`peerId`: kotlin.String)
+fun `clearHistory`()
+fun `clearOverrides`()
+fun `clear`()
+fun `computeBleAdjustment`(`profile`: AdjustmentProfile): BleAdjustment
+fun `computeJitterDelay`(): kotlin.ULong?
+fun `computeProfile`(`device`: DeviceProfile): AdjustmentProfile
+fun `computeRelayAdjustment`(`profile`: AdjustmentProfile): RelayAdjustment
+fun `contactDisplayName`(`peerId`: kotlin.String): kotlin.String
+fun `contactFederatedNickname`(`peerId`: kotlin.String): kotlin.String?
+fun `contactUpdateLastKnownDeviceId`(`peerId`: kotlin.String, `deviceId`: kotlin.String?)
+fun `contactsManager`(): ContactManager
+fun `conversation`(`peerId`: kotlin.String, `limit`: kotlin.UInt): List<MessageRecord>
+fun `count`(): kotlin.UInt
+fun `count`(): kotlin.UInt
+fun `custodyAuditCount`(): kotlin.UInt
+fun `custodyGetRegistrationStateInfo`(`identityId`: kotlin.String): RegistrationStateInfo
+fun `custodyRegistrationTransitions`(`identityId`: kotlin.String): kotlin.String
+fun `defaultSettings`(): MeshSettings
+fun `delete`(`id`: kotlin.String)
+fun `deviceId`(): kotlin.String?
+fun `dial`(`multiaddr`: kotlin.String)
+fun `dialableAddresses`(): List<LedgerEntry>
+fun `dispatchBlePacket`(`peerId`: kotlin.String, `data`: kotlin.ByteArray)
+fun `dispatchProximityPacket`(`peerId`: kotlin.String, `transport`: ProximityTransport, `data`: kotlin.ByteArray)
+fun `drainReceivedMessages`(): List<ReceivedMessage>
+fun `driftActivate`()
+fun `driftDeactivate`()
+fun `driftNetworkState`(): kotlin.String
+fun `driftStoreSize`(): kotlin.UInt
+fun `dspyGetSignature`(`role`: kotlin.String): kotlin.String?
+fun `dspyVerifySignature`(`role`: kotlin.String): kotlin.String?
+fun `emergencyRecover`(`history`: HistoryManager): kotlin.UInt
+fun `enforceRetention`(`maxMessages`: kotlin.UInt): kotlin.UInt
+fun `exportAuditLog`(): kotlin.String
+fun `exportDiagnostics`(): kotlin.String
+fun `exportIdentityBackupWithSalt`(`passphrase`: kotlin.String, `salt`: kotlin.ByteArray): kotlin.String
+fun `exportIdentityBackupWithSalt`(`passphrase`: kotlin.String, `salt`: kotlin.ByteArray?): kotlin.String
+fun `exportIdentityBackup`(`passphrase`: kotlin.String): kotlin.String
+fun `exportIdentityBackup`(`passphrase`: kotlin.String): kotlin.String
+fun `exportLogs`(): kotlin.String
+fun `extractPublicKeyFromPeerId`(`peerId`: kotlin.String): kotlin.String
+fun `flush`()
+fun `flush`()
+fun `getAllConnectionStats`(): Map<kotlin.String, kotlin.String>
+fun `getAuditEventsByType`(`eventType`: AuditEventType): List<AuditEvent>
+fun `getAuditEventsSince`(`since`: kotlin.ULong): List<AuditEvent>
+fun `getAuditLog`(): List<AuditEvent>
+fun `getAutoAdjustEngine`(): AutoAdjustEngine
+fun `getAutoAdjustEngine`(): AutoAdjustEngine
+fun `getBlockedPeerDevices`(`peerId`: kotlin.String): List<kotlin.String>
+fun `getConnectionPathState`(): ConnectionPathState
+fun `getCore`(): IronCore?
+fun `getDeviceId`(): kotlin.String?
+fun `getDeviceState`(): DeviceState?
+fun `getDiskStats`(): DiskStats
+fun `getExternalAddresses`(): List<kotlin.String>
+fun `getIdentityInfo`(): IdentityInfo
+fun `getLibp2pPeerId`(): kotlin.String?
+fun `getListeners`(): List<kotlin.String>
+fun `getNatStatus`(): kotlin.String
+fun `getPeerReputation`(`peerId`: kotlin.String): kotlin.Double
+fun `getPeers`(): List<kotlin.String>
+fun `getPreferredRelays`(`limit`: kotlin.UInt): List<LedgerEntry>
+fun `getPrivacyConfig`(): kotlin.String
+fun `getRegistrationState`(`identityId`: kotlin.String): RegistrationStateInfo
+fun `getSeniorityTimestamp`(): kotlin.ULong?
+fun `getState`(): ServiceState
+fun `getStats`(): ServiceStats
+fun `getSwarmBridge`(): SwarmBridge
+fun `getTopics`(): List<kotlin.String>
+fun `get`(`id`: kotlin.String): MessageRecord?
+fun `get`(`peerId`: kotlin.String): Contact?
+fun `grantConsent`()
+fun `hideMessagesForPeer`(`peerId`: kotlin.String): kotlin.UInt
+fun `historyManager`(): HistoryManager
+fun `identityId`(): kotlin.String?
+fun `importIdentityBackup`(`backup`: kotlin.String, `passphrase`: kotlin.String)
+fun `importIdentityBackup`(`backup`: kotlin.String, `passphrase`: kotlin.String)
+fun `inboxCount`(): kotlin.UInt
+fun `initializeIdentity`()
+fun `inviteGetSignableData`(`tokenBytes`: kotlin.ByteArray): kotlin.ByteArray
+fun `isConsentGranted`(): kotlin.Boolean
+fun `isPeerBlocked`(`peerId`: kotlin.String, `deviceId`: kotlin.String?): kotlin.Boolean
+fun `isRunning`(): kotlin.Boolean
+fun `isRunning`(): kotlin.Boolean
+fun `listBlockedPeersBridge`(): List<BlockedIdentity>
+fun `listBlockedPeers`(): List<BlockedIdentity>
+fun `listBlocked`(): List<BlockedIdentity>
+fun `list`(): List<Contact>
+fun `load`()
+fun `load`(): MeshSettings
+fun `markDelivered`(`id`: kotlin.String)
+fun `markMessageSent`(`messageId`: kotlin.String): kotlin.Boolean
+fun `markVerified`(`peerId`: kotlin.String)
+fun `mergeRemoteContacts`(`remoteContacts`: List<Contact>): kotlin.UInt
+fun `notifyPeerDisconnected`(`peerId`: kotlin.String)
+fun `notifyPeerDiscovered`(`peerId`: kotlin.String)
+fun `onAppBackground`()
+fun `onAppResume`()
+fun `onBatteryChanged`(`batteryPct`: kotlin.UByte, `isCharging`: kotlin.Boolean)
+fun `onBatteryChanged`(`batteryPct`: kotlin.UByte, `isCharging`: kotlin.Boolean)
+fun `onBleDataReceived`(`peerId`: kotlin.String, `data`: kotlin.ByteArray)
+fun `onBleDataReceived`(`peerId`: kotlin.String, `data`: kotlin.ByteArray)
+fun `onDataReceived`(`peerId`: kotlin.String, `data`: kotlin.ByteArray)
+fun `onEnteringBackground`()
+fun `onEnteringBackground`()
+fun `onEnteringForeground`()
+fun `onEnteringForeground`()
+fun `onMessageReceived`(`senderId`: kotlin.String, `senderPublicKeyHex`: kotlin.String, `messageId`: kotlin.String, `senderTimestamp`: kotlin.ULong, `data`: kotlin.ByteArray)
+fun `onMotionChanged`(`motion`: MotionState)
+fun `onMotionChanged`(`motion`: MotionState)
+fun `onNetworkChanged`(`hasWifi`: kotlin.Boolean, `hasCellular`: kotlin.Boolean)
+fun `onNetworkChanged`(`hasWifi`: kotlin.Boolean, `hasCellular`: kotlin.Boolean)
+fun `onPeerDisconnected`(`peerId`: kotlin.String)
+fun `onPeerDisconnected`(`peerId`: kotlin.String)
+fun `onPeerDiscovered`(`peerId`: kotlin.String)
+fun `onPeerDiscovered`(`peerId`: kotlin.String)
+fun `onPeerIdentified`(`peerId`: kotlin.String, `agentVersion`: kotlin.String, `listenAddrs`: List<kotlin.String>)
+fun `onProximityDataReceived`(`peerId`: kotlin.String, `transport`: ProximityTransport, `data`: kotlin.ByteArray)
+fun `onProximityDataReceived`(`peerId`: kotlin.String, `transport`: ProximityTransport, `data`: kotlin.ByteArray)
+fun `onReceiptReceived`(`messageId`: kotlin.String, `status`: kotlin.String)
+fun `onWifiAwareDataPathConfirmed`(`peerId`: kotlin.String, `ipAddress`: kotlin.String, `port`: kotlin.UShort)
+fun `onWifiAwarePeerDiscovered`(`peerId`: kotlin.String, `serviceInfo`: kotlin.ByteArray, `rssi`: kotlin.Int)
+fun `onWifiDirectConnectionInfo`(`peerId`: kotlin.String, `groupOwnerIp`: kotlin.String, `isGroupOwner`: kotlin.Boolean)
+fun `onWifiDirectPeerDiscovered`(`peerId`: kotlin.String, `deviceName`: kotlin.String, `deviceAddress`: kotlin.String, `rssi`: kotlin.Int)
+fun `outboxCount`(): kotlin.UInt
+fun `overrideBleAdvertiseInterval`(`intervalMs`: kotlin.UShort?)
+fun `overrideBleScanInterval`(`intervalMs`: kotlin.UInt)
+fun `overrideRelayMaxPerHour`(`max`: kotlin.UInt)
+fun `overrideRelayPriorityThreshold`(`threshold`: kotlin.UByte?)
+fun `pause`()
+fun `peekReceivedMessages`(): List<ReceivedMessage>
+fun `peelOnionLayer`(`onionData`: kotlin.ByteArray, `relaySecretKey`: kotlin.ByteArray): PeelResult
+fun `peelOnionLayer`(`onionData`: kotlin.ByteArray, `relaySecretKey`: kotlin.ByteArray): PeelResult
+fun `peerRateLimitMultiplier`(`peerId`: kotlin.String): kotlin.Double
+fun `peerSpamScore`(`peerId`: kotlin.String): kotlin.Double
+fun `performMaintenance`()
+fun `prepareCoverTraffic`(`sizeBytes`: kotlin.UInt): kotlin.ByteArray
+fun `prepareMessageInternal`(`recipientId`: kotlin.String, `content`: kotlin.String, `msgType`: MessageType, `ttl`: TtlConfig?): PreparedMessage
+fun `prepareMessageWithId`(`recipientPublicKeyHex`: kotlin.String, `text`: kotlin.String, `msgType`: MessageType, `ttl`: TtlConfig?): PreparedMessage
+fun `prepareMessage`(`recipientPublicKeyHex`: kotlin.String, `text`: kotlin.String, `msgType`: MessageType, `ttl`: TtlConfig?): PreparedMessage
+fun `prepareOnionMessage`(`envelopeData`: kotlin.ByteArray, `relayPublicKeysJson`: kotlin.String): kotlin.ByteArray
+fun `prepareOnionMessage`(`envelopeData`: kotlin.ByteArray, `relayPublicKeysJson`: kotlin.String): kotlin.ByteArray
+fun `prepareReceipt`(`recipientPublicKeyHex`: kotlin.String, `messageId`: kotlin.String): kotlin.ByteArray
+fun `pruneBefore`(`beforeTimestamp`: kotlin.ULong): kotlin.UInt
+fun `publicKeyHex`(): kotlin.String?
+fun `publishTopic`(`topic`: kotlin.String, `data`: kotlin.ByteArray)
+fun `randomPort`(): kotlin.UShort
+fun `randomPort`(): kotlin.UShort
+fun `ratchetHasSession`(`peerId`: kotlin.String): kotlin.Boolean
+fun `ratchetHasSession`(`peerId`: kotlin.String): kotlin.Boolean
+fun `ratchetResetSession`(`peerId`: kotlin.String)
+fun `ratchetResetSession`(`peerId`: kotlin.String)
+fun `ratchetSessionCount`(): kotlin.UInt
+fun `ratchetSessionCount`(): kotlin.UInt
+fun `recentIncludingHidden`(`peerFilter`: kotlin.String?, `limit`: kotlin.UInt): List<MessageRecord>
+fun `recentInternal`(`peerFilter`: kotlin.String?, `limit`: kotlin.UInt, `includeHidden`: kotlin.Boolean): List<MessageRecord>
+fun `recent`(`peerFilter`: kotlin.String?, `limit`: kotlin.UInt): List<MessageRecord>
+fun `recommendedBehavior`(): BehaviorAdjustment?
+fun `recommendedTransport`(`peerId`: kotlin.String): ProximityTransport {
+fun `reconcileFromHistory`(`history`: HistoryManager): kotlin.UInt
+fun `recordAbuseSignal`(`peerId`: kotlin.String, `signal`: kotlin.String)
+fun `recordConnection`(`multiaddr`: kotlin.String, `peerId`: kotlin.String)
+fun `recordFailure`(`multiaddr`: kotlin.String)
+fun `recordLog`(`line`: kotlin.String)
+fun `registerBlockedDevice`(`peerId`: kotlin.String, `deviceId`: kotlin.String)
+fun `relayJitterDelay`(`severity`: kotlin.String): kotlin.ULong
+fun `removeConversation`(`peerId`: kotlin.String)
+fun `remove`(`peerId`: kotlin.String)
+fun `resetStats`()
+fun `resolveIdentity`(`anyId`: kotlin.String): kotlin.String
+fun `resolveToIdentityId`(`anyId`: kotlin.String): kotlin.String
+fun `resume`()
+fun `routingCalculateDynamicTtl`(`baseTtl`: kotlin.ULong, `batteryLevel`: kotlin.UByte, `peerCount`: kotlin.UInt): kotlin.ULong
+fun `routingClearUnreachablePeer`(`peerIdHex`: kotlin.String)
+fun `routingCurrentDiscoveryPhase`(): kotlin.String
+fun `routingMarkGateway`(`peerIdHex`: kotlin.String, `isGateway`: kotlin.Boolean)
+fun `routingMarkPathFailed`(`pathId`: kotlin.ULong)
+fun `routingNegativeCacheStats`(): kotlin.String
+fun `routingPeerSeen`(`peerIdHex`: kotlin.String, `transport`: kotlin.String)
+fun `routingPrefetchStats`(): kotlin.String
+fun `routingRegisterPath`(`peerIdHex`: kotlin.String, `pathId`: kotlin.ULong, `latencyMs`: kotlin.ULong)
+fun `routingSummary`(): kotlin.String
+fun `routingTick`(): kotlin.String
+fun `routingTick`(): kotlin.String
+fun `routingTimeoutBudgetSummary`(): kotlin.String
+fun `routingUpdatePeerHints`(`peerIdHex`: kotlin.String, `hints`: List<kotlin.ByteArray>)
+fun `routingUpdateReliability`(`peerIdHex`: kotlin.String, `success`: kotlin.Boolean)
+fun `runMaintenanceCycle`(`budgetMs`: kotlin.UInt): kotlin.String
+fun `runMaintenanceCycle`(`budgetMs`: kotlin.UInt): kotlin.String
+fun `safetyNumber`(`ourPubkeyHex`: kotlin.String, `theirPubkeyHex`: kotlin.String): kotlin.String {
+fun `saveWithEntries`(`entries`: List<LedgerEntry>)
+fun `save`()
+fun `save`(`settings`: MeshSettings)
+fun `search`(`query`: kotlin.String): List<Contact>
+fun `search`(`query`: kotlin.String, `limit`: kotlin.UInt): List<MessageRecord>
+fun `sendBlePacket`(`peerId`: kotlin.String, `data`: kotlin.ByteArray)
+fun `sendMessageStatus`(`peerId`: kotlin.String, `data`: kotlin.ByteArray, `recipientIdentityId`: kotlin.String?, `intendedDeviceId`: kotlin.String?): kotlin.String?
+fun `sendMessageStatus`(`peerId`: kotlin.String, `data`: kotlin.ByteArray, `recipientIdentityId`: kotlin.String?, `intendedDeviceId`: kotlin.String?): kotlin.String?
+fun `sendMessage`(`peerId`: kotlin.String, `data`: kotlin.ByteArray, `recipientIdentityId`: kotlin.String?, `intendedDeviceId`: kotlin.String?)
+fun `sendProximityPacket`(`peerId`: kotlin.String, `transport`: ProximityTransport, `data`: kotlin.ByteArray)
+fun `sendToAllPeers`(`data`: kotlin.ByteArray)
+fun `setDelegate`(`delegate`: CoreDelegate?)
+fun `setDelegate`(`delegate`: CoreDelegate?)
+fun `setLocalNickname`(`peerId`: kotlin.String, `nickname`: kotlin.String?)
+fun `setNickname`(`nickname`: kotlin.String)
+fun `setNickname`(`peerId`: kotlin.String, `nickname`: kotlin.String?)
+fun `setPlatformBridge`(`bridge`: PlatformBridge?)
+fun `setPrivacyConfig`(`json`: kotlin.String)
+fun `setRelayBudget`(`messagesPerHour`: kotlin.UInt)
+fun `shutdown`()
+fun `signData`(`data`: kotlin.ByteArray): SignatureResult
+fun `startSwarm`(`listenAddr`: kotlin.String, `bootstrapAddrs`: List<kotlin.String>)
+fun `start`()
+fun `start`()
+fun `stats`(): HistoryStats
+fun `stop`()
+fun `stop`()
+fun `subscribeTopic`(`topic`: kotlin.String)
+fun `summary`(): kotlin.String
+fun `swarmCanBootstrapOthers`(): kotlin.Boolean
+fun `swarmGetBestPaths`(`targetPeerId`: kotlin.String, `count`: kotlin.UInt): List<List<kotlin.String>>
+fun `swarmGetBestRelays`(`count`: kotlin.UInt): List<kotlin.String>
+fun `swarmGetBootstrapCandidates`(): List<kotlin.String>
+fun `unblockPeer`(`peerId`: kotlin.String, `deviceId`: kotlin.String?)
+fun `unhideMessagesForPeer`(`peerId`: kotlin.String): kotlin.UInt
+fun `unsubscribeTopic`(`topic`: kotlin.String)
+fun `unverify`(`peerId`: kotlin.String)
+fun `updateDeviceId`(`peerId`: kotlin.String, `deviceId`: kotlin.String?)
+fun `updateDeviceState`(`profile`: DeviceProfile)
+fun `updateDiskStats`(`totalBytes`: kotlin.ULong, `freeBytes`: kotlin.ULong)
+fun `updateKeepalive`(`peerId`: kotlin.String, `intervalSecs`: kotlin.ULong)
+fun `updateLastSeen`(`peerId`: kotlin.String)
+fun `updatePeerTransports`(`peerId`: kotlin.String, `transports`: List<ProximityTransport>)
+fun `validateAuditChain`()
+fun `validate`(`settings`: MeshSettings)
+fun `verifyIntegrity`()
+fun `verifySignature`(`data`: kotlin.ByteArray, `signature`: kotlin.ByteArray, `publicKeyHex`: kotlin.String): kotlin.Boolean
+fun `wifiAwareCreateDataPath`(`peerId`: kotlin.String, `pmk`: kotlin.ByteArray): kotlin.Boolean
+fun `wifiAwarePublish`(`serviceName`: kotlin.String, `serviceInfo`: kotlin.ByteArray): kotlin.Boolean
+fun `wifiAwareStop`()
+fun `wifiAwareSubscribe`(`serviceName`: kotlin.String): kotlin.Boolean
+fun `wifiDirectConnect`(`deviceAddress`: kotlin.String): kotlin.Boolean
+fun `wifiDirectCreateGroup`(`groupName`: kotlin.String): kotlin.Boolean
+fun `wifiDirectDiscoverPeers`(): kotlin.Boolean
+fun `wifiDirectRemoveGroup`()
+fun `wifiDirectStopDiscovery`()
+fun `withStorageAndLogs`(`config`: MeshServiceConfig, `storagePath`: kotlin.String, `logDirectory`: kotlin.String): MeshService {
+fun `withStorageAndLogs`(`path`: kotlin.String, `logDir`: kotlin.String): IronCore {
+fun `withStorage`(`config`: MeshServiceConfig, `storagePath`: kotlin.String): MeshService {
+fun `withStorage`(`path`: kotlin.String): IronCore {
+fun allocationSize(value: KotlinType): ULong
+fun asByteBuffer() =
+fun callback(`callbackData`: Long,`result`: UniffiForeignFutureResultF32.UniffiByValue,)
+fun callback(`callbackData`: Long,`result`: UniffiForeignFutureResultF64.UniffiByValue,)
+fun callback(`callbackData`: Long,`result`: UniffiForeignFutureResultI16.UniffiByValue,)
+fun callback(`callbackData`: Long,`result`: UniffiForeignFutureResultI32.UniffiByValue,)
+fun callback(`callbackData`: Long,`result`: UniffiForeignFutureResultI64.UniffiByValue,)
+fun callback(`callbackData`: Long,`result`: UniffiForeignFutureResultI8.UniffiByValue,)
+fun callback(`callbackData`: Long,`result`: UniffiForeignFutureResultRustBuffer.UniffiByValue,)
+fun callback(`callbackData`: Long,`result`: UniffiForeignFutureResultU16.UniffiByValue,)
+fun callback(`callbackData`: Long,`result`: UniffiForeignFutureResultU32.UniffiByValue,)
+fun callback(`callbackData`: Long,`result`: UniffiForeignFutureResultU64.UniffiByValue,)
+fun callback(`callbackData`: Long,`result`: UniffiForeignFutureResultU8.UniffiByValue,)
+fun callback(`callbackData`: Long,`result`: UniffiForeignFutureResultVoid.UniffiByValue,)
+fun callback(`data`: Long,`pollResult`: Byte,)
+fun callback(`handle`: Long,)
+fun callback(`handle`: Long,)
+fun callback(`handle`: Long,)
+fun callback(`uniffiHandle`: Long,`batteryPct`: Byte,`isCharging`: Byte,`uniffiOutReturn`: Pointer,uniffiCallStatus: UniffiRustCallStatus,)
+fun callback(`uniffiHandle`: Long,`deviceAddress`: RustBuffer.ByValue,`uniffiOutReturn`: ByteByReference,uniffiCallStatus: UniffiRustCallStatus,)
+fun callback(`uniffiHandle`: Long,`groupName`: RustBuffer.ByValue,`uniffiOutReturn`: ByteByReference,uniffiCallStatus: UniffiRustCallStatus,)
+fun callback(`uniffiHandle`: Long,`hasWifi`: Byte,`hasCellular`: Byte,`uniffiOutReturn`: Pointer,uniffiCallStatus: UniffiRustCallStatus,)
+fun callback(`uniffiHandle`: Long,`messageId`: RustBuffer.ByValue,`status`: RustBuffer.ByValue,`uniffiOutReturn`: Pointer,uniffiCallStatus: UniffiRustCallStatus,)
+fun callback(`uniffiHandle`: Long,`motion`: RustBuffer.ByValue,`uniffiOutReturn`: Pointer,uniffiCallStatus: UniffiRustCallStatus,)
+fun callback(`uniffiHandle`: Long,`peerId`: RustBuffer.ByValue,`agentVersion`: RustBuffer.ByValue,`listenAddrs`: RustBuffer.ByValue,`uniffiOutReturn`: Pointer,uniffiCallStatus: UniffiRustCallStatus,)
+fun callback(`uniffiHandle`: Long,`peerId`: RustBuffer.ByValue,`data`: RustBuffer.ByValue,`uniffiOutReturn`: Pointer,uniffiCallStatus: UniffiRustCallStatus,)
+fun callback(`uniffiHandle`: Long,`peerId`: RustBuffer.ByValue,`data`: RustBuffer.ByValue,`uniffiOutReturn`: Pointer,uniffiCallStatus: UniffiRustCallStatus,)
+fun callback(`uniffiHandle`: Long,`peerId`: RustBuffer.ByValue,`pmk`: RustBuffer.ByValue,`uniffiOutReturn`: ByteByReference,uniffiCallStatus: UniffiRustCallStatus,)
+fun callback(`uniffiHandle`: Long,`peerId`: RustBuffer.ByValue,`transport`: RustBuffer.ByValue,`data`: RustBuffer.ByValue,`uniffiOutReturn`: Pointer,uniffiCallStatus: UniffiRustCallStatus,)
+fun callback(`uniffiHandle`: Long,`peerId`: RustBuffer.ByValue,`transport`: RustBuffer.ByValue,`data`: RustBuffer.ByValue,`uniffiOutReturn`: Pointer,uniffiCallStatus: UniffiRustCallStatus,)
+fun callback(`uniffiHandle`: Long,`peerId`: RustBuffer.ByValue,`uniffiOutReturn`: Pointer,uniffiCallStatus: UniffiRustCallStatus,)
+fun callback(`uniffiHandle`: Long,`peerId`: RustBuffer.ByValue,`uniffiOutReturn`: Pointer,uniffiCallStatus: UniffiRustCallStatus,)
+fun callback(`uniffiHandle`: Long,`senderId`: RustBuffer.ByValue,`senderPublicKeyHex`: RustBuffer.ByValue,`messageId`: RustBuffer.ByValue,`senderTimestamp`: Long,`data`: RustBuffer.ByValue,`uniffiOutReturn`: Pointer,uniffiCallStatus: UniffiRustCallStatus,)
+fun callback(`uniffiHandle`: Long,`serviceName`: RustBuffer.ByValue,`serviceInfo`: RustBuffer.ByValue,`uniffiOutReturn`: ByteByReference,uniffiCallStatus: UniffiRustCallStatus,)
+fun callback(`uniffiHandle`: Long,`serviceName`: RustBuffer.ByValue,`uniffiOutReturn`: ByteByReference,uniffiCallStatus: UniffiRustCallStatus,)
+fun callback(`uniffiHandle`: Long,`uniffiOutReturn`: ByteByReference,uniffiCallStatus: UniffiRustCallStatus,)
+fun callback(`uniffiHandle`: Long,`uniffiOutReturn`: Pointer,uniffiCallStatus: UniffiRustCallStatus,)
+fun callback(`uniffiHandle`: Long,`uniffiOutReturn`: Pointer,uniffiCallStatus: UniffiRustCallStatus,)
+fun callback(`uniffiHandle`: Long,`uniffiOutReturn`: Pointer,uniffiCallStatus: UniffiRustCallStatus,)
+fun callback(`uniffiHandle`: Long,`uniffiOutReturn`: Pointer,uniffiCallStatus: UniffiRustCallStatus,)
+fun callback(`uniffiHandle`: Long,`uniffiOutReturn`: Pointer,uniffiCallStatus: UniffiRustCallStatus,)
+fun clean()
+fun clone(handle: Long): Long {
+fun create(code: Byte, errorBuf: RustBuffer.ByValue): UniffiRustCallStatus.ByValue {
+fun destroy()
+fun destroy(vararg args: Any?) {
+fun get(handle: Long): T {
+fun insert(obj: T): Long {
+fun isError(): Boolean {
+fun isPanic(): Boolean {
+fun isSuccess(): Boolean {
+fun lift(error_buf: RustBuffer.ByValue): E;
+fun lift(value: FfiType): KotlinType
+fun lift(value: Int): UByte {
+fun lift(value: Int): UShort {
+fun liftFromRustBuffer(rbuf: RustBuffer.ByValue): KotlinType {
+fun lower(value: KotlinType): FfiType
+fun lowerIntoRustBuffer(value: KotlinType): RustBuffer.ByValue {
+fun read(buf: ByteBuffer): KotlinType
+fun register(value: Any, cleanUpTask: Runnable): UniffiCleaner.Cleanable
+fun remove(handle: Long): T {
+fun toUtf8(value: String): ByteBuffer {
+fun uniffiCloneHandle(): Long {
+fun uniffiCloneHandle(): Long {
+fun uniffiCloneHandle(): Long {
+fun uniffiCloneHandle(): Long {
+fun uniffiCloneHandle(): Long {
+fun uniffiCloneHandle(): Long {
+fun uniffiCloneHandle(): Long {
+fun uniffiCloneHandle(): Long {
+fun write(value: KotlinType, buf: ByteBuffer)
+interface Cleanable {
+interface Disposable {
+interface UniffiCleaner {
+interface UniffiRustCallStatusErrorHandler<E> {
+object NoHandle// Magic number for the Rust proxy to call using the same mechanism as every other method,
+object UniffiNullRustCallStatusErrorHandler: UniffiRustCallStatusErrorHandler<InternalException> {
+object UniffiWithHandle
+sealed class IronCoreException(message: String): kotlin.Exception(message) {

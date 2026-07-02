@@ -421,13 +421,23 @@ async fn test_address_reflection_timeout() {
     let result1: AnyhowResult<String> = swarm2.request_address_reflection(peer1).await;
     assert!(result1.is_ok(), "First reflection should succeed");
 
-    swarm1.shutdown().await.ok();
+    let _ = SwarmHandle::shutdown(&swarm1).await;
 
     let mut disconnected = false;
     for _ in 0..20 {
         tokio::time::sleep(Duration::from_millis(500)).await;
-        let remaining_peers: Vec<PeerId> = swarm2.get_peers().await.expect("Failed to get peers");
-        if !remaining_peers.contains(&peer1) {
+        let remaining_peers = match SwarmHandle::get_peers(&swarm2).await {
+            Ok(p) => p,
+            Err(_) => panic!("Failed to get peers"),
+        };
+        let mut found = false;
+        for p in &remaining_peers {
+            if *p == peer1 {
+                found = true;
+                break;
+            }
+        }
+        if !found {
             disconnected = true;
             println!("✅ Peer disconnected after polling");
             break;
@@ -440,13 +450,19 @@ async fn test_address_reflection_timeout() {
         return;
     }
 
-    let result2: Result<AnyhowResult<String>, tokio::time::error::Elapsed> = tokio::time::timeout(
+    let result2 = tokio::time::timeout(
         Duration::from_secs(3),
-        swarm2.request_address_reflection(peer1),
+        async { SwarmHandle::request_address_reflection(&swarm2, peer1).await },
     )
     .await;
 
-    let failed = result2.is_err() || (result2.is_ok() && result2.unwrap().is_err());
+    let failed = match result2 {
+        Err(_) => true,
+        Ok(res) => match res {
+            Err(_) => true,
+            Ok(_) => false,
+        },
+    };
     assert!(failed, "Reflection should fail after peer disconnect");
 
     println!("✅ Address reflection timeout test passed!");

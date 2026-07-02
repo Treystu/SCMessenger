@@ -89,6 +89,11 @@ class ContactsViewModel @Inject constructor(
     private val _nearbyPeers = MutableStateFlow<List<NearbyPeer>>(emptyList())
     val nearbyPeers: StateFlow<List<NearbyPeer>> = _nearbyPeers.asStateFlow()
 
+    // Nearby rescan state — true while a rescan is actively running
+    private val _isScanning = MutableStateFlow(false)
+    val isScanning: StateFlow<Boolean> = _isScanning.asStateFlow()
+    private var scanStartTimeMs = 0L
+
     init {
         loadContacts()
         observeNearbyPeers()
@@ -482,7 +487,9 @@ class ContactsViewModel @Inject constructor(
                     addedAt = (System.currentTimeMillis() / 1000).toULong(),
                     lastSeen = null,
                     notes = finalNotes,
-                    lastKnownDeviceId = null
+                    lastKnownDeviceId = null,
+                    verifiedAt = null,
+                    isTombstone = false
                 )
 
                 meshRepository.addContact(contact)
@@ -595,6 +602,52 @@ class ContactsViewModel @Inject constructor(
             }
         }
     }
+
+    /**
+     * Mark a contact as verified after the user has compared safety numbers
+     * out-of-band and confirmed they match.
+     */
+    fun markContactVerified(peerId: String) {
+        viewModelScope.launch {
+            try {
+                meshRepository.markContactVerified(peerId)
+                loadContacts()
+                Timber.i("Contact marked verified: $peerId")
+            } catch (e: Exception) {
+                _error.value = "Failed to mark contact verified: ${e.message}"
+                Timber.e(e, "Failed to mark contact verified")
+            }
+        }
+    }
+
+    /** Clear a contact's verification status (e.g. after a key change). */
+    fun unverifyContact(peerId: String) {
+        viewModelScope.launch {
+            try {
+                meshRepository.unverifyContact(peerId)
+                loadContacts()
+                Timber.i("Contact verification cleared: $peerId")
+            } catch (e: Exception) {
+                _error.value = "Failed to clear contact verification: ${e.message}"
+                Timber.e(e, "Failed to clear contact verification")
+            }
+        }
+    }
+
+    /**
+     * Compute the safety number for comparing our identity with [theirPublicKeyHex]
+     * out-of-band. Returns null if our own identity isn't initialized yet.
+     */
+    fun computeSafetyNumber(theirPublicKeyHex: String): String? {
+        return meshRepository.computeSafetyNumber(theirPublicKeyHex)
+    }
+
+    /**
+     * Our own identity's readiness, so UI that depends on [computeSafetyNumber]
+     * (which needs our identity's public key) can key off of it becoming
+     * available after first composition (T9).
+     */
+    val identityInfo: StateFlow<uniffi.api.IdentityInfo?> = meshRepository.identityInfo
 
     /**
      * Update contact device ID (for multi-device tracking).
@@ -731,8 +784,28 @@ class ContactsViewModel @Inject constructor(
      * discoveries immediately rather than waiting for the next periodic scan.
      */
     fun refreshDiscovery() {
-        Timber.d("refreshDiscovery requested; replaying cached discoveries")
-        meshRepository.replayDiscoveredPeerEvents()
+        if (_isScanning.value) return // already scanning
+        _isScanning.value = true
+        scanStartTimeMs = System.currentTimeMillis()
+        Timber.d("refreshDiscovery: starting rescan")
+
+        viewModelScope.launch {
+            // Replay cached discoveries immediately
+            meshRepository.replayDiscoveredPeerEvents()
+
+            // Trigger actual BLE/WiFi rescan by restarting transport discovery
+            try {
+                meshRepository.triggerTransportRescan()
+            } catch (e: Exception) {
+                Timber.w(e, "Transport rescan failed")
+            }
+
+            // Keep scanning state active for at least 10s to allow BLE/WiFi
+            // discovery to find new peers, then auto-clear
+            delay(10_000L)
+            _isScanning.value = false
+            Timber.d("refreshDiscovery: rescan complete (${System.currentTimeMillis() - scanStartTimeMs}ms)")
+        }
     }
 
     /**

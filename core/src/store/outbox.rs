@@ -16,6 +16,9 @@ const MAX_QUEUE_PER_PEER: usize = 1000;
 /// Maximum total messages across all peers
 const MAX_TOTAL_QUEUED: usize = 10_000;
 
+/// Maximum delivery attempts before automatic removal
+const MAX_DELIVERY_ATTEMPTS: u32 = 12;
+
 const QUEUE_PREFIX: &[u8] = b"outbox_";
 
 /// A queued outbound message
@@ -269,35 +272,37 @@ impl Outbox {
         }
     }
 
-    /// Increment attempt count for a message
-    pub fn record_attempt(&mut self, message_id: &str) {
+    /// Increment attempt count for a message.
+    /// Returns true if the message should be removed (max attempts exceeded).
+    pub fn record_attempt(&mut self, message_id: &str) -> bool {
         match &mut self.backend {
             OutboxBackend::Memory { queues, .. } => {
                 for queue in queues.values_mut() {
                     if let Some(msg) = queue.iter_mut().find(|m| m.message_id == message_id) {
                         msg.attempts = msg.attempts.saturating_add(1);
-                        return;
+                        return msg.attempts >= MAX_DELIVERY_ATTEMPTS;
                     }
                 }
             }
             OutboxBackend::Persistent(db) => {
-                // Find, update, and save the message
                 if let Ok(results) = db.scan_prefix(QUEUE_PREFIX) {
                     for (key, value) in results {
                         if let Ok(mut msg) = bincode::deserialize::<QueuedMessage>(&value) {
                             if msg.message_id == message_id {
                                 msg.attempts = msg.attempts.saturating_add(1);
+                                let exceeded = msg.attempts >= MAX_DELIVERY_ATTEMPTS;
                                 if let Ok(bytes) = bincode::serialize(&msg) {
                                     let _ = db.put(&key, &bytes);
                                     let _ = db.flush();
                                 }
-                                return;
+                                return exceeded;
                             }
                         }
                     }
                 }
             }
         }
+        false
     }
 
     /// Total queued messages

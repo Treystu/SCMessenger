@@ -211,6 +211,30 @@ final class ContactsViewModel {
         }
     }
 
+    /// Mark a contact as verified after the user has compared safety numbers
+    /// out-of-band and confirmed they match.
+    func markContactVerified(peerId: String) throws {
+        try repository?.markContactVerified(peerId: peerId)
+        Task { @MainActor in
+            loadContacts()
+        }
+    }
+
+    /// Clear a contact's verification status (e.g. after a key change).
+    func unverifyContact(peerId: String) throws {
+        try repository?.unverifyContact(peerId: peerId)
+        Task { @MainActor in
+            loadContacts()
+        }
+    }
+
+    /// Compute the safety number for comparing our identity with
+    /// `theirPublicKeyHex` out-of-band. Returns nil if our own identity
+    /// isn't initialized yet.
+    func computeSafetyNumber(theirPublicKeyHex: String) -> String? {
+        repository?.computeSafetyNumber(theirPublicKeyHex: theirPublicKeyHex)
+    }
+
     func deleteContacts(at offsets: IndexSet) {
         for index in offsets {
             let contact = filteredContacts[index]

@@ -141,6 +141,50 @@ impl IdentityKeys {
     }
 }
 
+/// Generate a Signal-style safety number from two public keys.
+///
+/// Returns a 60-digit numeric string (12 groups of 5 digits, space-separated).
+/// The number is order-independent (sorted keys) so both sides display identically.
+pub fn safety_number(our_pubkey_hex: &str, their_pubkey_hex: &str) -> Result<String> {
+    let our_bytes = hex::decode(our_pubkey_hex)
+        .map_err(|e| anyhow::anyhow!("Invalid our pubkey hex: {}", e))?;
+    let their_bytes = hex::decode(their_pubkey_hex)
+        .map_err(|e| anyhow::anyhow!("Invalid their pubkey hex: {}", e))?;
+
+    if our_bytes.len() != 32 || their_bytes.len() != 32 {
+        return Err(anyhow::anyhow!("Public keys must be 32 bytes"));
+    }
+
+    // Sort keys to ensure order-independence
+    let (first, second) = if our_bytes <= their_bytes {
+        (&our_bytes, &their_bytes)
+    } else {
+        (&their_bytes, &our_bytes)
+    };
+
+    // blake3(first || second)
+    let mut hasher = blake3::Hasher::new();
+    hasher.update(first);
+    hasher.update(second);
+    let hash = hasher.finalize();
+    let hash_bytes = hash.as_bytes();
+
+    // Convert hash bytes to decimal digits
+    // Use the hash bytes to generate enough digits
+    let mut digits = String::with_capacity(71); // 60 digits + 11 spaces
+    for group in 0..12 {
+        let offset = (group * 2) % 24;
+        let val = u16::from_be_bytes([hash_bytes[offset], hash_bytes[offset + 1]]) as u32;
+        let group_val = val % 100000;
+        if group > 0 {
+            digits.push(' ');
+        }
+        digits.push_str(&format!("{:05}", group_val));
+    }
+
+    Ok(digits)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -307,5 +351,44 @@ mod tests {
              Expected ~50%. Check for non-random key generation.",
             valid_count
         );
+    }
+
+    #[test]
+    fn test_safety_number_is_order_independent_and_deterministic() {
+        let a = IdentityKeys::generate().public_key_hex();
+        let b = IdentityKeys::generate().public_key_hex();
+
+        let ab = safety_number(&a, &b).unwrap();
+        let ba = safety_number(&b, &a).unwrap();
+        assert_eq!(ab, ba, "safety number must not depend on argument order");
+
+        // Deterministic: same inputs produce the same output every time.
+        assert_eq!(ab, safety_number(&a, &b).unwrap());
+
+        // 12 groups of 5 digits, space-separated.
+        let groups: Vec<&str> = ab.split(' ').collect();
+        assert_eq!(groups.len(), 12);
+        for group in groups {
+            assert_eq!(group.len(), 5);
+            assert!(group.chars().all(|c| c.is_ascii_digit()));
+        }
+    }
+
+    #[test]
+    fn test_safety_number_differs_for_different_key_pairs() {
+        let a = IdentityKeys::generate().public_key_hex();
+        let b = IdentityKeys::generate().public_key_hex();
+        let c = IdentityKeys::generate().public_key_hex();
+
+        assert_ne!(
+            safety_number(&a, &b).unwrap(),
+            safety_number(&a, &c).unwrap()
+        );
+    }
+
+    #[test]
+    fn test_safety_number_rejects_malformed_keys() {
+        assert!(safety_number("not-hex", "also-not-hex").is_err());
+        assert!(safety_number("abcd", "abcd").is_err()); // too short
     }
 }

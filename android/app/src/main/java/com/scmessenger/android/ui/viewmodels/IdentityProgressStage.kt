@@ -47,7 +47,13 @@ sealed class IdentityProgressStage(
         id = 1,
         label = "Setting up secure storage",
         detail = "Waking the encrypted key vault and asking for your consent…",
-        etaMs = 250L,
+        // This ETA drives the progress bar fraction, not the displayed countdown.
+        // On cold starts the actual wall time is 15-60s (sled DB, managers, migrations);
+        // on warm starts it's <1ms. We use 5s for smooth progress bar advancement.
+        // The displayed ETA text shows "Initializing…" during cold starts instead
+        // of a misleading countdown, driven by the sub-detail presence in
+        // IdentityProgressDisplay.
+        etaMs = 5_000L,
     )
 
     /** Worker is generating a 256-bit cryptographically-secure salt. */
@@ -94,8 +100,11 @@ sealed class IdentityProgressStage(
         /** Total number of stages; used to compute "X of N" progress. */
         const val TOTAL: Int = 6
 
-        /** Total estimated wall-clock time across all stages (sum of etaMs). */
-        const val TOTAL_ETA_MS: Long = 3900L
+        /** Total estimated wall-clock time across all stages (sum of etaMs).
+         *  On cold starts, PreparingStorage can take 15-60s (the displayed ETA
+         *  shows "Initializing…" instead of a countdown). On warm starts the
+         *  actual total is ~4s because PreparingStorage completes instantly. */
+        const val TOTAL_ETA_MS: Long = 8_650L
 
         val ALL: List<IdentityProgressStage> = listOf(
             PreparingStorage,

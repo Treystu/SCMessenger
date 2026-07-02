@@ -55,10 +55,12 @@ impl IdentityStore {
                 Ok(())
             }
             Self::Persistent(db) => {
-                let bytes = keys.to_bytes();
+                let mut bytes = keys.to_bytes();
                 db.put(IDENTITY_KEY, &bytes)
                     .map_err(|e| anyhow::anyhow!(e))?;
                 db.flush().map_err(|e| anyhow::anyhow!(e))?;
+                use zeroize::Zeroize;
+                bytes.zeroize();
                 Ok(())
             }
         }

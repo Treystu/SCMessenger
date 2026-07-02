@@ -651,7 +651,7 @@ impl TransportManager {
     }
 
     /// Get all tracked connections from the address observer's connection tracker.
-    /// Delegates to AddressObserver::all_connections() to surface observed
+    /// Delegates to AddressObserver::all_observations() to surface observed
     /// connection endpoints for diagnostics.
     pub fn get_all_observed_connections(
         &self,

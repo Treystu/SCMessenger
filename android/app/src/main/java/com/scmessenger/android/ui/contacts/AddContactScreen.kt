@@ -41,6 +41,7 @@ import com.scmessenger.android.ui.viewmodels.ContactsViewModel
 import com.scmessenger.android.ui.viewmodels.NearbyPeer
 import com.scmessenger.android.utils.ContactImportParseResult
 import com.scmessenger.android.utils.parseContactImportPayload
+import kotlinx.coroutines.delay
 import timber.log.Timber
 
 /**
@@ -388,13 +389,25 @@ private fun NearbyDiscoveryTab(viewModel: ContactsViewModel) {
     val context = LocalContext.current
     val nearbyPeers by viewModel.nearbyPeers.collectAsState()
     val error by viewModel.error.collectAsState()
+    val isScanning by viewModel.isScanning.collectAsState()
 
     // Permission state — recompute when this composable re-enters composition
     // (e.g. user backgrounds and returns after toggling permissions).
     var hasPermissions by remember { mutableStateOf(isNearbyPermissionsGranted(context)) }
-    // Briefly flash a "Rescanning…" message after a Rescan click.
-    var lastRefreshAt by remember { mutableStateOf(0L) }
-    val isRefreshing = remember(lastRefreshAt) { mutableStateOf(false) }
+
+    // Elapsed timer for rescan
+    var scanStartMs by remember { mutableLongStateOf(0L) }
+    var elapsedSeconds by remember { mutableLongStateOf(0L) }
+
+    LaunchedEffect(isScanning) {
+        if (isScanning) {
+            scanStartMs = System.currentTimeMillis()
+            while (isScanning) {
+                elapsedSeconds = (System.currentTimeMillis() - scanStartMs) / 1000L
+                delay(1000L)
+            }
+        }
+    }
 
     Column(
         modifier = Modifier
@@ -420,17 +433,30 @@ private fun NearbyDiscoveryTab(viewModel: ContactsViewModel) {
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
-            IconButton(
-                onClick = {
-                    viewModel.refreshDiscovery()
-                    lastRefreshAt = System.currentTimeMillis()
-                    hasPermissions = isNearbyPermissionsGranted(context)
+            if (isScanning) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                    Text(
+                        text = "${elapsedSeconds}s",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary
+                    )
                 }
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Refresh,
-                    contentDescription = stringResource(R.string.add_contact_nearby_rescan_content_description)
-                )
+            } else {
+                IconButton(
+                    onClick = {
+                        viewModel.refreshDiscovery()
+                        hasPermissions = isNearbyPermissionsGranted(context)
+                    }
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Refresh,
+                        contentDescription = stringResource(R.string.add_contact_nearby_rescan_content_description)
+                    )
+                }
             }
         }
 
@@ -458,13 +484,12 @@ private fun NearbyDiscoveryTab(viewModel: ContactsViewModel) {
                     }
                 )
                 nearbyPeers.isEmpty() -> {
-                    if (isRefreshing.value) {
-                        ScanningState()
+                    if (isScanning) {
+                        ScanningState(elapsedSeconds = elapsedSeconds)
                     } else {
                         EmptyState(
                             onRescan = {
                                 viewModel.refreshDiscovery()
-                                lastRefreshAt = System.currentTimeMillis()
                             }
                         )
                     }
@@ -530,7 +555,7 @@ private fun PermissionRationaleCard(onGrant: () -> Unit) {
 }
 
 @Composable
-private fun ScanningState() {
+private fun ScanningState(elapsedSeconds: Long = 0L) {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -545,6 +570,14 @@ private fun ScanningState() {
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
+        if (elapsedSeconds > 0) {
+            Spacer(Modifier.height(8.dp))
+            Text(
+                text = "${elapsedSeconds}s elapsed",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+            )
+        }
     }
 }
 

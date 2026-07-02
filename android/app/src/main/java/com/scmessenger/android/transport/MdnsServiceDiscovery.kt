@@ -187,6 +187,13 @@ class MdnsServiceDiscovery(
         }
         Timber.d("mDNS service resolved: ${resolvedInfo.serviceName} at ${hostAddress ?: "unknown"}:${resolvedInfo.port}")
 
+        // Skip loopback addresses (127.0.0.1) — these are the device discovering
+        // itself and are useless for LAN communication.
+        if (hostAddress != null && (hostAddress == "127.0.0.1" || hostAddress == "::1" || hostAddress.startsWith("fe80:"))) {
+            Timber.d("mDNS: Skipping loopback/link-local address for ${resolvedInfo.serviceName}: $hostAddress")
+            return
+        }
+
         // Track the resolved peer
         discoveredPeers[resolvedInfo.serviceName] = resolvedInfo
 
@@ -256,6 +263,18 @@ class MdnsServiceDiscovery(
         discoveryRetryCount++
         Timber.e("mDNS discovery start failed: type=$serviceType errorCode=$errorCode (retry=$discoveryRetryCount/$maxRetries)")
 
+        // Error code 4 = FAILURE_ALREADY_ACTIVE: discovery is already running
+        // from a previous attempt. Stop it first before retrying.
+        if (errorCode == 4) {
+            Timber.w("mDNS: Discovery already active, stopping before retry")
+            try {
+                discoveryListener?.let { nsdManager?.stopServiceDiscovery(it) }
+            } catch (e: Exception) {
+                Timber.w(e, "mDNS: Failed to stop stale discovery")
+            }
+            isDiscovering = false
+        }
+
         if (discoveryRetryCount <= maxRetries) {
             val backoffMs = 1000L * (1L shl (discoveryRetryCount - 1)) // 1s, 2s, 4s
             handler.postDelayed({
@@ -296,6 +315,35 @@ class MdnsServiceDiscovery(
         isRegistered = false
         registrationRetryCount++
         Timber.e("mDNS service registration failed: ${serviceInfo.serviceName} errorCode=$errorCode (retry=$registrationRetryCount/$maxRetries)")
+
+        // Error code 4 = FAILURE_ALREADY_ACTIVE: NsdManager has a stale registration
+        // from a previous session. Unregister it and retry ONCE, then fall through
+        // to normal retry logic (which has maxRetries cap).
+        if (errorCode == 4 && registrationRetryCount <= 2) {
+            Timber.w("mDNS: Service already active (errorCode=4), force-unregistering stale registration")
+            try {
+                registrationListener?.let { nsdManager?.unregisterService(it) }
+            } catch (e: Exception) {
+                Timber.w(e, "mDNS: Failed to unregister stale service")
+            }
+            isRegistered = false
+            // Retry once after short delay, then fall through to normal retry path
+            handler.postDelayed({
+                if (isRunning && !isRegistered) {
+                    Timber.d("mDNS: Retrying registration after stale-unregister cleanup")
+                    registerService()
+                }
+            }, 500)
+            return
+        }
+        // For error code 4 beyond 2 attempts, or other errors: fall through to
+        // normal retry with exponential backoff and maxRetries cap.
+        // If error code 4 persists after cleanup, the NsdManager is stuck —
+        // give up gracefully rather than spinning forever.
+        if (errorCode == 4 && registrationRetryCount > 2) {
+            Timber.e("mDNS: errorCode=4 persists after stale-unregister — giving up mDNS registration")
+            return
+        }
 
         if (registrationRetryCount <= maxRetries) {
             val backoffMs = 1000L * (1L shl (registrationRetryCount - 1))
@@ -366,6 +414,33 @@ class MdnsServiceDiscovery(
             }
 
             isRunning = true
+
+            // P0: Force-unregister any stale registration from a previous app session
+            // before registering fresh. NsdManager holds registrations across app
+            // restarts — without this, the first registerService() fails with
+            // errorCode=4 (FAILURE_ALREADY_ACTIVE).
+            try {
+                // Create a temporary listener to unregister any stale service
+                val staleListener = object : NsdManager.RegistrationListener {
+                    override fun onServiceRegistered(info: NsdServiceInfo) {}
+                    override fun onRegistrationFailed(info: NsdServiceInfo, code: Int) {}
+                    override fun onServiceUnregistered(info: NsdServiceInfo) {
+                        Timber.d("mDNS: Stale service unregistered successfully")
+                    }
+                    override fun onUnregistrationFailed(info: NsdServiceInfo, code: Int) {
+                        Timber.d("mDNS: Stale service unregistration not needed (code=$code)")
+                    }
+                }
+                val staleInfo = NsdServiceInfo().apply {
+                    serviceName = getLocalPeerId?.invoke() ?: serviceName
+                    serviceType = this@MdnsServiceDiscovery.serviceType
+                    port = servicePort
+                }
+                nsdManager?.unregisterService(staleListener)
+                Timber.d("mDNS: Attempted stale-registration cleanup before fresh register")
+            } catch (e: Exception) {
+                Timber.d("mDNS: Stale cleanup skipped (no prior registration): ${e.message}")
+            }
 
             // Register our service
             registerService()

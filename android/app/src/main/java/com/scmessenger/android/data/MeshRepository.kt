@@ -20,6 +20,7 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.async
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -28,6 +29,8 @@ import java.util.concurrent.atomic.AtomicBoolean
 import timber.log.Timber
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.isActive
 import java.io.File
@@ -45,7 +48,10 @@ import java.io.File
  * All UniFFI objects are initialized lazily and managed here to ensure
  * proper lifecycle and resource cleanup.
  */
-open class MeshRepository(private val context: Context) {
+open class MeshRepository(
+    private val context: Context,
+    private val preferencesRepository: PreferencesRepository? = null
+) {
     private val storagePath = context.filesDir.absolutePath
     private val networkFailureMetrics = NetworkFailureMetrics()
     private val transportHealthMonitor = com.scmessenger.android.transport.TransportHealthMonitor()
@@ -882,6 +888,18 @@ open class MeshRepository(private val context: Context) {
                 },
                 getLocalPeerId = {
                     ironCore?.getIdentityInfo()?.libp2pPeerId
+                },
+                onWifiAwarePeerDiscovered = { peerId, serviceInfo, rssi ->
+                    meshService?.onWifiAwarePeerDiscovered(peerId, serviceInfo, rssi)
+                },
+                onWifiAwareDataPathConfirmed = { peerId, ipAddress, port ->
+                    meshService?.onWifiAwareDataPathConfirmed(peerId, ipAddress, port.toUShort())
+                },
+                onWifiDirectPeerDiscovered = { peerId, deviceName, deviceAddress ->
+                    meshService?.onWifiDirectPeerDiscovered(peerId, deviceName, deviceAddress, 0)
+                },
+                onWifiDirectConnectionInfo = { peerId, groupOwnerIp, isGroupOwner ->
+                    meshService?.onWifiDirectConnectionInfo(peerId, groupOwnerIp, isGroupOwner)
                 }
             )
 
@@ -1084,7 +1102,9 @@ open class MeshRepository(private val context: Context) {
                         addedAt = contact.addedAt,
                         lastSeen = contact.lastSeen,
                         notes = updatedNotes,
-                        lastKnownDeviceId = null
+                        lastKnownDeviceId = null,
+                        verifiedAt = null,
+                        isTombstone = false
                     ))
                     cleaned++
                 }
@@ -1150,7 +1170,9 @@ open class MeshRepository(private val context: Context) {
                         addedAt = contact.addedAt,
                         lastSeen = contact.lastSeen,
                         notes = contact.notes,
-                        lastKnownDeviceId = contact.lastKnownDeviceId
+                        lastKnownDeviceId = contact.lastKnownDeviceId,
+                        verifiedAt = null,
+                        isTombstone = false
                     ))
                     repaired++
                 } else {
@@ -1750,7 +1772,7 @@ open class MeshRepository(private val context: Context) {
                                 routeNotes,
                                 normalizeOutboundListenerHints(hintedDialCandidates)
                             )
-                            val autoContact = uniffi.api.Contact(
+                             val autoContact = uniffi.api.Contact(
                                 peerId = canonicalPeerId,
                                 nickname = knownNickname,
                                 localNickname = null,
@@ -1758,7 +1780,9 @@ open class MeshRepository(private val context: Context) {
                                 addedAt = (System.currentTimeMillis() / 1000).toULong(),
                                 lastSeen = (System.currentTimeMillis() / 1000).toULong(),
                                 notes = routeNotes,
-                                lastKnownDeviceId = verifiedHints?.deviceId
+                                lastKnownDeviceId = verifiedHints?.deviceId,
+                                verifiedAt = null,
+                                isTombstone = false
                             )
                             try {
                                 contactManager?.add(autoContact)
@@ -1786,7 +1810,9 @@ open class MeshRepository(private val context: Context) {
                                     addedAt = existingContact.addedAt,
                                     lastSeen = existingContact.lastSeen,
                                     notes = existingContact.notes,
-                                    lastKnownDeviceId = verifiedHints?.deviceId ?: existingContact.lastKnownDeviceId
+                                    lastKnownDeviceId = verifiedHints?.deviceId ?: existingContact.lastKnownDeviceId,
+                                    verifiedAt = existingContact.verifiedAt,
+                                    isTombstone = false
                                 )
                                 try {
                                     contactManager?.add(updatedContact)
@@ -1819,7 +1845,9 @@ open class MeshRepository(private val context: Context) {
                                     addedAt = existingContact.addedAt,
                                     lastSeen = existingContact.lastSeen,
                                     notes = updatedNotesWithListeners,
-                                    lastKnownDeviceId = verifiedHints?.deviceId ?: existingContact.lastKnownDeviceId
+                                    lastKnownDeviceId = verifiedHints?.deviceId ?: existingContact.lastKnownDeviceId,
+                                    verifiedAt = existingContact.verifiedAt,
+                                    isTombstone = false
                                 )
                                 try {
                                     contactManager?.add(updatedContact)
@@ -1846,7 +1874,9 @@ open class MeshRepository(private val context: Context) {
                                     addedAt = existingContact.addedAt,
                                     lastSeen = existingContact.lastSeen,
                                     notes = updatedNotesWithListeners,
-                                    lastKnownDeviceId = verifiedHints?.deviceId ?: existingContact.lastKnownDeviceId
+                                    lastKnownDeviceId = verifiedHints?.deviceId ?: existingContact.lastKnownDeviceId,
+                                    verifiedAt = existingContact.verifiedAt,
+                                    isTombstone = false
                                 )
                                 try {
                                     contactManager?.add(updatedContact)
@@ -1945,6 +1975,7 @@ open class MeshRepository(private val context: Context) {
                                             timestamp = obj.getLong("ts").toULong(),
                                             senderTimestamp = obj.getLong("sts").toULong(),
                                             delivered = obj.getBoolean("del"),
+                                            status = if (obj.getBoolean("del")) uniffi.api.MessageStatus.DELIVERED else uniffi.api.MessageStatus.SENT,
                                             hidden = false
                                         )
                                         historyManager?.add(record)
@@ -2002,6 +2033,7 @@ open class MeshRepository(private val context: Context) {
                             timestamp = canonicalTimestamp,
                             senderTimestamp = senderTimestamp,
                             delivered = true,
+                            status = uniffi.api.MessageStatus.DELIVERED,
                             hidden = false
                         )
                         historyManager?.add(record)
@@ -3051,13 +3083,25 @@ open class MeshRepository(private val context: Context) {
         }
     }
 
+    private fun getPlatformSecuredPassphrase(): String {
+        val prefs = context.getSharedPreferences("platform_secure_keys", Context.MODE_PRIVATE)
+        var key = prefs.getString("backup_passphrase_v1", null)
+        if (key == null) {
+            val bytes = ByteArray(32)
+            java.security.SecureRandom().nextBytes(bytes)
+            key = android.util.Base64.encodeToString(bytes, android.util.Base64.NO_WRAP)
+            prefs.edit().putString("backup_passphrase_v1", key).commit()
+        }
+        return key ?: ""
+    }
+
     private fun restoreIdentityFromBackup(core: uniffi.api.IronCore): Boolean {
         val backup = identityBackupPrefs.getString(IDENTITY_BACKUP_KEY, null)
         if (backup.isNullOrBlank()) {
             return false
         }
         return try {
-            core.importIdentityBackup(backup, "")
+            core.importIdentityBackup(backup, getPlatformSecuredPassphrase())
             Timber.i("Restored identity from Android backup payload")
             // P0_SHARED_IDENTITY: publish restored identity to all subscribers
             val restored = core.getIdentityInfo()
@@ -3068,24 +3112,67 @@ open class MeshRepository(private val context: Context) {
             true
         } catch (e: Exception) {
             Timber.w("Identity backup restore failed; fallback to new identity: ${e.message}")
-            false
+            // Fallback to empty string for compatibility with old backups if present
+            try {
+                core.importIdentityBackup(backup, "")
+                Timber.i("Restored identity using legacy empty passphrase fallback")
+                val restored = core.getIdentityInfo()
+                if (restored != null && restored.initialized) {
+                    cacheIdentityFields(restored)
+                }
+                publishIdentityInfo(restored)
+                true
+            } catch (fallbackEx: Exception) {
+                Timber.w("Legacy backup restore fallback also failed: ${fallbackEx.message}")
+                false
+            }
         }
     }
 
-    /** P1_ANDROID_003: Public entry-point for manual identity import from backup string. */
-    fun restoreIdentityFromBackup(backup: String) {
+    /**
+     * P1_ANDROID_003: Public entry-point for manual identity import from backup string.
+     *
+     * If [passphrase] is supplied (the user typed the passphrase they used when
+     * exporting via [exportIdentityBackup]), it is used directly with no fallback —
+     * a wrong user-supplied passphrase should surface as an error, not silently
+     * retry with the device-bound key. If null, falls back to the historical
+     * device-bound-passphrase behavior (for the app's own auto-backup restore flow).
+     */
+    fun restoreIdentityFromBackup(backup: String, passphrase: String? = null) {
         val core = ironCore ?: run {
             Timber.w("restoreIdentityFromBackup: Core not initialized, skipping")
             return
         }
-        core.importIdentityBackup(backup, "")
-        Timber.i("Restored identity from manually pasted backup payload")
+        if (passphrase != null) {
+            core.importIdentityBackup(backup, passphrase)
+            Timber.i("Restored identity from manually pasted backup payload using supplied passphrase")
+        } else {
+            try {
+                core.importIdentityBackup(backup, getPlatformSecuredPassphrase())
+                Timber.i("Restored identity from manually pasted backup payload")
+            } catch (e: Exception) {
+                // Fallback for empty passphrase for legacy manually exported backups
+                core.importIdentityBackup(backup, "")
+                Timber.i("Restored identity from manually pasted backup payload using legacy fallback")
+            }
+        }
         // P0_SHARED_IDENTITY: publish the restored identity to all subscribers
         val restored = core.getIdentityInfo()
         if (restored != null && restored.initialized) {
             cacheIdentityFields(restored)
         }
         publishIdentityInfo(restored)
+    }
+
+    /**
+     * Export a passphrase-encrypted identity backup: the identity signing key,
+     * active ratchet sessions, and contacts, encrypted with an Argon2id-derived
+     * key. Distinct from [getIdentityExportString], which exports the public
+     * identity card (peer ID / public key / listeners) with no encryption.
+     */
+    fun exportIdentityBackup(passphrase: String): String {
+        val core = ironCore ?: throw IllegalStateException("Core not initialized")
+        return core.exportIdentityBackup(passphrase)
     }
 
     private fun persistIdentityBackup(
@@ -3102,10 +3189,11 @@ open class MeshRepository(private val context: Context) {
         val activeCore = core ?: return
         try {
             progress(IdentityCreationEvent.PersistingToStorage, "Encrypting with XChaCha20-Poly1305…")
+            val passphrase = getPlatformSecuredPassphrase()
             val backup = if (customSalt != null) {
-                activeCore.exportIdentityBackupWithSalt("", customSalt)
+                activeCore.exportIdentityBackupWithSalt(passphrase, customSalt)
             } else {
-                activeCore.exportIdentityBackup("")
+                activeCore.exportIdentityBackup(passphrase)
             }
             // P0_ANDROID_010: Use commit() for synchronous write.
             // apply() is async and can lose the backup if the process is killed
@@ -3175,11 +3263,23 @@ open class MeshRepository(private val context: Context) {
         )
     }
 
+    fun getMeshService(): uniffi.api.MeshService? = meshService
+
     fun setPlatformBridge(bridge: uniffi.api.PlatformBridge) {
         meshService?.setPlatformBridge(bridge)
         // Wire TransportManager to AndroidPlatformBridge for BLE adjustment application
         if (bridge is com.scmessenger.android.service.AndroidPlatformBridge) {
-            transportManager?.let { bridge.setTransportManager(it) }
+            transportManager?.let { tm ->
+                bridge.setTransportManager(tm)
+                // Wire WiFi Aware transport for PlatformBridge FFI delegation
+                tm.getWifiAwareTransport()?.let { aware ->
+                    bridge.setWifiAwareTransport(aware)
+                }
+                // Wire WiFi Direct transport for PlatformBridge FFI delegation
+                tm.getWifiDirectTransport()?.let { direct ->
+                    bridge.setWifiDirectTransport(direct)
+                }
+            }
             // Wire BLE components into platform bridge for data forwarding
             bridge.setBleComponents(bleAdvertiser, bleScanner, bleGattClient, bleGattServer)
         }
@@ -3223,6 +3323,13 @@ open class MeshRepository(private val context: Context) {
         kotlin.runCatching { wifiTransportManager?.stopDiscovery() }
             .onFailure { Timber.w(it, "Failed to stop WiFi transport") }
 
+        // TransportManager.startAll() is called when the service starts (see
+        // above); stopAll() must be called here too so WiFi Aware detaches
+        // (WifiAwareSession.close()) instead of leaking an attach session
+        // for the lifetime of the process after the mesh service stops.
+        kotlin.runCatching { transportManager?.stopAll() }
+            .onFailure { Timber.w(it, "Failed to stop TransportManager (BLE/WiFi Aware/WiFi Direct/mDNS)") }
+
         kotlin.runCatching { swarmBridge?.shutdown() }
             .onFailure { Timber.w(it, "Failed to shutdown swarm bridge") }
 
@@ -3249,6 +3356,7 @@ open class MeshRepository(private val context: Context) {
         bleGattServer = null
         bleGattClient = null
         wifiTransportManager = null
+        transportManager = null
 
         _serviceState.value = uniffi.api.ServiceState.STOPPED
         _serviceStats.value = null
@@ -3502,7 +3610,9 @@ open class MeshRepository(private val context: Context) {
                     if (contact.lastSeen!! > currentLastSeen) contact.lastSeen else currentLastSeen
                 } else existingWithKey.lastSeen,
                 notes = contact.notes ?: existingWithKey.notes,
-                lastKnownDeviceId = contact.lastKnownDeviceId ?: existingWithKey.lastKnownDeviceId
+                lastKnownDeviceId = contact.lastKnownDeviceId ?: existingWithKey.lastKnownDeviceId,
+                verifiedAt = contact.verifiedAt ?: existingWithKey.verifiedAt,
+                isTombstone = false
             )
         } else {
             val canonical = canonicalId(contact.peerId)
@@ -3515,7 +3625,9 @@ open class MeshRepository(private val context: Context) {
                     addedAt = contact.addedAt,
                     lastSeen = contact.lastSeen,
                     notes = contact.notes,
-                    lastKnownDeviceId = contact.lastKnownDeviceId
+                    lastKnownDeviceId = contact.lastKnownDeviceId,
+                    verifiedAt = contact.verifiedAt,
+                    isTombstone = contact.isTombstone
                 )
             } else {
                 contact
@@ -3554,7 +3666,9 @@ open class MeshRepository(private val context: Context) {
                         addedAt = existing.addedAt,
                         lastSeen = existing.lastSeen,
                         notes = existing.notes,
-                        lastKnownDeviceId = existing.lastKnownDeviceId
+                        lastKnownDeviceId = existing.lastKnownDeviceId,
+                        verifiedAt = existing.verifiedAt,
+                        isTombstone = false
                     ))
                 }
                 return true
@@ -3578,7 +3692,9 @@ open class MeshRepository(private val context: Context) {
                 addedAt = (System.currentTimeMillis() / 1000).toULong(),
                 lastSeen = null,
                 notes = null,
-                lastKnownDeviceId = null
+                lastKnownDeviceId = null,
+                verifiedAt = null,
+                isTombstone = false
             )
             addContact(contact)
             return true
@@ -3648,6 +3764,29 @@ open class MeshRepository(private val context: Context) {
     fun setContactNickname(peerId: String, nickname: String?) {
         contactManager?.setNickname(peerId, nickname)
         Timber.d("Contact nickname updated: $peerId -> $nickname")
+    }
+
+    /** Mark a contact as verified after an out-of-band safety-number comparison. */
+    fun markContactVerified(peerId: String) {
+        contactManager?.markVerified(peerId)
+        Timber.d("Contact marked verified: $peerId")
+    }
+
+    /** Clear a contact's verification status (e.g. after a key change). */
+    fun unverifyContact(peerId: String) {
+        contactManager?.unverify(peerId)
+        Timber.d("Contact verification cleared: $peerId")
+    }
+
+    /**
+     * Compute the Signal-style safety number for comparing identities with [theirPublicKeyHex]
+     * out-of-band. Returns null if our own identity isn't initialized yet, or an empty string
+     * if the underlying keys are malformed (S5) - callers must treat both as error states, never
+     * render an empty string as if it were a real safety number.
+     */
+    fun computeSafetyNumber(theirPublicKeyHex: String): String? {
+        val ourKey = identityInfo.value?.publicKeyHex ?: return null
+        return uniffi.api.safetyNumber(ourKey, theirPublicKeyHex)
     }
 
     fun getContactCount(): UInt {
@@ -3867,6 +4006,14 @@ open class MeshRepository(private val context: Context) {
      * This is non-blocking and safe to call from the main thread during UI composition.
      */
     fun getIdentityInfoNonBlocking(): uniffi.api.IdentityInfo? {
+        // P0_SHARED_IDENTITY: Check the published StateFlow first — this is the
+        // fastest path and catches identity that was just created in another
+        // ViewModel (e.g., onboarding) before the core/cache paths run.
+        val published = _identityInfo.value
+        if (published != null && published.initialized) {
+            return published
+        }
+
         // Try to get identity info even if the service isn't fully RUNNING yet.
         // ironCore may already have identity loaded from sled before the swarm
         // finishes binding. This eliminates the 30-60s polling gap in Settings UI.
@@ -3874,9 +4021,54 @@ open class MeshRepository(private val context: Context) {
         if (core != null) {
             val info = core.getIdentityInfo()
             if (info != null && info.initialized) {
-                cacheIdentityFields(info)
+                val resolvedInfo = if (info.nickname.isNullOrBlank()) {
+                    val cachedNickname = kotlinx.coroutines.runBlocking {
+                        try {
+                            preferencesRepository?.identityNickname?.firstOrNull()
+                        } catch (e: Exception) {
+                            null
+                        }
+                    }
+                    if (!cachedNickname.isNullOrBlank()) {
+                        Timber.w("getIdentityInfoNonBlocking: Rust core nickname blank; using DataStore fallback: $cachedNickname")
+                        setNickname(cachedNickname)
+                        info.copy(nickname = cachedNickname)
+                    } else {
+                        info
+                    }
+                } else {
+                    info
+                }
+                cacheIdentityFields(resolvedInfo)
+                publishIdentityInfo(resolvedInfo)
+                return resolvedInfo
             }
-            // P0_SHARED_IDENTITY: publish to all subscribers (Main/Identity/Settings VMs)
+            // Core exists but reports uninitialized (sled lost/corrupt).
+            // Fall back to SharedPreferences cache — the identity was created
+            // in a previous session and the backup is still valid.
+            val cached = readCachedIdentityFields()
+            if (cached != null && cached.initialized) {
+                val resolvedCached = if (cached.nickname.isNullOrBlank()) {
+                    val cachedNickname = kotlinx.coroutines.runBlocking {
+                        try {
+                            preferencesRepository?.identityNickname?.firstOrNull()
+                        } catch (e: Exception) {
+                            null
+                        }
+                    }
+                    if (!cachedNickname.isNullOrBlank()) {
+                        cached.copy(nickname = cachedNickname)
+                    } else {
+                        cached
+                    }
+                } else {
+                    cached
+                }
+                Timber.w("getIdentityInfoNonBlocking: core uninitialized but cache has identity; using cached")
+                publishIdentityInfo(resolvedCached)
+                return resolvedCached
+            }
+            // Neither core nor cache has identity
             publishIdentityInfo(info)
             return info
         }
@@ -3884,10 +4076,26 @@ open class MeshRepository(private val context: Context) {
         // This eliminates the 30-60s "Unavailable" gap during service startup.
         val cached = readCachedIdentityFields()
         if (cached != null) {
+            val resolvedCached = if (cached.nickname.isNullOrBlank()) {
+                val cachedNickname = kotlinx.coroutines.runBlocking {
+                    try {
+                        preferencesRepository?.identityNickname?.firstOrNull()
+                    } catch (e: Exception) {
+                        null
+                    }
+                }
+                if (!cachedNickname.isNullOrBlank()) {
+                    cached.copy(nickname = cachedNickname)
+                } else {
+                    cached
+                }
+            } else {
+                cached
+            }
             Timber.d("getIdentityInfoNonBlocking: using cached identity (core not ready)")
             // P0_SHARED_IDENTITY: also publish cached identity so subscribers see it
-            publishIdentityInfo(cached)
-            return cached
+            publishIdentityInfo(resolvedCached)
+            return resolvedCached
         }
         // Last resort: only return null if there's truly no core available and no cache.
         val state = meshService?.getState()
@@ -3911,7 +4119,50 @@ open class MeshRepository(private val context: Context) {
         )
         // P0: Cache identity fields for instant UI load on next startup
         if (result != null && result.initialized) {
-            cacheIdentityFields(result)
+            val resolvedResult = if (result.nickname.isNullOrBlank()) {
+                val cachedNickname = kotlinx.coroutines.runBlocking {
+                    try {
+                        preferencesRepository?.identityNickname?.firstOrNull()
+                    } catch (e: Exception) {
+                        null
+                    }
+                }
+                if (!cachedNickname.isNullOrBlank()) {
+                    Timber.w("getIdentityInfo: Rust core nickname blank; using DataStore fallback: $cachedNickname")
+                    setNickname(cachedNickname)
+                    result.copy(nickname = cachedNickname)
+                } else {
+                    result
+                }
+            } else {
+                result
+            }
+            cacheIdentityFields(resolvedResult)
+            publishIdentityInfo(resolvedResult)
+            return resolvedResult
+        }
+        // Core returned uninitialized — fall back to SharedPreferences cache
+        val cached = readCachedIdentityFields()
+        if (cached != null && cached.initialized) {
+            val resolvedCached = if (cached.nickname.isNullOrBlank()) {
+                val cachedNickname = kotlinx.coroutines.runBlocking {
+                    try {
+                        preferencesRepository?.identityNickname?.firstOrNull()
+                    } catch (e: Exception) {
+                        null
+                    }
+                }
+                if (!cachedNickname.isNullOrBlank()) {
+                    cached.copy(nickname = cachedNickname)
+                } else {
+                    cached
+                }
+            } else {
+                cached
+            }
+            Timber.w("getIdentityInfo: core uninitialized but cache has identity; using cached")
+            publishIdentityInfo(resolvedCached)
+            return resolvedCached
         }
         // P0_SHARED_IDENTITY: publish to all subscribers
         publishIdentityInfo(result)
@@ -3980,11 +4231,15 @@ open class MeshRepository(private val context: Context) {
      * We read this directly from the SharedPreferences backup file that DataStore creates.
      */
     fun syncNicknameFromDatastore() {
-        // Read the nickname from the DataStore backup file
-        // DataStore stores preferences in a protobuf file, but also maintains
-        // a SharedPreferences backup file at "app_preferences.xml"
-        val prefs = context.getSharedPreferences("app_preferences", Context.MODE_PRIVATE)
-        val cachedNickname = prefs.getString("identity_nickname", null)
+        // Read the nickname from the PreferencesRepository (DataStore fallback)
+        val cachedNickname = kotlinx.coroutines.runBlocking {
+            try {
+                preferencesRepository?.identityNickname?.firstOrNull()
+            } catch (e: Exception) {
+                Timber.e(e, "syncNicknameFromDatastore: Failed to read from preferencesRepository")
+                null
+            }
+        }
 
         if (cachedNickname.isNullOrBlank()) {
             Timber.d("syncNicknameFromDatastore: No nickname in DataStore")
@@ -4130,6 +4385,7 @@ open class MeshRepository(private val context: Context) {
                 timestamp = now,
                 senderTimestamp = now,
                 delivered = false,
+                status = uniffi.api.MessageStatus.QUEUED,
                 hidden = false
             )
 
@@ -4232,6 +4488,7 @@ open class MeshRepository(private val context: Context) {
                             timestamp = now,
                             senderTimestamp = now,
                             delivered = false,
+                            status = uniffi.api.MessageStatus.QUEUED,
                             hidden = false
                         )
                         historyManager?.add(reconciledRecord)
@@ -4364,6 +4621,24 @@ open class MeshRepository(private val context: Context) {
      * 3. Rust core identity database check (authoritative)
      */
     fun isIdentityInitialized(): Boolean {
+        // P0_SHARED_IDENTITY: Check the published StateFlow first — this is the
+        // fastest path and catches identity that was just created in another
+        // ViewModel (e.g., onboarding) before cache/backup checks run.
+        val published = _identityInfo.value
+        if (published != null && published.initialized) {
+            return true
+        }
+
+        // P0: Check the identity cache (SharedPreferences) — this is populated
+        // by cacheIdentityFields() immediately after initializeIdentity() succeeds,
+        // before persistIdentityBackup() runs. This eliminates the race where
+        // isIdentityInitialized() returns false because the backup hasn't been
+        // written yet.
+        val cached = readCachedIdentityFields()
+        if (cached != null && cached.initialized) {
+            return true
+        }
+
         // Check if we have an identity backup first (fast path)
         if (identityBackupPrefs.contains(IDENTITY_BACKUP_KEY)) {
             // P0_ANDROID_010: Verify Rust core also has the identity.
@@ -4476,14 +4751,20 @@ open class MeshRepository(private val context: Context) {
             kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
                 try {
                     // P0_ANDROID_PROGRESS_CALLBACK: stage 1 — visible during the
-                    // up-to-10s ensureServiceInitialized wait, which is the longest
-                    // blocking piece on a cold start and the wall the user
-                    // perceives as a hang. Fire it before the wait so the UI
-                    // recomposes immediately.
+                    // ensureServiceInitialized wait, which is the longest blocking
+                    // piece on a cold start and the wall the user perceives as a hang.
+                    // Fire it before the wait so the UI recomposes immediately.
+                    // The progress callback is now passed through so ensureServiceInitialized
+                    // can fire periodic elapsed-time updates during the wait.
                     progress(IdentityCreationEvent.PreparingStorage, "Waking the encrypted key vault…")
-                    if (!ensureServiceInitialized() || ironCore == null) {
-                        Timber.e("IronCore is null after ensureServiceInitialized! Cannot create identity.")
-                        return@withContext
+                    if (!ensureServiceInitialized(progress) || ironCore == null) {
+                        // Throw instead of silent return — the ViewModel catch block
+                        // will set _identityError and reset _isCreating, giving the
+                        // user visible feedback instead of a frozen progress display.
+                        throw IllegalStateException(
+                            "Service initialization timed out — identity cannot be created. " +
+                            "The encrypted storage is taking longer than expected to start."
+                        )
                     }
                     // P0_ANDROID_024 (Bug 3): Skip if identity is already initialized.
                     // Multiple UI surfaces (Onboarding, Settings) and onRuntimePermissionsGranted
@@ -4492,10 +4773,12 @@ open class MeshRepository(private val context: Context) {
                     val current = ironCore?.getIdentityInfo()
                     if (current?.initialized == true) {
                         Timber.d("createIdentity: identity already initialized (id=${current.identityId?.take(8)}); skipping")
-                        // P0_ANDROID_PROGRESS_CALLBACK: drive the UI to the final
-                        // stage instead of vanishing mid-way on subsequent clicks.
-                        // The display will hold on VerifyingIdentity briefly before
-                        // the MainViewModel's 600ms tail-delay and Idle flip.
+                        // P0_SHARED_IDENTITY: publish existing identity so the UI
+                        // state flips to initialized even on redundant create calls.
+                        // Without this, the StateFlow stays null and IdentityScreen
+                        // shows the creation form again.
+                        cacheIdentityFields(current)
+                        publishIdentityInfo(current)
                         progress(IdentityCreationEvent.VerifyingIdentity, "Identity already on disk; verifying…")
                         return@withContext
                     }
@@ -4510,6 +4793,15 @@ open class MeshRepository(private val context: Context) {
                     progress(IdentityCreationEvent.GeneratingKeypair, null)
                     Timber.d("Calling ironCore.initializeIdentity()...")
                     ironCore?.initializeIdentity()
+                    // P0_SHARED_IDENTITY: publish identity IMMEDIATELY after keygen
+                    // succeeds, before backup/swarm steps. If persistIdentityBackup or
+                    // initializeAndStartSwarm fails, the UI still knows identity exists
+                    // and won't show the redundant creation form.
+                    val created = ironCore?.getIdentityInfo()
+                    if (created != null && created.initialized) {
+                        cacheIdentityFields(created)
+                        publishIdentityInfo(created)
+                    }
                     ensureLocalIdentityFederation()
                     // P0_ANDROID_PROGRESS_CALLBACK: stage 4 — fingerprint is
                     // computed by the Rust core during initializeIdentity; we
@@ -4520,14 +4812,12 @@ open class MeshRepository(private val context: Context) {
                     progress(IdentityCreationEvent.ComputingFingerprint, "Hashing your key…")
                     persistIdentityBackup(ironCore, customSalt, progress)
                     Timber.i("Identity created successfully")
-                    // P0_SHARED_IDENTITY: publish the freshly-created identity to all
-                    // subscribers (Main/Identity/Settings VMs) so any open screen
-                    // showing "not initialized" immediately gets the new state.
-                    val created = ironCore?.getIdentityInfo()
-                    if (created != null && created.initialized) {
-                        cacheIdentityFields(created)
+                    // Publish again after backup to ensure latest state (nickname, etc.)
+                    val finalInfo = ironCore?.getIdentityInfo()
+                    if (finalInfo != null && finalInfo.initialized) {
+                        cacheIdentityFields(finalInfo)
                     }
-                    publishIdentityInfo(created)
+                    publishIdentityInfo(finalInfo)
                     // P0_ANDROID_PROGRESS_CALLBACK: stage 6 — final verification
                     // step that starts the libp2p swarm listener and updates
                     // the BLE beacon. The libp2p TCP bind on port 9001 can
@@ -4535,7 +4825,15 @@ open class MeshRepository(private val context: Context) {
                     // listener…" gives the user motion during that wait.
                     progress(IdentityCreationEvent.VerifyingIdentity, "Starting swarm listener…")
                     // Identity is now available; bring up internet transport if it was deferred.
-                    initializeAndStartSwarm()
+                    // Fire-and-forget: the swarm startup is slow (~5-10s for TCP bind + mDNS)
+                    // but identity is already created and published. Don't block the UI.
+                    repoScope.launch {
+                        try {
+                            initializeAndStartSwarm()
+                        } catch (e: Exception) {
+                            Timber.w(e, "Swarm startup failed after identity creation (non-blocking)")
+                        }
+                    }
                     updateBleIdentityBeacon()
                 } catch (e: Exception) {
                     Timber.e(e, "Failed to create identity")
@@ -4581,8 +4879,8 @@ open class MeshRepository(private val context: Context) {
                     maxRelayBudget = 200u,
                     batteryFloor = 20u,
                     bleEnabled = true,
-                    wifiAwareEnabled = true,
-                    wifiDirectEnabled = true,
+                    wifiAwareEnabled = false,
+                    wifiDirectEnabled = false,
                     internetEnabled = true,
                     discoveryMode = uniffi.api.DiscoveryMode.NORMAL,
                     onionRouting = false,
@@ -4635,9 +4933,16 @@ open class MeshRepository(private val context: Context) {
 
     /**
      * Non-blocking variant for suspend functions that require the service to be running.
-     * Waits up to 10 seconds for MeshService to reach RUNNING state using delay().
+     * Waits up to 60 seconds for MeshService to reach RUNNING state using delay().
+     *
+     * Accepts an optional progress callback so the UI can show elapsed time during
+     * the potentially long cold-start wait (sled DB init, manager setup, data migration).
+     * Fires PreparingStorage periodically with elapsed-seconds info so the user sees
+     * motion instead of a frozen "4 seconds remaining" display.
      */
-    private suspend fun ensureServiceInitialized(): Boolean {
+    private suspend fun ensureServiceInitialized(
+        progress: IdentityProgressCallback = { _, _ -> }
+    ): Boolean {
         // Fast path: already running
         if (meshService?.getState() == uniffi.api.ServiceState.RUNNING && ironCore != null) {
             return true
@@ -4646,16 +4951,26 @@ open class MeshRepository(private val context: Context) {
         // Start initialization if needed
         ensureServiceInitializedDeferred()
 
-        // Wait for service to actually start (with timeout)
+        // Wait for service to actually start (with generous timeout for cold starts).
+        // Cold-start on low-end devices can take 30-60s due to sled DB init, manager
+        // construction, and data migrations. The old 10s timeout caused silent failures
+        // where createIdentity() returned without creating identity or notifying the UI.
         val startTime = System.currentTimeMillis()
-        val timeoutMs = 10_000L
+        val timeoutMs = 60_000L
+        var lastProgressMs = 0L
         while (System.currentTimeMillis() - startTime < timeoutMs) {
             if (meshService?.getState() == uniffi.api.ServiceState.RUNNING && ironCore != null) {
                 return true
             }
-            kotlinx.coroutines.delay(100)
+            val elapsed = System.currentTimeMillis() - startTime
+            if (elapsed - lastProgressMs >= 2_000L) {
+                lastProgressMs = elapsed
+                progress(IdentityCreationEvent.PreparingStorage,
+                    "Starting secure service… (${elapsed / 1000}s)")
+            }
+            kotlinx.coroutines.delay(200)
         }
-        Timber.w("ensureServiceInitialized timed out after ${timeoutMs}ms")
+        Timber.e("ensureServiceInitialized timed out after ${timeoutMs}ms")
         return false
     }
 
@@ -4812,6 +5127,25 @@ open class MeshRepository(private val context: Context) {
         return ledgerManager?.dialableAddresses() ?: emptyList()
     }
 
+    /**
+     * Trigger an actual BLE + WiFi rescan for nearby peer discovery.
+     * Restarts BLE scanning and WiFi P2P discovery to find new peers.
+     */
+    fun triggerTransportRescan() {
+        repoScope.launch {
+            try {
+                // Restart BLE scanning
+                transportManager?.let { tm ->
+                    tm.stopAll()
+                    delay(200)
+                    tm.startAll()
+                }
+                Timber.d("triggerTransportRescan: BLE + WiFi restarted")
+            } catch (e: Exception) {
+                Timber.w(e, "triggerTransportRescan failed")
+            }
+        }
+    }
 
     fun replayDiscoveredPeerEvents() {
         repoScope.launch {
@@ -5175,8 +5509,8 @@ open class MeshRepository(private val context: Context) {
                 maxRelayBudget = 200u,
                 batteryFloor = 20u,
                 bleEnabled = true,
-                wifiAwareEnabled = true,
-                wifiDirectEnabled = true,
+                wifiAwareEnabled = false,
+                wifiDirectEnabled = false,
                 internetEnabled = true,
                 discoveryMode = uniffi.api.DiscoveryMode.NORMAL,
                 onionRouting = false,
@@ -7127,7 +7461,9 @@ open class MeshRepository(private val context: Context) {
                 addedAt = contact.addedAt,
                 lastSeen = contact.lastSeen,
                 notes = withListeners,
-                lastKnownDeviceId = contact.lastKnownDeviceId
+                lastKnownDeviceId = contact.lastKnownDeviceId,
+                verifiedAt = contact.verifiedAt,
+                isTombstone = false
             )
             try {
                 contactManager?.add(updated)
@@ -7230,7 +7566,9 @@ open class MeshRepository(private val context: Context) {
                 addedAt = existing?.addedAt ?: now,
                 lastSeen = now,
                 notes = notes,
-                lastKnownDeviceId = deviceId?.trim()?.takeIf { it.isNotEmpty() } ?: existing?.lastKnownDeviceId
+                lastKnownDeviceId = deviceId?.trim()?.takeIf { it.isNotEmpty() } ?: existing?.lastKnownDeviceId,
+                verifiedAt = existing?.verifiedAt,
+                isTombstone = false
             )
 
             try {
@@ -7803,7 +8141,9 @@ open class MeshRepository(private val context: Context) {
             addedAt = (System.currentTimeMillis() / 1000).toULong(),
             lastSeen = (System.currentTimeMillis() / 1000).toULong(),
             notes = "Emergency contact created during peer discovery",
-            lastKnownDeviceId = null
+            lastKnownDeviceId = null,
+            verifiedAt = null,
+            isTombstone = false
         )
 
         // Save to database
@@ -8018,10 +8358,7 @@ open class MeshRepository(private val context: Context) {
         val prioritizedAddresses = emptyList<String>()
 
         // Proactively probe known relay ports to deprioritize blocked addresses
-        val probeTargets = listOf(
-            "34.135.34.73" to 9001, "34.135.34.73" to 443,
-            "104.28.216.43" to 9010, "104.28.216.43" to 443
-        )
+        val probeTargets = emptyList<Pair<String, Int>>()
         val portProbeResults = networkDetector.probePorts(probeTargets)
 
         // Filter out circuit-breaker-blocked and throttle-blocked addresses,
@@ -8260,7 +8597,7 @@ open class MeshRepository(private val context: Context) {
 
     /** Extract port number from a libp2p multiaddr string. */
     private fun extractPortFromMultiaddr(multiaddr: String): Int? {
-        // e.g. "/ip4/34.135.34.73/tcp/9001/p2p/..." → 9001
+        // e.g. "/ip4/1.2.3.4/tcp/9001/p2p/..." → 9001
         // e.g. "/dns4/bootstrap.example.com/tcp/443/ws/p2p/..." → 443
         val portRegex = Regex("""/tcp/(\d+)""").find(multiaddr)
             ?: Regex("""/udp/(\d+)""").find(multiaddr)
@@ -8715,7 +9052,9 @@ open class MeshRepository(private val context: Context) {
                             addedAt = System.currentTimeMillis().toULong(),
                             lastSeen = null,
                             notes = "Emergency contact recovered from message history",
-                            lastKnownDeviceId = null
+                            lastKnownDeviceId = null,
+                            verifiedAt = null,
+                            isTombstone = false
                         )
                         contacts.add(contact)
                         recoveredCount++

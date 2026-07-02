@@ -7,7 +7,6 @@
 //
 
 import SwiftUI
-import CoreImage.CIFilterBuiltins
 
 struct SettingsView: View {
     @Environment(MeshRepository.self) private var repository
@@ -15,6 +14,8 @@ struct SettingsView: View {
     @State private var showingIdentityQr = false
     @State private var showingResetConfirmation = false
     @State private var identitySetupError: String?
+    @State private var showingExportBackup = false
+    @State private var showingImportBackup = false
     let onIdentityChanged: () -> Void
 
     init(onIdentityChanged: @escaping () -> Void = {}) {
@@ -205,6 +206,18 @@ struct SettingsView: View {
                     } label: {
                         Label("Show Identity QR", systemImage: "qrcode")
                     }
+
+                    Button {
+                        showingExportBackup = true
+                    } label: {
+                        Label("Export Identity Backup", systemImage: "lock")
+                    }
+
+                    Button {
+                        showingImportBackup = true
+                    } label: {
+                        Label("Import Identity Backup", systemImage: "square.and.arrow.down")
+                    }
                 } else {
                     Text("Relay-only mode is active. Create an identity to enable Messages and Contacts.")
                         .font(Theme.bodySmall)
@@ -287,6 +300,16 @@ struct SettingsView: View {
         }
         .sheet(isPresented: $showingIdentityQr) {
             IdentityQrSheet(payload: repository.getIdentityQrPayload())
+        }
+        .sheet(isPresented: $showingExportBackup) {
+            if let viewModel {
+                ExportIdentityBackupSheet(viewModel: viewModel)
+            }
+        }
+        .sheet(isPresented: $showingImportBackup) {
+            if let viewModel {
+                ImportIdentityBackupSheet(viewModel: viewModel)
+            }
         }
         .confirmationDialog(
             "Delete All Data & Reset App?",
@@ -371,13 +394,11 @@ struct RelayWarningCard: View {
 private struct IdentityQrSheet: View {
     let payload: String
     @Environment(\.dismiss) private var dismiss
-    private let context = CIContext()
-    private let filter = CIFilter.qrCodeGenerator()
 
     var body: some View {
         NavigationStack {
             VStack(spacing: Theme.spacingMedium) {
-                if let image = qrImage(from: payload) {
+                if let image = QRCodeGenerator.image(from: payload) {
                     Image(uiImage: image)
                         .interpolation(.none)
                         .resizable()
@@ -403,17 +424,6 @@ private struct IdentityQrSheet: View {
                 }
             }
         }
-    }
-
-    private func qrImage(from string: String) -> UIImage? {
-        let data = Data(string.utf8)
-        filter.setValue(data, forKey: "inputMessage")
-        filter.setValue("Q", forKey: "inputCorrectionLevel")
-
-        guard let outputImage = filter.outputImage else { return nil }
-        let scaled = outputImage.transformed(by: CGAffineTransform(scaleX: 12, y: 12))
-        guard let cgImage = context.createCGImage(scaled, from: scaled.extent) else { return nil }
-        return UIImage(cgImage: cgImage)
     }
 }
 

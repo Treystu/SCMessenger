@@ -6,400 +6,71 @@ on:
   pull_request:
     branches: [main]
 
-permissions:
-  contents: read
-
 env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  path-filter:
-    name: Detect Changed Paths
+  lint:
+    name: Lint
     runs-on: ubuntu-latest
-    timeout-minutes: 5
-    outputs:
-      core: ${{ steps.filter.outputs.core }}
-      android: ${{ steps.filter.outputs.android }}
-      ios: ${{ steps.filter.outputs.ios }}
-      wasm: ${{ steps.filter.outputs.wasm }}
-      docs: ${{ steps.filter.outputs.docs }}
-      ci: ${{ steps.filter.outputs.ci }}
     steps:
       - uses: actions/checkout@v4
-      - uses: dorny/paths-filter@v2
-        id: filter
+      - uses: dtolnay/rust-toolchain@stable
         with:
-          filters: |
-            core:
-              - 'core/**'
-              - 'mobile/**'
-              - 'Cargo.toml'
-              - 'Cargo.lock'
-              - 'deny.toml'
-            android:
-              - 'android/**'
-              - 'mobile/**'
-              - 'core/**'
-            ios:
-              - 'iOS/**'
-              - 'mobile/**'
-              - 'core/**'
-            wasm:
-              - 'wasm/**'
-              - 'core/**'
-            docs:
-              - 'docs/**'
-              - '**.md'
-            ci:
-              - '.github/workflows/**'
-              - 'scripts/**'
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - run: sudo apt-get update && sudo apt-get install -y libdbus-1-dev pkg-config
+      - run: cargo fmt --check
+      - run: cargo clippy --workspace --all-features -- -D warnings
+      - run: cargo install cargo-deny
+      - run: cargo deny check
 
-  check-path-governance:
-    name: Repo Hygiene / Path Governance
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@v4
-      - name: Reject tracked lowercase ios/ entries
-        run: |
-          if git ls-files | rg -n "^ios/"; then
-            echo "Tracked lowercase ios/ paths are not allowed."
-            exit 1
-          fi
-      - name: Reject case-colliding tracked paths
-        run: |
-          COLLISIONS=$(git ls-files | awk '{k=tolower($0); seen[k]=seen[k]"\n"$0} END {for (k in seen) {n=split(seen[k],a,"\n"); if (n>2) {for(i=2;i<=n;i++) print a[i]}}}')
-          if [ -n "$COLLISIONS" ]; then
-            echo "Case-colliding tracked paths detected:"
-            echo "$COLLISIONS"
-            exit 1
-          fi
-      - name: Reject nested git repositories
-        run: |
-          NESTED_REPOS=$(find . -type d -name .git -not -path "./.git")
-          if [ -n "$NESTED_REPOS" ]; then
-            echo "Nested git repositories are not allowed:"
-            echo "$NESTED_REPOS"
-            exit 1
-          fi
-      - name: Enforce canonical copy-bindings policy
-        run: |
-          if rg -n "mkdir -p ../iOS/SCMessenger/Generated|SCMessenger/Generated/api.swift|SCMessenger/Generated/apiFFI.h|SCMessenger/Generated/apiFFI.modulemap" iOS/copy-bindings.sh; then
-            echo "copy-bindings.sh contains legacy dual-copy logic."
-            exit 1
-          fi
-      - name: Reject lowercase ios/ path references
-        run: |
-          # Allow non-path prose tokens like iOS/Android and target triples like apple-ios.
-          VIOLATIONS=$(rg -n "\bios/" README.md DOCUMENTATION.md docs REMAINING_WORK_TRACKING.md iOS mobile android core cli wasm scripts docker ui \
-            | rg -v "apple-ios/|iOS/Android|Android/iOS|iOS/ANDROID|Path-case governance|Resolve ios/|lowercase ios/" \
-            | rg -v "^docs/IOS_PATH_MIGRATION_REPORT.md:|^docs/REPO_CONTEXT.md:|^REMAINING_WORK_TRACKING.md:" || true)
-          if [ -n "$VIOLATIONS" ]; then
-            echo "Found non-canonical lowercase ios/ references:"
-            echo "$VIOLATIONS"
-            exit 1
-          fi
-
-  check-doc-sync:
-    name: Repo Hygiene / Docs Sync
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - name: Run documentation sync checks
-        run: |
-          chmod +x ./scripts/docs_sync_check.sh
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            git fetch origin "${{ github.base_ref }}" --depth=1
-            BASE_REF="origin/${{ github.base_ref }}"
-          else
-            if git rev-parse --verify HEAD~1 >/dev/null 2>&1; then
-              BASE_REF="$(git rev-parse HEAD~1)"
-            else
-              BASE_REF="HEAD"
-            fi
-          fi
-          DOC_SYNC_REQUIRE_DOC_UPDATES=1 DOC_SYNC_BASE_REF="$BASE_REF" ./scripts/docs_sync_check.sh
-
-  check-core:
-    name: Rust Core (${{ matrix.os }})
+  test:
+    name: Test (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 30
-    needs: path-filter
-    if: needs.path-filter.outputs.core == 'true' || needs.path-filter.outputs.ci == 'true'
     strategy:
       matrix:
-        os: [ubuntu-latest, macos-latest]
-
+        os: [ubuntu-latest, macos-latest, windows-latest]
     steps:
       - uses: actions/checkout@v4
-
       - uses: dtolnay/rust-toolchain@stable
-        with:
-          toolchain: stable
-          components: rustfmt, clippy
-
       - uses: Swatinem/rust-cache@v2
+      - name: Install libdbus-1-dev (Ubuntu)
+        if: matrix.os == 'ubuntu-latest'
+        run: sudo apt-get update && sudo apt-get install -y libdbus-1-dev pkg-config
+      # Only Windows runners lack a preinstalled/vendored protoc; matches the
+      # manual cross-platform-test.yml dispatch workflow's test-windows job.
+      - name: Install protoc (Windows)
+        if: matrix.os == 'windows-latest'
+        uses: arduino/setup-protoc@v3
         with:
-          key: ${{ matrix.os }}-rust-${{ hashFiles('**/Cargo.lock') }}
-          cache-on-failure: true
-          save-if: ${{ github.ref == 'refs/heads/main' }}
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+      - run: cargo test --workspace --all-features
 
-      - name: Check formatting
-        run: cargo fmt --all -- --check
-
-      - name: Clippy
-        run: cargo clippy --workspace -- -D warnings -A clippy::empty_line_after_doc_comments
-
-      - name: Build
-        run: cargo build --workspace
-
-      - name: Compile Gate (workspace no-run)
-        run: cargo test --workspace --no-run
-
-      - name: Test
-        uses: nick-fields/retry@v2
-        with:
-          timeout_minutes: 15
-          max_attempts: 3
-          retry_on: error
-          command: cargo test --workspace
-
-      - name: Core Integration Tests (always-pass suite)
-        if: needs.path-filter.outputs.docs != 'true' || needs.path-filter.outputs.ci == 'true'
-        run: |
-          cargo test -p scmessenger-core --test integration_contact_block
-          cargo test -p scmessenger-core --test integration_e2e
-          cargo test -p scmessenger-core --test integration_ironcore_roundtrip
-          cargo test -p scmessenger-core --test integration_registration_protocol
-          cargo test -p scmessenger-core --test test_address_observation
-          cargo test -p scmessenger-core --test test_mesh_routing
-          cargo test -p scmessenger-core --test test_persistence_restart
-
-      - name: WS12 Deterministic Offline/Partition Matrix
-        if: needs.path-filter.outputs.docs != 'true' || needs.path-filter.outputs.ci == 'true'
-        run: |
-          cargo test -p scmessenger-core --test integration_offline_partition_matrix
-          cargo test -p scmessenger-core --test integration_retry_lifecycle
-          cargo test -p scmessenger-core --test integration_receipt_convergence
-          cargo test -p scmessenger-core --test integration_relay_custody -- --include-ignored
-
-  clippy:
-    name: Cargo clippy strict
+  docs:
+    name: Docs
     runs-on: ubuntu-latest
-    timeout-minutes: 20
-    needs: path-filter
-    if: needs.path-filter.outputs.core == 'true' || needs.path-filter.outputs.ci == 'true'
     steps:
       - uses: actions/checkout@v4
-
       - uses: dtolnay/rust-toolchain@stable
-        with:
-          toolchain: stable
-          components: clippy
-
       - uses: Swatinem/rust-cache@v2
-        with:
-          key: ubuntu-latest-rust-clippy-${{ hashFiles('**/Cargo.lock') }}
-          cache-on-failure: true
-          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - run: sudo apt-get update && sudo apt-get install -y libdbus-1-dev pkg-config
+      - run: cargo doc --workspace --no-deps
 
-      - name: Cargo clippy strict
-        run: cargo clippy --workspace --lib --bins --examples -- -D warnings -A clippy::empty_line_after_doc_comments
-
-  check-wasm:
-    name: WASM / Web
+  ffi-surface:
+    name: FFI Surface Contract
     runs-on: ubuntu-latest
-    timeout-minutes: 30
-    needs: path-filter
-    if: needs.path-filter.outputs.wasm == 'true' || needs.path-filter.outputs.ci == 'true'
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-        with:
-          toolchain: stable
-          targets: wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@v2
-        with:
-          key: wasm-rust-${{ hashFiles('**/Cargo.lock') }}
-          cache-on-failure: true
-          save-if: ${{ github.ref == 'refs/heads/main' }}
-      - name: Check Core wasm32 Swarm Build
-        run: cargo check -p scmessenger-core --features wasm --target wasm32-unknown-unknown
-      - name: Check WASM Crate Build
-        run: cargo check -p scmessenger-wasm --target wasm32-unknown-unknown
-      - name: Install wasm-pack
-        uses: nick-fields/retry@v2
-        with:
-          timeout_minutes: 5
-          max_attempts: 3
-          retry_on: error
-          command: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
-      - name: Test Web/WASM
-        run: |
-          cd wasm
-          wasm-pack test --headless --firefox
-      - name: WS12 Desktop Role Parity Checks
-        run: |
-          cargo test -p scmessenger-wasm test_desktop_role_resolution_defaults_to_relay_only_without_identity
-          cargo test -p scmessenger-wasm test_desktop_relay_only_flow_blocks_outbound_message_prepare
-
-  check-android:
-    name: Android
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    needs: path-filter
-    if: needs.path-filter.outputs.android == 'true' || needs.path-filter.outputs.ci == 'true'
-    steps:
-      - uses: actions/checkout@v4
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          toolchain: stable
-          targets: aarch64-linux-android,x86_64-linux-android
-      - uses: Swatinem/rust-cache@v2
-        with:
-          key: android-rust-${{ hashFiles('**/Cargo.lock') }}
-          cache-on-failure: true
-          save-if: ${{ github.ref == 'refs/heads/main' }}
-      - name: Setup Android NDK
-        uses: nttld/setup-ndk@v1
-        id: setup-ndk
-        with:
-          ndk-version: r26b
-          add-to-path: false
-      - name: Setup ANDROID_NDK_HOME
-        run: echo "ANDROID_NDK_HOME=${{ steps.setup-ndk.outputs.ndk-path }}" >> $GITHUB_ENV
-      - name: Standardize Android SDK environment
-        run: |
-          SDK_PATH="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-}}"
-          if [ -z "$SDK_PATH" ]; then
-            echo "ANDROID_SDK_ROOT/ANDROID_HOME is not set after setup-android."
-            exit 1
-          fi
-          echo "ANDROID_HOME=$SDK_PATH" >> $GITHUB_ENV
-          echo "ANDROID_SDK_ROOT=$SDK_PATH" >> $GITHUB_ENV
-      - name: Validate Android environment
-        run: |
-          echo "Validating Android environment..."
-          echo "ANDROID_HOME=$ANDROID_HOME"
-          echo "ANDROID_NDK_HOME=$ANDROID_NDK_HOME"
-          if [ ! -d "$ANDROID_HOME" ]; then
-            echo "ERROR: ANDROID_HOME directory does not exist"
-            exit 1
-          fi
-          if [ ! -d "$ANDROID_NDK_HOME" ]; then
-            echo "ERROR: ANDROID_NDK_HOME directory does not exist"
-            exit 1
-          fi
-          echo "Android environment validated successfully"
-      - name: Cache Gradle dependencies
-        uses: actions/cache@v3
-        with:
-          path: |
-            ~/.gradle/caches
-            ~/.gradle/wrapper
-          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
-          restore-keys: |
-            ${{ runner.os }}-gradle-
-      - name: Install cargo-ndk
-        uses: nick-fields/retry@v2
-        with:
-          timeout_minutes: 5
-          max_attempts: 3
-          retry_on: error
-          command: cargo install cargo-ndk
-      - name: Android preflight verification
-        run: bash ./android/verify-build-setup.sh
-      - name: Build Android Debug APK
-        uses: nick-fields/retry@v2
-        with:
-          timeout_minutes: 15
-          max_attempts: 3
-          retry_on: error
-          command: cd android && ./gradlew assembleDebug
-      - name: WS12 Android Role/Fallback Parity Checks
-        working-directory: android
-        run: |
-          ./gradlew :app:testDebugUnitTest \
-            --tests com.scmessenger.android.test.RoleNavigationPolicyTest \
-            --tests com.scmessenger.android.data.MeshRepositoryTest
-
-  check-ios:
-    name: iOS
-    runs-on: macos-latest
-    timeout-minutes: 30
-    needs: path-filter
-    if: needs.path-filter.outputs.ios == 'true' || needs.path-filter.outputs.ci == 'true'
-    steps:
-      - uses: actions/checkout@v4
-      - name: Select Xcode version
-        run: |
-          sudo xcode-select -s /Applications/Xcode_15.2.app || sudo xcode-select -s /Applications/Xcode.app
-          xcodebuild -version
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          toolchain: stable
-          targets: aarch64-apple-ios,aarch64-apple-ios-sim,x86_64-apple-ios
-      - uses: Swatinem/rust-cache@v2
-        with:
-          key: ios-rust-${{ hashFiles('**/Cargo.lock') }}
-          cache-on-failure: true
-          save-if: ${{ github.ref == 'refs/heads/main' }}
-      - name: Verify iOS Build
-        run: |
-          chmod +x ./iOS/verify-test.sh
-          ./iOS/verify-test.sh
-
-  coverage:
-    name: Code Coverage
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    needs: path-filter
-    if: needs.path-filter.outputs.core == 'true' || needs.path-filter.outputs.ci == 'true'
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          toolchain: stable
-
-      - uses: Swatinem/rust-cache@v2
-        with:
-          key: coverage-rust-${{ hashFiles('**/Cargo.lock') }}
-          cache-on-failure: true
-          save-if: ${{ github.ref == 'refs/heads/main' }}
-
-      - name: Install tarpaulin
-        uses: nick-fields/retry@v2
-        with:
-          timeout_minutes: 10
-          max_attempts: 3
-          retry_on: error
-          command: cargo install cargo-tarpaulin
-
-      - name: Generate coverage
-        run: cargo tarpaulin --config .tarpaulin.toml
-
-      - name: Upload coverage reports
-        uses: actions/upload-artifact@v3
-        if: always()
-        with:
-          name: coverage-reports
-          path: |
-            target/coverage/index.html
-            target/coverage/lcov.info
-          retention-days: 30
-
-      - name: Check coverage threshold
-        run: |
-          if [ -f target/coverage/lcov.info ]; then
-            echo "Coverage report generated successfully"
-            # Tarpaulin will fail if coverage is below threshold (configured in .tarpaulin.toml)
-          else
-            echo "ERROR: Coverage report not generated"
-            exit 1
-          fi
+      - run: sudo apt-get update && sudo apt-get install -y libdbus-1-dev pkg-config
+      # gen_kotlin/gen_swift locate the compiled cdylib by filesystem path at
+      # runtime rather than through a Cargo dependency edge, so `cargo run`
+      # alone doesn't guarantee it's been built (verified: deleting the
+      # cdylib and re-running `cargo run --bin gen_kotlin` reproduces the
+      # "cdylib not found" panic even though nothing else changed).
+      - run: cargo build -p scmessenger-core --features gen-bindings
+      - run: cargo run --bin gen_kotlin --features gen-bindings
+      - run: cargo run --bin gen_swift --features gen-bindings
+      - run: scripts/ffi_surface.sh

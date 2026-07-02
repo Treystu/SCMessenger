@@ -118,12 +118,7 @@ open class DiagnosticsReporter @Inject constructor(
     }
 
     private suspend fun runPortProbes(): Map<String, Boolean> {
-        val probes = listOf(
-            "34.135.34.73" to 9001,
-            "34.135.34.73" to 443,
-            "104.28.216.43" to 9010,
-            "104.28.216.43" to 443
-        )
+        val probes = emptyList<Pair<String, Int>>()
         return try {
             networkDetector.probePorts(probes)
         } catch (e: Exception) {

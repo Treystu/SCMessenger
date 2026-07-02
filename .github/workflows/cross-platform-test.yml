@@ -1,0 +1,276 @@
+# ==============================================================================
+# SCMessenger Cross-Platform Test Matrix
+# ==============================================================================
+#
+# Dispatchable workflow that runs the full test suite across all supported
+# platforms: Linux, macOS, Windows, and WebAssembly. Results from all
+# platform jobs are aggregated and reported to the orchestrator.
+#
+# Triggers: Manual dispatch with sprint_id and git_branch inputs
+#
+# Jobs:
+#   test-linux:   Ubuntu — full workspace tests with all features
+#   test-macos:   macOS 14 (Apple Silicon) — workspace tests
+#   test-windows: Windows — workspace tests + CLI build
+#   test-wasm:    Ubuntu — wasm-pack build + headless Chrome tests
+#   notify:       Aggregates results and sends to orchestrator
+#
+# ==============================================================================
+
+name: Cross-Platform Tests
+
+on:
+  workflow_dispatch:
+    inputs:
+      sprint_id:
+        description: "Sprint identifier for tracking (e.g., sprint-42)"
+        required: true
+        type: string
+      git_branch:
+        description: "Branch to build and test"
+        required: true
+        default: main
+        type: string
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  # ============================================================================
+  # Job 1: Linux Tests (all features)
+  # ============================================================================
+  test-linux:
+    name: Linux (ubuntu-latest)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.git_branch }}
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: linux-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: linux-cargo-
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            pkg-config libssl-dev protobuf-compiler
+
+      - name: Run full workspace tests (all features)
+        run: cargo test --workspace --all-features
+
+      - name: Build CLI (release)
+        run: cargo build --release -p scmessenger-cli
+
+      - name: Run clippy lints
+        run: cargo clippy --workspace --all-features -- -D warnings
+        continue-on-error: true
+
+  # ============================================================================
+  # Job 2: macOS Tests (Apple Silicon)
+  # ============================================================================
+  test-macos:
+    name: macOS (macos-14, Apple Silicon)
+    runs-on: macos-14
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.git_branch }}
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: macos-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: macos-cargo-
+
+      - name: Run workspace tests
+        run: cargo test --workspace
+
+      - name: Build CLI (release)
+        run: cargo build --release -p scmessenger-cli
+
+  # ============================================================================
+  # Job 3: Windows Tests
+  # ============================================================================
+  test-windows:
+    name: Windows (windows-latest)
+    runs-on: windows-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.git_branch }}
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: windows-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: windows-cargo-
+
+      - name: Install protoc
+        uses: arduino/setup-protoc@v3
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Run workspace tests
+        run: cargo test --workspace
+
+      - name: Build CLI (release)
+        run: cargo build --release -p scmessenger-cli
+
+      - name: Verify CLI binary
+        run: |
+          Get-ChildItem target\release\scmessenger-cli.exe
+        shell: pwsh
+
+  # ============================================================================
+  # Job 4: WebAssembly Tests
+  # ============================================================================
+  test-wasm:
+    name: WebAssembly (wasm-pack)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.git_branch }}
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: Cache Rust dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: wasm-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: wasm-cargo-
+
+      - name: Install wasm-pack
+        run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
+
+      - name: Install Chrome for headless testing
+        uses: browser-actions/setup-chrome@v1
+        with:
+          chrome-version: stable
+
+      - name: Build WASM package
+        working-directory: wasm
+        run: wasm-pack build
+
+      - name: Run WASM tests (headless Chrome)
+        working-directory: wasm
+        run: wasm-pack test --headless --chrome
+
+  # ============================================================================
+  # Job 5: Aggregate & Notify Orchestrator
+  # ============================================================================
+  notify:
+    name: Notify Orchestrator
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    if: always()
+    needs:
+      - test-linux
+      - test-macos
+      - test-windows
+      - test-wasm
+
+    steps:
+      - name: Aggregate results and notify
+        env:
+          ORCHESTRATOR_URL: ${{ secrets.ORCHESTRATOR_URL }}
+          ORCHESTRATOR_TOKEN: ${{ secrets.ORCHESTRATOR_TOKEN }}
+        run: |
+          echo "============================================================"
+          echo "  Cross-Platform Test Results Summary"
+          echo "============================================================"
+          echo "  Sprint:    ${{ github.event.inputs.sprint_id }}"
+          echo "  Branch:    ${{ github.event.inputs.git_branch }}"
+          echo "  Run ID:    ${{ github.run_id }}"
+          echo ""
+          echo "  Linux:     ${{ needs.test-linux.result }}"
+          echo "  macOS:     ${{ needs.test-macos.result }}"
+          echo "  Windows:   ${{ needs.test-windows.result }}"
+          echo "  WASM:      ${{ needs.test-wasm.result }}"
+          echo "============================================================"
+
+          # Determine overall status
+          OVERALL="passed"
+          for result in \
+            "${{ needs.test-linux.result }}" \
+            "${{ needs.test-macos.result }}" \
+            "${{ needs.test-windows.result }}" \
+            "${{ needs.test-wasm.result }}"; do
+            if [ "${result}" != "success" ]; then
+              OVERALL="failed"
+              break
+            fi
+          done
+
+          echo ""
+          echo "Overall status: ${OVERALL}"
+
+          # Send combined results to orchestrator
+          if [ -n "${ORCHESTRATOR_URL}" ]; then
+            curl -sf -X POST "${ORCHESTRATOR_URL}/api/v1/build-results" \
+              -H "Content-Type: application/json" \
+              -H "Authorization: Bearer ${ORCHESTRATOR_TOKEN}" \
+              -d "{
+                \"sprint_id\": \"${{ github.event.inputs.sprint_id }}\",
+                \"workflow\": \"cross-platform-test\",
+                \"job\": \"aggregate\",
+                \"status\": \"${OVERALL}\",
+                \"branch\": \"${{ github.event.inputs.git_branch }}\",
+                \"run_id\": \"${{ github.run_id }}\",
+                \"run_url\": \"${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}\",
+                \"platform_results\": {
+                  \"linux\": \"${{ needs.test-linux.result }}\",
+                  \"macos\": \"${{ needs.test-macos.result }}\",
+                  \"windows\": \"${{ needs.test-windows.result }}\",
+                  \"wasm\": \"${{ needs.test-wasm.result }}\"
+                },
+                \"timestamp\": \"$(date -u '+%Y-%m-%dT%H:%M:%SZ')\"
+              }" || echo "WARNING: Failed to notify orchestrator (non-fatal)"
+          else
+            echo "WARNING: ORCHESTRATOR_URL not set, skipping notification"
+          fi

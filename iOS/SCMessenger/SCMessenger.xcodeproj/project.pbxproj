@@ -40,6 +40,10 @@
 		DDEB56E02F3FE0BD00387CC8 /* ContactsListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDEB56B12F3FE0BD00387CC8 /* ContactsListView.swift */; };
 		DDEB56E12F3FE0BD00387CC8 /* DiagnosticsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDEB56E22F3FE0BD00387CC8 /* DiagnosticsView.swift */; };
 		DDEB56E42F3FE20E00387CC8 /* libscmessenger_mobile.a in Frameworks */ = {isa = PBXBuildFile; fileRef = DDEB56E32F3FE20E00387CC8 /* libscmessenger_mobile.a */; };
+		DDEB56012F3FE0BD00387CC8 /* QRCodeGenerator.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDEB56002F3FE0BD00387CC8 /* QRCodeGenerator.swift */; };
+		DDEB56032F3FE0BD00387CC8 /* VerifySafetyNumberSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDEB56022F3FE0BD00387CC8 /* VerifySafetyNumberSheet.swift */; };
+		DDEB56052F3FE0BD00387CC8 /* BackupPassphraseValidator.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDEB56042F3FE0BD00387CC8 /* BackupPassphraseValidator.swift */; };
+		DDEB56072F3FE0BD00387CC8 /* IdentityBackupSheets.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDEB56062F3FE0BD00387CC8 /* IdentityBackupSheets.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -80,6 +84,10 @@
 		DDEB56C22F3FE0BD00387CC8 /* SCMessengerApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SCMessengerApp.swift; sourceTree = "<group>"; };
 		DDEB56E22F3FE0BD00387CC8 /* DiagnosticsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiagnosticsView.swift; sourceTree = "<group>"; };
 		DDEB56E32F3FE20E00387CC8 /* libscmessenger_mobile.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; path = libscmessenger_mobile.a; sourceTree = BUILT_PRODUCTS_DIR; };
+		DDEB56002F3FE0BD00387CC8 /* QRCodeGenerator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QRCodeGenerator.swift; sourceTree = "<group>"; };
+		DDEB56022F3FE0BD00387CC8 /* VerifySafetyNumberSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VerifySafetyNumberSheet.swift; sourceTree = "<group>"; };
+		DDEB56042F3FE0BD00387CC8 /* BackupPassphraseValidator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackupPassphraseValidator.swift; sourceTree = "<group>"; };
+		DDEB56062F3FE0BD00387CC8 /* IdentityBackupSheets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IdentityBackupSheets.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -169,6 +177,8 @@
 			isa = PBXGroup;
 			children = (
 				DDEB56AA2F3FE0BD00387CC8 /* Theme.swift */,
+				DDEB56002F3FE0BD00387CC8 /* QRCodeGenerator.swift */,
+				DDEB56042F3FE0BD00387CC8 /* BackupPassphraseValidator.swift */,
 			);
 			path = Utils;
 			sourceTree = "<group>";
@@ -188,6 +198,7 @@
 			isa = PBXGroup;
 			children = (
 				DDEB56B12F3FE0BD00387CC8 /* ContactsListView.swift */,
+				DDEB56022F3FE0BD00387CC8 /* VerifySafetyNumberSheet.swift */,
 			);
 			path = Contacts;
 			sourceTree = "<group>";
@@ -221,6 +232,7 @@
 			children = (
 				DDEB56B92F3FE0BD00387CC8 /* SettingsView.swift */,
 				DDEB56E22F3FE0BD00387CC8 /* DiagnosticsView.swift */,
+				DDEB56062F3FE0BD00387CC8 /* IdentityBackupSheets.swift */,
 			);
 			path = Settings;
 			sourceTree = "<group>";
@@ -359,7 +371,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "set -e\nexport IPHONEOS_DEPLOYMENT_TARGET=\"${IPHONEOS_DEPLOYMENT_TARGET}\"\nif [ -f \"$HOME/.cargo/env\" ]; then\n    source \"$HOME/.cargo/env\"\nfi\n\ncd \"${PROJECT_DIR}/../../mobile\"\n\nif [ \"$PLATFORM_NAME\" = \"iphonesimulator\" ]; then\n    SDK_MIN_FLAG=\"-mios-simulator-version-min=${IPHONEOS_DEPLOYMENT_TARGET}\"\n    if [ \"$(uname -m)\" = \"arm64\" ]; then\n        RUST_TARGET=\"aarch64-apple-ios-sim\"\n    else\n        RUST_TARGET=\"x86_64-apple-ios\"\n    fi\nelse\n    SDK_MIN_FLAG=\"-miphoneos-version-min=${IPHONEOS_DEPLOYMENT_TARGET}\"\n    RUST_TARGET=\"aarch64-apple-ios\"\nfi\n\n# Ensure C/ASM dependencies (for example ring) are compiled with the same min deployment target\nexport CFLAGS_aarch64_apple_ios=\"$SDK_MIN_FLAG\"\nexport CFLAGS_aarch64_apple_ios_sim=\"$SDK_MIN_FLAG\"\nexport CFLAGS_x86_64_apple_ios=\"$SDK_MIN_FLAG\"\nexport CARGO_TARGET_AARCH64_APPLE_IOS_RUSTFLAGS=\"-C link-arg=$SDK_MIN_FLAG\"\nexport CARGO_TARGET_AARCH64_APPLE_IOS_SIM_RUSTFLAGS=\"-C link-arg=$SDK_MIN_FLAG\"\nexport CARGO_TARGET_X86_64_APPLE_IOS_RUSTFLAGS=\"-C link-arg=$SDK_MIN_FLAG\"\n\nif [ \"$CONFIGURATION\" = \"Release\" ]; then\n    RUST_PROFILE=\"--release\"\n    RUST_DIR=\"release\"\nelse\n    RUST_PROFILE=\"\"\n    RUST_DIR=\"debug\"\nfi\n\necho \"Building Rust library for target: $RUST_TARGET ($CONFIGURATION)\"\ncargo build $RUST_PROFILE --target \"$RUST_TARGET\"\n\nmkdir -p \"${CONFIGURATION_BUILD_DIR}\"\ncp \"../target/${RUST_TARGET}/${RUST_DIR}/libscmessenger_mobile.a\" \\\n   \"${CONFIGURATION_BUILD_DIR}/libscmessenger_mobile.a\"\n\necho \"✓ Rust library copied to: ${CONFIGURATION_BUILD_DIR}/libscmessenger_mobile.a\"\n";
+			shellScript = "set -e\nexport IPHONEOS_DEPLOYMENT_TARGET=\"${IPHONEOS_DEPLOYMENT_TARGET}\"\nif [ -f \"$HOME/.cargo/env\" ]; then\n    source \"$HOME/.cargo/env\"\nfi\n\ncd \"${PROJECT_DIR}/../..\"\n\nif [ \"$PLATFORM_NAME\" = \"iphonesimulator\" ]; then\n    SDK_MIN_FLAG=\"-mios-simulator-version-min=${IPHONEOS_DEPLOYMENT_TARGET}\"\n    if [ \"$(uname -m)\" = \"arm64\" ]; then\n        RUST_TARGET=\"aarch64-apple-ios-sim\"\n    else\n        RUST_TARGET=\"x86_64-apple-ios\"\n    fi\nelse\n    SDK_MIN_FLAG=\"-miphoneos-version-min=${IPHONEOS_DEPLOYMENT_TARGET}\"\n    RUST_TARGET=\"aarch64-apple-ios\"\nfi\n\n# Ensure C/ASM dependencies (for example ring) are compiled with the same min deployment target\nexport CFLAGS_aarch64_apple_ios=\"$SDK_MIN_FLAG\"\nexport CFLAGS_aarch64_apple_ios_sim=\"$SDK_MIN_FLAG\"\nexport CFLAGS_x86_64_apple_ios=\"$SDK_MIN_FLAG\"\nexport CARGO_TARGET_AARCH64_APPLE_IOS_RUSTFLAGS=\"-C link-arg=$SDK_MIN_FLAG\"\nexport CARGO_TARGET_AARCH64_APPLE_IOS_SIM_RUSTFLAGS=\"-C link-arg=$SDK_MIN_FLAG\"\nexport CARGO_TARGET_X86_64_APPLE_IOS_RUSTFLAGS=\"-C link-arg=$SDK_MIN_FLAG\"\n\nif [ \"$CONFIGURATION\" = \"Release\" ]; then\n    RUST_PROFILE=\"--release\"\n    RUST_DIR=\"release\"\nelse\n    RUST_PROFILE=\"\"\n    RUST_DIR=\"debug\"\nfi\n\necho \"Building Rust library for target: $RUST_TARGET ($CONFIGURATION)\"\ncargo build $RUST_PROFILE -p scmessenger-core --target \"$RUST_TARGET\"\n\nmkdir -p \"${CONFIGURATION_BUILD_DIR}\"\ncp \"target/${RUST_TARGET}/${RUST_DIR}/libscmessenger_core.a\" \\\n   \"${CONFIGURATION_BUILD_DIR}/libscmessenger_mobile.a\"\n\necho \"✓ Rust library copied to: ${CONFIGURATION_BUILD_DIR}/libscmessenger_mobile.a\"\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 
@@ -399,6 +411,10 @@
 				DDEB56DF2F3FE0BD00387CC8 /* IosPlatformBridge.swift in Sources */,
 				DDEB56E02F3FE0BD00387CC8 /* ContactsListView.swift in Sources */,
 				DDEB56E12F3FE0BD00387CC8 /* DiagnosticsView.swift in Sources */,
+				DDEB56012F3FE0BD00387CC8 /* QRCodeGenerator.swift in Sources */,
+				DDEB56032F3FE0BD00387CC8 /* VerifySafetyNumberSheet.swift in Sources */,
+				DDEB56052F3FE0BD00387CC8 /* BackupPassphraseValidator.swift in Sources */,
+				DDEB56072F3FE0BD00387CC8 /* IdentityBackupSheets.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

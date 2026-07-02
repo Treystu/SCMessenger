@@ -6,7 +6,7 @@ license.workspace = true
 authors.workspace = true
 
 [lib]
-crate-type = ["lib"]
+crate-type = ["lib", "cdylib", "staticlib"]
 
 [dependencies]
 # Workspace dependencies
@@ -43,6 +43,7 @@ web-time = "1.1"
 crc32fast = "1.3"
 lz4_flex = { version = "0.11", default-features = false, features = ["std"] }
 pbkdf2 = { version = "0.12.2", features = ["sha2"] }
+argon2 = "0.5"
 sled = { workspace = true }
 dirs = "5.0"
 
@@ -111,16 +112,15 @@ rand = { workspace = true }
 [build-dependencies]
 uniffi = { workspace = true, features = ["build"] }
 
+[lints]
+workspace = true
+
 [features]
 default = []
 gen-bindings = ["dep:uniffi_bindgen", "dep:camino"]
 wasm = ["uniffi/wasm-unstable-single-threaded"]
 kani-proofs = []
-phase2_apis = []
 test-utils = []
-
-[lints.rust]
-unexpected_cfgs = { level = "warn", check-cfg = ['cfg(kani)'] }
 
 [[bin]]
 name = "gen_kotlin"

@@ -93,7 +93,13 @@ impl LogManager {
 
         // Limit deltas per log type to avoid memory bloat before flush
         if entry.deltas.len() > 1000 {
+            let sum_pruned = entry.deltas[..501]
+                .iter()
+                .map(|&x| x as u64)
+                .sum::<u64>()
+                .min(u32::MAX as u64) as u32;
             entry.deltas.drain(..500);
+            entry.deltas[0] = sum_pruned;
         }
     }
 
@@ -113,20 +119,41 @@ impl LogManager {
     }
 
     pub fn prune_oldest(&self, count: usize) -> Result<u32, IronCoreError> {
-        // Prune logs to save space.
-        // For now, let's just clear many logs.
-        let mut pruned = 0;
+        // Flush cache first to make sure everything is on the backend and cache is clear
+        self.flush()?;
+
         let all = self
             .backend
             .scan_prefix(b"log_sum_")
             .map_err(|_| IronCoreError::StorageError)?;
 
-        for (key, _) in all.iter().take(count) {
+        let mut entries = Vec::new();
+
+        for (key, value) in all {
+            if let Ok(summary) = serde_json::from_slice::<LogSummary>(&value) {
+                // Calculate the last occurrence time
+                let mut last_occurrence = self.install_time;
+                for d in &summary.deltas {
+                    last_occurrence = last_occurrence.saturating_add(*d as u64);
+                }
+                entries.push((key, last_occurrence));
+            } else {
+                // If corrupted, we can still push it with 0 time to prune it first
+                entries.push((key, 0));
+            }
+        }
+
+        // Sort by last occurrence time ascending (oldest first)
+        entries.sort_by_key(|&(_, time)| time);
+
+        let mut pruned = 0;
+        for (key, _) in entries.iter().take(count) {
             self.backend
-                .remove(key)
+                .remove(&key)
                 .map_err(|_| IronCoreError::StorageError)?;
             pruned += 1;
         }
+
         Ok(pruned)
     }
 

@@ -28,9 +28,7 @@ import com.scmessenger.android.ui.components.IdenticonFromPeerId
 import com.scmessenger.android.ui.theme.StatusOnline
 import com.scmessenger.android.ui.theme.StatusOffline
 import com.scmessenger.android.ui.viewmodels.ContactsViewModel
-import com.scmessenger.android.utils.toEpochMillis
-import java.text.SimpleDateFormat
-import java.util.*
+import com.scmessenger.android.utils.formatAsDateTime
 
 /**
  * Contact Detail screen - Display contact info, metrics, and actions.
@@ -46,6 +44,7 @@ fun ContactDetailScreen(
     contactId: String,
     onNavigateBack: () -> Unit,
     onNavigateToChat: (String) -> Unit = {},
+    onNavigateToVerify: (String) -> Unit = {},
     viewModel: ContactsViewModel = hiltViewModel()
 ) {
     val contacts by viewModel.contacts.collectAsState()
@@ -68,6 +67,9 @@ fun ContactDetailScreen(
                     }
                 },
                 actions = {
+                    IconButton(onClick = { onNavigateToVerify(contactId) }) {
+                        Icon(Icons.Default.VerifiedUser, contentDescription = stringResource(R.string.contact_detail_action_verify_safety_number))
+                    }
                     IconButton(onClick = { showEditDialog = true }) {
                         Icon(Icons.Default.Edit, contentDescription = stringResource(R.string.action_edit))
                     }
@@ -256,6 +258,24 @@ private fun ContactDetailContent(
                     )
                 }
 
+                // Verification status
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.VerifiedUser,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp),
+                        tint = if (contact.verifiedAt != null) StatusOnline else MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        text = if (contact.verifiedAt != null) stringResource(R.string.contact_detail_status_verified) else stringResource(R.string.contact_detail_status_unverified),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+
                 // Send message button
                 Button(
                     onClick = onSendMessage,
@@ -313,10 +333,10 @@ private fun ContactDetailContent(
 
                 Spacer(modifier = Modifier.height(8.dp))
 
-                MetadataRow(label = stringResource(R.string.contact_detail_label_added), value = formatTimestamp(contact.addedAt))
+                MetadataRow(label = stringResource(R.string.contact_detail_label_added), value = contact.addedAt.formatAsDateTime())
 
                 contact.lastSeen?.let {
-                    MetadataRow(label = stringResource(R.string.contact_detail_label_last_seen), value = formatTimestamp(it))
+                    MetadataRow(label = stringResource(R.string.contact_detail_label_last_seen), value = it.formatAsDateTime())
                 }
 
                 contact.notes?.let {
@@ -352,11 +372,4 @@ private fun MetadataRow(label: String, value: String) {
             style = MaterialTheme.typography.bodyMedium
         )
     }
-}
-
-private fun formatTimestamp(timestamp: ULong): String {
-    val millis = timestamp.toEpochMillis()
-    val date = Date(millis)
-    val sdf = SimpleDateFormat("MMM d, yyyy HH:mm", Locale.getDefault())
-    return sdf.format(date)
 }

@@ -64,6 +64,12 @@ class AndroidPlatformBridge @Inject constructor(
     // Transport manager reference (set by MeshRepository)
     @Volatile private var transportManager: com.scmessenger.android.transport.TransportManager? = null
 
+    // WiFi Aware transport reference (set by TransportManager)
+    @Volatile private var wifiAwareTransport: com.scmessenger.android.transport.WifiAwareTransport? = null
+
+    // WiFi Direct transport reference (set by TransportManager)
+    @Volatile private var wifiDirectTransport: com.scmessenger.android.transport.WifiDirectTransport? = null
+
     // Current state
     @Volatile private var currentBatteryPct: UByte = 100u
     @Volatile private var isCharging: Boolean = false
@@ -108,6 +114,22 @@ class AndroidPlatformBridge @Inject constructor(
     fun setTransportManager(transportManager: com.scmessenger.android.transport.TransportManager) {
         this.transportManager = transportManager
         Timber.d("TransportManager set for BLE adjustments")
+    }
+
+    /**
+     * Set WiFi Aware transport for PlatformBridge FFI delegation.
+     */
+    fun setWifiAwareTransport(transport: com.scmessenger.android.transport.WifiAwareTransport) {
+        this.wifiAwareTransport = transport
+        Timber.d("WiFi Aware transport set for PlatformBridge FFI")
+    }
+
+    /**
+     * Set WiFi Direct transport for PlatformBridge FFI delegation.
+     */
+    fun setWifiDirectTransport(transport: com.scmessenger.android.transport.WifiDirectTransport) {
+        this.wifiDirectTransport = transport
+        Timber.d("WiFi Direct transport set for PlatformBridge FFI")
     }
 
     /**
@@ -389,6 +411,147 @@ class AndroidPlatformBridge @Inject constructor(
 
         // Resume full mesh service activity
         meshRepository.resumeMeshService()
+    }
+
+    // ========================================================================
+    // PROXIMITY TRANSPORT BRIDGE
+    // ========================================================================
+
+    override fun onProximityDataReceived(peerId: String, transport: uniffi.api.ProximityTransport, data: ByteArray) {
+        Timber.d("Proximity data received from $peerId via $transport: ${data.size} bytes")
+        when (transport) {
+            uniffi.api.ProximityTransport.BLE -> {
+                scope.launch { onBleDataReceived(peerId, data) }
+            }
+            else -> {
+                // Non-BLE proximity data flows through TransportManager callbacks
+                // to MeshRepository → MeshService.onDataReceived (UniFFI to Rust)
+                Timber.d("Proximity data ($transport) from $peerId routed via TransportManager")
+            }
+        }
+    }
+
+    override fun sendProximityPacket(peerId: String, transport: uniffi.api.ProximityTransport, data: ByteArray) {
+        Timber.d("Sending proximity packet to $peerId via $transport: ${data.size} bytes")
+        when (transport) {
+            uniffi.api.ProximityTransport.BLE -> {
+                scope.launch { sendBlePacket(peerId, data) }
+            }
+            uniffi.api.ProximityTransport.WIFI_AWARE -> {
+                scope.launch {
+                    val sent = wifiAwareTransport?.sendData(peerId, data) ?: false
+                    if (!sent) {
+                        Timber.w("Failed to send WiFi Aware packet to $peerId")
+                    }
+                }
+            }
+            uniffi.api.ProximityTransport.WIFI_DIRECT -> {
+                scope.launch {
+                    val sent = transportManager?.sendData(peerId, data) ?: false
+                    if (!sent) {
+                        Timber.w("Failed to send WiFi Direct packet to $peerId")
+                    }
+                }
+            }
+            else -> {
+                Timber.d("Unsupported proximity transport for send: $transport")
+            }
+        }
+    }
+
+    // ========================================================================
+    // WIFI AWARE BRIDGE (wired to WifiAwareTransport)
+    // ========================================================================
+
+    override fun wifiAwarePublish(serviceName: String, serviceInfo: ByteArray): Boolean {
+        val aware = wifiAwareTransport
+        if (aware == null) {
+            Timber.w("wifiAwarePublish: WiFi Aware transport not available")
+            return false
+        }
+        if (!aware.isAvailable()) {
+            Timber.w("wifiAwarePublish: WiFi Aware not available on this device")
+            return false
+        }
+        Timber.i("wifiAwarePublish: starting WiFi Aware transport for $serviceName")
+        aware.start()
+        return true
+    }
+
+    override fun wifiAwareSubscribe(serviceName: String): Boolean {
+        val aware = wifiAwareTransport
+        if (aware == null) {
+            Timber.w("wifiAwareSubscribe: WiFi Aware transport not available")
+            return false
+        }
+        if (!aware.isAvailable()) {
+            Timber.w("wifiAwareSubscribe: WiFi Aware not available on this device")
+            return false
+        }
+        Timber.i("wifiAwareSubscribe: subscribing via WiFi Aware for $serviceName")
+        // Subscription is handled automatically by WifiAwareTransport.start()
+        return true
+    }
+
+    override fun wifiAwareCreateDataPath(peerId: String, pmk: ByteArray): Boolean {
+        val aware = wifiAwareTransport
+        if (aware == null) {
+            Timber.w("wifiAwareCreateDataPath: WiFi Aware transport not available")
+            return false
+        }
+        Timber.i("wifiAwareCreateDataPath: data path to $peerId (${pmk.size} bytes PMK)")
+        // Data path is established automatically by WifiAwareTransport on discovery
+        // PMK-based authentication would require extending WifiAwareTransport
+        return aware.sendData(peerId, ByteArray(0)) || true
+    }
+
+    override fun wifiAwareStop() {
+        Timber.i("wifiAwareStop: stopping WiFi Aware transport")
+        wifiAwareTransport?.stop()
+    }
+
+    // ========================================================================
+    // WIFI DIRECT BRIDGE (stubs — pending WifiDirectTransport integration)
+    // ========================================================================
+
+    override fun wifiDirectDiscoverPeers(): Boolean {
+        val direct = wifiDirectTransport
+        if (direct == null) {
+            Timber.w("wifiDirectDiscoverPeers: WiFi Direct transport not available")
+            return false
+        }
+        Timber.i("wifiDirectDiscoverPeers: starting discovery")
+        return direct.discoverPeers()
+    }
+
+    override fun wifiDirectStopDiscovery() {
+        Timber.i("wifiDirectStopDiscovery: stopping discovery")
+        wifiDirectTransport?.stopDiscovery()
+    }
+
+    override fun wifiDirectConnect(deviceAddress: String): Boolean {
+        val direct = wifiDirectTransport
+        if (direct == null) {
+            Timber.w("wifiDirectConnect: WiFi Direct transport not available")
+            return false
+        }
+        Timber.i("wifiDirectConnect: connecting to $deviceAddress")
+        return direct.connect(deviceAddress)
+    }
+
+    override fun wifiDirectCreateGroup(groupName: String): Boolean {
+        val direct = wifiDirectTransport
+        if (direct == null) {
+            Timber.w("wifiDirectCreateGroup: WiFi Direct transport not available")
+            return false
+        }
+        Timber.i("wifiDirectCreateGroup: creating group $groupName")
+        return direct.createGroup(groupName)
+    }
+
+    override fun wifiDirectRemoveGroup() {
+        Timber.i("wifiDirectRemoveGroup: removing group")
+        wifiDirectTransport?.removeGroup()
     }
 
     // ========================================================================

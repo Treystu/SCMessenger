@@ -57,6 +57,16 @@ impl Contact {
     }
 }
 
+/// Key prefix namespacing contact records in the shared backend. `IronCore`
+/// hands identity, history, logs, blocked-list, and contact storage the same
+/// `Arc<dyn StorageBackend>` instance, so without a prefix, `list()`/`count()`
+/// would scan (and try to parse as `Contact`) every other subsystem's keys too.
+const CONTACT_KEY_PREFIX: &[u8] = b"contact:";
+
+fn contact_key(peer_id: &str) -> Vec<u8> {
+    [CONTACT_KEY_PREFIX, peer_id.as_bytes()].concat()
+}
+
 #[derive(Clone)]
 pub struct ContactManager {
     backend: Arc<dyn StorageBackend>,
@@ -64,7 +74,71 @@ pub struct ContactManager {
 
 impl ContactManager {
     pub fn new(backend: Arc<dyn StorageBackend>) -> Self {
-        Self { backend }
+        let manager = Self { backend };
+        manager.migrate_unprefixed_contacts();
+        manager
+    }
+
+    /// One-time migration for installs that stored contacts under bare
+    /// `peer_id` keys before `CONTACT_KEY_PREFIX` existed: those records
+    /// became invisible to `list()`/`get()`/`count()` (which only see
+    /// `contact:`-prefixed keys) after upgrading, without being deleted.
+    /// Idempotent - a no-op once every contact has been rewritten under its
+    /// prefixed key.
+    fn migrate_unprefixed_contacts(&self) {
+        if self
+            .backend
+            .get(b"metadata_contacts_migrated")
+            .map(|opt| opt.is_some())
+            .unwrap_or(false)
+        {
+            return;
+        }
+
+        let Ok(entries) = self.backend.scan_prefix(b"") else {
+            return;
+        };
+        let mut migrated = 0u32;
+        for (key, value) in entries {
+            if key.starts_with(CONTACT_KEY_PREFIX) {
+                continue;
+            }
+            let Ok(contact) = serde_json::from_slice::<Contact>(&value) else {
+                continue;
+            };
+            // Disambiguator against other subsystems' records sharing this
+            // backend: only treat it as a migratable contact if the bare
+            // key really is that contact's peer_id.
+            if contact.peer_id.as_bytes() != key.as_slice() {
+                continue;
+            }
+            
+            let prefixed = contact_key(&contact.peer_id);
+            let already_exists = self
+                .backend
+                .get(&prefixed)
+                .map(|opt| opt.is_some())
+                .unwrap_or(false);
+
+            if already_exists {
+                // Prefixed key already exists, don't overwrite.
+                // Just remove the legacy bare key to clean up the backend.
+                let _ = self.backend.remove(&key);
+            } else if self.backend.put(&prefixed, &value).is_ok() {
+                let _ = self.backend.remove(&key);
+                migrated += 1;
+            }
+        }
+
+        let _ = self.backend.put(b"metadata_contacts_migrated", b"true");
+
+        if migrated > 0 {
+            tracing::info!(
+                event = "contacts_key_prefix_migration",
+                migrated_count = migrated,
+                "migrated bare-keyed contacts to contact:-prefixed keys"
+            );
+        }
     }
 
     /// Reconcile contacts from message history to recover potentially lost records.
@@ -133,19 +207,19 @@ impl ContactManager {
     }
 
     pub fn add(&self, contact: Contact) -> Result<(), IronCoreError> {
-        let key = contact.peer_id.clone();
+        let key = contact_key(&contact.peer_id);
         let value = serde_json::to_vec(&contact).map_err(|_| IronCoreError::Internal)?;
         self.backend
-            .put(key.as_bytes(), &value)
+            .put(&key, &value)
             .map_err(|_| IronCoreError::StorageError)?;
         Ok(())
     }
 
     pub fn get(&self, peer_id: String) -> Result<Option<Contact>, IronCoreError> {
-        let key = peer_id;
+        let key = contact_key(&peer_id);
         if let Some(data) = self
             .backend
-            .get(key.as_bytes())
+            .get(&key)
             .map_err(|_| IronCoreError::StorageError)?
         {
             let contact: Contact =
@@ -157,9 +231,9 @@ impl ContactManager {
     }
 
     pub fn remove(&self, peer_id: String) -> Result<(), IronCoreError> {
-        let key = peer_id;
+        let key = contact_key(&peer_id);
         self.backend
-            .remove(key.as_bytes())
+            .remove(&key)
             .map_err(|_| IronCoreError::StorageError)?;
         Ok(())
     }
@@ -167,7 +241,7 @@ impl ContactManager {
     pub fn list(&self) -> Result<Vec<Contact>, IronCoreError> {
         let all = self
             .backend
-            .scan_prefix(b"")
+            .scan_prefix(CONTACT_KEY_PREFIX)
             .map_err(|_| IronCoreError::StorageError)?;
 
         let mut contacts = Vec::new();
@@ -275,7 +349,7 @@ impl ContactManager {
     }
 
     pub fn count(&self) -> u32 {
-        self.backend.count_prefix(b"").unwrap_or(0) as u32
+        self.backend.count_prefix(CONTACT_KEY_PREFIX).unwrap_or(0) as u32
     }
 
     pub fn flush(&self) {
@@ -283,20 +357,23 @@ impl ContactManager {
     }
 
     /// Verify database integrity and detect corruption.
-    /// Returns an error if the database has data but returns 0 contacts.
+    /// Returns an error if the database has contact-prefixed entries but
+    /// `list()` returns 0 contacts (i.e. entries exist but fail to parse).
     pub fn verify_integrity(&self) -> Result<(), IronCoreError> {
         let contact_count = self.count();
-        let db_size = self.backend.count_prefix(b"").unwrap_or(0);
+        let raw_entry_count = self.backend.count_prefix(CONTACT_KEY_PREFIX).unwrap_or(0);
 
-        // If contact count is 0 but database has entries, there may be corruption
-        // or the contacts were not properly loaded from the database.
-        // We use a threshold of 1024 bytes as a reasonable indicator of data presence.
-        if contact_count == 0 && db_size > 0 {
-            // Check if we have actual data by scanning a few keys
-            let has_data = !self.backend.scan_prefix(b"").unwrap_or_default().is_empty();
+        // If contact count is 0 but contact-prefixed entries exist, there may
+        // be corruption or the contacts were not properly loaded.
+        if contact_count == 0 && raw_entry_count > 0 {
+            let has_data = !self
+                .backend
+                .scan_prefix(CONTACT_KEY_PREFIX)
+                .unwrap_or_default()
+                .is_empty();
             if has_data {
-                // Database has data but count() returns 0 - potential corruption
-                // This could happen if the data is stored but not properly deserialized
+                // Contact-prefixed entries exist but count() returns 0 -
+                // potential corruption (data stored but not properly deserialized).
                 return Err(IronCoreError::CorruptionDetected);
             }
         }
@@ -407,5 +484,59 @@ mod tests {
             contact.last_known_device_id.as_deref(),
             Some("550e8400-e29b-41d4-a716-446655440000")
         );
+    }
+
+    #[test]
+    fn test_unprefixed_contacts_migrate_on_open() {
+        let backend = Arc::new(MemoryStorage::new());
+        let contact = Contact::new("peer-legacy".to_string(), "pubkey-hex".to_string());
+        let bytes = serde_json::to_vec(&contact).unwrap();
+        // Simulate a pre-prefix install: the contact stored under its bare
+        // peer_id key, with no `contact:` prefix.
+        backend.put(b"peer-legacy", &bytes).unwrap();
+
+        let mgr = ContactManager::new(backend.clone());
+
+        let contacts = mgr.list().unwrap();
+        assert_eq!(
+            contacts.len(),
+            1,
+            "the bare-keyed contact must be visible after migration"
+        );
+        assert_eq!(contacts[0].peer_id, "peer-legacy");
+
+        assert!(
+            backend.get(b"peer-legacy").unwrap().is_none(),
+            "the bare key must be removed after migration"
+        );
+        assert!(
+            backend.get(&contact_key("peer-legacy")).unwrap().is_some(),
+            "the contact must now live under its prefixed key"
+        );
+
+        // Idempotent: reopening must not duplicate or lose it.
+        let mgr2 = ContactManager::new(backend);
+        assert_eq!(mgr2.list().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn test_migration_ignores_non_contact_records_sharing_the_backend() {
+        let backend = Arc::new(MemoryStorage::new());
+        // A record from another subsystem that happens to be valid JSON but
+        // is not a Contact (or whose peer_id doesn't match the key) must be
+        // left untouched.
+        backend
+            .put(b"some-other-key", br#"{"unrelated":"record"}"#)
+            .unwrap();
+        let mismatched = Contact::new("actual-peer-id".to_string(), "pk".to_string());
+        backend
+            .put(b"different-key", &serde_json::to_vec(&mismatched).unwrap())
+            .unwrap();
+
+        let mgr = ContactManager::new(backend.clone());
+
+        assert_eq!(mgr.list().unwrap().len(), 0);
+        assert!(backend.get(b"some-other-key").unwrap().is_some());
+        assert!(backend.get(b"different-key").unwrap().is_some());
     }
 }

@@ -1,5 +1,5 @@
 [workspace]
-members = ["core", "mobile", "cli", "desktop_bridge", "wasm"]
+members = ["core", "cli", "wasm"]
 # wasm excluded from default members: requires wasm32 target
 # Build with: cargo build -p scmessenger-wasm --target wasm32-unknown-unknown
 # exclude = ["wasm"]
@@ -116,6 +116,12 @@ clap = { version = "4.5", features = ["derive"] }
 
 # Testing
 mockall = "0.12"
+
+[workspace.lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(kani)'] }
+
+[workspace.lints.clippy]
+all = "warn"
 
 [profile.release]
 opt-level = 3

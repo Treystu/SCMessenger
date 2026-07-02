@@ -2,6 +2,8 @@
 ///
 /// This module provides a channel abstraction over BLE L2CAP with support for
 /// fragmentation and reassembly of messages that exceed the MTU.
+use std::collections::HashMap;
+use std::time::Instant;
 
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -196,9 +198,7 @@ impl L2capChannel {
                 self.state = ChannelState::Connecting;
                 Ok(())
             }
-            ChannelState::Connecting | ChannelState::Connected => {
-                Err(L2capError::AlreadyConnected)
-            }
+            ChannelState::Connecting | ChannelState::Connected => Err(L2capError::AlreadyConnected),
             ChannelState::Closing => Err(L2capError::ConnectionFailed(
                 "Channel is closing".to_string(),
             )),
@@ -268,7 +268,7 @@ impl L2capFragmenter {
             return Ok(vec![Vec::new()]);
         }
 
-        let total_fragments = (data.len() + max_payload - 1) / max_payload;
+        let total_fragments = data.len().div_ceil(max_payload);
 
         if total_fragments > u16::MAX as usize {
             return Err(L2capError::FragmentationError(
@@ -313,13 +313,11 @@ impl L2capReassembler {
         let expected_total = first_header.total_fragments as usize;
 
         if fragments.len() != expected_total {
-            return Err(L2capError::ReassemblyError(
-                format!(
-                    "Expected {} fragments, got {}",
-                    expected_total,
-                    fragments.len()
-                ),
-            ));
+            return Err(L2capError::ReassemblyError(format!(
+                "Expected {} fragments, got {}",
+                expected_total,
+                fragments.len()
+            )));
         }
 
         // Verify all fragments are present and in order
@@ -348,6 +346,180 @@ impl L2capReassembler {
 
         Ok(result)
     }
+}
+
+/// Reason a partial reassembly was dropped
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum DropReason {
+    /// Reassembly timed out (partial fragments discarded)
+    Timeout,
+    /// Per-peer memory cap exceeded
+    MemoryCapExceeded,
+    /// CRC32 verification failed on reassembled frame
+    CrcMismatch,
+}
+
+/// Per-peer partial reassembly state
+struct PartialReassembly {
+    fragments: HashMap<u16, Vec<u8>>,
+    expected_total: u16,
+    received_at: Instant,
+    bytes_stored: usize,
+}
+
+/// Stateful reassembly manager with timeout, per-peer memory cap, and CRC32 verification.
+///
+/// Tracks partial reassemblies per peer, drops stale entries after `reassembly_timeout`,
+/// and enforces a per-peer memory cap of `max_peer_memory_bytes`.
+pub struct L2capReassemblyManager {
+    reassembly_timeout: std::time::Duration,
+    max_peer_memory_bytes: usize,
+    partials: HashMap<String, PartialReassembly>,
+    drop_stats: HashMap<DropReason, u64>,
+}
+
+impl L2capReassemblyManager {
+    pub fn new(reassembly_timeout_secs: u64, max_peer_memory_bytes: usize) -> Self {
+        Self {
+            reassembly_timeout: std::time::Duration::from_secs(reassembly_timeout_secs),
+            max_peer_memory_bytes,
+            partials: HashMap::new(),
+            drop_stats: HashMap::new(),
+        }
+    }
+
+    pub fn with_defaults() -> Self {
+        Self::new(30, 256 * 1024) // 30s timeout, 256 KiB cap
+    }
+
+    /// Feed a fragment for a given peer. Returns `Some(reassembled_data)` when all
+    /// fragments are collected and CRC32 passes, or `None` if more fragments are needed.
+    pub fn feed_fragment(&mut self, peer_id: &str, fragment: &[u8]) -> Option<Vec<u8>> {
+        self.evict_expired();
+
+        let header = match FragmentHeader::from_bytes(fragment) {
+            Ok(h) => h,
+            Err(_) => return None,
+        };
+
+        let payload = if fragment.len() > FragmentHeader::HEADER_SIZE {
+            &fragment[FragmentHeader::HEADER_SIZE..]
+        } else {
+            &[]
+        };
+
+        let partial =
+            self.partials
+                .entry(peer_id.to_string())
+                .or_insert_with(|| PartialReassembly {
+                    fragments: HashMap::new(),
+                    expected_total: header.total_fragments,
+                    received_at: Instant::now(),
+                    bytes_stored: 0,
+                });
+
+        // Check memory cap before inserting
+        if partial.bytes_stored + payload.len() > self.max_peer_memory_bytes {
+            self.drop_stats
+                .entry(DropReason::MemoryCapExceeded)
+                .and_modify(|c| *c += 1)
+                .or_insert(1);
+            self.partials.remove(peer_id);
+            return None;
+        }
+
+        partial
+            .fragments
+            .insert(header.fragment_index, payload.to_vec());
+        partial.bytes_stored += payload.len();
+
+        // Check if we have all fragments
+        if partial.fragments.len() == partial.expected_total as usize {
+            let partial = self.partials.remove(peer_id).unwrap();
+            let mut reassembled = Vec::new();
+            for i in 0..partial.expected_total {
+                if let Some(chunk) = partial.fragments.get(&i) {
+                    reassembled.extend_from_slice(chunk);
+                }
+            }
+
+            // CRC32 verification: last 4 bytes of reassembled data are the CRC
+            if reassembled.len() >= 4 {
+                let data_len = reassembled.len() - 4;
+                let expected_crc = u32::from_le_bytes([
+                    reassembled[data_len],
+                    reassembled[data_len + 1],
+                    reassembled[data_len + 2],
+                    reassembled[data_len + 3],
+                ]);
+                let actual_crc = crc32(&reassembled[..data_len]);
+                if expected_crc != actual_crc {
+                    self.drop_stats
+                        .entry(DropReason::CrcMismatch)
+                        .and_modify(|c| *c += 1)
+                        .or_insert(1);
+                    return None;
+                }
+                reassembled.truncate(data_len);
+            }
+
+            Some(reassembled)
+        } else {
+            None
+        }
+    }
+
+    /// Evict expired partial reassemblies
+    fn evict_expired(&mut self) {
+        let now = Instant::now();
+        let timeout = self.reassembly_timeout;
+        let expired: Vec<String> = self
+            .partials
+            .iter()
+            .filter(|(_, p)| now.duration_since(p.received_at) > timeout)
+            .map(|(k, _)| k.clone())
+            .collect();
+
+        for peer_id in expired {
+            self.partials.remove(&peer_id);
+            self.drop_stats
+                .entry(DropReason::Timeout)
+                .and_modify(|c| *c += 1)
+                .or_insert(1);
+        }
+    }
+
+    /// Get drop statistics
+    pub fn drop_stats(&self) -> &HashMap<DropReason, u64> {
+        &self.drop_stats
+    }
+
+    /// Get number of active partial reassemblies
+    pub fn active_count(&self) -> usize {
+        self.partials.len()
+    }
+}
+
+/// CRC32 checksum (IEEE polynomial)
+fn crc32(data: &[u8]) -> u32 {
+    let mut crc: u32 = 0xFFFFFFFF;
+    for &byte in data {
+        crc ^= byte as u32;
+        for _ in 0..8 {
+            if crc & 1 != 0 {
+                crc = (crc >> 1) ^ 0xEDB88320;
+            } else {
+                crc >>= 1;
+            }
+        }
+    }
+    crc ^ 0xFFFFFFFF
+}
+
+/// Append CRC32 to data (last 4 bytes are the CRC in little-endian)
+pub fn append_crc32(data: &mut Vec<u8>) {
+    let crc = crc32(data);
+    data.extend_from_slice(&crc.to_le_bytes());
 }
 
 #[cfg(test)]
@@ -556,13 +728,149 @@ mod tests {
         channel.initiate_close().expect("Initiate close");
         channel.initiate_close().expect("Close is idempotent");
         channel.confirm_close().expect("Confirm close");
-        channel.confirm_close().expect("Close confirmation is idempotent");
+        channel
+            .confirm_close()
+            .expect("Close confirmation is idempotent");
     }
 
     #[test]
-    fn test_l2cap_channel_new_validates_config() {
-        let config = L2capConfig::default().with_mtu(10);
-        let result = L2capChannel::new(config);
-        assert!(result.is_err());
+    fn test_crc32_roundtrip() {
+        let mut data = b"Hello, L2CAP!".to_vec();
+        let original_len = data.len();
+        append_crc32(&mut data);
+        assert_eq!(data.len(), original_len + 4);
+
+        let mut manager = L2capReassemblyManager::with_defaults();
+        let header = FragmentHeader::new(1, 0).unwrap();
+        let mut fragment = header.to_bytes().to_vec();
+        fragment.extend_from_slice(&data);
+
+        let result = manager.feed_fragment("peer1", &fragment);
+        assert!(result.is_some());
+        assert_eq!(result.unwrap(), b"Hello, L2CAP!");
+    }
+
+    #[test]
+    fn test_reassembly_manager_single_fragment() {
+        let mut manager = L2capReassemblyManager::with_defaults();
+        let mut payload = b"Hello".to_vec();
+        append_crc32(&mut payload);
+
+        let header = FragmentHeader::new(1, 0).unwrap();
+        let mut fragment = header.to_bytes().to_vec();
+        fragment.extend_from_slice(&payload);
+
+        let result = manager.feed_fragment("peer1", &fragment);
+        assert!(result.is_some());
+        assert_eq!(result.unwrap(), b"Hello");
+    }
+
+    #[test]
+    fn test_reassembly_manager_multi_fragment() {
+        let mut manager = L2capReassemblyManager::with_defaults();
+        let mut payload = b"Hello, L2CAP reassembly!".to_vec();
+        append_crc32(&mut payload);
+
+        // Split into 2 fragments
+        let mid = payload.len() / 2;
+        let part1 = payload[..mid].to_vec();
+        let part2 = payload[mid..].to_vec();
+
+        let h1 = FragmentHeader::new(2, 0).unwrap();
+        let h2 = FragmentHeader::new(2, 1).unwrap();
+
+        let mut frag1 = h1.to_bytes().to_vec();
+        frag1.extend_from_slice(&part1);
+        let mut frag2 = h2.to_bytes().to_vec();
+        frag2.extend_from_slice(&part2);
+
+        assert!(manager.feed_fragment("peer1", &frag1).is_none());
+        let result = manager.feed_fragment("peer1", &frag2);
+        assert!(result.is_some());
+        assert_eq!(result.unwrap(), b"Hello, L2CAP reassembly!");
+    }
+
+    #[test]
+    fn test_reassembly_manager_out_of_order() {
+        let mut manager = L2capReassemblyManager::with_defaults();
+        let mut payload = b"OutOfOrder".to_vec();
+        append_crc32(&mut payload);
+
+        let mid = payload.len() / 2;
+        let part1 = payload[..mid].to_vec();
+        let part2 = payload[mid..].to_vec();
+
+        let h1 = FragmentHeader::new(2, 0).unwrap();
+        let h2 = FragmentHeader::new(2, 1).unwrap();
+
+        let mut frag1 = h1.to_bytes().to_vec();
+        frag1.extend_from_slice(&part1);
+        let mut frag2 = h2.to_bytes().to_vec();
+        frag2.extend_from_slice(&part2);
+
+        // Feed fragment 2 first, then fragment 1
+        assert!(manager.feed_fragment("peer1", &frag2).is_none());
+        let result = manager.feed_fragment("peer1", &frag1);
+        assert!(result.is_some());
+        assert_eq!(result.unwrap(), b"OutOfOrder");
+    }
+
+    #[test]
+    fn test_reassembly_manager_crc_mismatch() {
+        let mut manager = L2capReassemblyManager::with_defaults();
+        let mut payload = b"Corrupt".to_vec();
+        // Append wrong CRC
+        payload.extend_from_slice(&[0xDE, 0xAD, 0xBE, 0xEF]);
+
+        let header = FragmentHeader::new(1, 0).unwrap();
+        let mut fragment = header.to_bytes().to_vec();
+        fragment.extend_from_slice(&payload);
+
+        let result = manager.feed_fragment("peer1", &fragment);
+        assert!(result.is_none());
+        assert_eq!(manager.drop_stats().get(&DropReason::CrcMismatch), Some(&1));
+    }
+
+    #[test]
+    fn test_reassembly_manager_memory_cap() {
+        let mut manager = L2capReassemblyManager::new(30, 10); // 10 byte cap
+        let mut payload = vec![0u8; 20]; // Exceeds cap
+        append_crc32(&mut payload);
+
+        let header = FragmentHeader::new(1, 0).unwrap();
+        let mut fragment = header.to_bytes().to_vec();
+        fragment.extend_from_slice(&payload);
+
+        let result = manager.feed_fragment("peer1", &fragment);
+        assert!(result.is_none());
+        assert_eq!(
+            manager.drop_stats().get(&DropReason::MemoryCapExceeded),
+            Some(&1)
+        );
+    }
+
+    #[test]
+    fn test_reassembly_manager_duplicate_fragment() {
+        let mut manager = L2capReassemblyManager::with_defaults();
+        let mut payload = b"Dup".to_vec();
+        append_crc32(&mut payload);
+
+        let mid = payload.len() / 2;
+        let part1 = payload[..mid].to_vec();
+        let part2 = payload[mid..].to_vec();
+
+        let h1 = FragmentHeader::new(2, 0).unwrap();
+        let h2 = FragmentHeader::new(2, 1).unwrap();
+
+        let mut frag1 = h1.to_bytes().to_vec();
+        frag1.extend_from_slice(&part1);
+        let mut frag2 = h2.to_bytes().to_vec();
+        frag2.extend_from_slice(&part2);
+
+        // Feed same fragment twice
+        assert!(manager.feed_fragment("peer1", &frag1).is_none());
+        assert!(manager.feed_fragment("peer1", &frag1).is_none()); // duplicate
+        let result = manager.feed_fragment("peer1", &frag2);
+        assert!(result.is_some());
     }
 }

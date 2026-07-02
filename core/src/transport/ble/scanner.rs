@@ -3,10 +3,9 @@
 /// This module provides BLE scanning with adaptive duty cycles based on battery state.
 /// Scanning can be aggressive when charging, standard when battery is good, and minimal
 /// when battery is low to conserve power.
-
 use serde::{Deserialize, Serialize};
-use web_time::{SystemTime, UNIX_EPOCH};
 use thiserror::Error;
+use web_time::{SystemTime, UNIX_EPOCH};
 
 /// BLE scanning configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -196,12 +195,7 @@ pub struct ScanResult {
 
 impl ScanResult {
     /// Create a new scan result
-    pub fn new(
-        peer_id: Vec<u8>,
-        rssi: i8,
-        beacon_data: Vec<u8>,
-        transport_info: Vec<u8>,
-    ) -> Self {
+    pub fn new(peer_id: Vec<u8>, rssi: i8, beacon_data: Vec<u8>, transport_info: Vec<u8>) -> Self {
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap_or_default();
@@ -226,8 +220,7 @@ impl ScanResult {
             return 1.0;
         }
 
-        let distance = 10f64.powf((tx_power - rssi_i16 as i16) as f64 / 20.0);
-        distance
+        10f64.powf((tx_power - rssi_i16) as f64 / 20.0)
     }
 }
 
@@ -471,12 +464,7 @@ mod tests {
 
     #[test]
     fn test_scan_result_creation() {
-        let result = ScanResult::new(
-            vec![0x01, 0x02, 0x03],
-            -50,
-            vec![0xAA; 30],
-            vec![],
-        );
+        let result = ScanResult::new(vec![0x01, 0x02, 0x03], -50, vec![0xAA; 30], vec![]);
 
         assert_eq!(result.peer_id, vec![0x01, 0x02, 0x03]);
         assert_eq!(result.rssi, -50);
