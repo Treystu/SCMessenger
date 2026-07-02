@@ -23,12 +23,11 @@ When a client starts, bootstrap nodes are resolved in strict priority order:
 
 3. **Static fallback list** (`static_nodes` in `BootstrapConfig`)
    Hardcoded multiaddr strings compiled into the binary. Always available.
-   Current default: GCP relay at `34.135.34.73:9001`.
+   Current default: None (Empty list). The project has shifted to ledger-based peer sharing.
 
 ## Trust Model
 
-- **Alpha:** Bootstrap nodes are trusted implicitly. The static list is maintained
-  by the project maintainers and compiled into each release.
+- **Alpha/Post-Alpha:** Bootstrap nodes are trusted implicitly when manually configured. The static list is now empty by default, shifting trust to the operator's environment and previously saved ledger nodes.
 
 - **Identity flexibility:** Bootstrap nodes may rotate their libp2p PeerId without
   breaking clients. Clients connect by IP:port and accept whichever valid Noise
@@ -59,7 +58,7 @@ export SC_BOOTSTRAP_NODES="/ip4/YOUR_IP/tcp/9001,/ip4/YOUR_IP2/tcp/9001"
 ## Future Considerations (Post-Alpha)
 
 - **Signed bootstrap lists:** Remote URL responses signed with a project key.
-- **Gossip-based discovery:** Peers share known bootstrap nodes via ledger exchange.
+- **Gossip-based discovery:** Peers share known bootstrap nodes via ledger exchange (Implemented).
 - **Reputation-weighted selection:** Prioritize bootstrap nodes with higher uptime.
 - **Decentralized registry:** Community-curated bootstrap list via on-chain or
   distributed registry.

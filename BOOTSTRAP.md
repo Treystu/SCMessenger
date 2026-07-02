@@ -22,10 +22,7 @@ SCMessenger automatically embeds default bootstrap nodes into all builds (Docker
 All builds include hardcoded bootstrap nodes in `cli/src/bootstrap.rs`:
 
 ```rust
-pub const DEFAULT_BOOTSTRAP_NODES: &[&str] = &[
-    "/ip4/34.168.102.7/tcp/9001/p2p/12D3KooWGGdvGNJb3JwkNpmYuapgk7SAZ4DsBmQsU989yhvnTB8W",
-    // Additional nodes...
-];
+pub const DEFAULT_BOOTSTRAP_NODES: &[&str] = &[];
 ```
 
 ### [Needs Revalidation] 2. Automatic Merging
@@ -78,7 +75,7 @@ Environment variable (Docker):
 
 ```bash
 docker run -d \
-  -e BOOTSTRAP_NODES="/ip4/1.2.3.4/tcp/9001/p2p/12D3Koo..." \
+  -e SC_BOOTSTRAP_NODES="/ip4/1.2.3.4/tcp/9001/p2p/12D3Koo..." \
   testbotz/scmessenger:latest
 ```
 
@@ -102,10 +99,10 @@ scmessenger-cli config bootstrap list
 
 ```bash
 # Docker
-docker exec scmessenger scm config bootstrap remove /ip4/34.168.102.7/tcp/9001/p2p/...
+docker exec scmessenger scm config bootstrap remove /ip4/1.2.3.4/tcp/9001/p2p/...
 
 # Native
-scmessenger-cli config bootstrap remove /ip4/34.168.102.7/tcp/9001/p2p/...
+scmessenger-cli config bootstrap remove /ip4/1.2.3.4/tcp/9001/p2p/...
 ```
 
 ## [Needs Revalidation] For Developers & Maintainers
@@ -116,7 +113,6 @@ Edit `cli/src/bootstrap.rs`:
 
 ```rust
 pub const DEFAULT_BOOTSTRAP_NODES: &[&str] = &[
-    "/ip4/34.168.102.7/tcp/9001/p2p/12D3KooWGGdvGNJb3JwkNpmYuapgk7SAZ4DsBmQsU989yhvnTB8W",
     "/ip4/1.2.3.4/tcp/9001/p2p/12D3KooW...",  // New node
     "/ip4/5.6.7.8/tcp/9001/p2p/12D3KooW...",  // Another node
 ];
@@ -141,12 +137,12 @@ Override defaults at build time using environment variable:
 
 ```bash
 # Native build
-export SCMESSENGER_BOOTSTRAP_NODES="/ip4/1.2.3.4/tcp/9001/p2p/12D3Koo...,/ip4/5.6.7.8/tcp/9001/p2p/12D3Koo..."
+export SC_BOOTSTRAP_NODES="/ip4/1.2.3.4/tcp/9001/p2p/12D3Koo...,/ip4/5.6.7.8/tcp/9001/p2p/12D3Koo..."
 cargo build --release
 
 # Docker build
 docker build \
-  --build-arg SCMESSENGER_BOOTSTRAP_NODES="/ip4/1.2.3.4/tcp/9001/p2p/12D3Koo..." \
+  --build-arg SC_BOOTSTRAP_NODES="/ip4/1.2.3.4/tcp/9001/p2p/12D3Koo..." \
   -t my-custom-build \
   -f docker/Dockerfile .
 ```
@@ -234,7 +230,7 @@ RUST_LOG=debug scmessenger-cli start
 
 # Watch for bootstrap connection logs:
 # ⚙ Connecting to bootstrap nodes...
-#   1. Dialing /ip4/34.168.102.7/tcp/9001/p2p/12D3Koo... ...
+#   1. Dialing /ip4/1.2.3.4/tcp/9001/p2p/12D3Koo... ...
 #   ✓ Connected to bootstrap node 1
 ```
 
@@ -276,7 +272,7 @@ scmessenger-cli start
 **Debug**:
 ```bash
 # Test connectivity
-nc -zv 34.168.102.7 9001
+nc -zv 1.2.3.4 9001
 
 # Check firewall
 # Linux: sudo ufw status
@@ -331,7 +327,7 @@ If you run a stable node with good uptime, consider contributing it as a default
 ```rust
 pub const DEFAULT_BOOTSTRAP_NODES: &[&str] = &[
     // North America - GCP (maintained by @user1)
-    "/ip4/34.168.102.7/tcp/9001/p2p/12D3KooWGGdvGNJb3JwkNpmYuapgk7SAZ4DsBmQsU989yhvnTB8W",
+    "/ip4/1.2.3.4/tcp/9001/p2p/12D3KooW...",
 
     // Europe - AWS (maintained by @user2)
     "/ip4/1.2.3.4/tcp/9001/p2p/12D3KooW...",
