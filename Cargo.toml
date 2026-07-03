@@ -123,6 +123,10 @@ unexpected_cfgs = { level = "warn", check-cfg = ['cfg(kani)'] }
 [workspace.lints.clippy]
 all = "warn"
 
+# Speed up debug builds by optimizing cryptography dependencies
+[profile.dev]
+opt-level = 3
+
 [profile.release]
 opt-level = 3
 lto = true

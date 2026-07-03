@@ -163,9 +163,42 @@ pub async fn run_ble_central_ingress(
         };
 
         let svc = scm_service_uuid();
-        let filter = ScanFilter::default(); // Use default empty filter for Windows compatibility
-        if let Err(e) = adapter.start_scan(filter).await {
-            tracing::warn!("BLE start_scan failed: {}", e);
+        // Windows/WinRT: the adapter object is often not ready to scan for a
+        // brief window right after Manager::new()/adapters() returns (the
+        // underlying BluetoothLEAdvertisementWatcher hasn't finished
+        // initializing). start_scan() then fails with HRESULT 0x800710DF
+        // ("device is not ready for use"). This is transient, not fatal —
+        // retry a few times with backoff before giving up.
+        const SCAN_START_RETRIES: u32 = 5;
+        let mut scan_started = false;
+        for attempt in 0..SCAN_START_RETRIES {
+            match adapter.start_scan(ScanFilter::default()).await {
+                Ok(()) => {
+                    scan_started = true;
+                    break;
+                }
+                Err(e) => {
+                    if attempt + 1 < SCAN_START_RETRIES {
+                        let delay_ms = 300u64 << attempt;
+                        tracing::debug!(
+                            "BLE start_scan attempt {}/{} failed ({}), retrying in {}ms",
+                            attempt + 1,
+                            SCAN_START_RETRIES,
+                            e,
+                            delay_ms
+                        );
+                        tokio::time::sleep(std::time::Duration::from_millis(delay_ms)).await;
+                    } else {
+                        tracing::warn!(
+                            "BLE start_scan failed after {} attempts: {}",
+                            SCAN_START_RETRIES,
+                            e
+                        );
+                    }
+                }
+            }
+        }
+        if !scan_started {
             return;
         }
         tracing::info!(

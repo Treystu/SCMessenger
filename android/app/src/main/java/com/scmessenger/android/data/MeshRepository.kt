@@ -8741,7 +8741,7 @@ open class MeshRepository(
         return null
     }
 
-    fun getIdentityExportString(): String {
+    fun getIdentityExportString(minimalForQr: Boolean = false): String {
         val identity = getIdentityInfo() ?: return "{}"
         var listeners = normalizeOutboundListenerHints(getListeningAddresses()).toMutableList()
         val externalAddresses = normalizeExternalAddressHints(getExternalAddresses())
@@ -8757,16 +8757,27 @@ open class MeshRepository(
         // UNIFIED ID FIX: QR code primary ID is libp2p_peer_id (network routable)
         // identity_id is secondary (human fingerprint for backup/recovery)
         val payload = org.json.JSONObject()
+            .put("version", "1.0")
             .put("peer_id", identity.libp2pPeerId ?: "")           // PRIMARY: libp2p Peer ID for contact add
             .put("public_key", identity.publicKeyHex ?: "")         // Canonical identity key
             .put("device_id", identity.deviceId ?: "")              // Multi-device routing
             .put("identity_id", identity.identityId ?: "")           // SECONDARY: Blake3 hash
             .put("nickname", identity.nickname ?: "")
             .put("libp2p_peer_id", identity.libp2pPeerId ?: "")      // Backward compatibility
-            .put("listeners", org.json.JSONArray(listeners))
-            .put("external_addresses", org.json.JSONArray(externalAddresses))
-            .put("connection_hints", org.json.JSONArray((listeners + externalAddresses).distinct()))
             .put("relay", relay ?: "None")
+
+        if (minimalForQr) {
+            // P0_ANDROID_QR_FIX: Keep payload small to avoid QR code capacity errors.
+            val minimalHints = mutableListOf<String>()
+            if (localIp != null) {
+                minimalHints.add("/ip4/$localIp/tcp/9001")
+            }
+            payload.put("connection_hints", org.json.JSONArray(minimalHints))
+        } else {
+            payload.put("listeners", org.json.JSONArray(listeners))
+            payload.put("external_addresses", org.json.JSONArray(externalAddresses))
+            payload.put("connection_hints", org.json.JSONArray((listeners + externalAddresses).distinct()))
+        }
 
         return payload.toString()
     }

@@ -10,7 +10,15 @@
       "Bash(xargs ls *)",
       "WebFetch(domain:ollama.com)",
       "Bash(C:\\\\Program Files\\\\Git\\\\bin\\\\bash.exe *)",
-      "Bash(\"C:\\\\Program Files\\\\Git\\\\bin\\\\bash.exe\" -x .claude/orchestrator_manager.sh pool patrol)"
+      "Bash(\"C:\\\\Program Files\\\\Git\\\\bin\\\\bash.exe\" -x .claude/orchestrator_manager.sh pool patrol)",
+      "Bash(export CARGO_INCREMENTAL=0)",
+      "Bash(cargo --version)",
+      "Bash(rustc --version)",
+      "Bash(ls target/debug/scmessenger-cli.exe target/release/scmessenger-cli.exe)",
+      "Bash(echo \"---\")",
+      "Bash(ls -la \"C:\\\\Users\\\\SCM\\\\Documents\\\\GitHub\\\\scm\" | head -20)",
+      "Bash(grep -E \"\\\\.kt$\")",
+      "Bash(ls -la \"C:\\\\Users\\\\SCM\\\\Documents\\\\GitHub\\\\scm\\\\android\\\\app\\\\src\\\\main\\\\java\\\\com\\\\scmessenger\\\\android\\\\ui\" | head -20)"
     ]
   }
 }

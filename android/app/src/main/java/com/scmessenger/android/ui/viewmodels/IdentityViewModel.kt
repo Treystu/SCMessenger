@@ -254,7 +254,7 @@ class IdentityViewModel @Inject constructor(
             try {
                 val identity = _identityInfo.value ?: return@withContext null
                 if (!identity.initialized) return@withContext null
-                meshRepository.getIdentityExportString()
+                meshRepository.getIdentityExportString(minimalForQr = true)
             } catch (e: Exception) {
                 Timber.e(e, "Failed to generate QR code data")
                 null

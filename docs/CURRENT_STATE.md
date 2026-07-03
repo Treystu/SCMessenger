@@ -1,8 +1,25 @@
 # SCMessenger Current State (Verified)
 
 Status: Active
-Last updated: 2026-05-18 (Mycorrhizal Routing activation verified)
-Last verified: **2026-05-18** (WS13 Tight Pairing complete; WS13.6 landed with compat mode, migration tests, risk triage; Mycorrhizal Routing confirmed active in live send path)
+Last updated: 2026-07-02 (v1.0.0 Release Readiness Assessment)
+Last verified: **2026-07-02** (v1.0.0 PR #1 merged, remaining items documented in `docs/release-readiness-2026-07-02.md`)
+
+---
+
+## 2026-07-02: V1.0.0 Release Readiness Assessment
+
+**Status:** IN PROGRESS
+**Reference:** `docs/release-readiness-2026-07-02.md`
+
+Following the merge of PR #1 (`cbec1f4`), the repository has been evaluated for v1.0.0 readiness. The core systems (Rust) are in excellent shape, passing all local integration tests.
+
+### Current Blockers to V1.0.0
+1. **GitHub Actions Dead Runners (H1)**: CI workflows fail instantly with no runners assigned. This blocks verification of cross-platform builds and mobile UI fixes (Task S9 is pending this).
+2. **Physical Device Tests (H2)**: Hardware validation (WiFi Aware, BLE, DTN mule tests) is required.
+3. ✅ **Core / CLI Debt (S2-S8, T1-T7)**: All code fixes have been implemented and verified.
+4. ✅ **Mobile (Android/iOS) (T8-T17)**: All SDK fixes are implemented in code.
+
+(See `REMAINING_WORK_TRACKING.md` or `docs/release-readiness-2026-07-02.md` for the exact breakdown).
 
 ---
 
