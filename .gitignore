@@ -135,9 +135,16 @@ build/
 .gradle/
 DerivedData/
 
-# Claude Code agent runtime (PID files, logs, per-agent configs)
-.claude/agents/
-**/.claude/agents/
+# Ollama-swarm agent runtime workspaces (PID files, logs, per-agent-run state).
+# NOTE: only the per-run subdirectories are runtime junk -- .claude/agents/*.md
+# files are real Claude Code subagent definitions and must stay tracked.
+.claude/agents/*/
+**/.claude/agents/*/
+
+# Claude Code personal settings (settings.json is the shared/team file and
+# stays tracked; settings.local.json is meant to be a personal, untracked
+# override layer per Claude Code convention).
+.claude/settings.local.json
 
 # Claude Code process cache
 .claude/process_cache/

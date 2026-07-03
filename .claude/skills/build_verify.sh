@@ -10,10 +10,10 @@ run_gate() {
   shift
   echo "=== GATE: ${name} ==="
   if "$@" 2>&1; then
-    echo "✅ ${name}: PASS"
+    echo "[PASS] ${name}: PASS"
     ((PASSED++))
   else
-    echo "❌ ${name}: FAIL"
+    echo "[FAIL] ${name}: FAIL"
     ((FAILED++))
   fi
   echo ""
@@ -35,7 +35,7 @@ case "$COMMAND" in
       run_gate "gradle_assembleDebug" bash -c 'cd android && ./gradlew assembleDebug -x lint --quiet'
       run_gate "role_nav_test" bash -c 'cd android && ./gradlew :app:testDebugUnitTest --tests "com.scmessenger.android.test.RoleNavigationPolicyTest"'
     else
-      echo "⚠️  Android directory not found, skipping Android gates"
+      echo "[WARN] Android directory not found, skipping Android gates"
     fi
     ;;
 esac

@@ -7,7 +7,7 @@ AGENT_NAME="${2:-}"
 POOL_FILE=".claude/agent_pool.json"
 
 if [ ! -f "$POOL_FILE" ]; then
-  echo "❌ Agent pool file not found: ${POOL_FILE}"
+  echo "[ERROR] Agent pool file not found: ${POOL_FILE}"
   exit 1
 fi
 
@@ -52,7 +52,7 @@ for agent in data.get('agents', []):
     ;;
   agent)
     if [ -z "$AGENT_NAME" ]; then
-      echo "❌ Agent name required. Usage: model_check.sh agent <agent_name>"
+      echo "[ERROR] Agent name required. Usage: model_check.sh agent <agent_name>"
       echo ""
       echo "Available agents:"
       python3 -c "

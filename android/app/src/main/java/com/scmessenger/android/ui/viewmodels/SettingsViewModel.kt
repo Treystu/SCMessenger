@@ -141,10 +141,10 @@ class SettingsViewModel @Inject constructor(
     val error: StateFlow<String?> = _error.asStateFlow()
 
     // Identity
-    private val _identityInfo = MutableStateFlow<uniffi.api.IdentityInfo?>(null)
+    private val _identityInfo = MutableStateFlow<uniffi.api.IdentityInfo?>(meshRepository.identityInfo.value)
     val identityInfo: StateFlow<uniffi.api.IdentityInfo?> = _identityInfo.asStateFlow()
-    val hasIdentity: StateFlow<Boolean> = _identityInfo.map { it?.initialized == true }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+    private val _hasIdentity = MutableStateFlow(meshRepository.isIdentityInitialized())
+    val hasIdentity: StateFlow<Boolean> = _hasIdentity.asStateFlow()
 
     // Import result
     private val _importResult = MutableStateFlow<String?>(null)
@@ -168,6 +168,11 @@ class SettingsViewModel @Inject constructor(
             _identityInfo.value = info
             cachedIdentityInfo = info
         }
+        if (info?.initialized == true) {
+            _hasIdentity.value = true
+        } else {
+            _hasIdentity.value = meshRepository.isIdentityInitialized()
+        }
     }
 
     init {
@@ -177,10 +182,7 @@ class SettingsViewModel @Inject constructor(
         // needing to call loadIdentity() again.
         viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
             meshRepository.identityInfo.collect { info ->
-                if (_identityInfo.value != info) {
-                    _identityInfo.value = info
-                    cachedIdentityInfo = info
-                }
+                emitIdentityInfo(info)
             }
         }
 

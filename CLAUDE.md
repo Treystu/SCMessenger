@@ -8,6 +8,10 @@ SCMessenger is a sovereign encrypted decentralized messaging mesh. A Rust core (
 
 **Active release line:** v0.2.1 alpha (v0.2.0 was the baseline).
 
+**Two operating modes share this repo:**
+1. **Native Claude Code** (default) — a single Claude Code session (you, most of the time) working directly, using the subagents/skills/hooks in [Native Claude Code Setup](#native-claude-code-setup) below.
+2. **The ollama-cloud swarm** — a separate multi-agent orchestration system invoked via `/orchestrate` or `/swarm`, documented in [Agent Swarm Integration](#agent-swarm-integration-ollama-cloud-orchestrate--swarm-only). Skip that section entirely unless one of those commands is active.
+
 ## Workspace Structure
 
 ```
@@ -20,7 +24,7 @@ iOS/           → Swift app (Xcode workspace, uppercase-I path convention enfor
 patch/         → Cargo patches: if-watch (Android stub), if-watch-full (Android compat), libp2p-quic, libp2p-tcp
 scripts/       → Build/test/ops shell scripts and Python utilities
 docs/          → Canonical documentation (see DOCUMENTATION.md index)
-HANDOFF/       → Task tracking: todo/, IN_PROGRESS/, done/ (agent orchestration backlog)
+HANDOFF/       → Task tracking: todo/, IN_PROGRESS/, done/ (agent orchestration backlog — native sessions can pull from here directly too, see below)
 ```
 
 ## Key Architecture
@@ -111,6 +115,8 @@ cargo run -p scmessenger-core --features gen-bindings --bin gen_kotlin
 cargo run -p scmessenger-core --features gen-bindings --bin gen_swift
 ```
 
+Prefer the **`build-verify` skill** (`full|rust|android|wasm|compile_gate`) over running these one at a time — see [Native Claude Code Setup](#native-claude-code-setup).
+
 ### Android
 
 ```bash
@@ -148,74 +154,40 @@ wasm-pack test --headless --firefox
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/docs_sync_check.ps1
 ```
 
-## API Quota Awareness (CRITICAL)
+Or just invoke the **`docs-sync` skill**.
 
-Every agent in the SCMessenger swarm operates under Ollama Cloud API quotas
-with a rolling 5-hour and 7-day window. You MUST check and respect API usage
-state before making decisions about model selection, task sizing, and
-parallelism.
+## Native Claude Code Setup
 
-### 5-Minute Staleness Rule
+This repo has real Claude Code subagents, Skills, and hooks configured — use them instead of re-deriving the same checks by hand every time. (These are distinct from the ollama swarm's own `.claude/skills/*.json` + `.sh` files, which are a separate, older mechanism used only by `.claude/orchestrator_manager.sh`'s `model_dispatch.sh` — don't confuse the two.)
 
-The file `.claude/quota_state.json` is the canonical source of truth. Its
-`timestamp` field records when quota data was last scraped from ollama.com.
-**Never trust quota data older than 5 minutes.** If the timestamp is over
-5 minutes old, the data may not reflect current API state and you must trigger
-a forced refresh before acting on it.
+### Subagents (`.claude/agents/*.md`)
 
-To force-refresh quota data:
-```bash
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./OllamaQuotaScraper.ps1 -Quiet
-```
+| Subagent | Tools | Use for |
+|---|---|---|
+| `rust-implementer` | full (Read/Edit/Write/Bash/Grep/Glob) | Landing a well-scoped Rust change from a plan/task spec and self-verifying against the build gates |
+| `crypto-security-auditor` | read-only + Bash | Adversarial review before merging any change to `crypto/`, `transport/`, `routing/`, `privacy/` — this is the repo's mandatory Adversarial Review Protocol |
+| `release-gatekeeper` | read-only + Bash | Final pre-merge checklist (compilation, correctness, tests, security, docs) — read-only, verdict only |
+| `android-qa` | Read/Edit/Grep/Glob/Bash | Android build/test verification, plus mechanical compliance fixes (hardcoded strings, manifest entries) |
+| `docs-sync-auditor` | Read/Edit/Grep/Glob/Bash | Doc sync verification after a change lands, plus mechanical doc fixes |
 
-The system uses a **lazy-refresh-on-read pattern**: quota is checked when
-someone reads `quota_state.json`, not on a timer. If you are reading the file
-directly (not through the swarm launcher), always check the `timestamp` field
-first.
+`.claude/agents/` is gitignored for per-run subdirectories only (`*/`) — the swarm uses that same directory as a runtime workspace (`AGENT_ROOT` in `orchestrator_manager.sh`), but the top-level `*.md` subagent definitions are tracked normally and won't collide with it.
 
-### 6-Tier Quota Governor
+### Skills (`.claude/skills/<name>/SKILL.md`)
 
-The swarm operates under a 6-tier phased execution system derived from the
-`fiveHour` percentage in `quota_state.json`:
+| Skill | Does |
+|---|---|
+| `build-verify [full\|rust\|android\|wasm\|compile_gate]` | Runs the existing `.claude/skills/build_verify.sh` gates |
+| `docs-sync` | Runs `scripts/docs_sync_check.sh`, fixes mechanical header/link issues directly |
+| `finalize-checklist` | Composite: scopes the change, runs `build-verify` + `docs-sync`, scans staged changes for secrets, checks a canonical doc was updated. Does **not** commit. |
 
-| Tier | Phase | 5-Hour | Slots | Max Budget | Behavior |
-|------|-------|--------|-------|------------|----------|
-| 1 | HEAVY-LIFT | <= 25% | 3 | unlimited | Flagship models, multi-file wiring, architecture, deep planning |
-| 2 | EXECUTE | <= 50% | 3 | 5400s | Major feature implementation, standard dispatch |
-| 3 | MIXED | <= 75% | 2 | 1800s | Smaller features, validation, testing. Avoid large refactors |
-| 4 | LIGHT | <= 90% | 2 | 900s | Docs, tests, lint, bindings, P0 fixes only |
-| 5 | MICRO | <= 99.5% | 1 | 300s | Single-line changes, P0/emergency fixes. Defer everything else |
-| 6 | HARDLOCK | > 99.5% | 0 | 0 | ZERO dispatch until quota window resets |
+### Hooks (`.claude/settings.json`)
 
-HARDLOCK triggers when EITHER `fiveHour` OR `sevenDay` exceeds 99.5%. Do not
-only check `fiveHour` -- either window at 99.5%+ blocks all dispatch.
+- **SessionStart** → `.claude/hooks/session_orientation.sh`: prints `git status --short`, HANDOFF todo/IN_PROGRESS counts, and the `REMAINING_WORK_TRACKING.md` header, so a new session doesn't have to re-derive backlog state manually.
+- **PostToolUse** (Edit|Write) → `.claude/hooks/check_no_emoji.py`: blocks (exit 2) if an edited file contains emoji characters, enforcing `.claude/rules/no-emojis.md` deterministically instead of relying on the model remembering it every turn. Fails open on any script error — it only ever blocks on an actual positive match.
 
-### Quota-Aware Agent Behavior
+### Permissions
 
-When you are launched as a worker agent, your prompt includes an auto-injected
-QUOTA CONTEXT block containing:
-- Current 5-hour and 7-day usage percentages
-- Approximate minutes until the 5-hour window resets
-- Your assigned token/time budget
-
-You MUST:
-- Read the QUOTA CONTEXT block before beginning any work
-- Stay within your assigned budget
-- Accept partial completion: if you cannot finish within budget, write what
-  you completed, mark remaining work with `[REMAINING]` comments, and exit
-  cleanly
-- Never silently exceed your budget
-
-When you are the orchestrator, your mandate already includes the current phase,
-slot limits, and budget caps. Route tasks according to the tier table above.
-
-### Detecting Stale Quota Data from Agent Context
-
-If your QUOTA CONTEXT block was injected at dispatch time but you have been
-running for several minutes, the data may be stale. Compare the injected
-percentages against a fresh read of `.claude/quota_state.json`. If the
-discrepancy is large enough to change the tier, adjust your behavior
-accordingly -- this may mean exiting early if quota has tightened.
+`.claude/settings.json` (checked in, project-wide) holds a `permissions.allow` list built from actual usage via the `fewer-permission-prompts` skill. Re-run that skill periodically as usage patterns grow — it's additive and safe. `.claude/settings.local.json` is gitignored, personal, per-machine overrides — it is not shared via git.
 
 ## Windows-Specific Notes
 
@@ -230,11 +202,25 @@ accordingly -- this may mean exiting early if quota has tightened.
 
 ### Before Finalizing Any Run
 
-1. **Build verification**: If you edited Rust code, run `cargo build --workspace`. If you edited Android code, run `./gradlew assembleDebug`. Record build status in commit messages.
-2. **Doc sync**: Run `scripts/docs_sync_check.sh` (or `.ps1`). Resolve failures before finalizing.
-3. **Canonical doc updates**: If a run changes behavior, scope, risk posture, scripts, tests, or verification workflow, update the canonical docs in the same run.
-4. **Final summary rule**: State which docs were updated, or why no doc updates were needed, and report build verification status for edited targets.
-5. **Git checkpoint**: After completing work, run `git add -A` followed by `git commit -m "swarm: completed [Task Name]"`. Do not push to remote; commit locally to prevent data loss.
+Run the **`finalize-checklist` skill** — it covers all of the following in one pass:
+
+1. **Build verification**: scoped to what changed. If you edited Rust code, that means `cargo build --workspace` (or the `build-verify rust` skill scope). If you edited Android code, `./gradlew assembleDebug` (`build-verify android`).
+2. **Doc sync**: the `docs-sync` skill / `scripts/docs_sync_check.sh` (or `.ps1`). Resolve failures before finalizing.
+3. **Canonical doc updates**: if a run changes behavior, scope, risk posture, scripts, tests, or verification workflow, update the canonical docs in the same run — see [Canonical Documentation](#canonical-documentation).
+4. **Final summary rule**: state which docs were updated, or why no doc updates were needed, and report build verification status for edited targets.
+5. **Git checkpoint**: after completing work, run `git add -A` followed by `git commit -m "swarm: completed [Task Name]"` if acting as the swarm, or a plain descriptive message if this was a native session. Do not push to remote; commit locally to prevent data loss.
+
+For anything touching `core/src/crypto/`, `core/src/transport/`, `core/src/routing/`, or `core/src/privacy/`, also run the **`crypto-security-auditor`** subagent before considering it mergeable. Use **`release-gatekeeper`** as the final pre-merge check.
+
+### Escalation
+
+Stop and ask the human operator before proceeding on any of the following — this applies whether you're a native session, a delegated subagent, or the ollama swarm:
+
+- Architectural direction changes that alter the project's core design philosophy
+- Security/privacy trade-off decisions
+- Technology stack migrations or additions
+- API contract breaking changes
+- Release timing and versioning strategy
 
 ### File Storage
 
@@ -254,98 +240,36 @@ accordingly -- this may mean exiting early if quota has tightened.
 - `git add -A` before commits.
 - Commit messages must include: issues fixed, files modified, test/build status, canonical docs updated.
 
-## Canonical Documentation (Priority Order)
+## Canonical Documentation
 
-1. `AGENTS.md` — Agent coordination and rules
-2. `DOCUMENTATION.md` — Project documentation hub
-3. `docs/DOCUMENT_STATUS_INDEX.md` — Doc lifecycle tracking
-4. `docs/CURRENT_STATE.md` — Current architecture and verified state
-5. `REMAINING_WORK_TRACKING.md` — Active backlog
-6. `docs/MILESTONE_PLAN_V0.2.0_ALPHA.md` — Milestone plan
-7. `docs/V0.2.0_RESIDUAL_RISK_REGISTER.md` — Risk tracking
+The authoritative, enforced list of canonical docs is the `HEADER_FILES` array in `scripts/docs_sync_check.sh` — treat that script as the single source of truth, not a hand-copied list here. (This section previously listed a 7-item priority order that had drifted from the script, including `AGENTS.md` — **that file does not exist in this repo**; don't cite it.)
+
+Priority reading order for context (a subset of the full enforced list — see the script for all ~22 files):
+
+1. `DOCUMENTATION.md` — project documentation hub
+2. `docs/CURRENT_STATE.md` — current architecture and verified state
+3. `REMAINING_WORK_TRACKING.md` — active backlog
+4. `docs/MILESTONE_PLAN_V0.2.0_ALPHA.md` — milestone plan
+5. `docs/V0.2.0_RESIDUAL_RISK_REGISTER.md` — risk tracking
+6. `docs/DOCUMENT_STATUS_INDEX.md` — doc lifecycle tracking
+
+Run the `docs-sync` skill (or `docs-sync-auditor` subagent) rather than checking headers by hand — it stays correct as the script evolves; this list doesn't automatically.
 
 Do not treat mixed or historical docs as execution truth unless canonical docs explicitly point to them. Historical docs live in `docs/historical/`.
 
-## Agent Swarm Integration
+## Agent Swarm Integration (ollama cloud, `/orchestrate` + `/swarm` only)
 
-The ollama-based agent swarm is configured in `ORCHESTRATOR_DIRECTIVE.md` (the former CLAUDE.md content). Models are routed through ngrok to cloud providers; append `:cloud` to any model name from the roster below. The pool is defined in `.claude/agent_pool.json` with a 2-slot concurrency limit. Use `bash .claude/orchestrator_manager.sh` for lifecycle management. On Windows, use `'C:\Program Files\Git\bin\bash.exe'` if not inside Claude's bash emulator.
+**Skip this entire section for a normal native session.** It only applies when you are explicitly acting as the swarm orchestrator or a swarm worker.
 
-### Swarm Identity & Roles
-
-Identify your role based on your initial prompt:
-- **Orchestrator:** Read tracking files, write task batches to `HANDOFF/todo/`, and launch workers via `.claude/orchestrator_manager.sh pool launch <agent_name> <task_file>`.
-- **Worker (Implementer):** Read `BATCH_...md` files, write code, run compilers, verify fixes, and move completed task files to `HANDOFF/done/`.
-
-### State-Machine & Commit Schedule (CRITICAL)
-
-Workers MUST follow this exact lifecycle for every task. Failure breaks swarm accounting.
-
-1. **Claim:** Read the task from `HANDOFF/todo/` or `HANDOFF/IN_PROGRESS/`.
-2. **Execute:** Write the code and run the compile gates (`cargo check --workspace` or `./gradlew`).
-3. **Move:** You are FORBIDDEN from considering a task complete until you move the task markdown file from `todo/` (or `IN_PROGRESS/`) to `HANDOFF/done/`.
-4. **Checkpoint:** Immediately after moving the file to `done/`, run `git add -A` followed by `git commit -m "swarm: completed [Task Name]"`. Do not push to remote.
-
-### Orchestrator Fire-and-Forget Protocol
-
-If you are the Orchestrator: Once you have delegated tasks and launched the worker agents (2/2 slots filled), you MUST exit the active session immediately. Do not launch monitors. Do not use `sleep` or wait for them to finish. The system cron (`/loop 30m`) will wake you up automatically to check on them later.
-
-### Process Management on Windows
-
-If you need to kill a zombie swarm agent, standard Linux `kill` will fail to clear the process tree on Windows. Use the dual-kill method:
-```bash
-kill -9 <PID> 2>/dev/null
- taskkill //F //T //PID <PID> 2>/dev/null
-```
-
-**Never** use `Stop-Process`, `taskkill`, or `kill` directly from the orchestrator — always go through `.claude/orchestrator_manager.sh pool stop <agent_id>`.
-
-### Available Cloud Models (`:cloud` suffix)
-
-**Flagship / Reasoning:**
-- `glm-5.1` — Latest GLM, 1.5T params, strongest general reasoning
-- `deepseek-v4-pro` — DeepSeek V4 Pro, 1.6T params, deep analysis
-- `deepseek-v4-flash` — DeepSeek V4 Flash, 140B params, fast reasoning
-- `kimi-k2.6` — Kimi K2.6, 595B params, latest Kimi
-- `kimi-k2-thinking` — Kimi K2 with extended thinking, 1.1T params
-- `kimi-k2:1t` — Kimi K2 base, 1.1T params
-- `kimi-k2.5` — Kimi K2.5, 1.1T params
-- `qwen3-coder:480b` — Specialized coding model, 510B params
-- `qwen3-coder-next` — Next-gen coding model, 81B params
-- `qwen3.5:397b` — General reasoning, strong fallback
-- `mistral-large-3:675b` — Large Mistral, pipeline coordination
-
-**Mid-Tier / Specialized:**
-- `cogito-2.1:671b` — Deliberative reasoning, 688B params
-- `deepseek-v3.2` — Crypto/math/protocol validation
-- `deepseek-v3.1:671b` — Previous DeepSeek flagship
-- `gemma4:31b` — Lightweight worker, tests/bindings/docs
-- `gemini-3-flash-preview` — Quick triage, lint, CI
-- `glm-5` — GLM 5 base (predecessor to 5.1)
-- `glm-4.7`, `glm-4.6` — Earlier GLM generations
-- `minimax-m2.7`, `minimax-m2.5`, `minimax-m2.1`, `minimax-m2` — MiniMax generations
-- `nemotron-3-super` — 230B, strong validation
-- `nemotron-3-nano:30b` — 32B, lightweight validation
-- `devstral-2:123b`, `devstral-small-2:24b` — Developer tooling models
-- `qwen3-vl:235b` — Vision-language (if needed)
-- `qwen3-vl:235b-instruct` — Vision-language instruct variant
-- `qwen3-next:80b` — Next-gen 80B generalist
-
-**Small / Local-Fallback:**
-- `gemma3:27b`, `gemma3:12b`, `gemma3:4b` — Lightweight Gemma variants
-- `ministral-3:14b`, `ministral-3:8b`, `ministral-3:3b` — Minimal Mistral
-- `rnj-1:8b` — 8B lightweight
-- `gpt-oss:120b`, `gpt-oss:20b` — Open-source GPT variants
-
-## Key Cross-Cutting Patterns
-
-- **Identity**: Ed25519 signing keys, X25519 for message encryption. `public_key_hex` is the canonical cross-platform identifier. `identity_id` and `libp2p_peer_id` are derived/operational.
-- **Crypto path**: X25519 ECDH → shared secret → XChaCha20-Poly1305 authenticated encryption.
-- **Storage**: sled (embedded key-value). Core data lives in `Store` behind `Arc<RwLock<…>>`.
-- **Transport priority**: BLE → WiFi Aware/Direct → mDNS/LAN → QUIC/TCP relay → Internet relay. Transport races with <500ms fallback.
-- **Message flow**: `prepare_message` → `Outbox` → transport send → receipt → `mark_message_sent`. Inbound: `receive_message` → `Inbox` → dedup → notify.
-- **UniFFI**: Core exposes `api.udl` + proc macros. Mobile bindings generated via `gen_kotlin`/`gen_swift` bins. WASM uses `wasm-unstable-single-threaded` feature.
-- **Relay custody**: Messages held by relay until receipt confirmation. Relay registry persisted in sled.
-- **Notification classification**: `classify_notification` determines if/when/how to surface a message based on platform, privacy config, and app state.
+- **Quota governor, agent routing table, cloud model roster**: all defined once in `.claude/commands/orchestrate.md`, loaded automatically when `/orchestrate` runs. Native Claude Code sessions run on Anthropic's API and are not subject to the ollama-cloud rolling quota windows described there. Do not re-copy those tables here — if they drift, fix them in `orchestrate.md`.
+- **Identity**: determine orchestrator vs. worker from your initiating prompt.
+  - **Orchestrator**: reads `HANDOFF/todo/` and `HANDOFF/IN_PROGRESS/`, writes task batches, launches workers via `.claude/orchestrator_manager.sh pool launch <agent_name> <task_file>`.
+  - **Worker**: reads one `BATCH_...md` file, implements it, runs compile gates, moves the file to `HANDOFF/done/`.
+- **HANDOFF state machine (CRITICAL)**: claim → execute + compile gates → move the task file from `todo/`/`IN_PROGRESS/` to `HANDOFF/done/` → `git add -A && git commit -m "swarm: completed [Task Name]"`. A task is not complete until the file has moved.
+  - If a **native** session (not the swarm) completes a HANDOFF task directly, follow the same todo → done move so the backlog stays accurate, but commit as `native: completed [Task Name]` rather than `swarm: ...`, so provenance stays honest.
+- **Orchestrator fire-and-forget**: once workers fill the 2 available slots, commit pending changes, arm log monitors, and exit immediately — do not `sleep` or wait. The `/loop 30m` cron (or an armed `Monitor` on agent logs) wakes the orchestrator on completion or timeout.
+- **Windows process management**: standard `kill` won't clear a Windows process tree — use the dual-kill method: `kill -9 <PID>; taskkill //F //T //PID <PID>`. For swarm-managed agent processes specifically, go through `.claude/orchestrator_manager.sh pool stop <agent_id>` rather than killing directly, so pool bookkeeping stays correct — this restriction doesn't apply to unrelated processes you spawn in a native session (e.g. a hung local build).
+- Swarm operator duties are also written up in `ORCHESTRATOR_DIRECTIVE.md`, but that file currently has stale, machine-specific absolute paths (`C:\Users\kanal\...`, a different contributor's environment) and an agent roster that doesn't match `.claude/agent_pool.json`. If the two disagree, `.claude/agent_pool.json` and `.claude/commands/orchestrate.md` are the source of truth — `ORCHESTRATOR_DIRECTIVE.md` needs a cleanup pass at some point, but that's swarm-internal housekeeping, not something to fix incidentally.
 
 ## Testing
 
@@ -365,62 +289,21 @@ Integration tests are in `core/tests/`:
 
 Property-based testing: `proptest` harness in `core/src/crypto/proptest_harness.rs`. Formal verification: `kani` proofs behind `kani-proofs` feature.
 
-## Harness Engineering Best Practices
+## Key Cross-Cutting Patterns
 
-This CLAUDE.md file is re-injected into the context prefix on **every conversational turn** — it functions as the agent's persistent rule engine. Treat it as mission-critical infrastructure, not loose notes.
+- **Identity**: Ed25519 signing keys, X25519 for message encryption. `public_key_hex` is the canonical cross-platform identifier. `identity_id` and `libp2p_peer_id` are derived/operational.
+- **Crypto path**: X25519 ECDH → shared secret → XChaCha20-Poly1305 authenticated encryption.
+- **Storage**: sled (embedded key-value). Core data lives in `Store` behind `Arc<RwLock<…>>`.
+- **Transport priority**: BLE → WiFi Aware/Direct → mDNS/LAN → QUIC/TCP relay → Internet relay. Transport races with <500ms fallback.
+- **Message flow**: `prepare_message` → `Outbox` → transport send → receipt → `mark_message_sent`. Inbound: `receive_message` → `Inbox` → dedup → notify.
+- **UniFFI**: Core exposes `api.udl` + proc macros. Mobile bindings generated via `gen_kotlin`/`gen_swift` bins. WASM uses `wasm-unstable-single-threaded` feature.
+- **Relay custody**: Messages held by relay until receipt confirmation. Relay registry persisted in sled.
+- **Notification classification**: `classify_notification` determines if/when/how to surface a message based on platform, privacy config, and app state.
 
-### Prompt Architecture
+## Context & Prompt Engineering Notes
 
-- **Write prompts as technical specifications**, not collaborative discussions. The agent executes literally — ambiguity is a liability.
-- **Definitive constraints** must be stated imperatively: "never modify the legacy auth module," "prefer WebSockets over SSE for message delivery."
-- **Operational manifests** must include exact commands: `cargo build --workspace`, `./gradlew assembleDebug`, etc. The agent must not waste tokens reverse-engineering standard processes.
+CLAUDE.md is re-injected into context on **every** turn — keep it dense and non-duplicative. If content already lives somewhere loaded on-demand (a skill, `.claude/commands/orchestrate.md`, `ORCHESTRATOR_DIRECTIVE.md`), point to it here instead of copying it — a second copy just drifts.
 
-### Parallel Execution
-
-The agent's query engine detects independent operations and dispatches them concurrently. To trigger this:
-
-- Phrase prompts using **explicit parallel language**: "read the user schema AND the message schema simultaneously," "check CI logs AND execute unit tests at the same time."
-- Avoid sequential step-by-step instructions when operations are independent — this wastes both latency budget and context window.
-- For macro-refactoring (e.g., migrating the transport layer, updating UniFFI bindings), use the batch/swarm pattern: decompose into parallel git worktree agents.
-
-### Context Window Management
-
-The agent implements a five-stage compaction cascade when context nears capacity. To avoid premature compaction and maintain deep architectural understanding:
-
-- **Limit tool output with bounded operations** — use `head`, `tail`, bounded `sed`, or `grep` with context flags instead of dumping full files.
-- **Prefer shell search tools** (grep, ripgrep, `git log`/`git diff`) over sequential file reading — a single `grep` call is 10x more context-efficient than "read file A, now read file B."
-- **Keep prompt instructions dense** — every word consumes token budget that could go toward code understanding.
-- **Context bloat protection** — NEVER run raw `git diff` on the entire workspace. Use `git diff --stat` or `git diff --name-only`. If you need to see code changes, only `git diff` the specific file you are working on.
-
-### Multi-Model Routing Strategy
-
-Route work to the appropriate ollama cloud model tier based on task complexity. See `docs/CLAUDE_CODE_ARCHITECTURE_RESEARCH.md` for the full mapping.
-
-| Task Type | Primary Model | Fallback |
-|-----------|--------------|----------|
-| Orchestration, coordination | `minimax-m3:cloud` | `mistral-large-3:675b:cloud` |
-| Architecture, planning | `qwen3-coder:480b:cloud` | `qwen3.5:397b:cloud` |
-| Implementation, coding | `qwen3-coder-next:cloud` | `glm-5.1:cloud` |
-| Rust core, protocol | `glm-5.1:cloud` | `qwen3-coder-next:cloud` |
-| Crypto, math, security | `deepseek-v3.2:cloud` | `deepseek-v4-pro:cloud` |
-| Code review, merge gate | `kimi-k2-thinking:cloud` | `kimi-k2.6:cloud` |
-| Quick fix, lint, CI | `gemini-3-flash-preview:cloud` | `deepseek-v4-flash:cloud` |
-| Tests, docs, bindings | `gemma4:31b:cloud` | `devstral-2:123b:cloud` |
-| Pipeline coordination | `minimax-m3:cloud` | `mistral-large-3:675b:cloud` |
-
-### Context Bloat Protection
-
-To prevent memory crashes during long swarm sessions:
-- NEVER run raw `git diff` on the entire workspace. Use `git diff --stat` or `git diff --name-only`.
-- If you need to see code changes, only `git diff` the specific file you are working on.
-- Prefer `grep` over sequential file reading for large codebases.
-
-### Escalation Policy
-
-The swarm operates autonomously on all implementation, testing, documentation, and optimization work. The following decision types are escalated to the human operator:
-
-- Architectural direction changes that alter the project's core design philosophy
-- Security/privacy trade-off decisions
-- Technology stack migrations or additions
-- API contract breaking changes
-- Release timing and versioning strategy
+- **Bounded tool output**: prefer `grep`/`rg` with context flags, `head`/`tail`, or a scoped `git diff <file>` over reading whole files or running a raw `git diff` across the whole workspace. Use `git diff --stat`/`--name-only` for an overview.
+- **Parallel independent operations**: batch independent reads/checks into one turn (e.g. reading two unrelated files, or running a build gate alongside a doc-sync check) instead of serializing them.
+- **Delegate, don't duplicate**: use the subagents in [Native Claude Code Setup](#native-claude-code-setup) for scoped, reviewable work instead of doing everything in the main thread — it keeps the main session's context focused on synthesis and decisions rather than raw output.

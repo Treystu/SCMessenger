@@ -48,7 +48,9 @@ class IdentityCreationCoordinator @Inject constructor(
                 val initialized = info?.initialized == true
                 if (initialized) {
                     _identityState.value = IdentityState.Ready
-                } else {
+                } else if (_identityState.value != IdentityState.Ready) {
+                    // Don't regress from Ready — the initial null emission from
+                    // StateFlow construction must not override a valid cached state.
                     determineInitialState()
                 }
             }
@@ -59,6 +61,13 @@ class IdentityCreationCoordinator @Inject constructor(
     fun determineInitialState() {
         val initialized = meshRepository.isIdentityInitialized()
         if (initialized) {
+            // Trust cached SharedPreferences fields first — they're authoritative
+            // for UI display and available before ironCore finishes starting up.
+            val cached = meshRepository.readCachedIdentityFields()
+            if (cached?.initialized == true) {
+                _identityState.value = IdentityState.Ready
+                return
+            }
             val currentInfo = meshRepository.getIdentityInfoNonBlocking()
             if (currentInfo?.initialized == true) {
                 _identityState.value = IdentityState.Ready

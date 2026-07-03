@@ -246,6 +246,8 @@ struct IdentityBackupPayload {
     /// or when the bridge store is empty.
     #[serde(default)]
     bridge_contacts_json: Option<String>,
+    #[serde(default)]
+    nickname: Option<String>,
 }
 
 impl Default for IronCore {
@@ -1285,6 +1287,7 @@ impl IronCore {
         let identity = self.identity.read();
         let keys = identity.keys().ok_or(IronCoreError::NotInitialized)?;
         let identity_key_hex = hex::encode(keys.to_bytes());
+        let nickname = identity.nickname();
 
         let ratchet_sessions_json = self.ratchet_sessions.read().serialize_sessions().ok();
         let contacts = self.contact_manager.read().list()?;
@@ -1312,6 +1315,7 @@ impl IronCore {
             ratchet_sessions_json,
             contacts,
             bridge_contacts_json,
+            nickname,
         };
         serde_json::to_string(&payload).map_err(|_| IronCoreError::Internal)
     }
@@ -1360,6 +1364,66 @@ impl IronCore {
         Ok(backup)
     }
 
+    /// Export an identity backup encrypted with Blake3 key derivation.
+    /// Use this for **device-bound auto-backups** where the passphrase is a
+    /// 256-bit random key (stored in SharedPreferences). Blake3 `derive_key`
+    /// runs in microseconds vs. 30-90s for Argon2id on low-end mobile.
+    ///
+    /// The passphrase MUST be high-entropy (≥ 128 bits); this method does NOT
+    /// provide brute-force resistance for weak human passwords.
+    pub fn export_identity_backup_fast(
+        &self,
+        passphrase: String,
+    ) -> Result<String, IronCoreError> {
+        let payload = self.build_identity_backup_payload()?;
+        let backup = crate::crypto::backup::encrypt_backup_fast(&payload, &passphrase, None)
+            .map_err(|_| IronCoreError::CryptoError)?;
+        self.audit_log.write().append(
+            AuditEventType::BackupExported,
+            self.identity.read().identity_id(),
+            None,
+            None,
+        );
+        Ok(backup)
+    }
+
+    /// Export an identity backup encrypted with Blake3 key derivation and a
+    /// custom 16-byte salt (e.g. from touch-screen entropy). See
+    /// [`export_identity_backup_fast`] for details.
+    pub fn export_identity_backup_fast_with_salt(
+        &self,
+        passphrase: String,
+        salt: Option<Vec<u8>>,
+    ) -> Result<String, IronCoreError> {
+        let payload = self.build_identity_backup_payload()?;
+
+        let salt_array = match salt {
+            Some(s) => {
+                if s.len() != 16 {
+                    return Err(IronCoreError::InvalidInput);
+                }
+                let mut arr = [0u8; 16];
+                arr.copy_from_slice(&s);
+                Some(arr)
+            }
+            None => None,
+        };
+
+        let backup = crate::crypto::backup::encrypt_backup_fast(
+            &payload,
+            &passphrase,
+            salt_array.as_ref(),
+        )
+        .map_err(|_| IronCoreError::CryptoError)?;
+        self.audit_log.write().append(
+            AuditEventType::BackupExported,
+            self.identity.read().identity_id(),
+            None,
+            None,
+        );
+        Ok(backup)
+    }
+
     /// Import an identity backup. Validates the entire payload (identity
     /// key bytes, ratchet session JSON, contact records) before writing
     /// anything, so a malformed or partially-tampered payload can't leave
@@ -1376,7 +1440,7 @@ impl IronCore {
         // original format (a bare hex-encoded identity key, no ratchet
         // sessions or contacts) for backups exported before this payload
         // existed.
-        let (key_bytes, ratchet_sessions_json, contacts, bridge_contacts) =
+        let (key_bytes, ratchet_sessions_json, contacts, bridge_contacts, nickname) =
             match serde_json::from_str::<IdentityBackupPayload>(&payload) {
                 Ok(parsed) => {
                     let key_bytes = hex::decode(&parsed.identity_key_hex)
@@ -1406,12 +1470,13 @@ impl IronCore {
                         parsed.ratchet_sessions_json,
                         parsed.contacts,
                         bridge_contacts,
+                        parsed.nickname,
                     )
                 }
                 Err(_) => {
                     let key_bytes =
                         hex::decode(&payload).map_err(|_| IronCoreError::CryptoError)?;
-                    (key_bytes, None, Vec::new(), Vec::new())
+                    (key_bytes, None, Vec::new(), Vec::new(), None)
                 }
             };
 
@@ -1420,6 +1485,10 @@ impl IronCore {
         identity
             .import_key_bytes(&key_bytes)
             .map_err(|_| IronCoreError::CryptoError)?;
+
+        if let Some(nn) = nickname {
+            let _ = identity.set_nickname(nn);
+        }
 
         if let Some(json) = ratchet_sessions_json {
             self.ratchet_sessions

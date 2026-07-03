@@ -336,7 +336,7 @@ open class MeshRepository(
     // Replay = 1 so a late subscriber immediately sees the current value (this
     // eliminates the "first load returns null then re-fires" race in any VM
     // constructed after the identity was already hydrated).
-    private val _identityInfo = MutableStateFlow<uniffi.api.IdentityInfo?>(null)
+    private val _identityInfo = MutableStateFlow<uniffi.api.IdentityInfo?>(readCachedIdentityFields())
     open val identityInfo: StateFlow<uniffi.api.IdentityInfo?> = _identityInfo.asStateFlow()
 
     // P0_SHARED_IDENTITY: Publish identity changes to all subscribers. Called
@@ -3066,6 +3066,7 @@ open class MeshRepository(
             val nickname = info.nickname?.trim().orEmpty()
             // P0: Cache identity fields for instant UI load on next startup
             cacheIdentityFields(info)
+            
             if (nickname.isNotEmpty()) {
                 // P2 (Bug 4): Latch the lazy-path persistIdentityBackup so a flurry of
                 // post-startup ensureLocalIdentityFederation() calls (each touching
@@ -3191,9 +3192,9 @@ open class MeshRepository(
             progress(IdentityCreationEvent.PersistingToStorage, "Encrypting with XChaCha20-Poly1305…")
             val passphrase = getPlatformSecuredPassphrase()
             val backup = if (customSalt != null) {
-                activeCore.exportIdentityBackupWithSalt(passphrase, customSalt)
+                activeCore.exportIdentityBackupFastWithSalt(passphrase, customSalt)
             } else {
-                activeCore.exportIdentityBackup(passphrase)
+                activeCore.exportIdentityBackupFast(passphrase)
             }
             // P0_ANDROID_010: Use commit() for synchronous write.
             // apply() is async and can lose the backup if the process is killed
@@ -4802,6 +4803,13 @@ open class MeshRepository(
                         cacheIdentityFields(created)
                         publishIdentityInfo(created)
                     }
+                    // P0_IDENTITY_FAST_BACKUP: Set the latch BEFORE calling
+                    // ensureLocalIdentityFederation so it SKIPS the redundant
+                    // persistIdentityBackup call. The explicit persist call at
+                    // L4818 (with custom salt + progress) is the only one we need.
+                    // This eliminates a wasted 30-90s backup encryption that was
+                    // immediately overwritten.
+                    identityBackupLatch.set(true)
                     ensureLocalIdentityFederation()
                     // P0_ANDROID_PROGRESS_CALLBACK: stage 4 — fingerprint is
                     // computed by the Rust core during initializeIdentity; we

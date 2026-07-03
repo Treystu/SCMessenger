@@ -1426,6 +1426,34 @@ impl MeshService {
         core.export_identity_backup_with_salt(passphrase, Some(salt))
     }
 
+    /// Export identity backup using fast Blake3 KDF (for device-bound
+    /// auto-backups with high-entropy random passphrases). Sub-millisecond.
+    pub fn export_identity_backup_fast(
+        &self,
+        passphrase: String,
+    ) -> Result<String, crate::IronCoreError> {
+        let core = self
+            .core
+            .lock()
+            .clone()
+            .ok_or(crate::IronCoreError::NotInitialized)?;
+        core.export_identity_backup_fast(passphrase)
+    }
+
+    /// Export identity backup using fast Blake3 KDF with a custom salt.
+    pub fn export_identity_backup_fast_with_salt(
+        &self,
+        passphrase: String,
+        salt: Vec<u8>,
+    ) -> Result<String, crate::IronCoreError> {
+        let core = self
+            .core
+            .lock()
+            .clone()
+            .ok_or(crate::IronCoreError::NotInitialized)?;
+        core.export_identity_backup_fast_with_salt(passphrase, Some(salt))
+    }
+
     pub fn import_identity_backup(
         &self,
         backup: String,

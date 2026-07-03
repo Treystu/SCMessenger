@@ -24,7 +24,7 @@ class IdentityViewModel @Inject constructor(
     private val identityCreationCoordinator: com.scmessenger.android.data.IdentityCreationCoordinator
 ) : ViewModel() {
 
-    private val _identityInfo = MutableStateFlow<uniffi.api.IdentityInfo?>(null)
+    private val _identityInfo = MutableStateFlow<uniffi.api.IdentityInfo?>(meshRepository.identityInfo.value)
     val identityInfo: StateFlow<uniffi.api.IdentityInfo?> = _identityInfo.asStateFlow()
 
     val identityState: StateFlow<com.scmessenger.android.data.IdentityState> = identityCreationCoordinator.identityState
@@ -252,8 +252,13 @@ class IdentityViewModel @Inject constructor(
     suspend fun getQrCodeData(): String? {
         return withContext(Dispatchers.IO) {
             try {
-                val identity = _identityInfo.value ?: return@withContext null
-                if (!identity.initialized) return@withContext null
+                // P0_ANDROID_QR_FIX: Do not depend on the async _identityInfo StateFlow here.
+                // Compose can call this before the StateFlow processes the upstream emission,
+                // causing a race condition where QR data stays null forever.
+                // getIdentityExportString() safely fetches directly from the authoritative core.
+                val info = meshRepository.getIdentityInfoNonBlocking()
+                if (info?.initialized != true) return@withContext null
+                
                 meshRepository.getIdentityExportString(minimalForQr = true)
             } catch (e: Exception) {
                 Timber.e(e, "Failed to generate QR code data")
