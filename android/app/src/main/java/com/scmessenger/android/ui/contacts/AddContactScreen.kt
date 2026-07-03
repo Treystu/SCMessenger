@@ -502,6 +502,9 @@ private fun NearbyDiscoveryTab(viewModel: ContactsViewModel) {
                             Timber.i("Promoted nearby peer to contact: ${peer.peerId.take(16)}")
                         }
                     },
+                    onDismissPeer = { peer ->
+                        viewModel.dismissNearbyPeer(peer)
+                    },
                     hasInlineError = inlineError,
                     inlineErrorMessage = error,
                     onDismissInlineError = { viewModel.clearError() }
@@ -614,6 +617,7 @@ private fun EmptyState(onRescan: () -> Unit) {
 private fun PeerList(
     peers: List<NearbyPeer>,
     onAdd: (NearbyPeer) -> Unit,
+    onDismissPeer: (NearbyPeer) -> Unit,
     hasInlineError: Boolean,
     inlineErrorMessage: String?,
     onDismissInlineError: () -> Unit
@@ -629,13 +633,13 @@ private fun PeerList(
             }
         }
         items(peers, key = { it.peerId }) { peer ->
-            NearbyPeerCard(peer = peer, onAdd = { onAdd(peer) })
+            NearbyPeerCard(peer = peer, onAdd = { onAdd(peer) }, onDismiss = { onDismissPeer(peer) })
         }
     }
 }
 
 @Composable
-private fun NearbyPeerCard(peer: NearbyPeer, onAdd: () -> Unit) {
+private fun NearbyPeerCard(peer: NearbyPeer, onAdd: () -> Unit, onDismiss: () -> Unit) {
     Card(
         modifier = Modifier.fillMaxWidth()
     ) {
@@ -668,6 +672,12 @@ private fun NearbyPeerCard(peer: NearbyPeer, onAdd: () -> Unit) {
                 }
             }
             TransportIcon(transport = peer.transport)
+            IconButton(onClick = onDismiss) {
+                Icon(
+                    imageVector = Icons.Default.Close,
+                    contentDescription = stringResource(R.string.add_contact_nearby_dismiss_content_description)
+                )
+            }
             FilledTonalIconButton(
                 onClick = onAdd,
                 enabled = peer.publicKey != null

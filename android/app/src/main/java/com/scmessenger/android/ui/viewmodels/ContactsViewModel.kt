@@ -89,6 +89,11 @@ class ContactsViewModel @Inject constructor(
     private val _nearbyPeers = MutableStateFlow<List<NearbyPeer>>(emptyList())
     val nearbyPeers: StateFlow<List<NearbyPeer>> = _nearbyPeers.asStateFlow()
 
+    // Peer IDs the user dismissed from the nearby list. Live discovery events for
+    // these peers are suppressed until the next rescan, which re-checks whether
+    // they're still around (see refreshDiscovery / dismissNearbyPeer).
+    private val _dismissedPeerIds = MutableStateFlow<Set<String>>(emptySet())
+
     // Nearby rescan state — true while a rescan is actively running
     private val _isScanning = MutableStateFlow(false)
     val isScanning: StateFlow<Boolean> = _isScanning.asStateFlow()
@@ -225,6 +230,26 @@ class ContactsViewModel @Inject constructor(
         return sameByPeerId || sameByLibp2p || sameByBle
     }
 
+    /** True if any of the given (nullable) peer identifiers matches a dismissed peer. */
+    private fun isDismissed(vararg ids: String?): Boolean {
+        if (_dismissedPeerIds.value.isEmpty()) return false
+        return ids.filterNotNull().any { id -> _dismissedPeerIds.value.any { PeerIdValidator.isSame(it, id) } }
+    }
+
+    /**
+     * Hide a nearby peer from the list without saving or blocking it.
+     *
+     * Dismissed peers stop reappearing from live background discovery events until
+     * the user rescans (see [refreshDiscovery]), which treats a rescan as an explicit
+     * request to recheck whether dismissed peers are still nearby.
+     */
+    fun dismissNearbyPeer(peer: NearbyPeer) {
+        val ids = listOfNotNull(peer.peerId, peer.libp2pPeerId, peer.blePeerId).toSet()
+        _dismissedPeerIds.value = _dismissedPeerIds.value + ids
+        _nearbyPeers.value = _nearbyPeers.value.filterNot { it.peerId == peer.peerId }
+        Timber.d("Dismissed nearby peer: ${peer.peerId.take(16)}")
+    }
+
     /**
      * Subscribe to MeshEventBus peer events.
      * Adds newly discovered peers to nearbyPeers if they aren't already contacts.
@@ -265,6 +290,10 @@ class ContactsViewModel @Inject constructor(
                             // Federated nickname/route hints can update in repository upsert;
                             // refresh saved contacts so local UI reflects latest values.
                             loadContacts()
+                            return@collect
+                        }
+
+                        if (isDismissed(event.peerId, event.libp2pPeerId, event.blePeerId)) {
                             return@collect
                         }
 
@@ -339,7 +368,7 @@ class ContactsViewModel @Inject constructor(
                             val refinedTransport = existing.transport ?: event.transport
                             current[existingIdx] = existing.copy(isOnline = true, transport = refinedTransport)
                             _nearbyPeers.value = current
-                        } else if (!alreadyContact) {
+                        } else if (!alreadyContact && !isDismissed(event.peerId)) {
                             _nearbyPeers.value = current + NearbyPeer(
                                 peerId = event.peerId,
                                 isOnline = true,
@@ -782,11 +811,16 @@ class ContactsViewModel @Inject constructor(
      * Used by the "Rescan" button in the Nearby Discovery tab. Useful after the
      * user toggles a transport back on and we want the UI to reflect cached
      * discoveries immediately rather than waiting for the next periodic scan.
+     *
+     * A rescan is also treated as an explicit request to recheck any peers the
+     * user previously dismissed: the dismissed set is cleared first, so the
+     * replay below can re-surface them if they're still nearby.
      */
     fun refreshDiscovery() {
         if (_isScanning.value) return // already scanning
         _isScanning.value = true
         scanStartTimeMs = System.currentTimeMillis()
+        _dismissedPeerIds.value = emptySet()
         Timber.d("refreshDiscovery: starting rescan")
 
         viewModelScope.launch {

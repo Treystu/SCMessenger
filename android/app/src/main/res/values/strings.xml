@@ -417,9 +417,11 @@
     <string name="add_contact_nearby_searching">Searching for nearby peers on this network…</string>
     <string name="add_contact_nearby_empty">No nearby peers found</string>
     <string name="add_contact_nearby_rescan">Rescan</string>
-    <string name="add_contact_nearby_rescan_content_description">Rescan for nearby peers</string>
+    <string name="add_contact_nearby_rescan_content_description">Rescan for nearby peers, including any you previously dismissed</string>
     <string name="add_contact_nearby_add_button">Add</string>
     <string name="add_contact_nearby_add_content_description">Add as contact</string>
+    <string name="add_contact_nearby_dismiss_content_description">Dismiss (hide until next rescan)</string>
+    <string name="add_contact_nearby_dismissed_toast">Dismissed. Rescan to check for it again.</string>
     <string name="add_contact_nearby_offline_badge">Offline</string>
     <string name="add_contact_nearby_no_public_key">No public key yet — wait for identity announcement</string>
     <string name="add_contact_nearby_added_toast">Added as contact</string>

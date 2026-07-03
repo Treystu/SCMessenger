@@ -104,8 +104,16 @@ impl Config {
         Ok(config_dir)
     }
 
-    /// Get the data directory path (cross-platform)
+    /// Get the data directory path (cross-platform).
+    /// Honors SCMESSENGER_DATA_DIR env var (absolute path) for running isolated
+    /// instances side by side, e.g. local multi-node discovery testing.
     pub fn data_dir() -> Result<PathBuf> {
+        if let Ok(env_path) = std::env::var("SCMESSENGER_DATA_DIR") {
+            let path = PathBuf::from(env_path);
+            std::fs::create_dir_all(&path).context("Failed to create data directory")?;
+            return Ok(path);
+        }
+
         let data_dir = dirs::data_local_dir()
             .context("Failed to determine data directory")?
             .join("scmessenger");

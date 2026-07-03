@@ -19,6 +19,10 @@
     <!-- WiFi Aware (API 26+) -->
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
     <uses-permission android:name="android.permission.CHANGE_WIFI_STATE" />
+    <!-- Required to hold a WifiManager.MulticastLock for mDNS (NSD) send/receive;
+         without it, NsdManager registerService/discoverServices fail outright
+         (errorCode=4) on many devices. See MdnsServiceDiscovery.kt. -->
+    <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.NEARBY_WIFI_DEVICES"
