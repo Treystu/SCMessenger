@@ -1,0 +1,32 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(export PATH=\"$PATH:/c/Users/SCM/AppData/Local/Android/Sdk/platform-tools\")",
+      "Bash(\"$ADB\" logcat *)",
+      "Bash(export PATH=\"$HOME/.cargo/bin:$PATH\")"
+    ]
+  },
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PROJECT_DIR}/.claude/hooks/session_orientation.sh\""
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python \"${CLAUDE_PROJECT_DIR}/.claude/hooks/check_no_emoji.py\""
+          }
+        ]
+      }
+    ]
+  }
+}
