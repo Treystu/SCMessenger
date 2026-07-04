@@ -667,7 +667,7 @@ impl MeshService {
             .collect();
         if !parsed_bootstrap.is_empty() {
             tracing::info!(
-                "📱 Mobile bridge: {} bootstrap addrs configured",
+                "[MOBILE] Mobile bridge: {} bootstrap addrs configured",
                 parsed_bootstrap.len()
             );
         }
@@ -759,7 +759,7 @@ impl MeshService {
                                                                 let next_hop_hex = msg.recipient_id.clone();
                                                                 let payload = msg.payload.clone();
 
-                                                                eprintln!("[IronCore] 🧅 Onion relay: forwarding to {}", next_hop_hex);
+                                                                eprintln!("[IronCore] [RELAY] Onion relay: forwarding to {}", next_hop_hex);
                                                                 if let Ok(next_hop_bytes) = hex::decode(&next_hop_hex) {
                                                                     if let Ok(libp2p_pk) = libp2p::identity::ed25519::PublicKey::try_from_bytes(&next_hop_bytes[..32]) {
                                                                         let next_peer_id = libp2p::PeerId::from_public_key(&libp2p::identity::PublicKey::from(libp2p_pk));
@@ -788,7 +788,7 @@ impl MeshService {
                                                                     peer_id
                                                                 );
                                                                 eprintln!(
-                                                                    "[IronCore] ✓ Received message {} from {} (type={:?})",
+                                                                    "[IronCore] [OK] Received message {} from {} (type={:?})",
                                                                     msg.id,
                                                                     peer_id,
                                                                     msg.message_type
@@ -805,7 +805,7 @@ impl MeshService {
                                                             // CRITICAL: eprintln! is the ONLY way to surface
                                                             // errors on mobile — tracing goes to /dev/null.
                                                             eprintln!(
-                                                                "[IronCore] ✗ receive_message FAILED from {}: {} (envelope_len={})",
+                                                                "[IronCore] [ERROR] receive_message FAILED from {}: {} (envelope_len={})",
                                                                 peer_id,
                                                                 err_detail,
                                                                 envelope_data.len()
@@ -814,7 +814,7 @@ impl MeshService {
                                                     }
                                                 } else {
                                                     eprintln!(
-                                                        "[IronCore] ✗ receive_message SKIPPED from {}: core not initialized",
+                                                        "[IronCore] [ERROR] receive_message SKIPPED from {}: core not initialized",
                                                         peer_id
                                                     );
                                                 }
@@ -913,11 +913,11 @@ impl MeshService {
                                             crate::transport::SwarmEvent::NatStatusChanged(
                                                 status,
                                             ) => {
-                                                tracing::info!("🔭 NAT status updated: {}", status);
+                                                tracing::info!("[NAT] NAT status updated: {}", status);
                                                 *nat_status.lock() = status;
                                             }
                                             crate::transport::SwarmEvent::PortMapping(status) => {
-                                                tracing::info!("🌐 Port mapping updated: {}", status);
+                                                tracing::info!("[NET] Port mapping updated: {}", status);
                                             }
                                             crate::transport::SwarmEvent::AbuseSignalDetected {
                                                 peer_id,
@@ -1189,7 +1189,7 @@ impl MeshService {
                         let payload = msg.payload.clone();
 
                         eprintln!(
-                            "[IronCore] 🧅 BLE Onion relay: forwarding to {}",
+                            "[IronCore] [RELAY] BLE Onion relay: forwarding to {}",
                             next_hop_hex
                         );
 
@@ -1205,7 +1205,7 @@ impl MeshService {
                     } else {
                         tracing::info!("Message received from {}: {:?}", peer_id, msg.id);
                         eprintln!(
-                            "[IronCore] ✓ BLE message received from {}: {}",
+                            "[IronCore] [OK] BLE message received from {}: {}",
                             peer_id, msg.id
                         );
                     }
@@ -1213,14 +1213,14 @@ impl MeshService {
                 Err(e) => {
                     tracing::error!("Failed to process received message: {:?}", e);
                     eprintln!(
-                        "[IronCore] ✗ BLE receive_message FAILED from {}: {:?}",
+                        "[IronCore] [ERROR] BLE receive_message FAILED from {}: {:?}",
                         peer_id, e
                     );
                 }
             }
         } else {
             eprintln!(
-                "[IronCore] ✗ on_data_received SKIPPED from {}: core not initialized",
+                "[IronCore] [ERROR] on_data_received SKIPPED from {}: core not initialized",
                 peer_id
             );
         }
@@ -2827,7 +2827,7 @@ impl Default for SwarmBridge {
         Self::new()
     }
 }
-// 🚨 CRITICAL: Global runtime for network operations on mobile.
+// [CRITICAL] Global runtime for network operations on mobile.
 // We need this because many mobile callback threads aren't in a tokio context.
 static GLOBAL_RT: parking_lot::RwLock<Option<tokio::runtime::Runtime>> =
     parking_lot::RwLock::new(None);
@@ -3831,5 +3831,263 @@ mod tests {
         let json = serde_json::to_string(&status).unwrap();
         let deserialized: MessageStatus = serde_json::from_str(&json).unwrap();
         assert_eq!(status, deserialized);
+    }
+
+    // -----------------------------------------------------------------------
+    // T1.1: generalized FFI proximity-data plane
+    // -----------------------------------------------------------------------
+
+    /// Mock `PlatformBridge` recording every outbound send and every inbound
+    /// delivery request it observes, so tests can assert round-trip behavior
+    /// without a real BLE/WiFi Aware/WiFi Direct stack.
+    #[derive(Default)]
+    struct MockPlatformBridge {
+        sent_packets: Mutex<Vec<(String, ProximityTransport, Vec<u8>)>>,
+    }
+
+    impl PlatformBridge for MockPlatformBridge {
+        fn on_battery_changed(&self, _battery_pct: u8, _is_charging: bool) {}
+        fn on_network_changed(&self, _has_wifi: bool, _has_cellular: bool) {}
+        fn on_motion_changed(&self, _motion: MotionState) {}
+        fn on_ble_data_received(&self, _peer_id: String, _data: Vec<u8>) {}
+        fn on_entering_background(&self) {}
+        fn on_entering_foreground(&self) {}
+        fn send_ble_packet(&self, peer_id: String, data: Vec<u8>) {
+            self.send_proximity_packet(peer_id, ProximityTransport::Ble, data);
+        }
+        fn on_proximity_data_received(
+            &self,
+            _peer_id: String,
+            _transport: ProximityTransport,
+            _data: Vec<u8>,
+        ) {
+        }
+        fn send_proximity_packet(
+            &self,
+            peer_id: String,
+            transport: ProximityTransport,
+            data: Vec<u8>,
+        ) {
+            self.sent_packets.lock().push((peer_id, transport, data));
+        }
+        fn wifi_aware_publish(&self, _service_name: String, _service_info: Vec<u8>) -> bool {
+            true
+        }
+        fn wifi_aware_subscribe(&self, _service_name: String) -> bool {
+            true
+        }
+        fn wifi_aware_create_data_path(&self, _peer_id: String, _pmk: Vec<u8>) -> bool {
+            true
+        }
+        fn wifi_aware_stop(&self) {}
+        fn wifi_direct_discover_peers(&self) -> bool {
+            true
+        }
+        fn wifi_direct_stop_discovery(&self) {}
+        fn wifi_direct_connect(&self, _device_address: String) -> bool {
+            true
+        }
+        fn wifi_direct_create_group(&self, _group_name: String) -> bool {
+            true
+        }
+        fn wifi_direct_remove_group(&self) {}
+    }
+
+    fn test_mesh_service_config() -> MeshServiceConfig {
+        MeshServiceConfig {
+            discovery_interval_ms: 5_000,
+            battery_floor_pct: 20,
+        }
+    }
+
+    fn all_proximity_transports() -> [ProximityTransport; 4] {
+        [
+            ProximityTransport::Ble,
+            ProximityTransport::WifiAware,
+            ProximityTransport::WifiDirect,
+            ProximityTransport::Multipeer,
+        ]
+    }
+
+    /// Oversize payloads must be rejected (dropped, not silently truncated,
+    /// not panicking) for every `ProximityTransport` variant, matching each
+    /// transport's `max_payload_size`.
+    #[test]
+    fn proximity_oversize_payload_rejected_per_transport_outbound() {
+        let service = MeshService::new(test_mesh_service_config());
+        let bridge = std::sync::Arc::new(MockPlatformBridge::default());
+        service.set_platform_bridge(Some(Box::new(MockBridgeHandle(bridge.clone()))));
+
+        for transport in all_proximity_transports() {
+            let max = transport.max_payload_size();
+            let oversize_data = vec![0xAB; max + 1];
+            service.dispatch_proximity_packet(
+                "peer-oversize".to_string(),
+                transport,
+                oversize_data,
+            );
+        }
+
+        // None of the oversize sends should have reached the bridge.
+        assert!(
+            bridge.sent_packets.lock().is_empty(),
+            "oversize payloads must never be forwarded to the platform bridge"
+        );
+    }
+
+    /// Oversize inbound data must be dropped (not processed / not panicking)
+    /// for every `ProximityTransport` variant.
+    #[test]
+    fn proximity_oversize_payload_rejected_per_transport_inbound() {
+        let service = MeshService::new(test_mesh_service_config());
+
+        for transport in all_proximity_transports() {
+            let max = transport.max_payload_size();
+            let oversize_data = vec![0xCD; max + 1];
+            // Must not panic; core is not initialized so there is nothing to
+            // observe beyond "did not crash" plus size-gate behavior, which
+            // on_proximity_data_received enforces before touching the core.
+            service.on_proximity_data_received(
+                "peer-oversize-in".to_string(),
+                transport,
+                oversize_data,
+            );
+        }
+    }
+
+    /// Exactly-at-limit payloads must be accepted (not rejected) for every
+    /// transport, i.e. the size check is `>`, not `>=`.
+    #[test]
+    fn proximity_payload_at_exact_limit_is_forwarded() {
+        let service = MeshService::new(test_mesh_service_config());
+        let bridge = std::sync::Arc::new(MockPlatformBridge::default());
+        service.set_platform_bridge(Some(Box::new(MockBridgeHandle(bridge.clone()))));
+
+        for transport in all_proximity_transports() {
+            let max = transport.max_payload_size();
+            let data = vec![0x11; max];
+            service.dispatch_proximity_packet("peer-exact".to_string(), transport, data);
+        }
+
+        let sent = bridge.sent_packets.lock();
+        assert_eq!(
+            sent.len(),
+            all_proximity_transports().len(),
+            "at-limit payloads for every transport must be forwarded"
+        );
+    }
+
+    /// Round-trip: dispatching a packet for a given transport calls the
+    /// bridge's `send_proximity_packet` with the same peer id, transport tag,
+    /// and bytes; and `send_ble_packet` (legacy) is a thin wrapper that
+    /// produces an equivalent `Ble`-tagged call.
+    #[test]
+    fn proximity_round_trip_via_mock_bridge_ble_and_wifi_aware() {
+        let service = MeshService::new(test_mesh_service_config());
+        let bridge = std::sync::Arc::new(MockPlatformBridge::default());
+        service.set_platform_bridge(Some(Box::new(MockBridgeHandle(bridge.clone()))));
+
+        // Ble via the generic dispatch path.
+        service.dispatch_proximity_packet(
+            "peer-ble".to_string(),
+            ProximityTransport::Ble,
+            b"hello-ble".to_vec(),
+        );
+        // WifiAware via the generic dispatch path.
+        service.dispatch_proximity_packet(
+            "peer-aware".to_string(),
+            ProximityTransport::WifiAware,
+            b"hello-aware".to_vec(),
+        );
+        // Legacy BLE-named helper must still work and route as Ble.
+        service.dispatch_ble_packet("peer-ble-legacy".to_string(), b"legacy-ble".to_vec());
+
+        let sent = bridge.sent_packets.lock();
+        assert_eq!(sent.len(), 3);
+
+        assert_eq!(sent[0].0, "peer-ble");
+        assert_eq!(sent[0].1, ProximityTransport::Ble);
+        assert_eq!(sent[0].2, b"hello-ble".to_vec());
+
+        assert_eq!(sent[1].0, "peer-aware");
+        assert_eq!(sent[1].1, ProximityTransport::WifiAware);
+        assert_eq!(sent[1].2, b"hello-aware".to_vec());
+
+        assert_eq!(sent[2].0, "peer-ble-legacy");
+        assert_eq!(sent[2].1, ProximityTransport::Ble);
+        assert_eq!(sent[2].2, b"legacy-ble".to_vec());
+    }
+
+    /// Thin wrapper for the mock: `PlatformBridge` requires `Box<dyn
+    /// PlatformBridge>` ownership at the `MeshService` boundary, while tests
+    /// want to keep observing the shared mock via `Arc` after handing
+    /// ownership over. This indirection lets the test retain a handle.
+    struct MockBridgeHandle(std::sync::Arc<MockPlatformBridge>);
+
+    impl PlatformBridge for MockBridgeHandle {
+        fn on_battery_changed(&self, battery_pct: u8, is_charging: bool) {
+            self.0.on_battery_changed(battery_pct, is_charging);
+        }
+        fn on_network_changed(&self, has_wifi: bool, has_cellular: bool) {
+            self.0.on_network_changed(has_wifi, has_cellular);
+        }
+        fn on_motion_changed(&self, motion: MotionState) {
+            self.0.on_motion_changed(motion);
+        }
+        fn on_ble_data_received(&self, peer_id: String, data: Vec<u8>) {
+            self.0.on_ble_data_received(peer_id, data);
+        }
+        fn on_entering_background(&self) {
+            self.0.on_entering_background();
+        }
+        fn on_entering_foreground(&self) {
+            self.0.on_entering_foreground();
+        }
+        fn send_ble_packet(&self, peer_id: String, data: Vec<u8>) {
+            self.0.send_ble_packet(peer_id, data);
+        }
+        fn on_proximity_data_received(
+            &self,
+            peer_id: String,
+            transport: ProximityTransport,
+            data: Vec<u8>,
+        ) {
+            self.0.on_proximity_data_received(peer_id, transport, data);
+        }
+        fn send_proximity_packet(
+            &self,
+            peer_id: String,
+            transport: ProximityTransport,
+            data: Vec<u8>,
+        ) {
+            self.0.send_proximity_packet(peer_id, transport, data);
+        }
+        fn wifi_aware_publish(&self, service_name: String, service_info: Vec<u8>) -> bool {
+            self.0.wifi_aware_publish(service_name, service_info)
+        }
+        fn wifi_aware_subscribe(&self, service_name: String) -> bool {
+            self.0.wifi_aware_subscribe(service_name)
+        }
+        fn wifi_aware_create_data_path(&self, peer_id: String, pmk: Vec<u8>) -> bool {
+            self.0.wifi_aware_create_data_path(peer_id, pmk)
+        }
+        fn wifi_aware_stop(&self) {
+            self.0.wifi_aware_stop();
+        }
+        fn wifi_direct_discover_peers(&self) -> bool {
+            self.0.wifi_direct_discover_peers()
+        }
+        fn wifi_direct_stop_discovery(&self) {
+            self.0.wifi_direct_stop_discovery();
+        }
+        fn wifi_direct_connect(&self, device_address: String) -> bool {
+            self.0.wifi_direct_connect(device_address)
+        }
+        fn wifi_direct_create_group(&self, group_name: String) -> bool {
+            self.0.wifi_direct_create_group(group_name)
+        }
+        fn wifi_direct_remove_group(&self) {
+            self.0.wifi_direct_remove_group();
+        }
     }
 }
