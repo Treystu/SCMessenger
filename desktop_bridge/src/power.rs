@@ -112,7 +112,10 @@ mod tests {
     #[test]
     fn test_power_state_for_suspend() {
         let state = power_state_for_event(crate::PowerProfile::SuspendImminent);
-        assert!(matches!(state.profile, crate::PowerProfile::SuspendImminent));
+        assert!(matches!(
+            state.profile,
+            crate::PowerProfile::SuspendImminent
+        ));
     }
 
     #[test]

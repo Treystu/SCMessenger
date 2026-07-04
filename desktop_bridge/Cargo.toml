@@ -11,9 +11,13 @@ crate-type = ["lib"]
 [dependencies]
 tokio = { workspace = true }
 tracing = { workspace = true }
+serde = { workspace = true }
+uniffi = { version = "0.31" }
+scmessenger-core = { path = "../core" }
 
 # XDG directory resolution
 dirs = "5.0"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 zbus = "4"
+web-time = "1.1"

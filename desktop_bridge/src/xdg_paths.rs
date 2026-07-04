@@ -56,10 +56,12 @@ pub fn resolve_xdg_paths() -> crate::XdgPaths {
             .ok()
             .filter(|p| !p.as_os_str().is_empty())
             .map(|p| p.join("scmessenger"))
-            .and_then(|p| if p.exists() || std::fs::create_dir_all(&p).is_ok() {
-                Some(p.to_string_lossy().to_string())
-            } else {
-                None
+            .and_then(|p| {
+                if p.exists() || std::fs::create_dir_all(&p).is_ok() {
+                    Some(p.to_string_lossy().to_string())
+                } else {
+                    None
+                }
             });
 
         crate::XdgPaths {
@@ -126,13 +128,25 @@ mod tests {
     #[test]
     fn test_xdg_paths_contains_scmessenger() {
         let paths = resolve_xdg_paths();
-        assert!(paths.data_dir.ends_with("scmessenger"), "data_dir: {}", paths.data_dir);
-        assert!(paths.config_dir.ends_with("scmessenger"), "config_dir: {}", paths.config_dir);
+        assert!(
+            paths.data_dir.ends_with("scmessenger"),
+            "data_dir: {}",
+            paths.data_dir
+        );
+        assert!(
+            paths.config_dir.ends_with("scmessenger"),
+            "config_dir: {}",
+            paths.config_dir
+        );
     }
 
     #[test]
     fn test_store_path_under_data_dir() {
         let paths = resolve_xdg_paths();
-        assert!(paths.store_path.ends_with("store"), "store_path: {}", paths.store_path);
+        assert!(
+            paths.store_path.ends_with("store"),
+            "store_path: {}",
+            paths.store_path
+        );
     }
 }

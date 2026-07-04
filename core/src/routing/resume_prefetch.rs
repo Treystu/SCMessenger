@@ -56,7 +56,9 @@ impl PrefetchedRoute {
         }
     }
 
-    /// Check if this route is still fresh
+    /// Check if this route is still fresh. Reserved strict-freshness check for
+    /// future prefetch validation refinement; `is_usable` (fresh-or-stale) is
+    /// what's used in the current prefetch/refresh path.
     #[allow(dead_code)]
     fn is_fresh(&self, max_age: Duration) -> bool {
         self.last_validated.elapsed() < max_age
@@ -74,7 +76,6 @@ impl PrefetchedRoute {
     }
 
     /// Mark as refreshing
-    #[allow(dead_code)]
     pub fn start_refresh(&mut self) {
         self.status = PrefetchStatus::Refreshing;
         self.refresh_attempts += 1;

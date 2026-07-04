@@ -1389,7 +1389,6 @@ pub enum SwarmEvent2 {
 
 /// Handle to communicate with the running swarm task
 #[derive(Clone)]
-#[allow(dead_code)]
 pub struct SwarmHandle {
     command_tx: mpsc::Sender<SwarmCommand>,
     core_handle: Option<Weak<crate::IronCore>>,

@@ -84,14 +84,9 @@ pub async fn start_scan() -> Result<(), String> {
         .await
         .map_err(|e| format!("Failed to connect to system D-Bus: {e}"))?;
 
-    let proxy = zbus::Proxy::new(
-        &connection,
-        BLUEZ_SERVICE,
-        DEFAULT_ADAPTER_PATH,
-        IF_ADAPTER,
-    )
-    .await
-    .map_err(|e| format!("Failed to create D-Bus proxy for adapter: {e}"))?;
+    let proxy = zbus::Proxy::new(&connection, BLUEZ_SERVICE, DEFAULT_ADAPTER_PATH, IF_ADAPTER)
+        .await
+        .map_err(|e| format!("Failed to create D-Bus proxy for adapter: {e}"))?;
 
     proxy
         .call_method("StartDiscovery", &())
@@ -107,14 +102,9 @@ pub async fn stop_scan() -> Result<(), String> {
         .await
         .map_err(|e| format!("Failed to connect to system D-Bus: {e}"))?;
 
-    let proxy = zbus::Proxy::new(
-        &connection,
-        BLUEZ_SERVICE,
-        DEFAULT_ADAPTER_PATH,
-        IF_ADAPTER,
-    )
-    .await
-    .map_err(|e| format!("Failed to create D-Bus proxy for adapter: {e}"))?;
+    let proxy = zbus::Proxy::new(&connection, BLUEZ_SERVICE, DEFAULT_ADAPTER_PATH, IF_ADAPTER)
+        .await
+        .map_err(|e| format!("Failed to create D-Bus proxy for adapter: {e}"))?;
 
     proxy
         .call_method("StopDiscovery", &())
@@ -134,24 +124,16 @@ pub async fn list_discovered_peers() -> Result<Vec<BlePeer>, String> {
         .map_err(|e| format!("Failed to connect to system D-Bus: {e}"))?;
 
     // Use ObjectManager to list all managed objects
-    let proxy = zbus::Proxy::new(
-        &connection,
-        BLUEZ_SERVICE,
-        "/",
-        IF_OBJECT_MANAGER,
-    )
-    .await
-    .map_err(|e| format!("Failed to create ObjectManager proxy: {e}"))?;
+    let proxy = zbus::Proxy::new(&connection, BLUEZ_SERVICE, "/", IF_OBJECT_MANAGER)
+        .await
+        .map_err(|e| format!("Failed to create ObjectManager proxy: {e}"))?;
 
     let (objects,): (
         std::collections::HashMap<
             zbus::zvariant::OwnedObjectPath,
             std::collections::HashMap<
                 String,
-                std::collections::HashMap<
-                    String,
-                    zbus::zvariant::OwnedValue,
-                >,
+                std::collections::HashMap<String, zbus::zvariant::OwnedValue>,
             >,
         >,
     ) = proxy
@@ -174,31 +156,33 @@ pub async fn list_discovered_peers() -> Result<Vec<BlePeer>, String> {
             // Extract properties
             let display_name = device_props
                 .get("Name")
-                .and_then(|v| v.downcast_ref::<String>().ok())
-                .cloned();
+                .and_then(|v| v.downcast_ref::<String>().ok());
 
             let rssi = device_props
                 .get("RSSI")
                 .and_then(|v| v.downcast_ref::<i16>().ok())
-                .copied()
                 .unwrap_or(-100);
 
-            let is_connected = device_props
+            let _is_connected = device_props
                 .get("Connected")
                 .and_then(|v| v.downcast_ref::<bool>().ok())
-                .copied()
                 .unwrap_or(false);
 
             // Check if this device advertises an SCMessenger UUID
             let uuids: Vec<String> = device_props
                 .get("UUIDs")
-                .and_then(|v| v.downcast_ref::<Vec<String>>().ok())
-                .cloned()
+                .and_then(|v| {
+                    let array: zbus::zvariant::Array = v.downcast_ref().ok()?;
+                    array
+                        .iter()
+                        .map(|item| String::try_from(item).ok())
+                        .collect::<Option<Vec<String>>>()
+                })
                 .unwrap_or_default();
 
             let is_scmessenger = uuids.iter().any(|u| {
-                u.eq_ignore_ascii_case(SCM_SERVICE_UUID_16) ||
-                u.contains("fe9f") // Match the short UUID
+                u.eq_ignore_ascii_case(SCM_SERVICE_UUID_16) || u.contains("fe9f")
+                // Match the short UUID
             });
 
             let last_seen = web_time::SystemTime::now()
@@ -218,7 +202,8 @@ pub async fn list_discovered_peers() -> Result<Vec<BlePeer>, String> {
 
     // Sort: SCMessenger nodes first, then by signal strength
     peers.sort_by(|a, b| {
-        b.is_scmessenger_node.cmp(&a.is_scmessenger_node)
+        b.is_scmessenger_node
+            .cmp(&a.is_scmessenger_node)
             .then_with(|| b.rssi.cmp(&a.rssi))
     });
 
@@ -243,11 +228,7 @@ pub async fn power_on_adapter() -> Result<(), String> {
     proxy
         .call_method(
             "Set",
-            &(
-                IF_ADAPTER,
-                "Powered",
-                zbus::zvariant::Value::Bool(true),
-            ),
+            &(IF_ADAPTER, "Powered", zbus::zvariant::Value::Bool(true)),
         )
         .await
         .map_err(|e| format!("BlueZ Power On failed: {e}"))?;
@@ -273,11 +254,7 @@ pub async fn power_off_adapter() -> Result<(), String> {
     proxy
         .call_method(
             "Set",
-            &(
-                IF_ADAPTER,
-                "Powered",
-                zbus::zvariant::Value::Bool(false),
-            ),
+            &(IF_ADAPTER, "Powered", zbus::zvariant::Value::Bool(false)),
         )
         .await
         .map_err(|e| format!("BlueZ Power Off failed: {e}"))?;
@@ -289,12 +266,9 @@ pub async fn power_off_adapter() -> Result<(), String> {
 // Helpers
 // ===========================================================================
 
-async fn read_property<'a, T>(
-    proxy: &zbus::Proxy<'a>,
-    property_name: &str,
-) -> Result<T, String>
+async fn read_property<'a, T>(proxy: &zbus::Proxy<'a>, property_name: &str) -> Result<T, String>
 where
-    T: serde::de::DeserializeOwned + zbus::zvariant::DynamicDeserialize + 'static,
+    T: serde::de::DeserializeOwned + zbus::zvariant::Type + 'static,
 {
     proxy
         .call_method("Get", &(IF_ADAPTER, property_name))

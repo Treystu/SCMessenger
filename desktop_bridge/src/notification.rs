@@ -57,15 +57,17 @@ fn send_notification_dbus(
 ) -> Result<u32, String> {
     // Use a dedicated async runtime thread for the D-Bus call.
     // This avoids interfering with any existing tokio runtime the caller may have.
+    // `title`/`body` are owned before crossing the thread boundary since
+    // `std::thread::spawn` requires a `'static` closure.
+    let title = title.to_string();
+    let body = body.to_string();
     std::thread::spawn(move || {
         let rt = tokio::runtime::Builder::new_current_thread()
             .enable_all()
             .build()
             .map_err(|e| format!("Failed to create tokio runtime: {e}"))?;
 
-        rt.block_on(async {
-            dbus_notify(title, body).await
-        })
+        rt.block_on(async { dbus_notify(&title, &body).await })
     })
     .join()
     .map_err(|_| "D-Bus notification thread panicked".to_string())?
@@ -82,21 +84,18 @@ async fn dbus_notify(title: &str, body: &str) -> Result<u32, String> {
     let reply = connection
         .call_method(
             Some("org.freedesktop.Notifications"), // destination
-            "/org/freedesktop/Notifications",       // path
+            "/org/freedesktop/Notifications",      // path
             Some("org.freedesktop.Notifications"), // interface
-            "Notify",                               // method
+            "Notify",                              // method
             &(
-                "scmessenger",                       // app_name
-                0u32,                                // replaces_id (0 = new notification)
-                "",                                  // app_icon
+                "scmessenger", // app_name
+                0u32,          // replaces_id (0 = new notification)
+                "",            // app_icon
                 title,
                 body,
-                Vec::<String>::new(),                // actions
-                std::collections::HashMap::<
-                    &str,
-                    zbus::zvariant::Value<'_>,
-                >::new(),                            // hints
-                5000i32,                             // expire_timeout (ms, 5s)
+                Vec::<String>::new(), // actions
+                std::collections::HashMap::<&str, zbus::zvariant::Value<'_>>::new(), // hints
+                5000i32,              // expire_timeout (ms, 5s)
             ),
         )
         .await

@@ -19,7 +19,8 @@ pub struct PeerBroadcaster {
     connected_peers: HashMap<PeerId, PeerInfo>,
 }
 
-/// Information about a connected peer
+/// Information about a connected peer. Constructed and read only within this
+/// module today; not yet consumed by external relay-broadcast callers.
 #[allow(dead_code)]
 struct PeerInfo {
     /// Peer's addresses

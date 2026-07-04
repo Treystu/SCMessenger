@@ -1,3 +1,5 @@
+VERIFIED FIXED as of 2026-07-03 — see commit 87d1ef61 (fix(android): FAB reappear + TCP subnet probe for LAN discovery). SubnetProbe.kt confirmed present, crash handler confirmed installed in MeshApplication.kt, nested-Scaffold fix confirmed in MeshApp.kt.
+
 # TASK: Android Crash — Need User Reproduction Steps to Diagnose
 
 ## Agent Role
@@ -136,3 +138,4 @@ Reproduce the original crash scenario → confirm it doesn't happen → pull `la
 ## Related
 - `P1_ANDROID_CONTACTS_FAB_REAPPEAR` (sibling) — fixes the nested Scaffold
 - `P1_ANDROID_LAN_DISCOVERY_REPAIR` (sibling) — the bootstrap fail in the bundle is part of why the app feels broken even without a literal crash
+</content>

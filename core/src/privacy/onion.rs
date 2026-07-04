@@ -18,7 +18,7 @@ const X25519_KEY_SIZE: usize = 32;
 /// Size of XChaCha20-Poly1305 nonce (bytes)
 const XCHACHA_NONCE_SIZE: usize = 24;
 
-/// Size of Poly1305 authentication tag (bytes)
+/// Size of Poly1305 authentication tag (bytes). Reserved constant for onion-layer size calculations; no current caller outside this module.
 #[allow(dead_code)]
 const POLY1305_TAG_SIZE: usize = 16;
 

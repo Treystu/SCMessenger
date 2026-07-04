@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 SCMessenger is a sovereign encrypted decentralized messaging mesh. A Rust core (`scmessenger-core`) handles identity, crypto, P2P transport, and storage. Platform clients (Android/Kotlin, iOS/Swift, WASM/browser, CLI) consume the core via UniFFI bindings or JSON-RPC.
 
-**Active release line:** v0.2.1 alpha (v0.2.0 was the baseline).
+**Active release line:** v0.3.4 (working toward v1.0.0; confirmed against `Cargo.toml` and the installed Android build — 2026-07-03).
 
 **Two operating modes share this repo:**
 1. **Native Claude Code** (default) — a single Claude Code session (you, most of the time) working directly, using the subagents/skills/hooks in [Native Claude Code Setup](#native-claude-code-setup) below.

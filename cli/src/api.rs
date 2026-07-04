@@ -221,7 +221,6 @@ pub async fn add_contact_via_api(
     }
 }
 
-#[allow(dead_code)]
 pub async fn get_peers_via_api() -> Result<Vec<PeerEntry>> {
     use http_body_util::{BodyExt, Empty};
     use hyper::body::Bytes;
@@ -242,7 +241,6 @@ pub async fn get_peers_via_api() -> Result<Vec<PeerEntry>> {
     Ok(response.peers)
 }
 
-#[allow(dead_code)]
 pub async fn get_swarm_stats_via_api() -> Result<Vec<ApiConnectionStats>> {
     use http_body_util::{BodyExt, Empty};
     use hyper::body::Bytes;
@@ -263,6 +261,9 @@ pub async fn get_swarm_stats_via_api() -> Result<Vec<ApiConnectionStats>> {
     Ok(response.stats)
 }
 
+/// NOTE: HANDOFF/done/task_wire_get_history_via_api.md claims this was wired,
+/// but no caller exists anywhere in the repo as of this triage (2026-07-03) -
+/// flagged for human follow-up.
 #[allow(dead_code)]
 pub async fn get_history_via_api(
     peer_id: Option<String>,
@@ -291,7 +292,6 @@ pub async fn get_history_via_api(
     Ok(response.messages)
 }
 
-#[allow(dead_code)]
 pub async fn get_external_address_via_api() -> Result<Vec<String>> {
     use http_body_util::{BodyExt, Empty};
     use hyper::body::Bytes;

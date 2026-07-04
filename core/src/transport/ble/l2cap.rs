@@ -289,7 +289,8 @@ impl L2capFragmenter {
     }
 }
 
-/// Reassembly logic for collecting fragments
+/// Reassembly logic for collecting fragments. Not yet wired into the active
+/// BLE transport send/receive path outside this module.
 #[allow(dead_code)]
 pub struct L2capReassembler {
     config: L2capConfig,

@@ -20,7 +20,9 @@ pub fn check_socket_activation() -> SocketActivationStatus {
         .and_then(|v| v.parse().ok())
         .unwrap_or(0);
 
-    let listen_pid: Option<u32> = std::env::var("LISTEN_PID").ok().and_then(|v| v.parse().ok());
+    let listen_pid: Option<u32> = std::env::var("LISTEN_PID")
+        .ok()
+        .and_then(|v| v.parse().ok());
 
     let our_pid = std::process::id();
 
@@ -72,7 +74,10 @@ mod tests {
         std::env::set_var("LISTEN_PID", &std::process::id().to_string());
 
         let status = check_socket_activation();
-        assert!(matches!(status.state, crate::SocketActivationState::Listening));
+        assert!(matches!(
+            status.state,
+            crate::SocketActivationState::Listening
+        ));
         assert_eq!(status.activated_socket_count, 2);
 
         // Cleanup
@@ -88,7 +93,10 @@ mod tests {
             listen_address: Some("scmessenger.socket".to_string()),
         };
         let completed = handoff_complete(&status);
-        assert!(matches!(completed.state, crate::SocketActivationState::HandoffComplete));
+        assert!(matches!(
+            completed.state,
+            crate::SocketActivationState::HandoffComplete
+        ));
         assert_eq!(completed.activated_socket_count, 1);
     }
 }

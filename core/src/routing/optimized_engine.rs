@@ -35,10 +35,12 @@ pub struct OptimizedRoutingEngine {
     adaptive_ttl: AdaptiveTTLManager,
     /// Multipath delivery manager for redundant route tracking
     multipath: MultiPathDelivery,
-    /// Our own peer ID
+    /// Our own peer ID. Retained for parity with `base_engine`'s copy; not read
+    /// directly today but kept for future direct access without traversing base_engine.
     #[allow(dead_code)]
     local_id: PeerId,
-    /// Our recipient hint
+    /// Our recipient hint. Retained for parity with `base_engine`'s copy; not read
+    /// directly today but kept for future direct access without traversing base_engine.
     #[allow(dead_code)]
     local_hint: [u8; 4],
     /// Current discovery phase

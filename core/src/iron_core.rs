@@ -107,7 +107,6 @@ pub enum ConsentState {
 /// The main entry point for the SCMessenger core.
 ///
 /// Wraps all subsystems behind `Arc<RwLock<…>>` for safe concurrent access.
-#[allow(dead_code)]
 #[cfg_attr(not(target_arch = "wasm32"), derive(uniffi::Object))]
 pub struct IronCore {
     pub(crate) identity: Arc<RwLock<IdentityManager>>,

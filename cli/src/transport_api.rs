@@ -15,6 +15,8 @@ pub struct RegisterPeerRequest {
 #[derive(Debug)]
 pub enum TransportError {
     InvalidPeerId,
+    /// Reserved variant for future capability-validation error paths; not yet
+    /// constructed anywhere - only `InvalidPeerId` is currently raised.
     #[allow(dead_code)]
     InvalidCapabilities,
 }

@@ -127,6 +127,7 @@ impl DSPyModule for ChainOfThought {
 /// Multi-hop recall module for retrieving and combining information
 pub struct MultiHopRecall {
     metadata: ModuleMetadata,
+    /// Reserved for future multi-hop recall depth limiting; DSPy module framework not yet wired into production routing.
     #[allow(dead_code)]
     max_hops: usize,
     /// Steps for chain-of-thought reasoning in multi-hop routing
@@ -188,6 +189,7 @@ impl DSPyModule for MultiHopRecall {
 /// Optimizer pipeline with self-correction loop
 pub struct OptimizerPipeline {
     metadata: ModuleMetadata,
+    /// Reserved for future pipeline-stage introspection; DSPy module framework not yet wired into production routing.
     #[allow(dead_code)]
     stages: Vec<String>,
 }

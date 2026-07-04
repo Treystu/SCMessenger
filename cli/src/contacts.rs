@@ -149,6 +149,10 @@ impl ContactList {
     }
 
     /// Set contact nickname
+    /// NOTE: this `ContactList` type is only declared via `cli/src/lib.rs`, not
+    /// `main.rs` - it appears superseded by `scmessenger_core::store::ContactManager`
+    /// (used directly in main.rs). Flagged for human review: likely dead legacy
+    /// CLI-local contact store, not a platform stub.
     #[allow(dead_code)]
     pub fn set_nickname(&self, peer_id: &str, nickname: Option<String>) -> Result<()> {
         if let Some(mut contact) = self.get(peer_id)? {
@@ -161,6 +165,8 @@ impl ContactList {
     }
 
     /// Set contact notes
+    /// NOTE: see comment on `set_nickname` above - this whole `ContactList` type
+    /// appears superseded by core's `ContactManager`. Flagged for human review.
     #[allow(dead_code)]
     pub fn set_notes(&self, peer_id: &str, notes: Option<String>) -> Result<()> {
         if let Some(mut contact) = self.get(peer_id)? {

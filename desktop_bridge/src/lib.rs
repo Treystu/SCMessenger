@@ -1,7 +1,12 @@
-/// Desktop bridge for SCMessenger on Linux.
-///
-/// Provides XDG Base Directory path resolution and desktop integration helpers.
-/// Non-Linux targets compile stubs that return empty/default values.
+//! Desktop bridge for SCMessenger on Linux.
+//!
+//! Provides XDG Base Directory path resolution and desktop integration helpers.
+//! Non-Linux targets compile stubs that return empty/default values.
+
+// This crate's UniFFI surface is described entirely via proc-macros (no `.udl`
+// scaffolding — see `build.rs`), so it must register its own scaffolding root.
+// Do not also call `uniffi::include_scaffolding!()` in this crate.
+uniffi::setup_scaffolding!();
 
 /// Returns the desktop bridge version string.
 pub fn desktop_version() -> String {
@@ -35,6 +40,19 @@ pub fn xdg_config_dir() -> std::path::PathBuf {
     }
     std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."))
 }
+
+pub mod types;
+pub use types::*;
+
+pub mod ble;
+pub mod desktop_bridge;
+pub mod notification;
+pub mod power;
+pub mod socket_activation;
+pub mod tray;
+pub mod xdg_paths;
+
+pub use desktop_bridge::DesktopBridge;
 
 #[cfg(test)]
 mod tests {

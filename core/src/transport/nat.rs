@@ -72,6 +72,8 @@ pub enum NatType {
 /// 1. Send "what's my address?" request to mesh peers
 /// 2. Peers respond with observed source IP:port
 /// 3. Aggregate responses to determine external address
+///
+/// Not yet wired into the active NAT-traversal path outside this module.
 #[allow(dead_code)]
 pub struct PeerAddressDiscovery {
     /// Known mesh peers who can report our address

@@ -134,6 +134,8 @@ impl Default for BleConfig {
 }
 
 /// BLE daemon for Windows CLI with graceful error handling.
+/// Not yet constructed/wired outside this module - Windows BLE integration
+/// is still pending compared to Android's BLE transport.
 #[allow(dead_code)]
 pub struct BleDaemon {
     config: BleConfig,

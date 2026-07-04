@@ -104,6 +104,8 @@ impl From<MeshSettings> for scmessenger_core::MeshSettings {
 }
 
 pub struct MeshSettingsManager {
+    /// Only read under `cfg(not(target_arch = "wasm32"))` in `load`/`save`;
+    /// unused when actually compiled to wasm32 (browser storage path differs).
     #[allow(dead_code)]
     storage_path: String,
 }

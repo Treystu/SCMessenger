@@ -16,7 +16,7 @@ use std::sync::Arc;
 #[derive(uniffi::Object)]
 pub struct DesktopBridge {
     /// Core engine instance (shared with mobile bridge).
-    core: Arc<std::sync::Option<std::sync::Arc<scmessenger_core::IronCore>>>,
+    core: Arc<std::sync::Mutex<Option<std::sync::Arc<scmessenger_core::IronCore>>>>,
     /// XDG paths (computed once at construction).
     xdg_paths: crate::XdgPaths,
     /// Current tray status.
@@ -76,9 +76,7 @@ impl DesktopBridge {
 
     /// Start the mesh engine.
     pub fn start(&self) -> Result<(), scmessenger_core::IronCoreError> {
-        let core = scmessenger_core::IronCore::with_storage(
-            self.xdg_paths.store_path.clone(),
-        );
+        let core = scmessenger_core::IronCore::with_storage(self.xdg_paths.store_path.clone());
         core.start()?;
         *self.core.lock().unwrap() = Some(std::sync::Arc::new(core));
         Ok(())
@@ -199,64 +197,71 @@ impl DesktopBridge {
     }
 
     // =======================================================================
-    // BLE (Linux only)
-    // =======================================================================
-
-    /// Get BLE adapter info (Linux only).
-    #[cfg(target_os = "linux")]
-    pub fn get_ble_adapter_info(&self) -> Result<crate::BleAdapterInfo, String> {
-        crate::ble::get_adapter_info_sync()
-    }
-
-    /// Get BLE adapter info (non-Linux stub).
-    #[cfg(not(target_os = "linux"))]
-    pub fn get_ble_adapter_info(&self) -> Result<crate::BleAdapterInfo, String> {
-        Err("BLE adapter info is only supported on Linux".to_string())
-    }
-
-    /// List discovered BLE peers (Linux only).
-    #[cfg(target_os = "linux")]
-    pub fn list_ble_peers(&self) -> Result<Vec<crate::BlePeer>, String> {
-        crate::ble::list_discovered_peers_sync()
-    }
-
-    /// List discovered BLE peers (non-Linux stub).
-    #[cfg(not(target_os = "linux"))]
-    pub fn list_ble_peers(&self) -> Result<Vec<crate::BlePeer>, String> {
-        Err("BLE peer discovery is only supported on Linux".to_string())
-    }
-
-    /// Start BLE scan (Linux only).
-    #[cfg(target_os = "linux")]
-    pub fn start_ble_scan(&self) -> Result<(), String> {
-        crate::ble::start_scan_sync()
-    }
-
-    /// Start BLE scan (non-Linux stub).
-    #[cfg(not(target_os = "linux"))]
-    pub fn start_ble_scan(&self) -> Result<(), String> {
-        Err("BLE scanning is only supported on Linux".to_string())
-    }
-
-    /// Stop BLE scan (Linux only).
-    #[cfg(target_os = "linux")]
-    pub fn stop_ble_scan(&self) -> Result<(), String> {
-        crate::ble::stop_scan_sync()
-    }
-
-    /// Stop BLE scan (non-Linux stub).
-    #[cfg(not(target_os = "linux"))]
-    pub fn stop_ble_scan(&self) -> Result<(), String> {
-        Err("BLE scanning is only supported on Linux".to_string())
-    }
-
-    // =======================================================================
     // DELEGATE
     // =======================================================================
 
     /// Set the desktop delegate for callbacks.
     pub fn set_delegate(&self, delegate: Option<Box<dyn crate::DesktopDelegate>>) {
         *self.delegate.lock().unwrap() = delegate;
+    }
+}
+
+// =======================================================================
+// BLE (Linux only)
+// =======================================================================
+//
+// Each `#[cfg]` variant gets its own `#[uniffi::export]` impl block: `#[cfg]`
+// does not reliably suppress UniFFI scaffolding generation inside a single
+// `uniffi::export` block (the attribute macro runs before `cfg` stripping),
+// so two cfg-gated methods with the same name in one block produce duplicate
+// scaffolding symbols. See:
+// https://mozilla.github.io/uniffi-rs/latest/proc_macro/index.html#conditional-compilation
+
+#[cfg(target_os = "linux")]
+#[uniffi::export]
+impl DesktopBridge {
+    /// Get BLE adapter info (Linux only).
+    pub fn get_ble_adapter_info(&self) -> Result<crate::BleAdapterInfo, String> {
+        crate::ble::get_adapter_info_sync()
+    }
+
+    /// List discovered BLE peers (Linux only).
+    pub fn list_ble_peers(&self) -> Result<Vec<crate::BlePeer>, String> {
+        crate::ble::list_discovered_peers_sync()
+    }
+
+    /// Start BLE scan (Linux only).
+    pub fn start_ble_scan(&self) -> Result<(), String> {
+        crate::ble::start_scan_sync()
+    }
+
+    /// Stop BLE scan (Linux only).
+    pub fn stop_ble_scan(&self) -> Result<(), String> {
+        crate::ble::stop_scan_sync()
+    }
+}
+
+#[cfg(not(target_os = "linux"))]
+#[uniffi::export]
+impl DesktopBridge {
+    /// Get BLE adapter info (non-Linux stub).
+    pub fn get_ble_adapter_info(&self) -> Result<crate::BleAdapterInfo, String> {
+        Err("BLE adapter info is only supported on Linux".to_string())
+    }
+
+    /// List discovered BLE peers (non-Linux stub).
+    pub fn list_ble_peers(&self) -> Result<Vec<crate::BlePeer>, String> {
+        Err("BLE peer discovery is only supported on Linux".to_string())
+    }
+
+    /// Start BLE scan (non-Linux stub).
+    pub fn start_ble_scan(&self) -> Result<(), String> {
+        Err("BLE scanning is only supported on Linux".to_string())
+    }
+
+    /// Stop BLE scan (non-Linux stub).
+    pub fn stop_ble_scan(&self) -> Result<(), String> {
+        Err("BLE scanning is only supported on Linux".to_string())
     }
 }
 

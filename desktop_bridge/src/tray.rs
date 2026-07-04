@@ -31,30 +31,26 @@ pub fn build_tray_status(
 
 /// Get a human-readable status text for the tray tooltip.
 /// Returns a (state, text) tuple.
-pub fn tray_status_for_state(
-    state: crate::TrayIconState,
-    unread: u32,
-    peers: u32,
-) -> TrayStatus {
+pub fn tray_status_for_state(state: crate::TrayIconState, unread: u32, peers: u32) -> TrayStatus {
     let text = match state {
-        crate::TrayIconState::Disconnected => {
-            "SCMessenger — Disconnected".to_string()
-        }
+        crate::TrayIconState::Disconnected => "SCMessenger — Disconnected".to_string(),
         crate::TrayIconState::Connected => {
             if peers > 0 {
-                format!("SCMessenger — {peers} peer{} connected",
-                    if peers == 1 { "" } else { "s" })
+                format!(
+                    "SCMessenger — {peers} peer{} connected",
+                    if peers == 1 { "" } else { "s" }
+                )
             } else {
                 "SCMessenger — Connected (no peers)".to_string()
             }
         }
         crate::TrayIconState::UnreadMessages => {
-            format!("SCMessenger — {unread} unread message{}",
-                if unread == 1 { "" } else { "s" })
+            format!(
+                "SCMessenger — {unread} unread message{}",
+                if unread == 1 { "" } else { "s" }
+            )
         }
-        crate::TrayIconState::Error => {
-            "SCMessenger — Connection error".to_string()
-        }
+        crate::TrayIconState::Error => "SCMessenger — Connection error".to_string(),
     };
 
     build_tray_status(state, unread, peers, text)
@@ -66,33 +62,21 @@ mod tests {
 
     #[test]
     fn test_tray_disconnected() {
-        let status = tray_status_for_state(
-            crate::TrayIconState::Disconnected,
-            0,
-            0,
-        );
+        let status = tray_status_for_state(crate::TrayIconState::Disconnected, 0, 0);
         assert_eq!(status.connected_peers, 0);
         assert!(status.status_text.contains("Disconnected"));
     }
 
     #[test]
     fn test_tray_connected_with_peers() {
-        let status = tray_status_for_state(
-            crate::TrayIconState::Connected,
-            0,
-            3,
-        );
+        let status = tray_status_for_state(crate::TrayIconState::Connected, 0, 3);
         assert_eq!(status.connected_peers, 3);
         assert!(status.status_text.contains("3"));
     }
 
     #[test]
     fn test_tray_unread() {
-        let status = tray_status_for_state(
-            crate::TrayIconState::UnreadMessages,
-            5,
-            2,
-        );
+        let status = tray_status_for_state(crate::TrayIconState::UnreadMessages, 5, 2);
         assert_eq!(status.unread_count, 5);
         assert!(status.status_text.contains("5"));
     }

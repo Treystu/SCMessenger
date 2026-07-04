@@ -1,3 +1,5 @@
+NOTE (2026-07-04): The wiring workstream (350 tasks) completed as of 2026-07-03, verified via HANDOFF/done/ file count (351 task_wire_* files present, 0 remaining in HANDOFF/todo/). WIRING_TASK_INDEX.md and WIRING_PATCH_MANIFEST.{json,md} have now been regenerated (`python scripts/generate_wiring_patch_manifest.py`, run 2026-07-04) — WIRING_PATCH_MANIFEST.md confirms `Total tasks: 0`; WIRING_TASK_INDEX.md retains the original 350-row table as a historical record with a closure note prepended. This workstream is fully closed; do not re-dispatch.
+
 # SCMessenger Wiring Master Execution Plan (All HANDOFF/todo Tasks)
 
 ## 1) Scope + Success Definition

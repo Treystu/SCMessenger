@@ -49,7 +49,8 @@ pub enum StorageError {
     NotFound,
 }
 
-/// Metadata for a stored message
+/// Metadata for a stored message. WASM-only storage type; fields are used
+/// internally by `WasmStore` but not yet all read externally by browser callers.
 #[derive(Debug, Clone)]
 #[allow(dead_code)]
 struct MessageEntry {

@@ -107,6 +107,10 @@ impl MessageHistory {
     }
 
     /// Get a specific message by ID
+    /// NOTE: this `MessageHistory` type is only declared via `cli/src/lib.rs`,
+    /// not `main.rs` - it appears superseded by core's HistoryManager (used
+    /// directly in main.rs). Flagged for human review: likely dead legacy
+    /// CLI-local history store, not a platform stub.
     #[allow(dead_code)]
     pub fn get(&self, id: &str) -> Result<Option<MessageRecord>> {
         for item in self.db.iter() {
@@ -172,12 +176,15 @@ impl MessageHistory {
     }
 
     /// Count total messages
+    /// NOTE: see comment on `get` above - this whole `MessageHistory` type
+    /// appears superseded by core's HistoryManager. Flagged for human review.
     #[allow(dead_code)]
     pub fn count(&self) -> usize {
         self.db.len()
     }
 
     /// Count messages with a specific peer
+    /// NOTE: see comment on `get` above - legacy/superseded, flagged for human review.
     #[allow(dead_code)]
     pub fn count_with_peer(&self, peer_id: &str) -> Result<usize> {
         let mut count = 0;
@@ -194,6 +201,7 @@ impl MessageHistory {
     }
 
     /// Mark message as delivered
+    /// NOTE: see comment on `get` above - legacy/superseded, flagged for human review.
     #[allow(dead_code)]
     pub fn mark_delivered(&self, id: &str) -> Result<()> {
         if let Some(mut record) = self.get(id)? {
@@ -204,6 +212,7 @@ impl MessageHistory {
     }
 
     /// Delete all messages
+    /// NOTE: see comment on `get` above - legacy/superseded, flagged for human review.
     #[allow(dead_code)]
     pub fn clear(&self) -> Result<()> {
         self.db.clear()?;
@@ -211,6 +220,7 @@ impl MessageHistory {
     }
 
     /// Delete messages with a specific peer
+    /// NOTE: see comment on `get` above - legacy/superseded, flagged for human review.
     #[allow(dead_code)]
     pub fn clear_conversation(&self, peer_id: &str) -> Result<usize> {
         let mut deleted = 0;

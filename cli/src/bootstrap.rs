@@ -77,6 +77,8 @@ pub fn default_bootstrap_nodes() -> Vec<String> {
 /// This is the core of aggressive discovery: we dial the IP:Port ONLY.
 /// libp2p will accept whatever PeerID the remote presents during the
 /// Noise handshake. No identity validation occurs at this stage.
+/// Reserved for a future aggressive-discovery bootstrap mode; not yet called
+/// from the CLI entry point or elsewhere.
 #[allow(dead_code)]
 pub fn promiscuous_bootstrap_addrs() -> Vec<String> {
     default_bootstrap_nodes()
@@ -87,6 +89,8 @@ pub fn promiscuous_bootstrap_addrs() -> Vec<String> {
 
 /// Extract the expected PeerID from a bootstrap multiaddr (if present).
 /// Returns (stripped_addr, optional_expected_peer_id)
+/// Reserved helper for future bootstrap-address/PeerID parsing use sites;
+/// not yet called outside this module.
 #[allow(dead_code)]
 pub fn parse_bootstrap_addr(multiaddr: &str) -> (String, Option<String>) {
     let stripped = ledger::strip_peer_id(multiaddr);

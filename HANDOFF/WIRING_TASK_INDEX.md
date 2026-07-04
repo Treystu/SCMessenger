@@ -1,6 +1,13 @@
 # Wiring Task Index (HANDOFF/todo)
 
-Total tasks: **350**.
+**CLOSED 2026-07-04.** The wiring workstream (350 tasks) completed as of 2026-07-03.
+Verified: `HANDOFF/todo/` contains 0 `task_wire_*` files; `HANDOFF/done/` contains 351.
+Regenerated via `python scripts/generate_wiring_patch_manifest.py`, which now reports
+`Total tasks: 0` in `HANDOFF/WIRING_PATCH_MANIFEST.md`. The table below is retained only
+as a historical record of the original inventory — do not re-dispatch any of these; check
+`HANDOFF/done/` for the corresponding completed task file first.
+
+Total tasks (historical, at generation time): **350**.
 
 | # | Task | Variant | Target | Task file |
 |---:|---|---|---|---|

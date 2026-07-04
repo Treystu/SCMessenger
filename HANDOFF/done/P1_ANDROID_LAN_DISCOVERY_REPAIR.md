@@ -1,3 +1,5 @@
+VERIFIED FIXED as of 2026-07-03 — see commit 87d1ef61 (fix(android): FAB reappear + TCP subnet probe for LAN discovery). SubnetProbe.kt confirmed present, crash handler confirmed installed in MeshApplication.kt, nested-Scaffold fix confirmed in MeshApp.kt.
+
 # TASK: Android LAN Auto-Discovery Not Working (Cannot See Windows or Ubuntu Peers)
 
 ## Agent Role
@@ -111,3 +113,4 @@ LAN test:
 - This task pairs with `P1_ANDROID_CONTACTS_FAB_REAPPEAR` — even if FAB works, empty Nearby Peers list means user can't test the auto-discovery claim.
 - Existing HANDOFF task `[VALIDATED]_P1_IOS_003_Background_Mode_BLE_Multipeer.md` may have lessons learned.
 - Existing task `[VALIDATED]_P1_ANDROID_022_BLE_Stale_Cache_Cleanup.md` may have updated BLE state to verify.
+</content>

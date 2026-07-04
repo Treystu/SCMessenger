@@ -41,7 +41,9 @@ struct StoredEnvelope {
     stored_at: u64,
 }
 
-/// Connection state
+/// Connection state. `Handshaking` and `Disconnected` are reserved for a future
+/// explicit handshake/teardown state machine; only `Connecting`/`Connected` are
+/// constructed today.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(dead_code)]
 enum ConnectionState {
@@ -81,7 +83,8 @@ pub enum RelayServerError {
     InvalidHandshake,
 }
 
-/// A connected relay peer session
+/// A connected relay peer session. Fields other than `state` are held for
+/// Debug-logging/introspection; not all are read via field access yet.
 #[derive(Debug)]
 #[allow(dead_code)]
 struct RelayPeerSession {

@@ -78,7 +78,8 @@ pub enum TransportError {
     SendFailed(String),
 }
 
-/// Manages WebRTC channels and WebSocket relays
+/// Manages WebRTC channels and WebSocket relays. WASM-only transport type,
+/// not yet wired into the browser thin-client's active send/receive path.
 #[allow(dead_code)]
 pub struct WebTransportManager {
     config: WebTransportConfig,
