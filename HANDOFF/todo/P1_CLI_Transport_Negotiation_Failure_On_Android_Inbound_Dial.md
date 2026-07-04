@@ -35,6 +35,38 @@ self-loopback/peer-count issues on the Android side fixed (see companion
 tickets), a real remote peer cannot currently establish a working connection
 to this CLI build over LAN at all, based on this evidence.
 
+## Progress (2026-07-04, native /scm session, session ended on API-limit)
+
+Confirmed via live tandem debugging (real CLI daemon on this Windows box +
+real Pixel 6a at 192.168.0.148, adb readonly): failure is **100%
+reproducible, not intermittent** — 12 occurrences of "Failed to negotiate
+transport protocol(s)" in the single hour-log `scm.log.2026-07-04-22` alone,
+recurring roughly every ~3 minutes for both TCP/9001 and WS/9002, every
+single time, since at least 21:12 that day.
+
+Artifacts saved locally (gitignored `tmp/`, not committed, still on this
+machine for the next session):
+- `tmp/work_files/parity_debug_2026-07-04/logcat_full_dump_initial.txt` — full historical logcat dump
+- `tmp/work_files/parity_debug_2026-07-04/logcat_live_capture2.txt` — live logcat during a trace-logging CLI run
+- `tmp/work_files/parity_debug_2026-07-04/cli_trace_log2.txt` — CLI daemon run with `RUST_LOG=libp2p_swarm=trace,libp2p_noise=trace,libp2p_core=trace,libp2p_tcp=trace,libp2p_mdns=trace,libp2p_websocket=trace,multistream_select=trace,scmessenger_core=debug` — captured a fresh mDNS discovery event but the session ended (API limit) before this run's window caught a fresh negotiation failure with full trace detail.
+- Real daemon logs (not gitignored artifact, persistent app data):
+  `C:\Users\SCM\AppData\Local\scmessenger\logs\scm.log.2026-07-04-21` and
+  `-22` already contain the 12 plain WARN-level occurrences referenced
+  above (generic wrapper message only, no Noise/multistream-select detail
+  — that's what the trace rerun was for).
+
+**Next session should:** start the CLI fresh with the same RUST_LOG line
+above (`./target/release/scmessenger-cli.exe start`, adb device serial is
+`192.168.0.148:43759` — note two adb entries currently resolve to the same
+physical device, must pass `-s 192.168.0.148:43759` explicitly or `adb`
+errors "more than one device/emulator"), let it run **at least 6-8 minutes
+uninterrupted** (observed retry cadence ~3min, want 2+ occurrences), then
+grep both the CLI trace log and the tandem logcat capture for the actual
+underlying Noise/multistream-select error around the WARN "Incoming
+connection error" timestamps — that specific underlying error is still not
+captured yet. Cross-check `Cargo.lock`'s libp2p pins against what's in the
+Android APK's bundled `.so` per Acceptance Criteria below (not yet done).
+
 ## Acceptance Criteria
 
 - Identify the specific negotiation failure point: reproduce with
