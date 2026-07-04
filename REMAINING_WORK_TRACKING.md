@@ -1,7 +1,27 @@
 # SCMessenger Remaining Work Tracking
 
 Status: Active
-Last updated: 2026-07-02 (v1.0.0 Release Readiness Assessment)
+Last updated: 2026-07-03 (Post-Quantum Migration workstream opened)
+
+---
+
+## 2026-07-03 POST-QUANTUM MIGRATION WORKSTREAM (PQC-01..14)
+
+**Status:** OPEN — task files staged in `HANDOFF/todo/`, human-approved for implementation
+**Reference:** `docs/QUANTUM_READINESS_AUDIT.md` (verdict: not quantum-proof; all asymmetric crypto is Curve25519) and `HANDOFF/todo/PQC_00_MASTER_PLAN.md` (dependency graph, suite registry, global rules, standard gates)
+
+Goal: hybrid X25519+ML-KEM-768 for all new-session confidentiality (closes harvest-now-decrypt-later), Ed25519+ML-DSA-65 dual signatures for identity operations. Symmetric layer (XChaCha20-Poly1305 / Blake3 / Argon2id) is already quantum-safe — unchanged.
+
+| Wave | Tasks | Notes |
+|------|-------|-------|
+| 0 | PQC-01 (ML-KEM dep), PQC-02 (Envelope v2), PQC-03 (Identity v2 bundle) | Parallelizable; PQC-03 needs PQC-01 |
+| 1 | PQC-04 (suite negotiation), PQC-05 (hybrid KEM module) | PQC-05 requires adversarial review |
+| 2 | PQC-06 (hybrid session init) | Adversarial review |
+| 3 | PQC-07 (PQ ratchet — Sonnet-tier only), PQC-09 (hybrid onion), PQC-10 (ML-DSA) | PQC-07 is highest-risk; auditor + gatekeeper |
+| 4 | PQC-08 (legacy path retirement), PQC-11 (relay/invite dual-sig), PQC-12 (TLS PQ groups) | |
+| 5 | PQC-13 (Kani/proptest/cross-version matrix), PQC-14 (docs + risk register closure) | Workstream exit gates |
+
+Standing rules for all PQC tasks: hybrid never pure; never remove legacy decrypt/verify paths; bincode format-tag discipline for any wire/sled struct change; adversarial review for `crypto/`/`privacy/` changes per `.claude/rules/security.md`. Per-task Definition of Done includes the standard build gates and moving the task file to `HANDOFF/done/`.
 
 ---
 
@@ -1291,20 +1311,4 @@ Priority items to track into remaining v0.2.x execution:
 5. `[Closed in WS12]` `EC-05`: custody reconnect integration test is now CI-gated and reproducible (`R-WS3-01` closed).
 6. `EC-06` (Reduced in WS11, accepted in WS12): sender-facing delivery states are normalized in Android+iOS UI/export surfaces; remaining Core-native transition API work is tracked via `R-WS11-01` for post-v0.2.0 follow-up.
 7. `EC-07` to `EC-09` (v0.2.1 WS13): execute tight-pair single-active-device lifecycle.
-8. `EC-10` to `EC-16` (post-v0.2.1): captive portal adaptation, high-latency profile tuning, censorship-resilience strategy, wake/delegate architecture, sparse encounter optimization, and clock-skew normalization.
-
-## 2026-03-13 iOS Simulator Launch Ambiguity
-
-- Completed: Identified and cleared an iPhone 17 Pro simulator launch blocker caused by a stale `platform IOS` SCMessenger bundle installed into the simulator instead of an `IOSSIMULATOR` build.
-- Open: If this recurs, audit any operator or harness path that reuses a previously installed simulator bundle without validating the built Mach-O platform.
-
-## 2026-03-13 Consolidated Open Items From Full Conversation
-
-- Open: prove full 5-node visibility after simulator recovery using the upgraded `run5.sh`; current honest state remains partially indeterminate rather than fully verified.
-- Open: investigate iOS simulator runtime `historySync request failed to prepare message` after successful launch recovery.
-- Open: complete iOS send-path parity with store-and-forward-first UX so the send action never blocks on live transport success.
-- Open: continue hardening iOS against peer-identify / identity-beacon event storms that can contribute to transient freeze/unfreeze behavior.
-- Open: unify Android BLE telemetry so accepted-send target reporting matches the actual fresher connected GATT target used on the wire.
-- Open: improve physical iOS app-level own-ID/peer capture in harness evidence so transport activity is not hidden by collector gaps.
-- Open: validate simultaneous transport functionality across BLE, direct LAN/libp2p, relay, and Wi-Fi Direct/local options.
-- Open: identify any script/operator path capable of reinstalling or preserving a stale `iphoneos` bundle inside the simulator.
+8. `EC-10` to `EC-16` (post-v0.2.1): captive portal adaptation, high-latency profile tuning, 
