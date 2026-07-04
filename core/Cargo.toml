@@ -27,6 +27,7 @@ blake3 = { workspace = true }
 hex = { workspace = true }
 rand = { workspace = true }
 zeroize = { workspace = true }
+libcrux-ml-kem = { workspace = true }
 bs58 = "0.5"
 uniffi = { workspace = true, features = ["wasm-unstable-single-threaded"] }
 anyhow = { workspace = true }

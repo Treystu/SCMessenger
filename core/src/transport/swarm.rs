@@ -5349,8 +5349,6 @@ mod tests {
     };
     use crate::identity::IdentityKeys;
     use crate::store::relay_custody::RelayCustodyStore;
-    use crate::transport::{PeerId as RoutingPeerId, RegistrationMessage};
-    use libp2p::{Multiaddr, PeerId as Libp2pPeerId};
     use std::collections::HashMap;
 
     #[test]

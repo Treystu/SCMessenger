@@ -1311,4 +1311,20 @@ Priority items to track into remaining v0.2.x execution:
 5. `[Closed in WS12]` `EC-05`: custody reconnect integration test is now CI-gated and reproducible (`R-WS3-01` closed).
 6. `EC-06` (Reduced in WS11, accepted in WS12): sender-facing delivery states are normalized in Android+iOS UI/export surfaces; remaining Core-native transition API work is tracked via `R-WS11-01` for post-v0.2.0 follow-up.
 7. `EC-07` to `EC-09` (v0.2.1 WS13): execute tight-pair single-active-device lifecycle.
-8. `EC-10` to `EC-16` (post-v0.2.1): captive portal adaptation, high-latency profile tuning, 
+8. `EC-10` to `EC-16` (post-v0.2.1): captive portal adaptation, high-latency profile tuning, censorship-resilience strategy, wake/delegate architecture, sparse encounter optimization, and clock-skew normalization.
+
+## 2026-03-13 iOS Simulator Launch Ambiguity
+
+- Completed: Identified and cleared an iPhone 17 Pro simulator launch blocker caused by a stale `platform IOS` SCMessenger bundle installed into the simulator instead of an `IOSSIMULATOR` build.
+- Open: If this recurs, audit any operator or harness path that reuses a previously installed simulator bundle without validating the built Mach-O platform.
+
+## 2026-03-13 Consolidated Open Items From Full Conversation
+
+- Open: prove full 5-node visibility after simulator recovery using the upgraded `run5.sh`; current honest state remains partially indeterminate rather than fully verified.
+- Open: investigate iOS simulator runtime `historySync request failed to prepare message` after successful launch recovery.
+- Open: complete iOS send-path parity with store-and-forward-first UX so the send action never blocks on live transport success.
+- Open: continue hardening iOS against peer-identify / identity-beacon event storms that can contribute to transient freeze/unfreeze behavior.
+- Open: unify Android BLE telemetry so accepted-send target reporting matches the actual fresher connected GATT target used on the wire.
+- Open: improve physical iOS app-level own-ID/peer capture in harness evidence so transport activity is not hidden by collector gaps.
+- Open: validate simultaneous transport functionality across BLE, direct LAN/libp2p, relay, and Wi-Fi Direct/local options.
+- Open: identify any script/operator path capable of reinstalling or preserving a stale `iphoneos` bundle inside the simulator.

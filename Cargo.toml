@@ -57,6 +57,7 @@ blake3 = "1.5"
 hex = "0.4"
 rand = "0.8"
 zeroize = { version = "1.6", features = ["derive"] }
+libcrux-ml-kem = { version = "0.0.9", default-features = false, features = ["mlkem768"] }
 
 # WebSocket client (relay fallback transport)
 # Connect feature enabled for both desktop and Android targets
