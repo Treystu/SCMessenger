@@ -435,7 +435,13 @@ impl L2capReassemblyManager {
 
         // Check if we have all fragments
         if partial.fragments.len() == partial.expected_total as usize {
-            let partial = self.partials.remove(peer_id).unwrap();
+            // Invariant: `peer_id`'s entry was created/touched above via `entry().or_insert_with()`
+            // in this same synchronous, non-reentrant call, and the only eviction pass
+            // (`evict_expired()`) already ran earlier at the top of this function -- so this
+            // remove cannot miss today. The `?` is a safety net, not an expected path: if this
+            // ever returns None, a future refactor broke that invariant (e.g. an `.await` or
+            // re-entrant call introduced between the entry creation above and here).
+            let partial = self.partials.remove(peer_id)?;
             let mut reassembled = Vec::new();
             for i in 0..partial.expected_total {
                 if let Some(chunk) = partial.fragments.get(&i) {

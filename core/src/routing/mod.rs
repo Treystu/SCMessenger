@@ -18,7 +18,6 @@ pub mod multipath;
 pub mod negative_cache;
 pub mod neighborhood;
 pub mod optimized_engine;
-pub mod reputation;
 pub mod resume_prefetch;
 pub mod smart_retry;
 pub mod timeout_budget;

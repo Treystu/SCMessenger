@@ -1,7 +1,7 @@
 # SCMessenger Documentation Hub
 
 Status: Active
-Last updated: 2026-04-28 (Phase 1-3 complete: wiring, tests, security hardening)
+Last updated: 2026-07-03 (removed stale urgent banner - see note below)
 
 This is the primary documentation entrypoint.
 
@@ -9,18 +9,21 @@ For lifecycle classification (`Active`, `Planned`, `Mixed`, `Historical`, `Super
 
 - [Document Status Index](docs/DOCUMENT_STATUS_INDEX.md)
 
-## ⚠️ URGENT - LOG AUDIT CRITICAL FINDINGS
-
-- **[Log Audit Report 2026-03-19](LOG_AUDIT_REPORT_2026-03-19.md) 🔴 CRITICAL**
-- **[Master Bug Tracker](MASTER_BUG_TRACKER.md) 🔴 UPDATED**
-
-**Key Issues Found:** 65-75% message delivery failure rate, BLE connection instability, relay circuit issues
+> **Note (2026-07-03):** This page previously carried an "URGENT" banner from 2026-04-28 citing a
+> 65-75% message delivery failure rate as a live critical issue. [`MASTER_BUG_TRACKER.md`](MASTER_BUG_TRACKER.md)
+> itself has since moved on to documenting resolved fixes, and the current canonical state in
+> [`docs/CURRENT_STATE.md`](docs/CURRENT_STATE.md) and [`REMAINING_WORK_TRACKING.md`](REMAINING_WORK_TRACKING.md)
+> (both last updated 2026-07-02) describes core systems as passing all local integration tests with
+> full LAN message-delivery parity and <500ms delivery latency. The banner was stale, not current, and
+> has been removed. [`LOG_AUDIT_REPORT_2026-03-19.md`](LOG_AUDIT_REPORT_2026-03-19.md) and
+> [`MASTER_BUG_TRACKER.md`](MASTER_BUG_TRACKER.md) remain linked below for historical context, not as
+> live critical-issue trackers.
 
 ## Active Canonical Docs (Read First)
 
 - [Repository Overview](README.md)
 - [Repository Context](docs/REPO_CONTEXT.md)
-- **[Log Extraction Standard](LOG_EXTRACTION_STANDARD.md) ⚠️ MANDATORY for iOS/Android**
+- **[Log Extraction Standard](LOG_EXTRACTION_STANDARD.md) [MANDATORY for iOS/Android]**
 - [Current Verified State](docs/CURRENT_STATE.md)
 - [Active Backlog](REMAINING_WORK_TRACKING.md)
 - [WS12.29 Known Issues + Burndown Plan](docs/WS12.29_KNOWN_ISSUES_BURNDOWN_PLAN.md)
@@ -114,7 +117,7 @@ Custom rules, prompts, and skills for the Claude Code agent harness:
 - [NAT Traversal Guide](docs/NAT_TRAVERSAL_GUIDE.md)
 - [Scripts Operations Guide](scripts/README.md)
 - [Log Mincing / Exploratory Analysis](scripts/mince_logs.py)
-- **[Log Correlation & Validation Agent](tmp/session_logs/README.md) ⚡ NEW** - Comprehensive log analysis and documentation synchronization validator
+- **[Log Correlation & Validation Agent](tmp/session_logs/README.md) [NEW]** - Comprehensive log analysis and documentation synchronization validator
 
 ## Mixed and Historical Context
 

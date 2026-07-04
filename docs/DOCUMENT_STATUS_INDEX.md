@@ -49,9 +49,6 @@ Purpose: classify documentation by lifecycle state so execution decisions use au
 | `docs/releases/RELEASE_NOTES_V0.2.0_DRAFT.md`         | Active | v0.2.0 draft release notes                                     |
 | `docs/releases/RELEASE_NOTES_V0.1.2_GH.md`            | Active | v0.1.2 GitHub release notes draft                              |
 | `android/IMPLEMENTATION_STATUS.md`                     | Active | Android implementation status with privacy features section   |
-| `REMAINING_WORK_TRACKING.md`                          | Active | Backlog including privacy features removal resolution         |
-| `docs/CURRENT_STATE.md`                               | Active | Current state including privacy settings cleanup documentation |
-=======
 
 ---
 

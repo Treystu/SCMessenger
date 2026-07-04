@@ -72,3 +72,7 @@ You are forbidden from considering this task 'complete' until you execute the `g
 
 ## Routing Tags
 [REQUIRES: KOTLIN] [REQUIRES: GEMINI_FLASH] [SERIAL_NEEDED: false] [PRIORITY: 3]
+
+---
+## /scm closure note (native, 2026-07-03)
+Verified already-wired: `clearPeerCache()` is called from `stopScanningLocked()` in BleScanner.kt when not actively scanning (functionally equivalent to onDiscoveryStop cleanup), and `BleScannerTest.kt` already covers `clearPeerCache_removesAllDiscoveredPeers`, `clearPeerCache_isIdempotentOnEmptyCache`, and cache-size assertions -- satisfies the ticket's 3 acceptance test cases under different names. No code change needed.

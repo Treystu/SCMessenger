@@ -149,7 +149,7 @@ impl LogManager {
         let mut pruned = 0;
         for (key, _) in entries.iter().take(count) {
             self.backend
-                .remove(&key)
+                .remove(key)
                 .map_err(|_| IronCoreError::StorageError)?;
             pruned += 1;
         }

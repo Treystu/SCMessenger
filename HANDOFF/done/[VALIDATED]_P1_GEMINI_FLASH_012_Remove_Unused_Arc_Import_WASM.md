@@ -61,3 +61,7 @@ You are forbidden from considering this task 'complete' until you execute the `g
 
 ## Routing Tags
 [REQUIRES: RUST] [REQUIRES: GEMINI_FLASH] [SERIAL_NEEDED: false] [PRIORITY: 12]
+
+---
+## /scm closure note (native, 2026-07-03)
+Verified: no unused `std::sync::Arc` import remains at wasm/src/transport.rs:17 or anywhere in the file (grep found only usages inside `Arc<RwLock<>>` types/comments). Already fixed prior to this run. Moved todo -> done, no code change needed.
