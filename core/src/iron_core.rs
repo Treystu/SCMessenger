@@ -1371,10 +1371,7 @@ impl IronCore {
     ///
     /// The passphrase MUST be high-entropy (≥ 128 bits); this method does NOT
     /// provide brute-force resistance for weak human passwords.
-    pub fn export_identity_backup_fast(
-        &self,
-        passphrase: String,
-    ) -> Result<String, IronCoreError> {
+    pub fn export_identity_backup_fast(&self, passphrase: String) -> Result<String, IronCoreError> {
         let payload = self.build_identity_backup_payload()?;
         let backup = crate::crypto::backup::encrypt_backup_fast(&payload, &passphrase, None)
             .map_err(|_| IronCoreError::CryptoError)?;
@@ -1409,12 +1406,9 @@ impl IronCore {
             None => None,
         };
 
-        let backup = crate::crypto::backup::encrypt_backup_fast(
-            &payload,
-            &passphrase,
-            salt_array.as_ref(),
-        )
-        .map_err(|_| IronCoreError::CryptoError)?;
+        let backup =
+            crate::crypto::backup::encrypt_backup_fast(&payload, &passphrase, salt_array.as_ref())
+                .map_err(|_| IronCoreError::CryptoError)?;
         self.audit_log.write().append(
             AuditEventType::BackupExported,
             self.identity.read().identity_id(),
@@ -1456,6 +1450,7 @@ impl IronCore {
                     }
                     // Validate (without applying) the bridge contacts JSON
                     // up front too, for the same all-or-nothing reason.
+                    #[cfg(not(target_arch = "wasm32"))]
                     let bridge_contacts = match parsed.bridge_contacts_json {
                         Some(ref json) => {
                             let parsed_contacts: Vec<crate::contacts_bridge::Contact> =
@@ -1465,6 +1460,9 @@ impl IronCore {
                         }
                         None => Vec::new(),
                     };
+                    #[cfg(target_arch = "wasm32")]
+                    let bridge_contacts: Vec<String> = Vec::new();
+
                     (
                         key_bytes,
                         parsed.ratchet_sessions_json,

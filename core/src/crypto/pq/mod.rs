@@ -1,6 +1,6 @@
 use anyhow::{anyhow, Result};
-use libcrux_ml_kem::{MlKemCiphertext, MlKemPrivateKey, MlKemPublicKey};
 use libcrux_ml_kem::mlkem768;
+use libcrux_ml_kem::{MlKemCiphertext, MlKemPrivateKey, MlKemPublicKey};
 use rand::rngs::OsRng;
 use rand::RngCore;
 use zeroize::Zeroize;
@@ -35,13 +35,13 @@ pub fn generate() -> MlKem768KeyPair {
     let mut seed = [0u8; 64];
     OsRng.fill_bytes(&mut seed);
     let keypair = mlkem768::generate_key_pair(seed);
-    
+
     let mut pub_key = [0u8; 1184];
     pub_key.copy_from_slice(keypair.public_key().as_ref());
-    
+
     let mut priv_key_bytes = [0u8; 2400];
     priv_key_bytes.copy_from_slice(keypair.private_key().as_ref());
-    
+
     MlKem768KeyPair {
         pub_key,
         priv_key: MlKem768PrivateKey(priv_key_bytes),
@@ -56,14 +56,14 @@ pub fn encapsulate(encaps_key: &[u8]) -> Result<(Vec<u8> /*ct*/, [u8; 32] /*ss*/
             encaps_key.len()
         ));
     }
-    
+
     let mut pub_key_bytes = [0u8; 1184];
     pub_key_bytes.copy_from_slice(encaps_key);
     let pub_key_obj = MlKemPublicKey::from(pub_key_bytes);
-    
+
     let mut encap_rand = [0u8; 32];
     OsRng.fill_bytes(&mut encap_rand);
-    
+
     let (ct, ss) = mlkem768::encapsulate(&pub_key_obj, encap_rand);
     Ok((ct.as_ref().to_vec(), ss))
 }
@@ -76,14 +76,14 @@ pub fn decapsulate(keypair: &MlKem768KeyPair, ct: &[u8]) -> Result<[u8; 32]> {
             ct.len()
         ));
     }
-    
+
     let mut ct_bytes = [0u8; 1088];
     ct_bytes.copy_from_slice(ct);
     let ct_obj = MlKemCiphertext::from(ct_bytes);
-    
+
     let priv_key_obj = MlKemPrivateKey::from(keypair.priv_key.0);
     let ss = mlkem768::decapsulate(&priv_key_obj, &ct_obj);
-    
+
     Ok(ss)
 }
 
@@ -130,4 +130,3 @@ mod tests {
         assert_ne!(ss_dec, ss_enc);
     }
 }
-

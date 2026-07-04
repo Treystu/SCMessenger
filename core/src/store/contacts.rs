@@ -112,7 +112,7 @@ impl ContactManager {
             if contact.peer_id.as_bytes() != key.as_slice() {
                 continue;
             }
-            
+
             let prefixed = contact_key(&contact.peer_id);
             let already_exists = self
                 .backend

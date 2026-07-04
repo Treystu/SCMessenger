@@ -226,7 +226,11 @@ pub async fn start(
     let tcp_listener = match tokio::net::TcpListener::bind(bound_addr).await {
         Ok(l) => l,
         Err(e) => {
-            tracing::error!("[ERROR] Failed to bind Warp server on {}: {}", bound_addr, e);
+            tracing::error!(
+                "[ERROR] Failed to bind Warp server on {}: {}",
+                bound_addr,
+                e
+            );
             return Err(anyhow::anyhow!("Warp bind failed on {}: {}", bound_addr, e));
         }
     };

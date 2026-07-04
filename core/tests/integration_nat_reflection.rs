@@ -450,10 +450,9 @@ async fn test_address_reflection_timeout() {
         return;
     }
 
-    let result2 = tokio::time::timeout(
-        Duration::from_secs(3),
-        async { SwarmHandle::request_address_reflection(&swarm2, peer1).await },
-    )
+    let result2 = tokio::time::timeout(Duration::from_secs(3), async {
+        SwarmHandle::request_address_reflection(&swarm2, peer1).await
+    })
     .await;
 
     let failed = match result2 {
