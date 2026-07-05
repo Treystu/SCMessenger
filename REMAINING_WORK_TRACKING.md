@@ -26,18 +26,17 @@ gaps, not hypothetical ones.
 
 **Priority order (dependency-aware):**
 
-0. **P0 — `HANDOFF/todo/P1_ANDROID_TransportManager_LAN_Discovery_Never_Starts.md`**
-   (NEW, 2026-07-05, re-ranked ahead of #1 below — it gates #1 entirely).
-   Live tandem test 2026-07-05 with fresh matched builds on both sides (controls
-   for version skew) found the negotiation-failure bug below was **never even
-   reached**: Android's two LAN-discovery mechanisms (`MdnsServiceDiscovery` via
-   NsdManager, `SubnetProbe` via TCP port-scan) are both correctly implemented
-   and wired into `TransportManager.startAll()`, called from
-   `MeshRepository.kt:2162` with default settings that should enable both — but
-   across the entire logcat buffer since a fresh install, neither ever logged
-   starting, registering, or finding anything. Leading hypothesis: a null-`transportManager`
-   race at the `:2162` call site (nullable safe-call silently no-ops). Kotlin/Android
-   only, no crypto-security-auditor gate needed.
+0. **CLOSED 2026-07-05 — `HANDOFF/done/P1_ANDROID_TransportManager_LAN_Discovery_Never_Starts.md`**
+   Root cause confirmed and fixed: `stopMeshService()` nulls `transportManager`
+   to release BLE/WiFi Aware cleanly, but nothing recreated it on a later start
+   (unlike BLE components, which self-heal) — any stop, including an internal
+   failure-recovery stop during startup, permanently disabled `MdnsServiceDiscovery`
+   + `SubnetProbe` for the rest of the process. Fixed via a lazy
+   `ensureTransportManager()` at all 3 call sites (`ef2869b1`).
+   `./gradlew assembleDebug` PASS. **Live-device retest not yet done this
+   session (budget-constrained) — that's the next session's first move**:
+   confirm `MdnsServiceDiscovery`/`SubnetProbe` actually log starting and find
+   the CLI's open ports, then re-attempt #1 below.
 1. **P0 — `HANDOFF/todo/P1_CLI_Transport_Negotiation_Failure_On_Android_Inbound_Dial.md`**
    (re-ranked P1->P0 on 2026-07-04; superseded in immediate priority by #0 above
    as of 2026-07-05 — retesting this before #0 lands will just reproduce the same
