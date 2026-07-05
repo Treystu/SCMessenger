@@ -54,14 +54,14 @@ Linux (rustc 1.94.1 stable, the same channel `rust-toolchain.toml` pins):
 
 | Gate (from `.github/workflows/ci.yml`) | Result | Notes |
 |---|---|---|
-| `cargo fmt --check` | ❌ **FAIL** → ✅ fixed on this branch | 21 diff sites across 6 files; violations date back to v1.0.0-rc2 (see §3) |
-| `cargo clippy --workspace --all-features -- -D warnings` | ✅ PASS | Only after installing `libdbus-1-dev` (pulled in by `btleplug`); the workflow has no such install step — see task S2 |
-| `cargo test --workspace --all-features` | ✅ **PASS** | Full workspace, zero failures (unit + 20+ integration suites + doc-tests) |
-| `cargo doc --workspace --no-deps` | ✅ PASS | 7 rustdoc warnings, non-fatal |
-| `cargo deny check` | ⚠️ partial | `bans licenses sources` PASS; `advisories` unverifiable here (this sandbox's network is repo-scoped; the RustSec DB clone is blocked). CI covers it once runners work |
-| `cargo run --bin gen_kotlin --features gen-bindings` | ❌ **FAIL** (panic, exit 101) | cdylib not prebuilt — `cargo run` alone doesn't build it. PR #1's ci.yml fix (prebuild step) verified to resolve this locally |
-| `scripts/ffi_surface.sh` | ❌ **FAIL** (and the gate is unsound) | With bindings absent it prints WARN and **exits 0 — a vacuous pass**. With bindings actually generated, it fails on a stale Kotlin snapshot. PR #1 updates the snapshots + extraction regex but does not fix the vacuous pass (task S3) |
-| `cargo build --target wasm32-unknown-unknown -p scmessenger-wasm --release` (from `cross.yml`) | ✅ PASS | |
+| `cargo fmt --check` | [FAIL] **FAIL** -> [OK] fixed on this branch | 21 diff sites across 6 files; violations date back to v1.0.0-rc2 (see §3) |
+| `cargo clippy --workspace --all-features -- -D warnings` | [OK] PASS | Only after installing `libdbus-1-dev` (pulled in by `btleplug`); the workflow has no such install step — see task S2 |
+| `cargo test --workspace --all-features` | [OK] **PASS** | Full workspace, zero failures (unit + 20+ integration suites + doc-tests) |
+| `cargo doc --workspace --no-deps` | [OK] PASS | 7 rustdoc warnings, non-fatal |
+| `cargo deny check` | [WARNING] partial | `bans licenses sources` PASS; `advisories` unverifiable here (this sandbox's network is repo-scoped; the RustSec DB clone is blocked). CI covers it once runners work |
+| `cargo run --bin gen_kotlin --features gen-bindings` | [FAIL] **FAIL** (panic, exit 101) | cdylib not prebuilt — `cargo run` alone doesn't build it. PR #1's ci.yml fix (prebuild step) verified to resolve this locally |
+| `scripts/ffi_surface.sh` | [FAIL] **FAIL** (and the gate is unsound) | With bindings absent it prints WARN and **exits 0 — a vacuous pass**. With bindings actually generated, it fails on a stale Kotlin snapshot. PR #1 updates the snapshots + extraction regex but does not fix the vacuous pass (task S3) |
+| `cargo build --target wasm32-unknown-unknown -p scmessenger-wasm --release` (from `cross.yml`) | [OK] PASS | |
 
 **Not verifiable in this environment:** macOS test job, iOS/Android
 cross-builds and app assembly (`cross.yml`, `mobile.yml`,
@@ -144,8 +144,9 @@ Independently verified on PR #1's branch (head `1f52b42`) in an isolated
 worktree: `cargo clippy --workspace --all-features -- -D warnings` **passes**
 and `cargo test --workspace --all-features` **passes** (exit 0, zero
 failures). Combined with the fmt fix being one mechanical command, PR #1 is
-in strictly better shape than its all-red checks page suggests — every red ✗
-on it is either the dead-runner problem (§1) or the fmt debt it inherited.
+in strictly better shape than its all-red checks page suggests — every red
+[FAIL] on it is either the dead-runner problem (§1) or the fmt debt it
+inherited.
 
 ## 5. Fixes applied and proven on this branch
 
@@ -422,11 +423,25 @@ local SDK is the proof gate)
   (IPv6-loopback devices dial an address nobody listens on). (b)
   `acceptAndPump` joins both pump jobs before closing — when one side
   closes, the other blocks forever in `read()`; close the bridge when
-  *either* pump finishes, then cancel the survivor. (c)
-  `PeerConnection.send()` is now a hard-coded `false` no-op while
-  `sendData`-capable routes still call it — either restore a real write
-  path or unregister WiFi Aware from those routes so delivery fails over
-  loudly, not silently.
+  *either* pump finishes, then cancel the survivor. (c) **[RECLASSIFIED
+  2026-07-05, see `HANDOFF/plans/P1-15_transport_matrix_audit.md` sections
+  (a)/(b) — T12c]** ~~`PeerConnection.send()` is now a hard-coded `false`
+  no-op while `sendData`-capable routes still call it — either restore a
+  real write path or unregister WiFi Aware from those routes so delivery
+  fails over loudly, not silently.~~ **Resolved-by-design, not an open code
+  fix.** `AwareConnection.send()` returning `false`
+  (`WifiAwareTransport.kt:512-519`) is a deliberate, documented dead-end:
+  `startLoopbackProxy` (`:401-425`) bridges the real cross-device Aware
+  socket to a local loopback `ServerSocket`, and delivery runs via
+  **libp2p dialing that loopback address** (confirmed end to end through
+  `mobile_bridge.rs:1340`'s `on_wifi_aware_data_path_confirmed` ->
+  `mobile_bridge.rs:1333`'s `dial_async`), not via `send()`. The `false` is
+  logged at ERROR intentionally, to keep the structural dead-end visible;
+  no "restore write path" code change is required. Residual: this is
+  code-wired and reachable but **not device-verified** — live carriage of
+  a libp2p session over two real WiFi Aware radios is a separate
+  [DEVICE][BLOCKED-HW] confirmation (needs a second Aware-capable Android),
+  not part of this correction.
 - **T13 (P3 — cubic `MeshApplicationScheduleTest.kt:1`) — Package
   declaration `com.scmessenger.android` doesn't match the
   `.../android/test/` directory.** One-line fix to
