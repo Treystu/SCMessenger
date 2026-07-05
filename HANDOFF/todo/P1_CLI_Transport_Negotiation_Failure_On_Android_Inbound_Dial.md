@@ -180,6 +180,63 @@ see the recipe earlier in this ticket) — this time discovery will not stall
 the run, so the window should actually catch the underlying Noise/
 multistream-select error this ticket needs.
 
+## Progress (2026-07-05, trace-level capture — likely TWO bugs, not one)
+
+Full negotiation trace (`RUST_LOG=libp2p_swarm=trace,libp2p_noise=trace,...`)
+captured while live against the phone. The generic "Failed to negotiate
+transport protocol(s)" wrapper turns out to fire for two genuinely different
+underlying failures, cross-referenced against Android logcat (filtered by
+the app's PID) from the same window:
+
+**(A) Windows CLI dialing OUT to the phone (192.168.0.121 -> 192.168.0.148:9001)
+fails with a plain TCP-level refusal, not a protocol mismatch:**
+```
+Outgoing connection error to <peer>: Failed to negotiate transport protocol(s):
+[(/ip4/192.168.0.148/tcp/9001/...: No connection could be made because the
+target machine actively refused it. (os error 10061))]
+```
+`os error 10061` = `WSAECONNREFUSED` — nothing accepted the TCP handshake on
+the phone's side at all. This never reaches Noise/multistream-select.
+**Corroborating evidence this is Android-side, not a Windows/network issue:**
+logcat (filtered by the app's own PID) shows the phone's own libp2p failing
+to dial **itself** at its own advertised address: `MdnsServiceDiscovery`
+resolved `12D3KooWE7Bi...@192.168.0.148:9001` (a mDNS self-loopback — the
+already-known, still-open `P1_ANDROID_mDNS_Self_Loopback_Discovery.md`), and
+immediately after: `MeshRepository$ensureTransportManager: Failed to dial
+discovered LAN peer /ip4/192.168.0.148/tcp/9001/p2p/...: Network error`. If
+the phone's own libp2p can't reach its own supposedly-bound listener, the
+listener likely isn't actually functioning at the OS level, regardless of
+what dials it. Kotlin (`MeshRepository.kt:3051`) does explicitly request
+`meshService?.startSwarm("/ip4/0.0.0.0/tcp/9001", listOf())`, so the
+requested port is correct — the open question is why `listen_on()` isn't
+producing a live, externally-reachable listener on Android (`listen_on()` in
+libp2p returns `Ok` immediately and reports async bind failure later via a
+listener-error swarm event, per `core/src/transport/swarm.rs:1904-1909` in
+the single-port branch — that later event needs to be traced/logged to
+confirm this hypothesis; not done this session).
+**Separately confirmed:** Android's `SubnetProbe` (a bare `Socket().connect()`,
+not libp2p) DOES succeed at reaching the Windows CLI's port 9001/9002 — so
+Windows's own listeners and the network path Android-to-Windows are fine;
+this failure mode is specifically about the phone's inbound-listener side.
+
+**(B) The phone dialing OUT to the CLI (the original 2026-07-04 finding, and
+reproduced again this session on 09:42-11:58 runs) is a real TCP-accepted,
+protocol-level failure** — the CLI's own "Incoming connection error" case,
+which DOES get accepted at the TCP level (unlike (A)) before failing
+negotiation. This is the genuine bug this ticket was filed for. Still not
+root-caused to a specific Noise/multistream-select mismatch — the trace
+capture that reproduced (A) did not happen to also catch a fresh instance of
+(B) in the same window to extract its detail; needs a dedicated capture run
+targeting an inbound (phone-initiated) dial specifically.
+
+**Net: this ticket's scope should split.** (A) is very likely a new,
+Android-listener-specific bug (candidate root cause: Android may need the
+Rust core to observe and log the async listener-bind outcome, or there's an
+Android-specific TCP/socket restriction preventing the bind from actually
+being externally reachable) — recommend filing as its own ticket once
+confirmed. (B) remains this ticket's original scope and still needs its
+Noise/multistream-select detail captured.
+
 ## Acceptance Criteria
 
 - Identify the specific negotiation failure point: reproduce with
