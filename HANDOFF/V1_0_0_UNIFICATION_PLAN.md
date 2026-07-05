@@ -1,5 +1,12 @@
 # SCMessenger v1.0.0 Unification Plan
 
+**SUPERSEDED (2026-07-04):** for sequencing and scope, use `HANDOFF/V1_0_0_EXECUTION_PLAN.md`
+(two-phase DAG: Android<->Windows transport parity first, then everything else — all of it
+ship-blocking). This file remains the audit record; its 8 findings were re-verified there
+(Section 0.1): findings 1-6 closed, finding 7 (uncommitted working tree) still open,
+finding 8 replaced by lane rules. The Phase 4 KMP scope question below is settled: IN
+scope for v1.0.0.
+
 **Generated:** 2026-07-03
 **Author:** Claude (native Cowork session), cross-referenced against agy/Antigravity (Gemini 3.5 Flash) live session output
 **Purpose:** One coherent, priority-ordered plan to close every remaining gap between the current `main` (`5363d1aa`, workspace v0.3.4) and a "perfect," fully-wired v1.0.0. Supersedes fragment-level tracking in `REMAINING_WORK_TRACKING.md` (1313 lines, substantially historical/superseded — see Finding 1 below).

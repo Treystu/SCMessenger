@@ -1,7 +1,9 @@
 # SCMessenger Remaining Work Tracking
 
 Status: Active
-Last updated: 2026-07-04 (Windows/Android parity effort opened, promoted to top priority)
+Last updated: 2026-07-04 (Windows/Android parity effort opened, promoted to top priority;
+full v1.0.0 sequencing now governed by `HANDOFF/V1_0_0_EXECUTION_PLAN.md` — two-phase DAG,
+Phase 1 = this parity effort + adaptive ports, Phase 2 = all remaining ship-blocking work)
 
 ---
 
