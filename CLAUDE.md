@@ -8,9 +8,10 @@ SCMessenger is a sovereign encrypted decentralized messaging mesh. A Rust core (
 
 **Active release line:** v0.3.4 (working toward v1.0.0; confirmed against `Cargo.toml` and the installed Android build — 2026-07-03).
 
-**Two operating modes share this repo:**
+**Three operating modes share this repo:**
 1. **Native Claude Code** (default) — a single Claude Code session (you, most of the time) working directly, using the subagents/skills/hooks in [Native Claude Code Setup](#native-claude-code-setup) below.
 2. **The ollama-cloud swarm** — a separate multi-agent orchestration system invoked via `/orchestrate` or `/swarm`, documented in [Agent Swarm Integration](#agent-swarm-integration-ollama-cloud-orchestrate--swarm-only). Skip that section entirely unless one of those commands is active.
+3. **Headless native workers** — `/scmorc` (`.claude/commands/scmorc.md`): a native session orchestrates per-task `claude -p` worker processes with tuned `--model`/`--effort`, on the Anthropic subscription only (no ollama). Orchestrator and workers share one 5-hour usage window — the command's quota governor is mandatory.
 
 ## Workspace Structure
 
