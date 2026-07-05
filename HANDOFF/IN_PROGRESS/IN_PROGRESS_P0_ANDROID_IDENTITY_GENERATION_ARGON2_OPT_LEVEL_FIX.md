@@ -73,6 +73,20 @@ been rebuilt/reinstalled with the `opt-level = 3` fix (check build timestamp vs.
 or (2), this is a separate Kotlin/Rust bridge state bug unrelated to Argon2 timing — likely in
 `MeshRepository.getIdentityExportString()` or the onboarding/settings identity-restore path.
 
+**UPDATE 2026-07-05 — likely resolved, this was option (3) all along, but not the cause it named.**
+A fresh live report this session ("QR code loading REALLY slowly... took like 45 seconds")
+triggered a full read of the actual QR call chain. Confirmed: `getIdentityExportString()` (the QR
+path) **never calls `exportIdentityBackup`/`derive_key_argon2id` at all** — it is a separate,
+unencrypted "public identity card" export (`MeshRepository.kt:3193-3194`, `:8774-8813`). So this
+ticket's `opt-level=3` fix was never going to affect QR load time either way — the QR slowness is
+a distinct bug (unconditional/redundant FFI calls and an uncached identity re-fetch on the QR hot
+path, likely also coupled to MeshService cold-start taking up to 60s by design). Filed as its own
+ticket: `HANDOFF/todo/P1_ANDROID_QR_Code_Identity_Export_Extremely_Slow.md` — that ticket owns the
+fix. This ticket's own scope (Argon2id opt-level for the encrypted-backup path) can be considered
+closed/verified once a fresh `cargo build --workspace` + timed backup-export repro confirms the
+opt-level=3 fix still compiles and applies (not re-verified this session, but the Cargo.toml
+setting was confirmed still present at lines 127-131).
+
 ## Note on a separate, unrelated, older ticket
 
 `HANDOFF/IN_PROGRESS/IN_PROGRESS_P0_ANDROID_024_IDENTITY_GENERATION_REGRESSION.md` (still marked
