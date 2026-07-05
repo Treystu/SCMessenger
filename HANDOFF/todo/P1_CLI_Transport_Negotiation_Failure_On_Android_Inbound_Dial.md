@@ -67,6 +67,86 @@ connection error" timestamps — that specific underlying error is still not
 captured yet. Cross-check `Cargo.lock`'s libp2p pins against what's in the
 Android APK's bundled `.so` per Acceptance Criteria below (not yet done).
 
+## Progress (2026-07-05, native /scm session, live tandem test with fresh matched builds)
+
+Both sides rebuilt fresh from current HEAD (`6bf2479914b9deac967dfa1437ebd2bfee8b33fa`) specifically to
+control for the version-skew hypothesis: Windows CLI release binary rebuilt
+(`cargo build --release -p scmessenger-cli`), Android APK clean-installed via
+`android/install-clean.sh` (fresh uninstall + `./gradlew clean :app:installDebug`).
+CLI ran with full negotiation trace logging
+(`RUST_LOG=libp2p_swarm=trace,libp2p_noise=trace,libp2p_core=trace,libp2p_tcp=trace,libp2p_mdns=trace,libp2p_websocket=trace,multistream_select=trace,scmessenger_core=debug`)
+for ~7.5 minutes while the phone app ran. Full log:
+`tmp/work_files/parity_debug_2026-07-05/cli_trace_log.txt` (433 lines,
+19:40:56.923-19:48:28.769).
+
+**This run never reached the negotiation-failure stage at all** — it got stuck one
+stage earlier, at mDNS peer resolution, and the CLI's listeners never saw a
+connection attempt of any kind (successful or failed) from the phone:
+
+- Zero occurrences of "Incoming connection error" / "Failed to negotiate transport
+  protocol(s)" anywhere in the 433-line log (previously 100% reproducible on
+  2026-07-04 builds).
+- Zero `ConnectionEstablished`. No `libp2p_swarm` activity at all after the initial
+  listener-bind sequence at 19:40:56 (7 lines, all in the first second).
+- Raw `libp2p_mdns::behaviour::iface`-level UDP packet chatter between the CLI
+  (192.168.0.121) and the phone's OS-level mDNS responder (192.168.0.148:5353) is
+  continuous and genuinely bidirectional for the full 7.5 minutes (62 queries, 137
+  responses, 71 sent packets) — but **zero** Behaviour-level `Discovered`/`Expired`
+  event, zero app-level `"mDNS discovered peer: ..."` line, and the phone's known
+  peer ID (`12D3KooWJJmBsLVA1rPsuPY6xWMSTRD427bnWUa7GxR496S8PxuU`, from the
+  2026-07-04 finding) never appears anywhere in this run's log.
+
+**Root cause traced further on the Android side, and it looks foundational, not a
+negotiation/protocol bug:** Android has exactly two LAN-discovery mechanisms, both
+correctly present and wired in code, both enabled by default:
+1. `MdnsServiceDiscovery.kt` (NsdManager-based, `_p2p._udp` service type) —
+   constructed and started via `TransportManager.getOrCreateMdns().start()`.
+2. `SubnetProbe.kt` (active TCP connect-scan of the local /24 + fallback subnets on
+   ports 9001/9002, explicitly written as an mDNS workaround since "multicast DNS
+   is link-local and does NOT cross routers... or some NAT'd virtual interfaces") —
+   constructed and started via `TransportManager.getOrCreateSubnetProbe().start()`.
+
+Both are started together from `TransportManager.startAll(enableMdns =
+settings.internetEnabled)` (`TransportManager.kt:103-138`), called from
+`MeshRepository.kt:2162` inside a `repoScope.launch { ... }` block, guarded by its
+own try/catch that logs `"TransportManager startAll failed; ..."` on exception.
+`settings.internetEnabled` defaults `true` (`MeshRepository.kt:4892`, `:5522`,
+`SettingsViewModel.kt:199`), so on this fresh install `enableMdns` should have been
+`true`.
+
+**But across the entire 22,089-line logcat buffer since app install, there is ZERO
+occurrence of:** `"SubnetProbe"` (any log line from that class, including its own
+`start()` announcement), `"All transports started"` (the confirmation line
+`TransportManager.startAll()` logs after starting both), or `"mDNS service
+registered"` (confirms `MdnsServiceDiscovery` never even completed its own NSD
+registration) — and also zero occurrence of the guarding
+`"TransportManager startAll failed"` warning that would fire on a thrown exception.
+`transportManager` is a `@Volatile private var transportManager: TransportManager? = null`
+(`MeshRepository.kt:323`), assigned at `MeshRepository.kt:862`, and called via a
+nullable safe-call (`transportManager?.startAll(...)`) at `:2162` — a null receiver
+at call time would silently no-op with no exception and no log, matching the
+observed silence exactly. (`MeshRepository.kt` was running and logging elsewhere
+throughout — e.g. periodic `"Mesh Stats: 0 peers (Core), 0 full, 0 headless
+(Repo)"` — so the process/service itself was alive; this specific init block's
+mDNS/probe branch is what never fired or never ran.)
+
+**This is likely the actual root cause of "no nearby peers" on same-LAN, and is a
+different, earlier-stage bug than this ticket's original (2026-07-04) finding.**
+Filed as a separate, more specific ticket:
+`HANDOFF/todo/P1_ANDROID_TransportManager_LAN_Discovery_Never_Starts.md` — that
+ticket owns root-causing whether this is a null-`transportManager`-at-call-time
+race, an init-order bug, or this whole block simply isn't reached on this app's
+current init path. **This ticket (P1-04) should be re-attempted only after that one
+is resolved and LAN discovery is confirmed actually engaging** — otherwise every
+retest will stall at mDNS/SubnetProbe silence before ever reaching the
+negotiation-failure stage this ticket was written to root-cause.
+
+Cargo.lock libp2p versions this session (for the record; not the suspected cause,
+since this run controlled for version skew by rebuilding both sides from the same
+commit): `libp2p 0.56.0`, `libp2p-core 0.43.2`, `libp2p-swarm 0.47.1`,
+`libp2p-noise 0.46.1`, `libp2p-tcp 0.44.1`, `libp2p-websocket 0.45.1`,
+`libp2p-mdns 0.48.0`, `libp2p-quic 0.13.1`.
+
 ## Acceptance Criteria
 
 - Identify the specific negotiation failure point: reproduce with

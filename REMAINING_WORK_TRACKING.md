@@ -26,13 +26,27 @@ gaps, not hypothetical ones.
 
 **Priority order (dependency-aware):**
 
+0. **P0 — `HANDOFF/todo/P1_ANDROID_TransportManager_LAN_Discovery_Never_Starts.md`**
+   (NEW, 2026-07-05, re-ranked ahead of #1 below — it gates #1 entirely).
+   Live tandem test 2026-07-05 with fresh matched builds on both sides (controls
+   for version skew) found the negotiation-failure bug below was **never even
+   reached**: Android's two LAN-discovery mechanisms (`MdnsServiceDiscovery` via
+   NsdManager, `SubnetProbe` via TCP port-scan) are both correctly implemented
+   and wired into `TransportManager.startAll()`, called from
+   `MeshRepository.kt:2162` with default settings that should enable both — but
+   across the entire logcat buffer since a fresh install, neither ever logged
+   starting, registering, or finding anything. Leading hypothesis: a null-`transportManager`
+   race at the `:2162` call site (nullable safe-call silently no-ops). Kotlin/Android
+   only, no crypto-security-auditor gate needed.
 1. **P0 — `HANDOFF/todo/P1_CLI_Transport_Negotiation_Failure_On_Android_Inbound_Dial.md`**
-   (re-ranked P1->P0: this is the literal "can the two clients connect at
-   all" blocker). Windows CLI fails `Failed to negotiate transport
-   protocol(s)` on both raw-TCP and WS inbound dials from the Android
-   device, even though mDNS discovery and the dial attempt itself succeed.
-   Touches `core/src/transport/` -> mandatory `crypto-security-auditor`
-   review before done.
+   (re-ranked P1->P0 on 2026-07-04; superseded in immediate priority by #0 above
+   as of 2026-07-05 — retesting this before #0 lands will just reproduce the same
+   silent-discovery stall, see that ticket's 2026-07-05 progress note). Windows
+   CLI fails `Failed to negotiate transport protocol(s)` on both raw-TCP and WS
+   inbound dials from the Android device — originally documented 2026-07-04 when
+   mDNS discovery reportedly succeeded first; not reproduced in the 2026-07-05
+   session because discovery itself never completed that run. Touches
+   `core/src/transport/` -> mandatory `crypto-security-auditor` review before done.
 2. **P0 — `HANDOFF/todo/P0_ANDROID_ANR_BatteryReceiver_Synchronous_FFI_Call.md`**
    Reproducible ANR (app killed/relaunched) from a synchronous FFI call on
    the main thread in a battery-change BroadcastReceiver. Independent of
