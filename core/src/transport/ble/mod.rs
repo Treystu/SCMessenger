@@ -23,8 +23,8 @@ pub use beacon::{
 };
 
 pub use gatt::{
-    GattCharacteristic, GattClient, GattError, GattFragmentHeader, GattFragmenter, GattReassembler,
-    GattServer, GattWriteQueue, GattWriteRequest, GATT_SERVICE_UUID, MAX_CHARACTERISTIC_SIZE,
+    GattCharacteristic, GattError, GattFragmentHeader, GattFragmenter, GattReassembler,
+    GattWriteQueue, GattWriteRequest, MAX_CHARACTERISTIC_SIZE,
 };
 
 pub use l2cap::{

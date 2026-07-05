@@ -6,9 +6,6 @@ use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
 use thiserror::Error;
 
-/// GATT service UUID (0xDF01)
-pub const GATT_SERVICE_UUID: u128 = 0x0000_0DF0_1000_1000_8000_0080_5F9B_34FB;
-
 /// Maximum GATT characteristic write size (protocol limitation)
 pub const MAX_CHARACTERISTIC_SIZE: usize = 512;
 
@@ -273,43 +270,6 @@ impl GattWriteQueue {
     pub fn clear(&mut self) {
         self.queue.clear();
     }
-}
-
-/// GATT Server trait for platform implementations
-pub trait GattServer: Send + Sync {
-    /// Handle a write to a characteristic
-    fn on_write(
-        &mut self,
-        characteristic: GattCharacteristic,
-        data: &[u8],
-    ) -> Result<(), GattError>;
-
-    /// Handle a read from a characteristic
-    fn on_read(&self, characteristic: GattCharacteristic) -> Result<Vec<u8>, GattError>;
-
-    /// Notify subscribers of a characteristic change
-    fn notify(&mut self, characteristic: GattCharacteristic, data: &[u8]) -> Result<(), GattError>;
-
-    /// Check if the GATT service is enabled
-    fn is_enabled(&self) -> bool;
-}
-
-/// GATT Client trait for platform implementations
-pub trait GattClient: Send + Sync {
-    /// Write to a characteristic
-    fn write(&mut self, characteristic: GattCharacteristic, data: &[u8]) -> Result<(), GattError>;
-
-    /// Read from a characteristic
-    fn read(&self, characteristic: GattCharacteristic) -> Result<Vec<u8>, GattError>;
-
-    /// Subscribe to notifications
-    fn subscribe(&mut self, characteristic: GattCharacteristic) -> Result<(), GattError>;
-
-    /// Unsubscribe from notifications
-    fn unsubscribe(&mut self, characteristic: GattCharacteristic) -> Result<(), GattError>;
-
-    /// Check if connected to GATT server
-    fn is_connected(&self) -> bool;
 }
 
 #[cfg(test)]
