@@ -859,49 +859,7 @@ open class MeshRepository(
 
             // Initialize TransportManager for BLE/WiFi transport control
             // This will be used to enable/disable transports when settings change
-            transportManager = TransportManager(
-                context = context,
-                onPeerDiscovered = { peerId, _ ->
-                    // TransportManager peers are handled by MeshService via onPeerDiscovered
-                    meshService?.onPeerDiscovered(peerId)
-                },
-                onDataReceived = { peerId, data, _ ->
-                    // TransportManager data is handled by MeshService via onDataReceived
-                    meshService?.onDataReceived(peerId, data)
-                },
-                // P1 (Bug 5): forward mDNS peer-loss to MeshService so the dedup/
-                // prune/emit pipeline in onPeerDisconnected runs for mDNS-only
-                // peers. Without this, mDNS-discovered peers stayed marked as
-                // "connected" forever in the UI/connection state.
-                onPeerDisconnected = { peerId, _ ->
-                    meshService?.onPeerDisconnected(peerId)
-                },
-                onLanAddressResolved = { multiaddr ->
-                    repoScope.launch {
-                        try {
-                            swarmBridge?.dial(multiaddr)
-                            Timber.i("Successfully dialed discovered LAN peer $multiaddr via SwarmBridge")
-                        } catch (e: Exception) {
-                            Timber.w("Failed to dial discovered LAN peer $multiaddr: ${e.message}")
-                        }
-                    }
-                },
-                getLocalPeerId = {
-                    ironCore?.getIdentityInfo()?.libp2pPeerId
-                },
-                onWifiAwarePeerDiscovered = { peerId, serviceInfo, rssi ->
-                    meshService?.onWifiAwarePeerDiscovered(peerId, serviceInfo, rssi)
-                },
-                onWifiAwareDataPathConfirmed = { peerId, ipAddress, port ->
-                    meshService?.onWifiAwareDataPathConfirmed(peerId, ipAddress, port.toUShort())
-                },
-                onWifiDirectPeerDiscovered = { peerId, deviceName, deviceAddress ->
-                    meshService?.onWifiDirectPeerDiscovered(peerId, deviceName, deviceAddress, 0)
-                },
-                onWifiDirectConnectionInfo = { peerId, groupOwnerIp, isGroupOwner ->
-                    meshService?.onWifiDirectConnectionInfo(peerId, groupOwnerIp, isGroupOwner)
-                }
-            )
+            ensureTransportManager()
 
             // Pre-load data where applicable
             ledgerManager?.load()
@@ -937,6 +895,69 @@ open class MeshRepository(
         } catch (e: Exception) {
             Timber.e(e, "Failed to initialize managers")
         }
+    }
+
+    /**
+     * Construct TransportManager if it does not already exist.
+     *
+     * TransportManager is nulled out by stopMeshService() (so WiFi Aware/BLE
+     * sessions are released cleanly), but unlike bleScanner/bleAdvertiser/
+     * bleGattServer/bleGattClient — which initializeAndStartBle() lazily
+     * re-creates on every start — nothing previously re-created
+     * TransportManager. Any stop (explicit, or the internal failure-recovery
+     * stopMeshService() call inside startMeshService()'s own catch block)
+     * therefore left it permanently null for the rest of the process
+     * lifetime: every later transportManager?.startAll(...) silently no-op'd
+     * with no exception and no log line, permanently disabling mDNS + the
+     * SubnetProbe LAN fallback. Call this instead of constructing
+     * TransportManager directly so restart-after-stop self-heals the same
+     * way the BLE components already do.
+     */
+    private fun ensureTransportManager() {
+        if (transportManager != null) return
+        transportManager = TransportManager(
+            context = context,
+            onPeerDiscovered = { peerId, _ ->
+                // TransportManager peers are handled by MeshService via onPeerDiscovered
+                meshService?.onPeerDiscovered(peerId)
+            },
+            onDataReceived = { peerId, data, _ ->
+                // TransportManager data is handled by MeshService via onDataReceived
+                meshService?.onDataReceived(peerId, data)
+            },
+            // P1 (Bug 5): forward mDNS peer-loss to MeshService so the dedup/
+            // prune/emit pipeline in onPeerDisconnected runs for mDNS-only
+            // peers. Without this, mDNS-discovered peers stayed marked as
+            // "connected" forever in the UI/connection state.
+            onPeerDisconnected = { peerId, _ ->
+                meshService?.onPeerDisconnected(peerId)
+            },
+            onLanAddressResolved = { multiaddr ->
+                repoScope.launch {
+                    try {
+                        swarmBridge?.dial(multiaddr)
+                        Timber.i("Successfully dialed discovered LAN peer $multiaddr via SwarmBridge")
+                    } catch (e: Exception) {
+                        Timber.w("Failed to dial discovered LAN peer $multiaddr: ${e.message}")
+                    }
+                }
+            },
+            getLocalPeerId = {
+                ironCore?.getIdentityInfo()?.libp2pPeerId
+            },
+            onWifiAwarePeerDiscovered = { peerId, serviceInfo, rssi ->
+                meshService?.onWifiAwarePeerDiscovered(peerId, serviceInfo, rssi)
+            },
+            onWifiAwareDataPathConfirmed = { peerId, ipAddress, port ->
+                meshService?.onWifiAwareDataPathConfirmed(peerId, ipAddress, port.toUShort())
+            },
+            onWifiDirectPeerDiscovered = { peerId, deviceName, deviceAddress ->
+                meshService?.onWifiDirectPeerDiscovered(peerId, deviceName, deviceAddress, 0)
+            },
+            onWifiDirectConnectionInfo = { peerId, groupOwnerIp, isGroupOwner ->
+                meshService?.onWifiDirectConnectionInfo(peerId, groupOwnerIp, isGroupOwner)
+            }
+        )
     }
 
     /**
@@ -2158,6 +2179,7 @@ open class MeshRepository(
 
                 // Start all transports via TransportManager, gating mDNS by internetEnabled setting
                 try {
+                    ensureTransportManager()
                     val settings = loadSettings()
                     transportManager?.startAll(enableMdns = settings.internetEnabled)
                 } catch (e: Exception) {
@@ -2210,9 +2232,9 @@ open class MeshRepository(
         preferredBlePeerId: String? = null,
         preferredListenerHints: List<String> = emptyList()
     ) {
-        // ✅ BLOCKING: Skip receipt if sender is blocked (relay unaffected)
+        // [BLOCKING]: Skip receipt if sender is blocked (relay unaffected)
         if (isBlocked(senderId)) {
-            Timber.i("📛 Blocking: Skipping receipt for blocked peer $senderId (relay unaffected)")
+            Timber.i("[BLOCKING] Skipping receipt for blocked peer $senderId (relay unaffected)")
             return
         }
 
@@ -3032,7 +3054,7 @@ open class MeshRepository(
             swarmBridge = meshService?.getSwarmBridge()
             updateBleIdentityBeacon()
 
-            Timber.i("✓ Internet transport (Swarm) initiated and bridge wired")
+            Timber.i("[OK] Internet transport (Swarm) initiated and bridge wired")
         } catch (e: Exception) {
             Timber.e(e, "Failed to initialize Swarm transport")
         }
@@ -5915,7 +5937,7 @@ open class MeshRepository(
                     }
                     try {
                         if (wifi.sendData(wifiId, encryptedData)) {
-                            Timber.i("✓ Delivery via WiFi Direct (target=$wifiId)")
+                            Timber.i("[OK] Delivery via WiFi Direct (target=$wifiId)")
                             logDeliveryAttempt(
                                 messageId = traceMessageId,
                                 medium = "wifi-direct",
@@ -5975,7 +5997,7 @@ open class MeshRepository(
                         if (bleClient != null) {
                             try {
                                 if (bleClient.sendData(target, encryptedData)) {
-                                    Timber.i("✓ Delivery via BLE client (target=$target)")
+                                    Timber.i("[OK] Delivery via BLE client (target=$target)")
                                     logDeliveryAttempt(
                                         messageId = traceMessageId,
                                         medium = "ble",
@@ -5993,7 +6015,7 @@ open class MeshRepository(
                         if (bleServer != null) {
                             try {
                                 if (bleServer.sendData(target, encryptedData)) {
-                                    Timber.i("✓ Delivery via BLE server notify (target=$target)")
+                                    Timber.i("[OK] Delivery via BLE server notify (target=$target)")
                                     logDeliveryAttempt(
                                         messageId = traceMessageId,
                                         medium = "ble",
@@ -6087,7 +6109,7 @@ open class MeshRepository(
                     if (dialCandidates.isNotEmpty()) {
                         connectToPeer(corePeerId, dialCandidates)
                         val connected = awaitPeerConnection(corePeerId, timeoutMs = 2000L)
-                        Timber.d("🔀 Transport: route=$corePeerId connected=$connected timeout=2000ms")
+                        Timber.d("[ROUTE] Transport: route=$corePeerId connected=$connected timeout=2000ms")
                     }
                     
                     val directError = bridge.sendMessageStatus(
@@ -6130,7 +6152,7 @@ open class MeshRepository(
                     }
                     try {
                         if (wifi.sendData(wifiId, encryptedData)) {
-                            Timber.i("✓ Delivery via WiFi Direct (target=$wifiId)")
+                            Timber.i("[OK] Delivery via WiFi Direct (target=$wifiId)")
                             logDeliveryAttempt(
                                 messageId = traceMessageId,
                                 medium = "wifi-direct",
@@ -6190,7 +6212,7 @@ open class MeshRepository(
                         if (bleClient != null) {
                             try {
                                 if (bleClient.sendData(target, encryptedData)) {
-                                    Timber.i("✓ Delivery via BLE client (target=$target)")
+                                    Timber.i("[OK] Delivery via BLE client (target=$target)")
                                     logDeliveryAttempt(
                                         messageId = traceMessageId,
                                         medium = "ble",
@@ -6208,7 +6230,7 @@ open class MeshRepository(
                         if (bleServer != null) {
                             try {
                                 if (bleServer.sendData(target, encryptedData)) {
-                                    Timber.i("✓ Delivery via BLE server notify (target=$target)")
+                                    Timber.i("[OK] Delivery via BLE server notify (target=$target)")
                                     logDeliveryAttempt(
                                         messageId = traceMessageId,
                                         medium = "ble",
@@ -6315,11 +6337,11 @@ open class MeshRepository(
                 rawAddresses = listeners + liveRouteHints,
                 includeRelayCircuits = true
             )
-            Timber.d("🔀 Transport: route=$routePeerId dialCandidates=${dialCandidates.size} (${dialCandidates.joinToString { it.substringBefore("/") }})")
+            Timber.d("[ROUTE] Transport: route=$routePeerId dialCandidates=${dialCandidates.size} (${dialCandidates.joinToString { it.substringBefore("/") }})")
             if (dialCandidates.isNotEmpty()) {
                 connectToPeer(routePeerId, dialCandidates)
                 val connected = awaitPeerConnection(routePeerId, timeoutMs = 2000L)
-                Timber.d("🔀 Transport: route=$routePeerId connected=$connected timeout=2000ms")
+                Timber.d("[ROUTE] Transport: route=$routePeerId connected=$connected timeout=2000ms")
             }
 
             logDeliveryAttempt(
@@ -6338,7 +6360,7 @@ open class MeshRepository(
             )
             if (directError == null) {
                 val latencyMs = System.currentTimeMillis() - attemptStart
-                Timber.i("✓ Direct delivery ACK from $routePeerId (${latencyMs}ms)")
+                Timber.i("[OK] Direct delivery ACK from $routePeerId (${latencyMs}ms)")
                 logDeliveryAttempt(
                     messageId = traceMessageId,
                     medium = "core",
@@ -6367,10 +6389,10 @@ open class MeshRepository(
 
             val relayOnlyCandidates = relayCircuitAddressesForPeer(routePeerId)
             if (relayOnlyCandidates.isNotEmpty()) {
-                Timber.d("🔀 Transport: Attempting relay-circuit for $routePeerId (${relayOnlyCandidates.size} candidates)")
+                Timber.d("[ROUTE] Transport: Attempting relay-circuit for $routePeerId (${relayOnlyCandidates.size} candidates)")
                 connectToPeer(routePeerId, relayOnlyCandidates)
                 val connected = awaitPeerConnection(routePeerId, timeoutMs = 1500L)
-                Timber.d("🔀 Transport: relay-circuit route=$routePeerId connected=$connected timeout=1500ms")
+                Timber.d("[ROUTE] Transport: relay-circuit route=$routePeerId connected=$connected timeout=1500ms")
                 kotlinx.coroutines.delay(500)
                 logDeliveryAttempt(
                     messageId = traceMessageId,
@@ -6388,7 +6410,7 @@ open class MeshRepository(
                 )
                 if (relayError == null) {
                     val latencyMs = System.currentTimeMillis() - relayStart
-                    Timber.i("✓ Delivery ACK from $routePeerId after relay-circuit retry (${latencyMs}ms)")
+                    Timber.i("[OK] Delivery ACK from $routePeerId after relay-circuit retry (${latencyMs}ms)")
                     logDeliveryAttempt(
                         messageId = traceMessageId,
                         medium = "relay-circuit",
@@ -9337,6 +9359,7 @@ open class MeshRepository(
      * Wired from TransportManager.startAll.
      */
     fun startAllTransports() {
+        ensureTransportManager()
         val settings = loadSettings()
         transportManager?.startAll(enableMdns = settings.internetEnabled)
     }
