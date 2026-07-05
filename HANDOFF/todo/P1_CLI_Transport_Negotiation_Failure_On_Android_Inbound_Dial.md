@@ -147,6 +147,39 @@ commit): `libp2p 0.56.0`, `libp2p-core 0.43.2`, `libp2p-swarm 0.47.1`,
 `libp2p-noise 0.46.1`, `libp2p-tcp 0.44.1`, `libp2p-websocket 0.45.1`,
 `libp2p-mdns 0.48.0`, `libp2p-quic 0.13.1`.
 
+## Progress (2026-07-05, lightweight retest after the LAN-discovery fix landed)
+
+`P1_ANDROID_TransportManager_LAN_Discovery_Never_Starts.md`'s fix (`ef2869b1`)
+was verified live: fresh incremental install, cold app relaunch, CLI daemon
+restarted. Within ~8 seconds: `TransportManager: All transports started`,
+`SubnetProbe starting`, `MdnsServiceDiscovery: mDNS service registered`, and
+`SubnetProbe: open port 192.168.0.121:9001/9002` all fired on the Android
+side. The CLI's own mDNS also completed real peer discovery this run (unlike
+the 2026-07-05 session before the fix, which never got a Behaviour-level
+Discovered event): `mDNS discovered peer: 12D3KooWE7Bi... at
+/ip4/192.168.0.148/tcp/9001/p2p/...`. **LAN discovery is confirmed fixed.**
+
+**But the negotiation failure this ticket was originally filed for is
+CONFIRMED STILL REAL**, immediately after discovery succeeded:
+```
+WARN scmessenger_core::transport::swarm: Incoming connection error from
+  /ip4/192.168.0.148/tcp/43862 -> /ip4/192.168.0.121/tcp/9001: Listen error:
+  Failed to negotiate transport protocol(s)
+WARN scmessenger_core::transport::swarm: Incoming connection error from
+  /ip4/192.168.0.148/tcp/52018/ws -> /ip4/192.168.0.121/tcp/9002/ws: Listen
+  error: Failed to negotiate transport protocol(s)
+```
+Both sides were running matched, fresh builds from current HEAD this session
+(Android APK rebuilt incrementally on top of `ef2869b1`; CLI release binary
+built earlier the same session from `6bf24799`), so **this rules out version
+skew as the root cause** — it is a genuine protocol/config negotiation bug,
+exactly as this ticket's acceptance criteria anticipated as the fallback
+case. Next step (not done this session, budget-constrained): re-run the
+trace-level capture (`RUST_LOG=libp2p_swarm=trace,libp2p_noise=trace,...`,
+see the recipe earlier in this ticket) — this time discovery will not stall
+the run, so the window should actually catch the underlying Noise/
+multistream-select error this ticket needs.
+
 ## Acceptance Criteria
 
 - Identify the specific negotiation failure point: reproduce with
