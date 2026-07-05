@@ -1,9 +1,11 @@
 # SCMessenger Remaining Work Tracking
 
 Status: Active
-Last updated: 2026-07-04 (Windows/Android parity effort opened, promoted to top priority;
-full v1.0.0 sequencing now governed by `HANDOFF/V1_0_0_EXECUTION_PLAN.md` — two-phase DAG,
-Phase 1 = this parity effort + adaptive ports, Phase 2 = all remaining ship-blocking work)
+Last updated: 2026-07-05 (Phase 1 Stage A compile-gate fixes landed; P1-15 transport-matrix
+audit and P1-10 adaptive-port design complete — see "Phase 1 Stage A/C/D progress" note below.
+Windows/Android parity effort remains top priority; full v1.0.0 sequencing governed by
+`HANDOFF/V1_0_0_EXECUTION_PLAN.md` — two-phase DAG, Phase 1 = parity effort + adaptive ports,
+Phase 2 = all remaining ship-blocking work)
 
 ---
 
@@ -51,16 +53,44 @@ gaps, not hypothetical ones.
    `crypto-security-auditor` review (DarkBLE rotation material has direct
    privacy implications).
 
-**Compile-gate note (2026-07-04):** ground-truth `cargo build --workspace`
-run (`HANDOFF/done/P0_COMPILE_GATE_VERIFICATION.md`) found 2 real,
-independent compile bugs, tracked as their own P0 follow-ups
-(`P0_DESKTOP_BRIDGE_Missing_Linux_Cfg_Gate_On_ble_Module.md`,
-`P0_CORE_swarm_rs_Test_Module_Broken_Imports_Blocking_Compile_Gate.md`).
-**Neither blocks this parity effort** — confirmed `desktop_bridge` is an
-orphan crate (zero dependents) and the `swarm.rs` bug is `#[cfg(test)]`-only
-— both are P0 purely because the compile gate itself is a mandatory
-repo-wide check, not because they block Windows/Android work. Fix them
-opportunistically, not ahead of the parity list above.
+**Compile-gate note (2026-07-04, CLOSED 2026-07-05):** ground-truth
+`cargo build --workspace` run (`HANDOFF/done/P0_COMPILE_GATE_VERIFICATION.md`)
+found 2 real, independent compile bugs, tracked as their own P0 follow-ups.
+**Both fixed and gate-verified 2026-07-05** (native `/scm` session, P1-01/P1-02
+in `HANDOFF/V1_0_0_EXECUTION_PLAN.md`): `cargo build --workspace`, `cargo test
+--workspace --no-run`, and `cargo test -p scmessenger-core --lib` all pass.
+One unrelated pre-existing failure surfaced (`transport::bootstrap::tests::
+test_bootstrap_manager_creation` — `discover_hardcoded_backup_relays()`
+returns an empty list, so `BootstrapManager::with_defaults()` seeds zero
+nodes) — not a regression from these fixes, flagged separately as its own
+follow-up. Ticket files moved to `HANDOFF/done/`.
+
+**Phase 1 Stage A/C/D progress (2026-07-05, native `/scm` session):**
+- P1-01, P1-02: DONE (see compile-gate note above).
+- **P1-15** (transport-matrix ground-truth audit): DONE. Full findings in
+  `HANDOFF/plans/P1-15_transport_matrix_audit.md`. Two genuine implementation
+  gaps surfaced — CLI has no BLE TX path (Android->CLI BLE works, CLI->Android
+  does not), and Windows has no WiFi Direct implementation at all (Android-only
+  today). New tickets: `P1_CLI_BLE_Outbound_TX_Path_Missing.md`,
+  `P1_CORE_BLE_GATT_Traits_Dead_And_Malformed_UUID.md` (also fixes a malformed
+  `GATT_SERVICE_UUID` constant, currently unused so harmless),
+  `P1_CORE_WINDOWS_WIFI_DIRECT_Peer_Absent.md`. The release-readiness T12c
+  finding (WiFi Aware `send()` hardcoded `false`) is **stale** — it's a
+  deliberate documented no-op, not a missing write path; ledger-only fix in
+  `P1_DOCS_WiFi_Aware_T12c_Ledger_Correction.md`.
+- **P1-10** (adaptive port selection design): DONE. Spec at
+  `HANDOFF/plans/P1-10_adaptive_port_selection_design.md`, decomposed into
+  `HANDOFF/todo/P1-11_Listen_Side_Adaptive_Port_Selection.md`,
+  `P1-12_Advertise_Dial_Remember_Adaptive_Port_Selection.md`,
+  `P1-13_Hardcode_Sweep_Retire_9001_9002_9010.md`. **Flags 3 items requiring
+  operator sign-off before P1-11/12 implement them** (peer_exchange
+  self-address semantics change, a new `GroupInfo.port` field crossing the
+  Kotlin FFI boundary, and a new sled `transport_memory` schema including a
+  privacy-adjacent network-fingerprint definition) — see spec section 4.
+- **Next gating item: P1-04** (root-cause the Android<->Windows transport
+  negotiation failure) — [OPUS+][AUDIT-GATE][DEVICE], requires live Pixel 6a
+  access. P1-11/12 (adaptive ports) and P1-16/17 (BLE/WiFi Direct gap closure)
+  all queue behind it per the plan's `transport/` hotspot-lane rule (§1.4).
 
 **Explicitly deprioritized pending this effort (not cancelled, not to be
 newly dispatched from native `/scm` sessions):**

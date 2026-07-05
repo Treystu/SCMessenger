@@ -44,6 +44,7 @@ pub fn xdg_config_dir() -> std::path::PathBuf {
 pub mod types;
 pub use types::*;
 
+#[cfg(target_os = "linux")]
 pub mod ble;
 pub mod desktop_bridge;
 pub mod notification;

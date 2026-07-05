@@ -5348,6 +5348,8 @@ mod tests {
     };
     use crate::identity::IdentityKeys;
     use crate::store::relay_custody::RelayCustodyStore;
+    use crate::transport::RegistrationMessage;
+    use libp2p::{Multiaddr, PeerId};
     use std::collections::HashMap;
 
     #[test]
@@ -5571,7 +5573,7 @@ mod tests {
         // Simulate first identify event: insert entry, expect map size 1
         {
             let mut map = super::last_identified_log().write();
-            let key = Libp2pPeerId::random();
+            let key = PeerId::random();
             let now = web_time::Instant::now();
             map.insert(key, now);
             assert!(map.contains_key(&key));
