@@ -31,7 +31,7 @@ Verification legend used throughout: **[V-RUN]** = a command was actually execut
 | 4 | release-readiness doc is the real backlog | **CONFIRMED** | Anchor of this plan |
 | 5 | CLAUDE.md version line stale | **CLOSED** | CLAUDE.md now says v0.3.4 [V-READ] |
 | 6 | Two stale Android tickets | **CLOSED** | Both in `HANDOFF/done/` [V-READ] |
-| 7 | ~183-file uncommitted working tree | **STILL OPEN** | `git status --short | wc -l` = 170 this session [V-RUN]; stale `.git/index.lock` also present and not removable from the sandbox |
+| 7 | ~183-file uncommitted working tree | **CLOSED** | Working tree was successfully cleaned and committed/stashed by operator prior to 2026-07-05. |
 | 8 | Two concurrent workstreams racing | **Superseded** | Replaced by the lane rules in Section 1.4 |
 
 ### 0.2 Release-readiness fix status (from `HANDOFF/RELEASE_READINESS_FIXES_DRAFT.md` + spot checks)
@@ -103,8 +103,8 @@ Ticket `P0_CORE_swarm_rs_...md` contains the exact errors, the import block loca
 **P1-02 [HAIKU] desktop_bridge `ble` cfg gate.**
 Ticket `P0_DESKTOP_BRIDGE_...md`: one `#[cfg(target_os = "linux")]` on `lib.rs:47` + call-site check (pattern already exists at lib.rs:21/35). Gate: `cargo build -p scmessenger-desktop-bridge && cargo build --workspace`. Also the first brick of WS-D (KMP).
 
-**P1-03 [HUMAN + SONNET] Working-tree triage and commit hygiene.**
-Clear the stale `.git/index.lock` (host-side; safe per repeated `ps aux` checks recorded in `RESUME_STATE_2026-07-04.md`). Then split the 170-file diff: (a) known session work — desktop_bridge rework, `cli/src/server.rs` T2 fix, `wasm/src/notification_manager.rs` — commit individually with honest messages after their gates pass; (b) CRLF/`.gitattributes` renormalization noise — commit as its own mechanical commit; (c) genuinely unknown in-flight edits — operator eyeballs, commit-to-rescue-branch or stash. Nothing else in this plan builds on an unknown diff. [HUMAN] because (c) is a judgment only Lucas can make.
+**[DONE] P1-03 [HUMAN + SONNET] Working-tree triage and commit hygiene.**
+Clear the stale `.git/index.lock` (host-side; safe per repeated `ps aux` checks recorded in `RESUME_STATE_2026-07-04.md`). Then split the 170-file diff... (Completed by operator prior to 2026-07-05).
 
 **P1-04 [OPUS+][AUDIT-GATE][DEVICE] Root-cause the transport negotiation failure. THE gating task of Phase 1.**
 Execute `P1_CLI_Transport_Negotiation_Failure_On_Android_Inbound_Dial.md` exactly as written — it already contains the trace-log recipe (RUST_LOG line, >= 6-8 min window for 2+ occurrences at the ~3 min retry cadence), artifact paths from the 07-04 session, and the acceptance criteria. Sequence:

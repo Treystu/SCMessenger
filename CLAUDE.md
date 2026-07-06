@@ -8,10 +8,11 @@ SCMessenger is a sovereign encrypted decentralized messaging mesh. A Rust core (
 
 **Active release line:** v0.3.4 (working toward v1.0.0; confirmed against `Cargo.toml` and the installed Android build — 2026-07-03).
 
-**Three operating modes share this repo:**
+**Four operating modes share this repo:**
 1. **Native Claude Code** (default) — a single Claude Code session (you, most of the time) working directly, using the subagents/skills/hooks in [Native Claude Code Setup](#native-claude-code-setup) below.
 2. **The ollama-cloud swarm** — a separate multi-agent orchestration system invoked via `/orchestrate` or `/swarm`, documented in [Agent Swarm Integration](#agent-swarm-integration-ollama-cloud-orchestrate--swarm-only). Skip that section entirely unless one of those commands is active.
-3. **Headless native workers** — `/scmorc` (`.claude/commands/scmorc.md`): a native session orchestrates per-task `claude -p` worker processes with tuned `--model`/`--effort`, on the Anthropic subscription only (no ollama). Orchestrator and workers share one 5-hour usage window — the command's quota governor is mandatory.
+3. **Headless native workers** — `/scmorc` (`.claude/commands/scmorc.md`): Fable's hybrid orchestrator that dispatches per-task `claude -p` worker processes on the Anthropic subscription only (no ollama). Orchestrator and workers share one 5-hour usage window — the command's quota governor is mandatory. **This is currently the gold standard for heavy batch processing.**
+4. **Native Cowork Orchestrator** — `/scm` (`.claude/commands/scm.md`): A parallel native alternative that drives the backlog using the `Agent` tool to spawn subagents, rather than spinning up raw `claude -p` processes.
 
 ## Workspace Structure
 

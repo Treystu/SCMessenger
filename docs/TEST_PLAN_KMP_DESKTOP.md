@@ -3,6 +3,7 @@
 > **Status**: Draft
 > **Last updated**: 2026-06-03
 > **Target**: SCMessenger Compose Multiplatform (KMP) desktop client on Linux (linuxX64) and JVM
+> **[BLOCKED_BY: TASK_KMP_COMPOSE_ARCHITECT] and [BLOCKED_BY: TASK_KMP_RUST_UNIFFI_LINUX]** — This test plan describes a future state. The KMP desktop UI is currently a greenfield skeleton and `desktop_bridge` FFI is unwired.
 
 ---
 

@@ -10,6 +10,8 @@ You are the SCMessenger Headless Orchestrator ("/scmorc"). Hybrid of `/orchestra
 - ESCALATE to the operator before: architecture-direction changes, security/privacy trade-offs, tech-stack changes, API-contract breaks, release/versioning decisions (CLAUDE.md "Escalation").
 - NEVER use `--dangerously-skip-permissions`. Workers get `--permission-mode acceptEdits` plus a scoped `--allowedTools` list. Project `.claude/settings.json` permissions also load into workers by default, which covers the standard build gates.
 - No emojis in any prompt file or output (repo rule, hook-enforced).
+- HOST BUILD SERIALIZATION (Windows rlib-lock safety — learned the hard way 2026-07-06). Never let two build-tool invocations touch the workspace's Cargo state at once, from ANY source: your own gate command, a worker's self-verification, or a Gradle task you triggered. **A Gradle target that looks Rust-free can silently pull in a cargo-ndk build as an upstream task dependency** — `./gradlew :app:compileDebugKotlin` was observed to spawn `cargo ndk -t aarch64-linux-android build -p scmessenger-core` even though nothing about that target name suggests it. Host-side build scripts and proc-macros for BOTH a native host build and any `--target`-cross-compiled build land in the same shared `target/debug/build/` tree regardless of the `--target` flag, so "different --target" does not by itself guarantee isolation. Before backgrounding any `cargo`/`gradlew` command, check first: `tasklist //FI "IMAGENAME eq cargo.exe"` and `//FI "IMAGENAME eq java.exe"` (Windows) — if either is non-empty from something you didn't expect, do NOT start another build on top of it. If you discover an unexpected concurrent build only after the fact, do NOT kill either process (an abrupt kill mid-write risks worse corruption than letting both finish) — let both finish, then run one clean `cargo check --workspace -q --message-format=short` before trusting or committing ANY Rust-touching result from that window. Default worker policy: workers implement the code change and report; they do NOT run `cargo build/check/test` or `./gradlew` themselves (see Worker Prompt Contract) — the orchestrator is the single writer for all build verification, which both prevents this class of conflict and sidesteps workers getting stuck on gradlew's interactive-approval requirement in headless mode.
+- ORCHESTRATOR PROCESS OWNERSHIP. Track every in-flight process across the whole fleet as a live inventory, not just the ones you explicitly launched — Claude workers (background Bash task IDs), non-Claude workers (e.g. `agy.exe`/Gemini dispatches), and any build you started yourself. Before any build-tool launch, and periodically while several dispatches are in flight, reconcile that mental model against actual system state (`tasklist //FI "IMAGENAME eq cargo.exe"`, `//FI "IMAGENAME eq java.exe"`, `//FI "IMAGENAME eq agy.exe"`, `//FI "IMAGENAME eq claude.exe"`) rather than assuming nothing exists beyond what you dispatched — tools you invoke can spawn children you didn't ask for (see the Gradle/cargo-ndk case above) and background jobs launched from a prior turn persist independent of what you currently remember. When a process's command line is ambiguous, resolve it (`Get-CimInstance Win32_Process -Filter "Name='X'" | Select ProcessId,ParentProcessId,CommandLine`) before deciding whether it conflicts with what you're about to start.
 
 ## Verified Model Roster (ground truth: `claude --help` v2.1.201, aliases resolve to latest)
 
@@ -40,7 +42,7 @@ Log every dispatch as one line appended to `tmp/scmorc/dispatch_log.md`: `[YYYY-
 
 ## The Loop
 
-1. READ BACKLOG. `REMAINING_WORK_TRACKING.md` header + list `HANDOFF/todo/` and `HANDOFF/IN_PROGRESS/`. Pick the highest-priority actionable task (P0 first). Group upcoming tasks by domain (rust-core / android / wasm / docs) and drain one domain at a time — this maximizes prompt-cache reuse (see Caching).
+1. READ BACKLOG. `HANDOFF/V1_0_0_EXECUTION_PLAN.md` (sequencing) + `docs/release-readiness-2026-07-02.md` (anchor) + list `HANDOFF/todo/` and `HANDOFF/IN_PROGRESS/`. Pick the highest-priority actionable task (P0 first). Group upcoming tasks by domain (rust-core / android / wasm / desktop / docs) and drain one domain at a time — this maximizes prompt-cache reuse (see Caching).
 2. PRE-DISPATCH VALIDATION (orchestrator-local, cheap — never spend a worker on a dead task):
    - Read the task file; identify the concrete target (symbol/file/function). Grep for it.
    - FALSE_POSITIVE (target is test/Kani/proptest scaffolding or inside a `GOLDEN_*` literal): move task to `HANDOFF/done/` with a note; next task.
@@ -64,7 +66,7 @@ Log every dispatch as one line appended to `tmp/scmorc/dispatch_log.md`: `[YYYY-
 5. POST-COMPLETION VERIFY (orchestrator-local):
    - Parse the worker's first line: must be `RESULT: DONE|BLOCKED|FAILED`.
    - `git diff --stat` scoped to the task's files. ZERO-DIFF RE-QUEUE: worker claimed DONE with no code change -> do not trust it; task stays in `todo/`, log `requeued`.
-   - Real diff: run the matching gate yourself (Rust: `CARGO_INCREMENTAL=0 cargo check --workspace -q --message-format=short`; Android: `cd android && ./gradlew assembleDebug -x lint --quiet`; WASM: `CARGO_INCREMENTAL=0 cargo check -p scmessenger-wasm --target wasm32-unknown-unknown -q --message-format=short`).
+   - Real diff: run the matching gate yourself (Rust: `CARGO_INCREMENTAL=0 cargo check --workspace -q --message-format=short`; Android: `cd android && ./gradlew assembleDebug -x lint --quiet`; WASM: `CARGO_INCREMENTAL=0 cargo check -p scmessenger-wasm --target wasm32-unknown-unknown -q --message-format=short`; Desktop: `CARGO_INCREMENTAL=0 cargo check -p scmessenger-desktop-bridge -q --message-format=short`).
    - Diff touches `core/src/crypto/`, `core/src/transport/`, `core/src/routing/`, or `core/src/privacy/`: mandatory adversarial review — launch a read-only fable worker per the routing table before marking done.
    - Gate fails: feed ONLY the short-format error lines (never full logs) back via `claude -r <session-uuid> -p "Gate failed: <error lines>. Fix and re-verify."` — resuming reuses the worker's warm cache. Two failed fixes -> escalate up the ladder with a fresh worker.
 6. MARK COMPLETE. Only after real diff + passing gate (+ security review where required): move the task file to `HANDOFF/done/`, update `REMAINING_WORK_TRACKING.md` if it tracks the item.
@@ -78,15 +80,14 @@ Header block, verbatim:
 ```
 You are a headless SCMessenger worker. Your stdout is parsed by an orchestrator.
 TOKEN PROTOCOL (mandatory):
-- Set CARGO_INCREMENTAL=0 before any cargo command (Windows rlib-lock rule).
-- Compiler output: `cargo check -q --message-format=short` ONLY. Never read full build logs.
+- Do NOT run `cargo build`/`cargo check`/`cargo test` or `./gradlew` yourself, even to self-verify. The orchestrator runs ALL build verification centrally — this is a Windows host-safety rule (see HOST BUILD SERIALIZATION above), not a formality: a build you start can silently collide with one the orchestrator or another worker is already running, and gradlew additionally requires interactive approval that isn't available to you headlessly anyway. Implement the change, then stop and report.
 - Locate code with rg, then read ONLY the surrounding ~20-40 lines. No whole-file reads unless the file is under 200 lines.
 - Do NOT commit. Do NOT push. The orchestrator commits after verifying your diff.
 - Do NOT move HANDOFF files. The orchestrator owns the state machine.
 - No emojis anywhere.
 REPORT FORMAT (your final message, nothing after it):
 Line 1: RESULT: DONE|BLOCKED|FAILED
-Then max 10 lines: what changed, files touched, gate command run + outcome, anything the orchestrator must know.
+Then max 10 lines: what changed, files touched, anything the orchestrator must know before it runs verification.
 ```
 
 Then: TASK (the requirement, from the HANDOFF file), TARGET FILES (exact paths), ACCEPTANCE (observable criteria), GATE (the exact command that must pass).
