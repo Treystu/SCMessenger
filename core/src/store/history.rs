@@ -355,6 +355,11 @@ impl HistoryManager {
         self.backend.count_prefix(b"msg_").unwrap_or(0) as u32
     }
 
+    /// Enforce the message history retention policy by pruning old messages
+    /// when the total count exceeds `max_messages`.
+    ///
+    /// Malformed or corrupt records that fail to deserialize are skipped
+    /// and logged with a warning, rather than causing a panic or returning an error.
     pub fn enforce_retention(&self, max_messages: u32) -> Result<u32, IronCoreError> {
         let all = self
             .backend
@@ -368,16 +373,25 @@ impl HistoryManager {
         // Parse and sort by timestamp ascending (oldest first)
         let mut records: Vec<(Vec<u8>, MessageRecord)> = all
             .into_iter()
-            .map(|(k, v)| {
-                let rec: MessageRecord =
-                    serde_json::from_slice(&v).expect("corrupt history record in sled");
-                (k, rec)
+            .filter_map(|(k, v)| {
+                match serde_json::from_slice::<MessageRecord>(&v) {
+                    Ok(rec) => Some((k, rec)),
+                    Err(e) => {
+                        let key_str = String::from_utf8_lossy(&k);
+                        tracing::warn!(
+                            key = %key_str,
+                            error = %e,
+                            "skipping corrupt history record during retention sweep"
+                        );
+                        None
+                    }
+                }
             })
             .collect();
 
         records.sort_by_key(|a| a.1.timestamp);
 
-        let to_remove = records.len() - max_messages as usize;
+        let to_remove = records.len().saturating_sub(max_messages as usize);
         for (key, _) in records.iter().take(to_remove) {
             self.backend
                 .remove(key)
@@ -512,5 +526,48 @@ mod tests {
             0,
             "All messages should be removed regardless of case"
         );
+    }
+
+    #[test]
+    fn test_enforce_retention_handles_corrupt_records() {
+        let backend = Arc::new(MemoryStorage::new());
+        let history = HistoryManager::new(backend.clone());
+
+        // Seed 4 valid messages with distinct timestamps
+        for i in 1..=4 {
+            let record = MessageRecord {
+                id: format!("msg{}", i),
+                peer_id: "peer_a".to_string(),
+                direction: MessageDirection::Sent,
+                content: format!("message {}", i),
+                timestamp: 1000 + i * 100, // 1100, 1200, 1300, 1400
+                sender_timestamp: 1000 + i * 100,
+                delivered: true,
+                hidden: false,
+            };
+            history.add(record).unwrap();
+        }
+
+        // Seed a corrupt record that fails deserialization
+        let corrupt_key = b"msg_corrupt_id";
+        let corrupt_val = b"not a valid json byte blob";
+        backend.put(corrupt_key, corrupt_val).unwrap();
+
+        // Check total raw count is 5
+        assert_eq!(backend.count_prefix(b"msg_").unwrap(), 5);
+
+        // Call enforce_retention down to max_messages = 2
+        // Should return Ok(2) since there are 4 valid messages and we prune to 2
+        let pruned = history.enforce_retention(2).unwrap();
+        assert_eq!(pruned, 2);
+
+        // Verify valid messages msg1 and msg2 were pruned, while msg3 and msg4 remain
+        assert!(history.get("msg1".to_string()).unwrap().is_none());
+        assert!(history.get("msg2".to_string()).unwrap().is_none());
+        assert!(history.get("msg3".to_string()).unwrap().is_some());
+        assert!(history.get("msg4".to_string()).unwrap().is_some());
+
+        // Verify the corrupt record is skipped (meaning it was not removed)
+        assert!(backend.get(corrupt_key).unwrap().is_some());
     }
 }
