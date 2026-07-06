@@ -22,6 +22,7 @@ pub mod routing;
 pub mod settings;
 pub mod store;
 pub mod transport;
+pub mod util;
 pub mod wasm_support;
 
 // Relay module — submodules containing platform-specific implementations are gated internally.
