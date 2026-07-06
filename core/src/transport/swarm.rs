@@ -3930,8 +3930,19 @@ pub async fn start_swarm_with_config(
                             }
 
                             SwarmEvent::IncomingConnectionError { local_addr, send_back_addr, error, .. } => {
-                                tracing::warn!(
-                                    "⚠ Incoming connection error from {} -> {}: {}",
+                                // Inbound connection errors on the LAN listeners are
+                                // dominated by benign TCP port-probes -- notably our own
+                                // Android SubnetProbe LAN-discovery fallback, which opens a
+                                // socket, waits ~200ms, then closes without ever writing the
+                                // multistream-select / WS-handshake bytes. libp2p surfaces
+                                // that as Select(Failed) / Handshake(UnexpectedEof), wrapped
+                                // in the generic "Failed to negotiate transport protocol(s)".
+                                // These are not actionable and previously masqueraded as a
+                                // real negotiation bug, so log at debug rather than warn. A
+                                // genuine peer-connectivity problem surfaces via
+                                // OutgoingConnectionError or the absence of ConnectionEstablished.
+                                tracing::debug!(
+                                    "Incoming connection negotiation aborted from {} -> {}: {}",
                                     send_back_addr,
                                     local_addr,
                                     error
@@ -5231,8 +5242,19 @@ pub async fn start_swarm_with_config(
                                 }
                             }
                             SwarmEvent::IncomingConnectionError { local_addr, send_back_addr, error, .. } => {
-                                tracing::warn!(
-                                    "⚠ Incoming connection error from {} -> {}: {}",
+                                // Inbound connection errors on the LAN listeners are
+                                // dominated by benign TCP port-probes -- notably our own
+                                // Android SubnetProbe LAN-discovery fallback, which opens a
+                                // socket, waits ~200ms, then closes without ever writing the
+                                // multistream-select / WS-handshake bytes. libp2p surfaces
+                                // that as Select(Failed) / Handshake(UnexpectedEof), wrapped
+                                // in the generic "Failed to negotiate transport protocol(s)".
+                                // These are not actionable and previously masqueraded as a
+                                // real negotiation bug, so log at debug rather than warn. A
+                                // genuine peer-connectivity problem surfaces via
+                                // OutgoingConnectionError or the absence of ConnectionEstablished.
+                                tracing::debug!(
+                                    "Incoming connection negotiation aborted from {} -> {}: {}",
                                     send_back_addr,
                                     local_addr,
                                     error

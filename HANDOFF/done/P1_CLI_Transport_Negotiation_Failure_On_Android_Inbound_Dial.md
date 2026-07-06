@@ -237,6 +237,59 @@ being externally reachable) — recommend filing as its own ticket once
 confirmed. (B) remains this ticket's original scope and still needs its
 Noise/multistream-select detail captured.
 
+## Progress (2026-07-05/06, native /scmorc session -- RESOLVED as false positive)
+
+Re-ran the trace-level capture targeting an inbound (phone-initiated) dial
+specifically, as (B)'s open item required. Caught two fresh occurrences:
+
+- TCP/9001: `Incoming connection from remote` at `00:52:12.117656Z` ->
+  `Incoming connection failed: ... Select(Failed)` at `00:52:12.322403Z`
+  (+205ms). Zero `multistream_select` trace lines in between despite
+  `multistream_select=trace` enabled.
+- WS/9002: `Incoming connection from remote` at `00:52:14.145273Z` ->
+  `libp2p_websocket::framed: receiving websocket handshake request` ->
+  `Incoming connection failed: ... Handshake(Io(Kind(UnexpectedEof)))` at
+  `00:52:14.348160Z` (+203ms).
+
+Both windows correlate almost exactly (within adb clock offset) with
+Android's own `SubnetProbe` logging `"open port 192.168.0.121:9001"` /
+`":9002"` at local time `14:52:14.452` / `14:52:16.474` on the same session.
+A dispatched opus-tier worker confirmed via `SubnetProbe.kt`'s `probeHost`
+(lines 187-201): it opens a socket, sets `soTimeout=200ms`, attempts a
+1-byte read (times out), then closes -- **writing zero bytes**, never
+sending multistream-select or WS-handshake data. The 200-205ms failure
+windows above are exactly that probe's 200ms socket timeout. No
+`ConnectionEstablished` appears anywhere in the ~12800-line capture, and no
+distinct real (non-probe) inbound dial event was found either.
+
+**Conclusion: (B) is a false positive.** These "Incoming connection error:
+Failed to negotiate transport protocol(s)" WARN logs are the CLI logging its
+own LAN-discovery-probe traffic (bare TCP connect-then-close, self-inflicted
+by the Android app's own SubnetProbe fallback) as if it were a failed
+protocol negotiation with a real peer. There is no Noise/multistream-select
+mismatch, no version skew, no genuine protocol bug on this path.
+
+**Fix applied and merged:** `core/src/transport/swarm.rs`, both
+`IncomingConnectionError` handlers (~line 3932 and ~5244): `tracing::warn!`
+downgraded to `tracing::debug!`, message reworded from "Incoming connection
+error" to "Incoming connection negotiation aborted", emoji removed, and an
+explanatory comment added. No control-flow/error-handling/protocol logic
+changed. `cargo check -p scmessenger-core`: clean (only 2 pre-existing
+dead-field warnings). `crypto-security-auditor` adversarial review:
+**CLEAR** (LOW/INFO findings only -- see
+`HANDOFF/todo/P1_CORE_Rate_Limited_Negotiation_Failure_Signal.md` for the
+one recommended, non-blocking follow-up: no per-remote-address rate-limited
+signal exists for a genuine handshake-flood/probe pattern, since this fix
+only silences the routine single-probe case at the log-macro level).
+
+**This ticket's scope is now closed.** The real remaining blocker for
+Android<->Windows messaging is tracked separately:
+`HANDOFF/todo/P1_ANDROID_Inbound_Libp2p_Listener_Not_Externally_Reachable.md`
+(mode A -- the phone's own inbound libp2p listener does not appear to be
+externally reachable; ruled out as a Windows/network-path issue by this same
+session's evidence). P1-09 (LAN E2E validation pass) depends on that ticket
+landing first, not this one.
+
 ## Acceptance Criteria
 
 - Identify the specific negotiation failure point: reproduce with
