@@ -697,7 +697,8 @@ fn print_full_identity(core: &IronCore, config: &config::Config) -> Result<()> {
     println!(
         "  ID:                     {}",
         info.identity_id
-            .expect("Identity ID should be available")
+            .clone()
+            .unwrap_or_else(|| "(pending)".to_string())
             .bright_cyan()
     );
     println!(
@@ -1311,7 +1312,7 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
         "Identity: {}",
         info.identity_id
             .clone()
-            .expect("Identity ID should be available")
+            .unwrap_or_else(|| "(pending)".to_string())
             .bright_cyan()
     );
     println!(
