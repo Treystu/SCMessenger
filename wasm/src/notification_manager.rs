@@ -141,26 +141,25 @@ impl NotificationManager {
                         if req_fn.is_function() {
                             let req_fn: js_sys::Function = req_fn.unchecked_into();
                             // Call navigator.permission() and await
-                            let promise = js_sys::Promise::from(
-                                js_sys::Reflect::apply(
-                                    &req_fn,
-                                    &JsValue::UNDEFINED,
-                                    &js_sys::Array::new(),
-                                )
-                                .unwrap(),
-                            );
-                            let js_future = wasm_bindgen_futures::JsFuture::from(promise);
-                            if let Ok(permission_val) = js_future.await {
-                                let permission_str = permission_val.as_string().unwrap_or_default();
-                                if permission_str == "granted" {
-                                    *self.permission.borrow_mut() = NotificationPermission::Granted;
-                                    save_notification_settings("granted");
-                                    return true;
-                                }
-                                if permission_str == "denied" {
-                                    *self.permission.borrow_mut() = NotificationPermission::Denied;
-                                    save_notification_settings("denied");
-                                    return false;
+                            if let Ok(promise_val) = js_sys::Reflect::apply(
+                                &req_fn,
+                                &JsValue::UNDEFINED,
+                                &js_sys::Array::new(),
+                            ) {
+                                let promise = js_sys::Promise::from(promise_val);
+                                let js_future = wasm_bindgen_futures::JsFuture::from(promise);
+                                if let Ok(permission_val) = js_future.await {
+                                    let permission_str = permission_val.as_string().unwrap_or_default();
+                                    if permission_str == "granted" {
+                                        *self.permission.borrow_mut() = NotificationPermission::Granted;
+                                        save_notification_settings("granted");
+                                        return true;
+                                    }
+                                    if permission_str == "denied" {
+                                        *self.permission.borrow_mut() = NotificationPermission::Denied;
+                                        save_notification_settings("denied");
+                                        return false;
+                                    }
                                 }
                             }
                         }
@@ -181,32 +180,32 @@ impl NotificationManager {
                     if let Some(request_fn) = req_fn {
                         if request_fn.is_function() {
                             let request_fn: js_sys::Function = request_fn.unchecked_into();
-                            let promise = js_sys::Promise::from(
-                                js_sys::Reflect::apply(
-                                    &request_fn,
-                                    &JsValue::UNDEFINED,
-                                    &js_sys::Array::new(),
-                                )
-                                .unwrap(),
-                            );
-                            let js_future = wasm_bindgen_futures::JsFuture::from(promise);
-                            if let Ok(permission_val) = js_future.await {
-                                let permission_str = permission_val.as_string().unwrap_or_default();
-                                let granted = permission_str == "granted";
-                                if granted {
-                                    *self.permission.borrow_mut() = NotificationPermission::Granted;
-                                    save_notification_settings("granted");
-                                } else {
-                                    *self.permission.borrow_mut() = NotificationPermission::Denied;
-                                    save_notification_settings("denied");
+                            if let Ok(promise_val) = js_sys::Reflect::apply(
+                                &request_fn,
+                                &JsValue::UNDEFINED,
+                                &js_sys::Array::new(),
+                            ) {
+                                let promise = js_sys::Promise::from(promise_val);
+                                let js_future = wasm_bindgen_futures::JsFuture::from(promise);
+                                if let Ok(permission_val) = js_future.await {
+                                    let permission_str = permission_val.as_string().unwrap_or_default();
+                                    let granted = permission_str == "granted";
+                                    if granted {
+                                        *self.permission.borrow_mut() = NotificationPermission::Granted;
+                                        save_notification_settings("granted");
+                                    } else {
+                                        *self.permission.borrow_mut() = NotificationPermission::Denied;
+                                        save_notification_settings("denied");
+                                    }
+                                    return granted;
                                 }
-                                return granted;
                             }
                         }
                     }
                 }
             }
 
+            *self.permission.borrow_mut() = NotificationPermission::Default;
             false
         }
 
