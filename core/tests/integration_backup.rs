@@ -507,6 +507,7 @@ fn iron_core_backup_restore_preserves_bridge_contacts() {
     bridge_contact.verified_at = Some(1_700_000_000);
     alice
         .contacts_manager()
+        .unwrap()
         .add(bridge_contact)
         .expect("alice adds bob via the bridge contacts store");
 
@@ -525,6 +526,7 @@ fn iron_core_backup_restore_preserves_bridge_contacts() {
 
     let restored_contacts = restored
         .contacts_manager()
+        .unwrap()
         .list()
         .expect("restored bridge contacts list");
     assert_eq!(

@@ -1298,7 +1298,7 @@ impl IronCore {
         let bridge_contacts_json = if self.storage_path.is_none() {
             None
         } else {
-            let bridge_contacts = self.contacts_manager().list()?;
+            let bridge_contacts = self.contacts_manager()?.list()?;
             if bridge_contacts.is_empty() {
                 None
             } else {
@@ -1503,7 +1503,7 @@ impl IronCore {
         // restore into. WASM has no contacts_bridge (UniFFI-only) at all.
         #[cfg(not(target_arch = "wasm32"))]
         if self.storage_path.is_some() {
-            let bridge = self.contacts_manager();
+            let bridge = self.contacts_manager()?;
             for contact in bridge_contacts {
                 bridge.add(contact)?;
             }
@@ -1852,14 +1852,13 @@ impl IronCore {
 
     /// Return a ContactManager instance for the UniFFI interface.
     #[cfg(not(target_arch = "wasm32"))]
-    pub fn contacts_manager(&self) -> crate::contacts_bridge::ContactManager {
+    pub fn contacts_manager(&self) -> Result<crate::contacts_bridge::ContactManager, crate::IronCoreError> {
         let path = self.storage_path.clone().unwrap_or_default();
         crate::contacts_bridge::ContactManager::new(path.clone())
             .or_else(|_| crate::contacts_bridge::ContactManager::new(path))
-            .unwrap_or_else(|e| {
+            .or_else(|e| {
                 tracing::error!("Failed to create contact manager: {:?}", e);
                 crate::contacts_bridge::ContactManager::new("".to_string())
-                    .expect("ContactManager fallback also failed")
             })
     }
 
@@ -1942,14 +1941,13 @@ impl IronCore {
 
     /// Return a HistoryManager instance for the UniFFI interface.
     #[cfg(not(target_arch = "wasm32"))]
-    pub fn history_manager(&self) -> crate::mobile_bridge::HistoryManager {
+    pub fn history_manager(&self) -> Result<crate::mobile_bridge::HistoryManager, crate::IronCoreError> {
         let path = self.storage_path.clone().unwrap_or_default();
         crate::mobile_bridge::HistoryManager::new(path.clone())
             .or_else(|_| crate::mobile_bridge::HistoryManager::new(path))
-            .unwrap_or_else(|e| {
+            .or_else(|e| {
                 tracing::error!("Failed to create history manager: {:?}", e);
                 crate::mobile_bridge::HistoryManager::new("".to_string())
-                    .expect("HistoryManager fallback also failed")
             })
     }
 
@@ -3789,5 +3787,16 @@ mod tests {
         let logs: Vec<serde_json::Value> = serde_json::from_str(&exported).unwrap();
         assert_eq!(logs.len(), 1);
         assert_eq!(logs[0]["content"], "persistent entry");
+    }
+
+    #[test]
+    fn test_manager_fallback_does_not_panic() {
+        // Construct with a guaranteed invalid path to force the fallback to fire
+        // (if the filesystem rejects it). The fallback might succeed (creating in
+        // the current directory) or fail, but importantly, it will return a Result
+        // and not panic.
+        let core = IronCore::with_storage("\0invalid/path<>|".to_string());
+        let _ = core.contacts_manager();
+        let _ = core.history_manager();
     }
 }
