@@ -21,6 +21,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import timber.log.Timber
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -54,6 +56,10 @@ class AndroidPlatformBridge @Inject constructor(
     }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    // Serializes battery/network device-state updates so concurrent broadcasts
+    // can't interleave and corrupt the FFI-reported device state.
+    private val deviceStateMutex = Mutex()
 
     // BLE components for data forwarding
     @Volatile private var bleAdvertiser: BleAdvertiser? = null
@@ -155,7 +161,11 @@ class AndroidPlatformBridge @Inject constructor(
     private fun registerBatteryMonitor() {
         batteryReceiver = object : BroadcastReceiver() {
             override fun onReceive(context: Context, intent: Intent) {
-                updateBatteryState()
+                scope.launch {
+                    deviceStateMutex.withLock {
+                        updateBatteryState()
+                    }
+                }
             }
         }
 
@@ -204,23 +214,31 @@ class AndroidPlatformBridge @Inject constructor(
 
         val callback = object : ConnectivityManager.NetworkCallback() {
             override fun onAvailable(network: Network) {
-                updateNetworkState()
+                dispatchNetworkStateUpdate()
             }
 
             override fun onLost(network: Network) {
-                updateNetworkState()
+                dispatchNetworkStateUpdate()
             }
 
             override fun onCapabilitiesChanged(
                 network: Network,
                 capabilities: NetworkCapabilities
             ) {
-                updateNetworkState()
+                dispatchNetworkStateUpdate()
             }
         }
         networkCallback = callback
 
         connectivityManager.registerNetworkCallback(request, callback)
+    }
+
+    private fun dispatchNetworkStateUpdate() {
+        scope.launch {
+            deviceStateMutex.withLock {
+                updateNetworkState()
+            }
+        }
     }
 
     private fun updateNetworkState() {
