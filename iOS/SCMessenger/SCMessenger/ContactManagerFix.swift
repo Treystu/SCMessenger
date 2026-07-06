@@ -77,12 +77,14 @@ extension ContactManager: ContactManagerProtocol {
     }
     
     public func count() -> UInt32 {
+        // Rust API contractually cannot fail; verified against core/src/store/contacts.rs line 351 and core/src/contacts_bridge.rs line 330
         return try! rustCall() {
             uniffi_scmessenger_core_fn_method_contactmanager_count(self.uniffiClonePointer(), $0)
         }
     }
     
     public func flush() {
+        // Rust API contractually cannot fail; verified against core/src/store/contacts.rs line 355 and core/src/contacts_bridge.rs line 335
         try! rustCall() {
             uniffi_scmessenger_core_fn_method_contactmanager_flush(self.uniffiClonePointer(), $0)
         }
