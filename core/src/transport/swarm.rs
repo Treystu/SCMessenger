@@ -3949,6 +3949,23 @@ pub async fn start_swarm_with_config(
                                 );
                             }
 
+                            SwarmEvent::ListenerError { listener_id, error } => {
+                                tracing::error!(
+                                    "Listener {:?} reported an error (async bind/accept failure): {}",
+                                    listener_id,
+                                    error
+                                );
+                            }
+
+                            SwarmEvent::ListenerClosed { listener_id, addresses, reason } => {
+                                tracing::warn!(
+                                    "Listener {:?} closed for addresses {:?}: {:?}",
+                                    listener_id,
+                                    addresses,
+                                    reason
+                                );
+                            }
+
                             _ => {}
                         }
                     }
@@ -5258,6 +5275,21 @@ pub async fn start_swarm_with_config(
                                     send_back_addr,
                                     local_addr,
                                     error
+                                );
+                            }
+                            SwarmEvent::ListenerError { listener_id, error } => {
+                                tracing::error!(
+                                    "Listener {:?} reported an error (async bind/accept failure): {}",
+                                    listener_id,
+                                    error
+                                );
+                            }
+                            SwarmEvent::ListenerClosed { listener_id, addresses, reason } => {
+                                tracing::warn!(
+                                    "Listener {:?} closed for addresses {:?}: {:?}",
+                                    listener_id,
+                                    addresses,
+                                    reason
                                 );
                             }
                             _ => {}
