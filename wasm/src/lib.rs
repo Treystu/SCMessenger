@@ -1885,6 +1885,9 @@ async fn start_swarm_runtime(
                 scmessenger_core::transport::SwarmEvent::PeerIdentified { peer_id, .. } => {
                     tracing::info!("Swarm identified peer {}", peer_id);
                 }
+                scmessenger_core::transport::SwarmEvent::ListenerFailed { listener_id, error } => {
+                    tracing::warn!("Swarm listener {} failed: {}", listener_id, error);
+                }
                 scmessenger_core::transport::SwarmEvent::AddressReflected { .. }
                 | scmessenger_core::transport::SwarmEvent::ListeningOn(_)
                 | scmessenger_core::transport::SwarmEvent::PortMapping(_)

@@ -1,5 +1,6 @@
 package com.scmessenger.android.data
 
+import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -123,7 +124,7 @@ class MeshRepositoryTest {
     }
 
     @Test
-    fun `wifi local path succeeds without BLE fallback`() {
+    fun `wifi local path succeeds without BLE fallback`() = runTest {
         val attempted = mutableListOf<String>()
 
         val result = MeshRepository.attemptWifiThenBleFallback(
@@ -148,7 +149,7 @@ class MeshRepositoryTest {
     }
 
     @Test
-    fun `wifi unavailable falls back deterministically to BLE`() {
+    fun `wifi unavailable falls back deterministically to BLE`() = runTest {
         val attempted = mutableListOf<String>()
 
         val result = MeshRepository.attemptWifiThenBleFallback(
@@ -173,7 +174,7 @@ class MeshRepositoryTest {
     }
 
     @Test
-    fun `high volume local sync fallback remains stable`() {
+    fun `high volume local sync fallback remains stable`() = runTest {
         var wifiCalls = 0
         var bleCalls = 0
         var wifiSuccesses = 0
@@ -214,7 +215,7 @@ class MeshRepositoryTest {
     }
 
     @Test
-    fun `ble-only fallback path emits deterministic terminal failure when BLE send fails`() {
+    fun `ble-only fallback path emits deterministic terminal failure when BLE send fails`() = runTest {
         var wifiCalled = false
         var bleCalled = false
 

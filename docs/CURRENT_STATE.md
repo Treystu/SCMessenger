@@ -1,10 +1,29 @@
 # SCMessenger Current State (Verified)
 
 Status: Active
-Last updated: 2026-07-02 (v1.0.0 Release Readiness Assessment)
+Last updated: 2026-07-06 (Fable 5 stabilization sprint)
 Last verified: **2026-07-02** (v1.0.0 PR #1 merged, remaining items documented in `docs/release-readiness-2026-07-02.md`)
 
 ---
+
+## 2026-07-06: Fable 5 Stabilization Sprint — Networking Layer
+
+**Status:** Implementation COMPLETE; verification gates handed to workers
+(`HANDOFF/todo/NEXT_ITER_01..04`). Details in `REMAINING_WORK_TRACKING.md`
+(2026-07-06 section) and `HANDOFF/done/FABLE_5_COMPREHENSIVE_AUDIT.md`.
+
+Key architectural changes to be aware of:
+- **The mobile FFI surface is now async.** All 14 former `rt.block_on` wrappers on
+  `SwarmBridge`/`MeshService` are `async fn` → Kotlin `suspend fun`. Internal Rust
+  sync callers must use the `*_blocking` helpers in `core/src/mobile_bridge.rs`
+  (never from a tokio context).
+- **`start_swarm` reports the truth.** It blocks (≤15s) until the first listener
+  binds; `Ok` now means "listening", not "thread spawned". `SwarmEvent2::ListenerFailed`
+  carries async bind/close failures to all consumers.
+- **Gossipsub commands reply.** Subscribe/Unsubscribe/Publish return real outcomes
+  (e.g. InsufficientPeers) through reply channels.
+- **Android unit tests are re-enabled** after being force-disabled since 2026-06-06
+  (operator-approved). `./gradlew :app:testDebugUnitTest` executes real tests again.
 
 ## 2026-07-02: V1.0.0 Release Readiness Assessment
 
@@ -16,8 +35,8 @@ Following the merge of PR #1 (`cbec1f4`), the repository has been evaluated for 
 ### Current Blockers to V1.0.0
 1. **GitHub Actions Dead Runners (H1)**: CI workflows fail instantly with no runners assigned. This blocks verification of cross-platform builds and mobile UI fixes (Task S9 is pending this).
 2. **Physical Device Tests (H2)**: Hardware validation (WiFi Aware, BLE, DTN mule tests) is required.
-3. ✅ **Core / CLI Debt (S2-S8, T1-T7)**: All code fixes have been implemented and verified.
-4. ✅ **Mobile (Android/iOS) (T8-T17)**: All SDK fixes are implemented in code.
+3. [DONE] **Core / CLI Debt (S2-S8, T1-T7)**: All code fixes have been implemented and verified.
+4. [DONE] **Mobile (Android/iOS) (T8-T17)**: All SDK fixes are implemented in code.
 
 (See `REMAINING_WORK_TRACKING.md` or `docs/release-readiness-2026-07-02.md` for the exact breakdown).
 
@@ -84,15 +103,15 @@ The mycorrhizal routing engine is **active** in the production send path. The ta
 
 ## 2026-05-09: Windows CLI Peer Discovery Verification
 
-**Status:** ✅ COMPLETE
+**Status:** [DONE] COMPLETE
 
 ### Summary
 The SCMessenger Windows CLI (`scmessenger-cli.exe`) has been compiled, launched, and verified to have all local discovery transports fully active and functional:
 
-- **mDNS LAN Discovery**: ✅ Active and broadcasting on the local interface (`192.168.0.222`).
-- **Bluetooth/BLE Discovery**: ✅ Active scanning configured with the correct service UUID (`df010000-0000-1000-8000-00805f9b34fb`) via the `btleplug` manager (1 adapter successfully acquired).
-- **WiFi-Aware**: ✅ Configured and active.
-- **Control API & Warp Server**: ✅ Listening successfully on loopback (`127.0.0.1:9876` and `127.0.0.1:9000`).
+- **mDNS LAN Discovery**: [DONE] Active and broadcasting on the local interface (`192.168.0.222`).
+- **Bluetooth/BLE Discovery**: [DONE] Active scanning configured with the correct service UUID (`df010000-0000-1000-8000-00805f9b34fb`) via the `btleplug` manager (1 adapter successfully acquired).
+- **WiFi-Aware**: [DONE] Configured and active.
+- **Control API & Warp Server**: [DONE] Listening successfully on loopback (`127.0.0.1:9876` and `127.0.0.1:9000`).
 
 Both active scans (`discovery scan`) and peer listings (`discovery peers`) have been verified using the Python CLI driver (`core_cli_driver.py`).
 
@@ -100,7 +119,7 @@ Both active scans (`discovery scan`) and peer listings (`discovery peers`) have 
 
 ## 2026-04-28: Phase 1-3 Completion — Compilation, Wiring, Tests, Security
 
-**Status:** ✅ COMPLETE
+**Status:** [DONE] COMPLETE
 
 ### Phase 1A: Compilation Baseline
 - `cargo check --workspace` passes with zero errors
@@ -127,9 +146,9 @@ Both active scans (`discovery scan`) and peer listings (`discovery peers`) have 
 - Unit tests: 820 tests, all passing
 
 ### Phase 2: Platform Clients (Partial — Environment Blockers)
-- ✅ WASM target builds successfully (`cargo build -p scmessenger-wasm --target wasm32-unknown-unknown`)
-- ⚠️ CLI build previously blocked on Windows by missing `dlltool.exe` (MinGW toolchain). **RESOLVED 2026-05-01** — MSVC Build Tools v143 installed; `.cargo/config.toml` updated with explicit MSVC linker path; `cargo build --workspace` passes cleanly.
-- ⚠️ Android build requires `ANDROID_HOME` environment variable or auto-detected SDK path.
+- [DONE] WASM target builds successfully (`cargo build -p scmessenger-wasm --target wasm32-unknown-unknown`)
+- [WARNING] CLI build previously blocked on Windows by missing `dlltool.exe` (MinGW toolchain). **RESOLVED 2026-05-01** — MSVC Build Tools v143 installed; `.cargo/config.toml` updated with explicit MSVC linker path; `cargo build --workspace` passes cleanly.
+- [WARNING] Android build requires `ANDROID_HOME` environment variable or auto-detected SDK path.
 
 ### Phase 3: Security Hardening
 - Adversarial review by deepseek-v4-pro:cloud
@@ -153,7 +172,7 @@ Both active scans (`discovery scan`) and peer listings (`discovery peers`) have 
 
 ## 2026-04-11: WASM WebSocket Connectivity & CLI Bridge Stabilized
 
-**Status:** ✅ RESOLVED
+**Status:** [DONE] RESOLVED
 
 ### Overview
 
@@ -171,13 +190,13 @@ Resolved critical connectivity failures between browser-based WASM nodes and the
 - **Auto-Relay Circuit**: Confirmed WASM nodes successfully reserve relay circuits on the CLI bridge (`/p2p-circuit`), making browser nodes reachable via the CLI's LAN/Public addresses.
 
 ### Impact
-- ✅ Browser nodes successfully join the mesh on local networks.
-- ✅ CLI bridge serves as a stable anchor for sandboxed browser nodes.
-- ✅ Full parity for LAN-based message delivery between Browser and Android/iOS.
+- [DONE] Browser nodes successfully join the mesh on local networks.
+- [DONE] CLI bridge serves as a stable anchor for sandboxed browser nodes.
+- [DONE] Full parity for LAN-based message delivery between Browser and Android/iOS.
 
 ### WASM thin client / local daemon JSON-RPC (2026-04-11 addendum)
 
-**Status:** ✅ LANDED (incremental; BLE GATT proxy still open)
+**Status:** [DONE] LANDED (incremental; BLE GATT proxy still open)
 
 - **Loopback-only UI server:** `scmessenger-cli` Warp server binds `127.0.0.1:<port>` (default UI port unchanged). Mitigates cross-site WebSocket hijacking for the daemon bridge.
 - **Strict WebSocket `Origin`:** `/ws` accepts only `http://127.0.0.1:<port>` and `http://localhost:<port>` (same port as the UI server).
@@ -193,7 +212,7 @@ Resolved critical connectivity failures between browser-based WASM nodes and the
 
 ## 2026-04-10: WebSocket Bridge & UI Hosting — Full Mesh Integration
 
-**Status:** ✅ IMPLEMENTATION COMPLETE
+**Status:** [DONE] IMPLEMENTATION COMPLETE
 
 ### Overview
 
@@ -267,7 +286,7 @@ By design, the WASM client running inside a browser sandbox cannot negotiate har
 
 ## 2026-04-09: TCP/mDNS Transport Parity
 
-**Status:** ✅ IMPLEMENTATION COMPLETE
+**Status:** [DONE] IMPLEMENTATION COMPLETE
 
 ### Overview
 
@@ -292,17 +311,17 @@ Full TCP/mDNS transport parity is now achieved across Android and iOS. Both plat
 
 | Transport      | Android | iOS  | Notes |
 |----------------|---------|------|-------|
-| WiFi Direct    | ✅      | N/A  | Android only |
-| Multipeer      | N/A     | ✅   | iOS only |
-| BLE            | ✅      | ✅   | L2CAP/GATT |
-| TCP/mDNS (LAN) | ✅     | ✅   | NEW — via SwarmBridge |
-| Internet (Core) | ✅     | ✅   | Relay/bootstrap |
+| WiFi Direct    | [DONE]      | N/A  | Android only |
+| Multipeer      | N/A     | [DONE]   | iOS only |
+| BLE            | [DONE]      | [DONE]   | L2CAP/GATT |
+| TCP/mDNS (LAN) | [DONE]     | [DONE]   | NEW — via SwarmBridge |
+| Internet (Core) | [DONE]     | [DONE]   | Relay/bootstrap |
 
 ---
 
 ## 2026-04-20: Android Privacy Settings UI Cleanup
 
-**Status:** ✅ IMPLEMENTATION COMPLETE — UI TRUST RESTORED
+**Status:** [DONE] IMPLEMENTATION COMPLETE — UI TRUST RESTORED
 
 ### Overview
 
@@ -311,10 +330,10 @@ Completed comprehensive audit and cleanup of Android privacy settings to ensure 
 ### Changes Implemented
 
 **Removed Unimplemented Features:**
-- ❌ Onion Routing (UI only, no Rust implementation)
-- ❌ Cover Traffic (partial implementation, non-functional)
-- ❌ Message Padding (UI only, no implementation)
-- ❌ Timing Obfuscation (UI only, no implementation)
+- [FAIL] Onion Routing (UI only, no Rust implementation)
+- [FAIL] Cover Traffic (partial implementation, non-functional)
+- [FAIL] Message Padding (UI only, no implementation)
+- [FAIL] Timing Obfuscation (UI only, no implementation)
 
 **Files Modified:**
 - `MeshSettingsScreen.kt`: Removed Privacy Settings section (-11 LOC)
@@ -326,14 +345,14 @@ Completed comprehensive audit and cleanup of Android privacy settings to ensure 
 ### Impact
 
 **Trust & Reliability:**
-- ✅ UI now accurately reflects implemented functionality
-- ✅ No more false promises to users
-- ✅ Aligns with project's trust philosophy
+- [DONE] UI now accurately reflects implemented functionality
+- [DONE] No more false promises to users
+- [DONE] Aligns with project's trust philosophy
 
 **Code Quality:**
-- ✅ Removed ~93 LOC of non-functional code
-- ✅ Cleaner, more maintainable codebase
-- ✅ Reduced technical debt
+- [DONE] Removed ~93 LOC of non-functional code
+- [DONE] Cleaner, more maintainable codebase
+- [DONE] Reduced technical debt
 
 ### Future Roadmap
 
@@ -350,15 +369,15 @@ Privacy features will be re-implemented when Rust core support is available:
 
 ### Verification
 
-**Build Status:** ✅ Android builds successfully
-**UI Status:** ✅ All remaining UI functions verified as fully implemented
-**Documentation Status:** ✅ All relevant docs updated
+**Build Status:** [DONE] Android builds successfully
+**UI Status:** [DONE] All remaining UI functions verified as fully implemented
+**Documentation Status:** [DONE] All relevant docs updated
 
 ---
 
 ## 2026-03-30: v0.2.1 Contact Block State Machine & Alpha Rollout Readiness
 
-**Status:** ✅ IMPLEMENTATION COMPLETE — READY FOR ALPHA ROLLOUT
+**Status:** [DONE] IMPLEMENTATION COMPLETE — READY FOR ALPHA ROLLOUT
 
 ### Overview
 =======
@@ -381,12 +400,12 @@ Three strict states are now enforced end-to-end:
 
 | Platform | Location | Status |
 |----------|----------|--------|
-| Core     | `core/src/lib.rs:block_and_delete_peer()` | ✅ |
-| UDL      | `core/src/api.udl` → `block_and_delete_peer(string, string?)` | ✅ |
-| Android  | `MeshRepository.kt:blockAndDeletePeer()`, `ConversationsViewModel.kt:blockAndDeletePeer()` | ✅ |
-| iOS      | `MeshRepository.swift:blockAndDeletePeer()` | ✅ |
-| WASM     | `wasm/src/lib.rs:block_and_delete_peer()` → JS `blockAndDeletePeer` | ✅ |
-| CLI      | `cli/src/main.rs` → `block delete <peer_id>` | ✅ |
+| Core     | `core/src/lib.rs:block_and_delete_peer()` | [DONE] |
+| UDL      | `core/src/api.udl` → `block_and_delete_peer(string, string?)` | [DONE] |
+| Android  | `MeshRepository.kt:blockAndDeletePeer()`, `ConversationsViewModel.kt:blockAndDeletePeer()` | [DONE] |
+| iOS      | `MeshRepository.swift:blockAndDeletePeer()` | [DONE] |
+| WASM     | `wasm/src/lib.rs:block_and_delete_peer()` → JS `blockAndDeletePeer` | [DONE] |
+| CLI      | `cli/src/main.rs` → `block delete <peer_id>` | [DONE] |
 
 ### ID Mapping Audit (2026-03-31)
 
@@ -394,7 +413,7 @@ All identifiers validated end-to-end:
 
 | ID Type | Format | Canonical? | Used for |
 |---------|--------|------------|----------|
-| `public_key_hex` | 64-char hex (Ed25519) | ✅ Primary | Encryption, contact exchange, persistence |
+| `public_key_hex` | 64-char hex (Ed25519) | [DONE] Primary | Encryption, contact exchange, persistence |
 | `identity_id` | 64-char hex (Blake3 of public key) | Display/History | Block store, history `peer_id`, UI display |
 | `libp2p_peer_id` | ~52-char Base58 (`12D3Koo...`) | Network only | Transport routing, peer discovery |
 | `device_id` | UUIDv4 | Installation-local | WS13 tight-pair routing |
@@ -445,9 +464,9 @@ All identifiers validated end-to-end:
 ### Verification
 
 ```bash
-cargo build --workspace    # ✅ pass
-cargo test --workspace     # ✅ 670+ pass, 0 fail
-./scripts/docs_sync_check.sh  # ✅ PASS
+cargo build --workspace    # [DONE] pass
+cargo test --workspace     # [DONE] 670+ pass, 0 fail
+./scripts/docs_sync_check.sh  # [DONE] PASS
 ```
 
 ### Alpha Rollout
@@ -458,7 +477,7 @@ See `docs/V0.2.1_ALPHA_ROLLOUT_PLAN.md` for complete pre-rollout checklist, buil
 
 ## 2026-03-23: Drift and Routing Modules Wired (Compilation Gate)
 
-**Status:** ✅ COMPILATION GATE CLEARED
+**Status:** [DONE] COMPILATION GATE CLEARED
 
 ### Overview
 
@@ -482,10 +501,10 @@ The `drift/` (~4.3K lines) and `routing/` (~4.6K lines) modules were present on 
 
 ### What Works
 
-- ✅ `cargo build --all-targets` succeeds
-- ✅ 667 tests pass (3 failures in time-sensitive decay tests are pre-existing)
-- ✅ drift module: envelope, frame, compress, sketch, sync, relay, policy all compile
-- ✅ routing module: local, neighborhood, global, engine, timeout_budget, negative_cache, resume_prefetch, adaptive_ttl, optimized_engine all compile
+- [DONE] `cargo build --all-targets` succeeds
+- [DONE] 667 tests pass (3 failures in time-sensitive decay tests are pre-existing)
+- [DONE] drift module: envelope, frame, compress, sketch, sync, relay, policy all compile
+- [DONE] routing module: local, neighborhood, global, engine, timeout_budget, negative_cache, resume_prefetch, adaptive_ttl, optimized_engine all compile
 
 ### Known Issues
 
@@ -495,15 +514,15 @@ The `drift/` (~4.3K lines) and `routing/` (~4.6K lines) modules were present on 
 ### Verification
 
 ```bash
-cargo build --all-targets  # ✅ succeeds
-cargo test                  # ✅ 667 pass, 3 fail (pre-existing)
+cargo build --all-targets  # [DONE] succeeds
+cargo test                  # [DONE] 667 pass, 3 fail (pre-existing)
 ```
 
 ---
 
 ## Previous: 2026-03-20 iOS Crash Fix & Complete Integration
 
-**Status:** ✅ ALL ISSUES RESOLVED - iOS working with updated bindings
+**Status:** [DONE] ALL ISSUES RESOLVED - iOS working with updated bindings
 
 ### Overview
 
@@ -511,10 +530,10 @@ Fixed critical iOS instant crash issue caused by version mismatch between Swift 
 
 ### Issues Resolved
 
-1. **✅ iOS Instant Crash**: Caused by outdated xcframework containing old Rust binaries while new Swift bindings expected updated function signatures
-2. **✅ Missing Enums**: Added MessageType enum to UDL and generated Swift bindings
-3. **✅ Swift Concurrency**: Maintained proper `nonisolated(unsafe)` annotations for Swift 6 compatibility
-4. **✅ Library Synchronization**: Rebuilt both iOS simulator and device libraries with latest bindings
+1. **[DONE] iOS Instant Crash**: Caused by outdated xcframework containing old Rust binaries while new Swift bindings expected updated function signatures
+2. **[DONE] Missing Enums**: Added MessageType enum to UDL and generated Swift bindings
+3. **[DONE] Swift Concurrency**: Maintained proper `nonisolated(unsafe)` annotations for Swift 6 compatibility
+4. **[DONE] Library Synchronization**: Rebuilt both iOS simulator and device libraries with latest bindings
 
 ### Technical Implementation
 
@@ -536,12 +555,12 @@ Fixed critical iOS instant crash issue caused by version mismatch between Swift 
 - iOS Swift bindings - Updated and synchronized with Rust libraries
 
 ### What Works (Verified)
-- ✅ iOS app builds and should no longer crash
-- ✅ MessageType enum available in Swift (`MessageType.text`, `MessageType.receipt`)
-- ✅ Automatic peer forwarding functionality (from previous session)
-- ✅ Cross-platform builds (iOS, Android, WASM)
-- ✅ Mobile package builds correctly
-- ✅ All Swift concurrency fixes preserved
+- [DONE] iOS app builds and should no longer crash
+- [DONE] MessageType enum available in Swift (`MessageType.text`, `MessageType.receipt`)
+- [DONE] Automatic peer forwarding functionality (from previous session)
+- [DONE] Cross-platform builds (iOS, Android, WASM)
+- [DONE] Mobile package builds correctly
+- [DONE] All Swift concurrency fixes preserved
 
 ### Critical Fix Details
 
@@ -557,7 +576,7 @@ Fixed critical iOS instant crash issue caused by version mismatch between Swift 
 
 ## Previous: 2026-03-20 Automatic Peer Forwarding Implementation
 
-**Status:** ✅ PEER FORWARDING ENABLED
+**Status:** [DONE] PEER FORWARDING ENABLED
 
 ### Overview
 
@@ -593,7 +612,7 @@ Implemented automatic peer forwarding functionality to address the issue where n
 
 ## Previous: 2026-03-19 v0.2.1 Notification Re-Enable
 
-**Status:** ✅ NOTIFICATIONS RE-ENABLED
+**Status:** [DONE] NOTIFICATIONS RE-ENABLED
 
 ### Overview
 
@@ -633,7 +652,7 @@ Re-enabled v0.2.1 notification functionality that was previously rolled back to 
 
 ## 2026-03-16 Smart Transport Router & BLE Discovery Fixes
 
-**Status:** ✅ IMPLEMENTED
+**Status:** [DONE] IMPLEMENTED
 
 ### Overview
 
@@ -700,21 +719,21 @@ Updated [`BleScanner.kt`](../android/app/src/main/java/com/scmessenger/android/t
 
 ## ID Management System (Verified 2026-04-09)
 
-- ✅ Canonical identity resolution working perfectly
-- ✅ Cross-platform ID consistency verified (Android/iOS/Core)
-- ✅ Contact keying strategy confirmed correct (uses canonicalPeerId)
-- ✅ No database schema changes required
-- ✅ All ID-related residual risks closed
-- ✅ Comprehensive analysis completed in `docs/ID_MANAGEMENT_ANALYSIS.md`
+- [DONE] Canonical identity resolution working perfectly
+- [DONE] Cross-platform ID consistency verified (Android/iOS/Core)
+- [DONE] Contact keying strategy confirmed correct (uses canonicalPeerId)
+- [DONE] No database schema changes required
+- [DONE] All ID-related residual risks closed
+- [DONE] Comprehensive analysis completed in `docs/ID_MANAGEMENT_ANALYSIS.md`
 
 ## Current Technical State
 
-- ✅ Rust core: All features implemented and tested
-- ✅ Android app: Ready for release build
-- ✅ iOS app: Code complete (requires macOS for build)
-- ✅ ID management: Perfectly implemented across all platforms
-- ⚠️ Android backup: Needs exclusion rules (minor fix required)
-- ✅ Documentation: Comprehensive and up-to-date
+- [DONE] Rust core: All features implemented and tested
+- [DONE] Android app: Ready for release build
+- [DONE] iOS app: Code complete (requires macOS for build)
+- [DONE] ID management: Perfectly implemented across all platforms
+- [WARNING] Android backup: Needs exclusion rules (minor fix required)
+- [DONE] Documentation: Comprehensive and up-to-date
 
 For architectural context across all repo components, see `docs/REPO_CONTEXT.md`.
 
@@ -722,7 +741,7 @@ For architectural context across all repo components, see `docs/REPO_CONTEXT.md`
 
 ## 2026-03-18 QUIC/UDP Cellular NAT Traversal Fix
 
-**Status:** ✅ IMPLEMENTED
+**Status:** [DONE] IMPLEMENTED
 
 ### Overview
 
@@ -769,7 +788,7 @@ The transport layer was relying solely on TCP for relay connections. Many cellul
 - **AND-CELLULAR-001**: Android cellular message sending (P0) - FIXED
 - **CROSS-RELAY-001**: Cross-platform relay circuit delivery (P0) - FIXED
 
-### ⚠️ Regression Introduced
+### [WARNING] Regression Introduced
 
 - **AND-CONTACTS-WIPE-001**: Android contacts wiped after QUIC/UDP update (P0) - OPEN
   - After deploying the update via `deploy_to_device.sh both`, Android contacts were wiped
@@ -788,7 +807,7 @@ The transport layer was relying solely on TCP for relay connections. Many cellul
 
 ## 2026-03-16 GCP Node Nickname Update
 
-**Status:** ✅ IMPLEMENTED
+**Status:** [DONE] IMPLEMENTED
 
 ### Overview
 
@@ -803,7 +822,7 @@ Updated the GCP headless relay node to use the nickname "GCP-headless". This ens
 
 ## 2026-03-16 BLE Log Visibility Improvements
 
-**Status:** ✅ IMPLEMENTED & VERIFIED
+**Status:** [DONE] IMPLEMENTED & VERIFIED
 
 ### Overview
 
@@ -824,7 +843,7 @@ Enhanced the Mesh Topology Visualizer to correctly display Bluetooth (BLE) links
 
 ## 2026-03-16 iOS Build & Stability Fixes
 
-### Build Status: ✅ iOS BUILD SUCCESSFUL
+### Build Status: [DONE] iOS BUILD SUCCESSFUL
 
 **Build Timestamp:** 2026-03-16 03:46 HST (Verified)
 **Build Output:** `.build/ios-sim/Build/Products/Debug-iphonesimulator/SCMessenger.app`
@@ -888,18 +907,18 @@ Build compiles cleanly, app launches on simulator successfully
 
 **Before Fixes:**
 
-- ❌ App freezes during contact operations
-- ❌ UI unresponsive during peer discovery
-- ❌ Debugging experience painful due to hangs
-- ❌ Excessive console spam in Xcode
+- [FAIL] App freezes during contact operations
+- [FAIL] UI unresponsive during peer discovery
+- [FAIL] Debugging experience painful due to hangs
+- [FAIL] Excessive console spam in Xcode
 
 **After Fixes:**
 
-- ✅ App remains responsive during all operations
-- ✅ Smooth scrolling in contacts list
-- ✅ Debugging experience improved
-- ✅ Clean console output in DEBUG builds
-- ✅ Reduced memory pressure
+- [DONE] App remains responsive during all operations
+- [DONE] Smooth scrolling in contacts list
+- [DONE] Debugging experience improved
+- [DONE] Clean console output in DEBUG builds
+- [DONE] Reduced memory pressure
 
 ### Testing Recommendations
 
@@ -922,14 +941,14 @@ Build compiles cleanly, app launches on simulator successfully
 | Issue | Platform | Log Evidence | Status | Field | Value |
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | **ID** | CONTACT-STALE-001 | | | | |
-| **iOS Retry Storm** | iOS | `IronCoreError error 4` repeating every ~1 second | 🟢 Fixed | P0 | |
-| **msg=unknown** | Android | `delivery_attempt msg=unknown` in 5+ log entries | 🔴 Active | P1 | |
-| **Relay Circuit Failing** | Both | `Core-routed delivery failed... Network error` | 🔴 Active | P0 | |
-| **BLE Working** | Android | `✓ Delivery via BLE client` confirmed | 🟢 Working | - | |
+| **iOS Retry Storm** | iOS | `IronCoreError error 4` repeating every ~1 second | [GREEN] Fixed | P0 | |
+| **msg=unknown** | Android | `delivery_attempt msg=unknown` in 5+ log entries | [RED] Active | P1 | |
+| **Relay Circuit Failing** | Both | `Core-routed delivery failed... Network error` | [RED] Active | P0 | |
+| **BLE Working** | Android | `[OK] Delivery via BLE client` confirmed | [GREEN] Working | - | |
 
 ### Specific Fix Recommendations from Log Analysis
 
-#### P0: iOS Exponential Backoff (✅ IMPLEMENTED)
+#### P0: iOS Exponential Backoff ([DONE] IMPLEMENTED)
 
 **File:** [`iOS/SCMessenger/SCMessenger/Data/MeshRepository.swift`](../iOS/SCMessenger/SCMessenger/Data/MeshRepository.swift)
 
@@ -1173,11 +1192,11 @@ ssh relay-server "journalctl -u scm-relay --since '5 minutes ago'"
   - iOS `MeshRepository` now follows the same rejection model, preserves terminal failure codes in the pending outbox, stops retrying abandoned/device-mismatch sends, and renders `rejected` delivery state in the main tab legend/UI.
   - UniFFI bindings were regenerated and copied after the new `RegistrationStateInfo` / `send_message_status(...)` surface landed.
 - **Current WS completion state**:
-  - WS13.1 ✅ Identity device metadata + persistence
-  - WS13.2 ✅ Contact + request schema updates
-  - WS13.3 ✅ Registration protocol + signature verification
-  - WS13.4 ✅ Relay registry state machine + custody enforcement
-  - WS13.5 🟨 Handover/abandon queue migration + rejection UX implemented; Android physical-device verification passed, iPhone foreground-launch proof is still blocked by device lock
+  - WS13.1 [DONE] Identity device metadata + persistence
+  - WS13.2 [DONE] Contact + request schema updates
+  - WS13.3 [DONE] Registration protocol + signature verification
+  - WS13.4 [DONE] Relay registry state machine + custody enforcement
+  - WS13.5 [YELLOW] Handover/abandon queue migration + rejection UX implemented; Android physical-device verification passed, iPhone foreground-launch proof is still blocked by device lock
   - WS13.6 ⬜ NEXT: compatibility/migration matrix + acceptance lock
 - **Verification completed on 2026-03-13**:
   - `cargo build --workspace` — **PASS**
@@ -1247,9 +1266,9 @@ ssh relay-server "journalctl -u scm-relay --since '5 minutes ago'"
 - `./scripts/docs_sync_check.sh` — **PASS**
 
 **WS completion state:**
-- WS13.1 ✅ Identity device metadata + persistence
-- WS13.2 ✅ Contact + request schema updates
-- WS13.3 ✅ Registration protocol + signature verification
+- WS13.1 [DONE] Identity device metadata + persistence
+- WS13.2 [DONE] Contact + request schema updates
+- WS13.3 [DONE] Registration protocol + signature verification
 - WS13.4 ⬜ **NEXT:** Relay registry state machine + custody enforcement
 - WS13.5 ⬜ Handover/abandon queue migration + rejection UX
 - WS13.6 ⬜ Migration + compatibility + test matrix
@@ -1356,9 +1375,9 @@ ssh relay-server "journalctl -u scm-relay --since '5 minutes ago'"
   - `cargo test --workspace` — **pass**
   - `./scripts/docs_sync_check.sh` — **pass**
 - Audited live WS13 code state:
-  - **WS13.1 (Seniority/Device Storage)**: ✅ IMPLEMENTED AND VERIFIED in `core/src/identity/`.
-  - **WS13.2 (Contact Schema/Metadata)**: ✅ IMPLEMENTED AND VERIFIED in `core/src/store/contacts.rs` and `api.udl`.
-  - **WS13.3-13.6 (Protocols/Relay-Registry)**: 🔄 DEFERRED to v0.2.1.
+  - **WS13.1 (Seniority/Device Storage)**: [DONE] IMPLEMENTED AND VERIFIED in `core/src/identity/`.
+  - **WS13.2 (Contact Schema/Metadata)**: [DONE] IMPLEMENTED AND VERIFIED in `core/src/store/contacts.rs` and `api.udl`.
+  - **WS13.3-13.6 (Protocols/Relay-Registry)**: [IN-PROGRESS] DEFERRED to v0.2.1.
 - Blocker Status:
   - The architectural blocker (transport metadata threading) was resolved by widening the swarm send boundary to carry `recipient_identity_id` and `intended_device_id` end-to-end through `SwarmCommand::SendMessage`, `RelayRequest`, and all call-sites.
   - Full platform verification (Android/iOS binding regeneration) remains pending platform tooling (see R-WS13.2-02).
@@ -1462,9 +1481,9 @@ ssh relay-server "journalctl -u scm-relay --since '5 minutes ago'"
 
 ### Build Status
 
-- Core (Rust): ✅ Built successfully with peer discovery + blocking
-- Android: ✅ Deployed with bug fixes
-- iOS Framework: ✅ Rebuilt with peer discovery (2m 25s)
+- Core (Rust): [DONE] Built successfully with peer discovery + blocking
+- Android: [DONE] Deployed with bug fixes
+- iOS Framework: [DONE] Rebuilt with peer discovery (2m 25s)
 
 ### Documentation Created
 
@@ -1599,9 +1618,9 @@ ssh relay-server "journalctl -u scm-relay --since '5 minutes ago'"
 
 ### Build Status
 
-- Core (Rust): ✅ Built successfully with relay server
-- Android: ✅ Built and deployed with transport optimizations
-- iOS: ✅ Framework rebuilt with relay server (device 00008130-001A48DA18EB8D3A)
+- Core (Rust): [DONE] Built successfully with relay server
+- Android: [DONE] Built and deployed with transport optimizations
+- iOS: [DONE] Framework rebuilt with relay server (device 00008130-001A48DA18EB8D3A)
 
 ### Documentation Created
 
@@ -2201,7 +2220,7 @@ ssh relay-server "journalctl -u scm-relay --since '5 minutes ago'"
     - `Core-routed delivery failed ... Network error; trying alternative transports`
     - `Relay-circuit retry failed ... Network error`
     - message state cycling `forwarding -> stored` with `awaiting_receipt_delay_sec=8` and rising retry attempts.
-  - In the same windows Android logs repeatedly emit `✓ Delivery via BLE (target=...)` immediately followed by `Failed to initiate characteristic write ...` while also emitting characteristic-write-success callbacks.
+  - In the same windows Android logs repeatedly emit `[OK] Delivery via BLE (target=...)` immediately followed by `Failed to initiate characteristic write ...` while also emitting characteristic-write-success callbacks.
   - Android stats remain effectively stalled for delivery (`messagesRelayed=0`) during these retries.
   - iOS diagnostics history (`ios_diagnostics_latest.log`) and prior relay logs show heavy relay dial/identify churn and throttling, consistent with unstable internet-route availability during pairing runs.
 - RCA conclusion:
@@ -2383,7 +2402,7 @@ ssh relay-server "journalctl -u scm-relay --since '5 minutes ago'"
 **Platform:** Android
 **Priority:** Must fix before v0.2.1 release
 
-- **Contact Auto-Creation Duplication** ❌
+- **Contact Auto-Creation Duplication** [FAIL]
   - **Issue:** Same peer contact created twice (4 seconds apart) during discovery
   - **Root Cause:** Duplicate `onPeerIdentified` callbacks + non-idempotent contact creation
   - **Evidence:** MeshRepository logs show auto-create at 18:22:49.396, duplicate at 18:22:52.530 for relay peer ID `93a35a87...`
@@ -2391,19 +2410,19 @@ ssh relay-server "journalctl -u scm-relay --since '5 minutes ago'"
   - **Location:** `android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt` (onPeerIdentified callback)
   - **Audit:** See `tmp/scm_audit_logs/contact_audit_2026-03-14/CONTACT_PERSISTENCE_AUDIT_2026-03-14.md`
 
-- **Relay Peers in User Contact List** ⚠️
+- **Relay Peers in User Contact List** [WARNING]
   - **Issue:** Relay server auto-discovered via Internet and shown as contact "peer-93a35a87"
   - **Question:** Should relay infrastructure peers be in user-visible contact list?
   - **Options:** (A) Hide from contacts, or (B) Show with special indicator
   - **Design Decision Required:** Product + Core team
 
-- **Discovered Peers Persist in UI After Discovery Stops** ⚠️
+- **Discovered Peers Persist in UI After Discovery Stops** [WARNING]
   - **Issue:** Discovered peer continues showing for 6+ seconds after discovery stopped
   - **Evidence:** Peer shown from 18:22:49 to 18:23:08, even though stopDiscovery called at 18:23:02
   - **Root Cause:** Async discovery lifecycle or UI refresh batching
   - **Fix:** Ensure immediate UI removal when discovery stops
 
-- **Permission Request Loop on App Startup** ⚠️
+- **Permission Request Loop on App Startup** [WARNING]
   - **Issue:** 9+ rapid permission requests (location, BLE, notifications, nearby WiFi) in ~700ms
   - **Evidence:** Multiple "Requesting permissions" logs from 18:22:48.152 to 18:22:49.237
   - **Root Cause:** Multiple code paths requesting same permissions without deduplication

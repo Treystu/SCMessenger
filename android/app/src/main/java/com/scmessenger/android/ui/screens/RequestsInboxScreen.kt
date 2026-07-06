@@ -41,7 +41,7 @@ fun RequestsInboxScreen(
                 title = { Text(stringResource(R.string.requests_inbox_title)) },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.requests_inbox_content_desc_back))
                     }
                 }
             )

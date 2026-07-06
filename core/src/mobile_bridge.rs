@@ -443,7 +443,7 @@ impl MeshService {
         }
 
         // Shutdown the swarm bridge gracefully
-        self.swarm_bridge.shutdown();
+        self.swarm_bridge.shutdown_blocking();
 
         // Clear headless mode
         *self.swarm_headless_mode.lock() = None;
@@ -474,7 +474,7 @@ impl MeshService {
 
     pub fn get_stats(&self) -> ServiceStats {
         let mut stats = self.stats.lock().clone();
-        let peers = self.get_swarm_bridge().get_peers();
+        let peers = self.get_swarm_bridge().get_peers_blocking();
         stats.peers_discovered = peers.len() as u32;
         stats
     }
@@ -489,7 +489,9 @@ impl MeshService {
     }
 
     /// Update keepalive interval for a peer connection.
-    pub fn update_keepalive(
+    ///
+    /// Async FFI (Issue 5): exported to Kotlin as a `suspend fun`.
+    pub async fn update_keepalive(
         &self,
         peer_id: String,
         interval_secs: u64,
@@ -503,8 +505,9 @@ impl MeshService {
             .lock()
             .clone()
             .ok_or(crate::IronCoreError::NetworkError)?;
-        let rt = self.swarm_bridge.get_runtime_handle();
-        rt.block_on(handle.update_keepalive(peer_id_parsed, interval_secs))
+        handle
+            .update_keepalive(peer_id_parsed, interval_secs)
+            .await
             .map_err(|_| crate::IronCoreError::NetworkError)
     }
 
@@ -514,8 +517,8 @@ impl MeshService {
     }
 
     pub fn get_connection_path_state(&self) -> ConnectionPathState {
-        let peers = self.swarm_bridge.get_peers();
-        let listeners = self.swarm_bridge.get_listeners();
+        let peers = self.swarm_bridge.get_peers_blocking();
+        let listeners = self.swarm_bridge.get_listeners_blocking();
         let nat = self.nat_status.lock().clone();
 
         if peers.is_empty() {
@@ -556,17 +559,17 @@ impl MeshService {
             ),
             (
                 "peers".into(),
-                serde_json::to_value(self.swarm_bridge.get_peers())
+                serde_json::to_value(self.swarm_bridge.get_peers_blocking())
                     .unwrap_or(serde_json::Value::Null),
             ),
             (
                 "listeners".into(),
-                serde_json::to_value(self.swarm_bridge.get_listeners())
+                serde_json::to_value(self.swarm_bridge.get_listeners_blocking())
                     .unwrap_or(serde_json::Value::Null),
             ),
             (
                 "external_addrs".into(),
-                serde_json::to_value(self.swarm_bridge.get_external_addresses())
+                serde_json::to_value(self.swarm_bridge.get_external_addresses_blocking())
                     .unwrap_or(serde_json::Value::Null),
             ),
             (
@@ -636,7 +639,7 @@ impl MeshService {
                 },
                 if headless_mode { "headless" } else { "full" }
             );
-            self.swarm_bridge.shutdown();
+            self.swarm_bridge.shutdown_blocking();
             *self.swarm_bridge.handle.lock() = None;
             *self.swarm_headless_mode.lock() = None;
         }
@@ -680,6 +683,15 @@ impl MeshService {
         let service_storage_path = self.storage_path.clone();
         let stats = self.stats.clone();
 
+        // TCP-listener-zombie fix: the OS socket bind happens asynchronously
+        // inside the swarm task, so returning Ok(()) here used to mean "the
+        // thread was spawned", not "we are listening". This channel carries
+        // the real startup outcome (first NewListenAddr, or a bind failure)
+        // back to this FFI call so callers can no longer observe a
+        // "Running" service with no listener.
+        let (startup_tx, startup_rx) = std::sync::mpsc::sync_channel::<Result<(), String>>(1);
+        let await_listener = listen_multiaddr.is_some();
+
         // Spawn a dedicated OS thread that owns its own Tokio runtime.
         // This is the safest approach for mobile: we cannot rely on being
         // called from a Tokio context, and we must not hold any Mutex across
@@ -702,6 +714,7 @@ impl MeshService {
                 match rt {
                     Ok(rt) => {
                         rt.block_on(async move {
+                            let mut startup_signal = Some(startup_tx);
                             let (event_tx, mut event_rx) = tokio::sync::mpsc::channel(100);
 
                             let iron_core_handle = {
@@ -736,6 +749,13 @@ impl MeshService {
                                     tracing::info!("Swarm started, wiring bridge");
                                     swarm_bridge.set_handle(handle.clone());
                                     *swarm_mode_state.lock() = Some(headless_mode);
+                                    if !await_listener {
+                                        // No listen address requested: nothing to
+                                        // wait for, report startup success now.
+                                        if let Some(tx) = startup_signal.take() {
+                                            let _ = tx.try_send(Ok(()));
+                                        }
+                                    }
                                     // Apply stored relay budget
                                     let budget = *relay_budget_init.lock();
                                     if let Err(e) = handle.set_relay_budget(budget).await {
@@ -773,7 +793,7 @@ impl MeshService {
                                                                             if delay_ms > 0 {
                                                                                 tokio::time::sleep(tokio::time::Duration::from_millis(delay_ms)).await;
                                                                             }
-                                                                            let _ = bridge_clone.send_message(next_peer_id.to_string(), payload, None, None);
+                                                                            let _ = bridge_clone.send_message(next_peer_id.to_string(), payload, None, None).await;
                                                                         });
                                                                         drop(spawn_res);
 
@@ -955,6 +975,33 @@ impl MeshService {
                                                     }
                                                 }
                                             }
+                                            crate::transport::SwarmEvent::ListeningOn(
+                                                addr,
+                                            ) => {
+                                                tracing::info!("Swarm listening on {}", addr);
+                                                eprintln!("[IronCore] [OK] Swarm listening on {}", addr);
+                                                if let Some(tx) = startup_signal.take() {
+                                                    let _ = tx.try_send(Ok(()));
+                                                }
+                                            }
+                                            crate::transport::SwarmEvent::ListenerFailed {
+                                                listener_id,
+                                                error,
+                                            } => {
+                                                tracing::error!(
+                                                    "Swarm listener {} failed: {}",
+                                                    listener_id,
+                                                    error
+                                                );
+                                                eprintln!(
+                                                    "[IronCore] [ERROR] Swarm listener {} failed: {}",
+                                                    listener_id,
+                                                    error
+                                                );
+                                                if let Some(tx) = startup_signal.take() {
+                                                    let _ = tx.try_send(Err(error));
+                                                }
+                                            }
                                             other => {
                                                 tracing::debug!("Swarm event: {:?}", other);
                                             }
@@ -964,18 +1011,41 @@ impl MeshService {
                                 Err(e) => {
                                     *swarm_mode_state.lock() = None;
                                     tracing::error!("Failed to start swarm: {:?}", e);
+                                    if let Some(tx) = startup_signal.take() {
+                                        let _ = tx.try_send(Err(format!("{:?}", e)));
+                                    }
                                 }
                             }
                         });
                     }
                     Err(e) => {
                         tracing::error!("Failed to create swarm Tokio runtime: {}", e);
+                        let _ = startup_tx.try_send(Err(format!(
+                            "failed to create swarm Tokio runtime: {}",
+                            e
+                        )));
                     }
                 }
             })
             .map_err(|_| crate::IronCoreError::Internal)?;
 
-        Ok(())
+        // Block until the swarm reports its true startup outcome: either the
+        // first listener is actually bound (NewListenAddr), the bind failed
+        // (ListenerFailed), or swarm construction itself errored. Callers must
+        // invoke this from a background thread/dispatcher, never the UI thread.
+        match startup_rx.recv_timeout(std::time::Duration::from_secs(15)) {
+            Ok(Ok(())) => Ok(()),
+            Ok(Err(e)) => {
+                tracing::error!("Swarm startup failed: {}", e);
+                eprintln!("[IronCore] [ERROR] Swarm startup failed: {}", e);
+                Err(crate::IronCoreError::NetworkError)
+            }
+            Err(_) => {
+                tracing::error!("Swarm startup timed out waiting for first listener");
+                eprintln!("[IronCore] [ERROR] Swarm startup timed out waiting for first listener");
+                Err(crate::IronCoreError::NetworkError)
+            }
+        }
     }
 
     pub fn get_swarm_bridge(&self) -> std::sync::Arc<SwarmBridge> {
@@ -1096,8 +1166,11 @@ impl MeshService {
             );
         }
 
-        // Apply relay budget from the new engine (this fulfills the 'wiring' requirement)
-        self.set_relay_budget(relay_adj.max_per_hour);
+        // Apply relay budget from the new engine (this fulfills the 'wiring'
+        // requirement). Non-blocking variant: update_device_state is invoked
+        // from sync platform callbacks (battery/network receivers) and must
+        // not wait on the swarm reply.
+        self.set_relay_budget_nonblocking(relay_adj.max_per_hour);
 
         // P0_RELIABILITY_001: Notify platform bridge of state change if it's subscribed.
         // This ensures the platform (Android/iOS) UI stays in sync with core adjustments.
@@ -1128,23 +1201,16 @@ impl MeshService {
         self.device_state.read().clone()
     }
 
-    pub fn set_relay_budget(&self, messages_per_hour: u32) {
-        tracing::info!("Relay budget set: {} msgs/hour", messages_per_hour);
-        *self.relay_budget.lock() = messages_per_hour;
+    /// Async FFI (Issue 5): exported to Kotlin as a `suspend fun`.
+    pub async fn set_relay_budget(&self, messages_per_hour: u32) {
+        self.apply_relay_budget_state(messages_per_hour);
 
-        // P1_CORE_001: Sync drift protocol state with relay budget
-        if let Some(core) = self.core.lock().as_ref() {
-            if messages_per_hour > 0 {
-                core.drift_activate();
-            } else {
-                core.drift_deactivate();
-            }
-        }
-
-        // If swarm is already running, forward the budget update immediately
-        if let Some(handle) = self.swarm_bridge.handle.lock().clone() {
-            let rt = self.swarm_bridge.get_runtime_handle();
-            rt.block_on(handle.set_relay_budget(messages_per_hour)).ok();
+        // If swarm is already running, forward the budget update immediately.
+        // Bind the clone to a local first: an `if let` on `.lock().clone()`
+        // would keep the (non-Send) guard alive across the await.
+        let handle = self.swarm_bridge.handle.lock().clone();
+        if let Some(handle) = handle {
+            handle.set_relay_budget(messages_per_hour).await.ok();
         }
     }
 
@@ -1196,7 +1262,9 @@ impl MeshService {
                         // For BLE, we might want to try both BLE and Internet
                         let bridge_clone = self.swarm_bridge.clone();
                         let spawn_res = bridge_clone.get_runtime_handle().spawn(async move {
-                            let _ = bridge_clone.send_message(next_hop_hex, payload, None, None);
+                            let _ = bridge_clone
+                                .send_message(next_hop_hex, payload, None, None)
+                                .await;
                         });
                         drop(spawn_res);
 
@@ -1330,7 +1398,7 @@ impl MeshService {
                         } else {
                             format!("/ip4/{}/tcp/{}", path_info.ip_address, path_info.port)
                         };
-                        let _ = swarm_bridge.dial_async(multiaddr_str).await;
+                        let _ = swarm_bridge.dial(multiaddr_str).await;
                     }
                 }
             });
@@ -1396,7 +1464,7 @@ impl MeshService {
             let rt = swarm_bridge.get_runtime_handle();
             rt.spawn(async move {
                 let multiaddr_str = format!("/ip4/{}/tcp/9001", group_owner_ip);
-                let _ = swarm_bridge.dial_async(multiaddr_str).await;
+                let _ = swarm_bridge.dial(multiaddr_str).await;
             });
         }
     }
@@ -1606,6 +1674,38 @@ impl MeshService {
 
 // Non-UniFFI internal methods for MeshService
 impl MeshService {
+    /// Apply the local (synchronous) side of a relay-budget change: persist
+    /// the budget and toggle drift protocol state. Shared by the async FFI
+    /// `set_relay_budget` and the internal non-blocking variant.
+    fn apply_relay_budget_state(&self, messages_per_hour: u32) {
+        tracing::info!("Relay budget set: {} msgs/hour", messages_per_hour);
+        *self.relay_budget.lock() = messages_per_hour;
+
+        // P1_CORE_001: Sync drift protocol state with relay budget
+        if let Some(core) = self.core.lock().as_ref() {
+            if messages_per_hour > 0 {
+                core.drift_activate();
+            } else {
+                core.drift_deactivate();
+            }
+        }
+    }
+
+    /// Relay-budget update for internal callers on synchronous paths
+    /// (e.g. `update_device_state`, which runs inside platform battery /
+    /// network callbacks). Applies local state immediately and forwards the
+    /// budget to the swarm as a spawned task instead of awaiting it.
+    pub(crate) fn set_relay_budget_nonblocking(&self, messages_per_hour: u32) {
+        self.apply_relay_budget_state(messages_per_hour);
+
+        if let Some(handle) = self.swarm_bridge.handle.lock().clone() {
+            let rt = self.swarm_bridge.get_runtime_handle();
+            rt.spawn(async move {
+                let _ = handle.set_relay_budget(messages_per_hour).await;
+            });
+        }
+    }
+
     /// Compute recommended behavior from a device state snapshot.
     ///
     /// This is a pure function — no side-effects — so callers can call it at
@@ -2890,14 +2990,17 @@ impl SwarmBridge {
     ///
     /// `recipient_identity_id` and `intended_device_id` are WS13 tight-pair metadata.
     /// Pass `None` for both if the caller has no device record for the recipient.
-    pub fn send_message(
+    ///
+    /// Async FFI (Issue 5): exported to Kotlin as a `suspend fun`; awaits the
+    /// swarm reply instead of parking the calling thread in `block_on`.
+    pub async fn send_message(
         &self,
         peer_id: String,
         data: Vec<u8>,
         recipient_identity_id: Option<String>,
         intended_device_id: Option<String>,
     ) -> Result<(), crate::IronCoreError> {
-        // Clone handle and drop guard before block_on to prevent deadlock
+        // Clone handle and drop guard before awaiting to prevent deadlock
         let handle = self
             .handle
             .lock()
@@ -2917,20 +3020,22 @@ impl SwarmBridge {
             self.dispatch_ble_packet(peer_id, data.clone());
         }
 
-        // Block on async operation
-        let rt = self.get_runtime_handle();
-        rt.block_on(handle.send_message(
-            peer_id_parsed,
-            data,
-            recipient_identity_id,
-            intended_device_id,
-        ))
-        .map_err(|_| crate::IronCoreError::NetworkError)
+        handle
+            .send_message(
+                peer_id_parsed,
+                data,
+                recipient_identity_id,
+                intended_device_id,
+            )
+            .await
+            .map_err(|_| crate::IronCoreError::NetworkError)
     }
 
     /// Send an encrypted message envelope and return the raw swarm error string
     /// on failure so adapters can classify retryable vs terminal rejection.
-    pub fn send_message_status(
+    ///
+    /// Async FFI (Issue 5): exported to Kotlin as a `suspend fun`.
+    pub async fn send_message_status(
         &self,
         peer_id: String,
         data: Vec<u8>,
@@ -2956,29 +3061,31 @@ impl SwarmBridge {
             self.dispatch_ble_packet(peer_id, data.clone());
         }
 
-        let rt = self.get_runtime_handle();
-        rt.block_on(handle.send_message(
-            peer_id_parsed,
-            data,
-            recipient_identity_id,
-            intended_device_id,
-        ))
-        .err()
-        .map(|err| err.to_string())
+        handle
+            .send_message(
+                peer_id_parsed,
+                data,
+                recipient_identity_id,
+                intended_device_id,
+            )
+            .await
+            .err()
+            .map(|err| err.to_string())
     }
 
     /// Send an encrypted message envelope to ALL connected peers.
     /// Since messages are encrypted for a specific recipient, broadcasting to all peers is safe.
     /// Only the intended recipient can decrypt the payload.
-    pub fn send_to_all_peers(&self, data: Vec<u8>) -> Result<(), crate::IronCoreError> {
+    ///
+    /// Async FFI (Issue 5): exported to Kotlin as a `suspend fun`.
+    pub async fn send_to_all_peers(&self, data: Vec<u8>) -> Result<(), crate::IronCoreError> {
         let handle = self
             .handle
             .lock()
             .clone()
             .ok_or(crate::IronCoreError::NetworkError)?;
 
-        let rt = self.get_runtime_handle();
-        let peers = rt.block_on(handle.get_peers()).unwrap_or_default();
+        let peers = handle.get_peers().await.unwrap_or_default();
 
         // P0_MESH_004: Dual-stack broadcast via BLE
         let ble_peers = self.nearby_ble_peers.lock().clone();
@@ -2989,7 +3096,7 @@ impl SwarmBridge {
 
         let mut sent = 0usize;
         for peer_id in peers {
-            match rt.block_on(handle.send_message(peer_id, data.clone(), None, None)) {
+            match handle.send_message(peer_id, data.clone(), None, None).await {
                 Ok(()) => sent += 1,
                 Err(e) => {
                     tracing::warn!("send_to_all_peers: failed to send to {}: {:?}", peer_id, e)
@@ -3006,31 +3113,11 @@ impl SwarmBridge {
 
     /// Dial a peer at a multiaddress.
     ///
-    /// For FFI/sync callers only. Calling this from within an already-running
-    /// tokio task (e.g. a `rt.spawn`'d future) panics ("Cannot start a
-    /// runtime from within a runtime") because it blocks on the same
-    /// runtime that's driving the caller — use `dial_async` there instead.
-    pub fn dial(&self, multiaddr: String) -> Result<(), crate::IronCoreError> {
-        let handle = self
-            .handle
-            .lock()
-            .clone()
-            .ok_or(crate::IronCoreError::NetworkError)?;
-
-        let addr =
-            Multiaddr::from_str(&multiaddr).map_err(|_| crate::IronCoreError::InvalidInput)?;
-
-        let rt = self.get_runtime_handle();
-        rt.block_on(handle.dial(addr))
-            .map_err(|_| crate::IronCoreError::NetworkError)
-    }
-
-    /// Dial a peer at a multiaddress from within an already-running async
-    /// context (e.g. a task spawned to react to a proximity-transport
-    /// discovery callback). Awaits the dial directly instead of blocking the
-    /// current worker thread on it, so it's safe to call from `rt.spawn`'d
-    /// futures where `dial` is not.
-    pub(crate) async fn dial_async(&self, multiaddr: String) -> Result<(), crate::IronCoreError> {
+    /// Async FFI (Issue 5): exported to Kotlin as a `suspend fun`. Safe to
+    /// call from any context, including `rt.spawn`'d futures — it awaits the
+    /// dial instead of blocking the calling thread (the old sync version
+    /// panicked with "Cannot start a runtime from within a runtime" there).
+    pub async fn dial(&self, multiaddr: String) -> Result<(), crate::IronCoreError> {
         let handle = self
             .handle
             .lock()
@@ -3046,100 +3133,110 @@ impl SwarmBridge {
             .map_err(|_| crate::IronCoreError::NetworkError)
     }
 
-    pub fn get_peers(&self) -> Vec<String> {
+    pub async fn get_peers(&self) -> Vec<String> {
         let handle = match self.handle.lock().clone() {
             Some(h) => h,
             None => return Vec::new(),
         };
 
-        let rt = self.get_runtime_handle();
-        rt.block_on(handle.get_peers())
+        handle
+            .get_peers()
+            .await
             .unwrap_or_default()
             .iter()
             .map(|peer_id| peer_id.to_string())
             .collect()
     }
 
-    pub fn get_listeners(&self) -> Vec<String> {
+    pub async fn get_listeners(&self) -> Vec<String> {
         let handle = match self.handle.lock().clone() {
             Some(h) => h,
             None => return Vec::new(),
         };
 
-        let rt = self.get_runtime_handle();
-        rt.block_on(handle.get_listeners())
+        handle
+            .get_listeners()
+            .await
             .unwrap_or_default()
             .iter()
             .map(|addr| addr.to_string())
             .collect()
     }
 
-    pub fn get_external_addresses(&self) -> Vec<String> {
+    pub async fn get_external_addresses(&self) -> Vec<String> {
         let handle = match self.handle.lock().clone() {
             Some(h) => h,
             None => return Vec::new(),
         };
 
-        let rt = self.get_runtime_handle();
-        rt.block_on(handle.get_external_addresses())
+        handle
+            .get_external_addresses()
+            .await
             .unwrap_or_default()
             .iter()
             .map(|addr| addr.to_string())
             .collect()
     }
 
-    pub fn get_topics(&self) -> Vec<String> {
+    pub async fn get_topics(&self) -> Vec<String> {
         let handle = match self.handle.lock().clone() {
             Some(h) => h,
             None => return Vec::new(),
         };
 
-        // Block on async operation
-        let rt = self.get_runtime_handle();
-        rt.block_on(handle.get_topics()).unwrap_or_default()
+        handle.get_topics().await.unwrap_or_default()
     }
 
     /// Subscribe to a Gossipsub topic.
-    pub fn subscribe_topic(&self, topic: String) -> Result<(), crate::IronCoreError> {
+    pub async fn subscribe_topic(&self, topic: String) -> Result<(), crate::IronCoreError> {
         let handle = self
             .handle
             .lock()
             .clone()
             .ok_or(crate::IronCoreError::NetworkError)?;
 
-        let rt = self.get_runtime_handle();
-        rt.block_on(handle.subscribe_topic(topic))
+        handle
+            .subscribe_topic(topic)
+            .await
             .map_err(|_| crate::IronCoreError::NetworkError)
     }
 
-    pub fn unsubscribe_topic(&self, topic: String) -> Result<(), crate::IronCoreError> {
+    pub async fn unsubscribe_topic(&self, topic: String) -> Result<(), crate::IronCoreError> {
         let handle = self
             .handle
             .lock()
             .clone()
             .ok_or(crate::IronCoreError::NetworkError)?;
 
-        let rt = self.get_runtime_handle();
-        rt.block_on(handle.unsubscribe_topic(topic))
+        handle
+            .unsubscribe_topic(topic)
+            .await
             .map_err(|_| crate::IronCoreError::NetworkError)
     }
 
-    pub fn publish_topic(&self, topic: String, data: Vec<u8>) -> Result<(), crate::IronCoreError> {
+    pub async fn publish_topic(
+        &self,
+        topic: String,
+        data: Vec<u8>,
+    ) -> Result<(), crate::IronCoreError> {
         let handle = self
             .handle
             .lock()
             .clone()
             .ok_or(crate::IronCoreError::NetworkError)?;
 
-        let rt = self.get_runtime_handle();
-        rt.block_on(handle.publish_topic(topic, data))
+        handle
+            .publish_topic(topic, data)
+            .await
             .map_err(|_| crate::IronCoreError::NetworkError)
     }
 
-    pub fn shutdown(&self) {
-        if let Some(handle) = self.handle.lock().clone() {
-            let rt = self.get_runtime_handle();
-            let _ = rt.block_on(handle.shutdown());
+    pub async fn shutdown(&self) {
+        // Bind the clone to a local first: an `if let` on `.lock().clone()`
+        // would keep the (non-Send) guard alive across the await.
+        let handle = self.handle.lock().clone();
+        if let Some(handle) = handle {
+            let _ = handle.shutdown().await;
         }
     }
 }
@@ -3157,6 +3254,70 @@ impl SwarmBridge {
         self.captured_handle
             .clone()
             .unwrap_or_else(get_global_runtime)
+    }
+
+    // ------------------------------------------------------------------
+    // Blocking snapshots for internal *synchronous* Rust callers only
+    // (diagnostics/state queries invoked from sync FFI paths like
+    // get_connection_path_state / export_diagnostics / MeshService::stop).
+    // These MUST NOT be called from an async context — they block the
+    // calling thread on the swarm reply. The FFI surface itself is async
+    // (Issue 5); do not re-export these through UniFFI.
+    // ------------------------------------------------------------------
+
+    pub(crate) fn get_peers_blocking(&self) -> Vec<String> {
+        let handle = match self.handle.lock().clone() {
+            Some(h) => h,
+            None => return Vec::new(),
+        };
+        let rt = self.get_runtime_handle();
+        rt.block_on(handle.get_peers())
+            .unwrap_or_default()
+            .iter()
+            .map(|peer_id| peer_id.to_string())
+            .collect()
+    }
+
+    pub(crate) fn get_listeners_blocking(&self) -> Vec<String> {
+        let handle = match self.handle.lock().clone() {
+            Some(h) => h,
+            None => return Vec::new(),
+        };
+        let rt = self.get_runtime_handle();
+        rt.block_on(handle.get_listeners())
+            .unwrap_or_default()
+            .iter()
+            .map(|addr| addr.to_string())
+            .collect()
+    }
+
+    pub(crate) fn get_external_addresses_blocking(&self) -> Vec<String> {
+        let handle = match self.handle.lock().clone() {
+            Some(h) => h,
+            None => return Vec::new(),
+        };
+        let rt = self.get_runtime_handle();
+        rt.block_on(handle.get_external_addresses())
+            .unwrap_or_default()
+            .iter()
+            .map(|addr| addr.to_string())
+            .collect()
+    }
+
+    pub(crate) fn get_topics_blocking(&self) -> Vec<String> {
+        let handle = match self.handle.lock().clone() {
+            Some(h) => h,
+            None => return Vec::new(),
+        };
+        let rt = self.get_runtime_handle();
+        rt.block_on(handle.get_topics()).unwrap_or_default()
+    }
+
+    pub(crate) fn shutdown_blocking(&self) {
+        if let Some(handle) = self.handle.lock().clone() {
+            let rt = self.get_runtime_handle();
+            let _ = rt.block_on(handle.shutdown());
+        }
     }
 
     /// Dispatch a BLE packet to the platform layer.
@@ -3661,8 +3822,8 @@ mod tests {
         });
         let bridge = svc.get_swarm_bridge();
         // Initial bridge should have no handle set yet
-        assert!(bridge.get_peers().is_empty());
-        assert!(bridge.get_topics().is_empty());
+        assert!(bridge.get_peers_blocking().is_empty());
+        assert!(bridge.get_topics_blocking().is_empty());
     }
 
     #[test]

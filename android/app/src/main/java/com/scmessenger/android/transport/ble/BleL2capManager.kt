@@ -37,6 +37,14 @@ class BleL2capManager(
 
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
+    // Issue 6: BluetoothServerSocket.accept() blocks indefinitely and has no
+    // NIO/async equivalent. Park it on a dedicated daemon thread so it can
+    // never consume a thread from the shared Dispatchers.IO pool (which other
+    // subsystems — outbox flush, diagnostics, identity sync — depend on).
+    private val acceptDispatcher = java.util.concurrent.Executors.newSingleThreadExecutor { r ->
+        Thread(r, "l2cap-accept").apply { isDaemon = true }
+    }.asCoroutineDispatcher()
+
     private var isListening = false
 
     /**
@@ -66,7 +74,7 @@ class BleL2capManager(
             return
         }
 
-        scope.launch {
+        scope.launch(acceptDispatcher) {
             try {
                 serverSocket = adapter.listenUsingInsecureL2capChannel()
                 isListening = true

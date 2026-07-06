@@ -26,10 +26,10 @@ These 4 issues were discovered during hands-on testing and confirmed via `adb lo
 5. `SwarmEvent2` enum (line 1348) has a `ListeningOn` variant but **no** `ListenerFailed` variant — there is no mechanism to propagate failure.
 
 **Fable 5 Deliverables:**
-- [ ] Add `ListenerFailed { listener_id, error }` variant to `SwarmEvent2`
-- [ ] In native event loop: on `ListenerError`, send `SwarmEvent2::ListenerFailed` via `event_tx`
-- [ ] In `mobile_bridge.rs`: `start_swarm_with_config` must use a `oneshot::channel` to await the first `NewListenAddr` event before returning success
-- [ ] Kotlin: `MeshRepository.initializeAndStartSwarm` must not mark state `RUNNING` until the awaited startup returns success
+- [x] Add `ListenerFailed { listener_id, error }` variant to `SwarmEvent2` — **DONE** (2026-07-05)
+- [x] In native event loop: on `ListenerError`, send `SwarmEvent2::ListenerFailed` via `event_tx` — **DONE** (also `ListenerClosed`, and the WASM event loop)
+- [x] In `mobile_bridge.rs`: `start_swarm` blocks on a `sync_channel` (15s bound) until the first `ListeningOn` event, a `ListenerFailed`, or swarm-start error — **DONE**
+- [x] Kotlin: `MeshRepository.initializeAndStartSwarm` is now a suspend fun on Dispatchers.IO; on failure the swarmBridge is nulled and the failure logged loudly — **DONE**
 - [ ] ~50 LOC Rust + ~20 LOC Kotlin
 
 ---
@@ -47,9 +47,9 @@ These 4 issues were discovered during hands-on testing and confirmed via `adb lo
 5. The entire `Dispatchers.IO` pool is frozen. All other background work (outbox flush, diagnostics, identity sync) starves. ANR fires.
 
 **Fable 5 Deliverables:**
-- [ ] Replace `java.util.concurrent.Semaphore` with `kotlinx.coroutines.sync.Semaphore` and `sem.withPermit { ... }`
-- [ ] Replace `Socket().connect()` in `probeHost()` with `suspendCancellableCoroutine` wrapping `java.nio.channels.AsynchronousSocketChannel` (`CompletionHandler` pattern, verified compatible with `minSdk=26`)
-- [ ] Wrap with `withTimeoutOrNull(connectTimeoutMs)` for clean cancellation
+- [x] Replace `java.util.concurrent.Semaphore` with `kotlinx.coroutines.sync.Semaphore` and `sem.withPermit { ... }` — **DONE**
+- [x] Replace `Socket().connect()` in `probeHost()` with `suspendCancellableCoroutine` wrapping `java.nio.channels.AsynchronousSocketChannel` — **DONE** (peek-read dropped; accept == liveness)
+- [x] Wrap with `withTimeoutOrNull(connectTimeoutMs)` for clean cancellation — **DONE**
 - [ ] ~80 LOC Kotlin
 
 ---
@@ -85,9 +85,9 @@ These 4 issues were discovered during hands-on testing and confirmed via `adb lo
 3. **TIME_WAIT socket poisoning:** `SubnetProbe` opens a raw `Socket().connect()`, the Windows CLI receives it, attempts Noise negotiation, fails (raw TCP, not libp2p), and the socket enters `TIME_WAIT`. Milliseconds later, Android fires the real libp2p dial to the same IP:port — the OS may reject the rapid reconnection.
 
 **Fable 5 Deliverables:**
-- [ ] `MeshRepository.onLanAddressResolved` must use the existing `open suspend fun dial()` wrapped in `withContext(Dispatchers.IO)` instead of calling the bridge directly
-- [ ] Implement PeerId extraction: either a lightweight probe handshake in `SubnetProbe`, or rely purely on mDNS (which already provides PeerId)
-- [ ] Add a configurable delay (e.g., 500ms) between the SubnetProbe raw ping and the libp2p dial to let `TIME_WAIT` clear
+- [x] `MeshRepository.onLanAddressResolved` now routes through the suspend `dial()` wrapper — **DONE** (the FFI dial itself is now async, so no withContext needed)
+- [x] PeerId: rely on mDNS (verified: MdnsServiceDiscovery already builds `/ip4/../tcp/../p2p/<PeerId>` from TXT records); SubnetProbe remains a PeerId-less fallback — **DONE**
+- [x] Added `dialDelayMs` (default 500ms) between SubnetProbe raw ping and the dial callback — **DONE**
 - [ ] ~30 LOC Kotlin + ~0 LOC Rust (if mDNS-only approach)
 
 ---
@@ -122,8 +122,8 @@ Every one of these Rust functions calls `rt.block_on()`, which blocks the callin
 | `update_keepalive` | 507 | Not actively used but exported |
 
 **Fable 5 Deliverables:**
-- [ ] Convert all 14 functions to `async fn` in Rust. UniFFI will automatically export these as Kotlin `suspend fun`.
-- [ ] Audit all Kotlin call sites to ensure they use the suspend variant and remove any `withContext(Dispatchers.IO)` wrappers (no longer needed once async).
+- [x] Converted all 14 functions to `async fn` (12 SwarmBridge + MeshService update_keepalive/set_relay_budget). Internal sync Rust callers use new `*_blocking` helpers; update_device_state uses `set_relay_budget_nonblocking` (spawned) — **DONE**
+- [x] Audited all Kotlin call sites: suspend-context sites call directly; sync wrappers (connectToPeer, topics, setRelayBudget, sendToAllPeers) launch on repoScope; teardown (stopMeshService/resetAllData) uses bounded runBlocking; value-returning getters (getTopics/getExternalAddresses/getListeningAddresses) use bounded runBlocking pending caller suspend-ification — **DONE**
 - [ ] ~200 LOC Rust refactor + ~100 LOC Kotlin call-site updates
 
 ---
@@ -144,11 +144,11 @@ Every one of these Rust functions calls `rt.block_on()`, which blocks the callin
 **Note:** `MeshVpnService.kt` line 87 uses `Thread.sleep(100)` but this runs on a raw `Thread`, not a coroutine — no fix needed.
 
 **Fable 5 Deliverables:**
-- [ ] Fix all 6 `runBlocking` call sites (~30 LOC)
-- [ ] Add `withContext(Dispatchers.IO)` to `NetworkTypeDetector` (~5 LOC)
-- [ ] Replace `CountDownLatch` → `suspendCancellableCoroutine` in BLE GATT (~30 LOC)
-- [ ] Convert `BleGattServer.sendFragmented` to `suspend fun` and replace `Thread.sleep(2)` → `delay(2)` (~15 LOC — requires updating callers, not a 2-line fix)
-- [ ] NIO migration for 3 transport accept loops (~120 LOC total, complex)
+- [x] Fixed all 6 `runBlocking` DataStore call sites: 5 read a @Volatile snapshot fed by a background collector; syncNicknameFromDatastore launches on repoScope — **DONE**
+- [x] NetworkTypeDetector.isPortBlocked now suspend + withContext(Dispatchers.IO); detectNetworkType/isCellularNetwork suspend (only caller is suspend DiagnosticsReporter.generateReport) — **DONE**
+- [x] BleGattClient write-initiation latch replaced with CompletableDeferred + withTimeoutOrNull; sendData is suspend — **DONE**
+- [x] BleGattServer.sendFragmented/sendData suspend, Thread.sleep(2) → delay(2); TransportManager.sendData/sendViaTransport suspend (callers verified in coroutine contexts) — **DONE**
+- [x] Accept loops moved OFF Dispatchers.IO onto dedicated daemon-thread dispatchers (WifiAware cached pool incl. stream pumps; WifiDirect + BleL2cap single-thread). NOTE: deliberate deviation from literal NIO selectors — BluetoothServerSocket has no NIO equivalent and the accepted sockets feed blocking stream pumps, so dedicated threads fix the actual failure mode (shared IO-pool starvation) at far lower risk — **DONE**
 
 ---
 
@@ -165,8 +165,8 @@ Every one of these Rust functions calls `rt.block_on()`, which blocks the callin
 
 **Fable 5 Deliverables:**
 - [x] **[CRITICAL]** Fix `session_manager.rs` lines 299/305: replace `.ok()` with `.map_err(|e| anyhow!(...))` and propagate the error to fail session initialization loudly (~10 LOC) — **DONE** (verified `cargo check`)
-- [ ] Add `reply: mpsc::Sender<Result<(), String>>` to `SubscribeTopic`, `UnsubscribeTopic`, `PublishTopic` SwarmCommands (~40 LOC)
-- [ ] Add `ListenerFailed` variant to `SwarmEvent2` and propagate in event loop (~20 LOC, overlaps with Issue 1)
+- [x] Added reply channels to SubscribeTopic/UnsubscribeTopic/PublishTopic in both native and WASM command loops; SwarmHandle methods await the outcome (publish failures like InsufficientPeers now reach callers) — **DONE**
+- [x] `ListenerFailed` variant added and propagated (see Issue 1) — **DONE**
 
 ---
 
@@ -181,15 +181,15 @@ The BLE Central Ingress loop in `cli/src/ble_mesh.rs` is the **only** retry-loop
 
 | # | Issue | Severity | Est. LOC | Complexity |
 |---|---|---|---|---|
-| 1 | TCP Listener Zombie State | P0 | ~70 | Medium — async FFI + SwarmEvent2 variant |
-| 2 | SubnetProbe ANR | P0 | ~80 | Medium — NIO refactor, well-scoped |
+| 1 | TCP Listener Zombie State | ~~P0~~ | ~70 | **DONE** (2026-07-05 sprint) |
+| 2 | SubnetProbe ANR | ~~P0~~ | ~80 | **DONE** (2026-07-05 sprint) |
 | 3 | BLE Backoff Circuit Breaker | ~~P1~~ | ~~40~~ | ~~Low~~ — **DONE** |
-| 4 | Outbound Dial Failures | P1 | ~30 | Low-Medium — fix callback + mDNS reliance |
-| 5 | 14 Sync FFI → Async Migration | P1 | ~300 | **High** — touches every FFI function and all Kotlin call sites |
-| 6 | Blocking I/O in Coroutines | P2 | ~200 | Medium — 7 distinct locations, NIO for 3 transports |
-| 7 | Swallowed Errors (Core) | ~~P1~~/P2 | ~60 | Medium — reply channels (crypto fix **DONE**) |
+| 4 | Outbound Dial Failures | ~~P1~~ | ~30 | **DONE** (2026-07-05 sprint) |
+| 5 | 14 Sync FFI → Async Migration | ~~P1~~ | ~300 | **DONE** (2026-07-05 sprint) |
+| 6 | Blocking I/O in Coroutines | ~~P2~~ | ~200 | **DONE** (2026-07-05 sprint; accept loops use dedicated daemon dispatchers, documented deviation from literal NIO) |
+| 7 | Swallowed Errors (Core) | ~~P1/P2~~ | ~60 | **DONE** (crypto fix + listener events + gossipsub reply channels) |
 | 8 | (Covered by Issue 3) | — | — | — |
-| **Total** | | | **~780** | |
+| **Total** | | | **~780** | **ALL ITEMS COMPLETE** |
 
 ---
 

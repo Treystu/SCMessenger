@@ -1852,7 +1852,9 @@ impl IronCore {
 
     /// Return a ContactManager instance for the UniFFI interface.
     #[cfg(not(target_arch = "wasm32"))]
-    pub fn contacts_manager(&self) -> Result<crate::contacts_bridge::ContactManager, crate::IronCoreError> {
+    pub fn contacts_manager(
+        &self,
+    ) -> Result<crate::contacts_bridge::ContactManager, crate::IronCoreError> {
         let path = self.storage_path.clone().unwrap_or_default();
         crate::contacts_bridge::ContactManager::new(path.clone())
             .or_else(|_| crate::contacts_bridge::ContactManager::new(path))
@@ -1941,7 +1943,9 @@ impl IronCore {
 
     /// Return a HistoryManager instance for the UniFFI interface.
     #[cfg(not(target_arch = "wasm32"))]
-    pub fn history_manager(&self) -> Result<crate::mobile_bridge::HistoryManager, crate::IronCoreError> {
+    pub fn history_manager(
+        &self,
+    ) -> Result<crate::mobile_bridge::HistoryManager, crate::IronCoreError> {
         let path = self.storage_path.clone().unwrap_or_default();
         crate::mobile_bridge::HistoryManager::new(path.clone())
             .or_else(|_| crate::mobile_bridge::HistoryManager::new(path))

@@ -1,6 +1,8 @@
 package com.scmessenger.android.ui
 
 import androidx.compose.foundation.layout.*
+import com.scmessenger.android.R
+import androidx.compose.ui.res.stringResource
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Block
@@ -135,7 +137,7 @@ fun MeshApp(mainViewModel: MainViewModel = hiltViewModel()) {
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Add,
-                                contentDescription = "Add contact"
+                                contentDescription = stringResource(R.string.app_content_desc_add_contact)
                             )
                         }
                     }

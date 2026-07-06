@@ -1069,7 +1069,7 @@ async fn apply_delivery_convergence_marker(
         || pending_cleared
     {
         tracing::info!(
-            "✅ Delivery convergence applied: message={} destination={} direct_requests={} relay_requests={} dispatches={} custody={} retries_cleared={} pending_cleared={}",
+            "[OK] Delivery convergence applied: message={} destination={} direct_requests={} relay_requests={} dispatches={} custody={} retries_cleared={} pending_cleared={}",
             marker.relay_message_id,
             marker.destination_peer_id,
             removed_direct_requests,
@@ -1126,7 +1126,7 @@ async fn apply_delivery_convergence_marker(
         || pending_cleared
     {
         tracing::info!(
-            "✅ (wasm) delivery convergence applied: message={} destination={} relay_requests={} dispatches={} custody={} pending_cleared={}",
+            "[OK] (wasm) delivery convergence applied: message={} destination={} relay_requests={} dispatches={} custody={} pending_cleared={}",
             marker.relay_message_id,
             marker.destination_peer_id,
             removed_relay_requests,
@@ -1197,7 +1197,7 @@ fn dispatch_pending_custody_for_peer(
             },
         );
         tracing::info!(
-            "📦 Dispatching custody {} for relay message {} to {} via {}",
+            "Dispatching custody {} for relay message {} to {} via {}",
             custody.custody_id,
             custody.relay_message_id,
             destination_peer,
@@ -1281,11 +1281,23 @@ pub enum SwarmCommand {
     /// Add a known peer address to Kademlia
     AddKadAddress { peer_id: PeerId, addr: Multiaddr },
     /// Subscribe to a Gossipsub topic
-    SubscribeTopic { topic: String },
+    SubscribeTopic {
+        topic: String,
+        reply: mpsc::Sender<Result<(), String>>,
+    },
     /// Unsubscribe from a Gossipsub topic
-    UnsubscribeTopic { topic: String },
-    /// Publish payload to a Gossipsub topic
-    PublishTopic { topic: String, data: Vec<u8> },
+    UnsubscribeTopic {
+        topic: String,
+        reply: mpsc::Sender<Result<(), String>>,
+    },
+    /// Publish payload to a Gossipsub topic.
+    /// The reply channel surfaces gossipsub failures (e.g. InsufficientPeers)
+    /// that were previously logged and swallowed — silent message drops.
+    PublishTopic {
+        topic: String,
+        data: Vec<u8>,
+        reply: mpsc::Sender<Result<(), String>>,
+    },
     /// Get currently subscribed topics
     GetTopics { reply: mpsc::Sender<Vec<String>> },
     /// Share our ledger with a specific peer
@@ -1362,6 +1374,11 @@ pub enum SwarmEvent2 {
     },
     /// We started listening on an address
     ListeningOn(Multiaddr),
+    /// A listener failed to bind or died after binding (async bind/accept
+    /// failure, or the listener was closed by the OS). Without this event a
+    /// node can silently lose all inbound connectivity while the application
+    /// layer still believes it is listening.
+    ListenerFailed { listener_id: String, error: String },
     /// A peer's identity was confirmed (after Identify protocol)
     PeerIdentified {
         peer_id: PeerId,
@@ -1672,28 +1689,60 @@ impl SwarmHandle {
         }
     }
 
-    /// Subscribe to a Gossipsub topic
+    /// Subscribe to a Gossipsub topic. Awaits the swarm's actual outcome —
+    /// a subscription failure is returned to the caller, not swallowed.
     pub async fn subscribe_topic(&self, topic: String) -> Result<()> {
+        let (reply_tx, mut reply_rx) = mpsc::channel(1);
         self.command_tx
-            .send(SwarmCommand::SubscribeTopic { topic })
+            .send(SwarmCommand::SubscribeTopic {
+                topic,
+                reply: reply_tx,
+            })
             .await
-            .map_err(|_| anyhow::anyhow!("Swarm task not running"))
+            .map_err(|_| anyhow::anyhow!("Swarm task not running"))?;
+        reply_rx
+            .recv()
+            .await
+            .ok_or_else(|| anyhow::anyhow!("No reply from swarm"))?
+            .map_err(|e| anyhow::anyhow!(e))
     }
 
-    /// Unsubscribe from a Gossipsub topic
+    /// Unsubscribe from a Gossipsub topic. Idempotent: unsubscribing from a
+    /// topic we never joined is Ok(()).
     pub async fn unsubscribe_topic(&self, topic: String) -> Result<()> {
+        let (reply_tx, mut reply_rx) = mpsc::channel(1);
         self.command_tx
-            .send(SwarmCommand::UnsubscribeTopic { topic })
+            .send(SwarmCommand::UnsubscribeTopic {
+                topic,
+                reply: reply_tx,
+            })
             .await
-            .map_err(|_| anyhow::anyhow!("Swarm task not running"))
+            .map_err(|_| anyhow::anyhow!("Swarm task not running"))?;
+        reply_rx
+            .recv()
+            .await
+            .ok_or_else(|| anyhow::anyhow!("No reply from swarm"))?
+            .map_err(|e| anyhow::anyhow!(e))
     }
 
-    /// Publish data to a Gossipsub topic
+    /// Publish data to a Gossipsub topic. Awaits the publish outcome so
+    /// failures like InsufficientPeers reach the caller instead of being
+    /// dropped silently.
     pub async fn publish_topic(&self, topic: String, data: Vec<u8>) -> Result<()> {
+        let (reply_tx, mut reply_rx) = mpsc::channel(1);
         self.command_tx
-            .send(SwarmCommand::PublishTopic { topic, data })
+            .send(SwarmCommand::PublishTopic {
+                topic,
+                data,
+                reply: reply_tx,
+            })
             .await
-            .map_err(|_| anyhow::anyhow!("Swarm task not running"))
+            .map_err(|_| anyhow::anyhow!("Swarm task not running"))?;
+        reply_rx
+            .recv()
+            .await
+            .ok_or_else(|| anyhow::anyhow!("No reply from swarm"))?
+            .map_err(|e| anyhow::anyhow!(e))
     }
 
     /// Get currently subscribed topics
@@ -1881,12 +1930,17 @@ pub async fn start_swarm_with_config(
             for (addr, port) in addresses {
                 match swarm.listen_on(addr.clone()) {
                     Ok(_) => {
-                        tracing::info!("✓ Bound to {}", addr);
+                        tracing::info!("[OK] Bound to {}", addr);
                         bind_results.push(BindResult::Success { addr, port });
                     }
                     Err(e) => {
                         let error = format!("{}", e);
-                        tracing::warn!("✗ Failed to bind to {} (port {}): {}", addr, port, error);
+                        tracing::warn!(
+                            "[FAIL] Failed to bind to {} (port {}): {}",
+                            addr,
+                            port,
+                            error
+                        );
                         bind_results.push(BindResult::Failed { port, error });
                     }
                 }
@@ -1927,7 +1981,7 @@ pub async fn start_swarm_with_config(
         // protocol tag is not supported by libp2p ≥ 0.53 SwarmBuilder.
         if let Ok(quic_addr) = "/ip4/0.0.0.0/udp/0/quic-v1".parse::<Multiaddr>() {
             match swarm.listen_on(quic_addr.clone()) {
-                Ok(_) => tracing::info!("✓ Bound QUIC-v1 listener {}", quic_addr),
+                Ok(_) => tracing::info!("[OK] Bound QUIC-v1 listener {}", quic_addr),
                 Err(e) => tracing::debug!("QUIC-v1 listener not available ({}): {}", quic_addr, e),
             }
         } else {
@@ -1937,8 +1991,12 @@ pub async fn start_swarm_with_config(
         // ADDED: Always expose a WebSocket listener for WASM bridge on 9002
         if let Ok(ws_addr) = "/ip4/0.0.0.0/tcp/9002/ws".parse::<Multiaddr>() {
             match swarm.listen_on(ws_addr.clone()) {
-                Ok(_) => tracing::info!("✓ Bound WebSocket listener {}", ws_addr),
-                Err(e) => tracing::warn!("✗ Failed to bind WebSocket listener {}: {}", ws_addr, e),
+                Ok(_) => tracing::info!("[OK] Bound WebSocket listener {}", ws_addr),
+                Err(e) => tracing::warn!(
+                    "[FAIL] Failed to bind WebSocket listener {}: {}",
+                    ws_addr,
+                    e
+                ),
             }
         }
 
@@ -1959,13 +2017,13 @@ pub async fn start_swarm_with_config(
         if let Err(e) = swarm.behaviour_mut().gossipsub.subscribe(&lobby_topic) {
             tracing::warn!("Failed to subscribe to lobby topic: {}", e);
         } else {
-            tracing::info!("📡 Subscribed to lobby topic: sc-lobby");
+            tracing::info!("Subscribed to lobby topic: sc-lobby");
         }
 
         if let Err(e) = swarm.behaviour_mut().gossipsub.subscribe(&mesh_topic) {
             tracing::warn!("Failed to subscribe to mesh topic: {}", e);
         } else {
-            tracing::info!("📡 Subscribed to mesh topic: sc-mesh");
+            tracing::info!("Subscribed to mesh topic: sc-mesh");
         }
 
         if let Err(e) = swarm
@@ -1976,7 +2034,7 @@ pub async fn start_swarm_with_config(
             tracing::warn!("Failed to subscribe to delivery convergence topic: {}", e);
         } else {
             tracing::info!(
-                "📡 Subscribed to delivery convergence topic: {}",
+                "Subscribed to delivery convergence topic: {}",
                 DELIVERY_CONVERGENCE_TOPIC
             );
         }
@@ -2097,7 +2155,7 @@ pub async fn start_swarm_with_config(
         let mut self_dial_logged: HashSet<Multiaddr> = HashSet::new();
         if !bootstrap_addrs.is_empty() {
             tracing::info!(
-                "🌐 Dialing {} bootstrap node(s) for NAT traversal",
+                "Dialing {} bootstrap node(s) for NAT traversal",
                 bootstrap_addrs.len()
             );
             for addr in &bootstrap_addrs {
@@ -2125,9 +2183,9 @@ pub async fn start_swarm_with_config(
                     .filter(|p| !matches!(p, libp2p::multiaddr::Protocol::P2p(_)))
                     .collect();
                 match swarm.dial(stripped_addr.clone()) {
-                    Ok(_) => tracing::info!("  ✓ Dialing bootstrap: {}", stripped_addr),
+                    Ok(_) => tracing::info!("  [OK] Dialing bootstrap: {}", stripped_addr),
                     Err(e) => {
-                        tracing::warn!("  ✗ Failed to dial bootstrap {}: {}", stripped_addr, e)
+                        tracing::warn!("  [FAIL] Failed to dial bootstrap {}: {}", stripped_addr, e)
                     }
                 }
             }
@@ -2310,7 +2368,7 @@ pub async fn start_swarm_with_config(
                         for (peer_id, attempts, next_dial) in relay_reconnect_pending.drain(..) {
                             if connected_peers.contains(&peer_id) {
                                 // Already connected; drop from pending queue
-                                tracing::debug!("✅ Relay {} reconnected successfully", peer_id);
+                                tracing::debug!("[OK] Relay {} reconnected successfully", peer_id);
                                 continue;
                             }
 
@@ -2319,7 +2377,7 @@ pub async fn start_swarm_with_config(
                                 if let Some(addrs) = relay_peer_addrs.get(&peer_id) {
                                     if let Some(addr) = addrs.first() {
                                         tracing::info!(
-                                            "🔄 Attempting to re-dial relay {} (Attempt {}): {}",
+                                            "Attempting to re-dial relay {} (Attempt {}): {}",
                                             peer_id, attempts + 1, addr
                                         );
                                         match swarm.dial(addr.clone()) {
@@ -2338,7 +2396,7 @@ pub async fn start_swarm_with_config(
                                                 ));
                                             }
                                             Err(e) => {
-                                                tracing::warn!("⚠️ Re-dial to relay {} failed immediately: {}", peer_id, e);
+                                                tracing::warn!("[WARNING] Re-dial to relay {} failed immediately: {}", peer_id, e);
                                                 // Re-enqueue with max backoff
                                                 next_pending.push((
                                                     peer_id,
@@ -2362,7 +2420,7 @@ pub async fn start_swarm_with_config(
                     // Exponential backoff per addr avoids spamming logs for persistently
                     // unreachable nodes (Connection refused, timeout, etc.).
                     _ = bootstrap_reconnect_interval.tick() => {
-                        tracing::info!("📊 Relay custody audit log count: {}", relay_custody_store.audit_count());
+                        tracing::info!("Relay custody audit log count: {}", relay_custody_store.audit_count());
                         if !bootstrap_addrs_clone.is_empty() {
                             let connected_peers: HashSet<PeerId> = swarm.connected_peers().cloned().collect();
                             for addr in &bootstrap_addrs_clone {
@@ -2406,7 +2464,7 @@ pub async fn start_swarm_with_config(
                                 if !already_connected {
                                     let stripped_addr: Multiaddr = addr.iter().filter(|p| !matches!(p, libp2p::multiaddr::Protocol::P2p(_))).collect();
                                     match swarm.dial(stripped_addr.clone()) {
-                                        Ok(_) => tracing::debug!("🔄 Re-dialing bootstrap: {}", stripped_addr),
+                                        Ok(_) => tracing::debug!("Re-dialing bootstrap: {}", stripped_addr),
                                         Err(e) => {
                                             // Dial was rejected internally (e.g. already dialing).
                                             // Treat as a failure and apply backoff to avoid retry spam.
@@ -2448,7 +2506,7 @@ pub async fn start_swarm_with_config(
                                         if let Ok(relay_msg) = crate::relay::protocol::RelayMessage::from_bytes(&request.envelope_data) {
                                             match relay_msg {
                                                 crate::relay::protocol::RelayMessage::PeerJoined { peer_info } => {
-                                                    tracing::info!("📢 Received PeerJoined: {} with {} addresses", peer_info.peer_id, peer_info.addresses.len());
+                                                    tracing::info!("Received PeerJoined: {} with {} addresses", peer_info.peer_id, peer_info.addresses.len());
                                                     for addr_str in &peer_info.addresses {
                                                         if let Ok(addr) = addr_str.parse::<Multiaddr>() {
                                                             if is_discoverable_multiaddr(&addr) {
@@ -2464,7 +2522,7 @@ pub async fn start_swarm_with_config(
                                                     continue;
                                                 }
                                                 crate::relay::protocol::RelayMessage::PeerListResponse { peers } => {
-                                                    tracing::info!("📋 Received peer list: {} peers", peers.len());
+                                                    tracing::info!("Received peer list: {} peers", peers.len());
                                                     for peer_info in peers {
                                                         tracing::debug!("  Peer: {} ({} addresses)", peer_info.peer_id, peer_info.addresses.len());
                                                         for addr_str in &peer_info.addresses {
@@ -2482,7 +2540,7 @@ pub async fn start_swarm_with_config(
                                                     continue;
                                                 }
                                                 crate::relay::protocol::RelayMessage::PeerLeft { peer_id } => {
-                                                    tracing::info!("📢 Peer left: {}", peer_id);
+                                                    tracing::info!("Peer left: {}", peer_id);
                                                     let _ = swarm.behaviour_mut().messaging.send_response(
                                                         channel,
                                                         Libp2pMessageResponse { accepted: true, error: None },
@@ -2559,7 +2617,7 @@ pub async fn start_swarm_with_config(
                                                     );
                                                 } else {
                                                     tracing::info!(
-                                                        "✅ Custody {} delivered to {} (relay message {})",
+                                                        "[OK] Custody {} delivered to {} (relay message {})",
                                                         dispatch.custody_id,
                                                         dispatch.destination_peer,
                                                         dispatch.relay_message_id
@@ -2638,7 +2696,7 @@ pub async fn start_swarm_with_config(
                                                     let _ = pending.reply_tx.send(Ok(())).await;
                                                 } else {
                                                     // Message rejected, trigger retry
-                                                    tracing::warn!("✗ Message rejected by {}: {:?}", pending.target_peer, response.error);
+                                                    tracing::warn!("[FAIL] Message rejected by {}: {:?}", pending.target_peer, response.error);
                                                     multi_path_delivery.record_failure(&message_id, vec![pending.target_peer]);
                                                     pending_messages.insert(message_id, pending);
                                                 }
@@ -2667,7 +2725,7 @@ pub async fn start_swarm_with_config(
                                 } else if let Some(message_id) = request_to_message.remove(&request_id) {
                                     if let Some(pending) = pending_messages.remove(&message_id) {
                                         tracing::warn!(
-                                            "✗ Direct send outbound failure to {}: {}",
+                                            "[FAIL] Direct send outbound failure to {}: {}",
                                             pending.target_peer,
                                             error
                                         );
@@ -2802,7 +2860,7 @@ pub async fn start_swarm_with_config(
                             )) => {
                                 match message {
                                     request_response::Message::Request { request, channel, .. } => {
-                                        tracing::info!("🔄 Relay request from {} for message {}", peer, request.message_id);
+                                        tracing::info!("Relay request from {} for message {}", peer, request.message_id);
 
                                         // Enforce relay budget — reset counter hourly
                                         if relay_hour_start.elapsed() >= web_time::Duration::from_secs(3600) {
@@ -2973,7 +3031,7 @@ pub async fn start_swarm_with_config(
                                                                             );
                                                                         } else {
                                                                             tracing::info!(
-                                                                                "📦 Accepted custody {} for offline destination {} (relay message {})",
+                                                                                "Accepted custody {} for offline destination {} (relay message {})",
                                                                                 custody.custody_id,
                                                                                 destination,
                                                                                 relay_message_id
@@ -3016,13 +3074,13 @@ pub async fn start_swarm_with_config(
                                                 if response.accepted {
                                                     let latency_ms = pending.attempt_start.elapsed().unwrap_or_default().as_millis() as u64;
                                                     multi_path_delivery.record_success(&message_id, vec![peer, pending.target_peer], latency_ms);
-                                                    tracing::info!("✓ Message relayed successfully via {} to {} ({}ms)", peer, pending.target_peer, latency_ms);
+                                                    tracing::info!("[OK] Message relayed successfully via {} to {} ({}ms)", peer, pending.target_peer, latency_ms);
                                                     let _ = pending.reply_tx.send(Ok(())).await;
                                                 } else {
                                                     let error = response
                                                         .error
                                                         .unwrap_or_else(|| "relay rejected".to_string());
-                                                    tracing::warn!("✗ Relay via {} failed: {}", peer, error);
+                                                    tracing::warn!("[FAIL] Relay via {} failed: {}", peer, error);
                                                     multi_path_delivery.record_failure(&message_id, vec![peer, pending.target_peer]);
                                                     if is_terminal_identity_rejection(&error) {
                                                         let _ = pending.reply_tx.send(Err(error)).await;
@@ -3041,7 +3099,7 @@ pub async fn start_swarm_with_config(
                                 if let Some(message_id) = pending_relay_requests.remove(&request_id) {
                                     if let Some(pending) = pending_messages.remove(&message_id) {
                                         tracing::warn!(
-                                            "✗ Relay outbound failure via {} to {}: {}",
+                                            "[FAIL] Relay outbound failure via {} to {}: {}",
                                             peer,
                                             pending.target_peer,
                                             error
@@ -3066,7 +3124,7 @@ pub async fn start_swarm_with_config(
                                 match message {
                                     request_response::Message::Request { request, channel, .. } => {
                                         tracing::info!(
-                                            "📒 Ledger exchange from {}: received {} peer entries (v{})",
+                                            "Ledger exchange from {}: received {} peer entries (v{})",
                                             peer,
                                             request.peers.len(),
                                             request.version,
@@ -3104,7 +3162,7 @@ pub async fn start_swarm_with_config(
                                                 if !subscribed_topics.contains(topic_str) {
                                                     let ident_topic = libp2p::gossipsub::IdentTopic::new(topic_str.clone());
                                                     if swarm.behaviour_mut().gossipsub.subscribe(&ident_topic).is_ok() {
-                                                        tracing::info!("📡 Auto-subscribed to topic from ledger: {}", topic_str);
+                                                        tracing::info!("Auto-subscribed to topic from ledger: {}", topic_str);
                                                         subscribed_topics.insert(topic_str.clone());
                                                     }
                                                 }
@@ -3127,7 +3185,7 @@ pub async fn start_swarm_with_config(
                                     }
                                     request_response::Message::Response { response, .. } => {
                                         tracing::info!(
-                                            "📒 Ledger exchange response from {}: they learned {} new peers, sent {} back",
+                                            "Ledger exchange response from {}: they learned {} new peers, sent {} back",
                                             peer,
                                             response.new_peers_learned,
                                             response.peers.len(),
@@ -3167,12 +3225,12 @@ pub async fn start_swarm_with_config(
                                 gossipsub::Event::Subscribed { peer_id, topic }
                             )) => {
                                 let topic_str = topic.to_string();
-                                tracing::info!("📡 Peer {} subscribed to topic: {}", peer_id, topic_str);
+                                tracing::info!("Peer {} subscribed to topic: {}", peer_id, topic_str);
 
                                 // AUTO-NEGOTIATE: If a peer subscribes to a topic we don't know,
                                 // subscribe to it ourselves. "A node is a node."
                                 if !subscribed_topics.contains(&topic_str) {
-                                    tracing::info!("🔄 Auto-subscribing to discovered topic: {}", topic_str);
+                                    tracing::info!("Auto-subscribing to discovered topic: {}", topic_str);
                                     let ident_topic = libp2p::gossipsub::IdentTopic::new(topic_str.clone());
                                     if let Err(e) = swarm.behaviour_mut().gossipsub.subscribe(&ident_topic) {
                                         tracing::warn!("Failed to auto-subscribe to {}: {}", topic_str, e);
@@ -3192,7 +3250,7 @@ pub async fn start_swarm_with_config(
                             )) => {
                                 // Accept all gossipsub messages — log and forward
                                 tracing::debug!(
-                                    "📨 Gossipsub message from {} on topic {:?} ({} bytes)",
+                                    "Gossipsub message from {} on topic {:?} ({} bytes)",
                                     propagation_source,
                                     message.topic,
                                     message.data.len()
@@ -3248,18 +3306,18 @@ pub async fn start_swarm_with_config(
                                 match event {
                                     autonat::Event::StatusChanged { old, new } => {
                                         tracing::info!(
-                                            "🔭 AutoNAT status: {:?} → {:?}",
+                                            "AutoNAT status: {:?} → {:?}",
                                             old, new
                                         );
                                         // Update NAT status for the application layer.
                                         // This determines whether relay fallback is required.
                                         let status_str = match new {
                                             autonat::NatStatus::Public(addr) => {
-                                                tracing::info!("✅ AutoNAT: public reachability confirmed at {}", addr);
+                                                tracing::info!("[OK] AutoNAT: public reachability confirmed at {}", addr);
                                                 format!("public:{}", addr)
                                             }
                                             autonat::NatStatus::Private => {
-                                                tracing::info!("🔒 AutoNAT: behind NAT — relay required for inbound");
+                                                tracing::info!("AutoNAT: behind NAT — relay required for inbound");
                                                 "private".to_string()
                                             }
                                             autonat::NatStatus::Unknown => {
@@ -3307,7 +3365,7 @@ pub async fn start_swarm_with_config(
                                 match event {
                                     dcutr::Event { remote_peer_id, result: Ok(num_attempts) } => {
                                         tracing::info!(
-                                            "🕳️ DCUtR hole-punch SUCCESS with {} (attempts: {})",
+                                            "DCUtR hole-punch SUCCESS with {} (attempts: {})",
                                             remote_peer_id, num_attempts
                                         );
                                         // Hole-punch succeeded — direct connection established.
@@ -3329,14 +3387,14 @@ pub async fn start_swarm_with_config(
                                             // Activate SyncSession for Drift Protocol mesh synchronization
                                             sync_sessions.insert(remote_peer_id, SyncSession::new());
                                             tracing::debug!(
-                                                "🔄 Activated SyncSession for peer: {}",
+                                                "Activated SyncSession for peer: {}",
                                                 remote_peer_id
                                             );
                                         }
                                     }
                                     dcutr::Event { remote_peer_id, result: Err(e) } => {
                                         tracing::warn!(
-                                            "🕳️ DCUtR hole-punch FAILED with {} — will relay messages instead: {}",
+                                            "DCUtR hole-punch FAILED with {} — will relay messages instead: {}",
                                             remote_peer_id, e
                                         );
                                         // Hole-punch failed — this is OK; our application-layer
@@ -3355,12 +3413,12 @@ pub async fn start_swarm_with_config(
                                     } => {
                                         if renewal {
                                             tracing::debug!(
-                                                "🔄 Relay circuit reservation RENEWED via {}",
+                                                "Relay circuit reservation RENEWED via {}",
                                                 relay_peer_id
                                             );
                                         } else {
                                             tracing::info!(
-                                                "✅ Relay circuit reservation ACCEPTED via {} — inbound-relayed connections now possible",
+                                                "[OK] Relay circuit reservation ACCEPTED via {} — inbound-relayed connections now possible",
                                                 relay_peer_id
                                             );
                                         }
@@ -3370,7 +3428,7 @@ pub async fn start_swarm_with_config(
                                         ..
                                     } => {
                                         tracing::info!(
-                                            "🔌 Inbound relay circuit established from {} — peer connected through relay",
+                                            "Inbound relay circuit established from {} — peer connected through relay",
                                             src_peer_id
                                         );
                                     }
@@ -3379,7 +3437,7 @@ pub async fn start_swarm_with_config(
                                         ..
                                     } => {
                                         tracing::info!(
-                                            "🔌 Outbound relay circuit established via {} — connected to remote through relay",
+                                            "Outbound relay circuit established via {} — connected to remote through relay",
                                             relay_peer_id
                                         );
                                     }
@@ -3392,13 +3450,13 @@ pub async fn start_swarm_with_config(
                                 match event {
                                     RelayServerEvent::ReservationReqAccepted { src_peer_id, .. } => {
                                         tracing::info!(
-                                            "✅ Relay server: accepted reservation from {} — acting as relay for this peer",
+                                            "[OK] Relay server: accepted reservation from {} — acting as relay for this peer",
                                             src_peer_id
                                         );
                                     }
                                     RelayServerEvent::CircuitReqAccepted { src_peer_id, dst_peer_id } => {
                                         tracing::info!(
-                                            "🔌 Relay server: circuit established {} -> {} — relaying traffic",
+                                            "Relay server: circuit established {} -> {} — relaying traffic",
                                             src_peer_id,
                                             dst_peer_id
                                         );
@@ -3445,7 +3503,7 @@ pub async fn start_swarm_with_config(
                                         // Activate SyncSession for Drift Protocol mesh synchronization
                                         sync_sessions.insert(peer_id, SyncSession::new());
                                         tracing::debug!(
-                                            "🔄 Activated SyncSession for peer: {}",
+                                            "Activated SyncSession for peer: {}",
                                             peer_id
                                         );
                                     }
@@ -3526,7 +3584,7 @@ pub async fn start_swarm_with_config(
                                 {
                                     address_observer.record_observation(peer_id, observed_addr);
                                     tracing::info!(
-                                        "🌐 Identify observed address via {}: {}",
+                                        "Identify observed address via {}: {}",
                                         peer_id,
                                         observed_addr
                                     );
@@ -3554,14 +3612,14 @@ pub async fn start_swarm_with_config(
                                     if is_discoverable_multiaddr(addr) {
                                         swarm.behaviour_mut().kademlia.add_address(&peer_id, addr.clone());
                                     } else {
-                                        tracing::debug!("🚫 Skipping non-discoverable Kademlia addr for {}: {}", peer_id, addr);
+                                        tracing::debug!("Skipping non-discoverable Kademlia addr for {}: {}", peer_id, addr);
                                     }
                                 }
 
                                 // Check if peer advertises relay capability
                                 let is_relay = info.agent_version.contains("relay");
                                 if is_relay {
-                                    tracing::info!("🔄 Peer {} is identified as a RELAY node (agent: {})", peer_id, info.agent_version);
+                                    tracing::info!("Peer {} is identified as a RELAY node (agent: {})", peer_id, info.agent_version);
                                     bootstrap_capability.add_peer(peer_id);
                                     multi_path_delivery.add_relay(peer_id);
                                     // Mycorrhizal routing: mark relay-capable peer as gateway
@@ -3595,33 +3653,33 @@ pub async fn start_swarm_with_config(
                                             );
 
                                             tracing::info!(
-                                                "📡 Attempting relay circuit reservation via {}: {}",
+                                                "Attempting relay circuit reservation via {}: {}",
                                                 peer_id, relay_circuit_addr
                                             );
                                             match swarm.listen_on(relay_circuit_addr.clone()) {
                                                 Ok(listener_id) => {
                                                     tracing::info!(
-                                                        "✅ Relay circuit reservation registered: {:?} via {}",
+                                                        "[OK] Relay circuit reservation registered: {:?} via {}",
                                                         listener_id, peer_id
                                                     );
                                                     successful_relay_reservations.insert(peer_id, listener_id);
                                                     relay_peer_addrs.insert(peer_id, routable_relay_addrs.clone());
                                                 },
                                                 Err(e) => tracing::warn!(
-                                                    "⚠️ Could not register relay circuit reservation via {}: {:?}",
+                                                    "[WARNING] Could not register relay circuit reservation via {}: {:?}",
                                                     peer_id, e
                                                 ),
                                             }
                                         } else {
                                             tracing::debug!(
-                                                "🔄 Relay {} has no WAN-routable addresses yet; \
+                                                "Relay {} has no WAN-routable addresses yet; \
                                                  will retry reservation after reconnect",
                                                 peer_id
                                             );
                                         }
                                     } else {
                                         tracing::debug!(
-                                            "📡 Relay circuit already active for {} — skipping duplicate",
+                                            "Relay circuit already active for {} — skipping duplicate",
                                             peer_id
                                         );
                                     }
@@ -3654,18 +3712,18 @@ pub async fn start_swarm_with_config(
                                 use libp2p::upnp;
                                 match event {
                                     upnp::Event::NewExternalAddr(addr) => {
-                                        tracing::info!("🌐 UPnP: successfully mapped external address {}", addr);
+                                        tracing::info!("UPnP: successfully mapped external address {}", addr);
                                         swarm.add_external_address(addr.clone());
                                         let _ = event_tx.send(SwarmEvent2::PortMapping(format!("mapped:{}", addr))).await;
                                     }
                                     upnp::Event::GatewayNotFound => {
-                                        tracing::debug!("🌐 UPnP: no compatible gateway found");
+                                        tracing::debug!("UPnP: no compatible gateway found");
                                     }
                                     upnp::Event::NonRoutableGateway => {
-                                        tracing::debug!("🌐 UPnP: gateway is not a routing device");
+                                        tracing::debug!("UPnP: gateway is not a routing device");
                                     }
                                     upnp::Event::ExpiredExternalAddr(addr) => {
-                                        tracing::info!("🌐 UPnP: external address mapping expired: {}", addr);
+                                        tracing::info!("UPnP: external address mapping expired: {}", addr);
                                         let _ = event_tx.send(SwarmEvent2::PortMapping(format!("expired:{}", addr))).await;
                                     }
                                 }
@@ -3679,7 +3737,7 @@ pub async fn start_swarm_with_config(
                             SwarmEvent::ConnectionEstablished { peer_id, endpoint, connection_id, .. } => {
                                 let remote_addr = endpoint.get_remote_address().clone();
                                 tracing::info!(
-                                    "🔗 Connected to {} via {} (promiscuous mode — any PeerID accepted)",
+                                    "Connected to {} via {} (promiscuous mode — any PeerID accepted)",
                                     peer_id,
                                     remote_addr
                                 );
@@ -3759,7 +3817,7 @@ pub async fn start_swarm_with_config(
                                     // Activate SyncSession for Drift Protocol mesh synchronization
                                     sync_sessions.insert(peer_id, SyncSession::new());
                                     tracing::debug!(
-                                        "🔄 Activated SyncSession for peer: {}",
+                                        "Activated SyncSession for peer: {}",
                                         peer_id
                                     );
                                 }
@@ -3788,7 +3846,7 @@ pub async fn start_swarm_with_config(
                             }
 
                             SwarmEvent::ConnectionClosed { peer_id, .. } => {
-                                tracing::info!("❌ Disconnected from {}", peer_id);
+                                tracing::info!("[ERROR] Disconnected from {}", peer_id);
                                 connection_tracker.remove_connection(&peer_id);
                                 // Allow re-exchange if they reconnect
                                 ledger_exchanged_peers.remove(&peer_id);
@@ -3797,7 +3855,7 @@ pub async fn start_swarm_with_config(
 
                                 // P0.13: Clear relay tracking so we can re-reserve on reconnect
                                 if let Some(listener_id) = successful_relay_reservations.remove(&peer_id) {
-                                    tracing::debug!("🧹 Clearing stale relay reservation for {}: {:?}", peer_id, listener_id);
+                                    tracing::debug!("Clearing stale relay reservation for {}: {:?}", peer_id, listener_id);
                                     // Note: libp2p usually kills circuit listeners on connection close,
                                     // but we remove it from swarm to be sure.
                                     let _ = swarm.remove_listener(listener_id);
@@ -3843,7 +3901,7 @@ pub async fn start_swarm_with_config(
                                 // Backoff: 10s → 30s → 60s → 60s (capped).
                                 if relay_peer_addrs.remove(&peer_id).is_some() {
                                     tracing::info!(
-                                        "🔄 Lost relay peer {}; cleared circuit reservation, scheduling reconnect",
+                                        "Lost relay peer {}; cleared circuit reservation, scheduling reconnect",
                                         peer_id
                                     );
                                     relay_reconnect_pending.push((peer_id, 0, web_time::Instant::now()));
@@ -3863,7 +3921,7 @@ pub async fn start_swarm_with_config(
                                             });
                                             if matches {
                                                 tracing::info!(
-                                                    "🔄 Self-heal: queueing redial for disconnected bootstrap peer {}",
+                                                    "Self-heal: queueing redial for disconnected bootstrap peer {}",
                                                     peer_id
                                                 );
                                                 if !bootstrap_backoff.contains_key(ba) {
@@ -3884,9 +3942,9 @@ pub async fn start_swarm_with_config(
                                 // from the routing table; timeouts here are expected churn, not
                                 // actionable errors. Relay/identity failures surface at info/warn.
                                 if let Some(pid) = peer_id {
-                                    tracing::debug!("⚠ Outgoing connection error to {}: {}", pid, error);
+                                    tracing::debug!("[WARNING] Outgoing connection error to {}: {}", pid, error);
                                 } else {
-                                    tracing::debug!("⚠ Outgoing connection error: {}", error);
+                                    tracing::debug!("[WARNING] Outgoing connection error: {}", error);
                                 }
                                 // Exponential backoff for bootstrap re-dial: if the failed
                                 // connection matches any bootstrap addr (by IP+port for
@@ -3955,6 +4013,10 @@ pub async fn start_swarm_with_config(
                                     listener_id,
                                     error
                                 );
+                                let _ = event_tx.send(SwarmEvent2::ListenerFailed {
+                                    listener_id: format!("{:?}", listener_id),
+                                    error: error.to_string(),
+                                }).await;
                             }
 
                             SwarmEvent::ListenerClosed { listener_id, addresses, reason } => {
@@ -3964,6 +4026,10 @@ pub async fn start_swarm_with_config(
                                     addresses,
                                     reason
                                 );
+                                let _ = event_tx.send(SwarmEvent2::ListenerFailed {
+                                    listener_id: format!("{:?}", listener_id),
+                                    error: format!("listener closed for {:?}: {:?}", addresses, reason),
+                                }).await;
                             }
 
                             _ => {}
@@ -4130,7 +4196,7 @@ pub async fn start_swarm_with_config(
                             }
 
                             SwarmCommand::Dial { addr, reply } => {
-                                tracing::debug!("📞 Dialing {} (promiscuous — accepting any PeerID)", addr);
+                                tracing::debug!("Dialing {} (promiscuous — accepting any PeerID)", addr);
                                 match swarm.dial(addr) {
                                     Ok(_) => { let _ = reply.send(Ok(())).await; }
                                     Err(e) => {
@@ -4162,36 +4228,56 @@ pub async fn start_swarm_with_config(
                                 }
                             }
 
-                            SwarmCommand::SubscribeTopic { topic } => {
-                                if !subscribed_topics.contains(&topic) {
+                            SwarmCommand::SubscribeTopic { topic, reply } => {
+                                if subscribed_topics.contains(&topic) {
+                                    let _ = reply.send(Ok(())).await;
+                                } else {
                                     let ident_topic = libp2p::gossipsub::IdentTopic::new(topic.clone());
-                                    if let Err(e) = swarm.behaviour_mut().gossipsub.subscribe(&ident_topic) {
-                                        tracing::warn!("Failed to subscribe to topic {}: {}", topic, e);
-                                    } else {
-                                        tracing::info!("📡 Subscribed to topic: {}", topic);
-                                        subscribed_topics.insert(topic);
+                                    match swarm.behaviour_mut().gossipsub.subscribe(&ident_topic) {
+                                        Ok(_) => {
+                                            tracing::info!("Subscribed to topic: {}", topic);
+                                            subscribed_topics.insert(topic);
+                                            let _ = reply.send(Ok(())).await;
+                                        }
+                                        Err(e) => {
+                                            tracing::warn!("Failed to subscribe to topic {}: {}", topic, e);
+                                            let _ = reply.send(Err(e.to_string())).await;
+                                        }
                                     }
                                 }
                             }
 
-                            SwarmCommand::UnsubscribeTopic { topic } => {
+                            SwarmCommand::UnsubscribeTopic { topic, reply } => {
                                 if subscribed_topics.contains(&topic) {
                                     let ident_topic = libp2p::gossipsub::IdentTopic::new(topic.clone());
                                     if swarm.behaviour_mut().gossipsub.unsubscribe(&ident_topic) {
                                         tracing::info!("Unsubscribed from topic: {}", topic);
                                         subscribed_topics.remove(&topic);
+                                        let _ = reply.send(Ok(())).await;
                                     } else {
                                         tracing::warn!("Not subscribed to topic {}", topic);
+                                        let _ = reply.send(Err(format!(
+                                            "gossipsub reports no subscription for topic {}",
+                                            topic
+                                        ))).await;
                                     }
+                                } else {
+                                    // Idempotent: not subscribed locally, nothing to undo.
+                                    let _ = reply.send(Ok(())).await;
                                 }
                             }
 
-                            SwarmCommand::PublishTopic { topic, data } => {
+                            SwarmCommand::PublishTopic { topic, data, reply } => {
                                 let ident_topic = libp2p::gossipsub::IdentTopic::new(topic.clone());
-                                if let Err(e) = swarm.behaviour_mut().gossipsub.publish(ident_topic, data) {
-                                    tracing::warn!("Failed to publish to topic {}: {}", topic, e);
-                                } else {
-                                    tracing::debug!("Published payload to topic {}", topic);
+                                match swarm.behaviour_mut().gossipsub.publish(ident_topic, data) {
+                                    Ok(_) => {
+                                        tracing::debug!("Published payload to topic {}", topic);
+                                        let _ = reply.send(Ok(())).await;
+                                    }
+                                    Err(e) => {
+                                        tracing::warn!("Failed to publish to topic {}: {}", topic, e);
+                                        let _ = reply.send(Err(e.to_string())).await;
+                                    }
                                 }
                             }
 
@@ -4204,7 +4290,7 @@ pub async fn start_swarm_with_config(
                                 // Send our known peer list to the specified peer
                                 if !ledger_exchanged_peers.contains(&peer_id) {
                                     tracing::info!(
-                                        "📒 Sharing ledger with {} ({} entries)",
+                                        "Sharing ledger with {} ({} entries)",
                                         peer_id,
                                         entries.len()
                                     );
@@ -4222,7 +4308,7 @@ pub async fn start_swarm_with_config(
 
                                     ledger_exchanged_peers.insert(peer_id);
                                 } else {
-                                    tracing::debug!("📒 Already exchanged ledger with {}, skipping", peer_id);
+                                    tracing::debug!("Already exchanged ledger with {}, skipping", peer_id);
                                 }
                             }
 
@@ -4264,7 +4350,7 @@ pub async fn start_swarm_with_config(
                             }
                             SwarmCommand::SetRelayBudget { budget } => {
                                 relay_budget = budget;
-                                tracing::info!("🔄 Relay budget updated: {} msgs/hour", budget);
+                                tracing::info!("Relay budget updated: {} msgs/hour", budget);
                             }
 
                             SwarmCommand::GetBestRelays { count, reply } => {
@@ -4369,7 +4455,7 @@ pub async fn start_swarm_with_config(
         let mut self_dial_logged: HashSet<Multiaddr> = HashSet::new();
         if !bootstrap_addrs.is_empty() {
             tracing::info!(
-                "🌐 Dialing {} bootstrap node(s) from wasm",
+                "Dialing {} bootstrap node(s) from wasm",
                 bootstrap_addrs.len()
             );
             for addr in &bootstrap_addrs {
@@ -4397,9 +4483,9 @@ pub async fn start_swarm_with_config(
                     .filter(|p| !matches!(p, libp2p::multiaddr::Protocol::P2p(_)))
                     .collect();
                 match swarm.dial(stripped_addr.clone()) {
-                    Ok(_) => tracing::info!("  ✓ Dialing bootstrap: {}", stripped_addr),
+                    Ok(_) => tracing::info!("  [OK] Dialing bootstrap: {}", stripped_addr),
                     Err(e) => {
-                        tracing::warn!("  ✗ Failed to dial bootstrap {}: {}", stripped_addr, e)
+                        tracing::warn!("  [FAIL] Failed to dial bootstrap {}: {}", stripped_addr, e)
                     }
                 }
             }
@@ -4545,26 +4631,49 @@ pub async fn start_swarm_with_config(
                                     swarm.behaviour_mut().kademlia.add_address(&peer_id, addr);
                                 }
                             }
-                            SwarmCommand::SubscribeTopic { topic } => {
-                                if !subscribed_topics.contains(&topic) {
+                            SwarmCommand::SubscribeTopic { topic, reply } => {
+                                if subscribed_topics.contains(&topic) {
+                                    let _ = reply.send(Ok(())).await;
+                                } else {
                                     let ident_topic = libp2p::gossipsub::IdentTopic::new(topic.clone());
-                                    if swarm.behaviour_mut().gossipsub.subscribe(&ident_topic).is_ok() {
-                                        subscribed_topics.insert(topic);
+                                    match swarm.behaviour_mut().gossipsub.subscribe(&ident_topic) {
+                                        Ok(_) => {
+                                            subscribed_topics.insert(topic);
+                                            let _ = reply.send(Ok(())).await;
+                                        }
+                                        Err(e) => {
+                                            let _ = reply.send(Err(e.to_string())).await;
+                                        }
                                     }
                                 }
                             }
-                            SwarmCommand::UnsubscribeTopic { topic } => {
+                            SwarmCommand::UnsubscribeTopic { topic, reply } => {
                                 if subscribed_topics.contains(&topic) {
                                     let ident_topic = libp2p::gossipsub::IdentTopic::new(topic.clone());
                                     if swarm.behaviour_mut().gossipsub.unsubscribe(&ident_topic) {
                                         subscribed_topics.remove(&topic);
+                                        let _ = reply.send(Ok(())).await;
+                                    } else {
+                                        let _ = reply.send(Err(format!(
+                                            "gossipsub reports no subscription for topic {}",
+                                            topic
+                                        ))).await;
                                     }
+                                } else {
+                                    // Idempotent: not subscribed locally, nothing to undo.
+                                    let _ = reply.send(Ok(())).await;
                                 }
                             }
-                            SwarmCommand::PublishTopic { topic, data } => {
+                            SwarmCommand::PublishTopic { topic, data, reply } => {
                                 let ident_topic = libp2p::gossipsub::IdentTopic::new(topic);
-                                if let Err(e) = swarm.behaviour_mut().gossipsub.publish(ident_topic, data) {
-                                    tracing::warn!("Failed to publish topic payload: {}", e);
+                                match swarm.behaviour_mut().gossipsub.publish(ident_topic, data) {
+                                    Ok(_) => {
+                                        let _ = reply.send(Ok(())).await;
+                                    }
+                                    Err(e) => {
+                                        tracing::warn!("Failed to publish topic payload: {}", e);
+                                        let _ = reply.send(Err(e.to_string())).await;
+                                    }
                                 }
                             }
                             SwarmCommand::GetTopics { reply } => {
@@ -4606,7 +4715,7 @@ pub async fn start_swarm_with_config(
                             }
                             SwarmCommand::SetRelayBudget { budget } => {
                                 relay_budget = budget;
-                                tracing::info!("🔄 Relay budget updated: {} msgs/hour", budget);
+                                tracing::info!("Relay budget updated: {} msgs/hour", budget);
                             }
                             SwarmCommand::GetBestRelays { reply, .. } => {
                                 let _ = reply.send(Vec::new()).await;
@@ -5147,7 +5256,7 @@ pub async fn start_swarm_with_config(
                                     // Activate SyncSession for Drift Protocol mesh synchronization
                                     sync_sessions.insert(peer_id, SyncSession::new());
                                     tracing::debug!(
-                                        "🔄 Activated SyncSession for peer: {}",
+                                        "Activated SyncSession for peer: {}",
                                         peer_id
                                     );
                                 }
@@ -5167,7 +5276,7 @@ pub async fn start_swarm_with_config(
                                 }
                             }
                             SwarmEvent::ConnectionClosed { peer_id, .. } => {
-                                tracing::info!("❌ Disconnected from {} (WASM)", peer_id);
+                                tracing::info!("[ERROR] Disconnected from {} (WASM)", peer_id);
                                 connection_tracker.remove_connection(&peer_id);
                                 ledger_exchanged_peers.remove(&peer_id);
                                 let stale_dispatches: Vec<libp2p::request_response::OutboundRequestId> =
@@ -5200,7 +5309,7 @@ pub async fn start_swarm_with_config(
                                             });
                                             if matches && !bootstrap_backoff.contains_key(ba) {
                                                 tracing::info!(
-                                                    "🔄 Self-heal: queueing redial for disconnected WASM bootstrap peer {}",
+                                                    "Self-heal: queueing redial for disconnected WASM bootstrap peer {}",
                                                     peer_id
                                                 );
                                                 bootstrap_backoff.insert(ba.clone(), BootstrapBackoffEntry::new());
@@ -5214,9 +5323,9 @@ pub async fn start_swarm_with_config(
                             SwarmEvent::OutgoingConnectionError { peer_id, error, .. } => {
                                 // Kademlia churn — expected at debug level
                                 if let Some(pid) = peer_id {
-                                    tracing::debug!("⚠ Outgoing connection error to {}: {}", pid, error);
+                                    tracing::debug!("[WARNING] Outgoing connection error to {}: {}", pid, error);
                                 } else {
-                                    tracing::debug!("⚠ Outgoing connection error: {}", error);
+                                    tracing::debug!("[WARNING] Outgoing connection error: {}", error);
                                 }
                                 // Exponential backoff for bootstrap re-dial: if the failed
                                 // connection matches any bootstrap addr (by IP+port for
@@ -5283,6 +5392,10 @@ pub async fn start_swarm_with_config(
                                     listener_id,
                                     error
                                 );
+                                let _ = event_tx.send(SwarmEvent2::ListenerFailed {
+                                    listener_id: format!("{:?}", listener_id),
+                                    error: error.to_string(),
+                                }).await;
                             }
                             SwarmEvent::ListenerClosed { listener_id, addresses, reason } => {
                                 tracing::warn!(
@@ -5291,6 +5404,10 @@ pub async fn start_swarm_with_config(
                                     addresses,
                                     reason
                                 );
+                                let _ = event_tx.send(SwarmEvent2::ListenerFailed {
+                                    listener_id: format!("{:?}", listener_id),
+                                    error: format!("listener closed for {:?}: {:?}", addresses, reason),
+                                }).await;
                             }
                             _ => {}
                         }

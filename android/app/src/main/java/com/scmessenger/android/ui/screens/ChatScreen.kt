@@ -144,7 +144,7 @@ fun ChatScreen(
                 },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.chat_content_desc_back))
                     }
                 },
                 actions = {
@@ -304,7 +304,7 @@ fun ChatScreen(
                             horizontalArrangement = Arrangement.Center,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Icon(Icons.Default.Block, contentDescription = "Blocked", tint = MaterialTheme.colorScheme.onErrorContainer)
+                            Icon(Icons.Default.Block, contentDescription = stringResource(R.string.chat_content_desc_blocked), tint = MaterialTheme.colorScheme.onErrorContainer)
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
                                 "Peer blocked. Unblock to send messages.",

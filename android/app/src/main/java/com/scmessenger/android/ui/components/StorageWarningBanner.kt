@@ -1,6 +1,8 @@
 package com.scmessenger.android.ui.components
 
 import androidx.compose.foundation.background
+import com.scmessenger.android.R
+import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Warning
@@ -28,7 +30,7 @@ fun StorageWarningBanner(availableMB: Long) {
         ) {
             Icon(
                 imageVector = Icons.Default.Warning,
-                contentDescription = "Warning",
+                contentDescription = stringResource(R.string.storage_warning_content_desc),
                 modifier = Modifier.size(24.dp)
             )
             Spacer(modifier = Modifier.width(12.dp))

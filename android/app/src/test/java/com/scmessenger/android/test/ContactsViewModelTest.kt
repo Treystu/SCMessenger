@@ -43,7 +43,9 @@ class ContactsViewModelTest {
             addedAt = 1u,
             lastSeen = null,
             notes = null,
-            lastKnownDeviceId = null
+            lastKnownDeviceId = null,
+            verifiedAt = null,
+            isTombstone = false
         )
     }
 

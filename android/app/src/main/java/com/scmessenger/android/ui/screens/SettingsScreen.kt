@@ -416,7 +416,7 @@ fun SettingsScreen(
                         }
                     },
                     onFailure = { error ->
-                        Text("Failed to export backup: ${error.message}")
+                        Text(stringResource(R.string.settings_error_export_backup, error.message ?: ""))
                     }
                 )
             },
@@ -934,7 +934,7 @@ fun IdentitySection(
                     pendingNickname = it
                     // DO NOT call onNicknameChange here — it triggers a Rust FFI roundtrip per keystroke
                 },
-                label = { Text("Nickname") },
+                label = { Text(stringResource(R.string.settings_label_nickname)) },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
                 keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
@@ -951,7 +951,7 @@ fun IdentitySection(
                 onClick = { onNicknameChange(pendingNickname.trim()) },
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Text("Save Nickname")
+                Text(stringResource(R.string.settings_action_save_nickname))
             }
 
             Spacer(modifier = Modifier.height(16.dp))
@@ -980,7 +980,7 @@ fun IdentitySection(
                     val clip = android.content.ClipData.newPlainText("Peer ID", identityInfo.libp2pPeerId ?: "")
                     clipboard.setPrimaryClip(clip)
                 }) {
-                    Icon(Icons.Default.ContentCopy, contentDescription = "Copy Peer ID")
+                    Icon(Icons.Default.ContentCopy, contentDescription = stringResource(R.string.settings_content_desc_copy_peer_id))
                 }
             }
 
@@ -1010,7 +1010,7 @@ fun IdentitySection(
                     val clip = android.content.ClipData.newPlainText("Identity Hash", identityInfo.identityId ?: "")
                     clipboard.setPrimaryClip(clip)
                 }) {
-                    Icon(Icons.Default.ContentCopy, contentDescription = "Copy Identity Hash")
+                    Icon(Icons.Default.ContentCopy, contentDescription = stringResource(R.string.settings_content_desc_copy_identity_hash))
                 }
             }
 
@@ -1040,7 +1040,7 @@ fun IdentitySection(
                     val clip = android.content.ClipData.newPlainText("Public Key", identityInfo.publicKeyHex ?: "")
                     clipboard.setPrimaryClip(clip)
                 }) {
-                    Icon(Icons.Default.ContentCopy, contentDescription = "Copy Key")
+                    Icon(Icons.Default.ContentCopy, contentDescription = stringResource(R.string.settings_content_desc_copy_key))
                 }
             }
 
@@ -1051,9 +1051,9 @@ fun IdentitySection(
                 onClick = onCopyExport,
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Icon(Icons.Default.Share, contentDescription = "Share identity export", modifier = Modifier.size(16.dp))
+                Icon(Icons.Default.Share, contentDescription = stringResource(R.string.settings_content_desc_share_identity_export), modifier = Modifier.size(16.dp))
                 Spacer(modifier = Modifier.width(8.dp))
-                Text("Copy Full Identity Export")
+                Text(stringResource(R.string.settings_button_copy_identity))
             }
 
             Spacer(modifier = Modifier.height(8.dp))
@@ -1062,7 +1062,7 @@ fun IdentitySection(
                 onClick = onShowIdentityQr,
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Text("Show Identity QR")
+                Text(stringResource(R.string.settings_button_show_qr))
             }
 
             Spacer(modifier = Modifier.height(8.dp))
@@ -1071,7 +1071,7 @@ fun IdentitySection(
                 onClick = onImportIdentity,
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Text("Import Identity")
+                Text(stringResource(R.string.settings_button_import_identity))
             }
 
             Spacer(modifier = Modifier.height(8.dp))
@@ -1115,7 +1115,7 @@ fun IdentityUnavailableSection(
                 onClick = onCreateIdentity,
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Text("Create Identity")
+                Text(stringResource(R.string.settings_button_create_identity))
             }
         }
     }
@@ -1141,9 +1141,9 @@ fun PrivacySection(
                 onClick = onNavigateToBlockedPeers,
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Icon(Icons.Filled.Block, contentDescription = "Manage blocked peers", modifier = Modifier.size(16.dp))
+                Icon(Icons.Filled.Block, contentDescription = stringResource(R.string.settings_content_desc_manage_blocked_peers), modifier = Modifier.size(16.dp))
                 Spacer(modifier = Modifier.width(8.dp))
-                Text("Manage Blocked Peers")
+                Text(stringResource(R.string.settings_button_manage_blocked))
             }
 
             Spacer(modifier = Modifier.height(8.dp))
@@ -1158,7 +1158,7 @@ fun PrivacySection(
                 },
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Text("Privacy Policy")
+                Text(stringResource(R.string.settings_button_privacy_policy))
             }
         }
     }

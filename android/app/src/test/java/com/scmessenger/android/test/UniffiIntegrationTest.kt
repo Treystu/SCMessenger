@@ -66,7 +66,9 @@ class UniffiIntegrationTest {
             addedAt = (System.currentTimeMillis() / 1000).toULong(),
             lastSeen = null,
             notes = "Integration test contact",
-            lastKnownDeviceId = null
+            lastKnownDeviceId = null,
+            verifiedAt = null,
+            isTombstone = false
         )
 
         manager.add(contact)

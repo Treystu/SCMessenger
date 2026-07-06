@@ -16,12 +16,17 @@ import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withTimeoutOrNull
 import timber.log.Timber
 import java.net.Inet4Address
 import java.net.InetSocketAddress
-import java.net.Socket
+import java.nio.channels.AsynchronousSocketChannel
+import java.nio.channels.CompletionHandler
 import java.util.concurrent.ConcurrentHashMap
+import kotlin.coroutines.resume
 
 /**
  * TCP-based LAN subnet probe.
@@ -74,7 +79,14 @@ class SubnetProbe(
     /** Per-TCP-connect timeout. */
     private val connectTimeoutMs: Int = 1_000,
     /** Bounded parallelism for the connect probe fan-out. */
-    private val maxConcurrentProbes: Int = 32
+    private val maxConcurrentProbes: Int = 32,
+    /**
+     * Pause between a successful raw TCP probe and reporting the address to
+     * the dialer. The probe socket leaves the peer's port in TIME_WAIT; an
+     * immediate libp2p dial to the same ip:port can be rejected by the OS
+     * (observed against the Windows CLI daemon). 500ms lets it clear.
+     */
+    private val dialDelayMs: Long = 500L
 ) {
     @Volatile private var isRunning = false
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
@@ -158,17 +170,19 @@ class SubnetProbe(
             candidates += expandSubnet(subnet)
         }
 
-        // Fan out probes in bounded parallel batches.
-        val sem = java.util.concurrent.Semaphore(maxConcurrentProbes)
+        // Fan out probes in bounded parallel batches. The semaphore is the
+        // kotlinx.coroutines suspending variant: waiting coroutines suspend
+        // instead of parking Dispatchers.IO threads. (The previous
+        // java.util.concurrent.Semaphore froze the entire IO pool — thousands
+        // of coroutines each blocking a real thread in acquire() — which
+        // starved all other background work and fired an ANR on "Rescan".)
+        val sem = Semaphore(maxConcurrentProbes)
         val jobs = candidates.map { (host, port) ->
-            scope.async(Dispatchers.IO) {
-                sem.acquire()
-                try {
-                    if (!isRunning) return@async
-                    if (host in localSelfIps) return@async
+            scope.async {
+                sem.withPermit {
+                    if (!isRunning) return@withPermit
+                    if (host in localSelfIps) return@withPermit
                     probeHost(host, port, localSelfIps)
-                } finally {
-                    sem.release()
                 }
             }
         }
@@ -182,26 +196,13 @@ class SubnetProbe(
         recentlyReported.entries.removeAll { (_, ts) -> (now - ts) > reportDedupMs }
         if (recentlyReported.containsKey(key)) return
 
+        // Non-blocking connect: AsynchronousSocketChannel completes on its own
+        // small NIO group instead of parking an IO-dispatcher thread per probe.
+        // A connect that is accepted is a sufficient liveness signal — we no
+        // longer peek-read a byte, which used to hold the socket (and a
+        // thread) open for up to another 200ms per host.
         val opened = withTimeoutOrNull(connectTimeoutMs.toLong() + 250L) {
-            try {
-                Socket().use { sock ->
-                    sock.connect(InetSocketAddress(host, port), connectTimeoutMs)
-                    // Optional: try to read a tiny amount to confirm something
-                    // is actually answering (not just a firewalled drop). We
-                    // give the server 200ms; libp2p won't push unsolicited
-                    // data, but a WebSocket relay may send an HTTP 400.
-                    try {
-                        sock.soTimeout = 200
-                        val peek = ByteArray(1)
-                        sock.getInputStream().read(peek)
-                    } catch (_: Throwable) {
-                        // No data is fine — connection accepted is enough.
-                    }
-                    true
-                }
-            } catch (_: Throwable) {
-                false
-            }
+            connectAsync(host, port)
         } ?: false
 
         if (!opened) return
@@ -211,12 +212,53 @@ class SubnetProbe(
         // correct transport. Port 9001 is raw TCP.
         val multiaddr = if (port == 9002) "/ip4/$host/tcp/$port/ws" else "/ip4/$host/tcp/$port"
         Timber.i("SubnetProbe: open port $host:$port (likely SCMessenger peer) -> $multiaddr")
+        // Let the probe socket's TIME_WAIT state clear on the peer before the
+        // dialer opens the real libp2p connection to the same ip:port.
+        if (dialDelayMs > 0) delay(dialDelayMs)
         try {
             onLanAddressResolved(multiaddr, TransportType.TCP_MDNS)
         } catch (t: Throwable) {
             Timber.w(t, "SubnetProbe: onLanAddressResolved callback threw")
         }
     }
+
+    /**
+     * Suspending TCP connect via NIO [AsynchronousSocketChannel]. Never blocks
+     * the calling thread; cancellation closes the channel, which aborts the
+     * in-flight connect. Returns true iff the connection was accepted.
+     */
+    private suspend fun connectAsync(host: String, port: Int): Boolean =
+        suspendCancellableCoroutine { cont ->
+            val channel = try {
+                AsynchronousSocketChannel.open()
+            } catch (t: Throwable) {
+                cont.resume(false)
+                return@suspendCancellableCoroutine
+            }
+            cont.invokeOnCancellation {
+                try { channel.close() } catch (_: Throwable) {}
+            }
+            try {
+                channel.connect(
+                    InetSocketAddress(host, port),
+                    Unit,
+                    object : CompletionHandler<Void?, Unit> {
+                        override fun completed(result: Void?, attachment: Unit) {
+                            try { channel.close() } catch (_: Throwable) {}
+                            if (cont.isActive) cont.resume(true)
+                        }
+
+                        override fun failed(exc: Throwable, attachment: Unit) {
+                            try { channel.close() } catch (_: Throwable) {}
+                            if (cont.isActive) cont.resume(false)
+                        }
+                    }
+                )
+            } catch (t: Throwable) {
+                try { channel.close() } catch (_: Throwable) {}
+                if (cont.isActive) cont.resume(false)
+            }
+        }
 
     // ----------------------------------------------------------------------
     // Subnet enumeration

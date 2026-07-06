@@ -149,14 +149,17 @@ impl NotificationManager {
                                 let promise = js_sys::Promise::from(promise_val);
                                 let js_future = wasm_bindgen_futures::JsFuture::from(promise);
                                 if let Ok(permission_val) = js_future.await {
-                                    let permission_str = permission_val.as_string().unwrap_or_default();
+                                    let permission_str =
+                                        permission_val.as_string().unwrap_or_default();
                                     if permission_str == "granted" {
-                                        *self.permission.borrow_mut() = NotificationPermission::Granted;
+                                        *self.permission.borrow_mut() =
+                                            NotificationPermission::Granted;
                                         save_notification_settings("granted");
                                         return true;
                                     }
                                     if permission_str == "denied" {
-                                        *self.permission.borrow_mut() = NotificationPermission::Denied;
+                                        *self.permission.borrow_mut() =
+                                            NotificationPermission::Denied;
                                         save_notification_settings("denied");
                                         return false;
                                     }
@@ -188,13 +191,16 @@ impl NotificationManager {
                                 let promise = js_sys::Promise::from(promise_val);
                                 let js_future = wasm_bindgen_futures::JsFuture::from(promise);
                                 if let Ok(permission_val) = js_future.await {
-                                    let permission_str = permission_val.as_string().unwrap_or_default();
+                                    let permission_str =
+                                        permission_val.as_string().unwrap_or_default();
                                     let granted = permission_str == "granted";
                                     if granted {
-                                        *self.permission.borrow_mut() = NotificationPermission::Granted;
+                                        *self.permission.borrow_mut() =
+                                            NotificationPermission::Granted;
                                         save_notification_settings("granted");
                                     } else {
-                                        *self.permission.borrow_mut() = NotificationPermission::Denied;
+                                        *self.permission.borrow_mut() =
+                                            NotificationPermission::Denied;
                                         save_notification_settings("denied");
                                     }
                                     return granted;

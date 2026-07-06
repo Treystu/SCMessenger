@@ -14,7 +14,7 @@ use futures_util::StreamExt;
 use scmessenger_core::drift::frame::{DriftFrame, FrameType};
 use scmessenger_core::wasm_support::rpc::{notif_message_received, MessageReceivedParams};
 use scmessenger_core::IronCore;
-use std::collections::HashSet;
+use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use uuid::Uuid;
@@ -214,7 +214,14 @@ pub async fn run_ble_central_ingress(
             }
         };
 
-        let tracked: Arc<Mutex<HashSet<String>>> = Arc::new(Mutex::new(HashSet::new()));
+        // Track peripherals with backoff state to prevent spin-looping on unreachable devices
+        struct PeripheralState {
+            active: bool,
+            failures: u32,
+            cooldown_until: Option<std::time::Instant>,
+        }
+        let tracked: Arc<Mutex<std::collections::HashMap<String, PeripheralState>>> =
+            Arc::new(Mutex::new(std::collections::HashMap::new()));
 
         while let Some(evt) = events.next().await {
             tracing::debug!("BLE central event received: {:?}", evt);
@@ -229,21 +236,37 @@ pub async fn run_ble_central_ingress(
                 _ => continue,
             };
 
-            // Throttle processing per device so we aren't checking properties 100x per second
+            // Throttle processing per device with exponential backoff
             let id_key = format!("{:?}", id);
             {
                 let mut guard = tracked.lock().await;
-                if guard.contains(&id_key) {
+                let state = guard.entry(id_key.clone()).or_insert(PeripheralState {
+                    active: false,
+                    failures: 0,
+                    cooldown_until: None,
+                });
+
+                if state.active {
                     continue; // Busy connecting or actively tracked
                 }
-                // We'll lock it while we investigate, and release if investigation fails
-                guard.insert(id_key.clone());
+
+                // Respect backoff cooldown for previously failed peripherals
+                if let Some(cooldown) = state.cooldown_until {
+                    if std::time::Instant::now() < cooldown {
+                        continue;
+                    }
+                }
+
+                state.active = true;
             }
 
             let peripheral = match adapter.peripheral(&id).await {
                 Ok(p) => p,
                 Err(_) => {
-                    tracked.lock().await.remove(&id_key);
+                    let mut guard = tracked.lock().await;
+                    if let Some(state) = guard.get_mut(&id_key) {
+                        state.active = false;
+                    }
                     continue;
                 }
             };
@@ -284,13 +307,41 @@ pub async fn run_ble_central_ingress(
                     }
                 }
 
+                let mut success = true;
                 if is_match {
                     tracing::info!("BLE found matching peripheral: {}", key);
                     subscribe_ingress_for_peripheral(peripheral, core_c, ui_c).await;
+                    // subscribe_ingress_for_peripheral returns only when the stream
+                    // ends or an error occurs — treat post-return as a failure if
+                    // we were actively matched (the happy path stays connected
+                    // indefinitely).
+                    success = false;
                 }
 
-                // Release tracking lock after we are finished so it can be rediscovered later if disconnected
-                track.lock().await.remove(&key);
+                // Update backoff state
+                let mut guard = track.lock().await;
+                if let Some(state) = guard.get_mut(&key) {
+                    state.active = false;
+                    if success || !is_match {
+                        // Non-matching peripherals or successful connections reset backoff
+                        state.failures = 0;
+                        state.cooldown_until = None;
+                    } else {
+                        state.failures += 1;
+                        // Exponential backoff: 2s, 4s, 8s, 16s, 32s, 60s cap
+                        let backoff_secs = (1u64 << state.failures).min(60);
+                        state.cooldown_until = Some(
+                            std::time::Instant::now()
+                                + std::time::Duration::from_secs(backoff_secs),
+                        );
+                        tracing::debug!(
+                            "BLE backoff for {} set to {}s (failure #{})",
+                            key,
+                            backoff_secs,
+                            state.failures
+                        );
+                    }
+                }
             });
         }
     }

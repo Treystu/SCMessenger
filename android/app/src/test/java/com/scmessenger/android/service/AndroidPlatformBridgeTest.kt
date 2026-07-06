@@ -7,7 +7,6 @@ import android.content.IntentFilter
 import android.os.BatteryManager
 import com.scmessenger.android.data.MeshRepository
 import io.mockk.every
-import io.mockk.isNull
 import io.mockk.mockk
 import io.mockk.slot
 import kotlin.system.measureTimeMillis

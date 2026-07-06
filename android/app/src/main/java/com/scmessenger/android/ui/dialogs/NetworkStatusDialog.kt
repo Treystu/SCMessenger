@@ -152,7 +152,7 @@ fun NetworkStatusDialog(
                         HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
                         Text(stringResource(R.string.network_diagnostics_section_dns_failures), style = MaterialTheme.typography.labelMedium)
                         failedDns.forEach { domain ->
-                            Text("  - $domain", style = MaterialTheme.typography.bodySmall)
+                            Text(stringResource(R.string.network_diagnostics_item, domain), style = MaterialTheme.typography.bodySmall)
                         }
                     }
 
@@ -162,7 +162,7 @@ fun NetworkStatusDialog(
                         HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
                         Text(stringResource(R.string.network_diagnostics_section_unreachable_relays), style = MaterialTheme.typography.labelMedium)
                         unreachableRelays.forEach { relay ->
-                            Text("  - $relay", style = MaterialTheme.typography.bodySmall)
+                            Text(stringResource(R.string.network_diagnostics_item, relay), style = MaterialTheme.typography.bodySmall)
                         }
                     }
 
@@ -171,7 +171,7 @@ fun NetworkStatusDialog(
                         HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
                         Text(stringResource(R.string.network_diagnostics_section_recommendations), style = MaterialTheme.typography.labelMedium)
                         report!!.recommendations.forEach { rec ->
-                            Text("  - $rec", style = MaterialTheme.typography.bodySmall)
+                            Text(stringResource(R.string.network_diagnostics_item, rec), style = MaterialTheme.typography.bodySmall)
                         }
                     }
 

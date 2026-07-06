@@ -330,8 +330,14 @@ class WifiDirectTransport(
         }
     }
 
+    // Issue 6: the accept loop blocks indefinitely; park it on a dedicated
+    // daemon thread instead of consuming a shared Dispatchers.IO thread.
+    private val acceptDispatcher = java.util.concurrent.Executors.newSingleThreadExecutor { r ->
+        Thread(r, "wifidirect-accept").apply { isDaemon = true }
+    }.asCoroutineDispatcher()
+
     private fun startServer() {
-        scope.launch {
+        scope.launch(acceptDispatcher) {
             try {
                 serverSocket = ServerSocket(P2P_PORT)
                 Timber.i("WiFi Direct server started on port $P2P_PORT")

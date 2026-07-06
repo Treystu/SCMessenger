@@ -1,6 +1,8 @@
 package com.scmessenger.android.ui.components
 
 import android.content.ClipData
+import com.scmessenger.android.R
+import androidx.compose.ui.res.stringResource
 import android.content.ClipboardManager
 import android.content.Context
 import android.widget.Toast
@@ -161,7 +163,7 @@ fun TruncatedCopyableText(
             ) {
                 Icon(
                     imageVector = androidx.compose.material.icons.Icons.Default.ContentCopy,
-                    contentDescription = "Copy $label"
+                    contentDescription = stringResource(R.string.copyable_text_content_desc_copy, label)
                 )
             }
         }

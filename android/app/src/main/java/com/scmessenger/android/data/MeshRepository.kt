@@ -154,11 +154,11 @@ open class MeshRepository(
                 get() = wifiAcked || bleAcked
         }
 
-        internal fun attemptWifiThenBleFallback(
+        internal suspend fun attemptWifiThenBleFallback(
             wifiPeerId: String?,
             blePeerId: String?,
-            tryWifi: (String) -> Boolean,
-            tryBle: (String) -> Boolean
+            tryWifi: suspend (String) -> Boolean,
+            tryBle: suspend (String) -> Boolean
         ): LocalTransportFallbackResult {
             val normalizedWifi = wifiPeerId?.trim()?.takeIf { it.isNotEmpty() }
             if (normalizedWifi != null) {
@@ -773,6 +773,14 @@ open class MeshRepository(
         }
     }
 
+    /**
+     * In-memory snapshot of the DataStore-backed nickname fallback, refreshed
+     * by the collector started in init. May briefly be null on cold start
+     * before the first DataStore emission; callers treat null as "no fallback".
+     */
+    @Volatile
+    private var dataStoreNicknameSnapshot: String? = null
+
     init {
         Timber.d("MeshRepository initialized with storage: $storagePath")
         if (strictBleOnlyValidation) {
@@ -780,6 +788,20 @@ open class MeshRepository(
         }
         checkReinstallState()
         initializeManagers()
+        // Issue 6 (blocking I/O): keep an in-memory snapshot of the DataStore
+        // nickname fallback fresh from a background collector. The identity
+        // getters used to runBlocking { ... firstOrNull() } on every call —
+        // DataStore disk I/O on whatever thread called them, including main
+        // during UI composition.
+        repoScope.launch {
+            try {
+                preferencesRepository?.identityNickname?.collect { value ->
+                    dataStoreNicknameSnapshot = value
+                }
+            } catch (e: Exception) {
+                Timber.w(e, "DataStore nickname collector failed; fallback snapshot frozen")
+            }
+        }
     }
 
     /**
@@ -935,7 +957,10 @@ open class MeshRepository(
             onLanAddressResolved = { multiaddr ->
                 repoScope.launch {
                     try {
-                        swarmBridge?.dial(multiaddr)
+                        // Route through the suspend dial() wrapper (Dispatchers.IO)
+                        // rather than hitting the bridge FFI directly — the FFI
+                        // dial blocks its calling thread until the swarm replies.
+                        dial(multiaddr)
                         Timber.i("Successfully dialed discovered LAN peer $multiaddr via SwarmBridge")
                     } catch (e: Exception) {
                         Timber.w("Failed to dial discovered LAN peer $multiaddr: ${e.message}")
@@ -3032,11 +3057,11 @@ open class MeshRepository(
         wifiTransportManager?.startDiscovery()
     }
 
-    private fun initializeAndStartSwarm() {
+    private suspend fun initializeAndStartSwarm() = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
         val settings = loadSettings()
         if (!settings.internetEnabled) {
             Timber.d("Swarm/Internet disabled in settings")
-            return
+            return@withContext
         }
 
         try {
@@ -3048,15 +3073,23 @@ open class MeshRepository(
             // Bootstrap addrs: empty for now — mobile will discover LAN peers via mDNS
             // and relay peers via the ledger exchange protocol. Can be populated from
             // config or QR-scanned contact addrs in future.
+            //
+            // TCP-listener-zombie fix: startSwarm now blocks (up to 15s) until the
+            // first listener is actually bound, and throws NetworkException if the
+            // bind fails or times out. That is why this function is a suspend fun
+            // pinned to Dispatchers.IO — it must never run on the main thread.
             meshService?.startSwarm("/ip4/0.0.0.0/tcp/9001", listOf())
 
-            // Obtain the SwarmBridge managed by Rust MeshService
+            // Obtain the SwarmBridge managed by Rust MeshService — only after the
+            // listener is confirmed bound, so a wired bridge implies real
+            // inbound connectivity rather than a zombie listener.
             swarmBridge = meshService?.getSwarmBridge()
             updateBleIdentityBeacon()
 
-            Timber.i("[OK] Internet transport (Swarm) initiated and bridge wired")
+            Timber.i("[OK] Internet transport (Swarm) listening on tcp/9001 and bridge wired")
         } catch (e: Exception) {
-            Timber.e(e, "Failed to initialize Swarm transport")
+            swarmBridge = null
+            Timber.e(e, "Swarm failed to start listening — inbound internet/LAN transport unavailable")
         }
     }
 
@@ -3353,7 +3386,10 @@ open class MeshRepository(
         kotlin.runCatching { transportManager?.stopAll() }
             .onFailure { Timber.w(it, "Failed to stop TransportManager (BLE/WiFi Aware/WiFi Direct/mDNS)") }
 
-        kotlin.runCatching { swarmBridge?.shutdown() }
+        // shutdown() is now a suspend FFI call; teardown must complete before
+        // meshService.stop() below, so block here (bounded: it only awaits the
+        // swarm command-channel acknowledgement).
+        kotlin.runCatching { kotlinx.coroutines.runBlocking { swarmBridge?.shutdown() } }
             .onFailure { Timber.w(it, "Failed to shutdown swarm bridge") }
 
         kotlin.runCatching { meshService?.stop() }
@@ -4045,13 +4081,7 @@ open class MeshRepository(
             val info = core.getIdentityInfo()
             if (info != null && info.initialized) {
                 val resolvedInfo = if (info.nickname.isNullOrBlank()) {
-                    val cachedNickname = kotlinx.coroutines.runBlocking {
-                        try {
-                            preferencesRepository?.identityNickname?.firstOrNull()
-                        } catch (e: Exception) {
-                            null
-                        }
-                    }
+                    val cachedNickname = dataStoreNicknameSnapshot
                     if (!cachedNickname.isNullOrBlank()) {
                         Timber.w("getIdentityInfoNonBlocking: Rust core nickname blank; using DataStore fallback: $cachedNickname")
                         setNickname(cachedNickname)
@@ -4072,13 +4102,7 @@ open class MeshRepository(
             val cached = readCachedIdentityFields()
             if (cached != null && cached.initialized) {
                 val resolvedCached = if (cached.nickname.isNullOrBlank()) {
-                    val cachedNickname = kotlinx.coroutines.runBlocking {
-                        try {
-                            preferencesRepository?.identityNickname?.firstOrNull()
-                        } catch (e: Exception) {
-                            null
-                        }
-                    }
+                    val cachedNickname = dataStoreNicknameSnapshot
                     if (!cachedNickname.isNullOrBlank()) {
                         cached.copy(nickname = cachedNickname)
                     } else {
@@ -4100,13 +4124,7 @@ open class MeshRepository(
         val cached = readCachedIdentityFields()
         if (cached != null) {
             val resolvedCached = if (cached.nickname.isNullOrBlank()) {
-                val cachedNickname = kotlinx.coroutines.runBlocking {
-                    try {
-                        preferencesRepository?.identityNickname?.firstOrNull()
-                    } catch (e: Exception) {
-                        null
-                    }
-                }
+                val cachedNickname = dataStoreNicknameSnapshot
                 if (!cachedNickname.isNullOrBlank()) {
                     cached.copy(nickname = cachedNickname)
                 } else {
@@ -4143,13 +4161,7 @@ open class MeshRepository(
         // P0: Cache identity fields for instant UI load on next startup
         if (result != null && result.initialized) {
             val resolvedResult = if (result.nickname.isNullOrBlank()) {
-                val cachedNickname = kotlinx.coroutines.runBlocking {
-                    try {
-                        preferencesRepository?.identityNickname?.firstOrNull()
-                    } catch (e: Exception) {
-                        null
-                    }
-                }
+                val cachedNickname = dataStoreNicknameSnapshot
                 if (!cachedNickname.isNullOrBlank()) {
                     Timber.w("getIdentityInfo: Rust core nickname blank; using DataStore fallback: $cachedNickname")
                     setNickname(cachedNickname)
@@ -4168,13 +4180,7 @@ open class MeshRepository(
         val cached = readCachedIdentityFields()
         if (cached != null && cached.initialized) {
             val resolvedCached = if (cached.nickname.isNullOrBlank()) {
-                val cachedNickname = kotlinx.coroutines.runBlocking {
-                    try {
-                        preferencesRepository?.identityNickname?.firstOrNull()
-                    } catch (e: Exception) {
-                        null
-                    }
-                }
+                val cachedNickname = dataStoreNicknameSnapshot
                 if (!cachedNickname.isNullOrBlank()) {
                     cached.copy(nickname = cachedNickname)
                 } else {
@@ -4226,18 +4232,25 @@ open class MeshRepository(
         }
         persistIdentityBackup(core)
         // If swarm start was postponed before identity/nickname was ready, resume now.
-        initializeAndStartSwarm()
+        // Launched on repoScope: initializeAndStartSwarm is a suspend fun that can
+        // block up to 15s waiting for the listener bind, and setNickname may be
+        // invoked from the main thread.
         updateBleIdentityBeacon()
         identitySyncSentPeers.clear()
         historySyncSentPeers.clear()
-        val connectedPeers = try {
-            swarmBridge?.getPeers().orEmpty()
-        } catch (e: Exception) {
-            Timber.d("Unable to enumerate peers for nickname sync: ${e.message}")
-            emptyList()
-        }
-        connectedPeers.forEach { routePeerId ->
-            sendIdentitySyncIfNeeded(routePeerId = routePeerId)
+        repoScope.launch {
+            initializeAndStartSwarm()
+            // getPeers() is a suspend FFI call now; enumerate after the swarm
+            // (re)start so the nickname sync reaches currently-connected peers.
+            val connectedPeers = try {
+                swarmBridge?.getPeers().orEmpty()
+            } catch (e: Exception) {
+                Timber.d("Unable to enumerate peers for nickname sync: ${e.message}")
+                emptyList()
+            }
+            connectedPeers.forEach { routePeerId ->
+                sendIdentitySyncIfNeeded(routePeerId = routePeerId)
+            }
         }
     }
 
@@ -4254,14 +4267,19 @@ open class MeshRepository(
      * We read this directly from the SharedPreferences backup file that DataStore creates.
      */
     fun syncNicknameFromDatastore() {
+        // Issue 6: read DataStore on repoScope instead of runBlocking on the
+        // caller's thread. The sync is inherently asynchronous — callers
+        // (SettingsViewModel) only trigger it, they don't consume a result.
+        repoScope.launch { syncNicknameFromDatastoreInternal() }
+    }
+
+    private suspend fun syncNicknameFromDatastoreInternal() {
         // Read the nickname from the PreferencesRepository (DataStore fallback)
-        val cachedNickname = kotlinx.coroutines.runBlocking {
-            try {
-                preferencesRepository?.identityNickname?.firstOrNull()
-            } catch (e: Exception) {
-                Timber.e(e, "syncNicknameFromDatastore: Failed to read from preferencesRepository")
-                null
-            }
+        val cachedNickname = try {
+            preferencesRepository?.identityNickname?.firstOrNull()
+        } catch (e: Exception) {
+            Timber.e(e, "syncNicknameFromDatastore: Failed to read from preferencesRepository")
+            null
         }
 
         if (cachedNickname.isNullOrBlank()) {
@@ -4621,15 +4639,14 @@ open class MeshRepository(
     }
 
     open suspend fun dial(multiaddr: String) {
-        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-            try {
-                // Attempt Swarm Dial
-                swarmBridge?.dial(multiaddr)
-                Timber.i("Dialed $multiaddr via SwarmBridge")
-            } catch (e: Exception) {
-                Timber.e(e, "Failed to dial $multiaddr")
-                throw e
-            }
+        // No withContext(Dispatchers.IO) needed: SwarmBridge.dial is a suspend
+        // FFI call (Issue 5) that awaits the swarm reply without blocking.
+        try {
+            swarmBridge?.dial(multiaddr)
+            Timber.i("Dialed $multiaddr via SwarmBridge")
+        } catch (e: Exception) {
+            Timber.e(e, "Failed to dial $multiaddr")
+            throw e
         }
     }
 
@@ -5100,8 +5117,11 @@ open class MeshRepository(
         pendingReceiptSendJobs.values.forEach { it.cancel() }
         pendingReceiptSendJobs.clear()
 
-        // 1. Stop all active services and release UniFFI objects
-        swarmBridge?.shutdown()
+        // 1. Stop all active services and release UniFFI objects.
+        // shutdown() is a suspend FFI call; the reset flow must not proceed to
+        // data wiping until the swarm has stopped, so block (bounded await).
+        kotlin.runCatching { kotlinx.coroutines.runBlocking { swarmBridge?.shutdown() } }
+            .onFailure { Timber.w(it, "Swarm shutdown failed during reset") }
         swarmBridge = null
 
         meshService?.stop()
@@ -5658,7 +5678,15 @@ open class MeshRepository(
     }
 
     fun setRelayBudget(messagesPerHour: UInt) {
-        meshService?.setRelayBudget(messagesPerHour)
+        // Suspend FFI call (Issue 5); fire-and-forget so sync callers (e.g. the
+        // battery-adjustment path in AndroidPlatformBridge) never block on it.
+        repoScope.launch {
+            try {
+                meshService?.setRelayBudget(messagesPerHour)
+            } catch (e: Exception) {
+                Timber.w("setRelayBudget failed: ${e.message}")
+            }
+        }
     }
 
     fun updateDeviceState(profile: uniffi.api.DeviceProfile) {
@@ -5682,44 +5710,61 @@ open class MeshRepository(
 
     /**
      * Get list of currently subscribed gossipsub topics from SwarmBridge.
+     *
+     * Bounded blocking bridge query: the FFI is a suspend fun (Issue 5), but
+     * legacy sync callers (TopicManager.refreshKnownTopics) need a value in
+     * place. The await is a fast in-process command-channel roundtrip.
      */
-    fun getTopics(): List<String> = swarmBridge?.getTopics() ?: emptyList()
+    fun getTopics(): List<String> = try {
+        kotlinx.coroutines.runBlocking { swarmBridge?.getTopics() ?: emptyList() }
+    } catch (e: Exception) {
+        Timber.w("getTopics failed: ${e.message}")
+        emptyList()
+    }
 
     /**
-     * Subscribe to a gossipsub topic via SwarmBridge.
+     * Subscribe to a gossipsub topic via SwarmBridge (fire-and-forget).
      */
     fun subscribeTopic(topic: String) {
-        try {
-            swarmBridge?.subscribeTopic(topic)
-        } catch (e: Exception) {
-            Timber.w("subscribeTopic failed for $topic: ${e.message}")
+        repoScope.launch {
+            try {
+                swarmBridge?.subscribeTopic(topic)
+            } catch (e: Exception) {
+                Timber.w("subscribeTopic failed for $topic: ${e.message}")
+            }
         }
     }
 
     fun unsubscribeTopic(topic: String) {
-        try {
-            swarmBridge?.unsubscribeTopic(topic)
-        } catch (e: Exception) {
-            Timber.w("unsubscribeTopic failed for $topic: ${e.message}")
+        repoScope.launch {
+            try {
+                swarmBridge?.unsubscribeTopic(topic)
+            } catch (e: Exception) {
+                Timber.w("unsubscribeTopic failed for $topic: ${e.message}")
+            }
         }
     }
 
     fun publishTopic(topic: String, data: ByteArray) {
-        try {
-            swarmBridge?.publishTopic(topic, data)
-        } catch (e: Exception) {
-            Timber.w("publishTopic failed for $topic: ${e.message}")
+        repoScope.launch {
+            try {
+                swarmBridge?.publishTopic(topic, data)
+            } catch (e: Exception) {
+                Timber.w("publishTopic failed for $topic: ${e.message}")
+            }
         }
     }
 
     /**
-     * Broadcast data to all connected peers via SwarmBridge.
+     * Broadcast data to all connected peers via SwarmBridge (fire-and-forget).
      */
     fun sendToAllPeers(data: ByteArray) {
-        try {
-            swarmBridge?.sendToAllPeers(data)
-        } catch (e: Exception) {
-            Timber.w("sendToAllPeers failed: ${e.message}")
+        repoScope.launch {
+            try {
+                swarmBridge?.sendToAllPeers(data)
+            } catch (e: Exception) {
+                Timber.w("sendToAllPeers failed: ${e.message}")
+            }
         }
     }
 
@@ -5729,22 +5774,28 @@ open class MeshRepository(
             rawAddresses = addresses,
             includeRelayCircuits = false
         )
-        dialCandidates.forEach { addr ->
-            try {
-                // Only append /p2p/ component if peerId is a valid libp2p PeerId format
-                // (base58btc multihash, starts with "12D3Koo" or "Qm").
-                // Blake3 hex identity_ids (64 hex chars) are NOT valid libp2p PeerIds.
-                val finalAddr = if (PeerIdValidator.isLibp2pPeerId(peerId) && !addr.contains("/p2p/")) {
-                    "$addr/p2p/$peerId"
-                } else {
-                    addr
+        // dial() is a suspend FFI call (Issue 5); issue the dials on repoScope
+        // so sync callers (ViewModels, delivery paths) never block. Callers
+        // that need the connection use awaitPeerConnection(), which polls and
+        // tolerates in-flight dials.
+        repoScope.launch {
+            dialCandidates.forEach { addr ->
+                try {
+                    // Only append /p2p/ component if peerId is a valid libp2p PeerId format
+                    // (base58btc multihash, starts with "12D3Koo" or "Qm").
+                    // Blake3 hex identity_ids (64 hex chars) are NOT valid libp2p PeerIds.
+                    val finalAddr = if (PeerIdValidator.isLibp2pPeerId(peerId) && !addr.contains("/p2p/")) {
+                        "$addr/p2p/$peerId"
+                    } else {
+                        addr
+                    }
+                    if (shouldAttemptDial(finalAddr)) {
+                        swarmBridge?.dial(finalAddr)
+                        Timber.d("Dialing $finalAddr")
+                    }
+                } catch (e: Exception) {
+                    Timber.e(e, "Failed to dial $addr")
                 }
-                if (shouldAttemptDial(finalAddr)) {
-                    swarmBridge?.dial(finalAddr)
-                    Timber.d("Dialing $finalAddr")
-                }
-            } catch (e: Exception) {
-                Timber.e(e, "Failed to dial $addr")
             }
         }
     }
@@ -8319,11 +8370,13 @@ open class MeshRepository(
         lastRelayBootstrapDialMs = nowMs
 
         emptyList<String>().forEach { addr ->
-            try {
-                if (!shouldAttemptDial(addr)) return@forEach
-                bridge.dial(addr)
-            } catch (e: Exception) {
-                Timber.d("Relay bootstrap dial skipped for $addr: ${e.message}")
+            if (!shouldAttemptDial(addr)) return@forEach
+            repoScope.launch {
+                try {
+                    bridge.dial(addr)
+                } catch (e: Exception) {
+                    Timber.d("Relay bootstrap dial skipped for $addr: ${e.message}")
+                }
             }
         }
     }
@@ -8715,7 +8768,14 @@ open class MeshRepository(
      * Uses relay/peer-confirmed observations (identify + reflection consensus).
      */
     fun getExternalAddresses(): List<String> {
-        return swarmBridge?.getExternalAddresses() ?: emptyList()
+        // Bounded blocking bridge query (fast command-channel roundtrip); see
+        // getTopics() for rationale — legacy sync callers need a value in place.
+        return try {
+            kotlinx.coroutines.runBlocking { swarmBridge?.getExternalAddresses() ?: emptyList() }
+        } catch (e: Exception) {
+            Timber.w("getExternalAddresses failed: ${e.message}")
+            emptyList()
+        }
     }
 
     /**
@@ -8725,7 +8785,14 @@ open class MeshRepository(
      * peers to attempt unreachable dials.
      */
     fun getListeningAddresses(): List<String> {
-        return swarmBridge?.getListeners() ?: emptyList()
+        // Bounded blocking bridge query (fast command-channel roundtrip); see
+        // getTopics() for rationale — legacy sync callers need a value in place.
+        return try {
+            kotlinx.coroutines.runBlocking { swarmBridge?.getListeners() ?: emptyList() }
+        } catch (e: Exception) {
+            Timber.w("getListeningAddresses failed: ${e.message}")
+            emptyList()
+        }
     }
 
     fun getLocalIpAddress(): String? {

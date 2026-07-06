@@ -5,6 +5,8 @@ import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import com.scmessenger.android.transport.NetworkType
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -21,7 +23,7 @@ class NetworkTypeDetector @Inject constructor(
     private val connectivityManager =
         context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
 
-    fun detectNetworkType(): NetworkType {
+    suspend fun detectNetworkType(): NetworkType {
         val network = connectivityManager.activeNetwork ?: return NetworkType.UNKNOWN
         val caps = connectivityManager.getNetworkCapabilities(network) ?: return NetworkType.UNKNOWN
 
@@ -50,17 +52,21 @@ class NetworkTypeDetector @Inject constructor(
     }
 
     /** Heuristic: check if the cellular network blocks non-standard ports (9001, 9010). */
-    private fun isCellularPortRestricted(): Boolean {
+    private suspend fun isCellularPortRestricted(): Boolean {
         return isPortBlocked("8.8.8.8", 9001) && isPortBlocked("8.8.8.8", 9010)
     }
 
-    fun isCellularNetwork(): Boolean {
+    suspend fun isCellularNetwork(): Boolean {
         val type = detectNetworkType()
         return type == NetworkType.CELLULAR || type == NetworkType.CELLULAR_RESTRICTED
     }
 
-    fun isPortBlocked(host: String, port: Int): Boolean {
-        return try {
+    /**
+     * Issue 6: pinned to Dispatchers.IO — the connect can block for up to 3s
+     * and must never run on the caller's dispatcher thread directly.
+     */
+    suspend fun isPortBlocked(host: String, port: Int): Boolean = withContext(Dispatchers.IO) {
+        try {
             val socket = java.net.Socket()
             socket.connect(java.net.InetSocketAddress(host, port), 3000)
             socket.close()

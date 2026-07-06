@@ -6,6 +6,7 @@ import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
 import androidx.core.content.ContextCompat
+import kotlinx.coroutines.delay
 import timber.log.Timber
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
@@ -173,8 +174,11 @@ class BleGattServer(
 
     /**
      * Send data to a specific connected device via notify.
+     *
+     * Issue 6: suspend — fragmented sends pace with delay() instead of
+     * Thread.sleep(), so the calling dispatcher thread is never parked.
      */
-    fun sendData(deviceAddress: String, data: ByteArray): Boolean {
+    suspend fun sendData(deviceAddress: String, data: ByteArray): Boolean {
         val device = connectedDevices[deviceAddress] ?: run {
             Timber.w("Device not connected: $deviceAddress")
             return false
@@ -226,7 +230,7 @@ class BleGattServer(
         return connectedDevices.keys().toList()
     }
 
-    private fun sendFragmented(
+    private suspend fun sendFragmented(
         device: BluetoothDevice,
         characteristic: BluetoothGattCharacteristic,
         data: ByteArray,
@@ -256,7 +260,7 @@ class BleGattServer(
 
             offset = end
             if (i < totalFragments - 1) {
-                Thread.sleep(2) // Reduced delay for higher throughput if MTU allows
+                delay(2) // Pace fragments without parking the dispatcher thread
             }
         }
 

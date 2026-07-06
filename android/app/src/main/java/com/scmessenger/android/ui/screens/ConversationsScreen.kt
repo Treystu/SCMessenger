@@ -304,7 +304,7 @@ fun ConversationItem(
                     ) {
                         Icon(
                             imageVector = Icons.Default.Delete,
-                            contentDescription = "Delete conversation",
+                            contentDescription = stringResource(R.string.conversations_content_desc_delete),
                             tint = Color.White,
                         )
                     }

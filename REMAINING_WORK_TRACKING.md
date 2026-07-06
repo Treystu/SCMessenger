@@ -1,13 +1,45 @@
 # SCMessenger Remaining Work Tracking
 
 Status: Active
-Last updated: 2026-07-05 (Phase 1 Stage A compile-gate fixes landed; P1-15 transport-matrix
-audit and P1-10 adaptive-port design complete — see "Phase 1 Stage A/C/D progress" note below.
-Windows/Android parity effort remains top priority; full v1.0.0 sequencing governed by
-`HANDOFF/V1_0_0_EXECUTION_PLAN.md` — two-phase DAG, Phase 1 = parity effort + adaptive ports,
-Phase 2 = all remaining ship-blocking work)
+Last updated: 2026-07-06 (Fable 5 stabilization sprint COMPLETE — all 7 issues in
+`HANDOFF/done/FABLE_5_COMPREHENSIVE_AUDIT.md` implemented: TCP listener zombie fix,
+SubnetProbe ANR fix, outbound-dial fix, 14 sync FFI fns -> async, blocking-I/O
+cleanup, gossipsub reply channels; Android unit tests RE-ENABLED (operator-approved).
+Follow-ups queued as `HANDOFF/todo/NEXT_ITER_01..04` for sonnet/haiku workers:
+compile-gate sweep + test triage, adversarial review rerun, docs/residual debt,
+live-device retest. Windows/Android parity effort remains top priority; full v1.0.0
+sequencing governed by `HANDOFF/V1_0_0_EXECUTION_PLAN.md` — two-phase DAG, Phase 1 =
+parity effort + adaptive ports, Phase 2 = all remaining ship-blocking work)
 
 ---
+
+## 2026-07-06 FABLE 5 STABILIZATION SPRINT (COMPLETE — verification handed to workers)
+
+All remaining items from `HANDOFF/done/FABLE_5_COMPREHENSIVE_AUDIT.md` were
+implemented in one native Fable session (2026-07-05/06):
+
+- **Issue 1 (P0, TCP listener zombie):** `SwarmEvent2::ListenerFailed` propagated
+  from native+WASM event loops; `MeshService::start_swarm` now blocks (15s bound)
+  until the first listener binds and returns `NetworkError` otherwise;
+  `MeshRepository.initializeAndStartSwarm` is suspend and nulls the bridge on failure.
+- **Issue 2 (P0, SubnetProbe ANR):** coroutine Semaphore + NIO AsynchronousSocketChannel probe.
+- **Issue 4 (P1, outbound dial):** suspend dial() wrapper wired to LAN discovery;
+  mDNS carries `/p2p/` PeerIds (verified); 500ms TIME_WAIT delay before dialing probed hosts.
+- **Issue 5 (P1, FFI):** all 14 `rt.block_on` FFI fns are `async fn` (Kotlin suspend
+  via UniFFI 0.31); internal sync callers use `*_blocking` helpers; Kotlin call sites audited.
+- **Issue 6 (P2, blocking I/O):** DataStore runBlocking sites -> @Volatile snapshot;
+  NetworkTypeDetector suspend; GATT latch -> CompletableDeferred; Thread.sleep -> delay;
+  accept loops -> dedicated daemon dispatchers (documented deviation from literal NIO).
+- **Issue 7:** gossipsub Subscribe/Unsubscribe/Publish now have reply channels (both loops).
+- **Android unit tests re-enabled** (`android/app/build.gradle` disable block removed,
+  operator-approved reversal of the 2026-06-06 disable; 4 MeshRepositoryTest tests
+  wrapped in runTest for the now-suspend fallback helper).
+
+Verified at handoff: `cargo check --workspace` PASS, `cargo fmt` PASS.
+Outstanding verification (queued for workers): clippy, `cargo test --workspace
+--no-run` compile gate, full test run, wasm32 target check, Gradle unit-test
+triage (`NEXT_ITER_01`), adversarial review rerun (`NEXT_ITER_02` — the in-session
+review subagent hit the token limit), live-device retest (`NEXT_ITER_04`).
 
 ## 2026-07-04 WINDOWS <-> ANDROID PARITY EFFORT (TOP PRIORITY, operator-directed)
 

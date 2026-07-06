@@ -373,18 +373,16 @@ impl HistoryManager {
         // Parse and sort by timestamp ascending (oldest first)
         let mut records: Vec<(Vec<u8>, MessageRecord)> = all
             .into_iter()
-            .filter_map(|(k, v)| {
-                match serde_json::from_slice::<MessageRecord>(&v) {
-                    Ok(rec) => Some((k, rec)),
-                    Err(e) => {
-                        let key_str = String::from_utf8_lossy(&k);
-                        tracing::warn!(
-                            key = %key_str,
-                            error = %e,
-                            "skipping corrupt history record during retention sweep"
-                        );
-                        None
-                    }
+            .filter_map(|(k, v)| match serde_json::from_slice::<MessageRecord>(&v) {
+                Ok(rec) => Some((k, rec)),
+                Err(e) => {
+                    let key_str = String::from_utf8_lossy(&k);
+                    tracing::warn!(
+                        key = %key_str,
+                        error = %e,
+                        "skipping corrupt history record during retention sweep"
+                    );
+                    None
                 }
             })
             .collect();

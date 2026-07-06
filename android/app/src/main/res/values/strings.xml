@@ -482,4 +482,25 @@
     <string name="notification_permission_rationale_message">SCMessenger needs notification permission to alert you about new messages, message requests, and mesh network status. You can change this later in Android Settings.</string>
     <string name="notification_permission_request_button">Allow</string>
     <string name="notification_permission_skip_button">Not now</string>
+
+    <!-- Task: Hardcoded UI Strings Extraction -->
+    <string name="network_diagnostics_item">  - %1$s</string>
+    <string name="contacts_content_desc_paste">Paste</string>
+    <string name="contacts_content_desc_scan_qr">Scan QR code</string>
+    <string name="contacts_content_desc_add_contact">Add contact</string>
+    <string name="copyable_text_content_desc_copy">Copy %1$s</string>
+    <string name="storage_warning_content_desc">Warning</string>
+    <string name="chat_content_desc_back">Back</string>
+    <string name="chat_content_desc_blocked">Blocked</string>
+    <string name="conversations_content_desc_delete">Delete conversation</string>
+    <string name="settings_content_desc_copy_peer_id">Copy Peer ID</string>
+    <string name="settings_content_desc_copy_identity_hash">Copy Identity Hash</string>
+    <string name="settings_content_desc_copy_key">Copy Key</string>
+    <string name="settings_content_desc_share_identity_export">Share identity export</string>
+    <string name="settings_content_desc_manage_blocked_peers">Manage blocked peers</string>
+    <string name="requests_inbox_content_desc_back">Back</string>
+    <string name="app_content_desc_add_contact">Add contact</string>
+    <string name="contacts_action_add_button">Add</string>
+    <string name="settings_error_export_backup">Failed to export backup: %1$s</string>
+
 </resources>

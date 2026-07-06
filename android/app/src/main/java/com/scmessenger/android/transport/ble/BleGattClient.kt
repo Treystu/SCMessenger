@@ -340,7 +340,7 @@ class BleGattClient(
      * Returns `true` only when every fragment write has actually started
      * (`BluetoothGatt.writeCharacteristic` returned `true`), not merely queued.
      */
-    fun sendData(deviceAddress: String, data: ByteArray): Boolean {
+    suspend fun sendData(deviceAddress: String, data: ByteArray): Boolean {
         var targetAddress = deviceAddress
         var gatt = activeConnections[targetAddress]
         if (gatt == null) {
@@ -386,7 +386,10 @@ class BleGattClient(
         var allInitiated = true
         for ((index, fragment) in fragments.withIndex()) {
             val initiated = AtomicBoolean(false)
-            val initiationLatch = CountDownLatch(1)
+            // Issue 6: CompletableDeferred instead of CountDownLatch — waiting
+            // for the GATT op to start suspends the coroutine rather than
+            // parking a Dispatchers.IO thread for up to WRITE_INIT_TIMEOUT_MS.
+            val initiationSignal = CompletableDeferred<Unit>()
             val enqueued = enqueueGattOp(targetAddress) {
                 try {
                     characteristic.value = fragment
@@ -415,7 +418,7 @@ class BleGattClient(
                     initiated.set(false)
                     releaseGattOp(targetAddress, activeGatt)
                 } finally {
-                    initiationLatch.countDown()
+                    initiationSignal.complete(Unit)
                 }
             }
             if (!enqueued) {
@@ -429,12 +432,8 @@ class BleGattClient(
                 reconnectAfterWriteFailure(targetAddress, "enqueue_failed")
                 break
             }
-            val started = try {
-                initiationLatch.await(WRITE_INIT_TIMEOUT_MS, TimeUnit.MILLISECONDS)
-            } catch (ie: InterruptedException) {
-                Thread.currentThread().interrupt()
-                false
-            }
+            val started =
+                withTimeoutOrNull(WRITE_INIT_TIMEOUT_MS) { initiationSignal.await() } != null
             if (!started || !initiated.get()) {
                 allInitiated = false
                 reconnectAfterWriteFailure(

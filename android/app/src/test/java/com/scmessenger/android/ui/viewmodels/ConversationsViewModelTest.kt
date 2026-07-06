@@ -72,6 +72,7 @@ class ConversationsViewModelTest {
             timestamp = 1000uL,
             senderTimestamp = 1000uL,
             delivered = true,
+            status = uniffi.api.MessageStatus.DELIVERED,
             hidden = false
         )
         every { mockMeshRepository.getRecentMessages(any(), any()) } returns listOf(testMessage)

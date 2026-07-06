@@ -242,8 +242,11 @@ class TransportManager @JvmOverloads constructor(
     /**
      * Send data to a peer using the best available transport.
      * Uses TransportHealthMonitor.shouldUseTransport to skip degraded transports.
+     *
+     * Issue 6: suspend — the BLE GATT paths pace fragment writes with delay()
+     * and await write initiation without parking dispatcher threads.
      */
-    fun sendData(peerId: String, data: ByteArray): Boolean {
+    suspend fun sendData(peerId: String, data: ByteArray): Boolean {
         // Use cached transport if available and healthy
         val preferredTransport = peerTransports[peerId]
 
@@ -282,7 +285,7 @@ class TransportManager @JvmOverloads constructor(
         return false
     }
 
-    private fun sendViaTransport(peerId: String, data: ByteArray, transport: TransportType): Boolean {
+    private suspend fun sendViaTransport(peerId: String, data: ByteArray, transport: TransportType): Boolean {
         return when (transport) {
             TransportType.BLE -> run {
                 // Prefer connected transport channels before non-targeted advertiser payloads.

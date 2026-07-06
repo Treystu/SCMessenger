@@ -152,23 +152,12 @@ android {
             // JNI libraries from cargo-ndk build
             jniLibs.srcDirs = ['../../core/target/android-libs']
         }
-        test {
-            java.srcDirs = []
-        }
-        androidTest {
-            java.srcDirs = []
-        }
     }
 
     testOptions {
         unitTests {
             includeAndroidResources = true
         }
-    }
-
-    // Forcefully disable all test tasks to ensure they don't block the build
-    tasks.withType(Test).configureEach {
-        enabled = false
     }
 }
 

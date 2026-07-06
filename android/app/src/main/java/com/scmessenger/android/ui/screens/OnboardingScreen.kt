@@ -272,7 +272,7 @@ fun OnboardingScreen(
                     enabled = !isCreating,
                     modifier = Modifier.fillMaxWidth().height(56.dp)
                 ) {
-                    Text("Skip for Relay-Only Install")
+                    Text(stringResource(R.string.onboarding_action_skip_relay))
                 }
 
                 identityError?.let { error ->

@@ -44,6 +44,7 @@ class ChatViewModelTest {
             timestamp = 1u,
             senderTimestamp = 1u,
             delivered = delivered,
+            status = if (delivered) uniffi.api.MessageStatus.DELIVERED else uniffi.api.MessageStatus.SENT,
             hidden = false
         )
     }

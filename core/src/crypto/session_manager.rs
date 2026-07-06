@@ -294,17 +294,25 @@ impl SerializableRatchetSession {
         root_key_bytes.zeroize();
         let root_key = RatchetKey::from_bytes(rk_arr);
 
-        let sending_chain = self.sending_chain.map(|cs| {
-            let mut ck = [0u8; 32];
-            hex::decode_to_slice(&cs.chain_key_hex, &mut ck).ok();
-            Chain::new_with_index(RatchetKey::from_bytes(ck), cs.index)
-        });
+        let sending_chain = self
+            .sending_chain
+            .map(|cs| -> anyhow::Result<Chain> {
+                let mut ck = [0u8; 32];
+                hex::decode_to_slice(&cs.chain_key_hex, &mut ck)
+                    .map_err(|e| anyhow::anyhow!("Corrupt sending chain_key_hex in DB: {}", e))?;
+                Ok(Chain::new_with_index(RatchetKey::from_bytes(ck), cs.index))
+            })
+            .transpose()?;
 
-        let receiving_chain = self.receiving_chain.map(|cs| {
-            let mut ck = [0u8; 32];
-            hex::decode_to_slice(&cs.chain_key_hex, &mut ck).ok();
-            Chain::new_with_index(RatchetKey::from_bytes(ck), cs.index)
-        });
+        let receiving_chain = self
+            .receiving_chain
+            .map(|cs| -> anyhow::Result<Chain> {
+                let mut ck = [0u8; 32];
+                hex::decode_to_slice(&cs.chain_key_hex, &mut ck)
+                    .map_err(|e| anyhow::anyhow!("Corrupt receiving chain_key_hex in DB: {}", e))?;
+                Ok(Chain::new_with_index(RatchetKey::from_bytes(ck), cs.index))
+            })
+            .transpose()?;
 
         let our_identity_secret = if let Some(ref hex_str) = self.identity_secret_hex {
             let mut bytes = hex::decode(hex_str)

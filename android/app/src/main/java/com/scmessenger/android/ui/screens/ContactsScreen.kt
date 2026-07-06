@@ -316,7 +316,7 @@ fun ContactItem(
                 if (dismissState.targetValue != SwipeToDismissBoxValue.Settled) {
                     Icon(
                         imageVector = Icons.Default.Delete,
-                        contentDescription = "Delete",
+                        contentDescription = stringResource(R.string.delete),
                         tint = Color.White,
                         modifier = Modifier.size(32.dp)
                     )
@@ -583,11 +583,11 @@ fun NearbyPeerItem(
             FilledTonalButton(onClick = if (peer.hasFullIdentity) onConnect else onAdd) {
                 Icon(
                     imageVector = Icons.Default.PersonAdd,
-                    contentDescription = "Add contact",
+                    contentDescription = stringResource(R.string.contacts_content_desc_add_contact),
                     modifier = Modifier.size(16.dp)
                 )
                 Spacer(modifier = Modifier.width(4.dp))
-                Text("Add")
+                Text(stringResource(R.string.contacts_action_add_button))
             }
         }
     }
@@ -614,7 +614,7 @@ fun AddContactDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Add Contact") },
+        title = { Text(stringResource(R.string.contacts_action_add)) },
         text = {
             Column {
                 OutlinedButton(
@@ -636,9 +636,9 @@ fun AddContactDialog(
                     },
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Icon(Icons.Default.ContentPaste, contentDescription = "Paste", modifier = Modifier.size(16.dp))
+                    Icon(Icons.Default.ContentPaste, contentDescription = stringResource(R.string.contacts_content_desc_paste), modifier = Modifier.size(16.dp))
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text("Paste Identity Export")
+                    Text(stringResource(R.string.contacts_label_paste_identity))
                 }
 
                 Spacer(modifier = Modifier.height(8.dp))
@@ -674,9 +674,9 @@ fun AddContactDialog(
                     },
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Icon(Icons.Default.CameraAlt, contentDescription = "Scan QR code", modifier = Modifier.size(16.dp))
+                    Icon(Icons.Default.CameraAlt, contentDescription = stringResource(R.string.contacts_content_desc_scan_qr), modifier = Modifier.size(16.dp))
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text("Scan Contact QR")
+                    Text(stringResource(R.string.contacts_label_scan_qr))
                 }
 
                 Spacer(modifier = Modifier.height(16.dp))
@@ -695,7 +695,7 @@ fun AddContactDialog(
                 OutlinedTextField(
                     value = peerId,
                     onValueChange = { peerId = it },
-                    label = { Text("Peer ID") },
+                    label = { Text(stringResource(R.string.contacts_label_peer_id)) },
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true
                 )
@@ -703,7 +703,7 @@ fun AddContactDialog(
                 OutlinedTextField(
                     value = publicKey,
                     onValueChange = { publicKey = it },
-                    label = { Text("Public Key") },
+                    label = { Text(stringResource(R.string.contacts_label_public_key)) },
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true
                 )
@@ -711,7 +711,7 @@ fun AddContactDialog(
                 OutlinedTextField(
                     value = nickname,
                     onValueChange = { nickname = it },
-                    label = { Text("Nickname (Optional)") },
+                    label = { Text(stringResource(R.string.contacts_label_nickname_optional)) },
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true
                 )
@@ -733,7 +733,7 @@ fun AddContactDialog(
                     },
                     enabled = peerId.isNotBlank() && publicKey.isNotBlank()
                 ) {
-                    Text("Add")
+                    Text(stringResource(R.string.contacts_action_add_button))
                 }
                 Spacer(modifier = Modifier.width(8.dp))
                 TextButton(
@@ -750,13 +750,13 @@ fun AddContactDialog(
                     },
                     enabled = peerId.isNotBlank() && publicKey.isNotBlank()
                 ) {
-                    Text("Chat")
+                    Text(stringResource(R.string.contacts_action_chat))
                 }
             }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text("Cancel")
+                Text(stringResource(R.string.cancel))
             }
         }
     )

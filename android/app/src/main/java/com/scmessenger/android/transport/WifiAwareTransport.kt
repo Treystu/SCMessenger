@@ -337,8 +337,15 @@ class WifiAwareTransport(
      * accept the single incoming connection from the Subscriber, then close the
      * server socket and hand the accepted socket to AwareConnection for proxying.
      */
+    // Issue 6: WiFi Aware accepts and stream pumps block indefinitely; run
+    // them on a dedicated daemon-thread pool instead of consuming shared
+    // Dispatchers.IO threads (the pool grows per concurrent peer bridge).
+    private val blockingSocketDispatcher = java.util.concurrent.Executors.newCachedThreadPool { r ->
+        Thread(r, "wifiaware-socket").apply { isDaemon = true }
+    }.asCoroutineDispatcher()
+
     private suspend fun createResponderSocket(peerId: String) {
-        withContext(Dispatchers.IO) {
+        withContext(blockingSocketDispatcher) {
             var serverSocket: ServerSocket? = null
             try {
                 // Network.bindSocket only accepts Socket/DatagramSocket/FileDescriptor.
@@ -444,7 +451,7 @@ class WifiAwareTransport(
         @Volatile private var closed = false
 
         suspend fun acceptAndPump() {
-            withContext(Dispatchers.IO) {
+            withContext(blockingSocketDispatcher) {
                 val accepted = try {
                     loopbackServer.accept()
                 } catch (e: Exception) {
@@ -459,10 +466,10 @@ class WifiAwareTransport(
 
                 Timber.d("WiFi Aware loopback proxy for $peerId accepted local dial; bridging streams")
 
-                val peerToLocal = scope.launch {
+                val peerToLocal = scope.launch(blockingSocketDispatcher) {
                     pump(peerSocket.getInputStream(), accepted.getOutputStream(), "peer->local")
                 }
-                val localToPeer = scope.launch {
+                val localToPeer = scope.launch(blockingSocketDispatcher) {
                     pump(accepted.getInputStream(), peerSocket.getOutputStream(), "local->peer")
                 }
                 // Close the whole bridge as soon as either direction's pump
