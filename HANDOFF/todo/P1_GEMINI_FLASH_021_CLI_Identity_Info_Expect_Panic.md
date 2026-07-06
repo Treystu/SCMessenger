@@ -1,9 +1,29 @@
-# P2_CLI_Identity_Info_Expect_Panics_On_Startup_And_Diagnostics
+## Triage Decision -- 2026-07-06
+
+**Status:** ready
+**Bucket:** pending-dispatch
+**Decided by:** native /scmorc orchestrator session
+**Routing model:** `gemini-3.5-flash:cloud` (2 tiny call-site swaps, 1 file, no design judgment)
+**Rationale:** Both call sites already have an exact fix pattern given below, mirroring an existing `.unwrap_or_default()` convention already used elsewhere in the same file for the same field. No crypto/transport/routing/privacy audit gate applies (CLI diagnostic print path only). Classic MICRO tier.
+
+---
+
+# MODEL: gemini-3.5-flash:cloud
+# BUDGET: 300
+# token_budget: 5000
+
+# P1_GEMINI_FLASH_021 -- CLI Identity Info `.expect()` Panics On Startup And Diagnostics
+
+**Status:** VERIFIED REMAINING WORK
+**Agent:** gemini-coder (Gemini 3.5 Flash)
+**Budget:** 300s (MICRO tier)
+**Phase:** v1.0.0 Phase 2 backlog sweep
+**Source:** native sweep 2026-07-04
+**Depends on:** none
 
 **Priority:** P2
 **Platform:** CLI
 **Status:** TODO
-**Source:** native sweep 2026-07-04
 
 ## Problem
 
@@ -85,3 +105,12 @@ banner prints `(pending)` instead.
 - Existing `.unwrap_or_default()` call sites for the same field are left
   unchanged (out of scope — already safe).
 - `cargo build -p scmessenger-cli` and `cargo test -p scmessenger-cli` pass.
+
+## CRITICAL
+
+You are forbidden from considering this task 'complete' until you execute the
+`git mv` to move this file from `todo/` to `done/`. If you do not move the
+file, the Orchestrator assumes you failed.
+
+## Routing Tags
+[REQUIRES: RUST] [REQUIRES: GEMINI_FLASH] [SERIAL_NEEDED: false] [PRIORITY: 21]

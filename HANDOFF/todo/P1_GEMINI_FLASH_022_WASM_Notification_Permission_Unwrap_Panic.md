@@ -1,9 +1,29 @@
-# P2_WASM_Notification_Permission_JS_Interop_Unwrap_Panic
+## Triage Decision -- 2026-07-06
+
+**Status:** ready
+**Bucket:** pending-dispatch
+**Decided by:** native /scmorc orchestrator session
+**Routing model:** `gemini-3.5-flash:cloud` (2 call-site swaps, 1 file, exact fallback pattern given)
+**Rationale:** Fix pattern is fully specified inline, mirrors existing `if let Ok(...) = ...` fallback convention already in the same function. No crypto/transport/routing/privacy audit gate applies (WASM notification-permission path only). Classic MICRO tier.
+
+---
+
+# MODEL: gemini-3.5-flash:cloud
+# BUDGET: 300
+# token_budget: 5000
+
+# P1_GEMINI_FLASH_022 -- WASM Notification Permission JS-Interop `.unwrap()` Panic
+
+**Status:** VERIFIED REMAINING WORK
+**Agent:** gemini-coder (Gemini 3.5 Flash)
+**Budget:** 300s (MICRO tier)
+**Phase:** v1.0.0 Phase 2 backlog sweep
+**Source:** native sweep 2026-07-04
+**Depends on:** none
 
 **Priority:** P2
 **Platform:** WASM
 **Status:** TODO
-**Source:** native sweep 2026-07-04
 
 ## Problem
 
@@ -109,3 +129,12 @@ note as a possible follow-up).
   outcome the function already produces on other failure branches (no new
   panics, no silent success).
 - `cargo check -p scmessenger-wasm --target wasm32-unknown-unknown` passes.
+
+## CRITICAL
+
+You are forbidden from considering this task 'complete' until you execute the
+`git mv` to move this file from `todo/` to `done/`. If you do not move the
+file, the Orchestrator assumes you failed.
+
+## Routing Tags
+[REQUIRES: RUST] [REQUIRES: GEMINI_FLASH] [SERIAL_NEEDED: false] [PRIORITY: 22]

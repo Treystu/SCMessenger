@@ -1,4 +1,25 @@
-# TASK: CORE-SWEEP-01 — `MessageHistory::enforce_retention` panics on a single corrupt sled record
+## Triage Decision -- 2026-07-06
+
+**Status:** ready
+**Bucket:** pending-dispatch
+**Decided by:** native /scmorc orchestrator session
+**Routing model:** `gemini-3.5-flash:cloud` (single-file fix + unit test, exact fix pattern given, precedent to check within same crate)
+**Rationale:** Ticket already specifies the exact `.filter_map` replacement pattern and points to existing precedent in the same file tree (`store/contacts.rs`, `store/inbox.rs`, `store/outbox.rs`) to check before picking skip-vs-remove semantics. Not a crypto/transport/routing/privacy path -- no audit gate. Slightly larger than pure MICRO (adds a unit test) but still a single-file, well-specified fix -- good fit for Flash at high effort.
+
+---
+
+# MODEL: gemini-3.5-flash:cloud
+# BUDGET: 600
+# token_budget: 8000
+
+# P1_GEMINI_FLASH_023 -- `MessageHistory::enforce_retention` panics on a single corrupt sled record
+
+**Status:** VERIFIED REMAINING WORK
+**Agent:** gemini-coder (Gemini 3.5 Flash)
+**Budget:** 600s
+**Phase:** v1.0.0 Phase 2 backlog sweep
+**Source:** native sweep 2026-07-04
+**Depends on:** none
 
 ## Context
 
@@ -98,3 +119,12 @@ cargo clippy --workspace -- -D warnings -A clippy::empty_line_after_doc_comments
 Run the `docs-sync` skill if `docs/CURRENT_STATE.md` or any canonical doc
 describes retention/history-pruning behavior in a way this change would
 make stale (check before assuming none do).
+
+## CRITICAL
+
+You are forbidden from considering this task 'complete' until you execute the
+`git mv` to move this file from `todo/` to `done/`. If you do not move the
+file, the Orchestrator assumes you failed.
+
+## Routing Tags
+[REQUIRES: RUST] [REQUIRES: GEMINI_FLASH] [SERIAL_NEEDED: false] [PRIORITY: 23]
