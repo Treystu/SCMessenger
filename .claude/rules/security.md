@@ -4,7 +4,10 @@ Re-injected into agent context on every turn. These are definitive constraints, 
 
 ## Crypto & Protocol Validation
 
-- All cryptographic code paths MUST pass through `deepseek-v3.2:cloud` or `deepseek-v4-pro:cloud` review before merge.
+- All cryptographic code paths MUST pass adversarial review before merge. The
+  reviewer depends on the operating mode: native sessions use the
+  `crypto-security-auditor` subagent; `/scmorc` uses a read-only fable(high)
+  worker; the ollama swarm uses `deepseek-v3.2:cloud`/`deepseek-v4-pro:cloud`.
 - X25519 ECDH and XChaCha20-Poly1305 implementations MUST NOT be modified without adversarial review.
 - Kani proofs (`kani-proofs` feature) MUST compile and pass before any crypto module change is merged.
 - Unsafe blocks in `core/src/crypto/` require explicit justification comment and gatekeeper sign-off.

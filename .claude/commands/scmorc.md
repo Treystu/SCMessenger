@@ -42,7 +42,7 @@ Log every dispatch as one line appended to `tmp/scmorc/dispatch_log.md`: `[YYYY-
 
 ## The Loop
 
-1. READ BACKLOG. `HANDOFF/V1_0_0_EXECUTION_PLAN.md` (sequencing) + `docs/release-readiness-2026-07-02.md` (anchor) + list `HANDOFF/todo/` and `HANDOFF/IN_PROGRESS/`. Pick the highest-priority actionable task (P0 first). Group upcoming tasks by domain (rust-core / android / wasm / desktop / docs) and drain one domain at a time — this maximizes prompt-cache reuse (see Caching).
+1. READ BACKLOG. **Start with `HANDOFF/todo/_QUEUE.md` — the live dependency-ordered pick list; pull from the top.** It encodes the operator-settled Phase 1 (Windows/Android parity) -> Phase 2 sequencing from `HANDOFF/V1_0_0_EXECUTION_PLAN.md`; consult the plan itself only when the queue is ambiguous or exhausted, and keep the queue's statuses updated as tasks move. [DEVICE]-tagged items need the operator + Pixel — prep their playbooks but work the next non-device item instead of blocking. Group upcoming tasks by domain (rust-core / android / wasm / desktop / docs) and drain one domain at a time — this maximizes prompt-cache reuse (see Caching).
 2. PRE-DISPATCH VALIDATION (orchestrator-local, cheap — never spend a worker on a dead task):
    - Read the task file; identify the concrete target (symbol/file/function). Grep for it.
    - FALSE_POSITIVE (target is test/Kani/proptest scaffolding or inside a `GOLDEN_*` literal): move task to `HANDOFF/done/` with a note; next task.

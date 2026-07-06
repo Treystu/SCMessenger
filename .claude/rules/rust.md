@@ -20,8 +20,10 @@ Re-injected into agent context on every turn.
 
 ## Code Quality
 
-- **Prefer `glm-5.1:cloud`** for Rust core work — it has proven Rust output quality.
-- **Unsafe blocks:** Must have `// SAFETY:` comment explaining invariants. Requires `deepseek-v3.2:cloud` review.
+- Model routing for Rust work is mode-specific: `/scmorc` routing table for
+  native workers; `glm-5.1:cloud` only in ollama swarm mode.
+- **Unsafe blocks:** Must have `// SAFETY:` comment explaining invariants, and
+  adversarial review per `.claude/rules/security.md` (mode-specific reviewer).
 - **Error handling:** Use `anyhow` for application errors, `thiserror` for library errors. Never `unwrap()` in production paths.
 - **Kani proofs:** Behind `kani-proofs` feature. All crypto module changes must pass existing proofs or add new ones.
 
