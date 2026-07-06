@@ -302,10 +302,19 @@ struct ConversationListView: View {
 struct RequestsInboxView: View {
     @Environment(MeshRepository.self) private var repository
     @State private var requests: [MessageRequestThread] = []
+    @State private var error: String?
     let onOpenConversation: (Conversation) -> Void
 
     var body: some View {
         List {
+            if let error = error {
+                Section {
+                    Text(error)
+                        .foregroundStyle(.red)
+                        .font(Theme.bodySmall)
+                }
+            }
+
             if requests.isEmpty {
                 ContentUnavailableView(
                     "No Message Requests",
@@ -322,8 +331,13 @@ struct RequestsInboxView: View {
                     .buttonStyle(.plain)
                     .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                         Button("Accept") {
-                            try? repository.acceptMessageRequest(peerId: request.peerId)
-                            loadRequests()
+                            do {
+                                try repository.acceptMessageRequest(peerId: request.peerId)
+                                error = nil
+                                loadRequests()
+                            } catch {
+                                self.error = error.localizedDescription
+                            }
                         }
                         .tint(.green)
                     }

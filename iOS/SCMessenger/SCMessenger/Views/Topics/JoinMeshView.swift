@@ -130,7 +130,12 @@ struct JoinMeshView: View {
     }
 
     private func leaveTopic(_ topic: String) {
-        try? topicManager?.unsubscribe(from: topic)
+        do {
+            try topicManager?.unsubscribe(from: topic)
+            error = nil
+        } catch {
+            self.error = error.localizedDescription
+        }
     }
 
     private func joinFromBundle(_ raw: String) {
