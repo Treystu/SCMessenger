@@ -1038,11 +1038,17 @@ impl MeshService {
             Ok(Err(e)) => {
                 tracing::error!("Swarm startup failed: {}", e);
                 eprintln!("[IronCore] [ERROR] Swarm startup failed: {}", e);
+                self.swarm_bridge.shutdown_blocking();
+                *self.swarm_bridge.handle.lock() = None;
+                *self.swarm_headless_mode.lock() = None;
                 Err(crate::IronCoreError::NetworkError)
             }
             Err(_) => {
                 tracing::error!("Swarm startup timed out waiting for first listener");
                 eprintln!("[IronCore] [ERROR] Swarm startup timed out waiting for first listener");
+                self.swarm_bridge.shutdown_blocking();
+                *self.swarm_bridge.handle.lock() = None;
+                *self.swarm_headless_mode.lock() = None;
                 Err(crate::IronCoreError::NetworkError)
             }
         }

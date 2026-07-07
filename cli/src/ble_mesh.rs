@@ -310,12 +310,16 @@ pub async fn run_ble_central_ingress(
                 let mut success = true;
                 if is_match {
                     tracing::info!("BLE found matching peripheral: {}", key);
+                    let start_time = std::time::Instant::now();
                     subscribe_ingress_for_peripheral(peripheral, core_c, ui_c).await;
                     // subscribe_ingress_for_peripheral returns only when the stream
-                    // ends or an error occurs — treat post-return as a failure if
-                    // we were actively matched (the happy path stays connected
-                    // indefinitely).
-                    success = false;
+                    // ends or an error occurs. A session that stayed connected past a
+                    // threshold is a normal disconnect (peer out of range), not a
+                    // backoff-worthy failure; only rapid failures (< threshold) back off.
+                    let session_duration = start_time.elapsed();
+                    if session_duration < std::time::Duration::from_secs(10) {
+                        success = false;
+                    }
                 }
 
                 // Update backoff state
