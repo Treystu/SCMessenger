@@ -87,6 +87,30 @@ Rules of engagement:
 - `P1_ANDROID_FABLE_5_DISCOVERY_REPORT.md` is EVIDENCE, not a task — leave in
   todo/ as reference for device sessions, or move to docs/historical/ at P1 exit.
 
+## Remote-eligible lane (Claude Cowork / cloud sandboxes — 2x-usage window)
+
+Tasks safe to farm out to REMOTE SANDBOX workers (AGENTS.md class rules:
+deliver branch/patch + UNVERIFIED report; Windows orchestrator runs the real
+gates and commits). Best fits, in value order:
+
+- R1. `NEXT_ITER_02_Adversarial_Review_Sprint_Diff.md` — read-only review;
+  needs no toolchain at all. Ideal first Cowork task.
+- R2. Quarantined-test rework (the fix-authoring half of NEXT_ITER_01's
+  quarantine item): rewrite `IdentityViewModelTest.kt` against the current
+  ViewModel API and draft the `IdentityCreationFlowTest.kt` androidTest/
+  Robolectric decision as a patch. Windows side compiles/executes.
+- R3. Test authoring for Phase 1 tickets (P1-06 self-loopback unit test,
+  P1-11/12 acceptance tests from the P1-10 spec) — delivered as patches.
+- R4. P1-05 build-provenance stamps implementation as a patch (small,
+  self-contained Rust; container cargo check is good advisory signal here).
+- R5. Pre-dispatch validation sweeps of `P3_*_NEEDS_PLANNING_*` items and the
+  IN_PROGRESS/ staleness triage — produce findings reports, no repo mutations.
+- R6. `NEXT_ITER_03` section A docs work — delivered as a patch.
+
+NOT remote-eligible: anything [DEVICE]; final AUDIT-GATE sign-off (review
+drafts are fine, the gating verdict runs under the orchestrator); any task
+whose acceptance is "gate passes on Windows" with no separable authoring half.
+
 ## Phase 2 — FROZEN until P1-19 passes
 
 PQC_00..14 (master plan `PQC_00_MASTER_PLAN.md`), TASK_KMP_*, WS-A

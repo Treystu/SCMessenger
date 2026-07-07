@@ -92,6 +92,31 @@ Then max 10 lines: what changed, files touched, anything the orchestrator must k
 
 Then: TASK (the requirement, from the HANDOFF file), TARGET FILES (exact paths), ACCEPTANCE (observable criteria), GATE (the exact command that must pass).
 
+## Foreign and Remote Workers (agy/Gemini, Claude Cowork)
+
+Supplemental capacity that does NOT draw on the Anthropic window. Both classes
+are governed by `AGENTS.md` (FOREIGN WORKER / REMOTE SANDBOX sections) and both
+feed the same verify-then-commit funnel — treat their output as UNVERIFIED
+until you prove otherwise:
+
+- **agy/Gemini dispatch** (`agy.exe`, models gemini-3.5-flash for mechanical /
+  gemini-3.1-pro for standard implementation): same Worker Prompt Contract as
+  Claude workers, prefixed with "Read AGENTS.md; you are the FOREIGN WORKER
+  class." Route them the filler-lane and mechanical tasks first; keep
+  AUDIT-GATE and crypto/transport implementation on Claude workers. Track in
+  the process inventory (see ORCHESTRATOR PROCESS OWNERSHIP) and dispatch log
+  with `model=gemini-*`.
+- **Cowork/cloud sessions** produce branches/patches with a
+  `VERIFICATION: NONE|CONTAINER(...)` report line. Container-green Linux
+  builds are advisory only — Windows gates are the truth.
+- **Acceptance protocol for BOTH** (before any commit of their work):
+  1. `python scripts/rules_check.py <changed files>` — mechanical rules.
+  2. `git diff --stat` — zero-diff claims get re-queued, same as Claude workers.
+  3. Run the matching build gate yourself (step 5 above).
+  4. AUDIT-GATE paths still require the fable adversarial pass.
+  The pre-commit hook (`.githooks/pre-commit`) backstops all of this at commit
+  time regardless of which tool wrote the change.
+
 ## Caching and Domain Grouping
 
 - Anthropic prompt caching has a ~5 minute TTL. Back-to-back tasks in the SAME domain: resume the same worker (`claude -r <uuid> -p "<next task>"`) instead of a cold launch — the worker's loaded files and rules stay cached.

@@ -81,6 +81,10 @@ checks. (Distinct from the swarm's older `.claude/skills/*.json` mechanism.)
 
 Hooks: SessionStart prints git status + HANDOFF counts + backlog header;
 PostToolUse (Edit|Write) blocks files containing emoji (`.claude/rules/no-emojis.md`).
+Tool-agnostic enforcement: a versioned pre-commit hook (`.githooks/pre-commit`
+-> `scripts/rules_check.py`, activated via `core.hooksPath`) blocks emoji,
+artifacts, root `.py`, lowercase `ios/`, and key material at commit time for
+EVERY tool — Claude, Cowork, Gemini/agy, humans. Never `--no-verify`.
 Permissions: project allowlist in `.claude/settings.json` (extend via the
 `fewer-permission-prompts` skill); `.claude/settings.local.json` is personal/gitignored.
 
@@ -122,7 +126,9 @@ than hand-checking. Priority reading order: `DOCUMENTATION.md` ->
 `docs/CURRENT_STATE.md` -> `REMAINING_WORK_TRACKING.md` ->
 `HANDOFF/V1_0_0_EXECUTION_PLAN.md` -> `docs/V0.2.0_RESIDUAL_RISK_REGISTER.md`
 -> `docs/DOCUMENT_STATUS_INDEX.md`. Historical docs live in `docs/historical/`
-and are not execution truth. (`AGENTS.md` does not exist — don't cite it.)
+and are not execution truth. `AGENTS.md` is the model-agnostic contract for
+non-Claude/remote agents (Cowork sandboxes, Gemini/agy) — this file supersets
+it for Claude sessions.
 
 ## Testing
 

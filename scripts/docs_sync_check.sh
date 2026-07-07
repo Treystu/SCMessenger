@@ -70,6 +70,8 @@ check_no_machine_local_paths() {
 
 HEADER_FILES=(
   "DOCUMENTATION.md"
+  "AGENTS.md"
+  "docs/CLAUDE_REFERENCE.md"
   "docs/DOCUMENT_STATUS_INDEX.md"
   "docs/REPO_CONTEXT.md"
   "docs/CURRENT_STATE.md"
