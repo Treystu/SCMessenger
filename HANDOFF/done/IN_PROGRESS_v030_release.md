@@ -8,15 +8,15 @@
 
 ## Result
 
-- ✅ **merge commit SHA:** `0538224ae01c231e0248116eff578d25bb9f48e4`
+- [OK] **merge commit SHA:** `0538224ae01c231e0248116eff578d25bb9f48e4`
   - `--no-ff` merge of `fix/p1-cli-025-identify-dedup` (3 unique commits) into `integration/v0.2.2-pre-android-push-2026-06-05`
   - 0 conflicts. `ort` strategy clean merge.
-- ✅ **release commit SHA:** `665a5199d9daf514978bf854d4b5a7af7737e25b`
-- ✅ **tag v0.3.0 created:** yes, pointing at merge commit `0538224a`
+- [OK] **release commit SHA:** `665a5199d9daf514978bf854d4b5a7af7737e25b`
+- [OK] **tag v0.3.0 created:** yes, pointing at merge commit `0538224a`
   - Tag annotation: `v0.3.0: P0/P1 Android bundle + identity race + mDNS peer-loss + UI A/B (Agy overnight ship 411940d1)`
-- ✅ **final HEAD SHA:** `665a5199d9daf514978bf854d4b5a7af7737e25b`
-- ✅ **working tree clean** at end
-- ✅ **no push** performed (Lucas gate)
+- [OK] **final HEAD SHA:** `665a5199d9daf514978bf854d4b5a7af7737e25b`
+- [OK] **working tree clean** at end
+- [OK] **no push** performed (Lucas gate)
 
 ## Version bump files changed (5 files, 10 lines)
 

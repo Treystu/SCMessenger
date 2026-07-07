@@ -14,10 +14,10 @@
 - Other APKs present: `android/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk` (5,812,866 bytes, 03:03 PT) — AndroidTest harness, not the deployable app
 
 ## APK Version Metadata (extracted via `aapt2 dump badging`, cross-checked across 35.0.0 / 35.0.1 / 37.0.0 — all agree)
-- package: **`com.scmessenger.android`** ✓
-- versionName: **`0.2.1`** ✗ (expected `0.3.0`)
-- versionCode: **`7`** ✗ (expected `8`)
-- application-label: **`SCMessenger`** ✓
+- package: **`com.scmessenger.android`** [OK]
+- versionName: **`0.2.1`** [FAIL] (expected `0.3.0`)
+- versionCode: **`7`** [FAIL] (expected `8`)
+- application-label: **`SCMessenger`** [OK]
 - minSdkVersion: 26
 - targetSdkVersion: 35
 - compileSdkVersion: 35
@@ -26,11 +26,11 @@ Confirmed by `output-metadata.json` at the same path: `versionCode: 7, versionNa
 
 ## Rust Workspace Versions
 - All 4 crates (`core`, `cli`, `mobile`, `wasm`) use `version.workspace = true`
-- Root `Cargo.toml` `[workspace.package]`: **`version = "0.3.0"`** ✓ (bumped from 0.2.1 in commit 665a5199)
+- Root `Cargo.toml` `[workspace.package]`: **`version = "0.3.0"`** [OK] (bumped from 0.2.1 in commit 665a5199)
 - `desktop_bridge` (5th workspace member, not requested): inherits same workspace version → 0.3.0
 
 ## Android Gradle Version
-- `android/build.gradle` lines 24-25: `versionCode = 8`, `versionName = '0.3.0'` ✓ (source bumped)
+- `android/build.gradle` lines 24-25: `versionCode = 8`, `versionName = '0.3.0'` [OK] (source bumped)
 - `android/app/build.gradle` lines 72-73: reads from `rootProject.ext.versionCode / versionName` (inherits correctly)
 - **BUT** `android/app/build/intermediates/.../AndroidManifest.xml` (merged manifest cache) still shows `versionCode="7"`, `versionName="0.2.1"` — this is stale from a pre-bump build, not a source-code issue
 
@@ -52,7 +52,7 @@ Confirmed by `output-metadata.json` at the same path: `versionCode: 7, versionNa
 1. **Rebuild the debug APK** so it picks up `versionCode=8`, `versionName='0.3.0'` from `android/build.gradle`. Either `./gradlew assembleDebug` or whatever the repo's standard build command is.
 2. **Re-verify** post-rebuild that `aapt2 dump badging` reports `versionCode='8' versionName='0.3.0'`.
 3. **Clean stale intermediates** (`android/app/build/intermediates/...` still cached at 0.2.1) — or just do a clean build.
-4. Confirm the version-bump commit (`665a5199`) is on the integration branch and that the v0.3.0 tag points at it (✓ both already true).
+4. Confirm the version-bump commit (`665a5199`) is on the integration branch and that the v0.3.0 tag points at it ([OK] both already true).
 5. Lucas gate: no push without explicit approval (per commit message: "No push (Lucas gate)").
 
 ### Discrepancies found

@@ -5,10 +5,10 @@
 **Source tag:** `v0.3.0` at `5bdb0b0f594badea91626e1b4bd03b793b87b5ff` (sits at merge commit `0538224a`; one commit behind HEAD `665a5199` — both are v0.3.0 history; tag is on the merge commit per subagent note)
 
 ## Pre-build verification
-- Source version: 0.3.0 ✅
-- Gradle versionCode/Name: 8 / 0.3.0 ✅
+- Source version: 0.3.0 [OK]
+- Gradle versionCode/Name: 8 / 0.3.0 [OK]
 - Working tree: clean (only untracked IN_PROGRESS files)
-- Old APK deleted: yes ✅ (rm -rf android/app/build, rm -f android/app/outputs/apk/debug/*.apk)
+- Old APK deleted: yes [OK] (rm -rf android/app/build, rm -f android/app/outputs/apk/debug/*.apk)
 
 ## Build attempts
 
@@ -36,8 +36,8 @@
   ```
 
 ### Attempt 4: `run_gradle.sh -x buildRustAndroid` (with E: SDK + E: NDK)
-- Compiled Rust host (2m 22s) + UniFFI bindings ✅
-- Compiled Kotlin (5+ min via Kotlin daemon) ✅
+- Compiled Rust host (2m 22s) + UniFFI bindings [OK]
+- Compiled Kotlin (5+ min via Kotlin daemon) [OK]
 - Failed at `StripDebugSymbolsRunnable`: `A problem occurred starting process 'command '/mnt/e/Android/sdk/ndk/26.1.10909125/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip''`
 - Root cause: E: drive NDK is the **Windows variant** (`windows-x86_64/bin/llvm-strip.exe`). It has NO `linux-x86_64/` subdir. The pre-built `libscmessenger_mobile.so` files in `src/main/jniLibs/` were already stripped (they're 9.8MB not 400MB), so the strip step should be unnecessary.
 - Also discovered: **WSL NDK has a 12-byte stub `llvm-strip` that's a broken symlink to non-existent `llvm-objcopy`**. The WSL NDK install is incomplete (only clang wrappers + a few stubs; missing `llvm-strip`, `llvm-readelf`, `llvm-objcopy`, etc).

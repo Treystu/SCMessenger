@@ -1,6 +1,6 @@
 # v0.3.0 Build Session — 2026-06-08
 
-## Status: ✅ COMPLETE — v0.3.0 PUSHED TO PIXEL 6a
+## Status: [OK] COMPLETE — v0.3.0 PUSHED TO PIXEL 6a
 
 ### Timeline
 - 08:25 PT — Quota check, fresh session start
@@ -30,4 +30,4 @@ Created shim scripts at `/mnt/e/Android/sdk/ndk/26.1.10909125/toolchains/llvm/pr
 These allow Android Gradle Plugin to complete the strip step on Windows-only NDKs.
 
 ### Pushed to device
-✅ v0.3.0 installed and launched successfully (no errors in logcat)
+[OK] v0.3.0 installed and launched successfully (no errors in logcat)

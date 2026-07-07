@@ -117,7 +117,7 @@ Agy compiled a clean reference doc covering:
 |---|---|---|
 | Identity lifecycle works end-to-end | `Identity initialized: 080605847bc3aca7efc3bc3a2054185aa15c3487c706e885bd725539460e9585`, `Loaded existing identity`, peerId=`12D3KooWFjyBaagUcyuweT26YVoAUtyM1u2K8YnKRgkMJ59zY8fD`, ledger: **245 known peers** | Core is healthy; identity is stable. **Bug 5 is reproducible, not a phantom.** |
 | P2P handshake works | `Identified peer 12D3KooWDwXw9CZosa22LcCUgHbrRNPvLTDUo3y8St93AKiHeFky — agent: scmessenger/0.2.1/full/relay/...` | Transport layer solid |
-| Gossipsub on `sc-mesh` works | `📨 Gossipsub message from 12D3KooW... on topic TopicHash { hash: "sc-mesh" }` | Pub/sub plumbing works |
+| Gossipsub on `sc-mesh` works | ` Gossipsub message from 12D3KooW... on topic TopicHash { hash: "sc-mesh" }` | Pub/sub plumbing works |
 | mDNS / direct dial to LAN often fails | `Failed to negotiate transport protocol(s): [...No connection could be made because the target machine actively refused it. (os error 10061)...]` (dozens of times) | **This is the on-the-wire signature of Bug 6** — listener-port mismatch. Reproducible. |
 | AutoNAT outbound always fails | `AutoNAT outbound probe: Error { ... error: NoServer }` (every 30s) | Expected behind NAT, no inbound — not a bug |
 | Connection refused to `192.168.0.138:9001` for peer `12D3KooWPD7Mkc9k5Xjyk6BJW2zUKCQpAXEFxv6PvyWCjwiB9z98` | Repeated refusal at 08:51, 08:56 — even after the node was up | This peer is the Android device — **the Pixel 6a is offline, confirming the 2026-06-06 PHASE 2 retest blocker still holds** |
@@ -129,7 +129,7 @@ Agy compiled a clean reference doc covering:
 **Quota state:** 5h=1.2%, 7d=0.2% — TIER 1 (HEAVY-LIFT), 240 min to reset, 3 slots free
 **Pool policy:** `local_only` (per Lucas directive 2026-06-06) — all `:cloud` models blocked unless explicitly overridden
 
-**⚠️ Orchestrator note from Lucas:** *"agy does not count as a slot, and local llm doesn't count as a slot."* So you have all 3 slots free.
+**[WARN] Orchestrator note from Lucas:** *"agy does not count as a slot, and local llm doesn't count as a slot."* So you have all 3 slots free.
 
 ### Suggested dispatch (in priority order):
 

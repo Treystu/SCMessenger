@@ -48,9 +48,9 @@ The user's "all the blocked (35)" reads from the **autonomous triage bucket** pr
 
 ### Machine B — HANDOFF/todo/ (file-based state, 51 files)
 - **40 `[VALIDATED]_*.md` tickets** (autonomous triage scans these)
-  - 🟡 **35 blocked** (per `scmessenger-triage.py` — `HANDOFF/todo/` scan on 2026-06-07 22:43 PT)
-  - 🔴 **5 missing-deliverable** (ticket exists but no code change seen)
-  - 🟢 0 ready, ✅ 0 already-done
+  - [WARN] **35 blocked** (per `scmessenger-triage.py` — `HANDOFF/todo/` scan on 2026-06-07 22:43 PT)
+  - [FAIL] **5 missing-deliverable** (ticket exists but no code change seen)
+  - [OK] 0 ready, [OK] 0 already-done
 - **6 non-`[VALIDATED]_` tickets** (`P0_ANDROID_024_IDENTITY_GENERATION_REGRESSION.md`, `P0_ANDROID_025_MDNS_LISTENER_COLLISION_CRASH.md`, `P1_ANDROID_CRASH_TRIAGE.md`, `P1_ANDROID_LAN_DISCOVERY_REPAIR.md`, `P2_ANDROID_IDENTITY_QR_PRERENDER.md`, `P2_ANDROID_IDENTITY_SCROLL_FIX.md`)
 - **1 `REJECTED/` subdirectory** with 5 stale drafts
 - **1 `IN_PROGRESS/`** with the Agy handoff ticket (unresolved from 2026-06-07 20:24 PT)
