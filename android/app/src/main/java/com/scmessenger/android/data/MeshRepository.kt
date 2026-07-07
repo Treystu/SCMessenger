@@ -8624,6 +8624,16 @@ open class MeshRepository(
                         newType == com.scmessenger.android.transport.NetworkType.ETHERNET
                     if (isRecovery) {
                         relayCircuitBreaker.resetAll()
+                        if (swarmBridge == null) {
+                            Timber.i("Network recovered to WiFi/Ethernet and swarm is inactive — attempting recovery restart")
+                            repoScope.launch {
+                                try {
+                                    initializeAndStartSwarm()
+                                } catch (e: Exception) {
+                                    Timber.w(e, "Swarm startup failed during network recovery self-healing")
+                                }
+                            }
+                        }
                     }
                     previousType = newType
                     racingBootstrapWithFallback()
