@@ -58,3 +58,10 @@ file, then move this file to `HANDOFF/done/`.
 ## Escalate to Fable if
 
 - Any Critical or High finding — Fable authored the diff and owns the fix.
+
+---
+**COMPLETE 2026-07-06 (orchestrator): review delivered. VERDICT: NOT MERGEABLE.**
+Report on file: tmp/audit_reports/fable5_sprint_adversarial_review.md.
+Findings: F1 HIGH (compile gate break - CONFIRMED independently by Windows `cargo test --workspace --no-run` exit 101 on scmessenger-mobile lib test); F2/F3/F4 MEDIUM (start_swarm handshake: timeout leaves live unowned swarm [privacy], retry returns Ok without listener verification [reintroduces P0], first-listener-of-any race); F5 MEDIUM + F6 LOW (BLE backoff has no success path + shift overflow at failures>=64); F7/F8/I1 LOW/INFO.
+No Critical, no key-material leakage. crypto/session_manager change is a genuine improvement, MERGEABLE in isolation. Reply channels + *_blocking helpers + parking_lot-across-await all cleared with reasoning.
+Remediation: F1 folds into NEXT_ITER_01 (compile gate); F2/F3/F4/F5 are AUDIT-GATE transport/privacy design fixes ESCALATED to operator/Fable; F6-F8 ride along or follow-up.

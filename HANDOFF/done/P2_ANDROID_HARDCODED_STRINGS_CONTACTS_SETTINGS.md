@@ -117,3 +117,6 @@ and confirm no matches.
   Android) — those cover QR perf, safety-number memoization, import dialog
   state leak, UTF-16 length, WiFi Aware loopback, test package name. None
   touch string localization.
+
+---
+**CLOSED 2026-07-06 (orchestrator): DUPLICATE of ANDROID_SWEEP_01_hardcoded_strings_contacts_settings.md**, which is the superset (same Contacts/Settings/Onboarding scope plus NetworkStatusDialog.kt and the 8-file contentDescription sweep). SWEEP_01 is the survivor and was dispatched to an agy/Gemini foreign worker. The only divergence: this ticket asked to localize ClipData.newPlainText labels; SWEEP_01 deliberately leaves them (system clipboard metadata, not user-visible UI) - accepted as the correct scope.
