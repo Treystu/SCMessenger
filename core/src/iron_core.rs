@@ -140,6 +140,8 @@ pub struct IronCore {
     /// Storage path for persistent data (None = in-memory).
     storage_path: Option<String>,
     /// Log directory for structured tracing.
+    // Reserved; not yet wired.
+    #[allow(dead_code)]
     log_directory: Option<String>,
 
     /// Ledger manager for connection tracking (used by mobile bridge).
@@ -210,6 +212,8 @@ pub struct IronCore {
     ratchet_sessions: Arc<RwLock<RatchetSessionManager>>,
 
     /// Security audit pipeline for cryptographic and protocol verification.
+    // Reserved; not yet wired.
+    #[allow(dead_code)]
     pub(crate) security_audit_pipeline: Arc<crate::dspy::modules::OptimizerPipeline>,
 
     /// Active runtime privacy configuration.

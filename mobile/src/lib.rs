@@ -68,10 +68,11 @@ mod tests {
         let bridge = SwarmBridge::new();
 
         // Should return empty lists when not connected
-        assert_eq!(bridge.get_peers().len(), 0);
-        assert_eq!(bridge.get_topics().len(), 0);
+        let rt = bridge.get_runtime_handle();
+        assert_eq!(rt.block_on(bridge.get_peers()).len(), 0);
+        assert_eq!(rt.block_on(bridge.get_topics()).len(), 0);
 
         // Should handle shutdown gracefully when not connected
-        bridge.shutdown();
+        rt.block_on(bridge.shutdown());
     }
 }

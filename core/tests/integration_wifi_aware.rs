@@ -192,7 +192,7 @@ fn test_wifi_aware_peer_discovered_triggers_data_path_and_dial() {
         // Give the dial a moment to complete.
         sleep(Duration::from_millis(150));
 
-        let peers = swarm_bridge.get_peers();
+        let peers = rt.block_on(swarm_bridge.get_peers());
         if peers.contains(&responder_peer_id.to_string()) {
             connected = true;
             break;

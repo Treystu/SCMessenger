@@ -1408,6 +1408,8 @@ pub enum SwarmEvent2 {
 #[derive(Clone)]
 pub struct SwarmHandle {
     command_tx: mpsc::Sender<SwarmCommand>,
+    // Retained for API symmetry; event loop holds its own core handle.
+    #[allow(dead_code)]
     core_handle: Option<Weak<crate::IronCore>>,
 }
 

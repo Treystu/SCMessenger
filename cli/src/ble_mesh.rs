@@ -329,7 +329,7 @@ pub async fn run_ble_central_ingress(
                     } else {
                         state.failures += 1;
                         // Exponential backoff: 2s, 4s, 8s, 16s, 32s, 60s cap
-                        let backoff_secs = (1u64 << state.failures).min(60);
+                        let backoff_secs = (1u64 << state.failures.min(6)).min(60);
                         state.cooldown_until = Some(
                             std::time::Instant::now()
                                 + std::time::Duration::from_secs(backoff_secs),

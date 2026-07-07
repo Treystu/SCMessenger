@@ -3304,6 +3304,7 @@ impl SwarmBridge {
             .collect()
     }
 
+    #[allow(dead_code)]
     pub(crate) fn get_topics_blocking(&self) -> Vec<String> {
         let handle = match self.handle.lock().clone() {
             Some(h) => h,
