@@ -13,6 +13,24 @@ if (keystorePropertiesFile.canRead()) {
     keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
 }
 
+def getGitHash = { ->
+    def stdout = new ByteArrayOutputStream()
+    try {
+        exec {
+            commandLine 'git', 'rev-parse', '--short', 'HEAD'
+            standardOutput = stdout
+        }
+        def result = stdout.toString().trim()
+        return result.isEmpty() ? "unknown" : result
+    } catch (Exception e) {
+        return "unknown"
+    }
+}
+
+def getBuildTime = { ->
+    return new Date().format("yyyy-MM-dd'T'HH:mm:ss'Z'", TimeZone.getTimeZone("UTC"))
+}
+
 android {
     namespace = 'com.scmessenger.android'
     compileSdk = rootProject.ext.compileSdk
@@ -71,6 +89,9 @@ android {
         targetSdk = rootProject.ext.targetSdk
         versionCode = rootProject.ext.versionCode
         versionName = rootProject.ext.versionName
+        
+        buildConfigField "String", "SCM_GIT_HASH", "\"${getGitHash()}\""
+        buildConfigField "String", "SCM_BUILD_TIME", "\"${getBuildTime()}\""
         
         testInstrumentationRunner = 'androidx.test.runner.AndroidJUnitRunner'
         

@@ -57,3 +57,6 @@ workspace = true
 
 [dev-dependencies]
 tempfile = "3.8"
+
+[build-dependencies]
+chrono = "0.4"

@@ -878,7 +878,7 @@ fun InfoSection(
 
             InfoRow(stringResource(R.string.settings_label_contacts), contactCount.toString())
             InfoRow(stringResource(R.string.settings_label_messages), messageCount.toString())
-            InfoRow(stringResource(R.string.settings_label_version), BuildConfig.VERSION_NAME)
+            InfoRow(stringResource(R.string.settings_label_version), "${BuildConfig.VERSION_NAME} (${BuildConfig.SCM_GIT_HASH} ${BuildConfig.SCM_BUILD_TIME})")
         }
     }
 }

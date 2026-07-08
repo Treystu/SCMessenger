@@ -218,6 +218,15 @@ class MdnsServiceDiscovery(
             "mdns-${resolvedInfo.serviceName}"
         }
 
+        // Self-loopback guard: NsdManager can hand back this device's own
+        // service broadcast as a "discovered" peer. Filter it before it
+        // reaches onPeerDiscovered/onLanPeerResolved/SwarmBridge dial.
+        val localPeerId = getLocalPeerId?.invoke()
+        if (localPeerId != null && peerId == localPeerId) {
+            Timber.d("mDNS: ignoring self-resolved service for $peerId")
+            return
+        }
+
         // Notify discovery
         onPeerDiscovered(peerId)
 

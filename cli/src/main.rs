@@ -133,10 +133,19 @@ fn load_or_create_headless_network_keypair(
     Ok(keypair)
 }
 
+const VERSION_INFO: &str = concat!(
+    env!("CARGO_PKG_VERSION"),
+    " (",
+    env!("SCM_GIT_HASH"),
+    " ",
+    env!("SCM_BUILD_TIME"),
+    ")"
+);
+
 #[derive(Parser)]
 #[command(name = "scm")]
 #[command(about = "SCMessenger — Sovereign Encrypted Messaging", long_about = None)]
-#[command(version)]
+#[command(version = VERSION_INFO)]
 struct Cli {
     #[command(subcommand)]
     command: Commands,
@@ -447,7 +456,7 @@ async fn main() -> Result<()> {
         )
         .init();
 
-    tracing::info!("SCMessenger CLI starting up...");
+    tracing::info!("SCMessenger CLI starting up... (Version: {})", VERSION_INFO);
     tracing::info!("Log directory: {}", log_dir.display());
 
     // 4. Prune old logs (keep last 7 days)
@@ -520,10 +529,10 @@ async fn cmd_init(name: Option<String>) -> Result<()> {
     println!();
 
     let config = config::Config::load()?;
-    println!("  {} Configuration", "✓".green());
+    println!("  {} Configuration", "[OK]".green());
 
     let data_dir = config::Config::data_dir()?;
-    println!("  {} Data directory: {}", "✓".green(), data_dir.display());
+    println!("  {} Data directory: {}", "[OK]".green(), data_dir.display());
 
     let storage_path = data_dir.join("storage");
     let core = IronCore::with_storage(path_to_string(&storage_path)?);
@@ -535,10 +544,10 @@ async fn cmd_init(name: Option<String>) -> Result<()> {
     if let Some(nickname) = name {
         core.set_nickname(nickname)
             .context("Failed to set nickname")?;
-        println!("  {} Nickname set", "✓".green());
+        println!("  {} Nickname set", "[OK]".green());
     }
 
-    println!("  {} Identity created", "✓".green());
+    println!("  {} Identity created", "[OK]".green());
     println!();
 
     print_full_identity(&core, &config)?;
@@ -572,7 +581,7 @@ async fn cmd_identity(action: Option<IdentityAction>) -> Result<()> {
                 .context("Failed to set nickname")?;
             println!(
                 "{} Nickname updated to: {}",
-                "✓".green(),
+                "[OK]".green(),
                 name.bright_cyan()
             );
         }
@@ -586,7 +595,7 @@ async fn cmd_identity(action: Option<IdentityAction>) -> Result<()> {
             println!();
             println!(
                 "{}",
-                "⚠️  WARNING: backup payload contains private key material."
+                "[WARN]  WARNING: backup payload contains private key material."
                     .bright_red()
                     .bold()
             );
@@ -598,7 +607,7 @@ async fn cmd_identity(action: Option<IdentityAction>) -> Result<()> {
             if let Some(path) = output {
                 std::fs::write(&path, &backup)
                     .with_context(|| format!("Failed to write backup file: {}", path))?;
-                println!("{} Backup written to {}", "✓".green(), path.bright_cyan());
+                println!("{} Backup written to {}", "[OK]".green(), path.bright_cyan());
             } else {
                 println!("{}", "Backup payload:".bold());
                 println!("{}", backup);
@@ -621,7 +630,7 @@ async fn cmd_identity(action: Option<IdentityAction>) -> Result<()> {
             core.import_identity_backup(payload, passphrase)
                 .context("Failed to import identity backup")?;
             let info = core.get_identity_info();
-            println!("{}", "✓ Identity backup imported".green());
+            println!("{}", "[OK] Identity backup imported".green());
             println!(
                 "  Identity ID: {}",
                 info.identity_id.unwrap_or_default().bright_cyan()
@@ -675,9 +684,9 @@ async fn cmd_identity(action: Option<IdentityAction>) -> Result<()> {
                 .verify_signature(data, signature, public_key_hex)
                 .context("Failed to verify signature")?;
             if valid {
-                println!("{} Signature is valid", "✓".green());
+                println!("{} Signature is valid", "[OK]".green());
             } else {
-                println!("{} Signature is INVALID", "✗".red());
+                println!("{} Signature is INVALID", "[FAIL]".red());
             }
         }
     }
@@ -777,7 +786,7 @@ async fn cmd_contact(action: ContactAction) -> Result<()> {
                 if canonical.to_lowercase() != public_key.to_lowercase() {
                     eprintln!(
                         "{} The provided public key does not match the Peer ID.",
-                        "⚠ Error:".red()
+                        "[WARN] Error:".red()
                     );
                     eprintln!(
                         "  Peer ID {} resolves to public key: {}",
@@ -793,7 +802,7 @@ async fn cmd_contact(action: ContactAction) -> Result<()> {
                 if peer_id.to_lowercase() != public_key.to_lowercase() {
                     eprintln!(
                         "{} The peer-id argument and public-key differ.",
-                        "⚠ Error:".red()
+                        "[WARN] Error:".red()
                     );
                     eprintln!("  Use either the Peer ID (12D3Koo...) or supply matching keys.");
                     return Ok(());
@@ -806,7 +815,7 @@ async fn cmd_contact(action: ContactAction) -> Result<()> {
                         if pk.to_lowercase() != public_key.to_lowercase() {
                             eprintln!(
                                 "{} Identity ID resolves to a different public key.",
-                                "⚠ Error:".red()
+                                "[WARN] Error:".red()
                             );
                             eprintln!("  Identity resolves to: {}", pk.yellow());
                             eprintln!("  You provided public key: {}", public_key.dimmed());
@@ -817,7 +826,7 @@ async fn cmd_contact(action: ContactAction) -> Result<()> {
                     Err(_) => {
                         eprintln!(
                             "{} Could not resolve identity ID '{}'. No matching contact found.",
-                            "⚠ Error:".red(),
+                            "[WARN] Error:".red(),
                             peer_id
                         );
                         eprintln!("  Identity IDs can only be resolved if the contact already exists in your address book.");
@@ -828,7 +837,7 @@ async fn cmd_contact(action: ContactAction) -> Result<()> {
             } else {
                 eprintln!(
                     "{} '{}' is not a recognized ID format.",
-                    "⚠ Error:".red(),
+                    "[WARN] Error:".red(),
                     peer_id
                 );
                 eprintln!("  Accepted formats:");
@@ -843,7 +852,7 @@ async fn cmd_contact(action: ContactAction) -> Result<()> {
                 let _ = api::add_contact_via_api(&peer_id, &public_key, name.clone())
                     .await
                     .context("Failed to add contact via API");
-                println!("{} Contact added:", "✓".green());
+                println!("{} Contact added:", "[OK]".green());
                 if let Some(nickname) = &name {
                     println!("  Name: {}", nickname.bright_cyan());
                 }
@@ -860,7 +869,7 @@ async fn cmd_contact(action: ContactAction) -> Result<()> {
                 .add(contact)
                 .map_err(|e| anyhow::anyhow!("{:?}", e))?;
 
-            println!("{} Contact added:", "✓".green());
+            println!("{} Contact added:", "[OK]".green());
             if let Some(nickname) = name {
                 println!("  Name: {}", nickname.bright_cyan());
             }
@@ -923,7 +932,7 @@ async fn cmd_contact(action: ContactAction) -> Result<()> {
                     contacts
                         .remove(contact.peer_id)
                         .map_err(|e| anyhow::anyhow!("{:?}", e))?;
-                    println!("{} Removed contact: {}", "✓".green(), name.bright_cyan());
+                    println!("{} Removed contact: {}", "[OK]".green(), name.bright_cyan());
                 }
 
                 ContactAction::Search { query } => {
@@ -965,7 +974,7 @@ async fn cmd_contact(action: ContactAction) -> Result<()> {
                         Some(name) => {
                             println!(
                                 "{} Local nickname set for {} -> {}",
-                                "✓".green(),
+                                "[OK]".green(),
                                 contact.peer_id.dimmed(),
                                 name.bright_cyan()
                             );
@@ -973,7 +982,7 @@ async fn cmd_contact(action: ContactAction) -> Result<()> {
                         None => {
                             println!(
                                 "{} Local nickname cleared for {}",
-                                "✓".green(),
+                                "[OK]".green(),
                                 contact.peer_id.dimmed()
                             );
                         }
@@ -1000,7 +1009,7 @@ async fn cmd_contact(action: ContactAction) -> Result<()> {
                         Some(name) => {
                             println!(
                                 "{} Federated nickname set for {} -> {}",
-                                "✓".green(),
+                                "[OK]".green(),
                                 contact.peer_id.dimmed(),
                                 name.bright_cyan()
                             );
@@ -1008,7 +1017,7 @@ async fn cmd_contact(action: ContactAction) -> Result<()> {
                         None => {
                             println!(
                                 "{} Federated nickname cleared for {}",
-                                "✓".green(),
+                                "[OK]".green(),
                                 contact.peer_id.dimmed()
                             );
                         }
@@ -1027,7 +1036,7 @@ async fn cmd_config(action: ConfigAction) -> Result<()> {
     match action {
         ConfigAction::Set { key, value } => {
             config.set(&key, &value)?;
-            println!("{} Set {} = {}", "✓".green(), key.bright_cyan(), value);
+            println!("{} Set {} = {}", "[OK]".green(), key.bright_cyan(), value);
         }
 
         ConfigAction::Get { key } => {
@@ -1112,7 +1121,7 @@ async fn cmd_config(action: ConfigAction) -> Result<()> {
             }
 
             core.set_privacy_config(serde_json::to_string(&p)?)?;
-            println!("{} Privacy configuration updated.", "✓".green());
+            println!("{} Privacy configuration updated.", "[OK]".green());
         }
     }
 
@@ -1325,7 +1334,7 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
     println!("WebSocket:     ws://127.0.0.1:{}/ws", ws_port);
     println!("P2P Listener:  /ip4/0.0.0.0/tcp/{}", p2p_port);
     println!("WASM Bridge:   /ip4/0.0.0.0/tcp/{}/ws", p2p_port + 1);
-    println!("📒 {}", connection_ledger.summary());
+    println!(" {}", connection_ledger.summary());
     println!();
 
     // Wrap core in Arc early so WebContext and later tasks can share it.
@@ -1342,7 +1351,7 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
     // intentional to unify identity and network IDs, but may require updating
     // peer expectations/ledgers on migration.
 
-    println!("{} Peer ID: {}", "✓".green(), local_peer_id);
+    println!("{} Peer ID: {}", "[OK]".green(), local_peer_id);
     println!();
 
     // Create shared state BEFORE server start so landing page has access
@@ -1410,13 +1419,13 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
     match swarm_handle.listen(ws_listen_addr.clone()).await {
         Ok(_) => println!(
             "{} WebSocket P2P Bridge started on {}",
-            "✓".green(),
+            "[OK]".green(),
             ws_listen_addr
         ),
         Err(e) => tracing::warn!("Failed to start WebSocket P2P bridge: {}", e),
     }
 
-    println!("{} Network started", "✓".green());
+    println!("{} Network started", "[OK]".green());
 
     if config.enable_ble {
         tokio::spawn(async move {
@@ -1466,7 +1475,7 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
         println!();
         println!(
             "{} Aggressive Discovery — dialing known peers...",
-            "⚙".yellow()
+            "".yellow()
         );
         let swarm_clone = swarm_handle.clone();
         let ledger_clone = ledger.clone();
@@ -1484,12 +1493,12 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
                     Ok(addr) => {
                         let label = ledger::extract_ip_port(multiaddr_str)
                             .unwrap_or_else(|| multiaddr_str.clone());
-                        println!("  {}. 📞 Dialing {} (promiscuous)...", i + 1, label);
+                        println!("  {}.  Dialing {} (promiscuous)...", i + 1, label);
 
                         // Primary dial attempt with stored address
                         match swarm_clone.dial(addr.clone()).await {
                             Ok(_) => {
-                                println!("  {} Dial initiated to {}", "✓".green(), label);
+                                println!("  {} Dial initiated to {}", "[OK]".green(), label);
                             }
                             Err(e) => {
                                 tracing::warn!("Dial failed to {}: {}", label, e);
@@ -1516,7 +1525,7 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
                                             Ok(_) => {
                                                 println!(
                                                     "  {} Fallback dial succeeded to {}",
-                                                    "✓".green(),
+                                                    "[OK]".green(),
                                                     fallback_label
                                                 );
                                                 // Update ledger with working address
@@ -1630,7 +1639,7 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
 
     println!(
         "{} Control API: {}",
-        "✓".green(),
+        "[OK]".green(),
         format!("http://127.0.0.1:{}", api::API_PORT).dimmed()
     );
 
@@ -1674,7 +1683,7 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
                                  let mut p = peers_rx.lock().await;
                                  if let std::collections::hash_map::Entry::Vacant(e) = p.entry(peer_id) {
                                      e.insert(None);
-                                     println!("\n{} Peer: {}", "✓".green(), peer_id);
+                                     println!("\n{} Peer: {}", "[OK]".green(), peer_id);
                                      print!("> ");
                                      let _ = std::io::Write::flush(&mut std::io::stdout());
                                      let _ = contacts_rx.update_last_seen(peer_id.to_string());
@@ -1805,8 +1814,8 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
 
                                 if new_count > 0 {
                                     println!(
-                                        "\n{} 📒 Learned {} new peers from {}",
-                                        "✓".green(),
+                                        "\n{}  Learned {} new peers from {}",
+                                        "[OK]".green(),
                                         new_count,
                                         from_peer
                                     );
@@ -1937,7 +1946,7 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
                                             // Received a delivery receipt — the remote peer confirmed delivery.
                                             if let Ok(receipt) = bincode::deserialize::<scmessenger_core::Receipt>(&msg.payload) {
                                                 let short_id = receipt.message_id.get(..8).unwrap_or(&receipt.message_id);
-                                                println!("\n{} Delivered: {}", "✓✓".green(), short_id);
+                                                println!("\n{} Delivered: {}", "[OK][OK]".green(), short_id);
                                                 print!("> ");
                                                 let _ = std::io::Write::flush(&mut std::io::stdout());
                                                 tracing::debug!("Delivery ACK received from {}: msg_id={}", peer_id, receipt.message_id);
@@ -1952,7 +1961,7 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
                                 }
                             }
                             SwarmEvent::ListeningOn(addr) => {
-                                println!("{} Listening on {}", "✓".green(), addr);
+                                println!("{} Listening on {}", "[OK]".green(), addr);
                             }
                             _ => {}
                         }
@@ -2121,7 +2130,7 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
                                 }
                             }
                             server::UiCommand::FactoryReset => {
-                                println!("{} Factory Reset initiated from UI...", "⚠".yellow());
+                                println!("{} Factory Reset initiated from UI...", "[WARN]".yellow());
                                 // Attempt to clean data dir. This is aggressive.
                                 if let Ok(data_dir) = config::Config::data_dir() {
                                      // On unix we can delete even if open? Sometimes.
@@ -2423,7 +2432,7 @@ async fn cmd_relay(listen_addr: String, http_port: u16, node_name: Option<String
 
     // Start HTTP server (landing page + WebSocket)
     let (ui_broadcast, _ui_cmd_rx) = server::start(http_port, web_ctx.clone()).await?;
-    println!("{} HTTP server started on port {}", "✓".green(), http_port);
+    println!("{} HTTP server started on port {}", "[OK]".green(), http_port);
 
     // Start swarm
     let listen_multiaddr: libp2p::Multiaddr =
@@ -2444,7 +2453,7 @@ async fn cmd_relay(listen_addr: String, http_port: u16, node_name: Option<String
         .collect();
     if !bootstrap_multiaddrs.is_empty() {
         println!(
-            "📡 Auto-dialing {} bootstrap node(s)",
+            " Auto-dialing {} bootstrap node(s)",
             bootstrap_multiaddrs.len()
         );
     }
@@ -2462,7 +2471,7 @@ async fn cmd_relay(listen_addr: String, http_port: u16, node_name: Option<String
         transport::default_routing_engine_handle(),
     )
     .await?;
-    println!("{} P2P swarm started on {}", "✓".green(), listen_addr);
+    println!("{} P2P swarm started on {}", "[OK]".green(), listen_addr);
 
     // Subscribe to topics
     for topic in known_topics {
@@ -2472,7 +2481,7 @@ async fn cmd_relay(listen_addr: String, http_port: u16, node_name: Option<String
     for topic in ["sc-lobby", "sc-mesh"] {
         let _ = swarm_handle.subscribe_topic(topic.to_string()).await;
     }
-    println!("{} Subscribed to mesh topics", "✓".green());
+    println!("{} Subscribed to mesh topics", "[OK]".green());
 
     // Contacts + History (for relay message handling)
     let contacts = core.contacts_store_manager();
@@ -2507,7 +2516,7 @@ async fn cmd_relay(listen_addr: String, http_port: u16, node_name: Option<String
     });
     println!(
         "{} Control API: {}",
-        "✓".green(),
+        "[OK]".green(),
         format!("http://127.0.0.1:{}", api::API_PORT).dimmed()
     );
 
@@ -2541,9 +2550,9 @@ async fn cmd_relay(listen_addr: String, http_port: u16, node_name: Option<String
                 if let Ok(addr) = stripped.parse::<Multiaddr>() {
                     let label = ledger::extract_ip_port(multiaddr_str)
                         .unwrap_or_else(|| multiaddr_str.clone());
-                    println!("  {}. 📞 Dialing {} ...", i + 1, label);
+                    println!("  {}.  Dialing {} ...", i + 1, label);
                     match swarm_clone.dial(addr).await {
-                        Ok(_) => println!("  {} Dial initiated to {}", "✓".green(), label),
+                        Ok(_) => println!("  {} Dial initiated to {}", "[OK]".green(), label),
                         Err(e) => {
                             tracing::warn!("Dial failed to {}: {}", label, e);
                             ledger_clone.lock().await.record_failure(multiaddr_str);
@@ -2781,7 +2790,7 @@ async fn cmd_relay(listen_addr: String, http_port: u16, node_name: Option<String
         }
     }
 
-    println!("{} Relay node stopped.", "✓".green());
+    println!("{} Relay node stopped.", "[OK]".green());
     Ok(())
 }
 
@@ -2791,7 +2800,7 @@ async fn cmd_send_offline(recipient: String, message: String) -> Result<()> {
         api::send_message_via_api(&recipient, &message)
             .await
             .context("Failed to send message via API")?;
-        println!("{} Message sent via running node", "✓".green());
+        println!("{} Message sent via running node", "[OK]".green());
         return Ok(());
     }
 
@@ -2820,7 +2829,7 @@ async fn cmd_send_offline(recipient: String, message: String) -> Result<()> {
     // Build swarm for immediate send
     println!(
         "{} Starting temporary swarm for immediate send...",
-        "⚙".yellow()
+        "".yellow()
     );
     let (event_tx, mut _event_rx) = tokio::sync::mpsc::channel(16);
     let routing_handle = scmessenger_core::transport::default_routing_engine_handle();
@@ -2857,7 +2866,7 @@ async fn cmd_send_offline(recipient: String, message: String) -> Result<()> {
 
     println!(
         "{} Message encrypted: {} bytes",
-        "✓".green(),
+        "[OK]".green(),
         envelope_bytes.len()
     );
 
@@ -2868,7 +2877,7 @@ async fn cmd_send_offline(recipient: String, message: String) -> Result<()> {
         .context("Invalid peer ID in contact: {}")?;
     println!(
         "{} Sending message to {}...",
-        "✓".green(),
+        "[OK]".green(),
         recipient_peer_id
     );
 
@@ -2885,7 +2894,7 @@ async fn cmd_send_offline(recipient: String, message: String) -> Result<()> {
             Ok(_) => {
                 println!(
                     "{} Message sent successfully to {} (attempt {}/{})",
-                    "✓".green(),
+                    "[OK]".green(),
                     recipient_peer_id,
                     attempts,
                     max_retries
@@ -2906,7 +2915,7 @@ async fn cmd_send_offline(recipient: String, message: String) -> Result<()> {
     // All retries failed - fall back to queuing
     println!(
         "{} All send attempts failed ({}), falling back to queue",
-        "⚠".yellow(),
+        "[WARN]".yellow(),
         last_error.unwrap_or("unknown error".to_string())
     );
     queue_message_for_later_delivery(&data_dir, &contact, &message).await
@@ -2951,13 +2960,13 @@ async fn queue_message_for_later_delivery(
                 Ok(()) => {
                     println!(
                         "{} Message queued for {} — will be delivered when peer comes online",
-                        "✓".green(),
+                        "[OK]".green(),
                         contact.display_name().bright_cyan(),
                     );
                 }
                 Err(e) => {
                     tracing::warn!("Failed to enqueue message for {}: {}", contact.peer_id, e);
-                    println!("{} Could not queue message: {}", "⚠".yellow(), e);
+                    println!("{} Could not queue message: {}", "[WARN]".yellow(), e);
                 }
             }
         }
@@ -2965,7 +2974,7 @@ async fn queue_message_for_later_delivery(
             tracing::warn!("Could not open outbox for queuing: {}", e);
             println!(
                 "{} Message encrypted but could not be queued (outbox unavailable: {})",
-                "⚠".yellow(),
+                "[WARN]".yellow(),
                 e
             );
         }
@@ -3150,13 +3159,13 @@ async fn cmd_mark_sent(message_id: String) -> Result<()> {
     if removed {
         println!(
             "{} Marked message as sent: {}",
-            "✓".green(),
+            "[OK]".green(),
             message_id.bright_cyan()
         );
     } else {
         println!(
             "{} Message ID not found in outbox: {}",
-            "⚠".yellow(),
+            "[WARN]".yellow(),
             message_id.dimmed()
         );
     }
@@ -3172,7 +3181,7 @@ async fn cmd_history_clear(yes: bool) -> Result<()> {
     let core = IronCore::with_storage(path_to_string(&storage_path)?);
     let history = core.history_store_manager();
     history.clear().map_err(|e| anyhow::anyhow!("{:?}", e))?;
-    println!("{} Cleared all message history", "✓".green());
+    println!("{} Cleared all message history", "[OK]".green());
     Ok(())
 }
 
@@ -3186,7 +3195,7 @@ async fn cmd_history_enforce_retention(max_messages: u32) -> Result<()> {
         .map_err(|e| anyhow::anyhow!("{:?}", e))?;
     println!(
         "{} Retention enforced (max={}): pruned {}",
-        "✓".green(),
+        "[OK]".green(),
         max_messages,
         pruned
     );
@@ -3203,7 +3212,7 @@ async fn cmd_history_prune_before(before_timestamp: u64) -> Result<()> {
         .map_err(|e| anyhow::anyhow!("{:?}", e))?;
     println!(
         "{} Pruned {} message(s) older than {}",
-        "✓".green(),
+        "[OK]".green(),
         pruned,
         before_timestamp
     );
@@ -3225,7 +3234,7 @@ async fn cmd_block(action: BlockAction) -> Result<()> {
         } => {
             core.block_peer(peer_id.clone(), device_id.clone(), reason.clone())
                 .map_err(|e| anyhow::anyhow!("{}", e))?;
-            println!("{} Blocked peer: {}", "✓".green(), peer_id.bright_cyan());
+            println!("{} Blocked peer: {}", "[OK]".green(), peer_id.bright_cyan());
             if let Some(device_id) = device_id {
                 println!("  Device ID: {}", device_id.dimmed());
             }
@@ -3236,7 +3245,7 @@ async fn cmd_block(action: BlockAction) -> Result<()> {
         BlockAction::Remove { peer_id, device_id } => {
             core.unblock_peer(peer_id.clone(), device_id.clone())
                 .map_err(|e| anyhow::anyhow!("{}", e))?;
-            println!("{} Unblocked peer: {}", "✓".green(), peer_id.bright_cyan());
+            println!("{} Unblocked peer: {}", "[OK]".green(), peer_id.bright_cyan());
             if let Some(device_id) = device_id {
                 println!("  Device ID: {}", device_id.dimmed());
             }
@@ -3250,7 +3259,7 @@ async fn cmd_block(action: BlockAction) -> Result<()> {
                 .map_err(|e| anyhow::anyhow!("{}", e))?;
             println!(
                 "{} Blocked and deleted peer: {} (messages purged)",
-                "✓".green(),
+                "[OK]".green(),
                 peer_id.bright_cyan()
             );
             if let Some(device_id) = device_id {
@@ -3296,12 +3305,12 @@ async fn cmd_block(action: BlockAction) -> Result<()> {
                 .is_peer_blocked(peer_id.clone(), device_id.clone())
                 .map_err(|e| anyhow::anyhow!("{}", e))?;
             if blocked {
-                println!("{} {} is blocked", "✗".red(), peer_id.bright_cyan());
+                println!("{} {} is blocked", "[FAIL]".red(), peer_id.bright_cyan());
                 if let Some(device_id) = device_id {
                     println!("  Device ID: {}", device_id.dimmed());
                 }
             } else {
-                println!("{} {} is NOT blocked", "✓".green(), peer_id.bright_cyan());
+                println!("{} {} is NOT blocked", "[OK]".green(), peer_id.bright_cyan());
                 if let Some(device_id) = device_id {
                     println!("  Device ID: {}", device_id.dimmed());
                 }
@@ -3337,7 +3346,7 @@ async fn cmd_history_get(id: String) -> Result<()> {
             println!("  Content:   {}", msg.content);
         }
         Ok(None) => {
-            println!("{} Message not found: {}", "⚠".yellow(), id.dimmed());
+            println!("{} Message not found: {}", "[WARN]".yellow(), id.dimmed());
         }
         Err(e) => {
             anyhow::bail!("Failed to retrieve message: {:?}", e);
@@ -3396,7 +3405,7 @@ async fn cmd_history_mark_delivered(id: String) -> Result<()> {
         .map_err(|e| anyhow::anyhow!("{:?}", e))?;
     println!(
         "{} Marked message as delivered: {}",
-        "✓".green(),
+        "[OK]".green(),
         id.bright_cyan()
     );
     Ok(())
@@ -3421,7 +3430,7 @@ async fn cmd_history_clear_conversation(peer: String) -> Result<()> {
         .map_err(|e| anyhow::anyhow!("{:?}", e))?;
     println!(
         "{} Cleared conversation with {}",
-        "✓".green(),
+        "[OK]".green(),
         peer_id.bright_cyan()
     );
     Ok(())
@@ -3435,7 +3444,7 @@ async fn cmd_history_delete(id: String) -> Result<()> {
     history
         .delete(id.clone())
         .map_err(|e| anyhow::anyhow!("{:?}", e))?;
-    println!("{} Deleted message: {}", "✓".green(), id.bright_cyan());
+    println!("{} Deleted message: {}", "[OK]".green(), id.bright_cyan());
     Ok(())
 }
 
@@ -3452,7 +3461,7 @@ async fn cmd_test() -> Result<()> {
     let _alice_info = alice.get_identity_info();
     let bob_info = bob.get_identity_info();
 
-    println!("{} Identity generation", "✓".green());
+    println!("{} Identity generation", "[OK]".green());
 
     let envelope = alice.prepare_message(
         bob_info
@@ -3466,7 +3475,7 @@ async fn cmd_test() -> Result<()> {
 
     println!(
         "{} Message encryption ({} bytes)",
-        "✓".green(),
+        "[OK]".green(),
         envelope.envelope_data.len()
     );
 
@@ -3477,7 +3486,7 @@ async fn cmd_test() -> Result<()> {
         "Test message"
     );
 
-    println!("{} Message decryption", "✓".green());
+    println!("{} Message decryption", "[OK]".green());
 
     let eve = IronCore::new();
     eve.initialize_identity()?;
@@ -3493,7 +3502,7 @@ async fn cmd_test() -> Result<()> {
     )?;
 
     assert!(eve.receive_message(envelope.envelope_data).is_err());
-    println!("{} Encryption security", "✓".green());
+    println!("{} Encryption security", "[OK]".green());
 
     println!();
     println!("{}", "All tests passed!".green().bold());
@@ -3596,14 +3605,14 @@ async fn cmd_audit(action: AuditAction) -> Result<()> {
                 .map_err(|e| anyhow::anyhow!("{:?}", e))?;
             if let Some(path) = output {
                 std::fs::write(&path, json)?;
-                println!("{} Audit log exported to {}", "✓".green(), path);
+                println!("{} Audit log exported to {}", "[OK]".green(), path);
             } else {
                 println!("{}", json);
             }
         }
         AuditAction::Verify => match core.validate_audit_chain() {
-            Ok(_) => println!("{} Audit chain integrity verified: OK", "✓".green()),
-            Err(e) => println!("{} Audit chain validation failed: {:?}", "✗".red(), e),
+            Ok(_) => println!("{} Audit chain integrity verified: OK", "[OK]".green()),
+            Err(e) => println!("{} Audit chain validation failed: {:?}", "[FAIL]".red(), e),
         },
         AuditAction::Stats => {
             let events = core.get_audit_events_since(0);
@@ -3692,7 +3701,7 @@ async fn cmd_swarm_stats() -> Result<()> {
                 }
             }
             Err(e) => {
-                println!("{} Failed to fetch swarm stats: {}", "✗".red(), e);
+                println!("{} Failed to fetch swarm stats: {}", "[FAIL]".red(), e);
             }
         }
 

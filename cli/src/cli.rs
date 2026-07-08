@@ -138,10 +138,19 @@ mod tests {
     }
 }
 
+const VERSION_INFO: &str = concat!(
+    env!("CARGO_PKG_VERSION"),
+    " (",
+    env!("SCM_GIT_HASH"),
+    " ",
+    env!("SCM_BUILD_TIME"),
+    ")"
+);
+
 #[derive(Parser)]
 #[command(name = "scm")]
 #[command(about = "SCMessenger — Sovereign Encrypted Messaging", long_about = None)]
-#[command(version)]
+#[command(version = VERSION_INFO)]
 pub struct Cli {
     #[command(subcommand)]
     pub command: Commands,
