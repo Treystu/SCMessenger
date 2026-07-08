@@ -1,3 +1,4 @@
+// core/src/lib.rs
 // Iron Core V2 — Messaging Spine
 #![allow(clippy::empty_line_after_doc_comments)]
 //
@@ -135,4 +136,9 @@ pub struct RegistrationStateInfo {
     pub state: String,
     pub device_id: Option<String>,
     pub seniority_timestamp: Option<u64>,
+}
+
+/// Get build provenance information (git hash, branch, and build timestamp)
+pub fn get_build_provenance() -> String {
+    option_env!("SCM_BUILD_STAMP").unwrap_or("development build").to_string()
 }

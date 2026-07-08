@@ -8800,6 +8800,13 @@ open class MeshRepository(
     }
 
     /**
+     * Get build provenance information from the core (git hash, branch, timestamp).
+     */
+    fun getBuildProvenance(): String {
+        return uniffi.api.getBuildProvenance()
+    }
+
+    /**
      * Returns external NAT-mapped addresses observed by peer nodes on the mesh.
      * Uses relay/peer-confirmed observations (identify + reflection consensus).
      */

@@ -243,6 +243,10 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
+    fun getBuildProvenance(): String {
+        return meshRepository.getBuildProvenance()
+    }
+
     /**
      * Internal settings loader that runs on IO dispatcher.
      * ANR FIX: Uses cached settings when available to avoid redundant I/O.

@@ -456,7 +456,8 @@ async fn main() -> Result<()> {
         )
         .init();
 
-    tracing::info!("SCMessenger CLI starting up... (Version: {})", VERSION_INFO);
+    tracing::info!("SCMessenger CLI starting up... (CLI Version: {})", VERSION_INFO);
+    tracing::info!("Core Provenance: {}", scmessenger_core::get_build_provenance());
     tracing::info!("Log directory: {}", log_dir.display());
 
     // 4. Prune old logs (keep last 7 days)

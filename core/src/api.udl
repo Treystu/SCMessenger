@@ -1,4 +1,6 @@
+// core/src/api.udl
 namespace api {
+    string get_build_provenance();
 };
 
 // ============================================================================

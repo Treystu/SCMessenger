@@ -242,7 +242,8 @@ fun SettingsScreen(
         // Info Section
         InfoSection(
             contactCount = settingsViewModel.getContactCount(),
-            messageCount = settingsViewModel.getMessageCount()
+            messageCount = settingsViewModel.getMessageCount(),
+            buildProvenance = settingsViewModel.getBuildProvenance()
         )
 
         Spacer(modifier = Modifier.height(24.dp))
@@ -862,7 +863,8 @@ fun SwitchPreference(
 @Composable
 fun InfoSection(
     contactCount: UInt,
-    messageCount: UInt
+    messageCount: UInt,
+    buildProvenance: String
 ) {
     Card(
         modifier = Modifier.fillMaxWidth()
@@ -878,7 +880,7 @@ fun InfoSection(
 
             InfoRow(stringResource(R.string.settings_label_contacts), contactCount.toString())
             InfoRow(stringResource(R.string.settings_label_messages), messageCount.toString())
-            InfoRow(stringResource(R.string.settings_label_version), "${BuildConfig.VERSION_NAME} (${BuildConfig.SCM_GIT_HASH} ${BuildConfig.SCM_BUILD_TIME})")
+            InfoRow(stringResource(R.string.settings_label_version), "${BuildConfig.VERSION_NAME} (Core: $buildProvenance)")
         }
     }
 }
