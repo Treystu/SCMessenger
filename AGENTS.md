@@ -59,7 +59,7 @@ this project verifies on Windows + a physical Pixel only. Therefore:
   authoring, mechanical refactors with clear acceptance criteria, pre-dispatch
   validation sweeps. See "Remote-eligible lane" in `HANDOFF/todo/_QUEUE.md`.
 
-### FOREIGN WORKER (Gemini via Antigravity/`agy`, Gemini CLI, others)
+### FOREIGN WORKER (Gemini via Antigravity/`agy`, Gemini CLI, others - except "HANDOFF/todo/GEMINI_SCMORC_DRIVER_2026-07-07.md)
 Dispatched and verified by an orchestrator on the Windows host. Rules:
 - Do NOT run `cargo`/`gradlew` (Windows build serialization — the orchestrator
   is the single writer for all build verification).

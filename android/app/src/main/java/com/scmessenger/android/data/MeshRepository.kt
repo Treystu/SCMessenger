@@ -325,6 +325,7 @@ open class MeshRepository(
     // Topic Manager for gossipsub topic subscription and filtering
     @Volatile private var topicManager: TopicManager? = null
 
+
     // Service state
     private val _serviceState = MutableStateFlow(uniffi.api.ServiceState.STOPPED)
     open val serviceState: StateFlow<uniffi.api.ServiceState> = _serviceState.asStateFlow()
@@ -1352,6 +1353,7 @@ open class MeshRepository(
             coreDelegate = object : uniffi.api.CoreDelegate {
                 override fun onPeerDiscovered(peerId: String) {
                     Timber.d("Core notified discovery: $peerId")
+                    refreshAddressesSnapshots()
                     repoScope.launch {
                         val selfLibp2pPeerId = ironCore?.getIdentityInfo()?.libp2pPeerId
                         if (!selfLibp2pPeerId.isNullOrBlank() && peerId == selfLibp2pPeerId) {
@@ -1459,6 +1461,7 @@ open class MeshRepository(
                     peerIdentifiedDedupCache[trimmedPeerId] = identifySignature to now
 
                     Timber.d("Core notified identified: $peerId (agent: $agentVersion) with ${listenAddrs.size} addresses")
+                    refreshAddressesSnapshots()
                     // Record successful transport event for health monitoring
                     val transport = when {
                         listenAddrs.any { it.contains("/ble/") } -> "ble"
@@ -1679,6 +1682,7 @@ open class MeshRepository(
                     peerDisconnectDedupCache[trimmedPeerId] = now
 
                     Timber.d("Core notified disconnected: $peerId")
+                    refreshAddressesSnapshots()
                     // Record transport failure event for health monitoring
                     recordTransportEvent("mesh", false)
                     repoScope.launch {
@@ -3084,6 +3088,7 @@ open class MeshRepository(
             // listener is confirmed bound, so a wired bridge implies real
             // inbound connectivity rather than a zombie listener.
             swarmBridge = meshService?.getSwarmBridge()
+            refreshAddressesSnapshots()
             updateBleIdentityBeacon()
 
             Timber.i("[OK] Internet transport (Swarm) listening on tcp/9001 and bridge wired")
@@ -3466,7 +3471,7 @@ open class MeshRepository(
     /**
      * Get current service state.
      */
-    fun getServiceState(): uniffi.api.ServiceState {
+    fun getServiceStateSync(): uniffi.api.ServiceState {
         return meshService?.getState() ?: uniffi.api.ServiceState.STOPPED
     }
 
@@ -3474,6 +3479,7 @@ open class MeshRepository(
      * Update and emit service stats.
      */
     private fun updateStats() {
+        refreshAddressesSnapshots()
         try {
             val stats = meshService?.getStats()
             if (stats != null) {
@@ -4143,10 +4149,10 @@ open class MeshRepository(
         if (state != uniffi.api.ServiceState.RUNNING) {
             return null
         }
-        return getIdentityInfo()
+        return getIdentityInfoSync()
     }
 
-    fun getIdentityInfo(): uniffi.api.IdentityInfo? {
+    fun getIdentityInfoSync(): uniffi.api.IdentityInfo? {
         ensureServiceInitializedFireAndForget()
         kotlin.runCatching { ensureLocalIdentityFederation() }
             .onFailure { Timber.w(it, "Failed to hydrate identity before getIdentityInfo") }
@@ -8773,19 +8779,32 @@ open class MeshRepository(
         }
     }
 
+    @Volatile private var externalAddressesSnapshot: List<String> = emptyList()
+    @Volatile private var listeningAddressesSnapshot: List<String> = emptyList()
+
+    private fun refreshAddressesSnapshots() {
+        repoScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            try {
+                val swarm = swarmBridge
+                if (swarm != null) {
+                    val external = swarm.getExternalAddresses()
+                    val listeners = swarm.getListeners()
+                    externalAddressesSnapshot = external
+                    listeningAddressesSnapshot = listeners
+                    Timber.d("Refreshed address snapshots: listeners=$listeners, external=$external")
+                }
+            } catch (e: Exception) {
+                Timber.w(e, "Failed to refresh address snapshots: ${e.message}")
+            }
+        }
+    }
+
     /**
      * Returns external NAT-mapped addresses observed by peer nodes on the mesh.
      * Uses relay/peer-confirmed observations (identify + reflection consensus).
      */
     fun getExternalAddresses(): List<String> {
-        // Bounded blocking bridge query (fast command-channel roundtrip); see
-        // getTopics() for rationale — legacy sync callers need a value in place.
-        return try {
-            kotlinx.coroutines.runBlocking { swarmBridge?.getExternalAddresses() ?: emptyList() }
-        } catch (e: Exception) {
-            Timber.w("getExternalAddresses failed: ${e.message}")
-            emptyList()
-        }
+        return externalAddressesSnapshot
     }
 
     /**
@@ -8795,14 +8814,7 @@ open class MeshRepository(
      * peers to attempt unreachable dials.
      */
     fun getListeningAddresses(): List<String> {
-        // Bounded blocking bridge query (fast command-channel roundtrip); see
-        // getTopics() for rationale — legacy sync callers need a value in place.
-        return try {
-            kotlinx.coroutines.runBlocking { swarmBridge?.getListeners() ?: emptyList() }
-        } catch (e: Exception) {
-            Timber.w("getListeningAddresses failed: ${e.message}")
-            emptyList()
-        }
+        return listeningAddressesSnapshot
     }
 
     fun getLocalIpAddress(): String? {
@@ -8849,7 +8861,7 @@ open class MeshRepository(
     }
 
     fun getIdentityExportString(minimalForQr: Boolean = false): String {
-        val identity = getIdentityInfo() ?: return "{}"
+        val identity = getIdentityInfoSync() ?: return "{}"
         var listeners = normalizeOutboundListenerHints(getListeningAddresses()).toMutableList()
         val externalAddresses = normalizeExternalAddressHints(getExternalAddresses())
         val relay = getPreferredRelay()

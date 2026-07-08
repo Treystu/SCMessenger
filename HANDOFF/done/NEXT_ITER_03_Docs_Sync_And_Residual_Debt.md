@@ -38,6 +38,11 @@ behavior, so it is not a regression).
 
 Gates afterward: `cd android && ./gradlew :app:assembleDebug :app:testDebugUnitTest -x lint`.
 
+## Outcomes
+
+- **Section B Completed**: Removed `runBlocking` calls from `MeshRepository.kt` getters (`getExternalAddresses` and `getListeningAddresses`) by introducing volatile snapshot variables. Added a background update helper `refreshAddressesSnapshots()` triggered periodically by stats update and on peer connection/identify events.
+- **TopicManager Asynchronous Refresh**: Added a local `CoroutineScope` to `TopicManager.kt` and wrapped the `refreshKnownTopics()` logic in `scope.launch` to make topic list updates asynchronous without changing the public function signature.
+
 ## Completion
 
 Update this file with outcomes, move to `HANDOFF/done/`, commit

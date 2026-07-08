@@ -63,6 +63,8 @@ class SettingsViewModelTest {
         every { repository.loadSettings() } returns settings()
         every { repository.validateSettings(any()) } returns true
         every { repository.getIdentityInfoNonBlocking() } returns null
+        val identityInfoFlow = MutableStateFlow<uniffi.api.IdentityInfo?>(null)
+        every { repository.identityInfo } returns identityInfoFlow
         every { repository.serviceState } returns MutableStateFlow(uniffi.api.ServiceState.STOPPED)
         every { preferences.identityNickname } returns kotlinx.coroutines.flow.flowOf(null)
 

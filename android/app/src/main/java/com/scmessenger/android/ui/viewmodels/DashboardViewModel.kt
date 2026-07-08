@@ -249,7 +249,7 @@ class DashboardViewModel @Inject constructor(
             val edges = mutableListOf<TopologyEdge>()
 
             // Add self node
-            val identityInfo = meshRepository.getIdentityInfo()
+            val identityInfo = meshRepository.getIdentityInfoSync()
             if (identityInfo != null) {
                 nodes.add(
                     TopologyNode(

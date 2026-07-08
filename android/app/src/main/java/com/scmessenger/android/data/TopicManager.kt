@@ -1,8 +1,12 @@
 package com.scmessenger.android.data
 
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 import timber.log.Timber
 
 /**
@@ -22,6 +26,8 @@ import timber.log.Timber
 class TopicManager(
     private val meshRepository: MeshRepository
 ) {
+
+    private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
     // Default topics
     companion object {
@@ -95,22 +101,24 @@ class TopicManager(
      * Refresh known topics from SwarmHandle and LedgerManager.
      */
     fun refreshKnownTopics() {
-        try {
-            val topics = mutableSetOf<String>()
-            topics.addAll(_subscribedTopics.value)
+        scope.launch {
+            try {
+                val topics = mutableSetOf<String>()
+                topics.addAll(_subscribedTopics.value)
 
-            // Add topics from SwarmBridge (gossipsub subscriptions active in Rust)
-            val swarmTopics = meshRepository.getTopics()
-            topics.addAll(swarmTopics)
+                // Add topics from SwarmBridge (gossipsub subscriptions active in Rust)
+                val swarmTopics = meshRepository.getTopics()
+                topics.addAll(swarmTopics)
 
-            // Add topics from LedgerManager (topics seen from peer exchanges)
-            val ledgerTopics = meshRepository.getAllKnownTopics()
-            topics.addAll(ledgerTopics)
+                // Add topics from LedgerManager (topics seen from peer exchanges)
+                val ledgerTopics = meshRepository.getAllKnownTopics()
+                topics.addAll(ledgerTopics)
 
-            _knownTopics.value = topics
-            Timber.d("Known topics refreshed: ${topics.size} topics (${swarmTopics.size} swarm, ${ledgerTopics.size} ledger)")
-        } catch (e: Exception) {
-            Timber.e(e, "Failed to refresh known topics")
+                _knownTopics.value = topics
+                Timber.d("Known topics refreshed: ${topics.size} topics (${swarmTopics.size} swarm, ${ledgerTopics.size} ledger)")
+            } catch (e: Exception) {
+                Timber.e(e, "Failed to refresh known topics")
+            }
         }
     }
 

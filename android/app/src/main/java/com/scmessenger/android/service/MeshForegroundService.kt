@@ -110,7 +110,7 @@ class MeshForegroundService : Service() {
 
         serviceScope.launch {
             val repoRunning = withContext(Dispatchers.Default) {
-                meshRepository.getServiceState() == uniffi.api.ServiceState.RUNNING
+                meshRepository.getServiceStateSync() == uniffi.api.ServiceState.RUNNING
             }
             when (decideCommand(action, isRunning, repoRunning)) {
                 StartDecision.Start -> startMeshService()
@@ -127,7 +127,7 @@ class MeshForegroundService : Service() {
     private fun startMeshService() {
         serviceScope.launch {
             val repoRunning = withContext(Dispatchers.Default) {
-                meshRepository.getServiceState() == uniffi.api.ServiceState.RUNNING
+                meshRepository.getServiceStateSync() == uniffi.api.ServiceState.RUNNING
             }
             if (isRunning || repoRunning) {
                 isRunning = true
@@ -164,7 +164,7 @@ class MeshForegroundService : Service() {
                 }
 
                 val started = withContext(Dispatchers.Default) {
-                    meshRepository.getServiceState() == uniffi.api.ServiceState.RUNNING
+                    meshRepository.getServiceStateSync() == uniffi.api.ServiceState.RUNNING
                 }
                 if (!started) {
                     Timber.e("Repository did not reach RUNNING state; aborting foreground service start")
@@ -358,7 +358,7 @@ class MeshForegroundService : Service() {
     private fun stopMeshService() {
         serviceScope.launch {
             val repoRunning = withContext(Dispatchers.Default) {
-                meshRepository.getServiceState() == uniffi.api.ServiceState.RUNNING
+                meshRepository.getServiceStateSync() == uniffi.api.ServiceState.RUNNING
             }
             if (!isRunning && !repoRunning) {
                 Timber.w("Mesh service stop requested while already stopped")
@@ -680,7 +680,7 @@ class MeshForegroundService : Service() {
         releaseWakeLock()
         serviceScope.launch {
             val repoRunning = withContext(Dispatchers.Default) {
-                meshRepository.getServiceState() == uniffi.api.ServiceState.RUNNING
+                meshRepository.getServiceStateSync() == uniffi.api.ServiceState.RUNNING
             }
             if (repoRunning) {
                 withContext(Dispatchers.Default) {

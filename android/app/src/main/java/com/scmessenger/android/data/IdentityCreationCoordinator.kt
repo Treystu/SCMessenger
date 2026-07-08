@@ -113,10 +113,10 @@ class IdentityCreationCoordinator @Inject constructor(
                 meshRepository.setNickname(trimmed)
 
                 // Verify nickname persistence
-                var info = meshRepository.getIdentityInfo()
+                var info = meshRepository.getIdentityInfoSync()
                 if (info?.nickname.isNullOrBlank()) {
                     meshRepository.setNickname(trimmed)
-                    info = meshRepository.getIdentityInfo()
+                    info = meshRepository.getIdentityInfoSync()
                 }
 
                 // Verify initialization
