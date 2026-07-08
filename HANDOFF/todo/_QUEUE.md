@@ -52,7 +52,7 @@ Rules of engagement:
 
 ## Phase 1 Stage C — adaptive ports (P1-10 spec is DONE; implementation open)
 
-11. `P1-11_Listen_Side_Adaptive_Port_Selection.md` [SONNET][AUDIT-GATE]
+~~11. `P1-11_Listen_Side_Adaptive_Port_Selection.md` [SONNET][AUDIT-GATE]~~ (Completed)
 12. `P1-12_Advertise_Dial_Remember_Adaptive_Port_Selection.md` [SONNET][AUDIT-GATE]
 13. `P1-13_Hardcode_Sweep_Retire_9001_9002_9010.md` [HAIKU] — after 11/12.
 14. P1-14 Hostile-network validation [DEVICE] — after 11-13.

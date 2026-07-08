@@ -730,19 +730,27 @@ impl MeshService {
                             let core_weak = iron_core_handle.map(|c| {
                                 Arc::downgrade(&c)
                             });
+                            let preferred_port = listen_multiaddr.as_ref().and_then(|addr| {
+                                  addr.iter().find_map(|p| match p {
+                                      libp2p::multiaddr::Protocol::Tcp(port) => Some(port),
+                                      _ => None,
+                                  })
+                              });
+                              let mut multiport_config = crate::transport::multiport::MultiPortConfig::default();
+                              multiport_config.preferred_port = preferred_port;
 
-                            match crate::transport::start_swarm_with_config(
-                                libp2p_keys,
-                                listen_multiaddr,
-                                event_tx,
-                                None,
-                                parsed_bootstrap.clone(),
-                                service_storage_path,
-                                core_weak,
-                                headless_mode,
-                                None, // Use default discovery config (Open/mDNS enabled)
-                                routing_engine_handle,
-                            )
+                              match crate::transport::start_swarm_with_config(
+                                  libp2p_keys,
+                                  listen_multiaddr,
+                                  event_tx,
+                                  Some(multiport_config),
+                                  parsed_bootstrap.clone(),
+                                  service_storage_path,
+                                  core_weak,
+                                  headless_mode,
+                                  None, // Use default discovery config (Open/mDNS enabled)
+                                  routing_engine_handle,
+                              )
                             .await
                             {
                                 Ok(handle) => {

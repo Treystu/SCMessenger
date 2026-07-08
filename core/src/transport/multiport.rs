@@ -28,6 +28,8 @@ pub struct MultiPortConfig {
     /// IP version preferences
     pub enable_ipv4: bool,
     pub enable_ipv6: bool,
+    /// Preferred port to try first (before common ports)
+    pub preferred_port: Option<u16>,
 }
 
 impl Default for MultiPortConfig {
@@ -38,6 +40,7 @@ impl Default for MultiPortConfig {
             additional_ports: Vec::new(),
             enable_ipv4: true,
             enable_ipv6: true,
+            preferred_port: None,
         }
     }
 }
@@ -57,23 +60,28 @@ pub enum BindResult {
 pub fn generate_listen_addresses(config: &MultiPortConfig) -> Vec<(Multiaddr, u16)> {
     let mut addresses = Vec::new();
 
-    // Helper to add IPv4 and IPv6 addresses for a port
+    // Helper to add IPv4 and IPv6 addresses for a port (both TCP and WS)
     let mut add_port = |port: u16| {
         if config.enable_ipv4 {
-            let addr: Multiaddr = format!("/ip4/0.0.0.0/tcp/{}", port)
-                .parse()
-                .expect("Valid multiaddr");
-            addresses.push((addr, port));
+            let tcp_addr: Multiaddr = format!("/ip4/0.0.0.0/tcp/{}", port).parse().unwrap();
+            let ws_addr: Multiaddr = format!("/ip4/0.0.0.0/tcp/{}/ws", port).parse().unwrap();
+            addresses.push((tcp_addr, port));
+            addresses.push((ws_addr, port));
         }
         if config.enable_ipv6 {
-            let addr: Multiaddr = format!("/ip6/::/tcp/{}", port)
-                .parse()
-                .expect("Valid multiaddr");
-            addresses.push((addr, port));
+            let tcp_addr: Multiaddr = format!("/ip6/::/tcp/{}", port).parse().unwrap();
+            let ws_addr: Multiaddr = format!("/ip6/::/tcp/{}/ws", port).parse().unwrap();
+            addresses.push((tcp_addr, port));
+            addresses.push((ws_addr, port));
         }
     };
 
-    // Add common ports first (prioritized)
+    // Add preferred port first (most prioritized)
+    if let Some(port) = config.preferred_port {
+        add_port(port);
+    }
+
+    // Add common ports next
     if config.enable_common_ports {
         for &port in COMMON_PORTS {
             add_port(port);
@@ -176,7 +184,7 @@ impl BindAnalysis {
         let mut report = String::new();
 
         report.push_str(&format!(
-            "✓ Listening on {} address(es)\n",
+            "[OK] Listening on {} address(es)\n",
             self.successful.len()
         ));
 
@@ -193,7 +201,7 @@ impl BindAnalysis {
 
         if !self.failed_permission.is_empty() {
             report.push_str(&format!(
-                "\n⚠ {} port(s) need elevated privileges: {:?}\n",
+                "\n[WARNING] {} port(s) need elevated privileges: {:?}\n",
                 self.failed_permission.len(),
                 self.failed_permission
             ));
@@ -202,7 +210,7 @@ impl BindAnalysis {
 
         if !self.failed_in_use.is_empty() {
             report.push_str(&format!(
-                "\n⚠ {} port(s) already in use: {:?}\n",
+                "\n[WARNING] {} port(s) already in use: {:?}\n",
                 self.failed_in_use.len(),
                 self.failed_in_use
             ));
@@ -210,7 +218,7 @@ impl BindAnalysis {
 
         if !self.failed_other.is_empty() {
             report.push_str(&format!(
-                "\n⚠ {} port(s) failed for other reasons\n",
+                "\n[WARNING] {} port(s) failed for other reasons\n",
                 self.failed_other.len()
             ));
         }
@@ -260,6 +268,7 @@ mod tests {
             additional_ports: vec![],
             enable_ipv4: true,
             enable_ipv6: false,
+            preferred_port: None,
         };
         let addresses = generate_listen_addresses(&config);
 
@@ -280,10 +289,11 @@ mod tests {
             additional_ports: vec![9999, 8888],
             enable_ipv4: true,
             enable_ipv6: false,
+            preferred_port: None,
         };
         let addresses = generate_listen_addresses(&config);
 
-        assert_eq!(addresses.len(), 2, "Should have 2 custom ports");
+        assert_eq!(addresses.len(), 4, "Should have 4 custom addresses (TCP + WS)");
         assert!(addresses.iter().any(|(_, port)| *port == 9999));
         assert!(addresses.iter().any(|(_, port)| *port == 8888));
     }

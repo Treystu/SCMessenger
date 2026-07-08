@@ -1399,11 +1399,14 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
         .filter_map(|addr| addr.parse().ok())
         .collect();
 
+    let mut multiport_config = scmessenger_core::transport::multiport::MultiPortConfig::default();
+    multiport_config.preferred_port = Some(p2p_port);
+
     let swarm_handle = transport::start_swarm_with_config(
         network_keypair,
         Some(listen_addr),
         event_tx,
-        None,
+        Some(multiport_config),
         relay_bootstrap,
         None,
         None,
@@ -1414,17 +1417,7 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
     .await?;
 
     // ── WebSocket P2P Bridge for WASM ────────────────────────────────────
-    let ws_p2p_port = p2p_port + 1;
-    let ws_listen_addr: libp2p::Multiaddr =
-        format!("/ip4/0.0.0.0/tcp/{}/ws", ws_p2p_port).parse()?;
-    match swarm_handle.listen(ws_listen_addr.clone()).await {
-        Ok(_) => println!(
-            "{} WebSocket P2P Bridge started on {}",
-            "[OK]".green(),
-            ws_listen_addr
-        ),
-        Err(e) => tracing::warn!("Failed to start WebSocket P2P bridge: {}", e),
-    }
+    // Redundant explicit bind removed; handled by MultiPortConfig.
 
     println!("{} Network started", "[OK]".green());
 
@@ -2462,11 +2455,18 @@ async fn cmd_relay(listen_addr: String, http_port: u16, node_name: Option<String
         );
     }
 
+    let listen_port = listen_multiaddr.iter().find_map(|p| match p {
+        libp2p::multiaddr::Protocol::Tcp(port) => Some(port),
+        _ => None,
+    });
+    let mut multiport_config = scmessenger_core::transport::multiport::MultiPortConfig::default();
+    multiport_config.preferred_port = listen_port;
+
     let swarm_handle = transport::start_swarm_with_config(
         network_keypair,
-        Some(listen_multiaddr),
+        Some(listen_multiaddr.clone()),
         event_tx,
-        None,
+        Some(multiport_config),
         bootstrap_multiaddrs,
         None,
         None,

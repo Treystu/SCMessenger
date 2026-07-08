@@ -1311,6 +1311,8 @@ pub enum SwarmCommand {
     },
     /// Get list of connected peers
     GetPeers { reply: mpsc::Sender<Vec<PeerId>> },
+    /// Get bound addresses
+    GetBoundAddresses { reply: mpsc::Sender<Vec<Multiaddr>> },
     /// Start listening on an address
     Listen {
         addr: Multiaddr,
@@ -1564,6 +1566,19 @@ impl SwarmHandle {
     }
 
     /// Get connected peers
+    pub async fn get_bound_addresses(&self) -> Result<Vec<Multiaddr>> {
+        let (reply_tx, mut reply_rx) = mpsc::channel(1);
+        self.command_tx
+            .send(SwarmCommand::GetBoundAddresses { reply: reply_tx })
+            .await
+            .map_err(|_| anyhow::anyhow!("Swarm task not running"))?;
+
+        reply_rx
+            .recv()
+            .await
+            .ok_or_else(|| anyhow::anyhow!("No reply from swarm"))
+    }
+
     pub async fn get_peers(&self) -> Result<Vec<PeerId>> {
         let (reply_tx, mut reply_rx) = mpsc::channel(1);
         self.command_tx
@@ -2089,6 +2104,7 @@ pub async fn start_swarm_with_config(
         let reflection_service = AddressReflectionService::new();
 
         // Track pending address reflection requests
+        let mut bound_addresses = Vec::new();
         let mut pending_reflections: HashMap<
             libp2p::request_response::OutboundRequestId,
             mpsc::Sender<Result<String, String>>,
@@ -3771,6 +3787,7 @@ pub async fn start_swarm_with_config(
 
                             SwarmEvent::NewListenAddr { address, .. } => {
                                 tracing::info!("Listening on {}", address);
+                                bound_addresses.push(address.clone());
                                 let _ = event_tx.send(SwarmEvent2::ListeningOn(address)).await;
                             }
 
@@ -4239,6 +4256,9 @@ pub async fn start_swarm_with_config(
                                 pending_reflections.insert(request_id, reply);
                             }
 
+                            SwarmCommand::GetBoundAddresses { reply } => {
+                                let _ = reply.send(bound_addresses.clone()).await;
+                            }
                             SwarmCommand::GetExternalAddresses { reply } => {
                                 let addresses = address_observer.external_addresses().to_vec();
                                 let _ = reply.send(addresses).await;
@@ -4551,6 +4571,7 @@ pub async fn start_swarm_with_config(
             mpsc::Sender<Result<(), String>>,
         > = HashMap::new();
 
+        let mut bound_addresses = Vec::new();
         let mut pending_reflections: HashMap<
             libp2p::request_response::OutboundRequestId,
             mpsc::Sender<Result<String, String>>,
@@ -4652,6 +4673,9 @@ pub async fn start_swarm_with_config(
                                     request,
                                 );
                                 pending_reflections.insert(request_id, reply);
+                            }
+                            SwarmCommand::GetBoundAddresses { reply } => {
+                                let _ = reply.send(bound_addresses.clone()).await;
                             }
                             SwarmCommand::GetExternalAddresses { reply } => {
                                 let addresses = address_observer.external_addresses().to_vec();
