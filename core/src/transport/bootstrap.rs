@@ -560,7 +560,13 @@ mod tests {
 
     #[test]
     fn test_bootstrap_manager_creation() {
-        let mgr = BootstrapManager::with_defaults();
+        // Hermetic: with_defaults()'s total_nodes() depends on the
+        // SC_BOOTSTRAP_NODES env var (empty by design in sovereign mode with
+        // no shell override), so seed a node explicitly rather than relying
+        // on environment state.
+        let mut mgr = BootstrapManager::with_defaults();
+        let addr: Multiaddr = "/ip4/10.0.0.1/tcp/9001".parse().unwrap();
+        mgr.add_bootstrap_node(addr);
         assert_eq!(*mgr.state(), BootstrapState::Idle);
         assert!(mgr.total_nodes() > 0);
         assert_eq!(mgr.connected_count(), 0);

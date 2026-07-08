@@ -68,3 +68,6 @@ value, confirming the test passes identically both times (true hermeticity).
 - `test_bootstrap_manager_creation` passes regardless of whether
   `SC_BOOTSTRAP_NODES` is set in the calling environment.
 - No change to `BootstrapManager`'s actual runtime behavior -- test-only fix.
+
+---
+**FIXED 2026-07-07 (orchestrator, option a):** test_bootstrap_manager_creation now seeds an explicit node via add_bootstrap_node before asserting total_nodes() > 0, no longer depends on SC_BOOTSTRAP_NODES shell state. Gate: cargo test -p scmessenger-core --lib bootstrap:: - 27/27 PASS.
