@@ -116,3 +116,17 @@ uncommitted, and leave a short note at the bottom of this file (append, don't
 rewrite) summarizing what you completed, what's still open, and any judgment
 calls you made that the operator/Fable should double-check. Then this file
 itself moves to `HANDOFF/done/`.
+
+### 2026-07-08 Session Outcomes
+- **Completed Tasks**:
+  1. `P1_CLI_BLE_Outbound_TX_Path_Missing.md` (moved to done/, committed c8b7a2f8). Implemented GATT-central write/TX path, added peer ID validation against `libp2p::PeerId`, and set up RAII drop guard connection-scoped cleaning. Adversarial security audit verdict: PASS (Qwen thinking model).
+  2. `CLIPPY_DEBT_cli_desktop_bridge_dwarnings.md` (moved to done/, committed dd52e75c). paid off clippy warnings workspace-wide.
+  3. Timing race in core unit test `test_cleanup_old_entries` resolved by switching cleanup max-age to 0 to bypass clock granularity issues.
+  4. Updated documentation (`REMAINING_WORK_TRACKING.md` and `docs/CURRENT_STATE.md`) with session summary (committed 6073beeb).
+- **Judgment Calls / Verification**:
+  - Replaced unwrap calls with `.expect("...")` on mutex locks since expect is explicitly recommended by `.clippy.toml` to provide context.
+  - Gated the Freedesktop Base Directory specification tests in `desktop_bridge/tests/xdg_paths_test.rs` with `#[cfg(target_os = "linux")]` since on Windows the fallback returns the current directory and fails directory path matching.
+- **Still Open**:
+  - Remaining Stage B/device tasks are blocked by device verification / emulator setup.
+  - Stage C (adaptive ports P1-11/12) is blocked by P1-04 (not landed).
+
