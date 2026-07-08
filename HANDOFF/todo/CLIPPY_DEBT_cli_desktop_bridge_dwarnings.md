@@ -36,3 +36,6 @@ NOTE: none are in the F6 edit (cli/src/ble_mesh.rs:332).
 
 ## GATE
 `cargo clippy --workspace -- -D warnings -A clippy::empty_line_after_doc_comments`
+
+---
+**Exact unwrap() locations (ollama gpt-oss:120b, 2026-07-07):** desktop_bridge/src/desktop_bridge.rs lines 81, 87, 90, 95, 100, 109, 118, 143, 154, 156, 167, 173, 175, 183, 185, 205.
