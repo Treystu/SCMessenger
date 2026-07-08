@@ -46,9 +46,9 @@ Rules of engagement:
    in item 6 still fails: trace-log capture per ticket, then root-cause fix.
 ~~8. P1_ANDROID_mDNS_Self_Loopback_Discovery.md [SONNET/medium] — P1-06.~~ (Completed via Qwen swarm)
 ~~9. P1_ANDROID_LAN_Discovery_Not_Feeding_Bootstrap_Peer_Count.md [SONNET/medium] — P1-07.~~ (Already in done/)
-10. `P1_ANDROID_Inbound_Libp2p_Listener_Not_Externally_Reachable.md` [SONNET/high]
-    — verify against the sprint's listener-zombie fix first; may already be
-    resolved (pre-dispatch validation should check for ALREADY_WIRED).
+~~10. `P1_ANDROID_Inbound_Libp2p_Listener_Not_Externally_Reachable.md` [SONNET/high]~~ (Pre-dispatch validation confirmed ALREADY_WIRED)
+    ~~— verify against the sprint's listener-zombie fix first; may already be~~
+    ~~resolved (pre-dispatch validation should check for ALREADY_WIRED).~~
 
 ## Phase 1 Stage C — adaptive ports (P1-10 spec is DONE; implementation open)
 
