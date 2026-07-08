@@ -1,12 +1,18 @@
 # SCMessenger Remaining Work Tracking
 
 Status: Active
-Last updated: 2026-07-07 (native /scmorc lean-mode session, native Claude
+Last updated: 2026-07-08 (native /scmorc lean-mode session, native Claude
 subscription at 98% weekly usage / resets 2026-07-10 — session ran on the
 Qwen/DashScope + agy-Gemini + ollama-cloud worker pools, near-zero native
 token spend; see `HANDOFF/todo/GEMINI_SCMORC_DRIVER_2026-07-07.md` for the
 lane-routing directive this session established for continued driving during
 the HARDLOCK window).
+
+## 2026-07-08 SESSION SUMMARY (BLE Outbound TX & Clippy Debt paid off)
+
+- **P1_CLI_BLE_Outbound_TX_Path_Missing**: Implemented GATT-central write/TX path on desktop CLI (`send_ble_message()` writing to `0xDF03`) with a transparent fallback to the libp2p swarm transport. Implemented peer ID format validation against `libp2p::PeerId` and dropped peers from active registry upon disconnection/errors. Passed adversarial security audit verdict **PASS** from Qwen thinking model (`qwen3-235b-a22b-thinking-2507`). Committed locally in `c8b7a2f8`.
+- **CLIPPY_DEBT_cli_desktop_bridge_dwarnings**: Paid off pre-existing clippy debt across `scmessenger-cli`, `scmessenger-desktop-bridge` and `scmessenger-wasm`. Replaced disallowed `.unwrap()` calls with `.expect("...")`, simplified boolean conditions, and gated platform-specific test blocks. Entire workspace compiles and passes clippy checks (`cargo clippy --workspace -- -D warnings`) cleanly. Committed locally in `dd52e75c`.
+- **Adaptive TTL Test Fix**: Fixed a timing-related race condition in `test_cleanup_old_entries` within `core/src/routing/adaptive_ttl.rs` by using a zero max-age cleanup rather than 1 nanosecond, making the test fully deterministic across all execution hosts.
 
 ## 2026-07-07 SESSION SUMMARY (Fable-5-sprint verification chain closed out)
 

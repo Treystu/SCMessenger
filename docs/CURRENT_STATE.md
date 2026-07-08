@@ -1,10 +1,19 @@
 # SCMessenger Current State (Verified)
 
 Status: Active
-Last updated: 2026-07-06 (Fable 5 stabilization sprint)
+Last updated: 2026-07-08 (Fable 5 stabilization sprint)
 Last verified: **2026-07-02** (v1.0.0 PR #1 merged, remaining items documented in `docs/release-readiness-2026-07-02.md`)
 
 ---
+
+## 2026-07-08: BLE Outbound TX & Clippy Debt paid off
+
+**Status:** Implementation COMPLETE; clippy debt resolved. Details in `REMAINING_WORK_TRACKING.md` (2026-07-08 section).
+
+Key changes:
+- **CLI BLE Outbound write/TX path**: Implemented GATT-central write/TX path on desktop CLI (`send_ble_message()` writing to `0xDF03`) with a transparent fallback to the libp2p swarm transport. Implemented peer ID format validation against `libp2p::PeerId` and dropped peers from active registry upon disconnection/errors. Passed adversarial security audit verdict **PASS** from Qwen thinking model (`qwen3-235b-a22b-thinking-2507`). Committed locally in `c8b7a2f8`.
+- **Clippy warnings resolved**: Paid off pre-existing clippy debt across `scmessenger-cli`, `scmessenger-desktop-bridge` and `scmessenger-wasm`. Replaced disallowed `.unwrap()` calls with `.expect("...")`, simplified boolean conditions, and gated platform-specific test blocks. Entire workspace compiles and passes clippy checks (`cargo clippy --workspace -- -D warnings`) cleanly. Committed locally in `dd52e75c`.
+- **Adaptive TTL Test Fix**: Fixed a timing-related race condition in `test_cleanup_old_entries` within `core/src/routing/adaptive_ttl.rs` by using a zero max-age cleanup rather than 1 nanosecond, making the test fully deterministic across all execution hosts.
 
 ## 2026-07-06: Fable 5 Stabilization Sprint — Networking Layer
 
