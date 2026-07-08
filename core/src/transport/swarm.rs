@@ -187,6 +187,44 @@ fn last_identified_log() -> &'static parking_lot::RwLock<HashMap<PeerId, Instant
     LAST_IDENTIFIED_LOG.get_or_init(|| parking_lot::RwLock::new(HashMap::new()))
 }
 
+/// P1-CORE-NEGOTIATION-RATE-SIGNAL: per-remote-address burst detector for
+/// IncomingConnectionError. Distinguishes routine single LAN-probe noise
+/// (logged at debug!) from a genuine flood of negotiation failures from one
+/// address (warn!-worthy), independent of the per-event debug-level logging.
+static NEGOTIATION_FAILURE_COUNTS: std::sync::OnceLock<parking_lot::RwLock<HashMap<String, (u32, Instant)>>> =
+    std::sync::OnceLock::new();
+
+fn negotiation_failure_counts() -> &'static parking_lot::RwLock<HashMap<String, (u32, Instant)>> {
+    NEGOTIATION_FAILURE_COUNTS.get_or_init(|| parking_lot::RwLock::new(HashMap::new()))
+}
+
+/// Returns true when `addr_key` has produced >=5 negotiation failures within
+/// the current 10-second window (caller should then emit a rate-limited warn).
+fn record_negotiation_failure_and_check_burst(addr_key: &str) -> bool {
+    let mut map = negotiation_failure_counts().write();
+    let now = Instant::now();
+    let window_duration = Duration::from_secs(10);
+
+    // Bound memory against an attacker spoofing many distinct send_back_addr
+    // values: this is a defensive counter, not a source of truth, so an
+    // occasional full clear on overflow is an acceptable tradeoff.
+    let need_clear = !map.contains_key(addr_key) && map.len() >= 4096;
+    if need_clear {
+        map.clear();
+    }
+
+    let (count, window_start) = map.entry(addr_key.to_string()).or_insert((0, now));
+
+    if window_start.elapsed() >= window_duration {
+        *count = 1;
+        *window_start = now;
+        false
+    } else {
+        *count += 1;
+        *count >= 5
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct DeliveryConvergenceMarker {
     relay_message_id: String,
@@ -4007,6 +4045,15 @@ pub async fn start_swarm_with_config(
                                     local_addr,
                                     error
                                 );
+
+                                if record_negotiation_failure_and_check_burst(&send_back_addr.to_string()) {
+                                    tracing::warn!(
+                                        "High rate of incoming negotiation failures from {} -> {}: {}",
+                                        send_back_addr,
+                                        local_addr,
+                                        error
+                                    );
+                                }
                             }
 
                             SwarmEvent::ListenerError { listener_id, error } => {
@@ -5387,6 +5434,15 @@ pub async fn start_swarm_with_config(
                                     local_addr,
                                     error
                                 );
+
+                                if record_negotiation_failure_and_check_burst(&send_back_addr.to_string()) {
+                                    tracing::warn!(
+                                        "High rate of incoming negotiation failures from {} -> {}: {}",
+                                        send_back_addr,
+                                        local_addr,
+                                        error
+                                    );
+                                }
                             }
                             SwarmEvent::ListenerError { listener_id, error } => {
                                 tracing::error!(
