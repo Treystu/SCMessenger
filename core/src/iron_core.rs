@@ -220,7 +220,8 @@ pub struct IronCore {
     pub(crate) privacy_config: Arc<RwLock<crate::privacy::PrivacyConfig>>,
 
     /// Drift policy engine — adapts relay aggressiveness from device state.
-    policy_engine: Arc<RwLock<crate::drift::PolicyEngine>>,
+    pub policy_engine: Arc<RwLock<crate::drift::PolicyEngine>>,
+    pub transport_memory: Arc<RwLock<crate::store::transport_memory::TransportMemoryStore>>,
 }
 
 /// Current version of the structured identity-backup payload (the plaintext
@@ -289,6 +290,8 @@ impl IronCore {
         let security_audit_pipeline =
             Arc::new(crate::dspy::modules::ModuleFactory::build_security_audit_pipeline());
 
+        let transport_memory = crate::store::transport_memory::TransportMemoryStore::new(backend.clone());
+
         Self {
             identity: Arc::new(RwLock::new(IdentityManager::new())),
             outbox: Arc::new(RwLock::new(outbox)),
@@ -336,6 +339,7 @@ impl IronCore {
             security_audit_pipeline,
             privacy_config: Arc::new(RwLock::new(crate::privacy::PrivacyConfig::default())),
             policy_engine: Arc::new(RwLock::new(crate::drift::PolicyEngine::new())),
+            transport_memory: Arc::new(RwLock::new(transport_memory)),
         }
     }
 
@@ -370,6 +374,8 @@ impl IronCore {
         );
         let security_audit_pipeline =
             Arc::new(crate::dspy::modules::ModuleFactory::build_security_audit_pipeline());
+
+        let transport_memory = crate::store::transport_memory::TransportMemoryStore::new(backend.clone());
 
         Self {
             identity: Arc::new(RwLock::new(
@@ -423,6 +429,7 @@ impl IronCore {
             security_audit_pipeline,
             privacy_config: Arc::new(RwLock::new(crate::privacy::PrivacyConfig::default())),
             policy_engine: Arc::new(RwLock::new(crate::drift::PolicyEngine::new())),
+            transport_memory: Arc::new(RwLock::new(transport_memory)),
         }
     }
 
@@ -457,6 +464,8 @@ impl IronCore {
         );
         let security_audit_pipeline =
             Arc::new(crate::dspy::modules::ModuleFactory::build_security_audit_pipeline());
+
+        let transport_memory = crate::store::transport_memory::TransportMemoryStore::new(backend.clone());
 
         Self {
             identity: Arc::new(RwLock::new(
@@ -510,6 +519,7 @@ impl IronCore {
             security_audit_pipeline,
             privacy_config: Arc::new(RwLock::new(crate::privacy::PrivacyConfig::default())),
             policy_engine: Arc::new(RwLock::new(crate::drift::PolicyEngine::new())),
+            transport_memory: Arc::new(RwLock::new(transport_memory)),
         }
     }
 

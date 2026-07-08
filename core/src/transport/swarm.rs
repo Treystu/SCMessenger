@@ -3800,6 +3800,24 @@ pub async fn start_swarm_with_config(
                                 );
                                 multi_path_delivery.record_recipient_seen_now(peer_id, peer_id);
 
+                                if let Some(c) = &core_handle {
+                                    if let Some(c_arc) = c.upgrade() {
+                                        let fp = crate::store::transport_memory::get_network_fingerprint();
+                                        let mut transport = String::new();
+                                        let mut port = 0;
+                                        for p in remote_addr.iter() {
+                                            match p {
+                                                libp2p::multiaddr::Protocol::Tcp(p) => { transport = "tcp".to_string(); port = p; },
+                                                libp2p::multiaddr::Protocol::Udp(p) => { transport = "udp".to_string(); port = p; },
+                                                _ => {}
+                                            }
+                                        }
+                                        if port > 0 {
+                                            let _ = c_arc.transport_memory.read().record_success(&peer_id, &fp, transport, port, 0);
+                                        }
+                                    }
+                                }
+
                                 // Track this connection for address observation
                                 connection_tracker.add_connection(
                                     peer_id,
@@ -3857,8 +3875,10 @@ pub async fn start_swarm_with_config(
                                     }
                                 }
 
-                                // Send full peer list to newly connected peer
-                                let list_msg = peer_broadcaster.create_peer_list_response();
+                                // Send full peer list to newly connected peer, including our own filtered bound addresses
+                                let filtered_self = build_mdns_advertised_addrs(&bound_addresses);
+                                let self_addrs = filtered_self.into_iter().map(|a| a.to_string()).collect::<Vec<_>>();
+                                let list_msg = peer_broadcaster.create_peer_list_response(Some((&local_peer_id, self_addrs)));
                                 if let Ok(list_bytes) = list_msg.to_bytes() {
                                     let framed = wrap_in_drift_frame(&list_bytes);
                                     let _request_id = swarm.behaviour_mut().messaging.send_request(
@@ -4265,8 +4285,65 @@ pub async fn start_swarm_with_config(
                             }
 
                             SwarmCommand::Dial { addr, reply } => {
-                                tracing::debug!("Dialing {} (promiscuous — accepting any PeerID)", addr);
-                                match swarm.dial(addr) {
+                                tracing::debug!("Dialing {} (synthesizing port ladder if applicable)", addr);
+                                let s = addr.to_string();
+                                let is_direct = !s.contains("/p2p-circuit/") && !s.contains("/ws/") && !s.contains("/wss/");
+
+                                let mut target_peer_id = None;
+                                let mut base_prefix = Multiaddr::empty();
+                                let mut found_ip = false;
+
+                                if is_direct {
+                                    for p in addr.iter() {
+                                        match p {
+                                            libp2p::multiaddr::Protocol::P2p(pid) => target_peer_id = Some(pid),
+                                            libp2p::multiaddr::Protocol::Ip4(_) | libp2p::multiaddr::Protocol::Ip6(_) => {
+                                                found_ip = true;
+                                                base_prefix.push(p);
+                                            }
+                                            libp2p::multiaddr::Protocol::Tcp(_) | libp2p::multiaddr::Protocol::Udp(_) => {}
+                                            _ => base_prefix.push(p),
+                                        }
+                                    }
+                                }
+
+                                let dial_res = if found_ip && target_peer_id.is_some() {
+                                    let pid = target_peer_id.unwrap();
+                                    let mut candidates = vec![addr.clone()];
+                                    let fp = crate::store::transport_memory::get_network_fingerprint();
+
+                                    if let Some(c) = &core_handle {
+                                        if let Some(c_arc) = c.upgrade() {
+                                            if let Ok(Some(last_good)) = c_arc.transport_memory.read().get_last_good(&pid, &fp) {
+                                                let mut a = base_prefix.clone();
+                                                if last_good.transport == "tcp" {
+                                                    a.push(libp2p::multiaddr::Protocol::Tcp(last_good.port));
+                                                } else {
+                                                    a.push(libp2p::multiaddr::Protocol::Udp(last_good.port));
+                                                }
+                                                a.push(libp2p::multiaddr::Protocol::P2p(pid));
+                                                if !candidates.contains(&a) { candidates.push(a); }
+                                            }
+                                        }
+                                    }
+
+                                    for port in [443, 80, 8080] {
+                                        let mut a = base_prefix.clone();
+                                        a.push(libp2p::multiaddr::Protocol::Tcp(port));
+                                        a.push(libp2p::multiaddr::Protocol::P2p(pid));
+                                        if !candidates.contains(&a) { candidates.push(a); }
+                                    }
+
+                                    tracing::debug!("Dialing candidate ladder for {}: {:?}", pid, candidates);
+                                    let opts = libp2p::swarm::dial_opts::DialOpts::peer_id(pid)
+                                        .addresses(candidates)
+                                        .build();
+                                    swarm.dial(opts)
+                                } else {
+                                    swarm.dial(addr.clone())
+                                };
+
+                                match dial_res {
                                     Ok(_) => { let _ = reply.send(Ok(())).await; }
                                     Err(e) => {
                                         let err_msg: String = format!("{}", e);

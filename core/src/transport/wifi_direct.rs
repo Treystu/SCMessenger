@@ -51,6 +51,7 @@ pub struct GroupInfo {
     pub group_owner_ip: Option<String>,
     pub client_ips: Vec<String>,
     pub interface_name: String,
+    pub port: Option<u16>,
 }
 
 /// Android's `WifiP2pConfig.groupOwnerIntent` ranges 0-15; a device more likely

@@ -1464,6 +1464,7 @@ impl MeshService {
             group_owner_ip: Some(group_owner_ip.clone()),
             client_ips: vec![],
             interface_name: "wlan0".to_string(),
+            port: None,
         };
 
         if let Some(transport) = self.wifi_direct_transport.lock().as_ref() {
