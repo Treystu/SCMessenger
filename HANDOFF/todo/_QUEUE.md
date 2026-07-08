@@ -33,10 +33,7 @@ Rules of engagement:
 3. `NEXT_ITER_03_Docs_Sync_And_Residual_Debt.md` section A only [HAIKU/low]
    (Section B — runBlocking-getter debt — queues after NEXT_ITER_01.)
 ~~4. P1-05 Build-provenance stamps [HAIKU/low]~~ (Completed via Qwen swarm)
-5. IN_PROGRESS/ triage [HAIKU/low, orchestrator-local]: 9 files dated 2026-06-07/08
-   predate the current plan. For each: confirm superseded/landed and move to
-   done/ with a note, or re-file as a real todo. Do not let stale state pollute
-   the backlog counts.
+~~5. IN_PROGRESS/ triage [HAIKU/low, orchestrator-local]~~ (Completed, folder empty)
 
 ## Phase 1 Stage B/device — needs operator + Pixel (schedule with operator)
 
