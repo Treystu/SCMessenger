@@ -15,3 +15,6 @@ existing reflection-invocation pattern in this codebase) or a refactor to
 extract a testable pure function. Prefer reflection to avoid a production
 signature change.
 GATE: gradlew :app:testDebugUnitTest.
+
+---
+**IMPLEMENTED 2026-07-07: MdnsServiceDiscoveryTest.kt added.** Both required tests pass: self-loopback filtered (onLanPeerResolved NOT invoked), different peer-id still resolves normally (no regression). Uses reflection to invoke the private newResolveListener() (mirrors AndroidPlatformBridgeTest pattern) + mockkStatic(Looper) for the constructor's Handler(Looper.getMainLooper()). Gate: gradlew testDebugUnitTest --tests MdnsServiceDiscoveryTest - 2/2 PASS.
