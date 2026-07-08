@@ -50,4 +50,25 @@ cargo clippy --workspace -- -D warnings -A clippy::empty_line_after_doc_comments
 - Do NOT re-enable `run_ble_peripheral_advertising` as a partial WinRT implementation without an explicit [OPUS+] design pass — that stub is intentional and its doc (`ble_mesh.rs:299-316`) explains why. Choose direction (A) first.
 - Do NOT introduce a second framing/encryption for BLE writes — reuse `DriftFrame` + `IronCore` so Android's existing reassembly/`receive_message` decodes it.
 - Do NOT wire the dead `core/src/transport/ble/gatt.rs` `GattClient` trait or its malformed `GATT_SERVICE_UUID` (`gatt.rs:10`) — resolve the companion ticket first or use the correct `0xDF01` form from `ble_mesh.rs:25` / `BleGattServer.kt:541`.
+
+---
+**DEFERRED 2026-07-07 (orchestrator, /scmorc lean-mode session):** attempted
+twice via agy-Gemini (headless `-p` dispatch) and NOT completed either time -
+(1) first attempt drifted into editing unrelated already-closed HANDOFF
+tickets instead of touching any BLE-TX file (reverted, zero-diff on the actual
+task); (2) second attempt (strict file-scope guard added) hung 16+ minutes
+past its own `--print-timeout`, zero CPU activity, zero file changes (agy's
+`--print-timeout` flag does not reliably kill a stuck child - had to
+`Stop-Process -Force` manually both times this session). No repo state was
+lost either time; git tree was clean before and after both attempts.
+Assessment: this task's scope (new GATT-central write path in
+`cli/src/ble_mesh.rs`, verifying Android's `BleGattServer.kt` inbound-write
+routing, coordinating with the currently-unused fragmenter in
+`core/src/transport/ble/gatt.rs`, plus the [AUDIT-GATE] transport-touching
+requirement) needs either a human/native-Claude-driven exploration pass or a
+staged approach (orchestrator does the multi-file reads itself, then hands
+Qwen a curated context per sub-piece, mirroring how F2/F5/F7/the rate-limit
+signal were landed this session) - NOT a single blind agy dispatch. Left
+untouched in `todo/`; no work lost. Next session should NOT retry a bare
+`agy -p` dispatch on this ticket a third time.
 - Mandatory `crypto-security-auditor` review before this is considered done (transport path). `release-gatekeeper` before merge.

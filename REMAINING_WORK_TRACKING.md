@@ -1,15 +1,47 @@
 # SCMessenger Remaining Work Tracking
 
 Status: Active
-Last updated: 2026-07-06 (Fable 5 stabilization sprint COMPLETE — all 7 issues in
-`HANDOFF/done/FABLE_5_COMPREHENSIVE_AUDIT.md` implemented: TCP listener zombie fix,
-SubnetProbe ANR fix, outbound-dial fix, 14 sync FFI fns -> async, blocking-I/O
-cleanup, gossipsub reply channels; Android unit tests RE-ENABLED (operator-approved).
-Follow-ups queued as `HANDOFF/todo/NEXT_ITER_01..04` for sonnet/haiku workers:
-compile-gate sweep + test triage, adversarial review rerun, docs/residual debt,
-live-device retest. Windows/Android parity effort remains top priority; full v1.0.0
-sequencing governed by `HANDOFF/V1_0_0_EXECUTION_PLAN.md` — two-phase DAG, Phase 1 =
-parity effort + adaptive ports, Phase 2 = all remaining ship-blocking work)
+Last updated: 2026-07-07 (native /scmorc lean-mode session, native Claude
+subscription at 98% weekly usage / resets 2026-07-10 — session ran on the
+Qwen/DashScope + agy-Gemini + ollama-cloud worker pools, near-zero native
+token spend; see `HANDOFF/todo/GEMINI_SCMORC_DRIVER_2026-07-07.md` for the
+lane-routing directive this session established for continued driving during
+the HARDLOCK window).
+
+## 2026-07-07 SESSION SUMMARY (Fable-5-sprint verification chain closed out)
+
+NEXT_ITER_01 (compile gates) and NEXT_ITER_02 (adversarial review) — both
+DONE, moved to `HANDOFF/done/`. Sprint verdict was NOT MERGEABLE as committed;
+findings F1/F2/F3/F5/F6 now FIXED and committed, F4/F7(FIXED this
+session)/F8 filed at `HANDOFF/todo/FABLE5_FOLLOWUP_F4_F7_F8.md` (F7 landed
+2026-07-07, F4/F8 still open). **PENDING: final Fable re-audit of the whole
+F2/F3/F5 + rate-limit-signal remediation set once the native window resets —
+not fully mergeable-certified until then.**
+
+Also landed this session: P1-05 (build-provenance stamps), P1-06 (mDNS
+self-loopback fix + its deferred unit tests), P1-CORE rate-limited
+negotiation-failure signal (with an adversarial-audit-caught HIGH DoS fix),
+a non-hermetic bootstrap test fix. P1-07 investigated and closed (root cause
+is P1-04, not a stats bug — no fix needed there). `ANDROID_SWEEP_01` found
+already-satisfied and closed. `CLIPPY_DEBT_cli_desktop_bridge_dwarnings.md`
+filed (pre-existing, non-blocking debt surfaced once F1's core dead-code was
+fixed and clippy could run further).
+
+**P1_CLI_BLE_Outbound_TX_Path_Missing (feeds P1-16) attempted twice via agy,
+NOT completed either time** (drift, then a hang) — deferred, see the ticket's
+2026-07-07 note for detail and the recommended staged approach for next time.
+
+**Operator's Pixel is broken (screen, off for repair)** — ALL Android
+verification is now emulator-driven by the orchestrator, not
+device-in-hand. The former `[DEVICE]`-tagged tasks are no longer
+operator-blocked; they become orchestrator-run emulated tests once code is
+ready. End-to-end acceptance target: Windows CLI daemon <-> Android emulator
+LAN pairing, run as the LAST phase after code is written/reviewed/accepted.
+
+Windows/Android parity effort remains top priority; full v1.0.0 sequencing
+governed by `HANDOFF/V1_0_0_EXECUTION_PLAN.md` — two-phase DAG, Phase 1 =
+parity effort + adaptive ports, Phase 2 = all remaining ship-blocking work.
+P1-11/12 (adaptive ports) remain BLOCKED by P1-04 (not landed).
 
 ---
 
