@@ -57,10 +57,22 @@ async fn handle_send_message(
         )
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to prepare message: {:?}", e)))?;
 
-    ctx.swarm_handle
+    let mut sent = false;
+    if crate::ble_mesh::send_ble_message(&peer_id.to_string(), &prepared.envelope_data).await.is_ok() {
+        sent = true;
+    } else if ctx.swarm_handle
         .send_message(peer_id, prepared.envelope_data, None, None)
         .await
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to send message: {:?}", e)))?;
+        .is_ok() {
+        sent = true;
+    }
+
+    if !sent {
+        return Err((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Failed to send message via BLE and Swarm".to_string(),
+        ));
+    }
 
     Ok(AxumJson(SendMessageResponse {
         success: true,

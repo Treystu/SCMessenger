@@ -2047,21 +2047,28 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
 
                                      if let Some(pk) = pk_opt {
                                          // prepare_message_with_id automatically saves outgoing history
-        if let Ok(prep) = core_rx.prepare_message_with_id(pk.clone(), message.clone(), scmessenger_core::MessageType::Text, None) {
-                                             if swarm_handle.send_message(target, prep.envelope_data, None, None).await.is_ok() {
-                                                 let mid = id.clone().unwrap_or_default();
-                                                 let _ = ui_broadcast.send(server::UiOutbound::Legacy(server::UiEvent::MessageStatus {
-                                                     message_id: mid.clone(),
-                                                     status: "sent".to_string()
-                                                 }));
-                                                 let dn = notif_delivery_status(DeliveryStatusParams {
-                                                     message_id: mid,
-                                                     status: "sent".to_string(),
-                                                 });
-                                                 if let Ok(v) = serde_json::to_value(&dn) {
-                                                     let _ = ui_broadcast.send(server::UiOutbound::JsonRpc(v));
-                                                 }
-                                             }
+                                         if let Ok(prep) = core_rx.prepare_message_with_id(pk.clone(), message.clone(), scmessenger_core::MessageType::Text, None) {
+                                              let mut sent = false;
+                                              if ble_mesh::send_ble_message(&target.to_string(), &prep.envelope_data).await.is_ok() {
+                                                  sent = true;
+                                              } else if swarm_handle.send_message(target, prep.envelope_data, None, None).await.is_ok() {
+                                                  sent = true;
+                                              }
+
+                                              if sent {
+                                                  let mid = id.clone().unwrap_or_default();
+                                                  let _ = ui_broadcast.send(server::UiOutbound::Legacy(server::UiEvent::MessageStatus {
+                                                      message_id: mid.clone(),
+                                                      status: "sent".to_string()
+                                                  }));
+                                                  let dn = notif_delivery_status(DeliveryStatusParams {
+                                                      message_id: mid,
+                                                      status: "sent".to_string(),
+                                                  });
+                                                  if let Ok(v) = serde_json::to_value(&dn) {
+                                                      let _ = ui_broadcast.send(server::UiOutbound::JsonRpc(v));
+                                                  }
+                                              }
                                          }
                                      }
                                 }

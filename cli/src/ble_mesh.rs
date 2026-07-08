@@ -17,6 +17,7 @@ use scmessenger_core::IronCore;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::Mutex;
+use std::sync::OnceLock;
 use uuid::Uuid;
 
 use crate::server::{UiEvent, UiOutbound};
@@ -24,8 +25,18 @@ use crate::server::{UiEvent, UiOutbound};
 /// SCM GATT primary service UUID (must match `core/src/transport/ble/gatt.rs`).
 const GATT_SERVICE_UUID: u128 = 0x0000_DF01_0000_1000_8000_0080_5F9B_34FB;
 
+static ACTIVE_PEERS: OnceLock<std::sync::Mutex<HashMap<String, Peripheral>>> = OnceLock::new();
+
+fn get_active_peers() -> &'static std::sync::Mutex<HashMap<String, Peripheral>> {
+    ACTIVE_PEERS.get_or_init(|| std::sync::Mutex::new(HashMap::new()))
+}
+
 fn scm_service_uuid() -> Uuid {
     Uuid::from_u128(GATT_SERVICE_UUID)
+}
+
+fn scm_identity_uuid() -> Uuid {
+    uuid_from_u16(0xDF02)
 }
 
 fn scm_notify_uuid() -> Uuid {
@@ -73,6 +84,21 @@ fn push_message_to_ui(
     }
 }
 
+struct PeerRegistryGuard {
+    peer_id: Option<String>,
+}
+
+impl Drop for PeerRegistryGuard {
+    fn drop(&mut self) {
+        if let Some(ref peer_id) = self.peer_id {
+            if let Ok(mut map) = get_active_peers().lock() {
+                map.remove(peer_id);
+                tracing::info!("BLE removed peer ID {} from active registry", peer_id);
+            }
+        }
+    }
+}
+
 async fn subscribe_ingress_for_peripheral(
     peripheral: Peripheral,
     core: Arc<IronCore>,
@@ -88,6 +114,43 @@ async fn subscribe_ingress_for_peripheral(
         let _ = peripheral.disconnect().await;
         return;
     }
+
+    // Try to read identity data to register peer_id
+    // PeerRegistryGuard will remove peer_id from ACTIVE_PEERS automatically when this background
+    // streaming task terminates (via early return, disconnect, or stream completion).
+    let mut guard = PeerRegistryGuard { peer_id: None };
+    let identity_uuid = scm_identity_uuid();
+    let id_char = peripheral
+        .characteristics()
+        .iter()
+        .find(|c| c.uuid == identity_uuid && c.properties.contains(CharPropFlags::READ))
+        .cloned();
+
+    if let Some(id_c) = id_char {
+        match peripheral.read(&id_c).await {
+            Ok(bytes) => {
+                if let Ok(val) = serde_json::from_slice::<serde_json::Value>(&bytes) {
+                    if let Some(peer_id) = val.get("peer_id").and_then(|v| v.as_str()) {
+                        if let Ok(parsed_peer_id) = peer_id.parse::<libp2p::PeerId>() {
+                            let peer_id_str = parsed_peer_id.to_string();
+                            tracing::info!("BLE mapped peripheral {} to peer ID {}", addr, peer_id_str);
+                            let mut map = get_active_peers().lock().expect("ACTIVE_PEERS lock poisoned");
+                            map.insert(peer_id_str.clone(), peripheral.clone());
+                            guard.peer_id = Some(peer_id_str);
+                        } else {
+                            tracing::warn!("BLE received invalid peer ID '{}' from {}", peer_id, addr);
+                        }
+                    }
+                }
+            }
+            Err(e) => {
+                tracing::warn!("BLE failed to read identity char for {}: {}", addr, e);
+            }
+        }
+    } else {
+        tracing::debug!("BLE no identity char {} on {}", identity_uuid, addr);
+    }
+
     let notify_uuid = scm_notify_uuid();
     let ch = peripheral
         .characteristics()
@@ -122,6 +185,47 @@ async fn subscribe_ingress_for_peripheral(
             push_message_to_ui(&ui_tx, params);
         }
     }
+}
+
+/// Send a SCMessenger message envelope over BLE to the registered peripheral
+pub async fn send_ble_message(recipient_peer_id: &str, data: &[u8]) -> Result<(), String> {
+    let peripheral = {
+        let guard = get_active_peers().lock().expect("ACTIVE_PEERS lock poisoned");
+        guard.get(recipient_peer_id).cloned()
+    };
+
+    let Some(peripheral) = peripheral else {
+        return Err("Peer not connected over BLE".to_string());
+    };
+
+    let msg_char_uuid = scm_notify_uuid(); // 0xDF03
+    let ch = peripheral
+        .characteristics()
+        .iter()
+        .find(|c| c.uuid == msg_char_uuid && (c.properties.contains(CharPropFlags::WRITE) || c.properties.contains(CharPropFlags::WRITE_WITHOUT_RESPONSE)))
+        .cloned();
+
+    let Some(ch) = ch else {
+        return Err("Message characteristic not found on peer".to_string());
+    };
+
+    // Fragment the message using GattFragmenter from scmessenger_core
+    let fragments = scmessenger_core::transport::ble::GattFragmenter::fragment(data)
+        .map_err(|e| format!("Fragmentation error: {:?}", e))?;
+
+    tracing::info!("BLE: sending {} fragments to {}", fragments.len(), recipient_peer_id);
+    for fragment in fragments {
+        let write_type = if ch.properties.contains(CharPropFlags::WRITE_WITHOUT_RESPONSE) {
+            btleplug::api::WriteType::WithoutResponse
+        } else {
+            btleplug::api::WriteType::WithResponse
+        };
+
+        peripheral.write(&ch, &fragment, write_type).await
+            .map_err(|e| format!("GATT write failed: {}", e))?;
+    }
+
+    Ok(())
 }
 
 /// Run until process exit: scan for SCM service, connect + notify per peripheral.
