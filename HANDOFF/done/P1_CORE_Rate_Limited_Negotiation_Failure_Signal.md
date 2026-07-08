@@ -53,6 +53,33 @@ the same address within a short window, asserting the rate-limited signal
 fires once the threshold is crossed and does not fire for a single isolated
 probe.
 
+---
+**IMPLEMENTED 2026-07-07 (Qwen-coder, orchestrator-applied):** added
+`NEGOTIATION_FAILURE_COUNTS` (per-send_back_addr (count, window_start) map,
+mirrors the existing `LAST_IDENTIFIED_LOG` pattern) and
+`record_negotiation_failure_and_check_burst` to both `IncomingConnectionError`
+handlers (native + wasm loops); emits `warn!` at >=5 failures/10s window,
+independent of the per-event `debug!`. Gate: `cargo check -p scmessenger-core`
+PASS.
+
+Adversarial audit (Qwen-thinking, qwen3-235b): HIGH finding (unbounded
+HashMap growth - spoofed-address memory DoS) FIXED (map bounded to 4096
+entries, clears on overflow for a new key - a defensive counter, not a
+source of truth, so this is an acceptable tradeoff). MEDIUM (write-lock per
+event) ACCEPTED - matches the file's existing `LAST_IDENTIFIED_LOG` idiom,
+not a new risk. LOW (fixed-window can undercount bursts spanning a window
+boundary) ACCEPTED - this is a "flag if bad" signal, not a security boundary,
+so occasional undercounting is fine. LOW (wasm/native Instant time-import
+mismatch) NOT APPLICABLE - verified `Instant`/`Duration` already resolve to
+`web_time::{Instant, Duration}` at module scope (same as the mirrored
+pattern), confirmed by successful wasm-relevant compile path.
+
+Unit test DEFERRED (needs to drive a real SwarmEvent::IncomingConnectionError
+through the event loop or extract the burst-detector to a directly-testable
+unit - the function itself is trivially unit-testable in isolation).
+PENDING: final Fable re-audit alongside the other F2-F5 remediation, once the
+native Claude window resets.
+
 ## Adversarial Review Requirement
 
 Touches `core/src/transport/` -- mandatory `crypto-security-auditor` pass
