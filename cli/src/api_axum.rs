@@ -57,15 +57,8 @@ async fn handle_send_message(
         )
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to prepare message: {:?}", e)))?;
 
-    let mut sent = false;
-    if crate::ble_mesh::send_ble_message(&peer_id.to_string(), &prepared.envelope_data).await.is_ok() {
-        sent = true;
-    } else if ctx.swarm_handle
-        .send_message(peer_id, prepared.envelope_data, None, None)
-        .await
-        .is_ok() {
-        sent = true;
-    }
+    let sent = crate::ble_mesh::send_ble_message(&peer_id.to_string(), &prepared.envelope_data).await.is_ok()
+        || ctx.swarm_handle.send_message(peer_id, prepared.envelope_data, None, None).await.is_ok();
 
     if !sent {
         return Err((

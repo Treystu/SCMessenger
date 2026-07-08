@@ -17,6 +17,7 @@ fn test_xdg_data_dir() {
 
 /// Verify that `xdg_data_dir` path ends with "scmessenger".
 #[test]
+#[cfg(target_os = "linux")]
 fn test_xdg_data_dir_contains_scmessenger() {
     let dir = scmessenger_desktop_bridge::xdg_data_dir();
     let dir_str = dir.to_string_lossy();
@@ -38,6 +39,7 @@ fn test_xdg_config_dir() {
 
 /// Verify that `xdg_config_dir` path ends with "scmessenger".
 #[test]
+#[cfg(target_os = "linux")]
 fn test_xdg_config_dir_contains_scmessenger() {
     let dir = scmessenger_desktop_bridge::xdg_config_dir();
     let dir_str = dir.to_string_lossy();
@@ -49,6 +51,7 @@ fn test_xdg_config_dir_contains_scmessenger() {
 
 /// Verify that overriding XDG_DATA_HOME is respected.
 #[test]
+#[cfg(target_os = "linux")]
 fn test_xdg_data_home_env_override() {
     // Save original value
     let original = std::env::var("XDG_DATA_HOME").ok();

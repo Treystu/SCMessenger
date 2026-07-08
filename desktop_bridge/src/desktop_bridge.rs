@@ -78,26 +78,26 @@ impl DesktopBridge {
     pub fn start(&self) -> Result<(), scmessenger_core::IronCoreError> {
         let core = scmessenger_core::IronCore::with_storage(self.xdg_paths.store_path.clone());
         core.start()?;
-        *self.core.lock().unwrap() = Some(std::sync::Arc::new(core));
+        *self.core.lock().expect("core lock poisoned") = Some(std::sync::Arc::new(core));
         Ok(())
     }
 
     /// Stop the mesh engine.
     pub fn stop(&self) {
-        if let Some(ref core) = *self.core.lock().unwrap() {
+        if let Some(ref core) = *self.core.lock().expect("core lock poisoned") {
             core.stop();
         }
-        *self.core.lock().unwrap() = None;
+        *self.core.lock().expect("core lock poisoned") = None;
     }
 
     /// Check if the mesh engine is running.
     pub fn is_running(&self) -> bool {
-        self.core.lock().unwrap().is_some()
+        self.core.lock().expect("core lock poisoned").is_some()
     }
 
     /// Get identity info from the core.
     pub fn get_identity_info(&self) -> scmessenger_core::IdentityInfo {
-        if let Some(ref core) = *self.core.lock().unwrap() {
+        if let Some(ref core) = *self.core.lock().expect("core lock poisoned") {
             core.get_identity_info()
         } else {
             scmessenger_core::IdentityInfo::default()
@@ -106,7 +106,7 @@ impl DesktopBridge {
 
     /// Initialize identity (requires consent).
     pub fn initialize_identity(&self) -> Result<(), scmessenger_core::IronCoreError> {
-        if let Some(ref core) = *self.core.lock().unwrap() {
+        if let Some(ref core) = *self.core.lock().expect("core lock poisoned") {
             core.initialize_identity()
         } else {
             Err(scmessenger_core::IronCoreError::NotInitialized)
@@ -115,7 +115,7 @@ impl DesktopBridge {
 
     /// Grant consent for identity operations.
     pub fn grant_consent(&self) {
-        if let Some(ref core) = *self.core.lock().unwrap() {
+        if let Some(ref core) = *self.core.lock().expect("core lock poisoned") {
             core.grant_consent();
         }
     }
@@ -140,7 +140,7 @@ impl DesktopBridge {
 
     /// Get the current tray status.
     pub fn get_tray_status(&self) -> crate::TrayStatus {
-        self.tray_status.lock().unwrap().clone()
+        self.tray_status.lock().expect("tray_status lock poisoned").clone()
     }
 
     /// Update the tray status and notify the delegate.
@@ -151,9 +151,9 @@ impl DesktopBridge {
         connected_peers: u32,
     ) {
         let status = crate::tray::tray_status_for_state(state, unread_count, connected_peers);
-        *self.tray_status.lock().unwrap() = status.clone();
+        *self.tray_status.lock().expect("tray_status lock poisoned") = status.clone();
 
-        if let Some(ref delegate) = *self.delegate.lock().unwrap() {
+        if let Some(ref delegate) = *self.delegate.lock().expect("delegate lock poisoned") {
             delegate.on_tray_state_changed(status);
         }
     }
@@ -164,15 +164,15 @@ impl DesktopBridge {
 
     /// Get the current power state.
     pub fn get_power_state(&self) -> crate::PowerState {
-        self.power_state.lock().unwrap().clone()
+        self.power_state.lock().expect("power_state lock poisoned").clone()
     }
 
     /// Refresh power state from system.
     pub fn refresh_power_state(&self) {
         let state = crate::power::detect_power_state();
-        *self.power_state.lock().unwrap() = state.clone();
+        *self.power_state.lock().expect("power_state lock poisoned") = state.clone();
 
-        if let Some(ref delegate) = *self.delegate.lock().unwrap() {
+        if let Some(ref delegate) = *self.delegate.lock().expect("delegate lock poisoned") {
             delegate.on_power_state_changed(state);
         }
     }
@@ -180,9 +180,9 @@ impl DesktopBridge {
     /// Handle a power event (suspend/resume).
     pub fn handle_power_event(&self, event: crate::PowerProfile) {
         let state = crate::power::power_state_for_event(event);
-        *self.power_state.lock().unwrap() = state.clone();
+        *self.power_state.lock().expect("power_state lock poisoned") = state.clone();
 
-        if let Some(ref delegate) = *self.delegate.lock().unwrap() {
+        if let Some(ref delegate) = *self.delegate.lock().expect("delegate lock poisoned") {
             delegate.on_power_state_changed(state);
         }
     }
@@ -202,7 +202,7 @@ impl DesktopBridge {
 
     /// Set the desktop delegate for callbacks.
     pub fn set_delegate(&self, delegate: Option<Box<dyn crate::DesktopDelegate>>) {
-        *self.delegate.lock().unwrap() = delegate;
+        *self.delegate.lock().expect("delegate lock poisoned") = delegate;
     }
 }
 

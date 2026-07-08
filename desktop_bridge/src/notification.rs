@@ -41,6 +41,7 @@ pub fn send_notification(
 
     #[cfg(not(target_os = "linux"))]
     {
+        let _ = (title, body, urgency);
         NotificationResult {
             notification_id: 0,
             shown: false,

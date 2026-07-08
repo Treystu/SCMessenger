@@ -350,8 +350,8 @@ pub async fn run_ble_central_ingress(
                 if guard.len() > 2048 {
                     let now = std::time::Instant::now();
                     guard.retain(|_, s| {
-                        !(!s.active && s.failures == 0)
-                            && !s.cooldown_until.map_or(false, |t| t <= now)
+                        (s.active || s.failures != 0)
+                            && s.cooldown_until.is_none_or(|t| t > now)
                     });
                 }
                 let state = guard.entry(id_key.clone()).or_insert(PeripheralState {

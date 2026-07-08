@@ -483,6 +483,7 @@ fn get_notification_settings() -> Option<String> {
 /// from `request_permission()`'s granted/denied branches (both the
 /// `navigator.permission()` path and the `window.Notification.requestPermission()`
 /// fallback) to remember the user's choice across sessions.
+#[cfg(target_arch = "wasm32")]
 fn save_notification_settings(_state: &str) {
     #[cfg(target_arch = "wasm32")]
     {

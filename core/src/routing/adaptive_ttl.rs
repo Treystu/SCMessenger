@@ -242,8 +242,8 @@ mod tests {
 
         assert_eq!(manager.len(), 2);
 
-        // Clean up with very short max age
-        let removed = manager.cleanup(Duration::from_nanos(1));
+        // Clean up with zero max age (should remove everything)
+        let removed = manager.cleanup(Duration::from_nanos(0));
         assert_eq!(removed, 2);
         assert_eq!(manager.len(), 0);
     }
