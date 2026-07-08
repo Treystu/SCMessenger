@@ -240,6 +240,16 @@ pub async fn run_ble_central_ingress(
             let id_key = format!("{:?}", id);
             {
                 let mut guard = tracked.lock().await;
+                // Bound memory against unbounded growth under BLE MAC rotation:
+                // sweep idle-safe (inactive, no failures) or expired-cooldown
+                // entries before growing past a cap.
+                if guard.len() > 2048 {
+                    let now = std::time::Instant::now();
+                    guard.retain(|_, s| {
+                        !(!s.active && s.failures == 0)
+                            && !s.cooldown_until.map_or(false, |t| t <= now)
+                    });
+                }
                 let state = guard.entry(id_key.clone()).or_insert(PeripheralState {
                     active: false,
                     failures: 0,

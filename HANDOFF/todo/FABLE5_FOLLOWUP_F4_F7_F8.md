@@ -36,3 +36,6 @@ listener's addresses.
 cargo check -p scmessenger-core -p scmessenger-cli; cargo test --workspace
 --no-run; gradlew assembleDebug (for any Kotlin touch). AUDIT-GATE (swarm.rs) ->
 Fable final re-audit before merge-ready.
+
+---
+**IMPLEMENTED 2026-07-07 (Qwen-coder, orchestrator-applied):** before inserting a new key, if `tracked` exceeds 2048 entries, retain only entries that are neither idle-safe (inactive+zero-failures) nor past their cooldown expiry - bounds memory against unbounded growth under BLE MAC rotation. Gate: `cargo check -p scmessenger-cli` PASS.
