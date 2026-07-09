@@ -10,8 +10,6 @@ pub mod ble_mesh;
 pub mod bootstrap;
 pub mod cli;
 pub mod config;
-pub mod contacts;
-pub mod history;
 pub mod ledger;
 pub mod server;
 pub mod transport_api;
