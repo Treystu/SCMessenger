@@ -215,28 +215,32 @@ final class MeshBackgroundService {
 extension MeshBackgroundService {
     @discardableResult
     func simulateBackgroundRefresh() -> Task<Void, Never> {
-        logger.debug("🧪 Simulating background refresh")
+        logger.debug("[INFO] Simulating background refresh")
         return Task {
             do {
                 try await meshRepository.syncPendingMessages()
                 meshRepository.updateStats()
                 try await meshRepository.quickPeerDiscovery()
-                logger.debug("✅ Simulated background refresh completed")
+                logger.debug("[OK] Simulated background refresh completed")
             } catch {
-                logger.error("❌ Simulated background refresh failed: \(error.localizedDescription)")
+                logger.error("[ERROR] Simulated background refresh failed: \(error.localizedDescription)")
             }
         }
     }
 
     @discardableResult
     func simulateBackgroundProcessing() -> Task<Void, Never> {
-        logger.debug("🧪 Simulating background processing")
+        logger.debug("[INFO] Simulating background processing")
         return Task {
             do {
                 try await meshRepository.performBulkSync()
-                logger.debug("✅ Simulated background processing completed")
+                try await meshRepository.cleanupOldMessages()
+                try await meshRepository.updatePeerLedger()
+                // Note: runMaintenanceCycle(budgetMs:) intentionally excluded from simulation
+                // to avoid side effects and timing behavior unsuitable for a fast test loop.
+                logger.debug("[OK] Simulated background processing completed")
             } catch {
-                logger.error("❌ Simulated background processing failed: \(error.localizedDescription)")
+                logger.error("[ERROR] Simulated background processing failed: \(error.localizedDescription)")
             }
         }
     }
