@@ -164,15 +164,12 @@ fun ConversationsScreen(
                             displayName = displayName,
                             peerId = peerId,
                             messages = messages,
-                            onClick = {
-                                onNavigateToChat(peerId)
-                            },
+                            onNavigateToChat = onNavigateToChat,
                             onRequestDelete = {
                                 conversationToDelete = peerId to messages
                                 showDeleteDialog = true
                             },
-                            deliveryState = viewModel.resolveDeliveryState(messages.first()),
-                            onNavigateToChat = onNavigateToChat
+                            deliveryState = viewModel.resolveDeliveryState(messages.first())
                         )
                         Spacer(modifier = Modifier.height(8.dp))
                     }
@@ -266,10 +263,9 @@ fun ConversationItem(
     displayName: String,
     peerId: String,
     messages: List<uniffi.api.MessageRecord>,
-    onClick: () -> Unit,
+    onNavigateToChat: (String) -> Unit,
     onRequestDelete: () -> Unit,
-    @Suppress("UNUSED_PARAMETER") deliveryState: DeliveryStatePresentation = DeliveryStatePresentation(DeliveryStateSurface.PENDING, "pending", ""),
-    @Suppress("UNUSED_PARAMETER") onNavigateToChat: (String) -> Unit = {},
+    deliveryState: DeliveryStatePresentation,
 ) {
     val lastMessage = messages.firstOrNull() ?: return
     val undeliveredCount = messages.count { !it.delivered }
@@ -315,7 +311,7 @@ fun ConversationItem(
         Card(
             modifier = Modifier
                 .fillMaxWidth()
-                .clickable(onClick = onClick)
+                .clickable(onClick = { onNavigateToChat(peerId) })
         ) {
             Row(
                 modifier = Modifier
@@ -371,6 +367,19 @@ fun ConversationItem(
                                 Text(undeliveredCount.toString())
                             }
                         }
+                    }
+
+                    if (lastMessage.direction == uniffi.api.MessageDirection.SENT) {
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = "Status: ${deliveryState.label}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = when (deliveryState.state) {
+                                DeliveryStateSurface.DELIVERED -> MaterialTheme.colorScheme.primary
+                                DeliveryStateSurface.REJECTED -> MaterialTheme.colorScheme.error
+                                else -> MaterialTheme.colorScheme.onSurfaceVariant
+                            }
+                        )
                     }
 
                     Text(

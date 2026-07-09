@@ -295,19 +295,31 @@ class SmartTransportRouter {
      */
     suspend fun attemptDelivery(
         peerId: String,
-        @Suppress("UNUSED_PARAMETER") envelopeData: ByteArray,
+        envelopeData: ByteArray,
         wifiPeerId: String?,
         blePeerId: String?,
         tcpMdnsPeerId: String?,
         routePeerCandidates: List<String>,
-        @Suppress("UNUSED_PARAMETER") listeners: List<String>,
-        @Suppress("UNUSED_PARAMETER") traceMessageId: String?,
-        @Suppress("UNUSED_PARAMETER") attemptContext: String?,
+        listeners: List<String>,
+        traceMessageId: String?,
+        attemptContext: String?,
         tryWifi: suspend (String) -> Boolean,
         tryBle: suspend (String) -> Boolean,
         tryTcpMdns: suspend (String) -> Boolean,
         tryCore: suspend (String) -> Boolean
     ): TransportDeliveryResult {
+        val logCtx = "[traceId=${traceMessageId?.take(8) ?: "none"}, ctx=${attemptContext ?: "none"}]"
+
+        if (envelopeData.isEmpty()) {
+            Timber.tag(TAG).w("$logCtx Rejected delivery attempt: empty envelope data")
+            return TransportDeliveryResult(
+                transport = TransportType.CORE,
+                success = false,
+                latencyMs = 0,
+                error = "empty_envelope_data"
+            )
+        }
+
         val startTime = System.currentTimeMillis()
 
         // Determine available transports
@@ -334,13 +346,18 @@ class SmartTransportRouter {
             availableTransports.add(TransportAttempt(TransportType.TCP_MDNS, tcpMdnsTarget) { tryTcpMdns(tcpMdnsTarget) })
         }
 
-        val coreTarget = routePeerCandidates.firstOrNull()?.trim()?.takeIf { it.isNotEmpty() }
+        // Fallback: If no route candidates are found but direct listener addresses exist, attempt dialing peer via core
+        var coreTarget = routePeerCandidates.firstOrNull()?.trim()?.takeIf { it.isNotEmpty() }
+        if (coreTarget == null && listeners.isNotEmpty()) {
+            coreTarget = peerId.trim().takeIf { it.isNotEmpty() }
+            Timber.tag(TAG).i("$logCtx No route candidates, using listeners direct fallback for $coreTarget")
+        }
         if (coreTarget != null) {
             availableTransports.add(TransportAttempt(TransportType.CORE, coreTarget) { tryCore(coreTarget) })
         }
 
         if (availableTransports.isEmpty()) {
-            Timber.tag(TAG).w("No available transports for peer ${peerId.take(8)}")
+            Timber.tag(TAG).w("$logCtx No available transports for peer ${peerId.take(8)}")
             return TransportDeliveryResult(
                 transport = TransportType.CORE,
                 success = false,
@@ -356,7 +373,7 @@ class SmartTransportRouter {
         if (preferredTransport != null) {
             val preferredAttempt = availableTransports.find { it.type == preferredTransport }
             if (preferredAttempt != null) {
-                Timber.tag(TAG).i("Trying preferred transport ${preferredTransport.value} for peer ${peerId.take(8)}")
+                Timber.tag(TAG).i("$logCtx Trying preferred transport ${preferredTransport.value} for peer ${peerId.take(8)}")
 
                 // Race preferred transport against timeout
                 val preferredResult = withTimeoutOrNull(PREFERRED_TRANSPORT_TIMEOUT_MS) {
@@ -366,7 +383,7 @@ class SmartTransportRouter {
                 if (preferredResult == true) {
                     val latencyMs = System.currentTimeMillis() - startTime
                     recordSuccess(peerId, preferredTransport, latencyMs)
-                    Timber.tag(TAG).i("✓ Preferred transport ${preferredTransport.value} succeeded in ${latencyMs}ms")
+                    Timber.tag(TAG).i("$logCtx [OK] Preferred transport ${preferredTransport.value} succeeded in ${latencyMs}ms")
                     return TransportDeliveryResult(
                         transport = preferredTransport,
                         success = true,
@@ -376,12 +393,12 @@ class SmartTransportRouter {
                 }
 
                 // Preferred transport failed or timed out - race all transports
-                Timber.tag(TAG).w("Preferred transport ${preferredTransport.value} failed/timed out, racing all transports")
+                Timber.tag(TAG).w("$logCtx Preferred transport ${preferredTransport.value} failed/timed out, racing all transports")
             }
         }
 
         // Race all available transports in parallel
-        Timber.tag(TAG).i("Racing ${availableTransports.count()} transports for peer ${peerId.take(8)}")
+        Timber.tag(TAG).i("$logCtx Racing ${availableTransports.count()} transports for peer ${peerId.take(8)}")
 
         val result = coroutineScope {
             val deferreds = availableTransports.map { transportAttempt ->
@@ -390,7 +407,7 @@ class SmartTransportRouter {
                     val success = try {
                         transportAttempt.attempt()
                     } catch (e: Exception) {
-                        Timber.tag(TAG).w(e, "Transport ${transportAttempt.type.value} failed")
+                        Timber.tag(TAG).w(e, "$logCtx Transport ${transportAttempt.type.value} failed")
                         false
                     }
                     val latencyMs = System.currentTimeMillis() - transportStart
@@ -416,7 +433,7 @@ class SmartTransportRouter {
 
         return if (result != null) {
             recordSuccess(peerId, result.first, result.third)
-            Timber.tag(TAG).i("✓ Transport ${result.first.value} succeeded in ${result.third}ms")
+            Timber.tag(TAG).i("$logCtx [OK] Transport ${result.first.value} succeeded in ${result.third}ms")
             TransportDeliveryResult(
                 transport = result.first,
                 success = true,
@@ -429,7 +446,7 @@ class SmartTransportRouter {
             availableTransports.forEach { transportAttempt ->
                 recordFailure(peerId, transportAttempt.type, "all_transports_failed")
             }
-            Timber.tag(TAG).e("✗ All transports failed for peer ${peerId.take(8)}")
+            Timber.tag(TAG).e("$logCtx [FAIL] All transports failed for peer ${peerId.take(8)}")
             TransportDeliveryResult(
                 transport = TransportType.CORE,
                 success = false,
