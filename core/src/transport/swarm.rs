@@ -4112,10 +4112,12 @@ pub async fn start_swarm_with_config(
                                     addresses,
                                     reason
                                 );
-                                let _ = event_tx.send(SwarmEvent2::ListenerFailed {
-                                    listener_id: format!("{:?}", listener_id),
-                                    error: format!("listener closed for {:?}: {:?}", addresses, reason),
-                                }).await;
+                                if reason.is_err() {
+                                    let _ = event_tx.send(SwarmEvent2::ListenerFailed {
+                                        listener_id: format!("{:?}", listener_id),
+                                        error: format!("listener closed for {:?}: {:?}", addresses, reason),
+                                    }).await;
+                                }
                             }
 
                             _ => {}
@@ -5563,10 +5565,12 @@ pub async fn start_swarm_with_config(
                                     addresses,
                                     reason
                                 );
-                                let _ = event_tx.send(SwarmEvent2::ListenerFailed {
-                                    listener_id: format!("{:?}", listener_id),
-                                    error: format!("listener closed for {:?}: {:?}", addresses, reason),
-                                }).await;
+                                if reason.is_err() {
+                                    let _ = event_tx.send(SwarmEvent2::ListenerFailed {
+                                        listener_id: format!("{:?}", listener_id),
+                                        error: format!("listener closed for {:?}: {:?}", addresses, reason),
+                                    }).await;
+                                }
                             }
                             _ => {}
                         }

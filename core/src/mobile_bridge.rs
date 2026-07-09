@@ -662,6 +662,7 @@ impl MeshService {
                     .map_err(|_| crate::IronCoreError::InvalidInput)?,
             )
         };
+        let expected_listen_addr = listen_multiaddr.clone();
 
         // Parse bootstrap multiaddr strings into Multiaddr objects
         let parsed_bootstrap: Vec<libp2p::Multiaddr> = bootstrap_addrs
@@ -988,8 +989,15 @@ impl MeshService {
                                             ) => {
                                                 tracing::info!("Swarm listening on {}", addr);
                                                 eprintln!("[IronCore] [OK] Swarm listening on {}", addr);
-                                                if let Some(tx) = startup_signal.take() {
-                                                    let _ = tx.try_send(Ok(()));
+                                                let is_expected = expected_listen_addr.as_ref().map_or(false, |expected| expected == &addr);
+                                                let is_primary_tcp = expected_listen_addr.is_none() && addr.iter().any(|p| matches!(p, libp2p::multiaddr::Protocol::Tcp(_)));
+                                                
+                                                if is_expected || is_primary_tcp || !await_listener {
+                                                    if let Some(tx) = startup_signal.take() {
+                                                        let _ = tx.try_send(Ok(()));
+                                                    }
+                                                } else {
+                                                    tracing::debug!("Ignoring ListeningOn for incidental/relay address: {}", addr);
                                                 }
                                             }
                                             crate::transport::SwarmEvent::ListenerFailed {
@@ -1006,9 +1014,9 @@ impl MeshService {
                                                     listener_id,
                                                     error
                                                 );
-                                                if let Some(tx) = startup_signal.take() {
-                                                    let _ = tx.try_send(Err(error));
-                                                }
+                                                // F4: Ignore listener failures for the startup signal to avoid
+                                                // false-failures from QUIC/WS/relay listeners. Genuine TCP bind
+                                                // failures will correctly trigger the 15s startup timeout.
                                             }
                                             other => {
                                                 tracing::debug!("Swarm event: {:?}", other);
