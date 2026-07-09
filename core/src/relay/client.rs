@@ -47,7 +47,7 @@ pub struct RelayClientConfig {
     /// (disabled on Android due to if-watch dependency issues)
     #[cfg(not(target_os = "android"))]
     pub enable_quic_fallback: bool,
-    /// AND-CELLULAR-001: QUIC port to try (default: 9002)
+    /// AND-CELLULAR-001: QUIC port to try (default: 443)
     #[cfg(not(target_os = "android"))]
     pub quic_port: u16,
 }
@@ -62,7 +62,7 @@ impl Default for RelayClientConfig {
             #[cfg(not(target_os = "android"))]
             enable_quic_fallback: true,
             #[cfg(not(target_os = "android"))]
-            quic_port: 9002,
+            quic_port: 443,
         }
     }
 }

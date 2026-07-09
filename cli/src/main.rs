@@ -189,8 +189,8 @@ enum Commands {
     },
     /// Run headless relay node (no interactive console)
     Relay {
-        /// P2P listen multiaddr (default: /ip4/0.0.0.0/tcp/9001)
-        #[arg(short, long, default_value = "/ip4/0.0.0.0/tcp/9001")]
+        /// P2P listen multiaddr (default: /ip4/0.0.0.0/tcp/0)
+        #[arg(short, long, default_value = "/ip4/0.0.0.0/tcp/0")]
         listen: String,
         /// HTTP status/landing page port (default: 9000)
         #[arg(long, default_value = "9000")]
@@ -1497,53 +1497,7 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
                             Err(e) => {
                                 tracing::warn!("Dial failed to {}: {}", label, e);
                                 let mut l = ledger_clone.lock().await;
-
-                                // P0_TRANSPORT_001: Fallback dial with known static ports
-                                // Android uses port 9001, try common ports before giving up
-                                let fallback_ports = [9001u16, 4001, 9000, 8000];
-                                let mut tried_fallback = false;
-                                for fallback_port in fallback_ports {
-                                    if let Some(fallback_addr) =
-                                        try_replace_port(&addr, fallback_port)
-                                    {
-                                        let fallback_label =
-                                            ledger::extract_ip_port(&fallback_addr.to_string())
-                                                .unwrap_or_else(|| fallback_addr.to_string());
-                                        println!(
-                                            "  {}. Fallback dial to {}...",
-                                            i + 1,
-                                            fallback_label
-                                        );
-                                        let fallback_addr_str = fallback_addr.to_string();
-                                        match swarm_clone.dial(fallback_addr).await {
-                                            Ok(_) => {
-                                                println!(
-                                                    "  {} Fallback dial succeeded to {}",
-                                                    "[OK]".green(),
-                                                    fallback_label
-                                                );
-                                                // Update ledger with working address
-                                                l.record_connection(
-                                                    &fallback_addr_str,
-                                                    "", // PeerID unknown at this point
-                                                );
-                                                tried_fallback = true;
-                                                break;
-                                            }
-                                            Err(fallback_err) => {
-                                                tracing::warn!(
-                                                    "Fallback dial to {} failed: {}",
-                                                    fallback_label,
-                                                    fallback_err
-                                                );
-                                            }
-                                        }
-                                    }
-                                }
-
-                                if !tried_fallback {
-                                    l.record_failure(multiaddr_str);
-                                }
+                                l.record_failure(multiaddr_str);
                             }
                         }
 

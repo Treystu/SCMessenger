@@ -194,8 +194,8 @@ pub enum Commands {
     },
     /// Run headless relay/bootstrap node (no interactive console)
     Relay {
-        /// P2P listen multiaddr (default: /ip4/0.0.0.0/tcp/9001)
-        #[arg(short, long, default_value = "/ip4/0.0.0.0/tcp/9001")]
+        /// P2P listen multiaddr (default: /ip4/0.0.0.0/tcp/0)
+        #[arg(short, long, default_value = "/ip4/0.0.0.0/tcp/0")]
         listen: String,
         /// HTTP status/landing page port (default: 9000)
         #[arg(long, default_value = "9000")]
