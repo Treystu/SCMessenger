@@ -52,15 +52,8 @@ fun IdentityScreen(
     // SharedPreferences commit() and the libp2p swarm bind.
     val progressSubDetail by viewModel.progressSubDetail.collectAsState()
 
-    // Collect QR code data from a coroutine to avoid blocking Main thread on FFI calls
-    var qrCodeData by remember { mutableStateOf<String?>(null) }
-    LaunchedEffect(identityInfo) {
-        if (identityInfo?.initialized == true) {
-            qrCodeData = viewModel.getQrCodeData()
-        } else {
-            qrCodeData = null
-        }
-    }
+    // Collect QR code data from ViewModel StateFlow
+    val qrCodeData by viewModel.qrCodeData.collectAsState()
 
     // P0_ANDROID_QR_FIX: belt-and-suspenders poll. IdentityViewModel.loadIdentity
     // has its own retry loop (~1.55s) but the Rust core may hydrate LATER if the
@@ -88,7 +81,10 @@ fun IdentityScreen(
                     }
                 },
                 actions = {
-                    IconButton(onClick = { viewModel.loadIdentity() }) {
+                    IconButton(onClick = {
+                        viewModel.loadIdentity()
+                        viewModel.refreshQrCode()
+                    }) {
                         Icon(Icons.Default.Refresh, contentDescription = stringResource(R.string.diagnostics_action_refresh))
                     }
                 }
@@ -234,7 +230,7 @@ private fun IdentityNotInitializedView(
 
         // P0_ANDROID_IDENTITY_PROOF_OF_WORK: render the 6 named proof-of-work
         // stages below the button. Each stage shows:
-        //   - ✓ checkmark (done)
+        //   - [DONE] checkmark (done)
         //   - spinner + label (active)
         //   - dimmed label (pending)
         //   - detail text under the active stage explaining what is happening
@@ -265,7 +261,7 @@ private fun IdentityNotInitializedView(
 
 /**
  * Renders the 6-stage identity-generation proof-of-work list. Each stage is
- * marked as "done" (✓), "active" (spinner), or "pending" (dimmed), with the
+ * marked as "done" ([DONE]), "active" (spinner), or "pending" (dimmed), with the
  * current active stage's detail text displayed below the list so the user can
  * see exactly what cryptographic work is happening.
  *
@@ -288,8 +284,8 @@ private fun IdentityContent(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(16.dp),
+            .padding(16.dp)
+            .verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(24.dp)
     ) {
         // Error banner
@@ -323,12 +319,21 @@ private fun IdentityContent(
         )
 
         // QR Code
-        qrCodeData?.let { data ->
+        if (qrCodeData != null) {
             com.scmessenger.android.ui.components.QrCodeImage(
-                data = data,
+                data = qrCodeData!!,
                 contentDescription = stringResource(R.string.identity_label_qr_code),
                 modifier = Modifier.align(Alignment.CenterHorizontally)
             )
+        } else {
+            Box(
+                modifier = Modifier
+                    .size(256.dp)
+                    .align(Alignment.CenterHorizontally),
+                contentAlignment = Alignment.Center
+            ) {
+                CircularProgressIndicator()
+            }
         }
 
         // Identity Hash (human fingerprint)

@@ -8867,18 +8867,13 @@ open class MeshRepository(
         return null
     }
 
-    fun getIdentityExportString(minimalForQr: Boolean = false): String {
-        val identity = getIdentityInfoSync() ?: return "{}"
-        var listeners = normalizeOutboundListenerHints(getListeningAddresses()).toMutableList()
-        val externalAddresses = normalizeExternalAddressHints(getExternalAddresses())
-        val relay = getPreferredRelay()
+    fun getIdentityExportString(
+        minimalForQr: Boolean = false,
+        identityInfo: uniffi.api.IdentityInfo? = null
+    ): String {
+        val identity = identityInfo ?: getIdentityInfoNonBlocking() ?: return "{}"
         val localIp = getLocalIpAddress()
-
-        if (localIp != null) {
-            listeners = listeners.map { addr ->
-                if (addr.contains("0.0.0.0")) addr.replace("0.0.0.0", localIp) else addr
-            }.toMutableList()
-        }
+        val relay = if (minimalForQr) null else getPreferredRelay()
 
         // UNIFIED ID FIX: QR code primary ID is libp2p_peer_id (network routable)
         // identity_id is secondary (human fingerprint for backup/recovery)
@@ -8900,6 +8895,15 @@ open class MeshRepository(
             }
             payload.put("connection_hints", org.json.JSONArray(minimalHints))
         } else {
+            var listeners = normalizeOutboundListenerHints(getListeningAddresses()).toMutableList()
+            val externalAddresses = normalizeExternalAddressHints(getExternalAddresses())
+            
+            if (localIp != null) {
+                listeners = listeners.map { addr ->
+                    if (addr.contains("0.0.0.0")) addr.replace("0.0.0.0", localIp) else addr
+                }.toMutableList()
+            }
+            
             payload.put("listeners", org.json.JSONArray(listeners))
             payload.put("external_addresses", org.json.JSONArray(externalAddresses))
             payload.put("connection_hints", org.json.JSONArray((listeners + externalAddresses).distinct()))

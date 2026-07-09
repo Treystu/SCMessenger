@@ -46,6 +46,9 @@ class IdentityViewModel @Inject constructor(
     private val _successMessage = MutableStateFlow<String?>(null)
     val successMessage: StateFlow<String?> = _successMessage.asStateFlow()
 
+    private val _qrCodeData = MutableStateFlow<String?>(null)
+    val qrCodeData: StateFlow<String?> = _qrCodeData.asStateFlow()
+
     val progressStage: StateFlow<IdentityProgressStage> = identityCreationCoordinator.progressStage
 
     val progressSubDetail: StateFlow<String?> = identityCreationCoordinator.progressSubDetail
@@ -90,6 +93,16 @@ class IdentityViewModel @Inject constructor(
         // above). loadIdentity() also handles the retry-with-backoff case where
         // the Rust core is still hydrating.
         loadIdentity()
+
+        viewModelScope.launch(Dispatchers.Default) {
+            _identityInfo.collect { info ->
+                if (info?.initialized == true) {
+                    _qrCodeData.value = getQrCodeData()
+                } else {
+                    _qrCodeData.value = null
+                }
+            }
+        }
 
         // P0: Refresh identity from Rust core when service transitions to RUNNING,
         // replacing SharedPreferences cache with live data.
@@ -245,6 +258,15 @@ class IdentityViewModel @Inject constructor(
     }
 
     /**
+     * Refresh QR code data from core.
+     */
+    fun refreshQrCode() {
+        viewModelScope.launch(Dispatchers.Default) {
+            _qrCodeData.value = getQrCodeData()
+        }
+    }
+
+    /**
      * Get QR code data for sharing identity.
      * Returns canonical identity export JSON so contact imports fully autofill.
      * Suspend function to avoid blocking Main thread on FFI calls.
@@ -259,7 +281,7 @@ class IdentityViewModel @Inject constructor(
                 val info = meshRepository.getIdentityInfoNonBlocking()
                 if (info?.initialized != true) return@withContext null
                 
-                meshRepository.getIdentityExportString(minimalForQr = true)
+                meshRepository.getIdentityExportString(minimalForQr = true, identityInfo = info)
             } catch (e: Exception) {
                 Timber.e(e, "Failed to generate QR code data")
                 null
