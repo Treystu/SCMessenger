@@ -138,9 +138,9 @@ class MainViewModel @Inject constructor(
         viewModelScope.launch {
             meshRepository.identityInfo.collect { info ->
                 val initialized = info?.initialized == true
-                if (initialized && !_isReady.value) {
-                    Timber.d("P0_SHARED_IDENTITY: meshRepository.identityInfo reports initialized; updating _isReady")
-                    _isReady.value = true
+                if (_isReady.value != initialized) {
+                    Timber.d("P0_SHARED_IDENTITY: meshRepository.identityInfo reports initialized=$initialized; updating _isReady")
+                    _isReady.value = initialized
                 }
             }
         }

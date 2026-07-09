@@ -5164,6 +5164,7 @@ open class MeshRepository(
             }
         }
 
+        publishIdentityInfo(null)
         Timber.i("All application data reset successfully")
     }
 

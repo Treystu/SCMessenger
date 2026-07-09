@@ -48,10 +48,17 @@ class IdentityCreationCoordinator @Inject constructor(
                 val initialized = info?.initialized == true
                 if (initialized) {
                     _identityState.value = IdentityState.Ready
-                } else if (_identityState.value != IdentityState.Ready) {
-                    // Don't regress from Ready — the initial null emission from
-                    // StateFlow construction must not override a valid cached state.
-                    determineInitialState()
+                } else {
+                    val isReallyInitialized = meshRepository.isIdentityInitialized()
+                    if (!isReallyInitialized) {
+                        // Safe regression: no identity exists on disk.
+                        _identityState.value = IdentityState.None
+                        _progressStage.value = IdentityProgressStage.Idle
+                        _progressSubDetail.value = null
+                        _error.value = null
+                    } else if (_identityState.value != IdentityState.Ready) {
+                        determineInitialState()
+                    }
                 }
             }
         }
