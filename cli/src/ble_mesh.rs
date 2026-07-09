@@ -20,14 +20,31 @@ use tokio::sync::Mutex;
 use std::sync::OnceLock;
 use uuid::Uuid;
 
+#[derive(Clone)]
+pub enum TrackingPeripheral {
+    Real(Peripheral),
+    #[cfg(test)]
+    Mock(String),
+}
+
+impl TrackingPeripheral {
+    pub fn address_string(&self) -> String {
+        match self {
+            Self::Real(p) => p.address().to_string(),
+            #[cfg(test)]
+            Self::Mock(mac) => mac.clone(),
+        }
+    }
+}
+
 use crate::server::{UiEvent, UiOutbound};
 
 /// SCM GATT primary service UUID (must match `core/src/transport/ble/gatt.rs`).
 const GATT_SERVICE_UUID: u128 = 0x0000_DF01_0000_1000_8000_0080_5F9B_34FB;
 
-static ACTIVE_PEERS: OnceLock<std::sync::Mutex<HashMap<String, Peripheral>>> = OnceLock::new();
+static ACTIVE_PEERS: OnceLock<std::sync::Mutex<HashMap<String, TrackingPeripheral>>> = OnceLock::new();
 
-fn get_active_peers() -> &'static std::sync::Mutex<HashMap<String, Peripheral>> {
+fn get_active_peers() -> &'static std::sync::Mutex<HashMap<String, TrackingPeripheral>> {
     ACTIVE_PEERS.get_or_init(|| std::sync::Mutex::new(HashMap::new()))
 }
 
@@ -86,14 +103,23 @@ fn push_message_to_ui(
 
 struct PeerRegistryGuard {
     peer_id: Option<String>,
+    mac_addr: String,
 }
 
 impl Drop for PeerRegistryGuard {
     fn drop(&mut self) {
         if let Some(ref peer_id) = self.peer_id {
             if let Ok(mut map) = get_active_peers().lock() {
-                map.remove(peer_id);
-                tracing::info!("BLE removed peer ID {} from active registry", peer_id);
+                let should_remove = match map.get(peer_id) {
+                    Some(active_p) => active_p.address_string() == self.mac_addr,
+                    None => false,
+                };
+                if should_remove {
+                    map.remove(peer_id);
+                    tracing::info!("BLE removed peer ID {} from active registry", peer_id);
+                } else {
+                    tracing::debug!("BLE peer ID {} retained in registry (MAC rotated from {})", peer_id, self.mac_addr);
+                }
             }
         }
     }
@@ -118,7 +144,7 @@ async fn subscribe_ingress_for_peripheral(
     // Try to read identity data to register peer_id
     // PeerRegistryGuard will remove peer_id from ACTIVE_PEERS automatically when this background
     // streaming task terminates (via early return, disconnect, or stream completion).
-    let mut guard = PeerRegistryGuard { peer_id: None };
+    let mut guard = PeerRegistryGuard { peer_id: None, mac_addr: addr.clone() };
     let identity_uuid = scm_identity_uuid();
     let id_char = peripheral
         .characteristics()
@@ -133,9 +159,13 @@ async fn subscribe_ingress_for_peripheral(
                     if let Some(peer_id) = val.get("peer_id").and_then(|v| v.as_str()) {
                         if let Ok(parsed_peer_id) = peer_id.parse::<libp2p::PeerId>() {
                             let peer_id_str = parsed_peer_id.to_string();
-                            tracing::info!("BLE mapped peripheral {} to peer ID {}", addr, peer_id_str);
                             let mut map = get_active_peers().lock().expect("ACTIVE_PEERS lock poisoned");
-                            map.insert(peer_id_str.clone(), peripheral.clone());
+                            if let Some(existing) = map.get(&peer_id_str) {
+                                tracing::info!("BLE correlated rotated MAC {} to existing logical peer ID {} (was {})", addr, peer_id_str, existing.address_string());
+                            } else {
+                                tracing::info!("BLE mapped peripheral {} to peer ID {}", addr, peer_id_str);
+                            }
+                            map.insert(peer_id_str.clone(), TrackingPeripheral::Real(peripheral.clone()));
                             guard.peer_id = Some(peer_id_str);
                         } else {
                             tracing::warn!("BLE received invalid peer ID '{}' from {}", peer_id, addr);
@@ -194,7 +224,7 @@ pub async fn send_ble_message(recipient_peer_id: &str, data: &[u8]) -> Result<()
         guard.get(recipient_peer_id).cloned()
     };
 
-    let Some(peripheral) = peripheral else {
+    let Some(TrackingPeripheral::Real(peripheral)) = peripheral else {
         return Err("Peer not connected over BLE".to_string());
     };
 
@@ -511,5 +541,50 @@ mod tests {
         let _ = core.start();
         let junk = [0u8; 4];
         assert!(decode_ble_payload_for_ui(&core, &junk).is_none());
+    }
+
+    #[test]
+    fn test_mac_rotation_continuity() {
+        // Clear global state to ensure clean test
+        get_active_peers().lock().unwrap().clear();
+
+        let peer_id = "12D3KooWMqHj8dM6zY7vVv2K4n3nF2T1oT1w2Z3a4b5c6d7e8f9".to_string();
+        let old_mac = "AA:BB:CC:DD:EE:FF".to_string();
+        let new_mac = "11:22:33:44:55:66".to_string();
+
+        // 1. Initial connection
+        let mut guard1 = PeerRegistryGuard { peer_id: None, mac_addr: old_mac.clone() };
+        {
+            let mut map = get_active_peers().lock().unwrap();
+            map.insert(peer_id.clone(), TrackingPeripheral::Mock(old_mac.clone()));
+            guard1.peer_id = Some(peer_id.clone());
+        }
+
+        assert_eq!(
+            get_active_peers().lock().unwrap().get(&peer_id).unwrap().address_string(),
+            old_mac
+        );
+
+        // 2. MAC rotates mid-session (new connection established before old one drops)
+        let mut guard2 = PeerRegistryGuard { peer_id: None, mac_addr: new_mac.clone() };
+        {
+            let mut map = get_active_peers().lock().unwrap();
+            // Correlate
+            if let Some(existing) = map.get(&peer_id) {
+                assert_eq!(existing.address_string(), old_mac);
+            } else {
+                panic!("Expected existing peer");
+            }
+            map.insert(peer_id.clone(), TrackingPeripheral::Mock(new_mac.clone()));
+            guard2.peer_id = Some(peer_id.clone());
+        }
+
+        // 3. Old connection drops
+        drop(guard1);
+
+        // 4. Assert session continuity (peer is still tracked with new MAC)
+        let map = get_active_peers().lock().unwrap();
+        assert!(map.contains_key(&peer_id), "Peer should still be in registry");
+        assert_eq!(map.get(&peer_id).unwrap().address_string(), new_mac);
     }
 }
