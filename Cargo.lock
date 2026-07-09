@@ -4400,7 +4400,6 @@ dependencies = [
  "scmessenger-core",
  "serde",
  "serde_json",
- "sled",
  "tempfile",
  "tokio",
  "tokio-stream",
