@@ -1,0 +1,25 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python 'C:\\Users\\SCM\\Documents\\GitHub\\SCMessenger\\.codex\\hooks\\check_no_emoji.py'"
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash 'C:\\Users\\SCM\\Documents\\GitHub\\SCMessenger\\.codex\\hooks\\session_orientation.sh'"
+          }
+        ]
+      }
+    ]
+  }
+}
