@@ -26,9 +26,9 @@ S1-T3 (Core Integration Audit)
 3. Wire `swarmBridge.dial(peerId)` for INTERNET transport:
    - When `TransportManager.sendData()` fails on BLE/WiFi, route to INTERNET
    - Ensure peerId is properly formatted for libp2p dialing
-4. Wire `TransportManager.enableTransport(TransportType.INTERNET)` → `swarmBridge.startListening()`
-5. Test peer connection: start service on two devices → verify peer count > 0
-6. Handle connection lifecycle: onPeerConnected → MeshEventBus → UI update
+4. Wire `TransportManager.enableTransport(TransportType.INTERNET)`  `swarmBridge.startListening()`
+5. Test peer connection: start service on two devices  verify peer count > 0
+6. Handle connection lifecycle: onPeerConnected  MeshEventBus  UI update
 
 ## Verification
 - Two devices can discover each other over internet transport

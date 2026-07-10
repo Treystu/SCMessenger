@@ -1,4 +1,4 @@
-# S4-T1: ANR Elimination 🔴 P0
+# S4-T1: ANR Elimination  P0
 
 ## Status
 - [ ] TODO
@@ -27,7 +27,7 @@ S2-T1 (SwarmBridge Wiring)
    - Use `withContext(Dispatchers.Default)` for FFI calls
 2. Implement retry cap + exponential backoff:
    - Max 10 attempts per message (configurable)
-   - Backoff: 1s → 2s → 4s → ... → max 30s
+   - Backoff: 1s  2s  4s  ...  max 30s
    - Cap total retry time at 5 minutes
 3. Fix message ID tracking:
    - Use UUID-based dedup keys
@@ -37,7 +37,7 @@ S2-T1 (SwarmBridge Wiring)
    - Don't re-throw to main thread
    - Log cancellation, clean up resources
    - Don't trigger ANR dialog on cancellation
-5. Test: rapid message sends (10 messages/second for 1 minute) → no ANR
+5. Test: rapid message sends (10 messages/second for 1 minute)  no ANR
 
 ## Verification
 - No ANR events during 10-minute stress test

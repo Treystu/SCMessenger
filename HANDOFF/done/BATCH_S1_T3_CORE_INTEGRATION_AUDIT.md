@@ -32,15 +32,15 @@ S1-T2 (UniFFI Binding Verification)
    - ... (24 more files)
 2. For each function: grep Rust core for existence
 3. Mark each as:
-   - ✅ Implemented (exists in both Kotlin and Rust)
-   - ⚠️ Stub exists (Kotlin has placeholder, needs Rust)
-   - 🔴 Missing (Kotlin calls it, Rust doesn't have it)
+   -  Implemented (exists in both Kotlin and Rust)
+   -  Stub exists (Kotlin has placeholder, needs Rust)
+   -  Missing (Kotlin calls it, Rust doesn't have it)
 4. Document findings in `docs/UNIFFI_GAP_ANALYSIS.md`
 
 ## Verification
 - `docs/UNIFFI_GAP_ANALYSIS.md` complete with function-by-function status
-- No 🔴 Missing items without an owner/plan
+- No  Missing items without an owner/plan
 
 ## Notes
 - Gap analysis feeds into Sprint 2 planning
-- Prioritize: ⚠️ and 🔴 items determine S2 scope
+- Prioritize:  and  items determine S2 scope

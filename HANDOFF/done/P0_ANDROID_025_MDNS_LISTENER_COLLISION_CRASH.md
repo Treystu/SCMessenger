@@ -17,9 +17,9 @@
 
 ---
 
-# P0 — Android: mDNS "listener already in use" crash on Android<->Windows discovery
+# P0  Android: mDNS "listener already in use" crash on Android<->Windows discovery
 
-**Status:** OPEN — NEWLY DISCOVERED
+**Status:** OPEN  NEWLY DISCOVERED
 **Severity:** P0 (crash on any discovered mDNS peer; blocks Android<->Windows LAN discovery)
 **Reported by:** Overseer session, 2026-06-05 21:19 PT (auto-discovered during end-to-end test)
 **Detected in:** v0.2.3-debug on Pixel 6a (installed 21:18 PT from `E:\SCMessenger-build-p0-024\android\app\build\outputs\apk\debug\app-debug.apk`)
@@ -84,15 +84,15 @@ private fun resolveService(serviceInfo: NsdServiceInfo) {
 | `android/app/src/main/java/com/scmessenger/android/transport/MdnsServiceDiscovery.kt:476` | The crash site. `getResolveListener()` returns a singleton. |
 | `MdnsServiceDiscovery.kt` (whole file, 490 lines) | The `ResolveListener` impl and its cleanup on `onResolveSucceeded` / `onResolveFailed` must detach the listener before allowing reuse. |
 | `BleScanner.kt` (sibling cache) | After P1_ANDROID_022 fix, `clearPeerCache()` is the model. mDNS needs the analogous `markResolveComplete()` or listener-pool pattern. |
-| `core/src/transport/` (Rust) | Not the cause — this is a pure Android NSD bug. Cross-check: does libp2p's mDNS ever trigger the same path? It does not (uses UDP multicast directly, not the Android NSD daemon). |
+| `core/src/transport/` (Rust) | Not the cause  this is a pure Android NSD bug. Cross-check: does libp2p's mDNS ever trigger the same path? It does not (uses UDP multicast directly, not the Android NSD daemon). |
 
 ## Hypothesis (entry point for the subagent)
 
 The most likely fix is one of:
 
-1. **Per-service listener** — Create a fresh `NsdManager.ResolveListener` for each `resolveService()` call, and let Android GC it. Cheap, but loses error context. (smallest patch)
-2. **Pending-resolve set + onComplete cleanup** — Track which `(serviceName, listener)` pairs are in flight, and only return the listener to the pool on `onResolveSucceeded` / `onResolveFailed`. (canonical fix)
-3. **Debounce onServiceFound** — If the same `serviceName` is found twice within N seconds, ignore the duplicate. Doesn't address root cause, but masks it. (anti-pattern, do not use)
+1. **Per-service listener**  Create a fresh `NsdManager.ResolveListener` for each `resolveService()` call, and let Android GC it. Cheap, but loses error context. (smallest patch)
+2. **Pending-resolve set + onComplete cleanup**  Track which `(serviceName, listener)` pairs are in flight, and only return the listener to the pool on `onResolveSucceeded` / `onResolveFailed`. (canonical fix)
+3. **Debounce onServiceFound**  If the same `serviceName` is found twice within N seconds, ignore the duplicate. Doesn't address root cause, but masks it. (anti-pattern, do not use)
 
 The fix is small (10-20 LoC) and lives entirely in `MdnsServiceDiscovery.kt`.
 
@@ -109,7 +109,7 @@ The fix is small (10-20 LoC) and lives entirely in `MdnsServiceDiscovery.kt`.
 
 - Refactoring the entire transport layer.
 - Adding new mDNS features.
-- The P0_ANDROID_024 / P1_ANDROID_022 fixes already in the worktree at `E:\SCMessenger-build-p0-024\` — they are SEPARATE and ship in a different commit.
+- The P0_ANDROID_024 / P1_ANDROID_022 fixes already in the worktree at `E:\SCMessenger-build-p0-024\`  they are SEPARATE and ship in a different commit.
 - Cross-OS triangulation work.
 
 ## Build environment (for the subagent)
@@ -124,8 +124,8 @@ Use the verified env from `HANDOFF/STATE/2026-06-05_ANDROID_P0_024_P1_022_BUILD_
 
 - P0_ANDROID_024 (separate): identity-generation re-entrancy
 - P1_ANDROID_022 (separate): BLE stale-cache cleanup
-- `HANDOFF/STATE/2026-06-05_ORCHESTRATION_INDEX.md` — build env, ticket queue
-- `HANDOFF/STATE/2026-06-05_ANDROID_P0_024_P1_022_BUILD_VERIFIED.md` — verified build, env
+- `HANDOFF/STATE/2026-06-05_ORCHESTRATION_INDEX.md`  build env, ticket queue
+- `HANDOFF/STATE/2026-06-05_ANDROID_P0_024_P1_022_BUILD_VERIFIED.md`  verified build, env
 
 
 # REPO_MAP Context for Task: P0_ANDROID_025_MDNS_LISTENER_COLLISION_CRASH

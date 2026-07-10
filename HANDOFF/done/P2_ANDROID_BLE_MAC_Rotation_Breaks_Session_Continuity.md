@@ -1,4 +1,4 @@
-# TASK: P2-ANDROID-BLE — Windows CLI treats every BLE MAC rotation as a new peripheral, resetting connection state
+# TASK: P2-ANDROID-BLE  Windows CLI treats every BLE MAC rotation as a new peripheral, resetting connection state
 
 ## Context
 
@@ -25,7 +25,7 @@ Each time the MAC rotates, the CLI logs a fresh "BLE found matching
 peripheral" and re-attempts the connect dance from scratch (including
 repeated `BLE subscribe failed ... Windows UWP threw error on subscribe:
 GattCommunicationStatus(1)` retries before eventually succeeding once, at
-`21:21:18` UTC for MAC `76:37:17:AC:B4:3C` — see the daemon log from this
+`21:21:18` UTC for MAC `76:37:17:AC:B4:3C`  see the daemon log from this
 session). By the time a stable GATT subscription was achieved for one MAC,
 the Android side had likely already rotated to a new one, since subsequent
 log lines show new MACs being discovered from scratch rather than continued
@@ -35,7 +35,7 @@ This means a stable, long-lived BLE session between this Windows CLI and an
 Android peer is unlikely to survive past one MAC rotation interval in
 practice, even though the underlying per-connection GATT subscribe mechanism
 does eventually work. This is a design gap in continuity, not a hard
-protocol failure — the fix is about correlating rotated MACs to the same
+protocol failure  the fix is about correlating rotated MACs to the same
 logical peer, not about GATT subscribe itself (which succeeded).
 
 Note this is BLE-specific and separate from the LAN/mDNS and CLI transport-
@@ -49,13 +49,13 @@ negotiation issues found in the same session (see companion tickets
 - Determine how (or whether) the CLI's `ble_mesh`/`ble_daemon` currently
   correlates a rotated BLE MAC to a stable logical peer identity (e.g. via
   the SCM service's advertised data / DarkBLE rotation material / a
-  peer-id exchanged post-connect) — read `core/src/transport/ble/beacon.rs`'s
+  peer-id exchanged post-connect)  read `core/src/transport/ble/beacon.rs`'s
   `rotation_epoch` handling and `cli/src/ble_mesh.rs` before assuming no
   correlation exists.
 - If no correlation exists: implement one, so that a MAC rotation mid-session
   (or between sessions) doesn't force a full from-scratch rediscovery/
   reconnect cycle when the underlying peer identity (e.g. libp2p PeerId or
-  DarkBLE beacon identity) is unchanged — this should reuse whatever
+  DarkBLE beacon identity) is unchanged  this should reuse whatever
   identity material the DarkBLE rotation scheme already provides for exactly
   this purpose, per the beacon rotation design.
 - If correlation already exists at the Rust core level but isn't reflected
@@ -67,12 +67,12 @@ negotiation issues found in the same session (see companion tickets
   simulating a MAC rotation mid-session and asserting the peer is recognized
   as the same logical peer rather than triggering a full reconnect from
   zero.
-- This touches `core/src/transport/ble/` — **the mandatory
+- This touches `core/src/transport/ble/`  **the mandatory
   `crypto-security-auditor` adversarial review applies**, per
   `.claude/rules/security.md`, since DarkBLE rotation material has direct
   privacy/security implications (a broken correlation scheme could either
   leak identity across rotations to an eavesdropper, or fail to correlate
-  legitimate rotations — both are review-worthy, not just a UX polish item).
+  legitimate rotations  both are review-worthy, not just a UX polish item).
 
 ## Implementation Plan
 
@@ -103,7 +103,7 @@ cargo test -p scmessenger-core --lib transport::ble
 cargo clippy --workspace -- -D warnings -A clippy::empty_line_after_doc_comments
 ```
 
-Manual verification (required — this is a live BLE timing/continuity bug):
+Manual verification (required  this is a live BLE timing/continuity bug):
 run the CLI daemon on Windows near a physical Android device, wait through at
 least one full BLE MAC rotation interval (~15+ minutes) while a BLE session
 is active or was recently active, confirm the CLI recognizes the

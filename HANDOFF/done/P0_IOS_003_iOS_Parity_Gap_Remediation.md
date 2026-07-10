@@ -10,14 +10,14 @@ The iOS parity plan (P0_IOS_002) has been reviewed. Many fixes are already parti
 
 ## Verification Checklist (from P0_IOS_002 Appendix B)
 
-### Already Implemented ✅
-1. **Bootstrap caching** — `MeshRepository.swift:82-85` uses computed property returning `staticBootstrapNodes`
-2. **Async diagnostics export** — `MeshRepository.swift:2632-2651` has `exportDiagnostics()` + `exportDiagnosticsAsync()` with 1s TTL cache
-3. **Settings debouncing** — `SettingsViewModel.swift:22-36` has `debouncedUpdateSettings()` with 500ms interval
-4. **Static port 9001** — `MeshRepository.swift:643,800` uses `/ip4/0.0.0.0/tcp/9001`
-5. **Identity display** — `SettingsView.swift:157-188` shows "Peer ID (Network)" (libp2p_peer_id) and "Identity Hash" separately
+### Already Implemented 
+1. **Bootstrap caching**  `MeshRepository.swift:82-85` uses computed property returning `staticBootstrapNodes`
+2. **Async diagnostics export**  `MeshRepository.swift:2632-2651` has `exportDiagnostics()` + `exportDiagnosticsAsync()` with 1s TTL cache
+3. **Settings debouncing**  `SettingsViewModel.swift:22-36` has `debouncedUpdateSettings()` with 500ms interval
+4. **Static port 9001**  `MeshRepository.swift:643,800` uses `/ip4/0.0.0.0/tcp/9001`
+5. **Identity display**  `SettingsView.swift:157-188` shows "Peer ID (Network)" (libp2p_peer_id) and "Identity Hash" separately
 
-### Remaining Gaps Fixed 🔧
+### Remaining Gaps Fixed 
 
 | Gap | Fix Applied |
 |-----|-------------|

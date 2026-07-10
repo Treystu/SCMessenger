@@ -8,8 +8,8 @@
 **Agent:** worker (doc-only META repair; no code, no build)
 **Budget:** 300s (MICRO tier)
 **Phase:** Orchestration bookkeeping
-**Source:** 2026-06-05 audit — `.claude/quota_state.json` is 16 days stale; `API_EFFICIENCY_LEDGER.md` referenced by `orchestrate.md` may not exist or may be outdated
-**Depends on:** none (independent of cold-start recovery — can run in parallel)
+**Source:** 2026-06-05 audit  `.claude/quota_state.json` is 16 days stale; `API_EFFICIENCY_LEDGER.md` referenced by `orchestrate.md` may not exist or may be outdated
+**Depends on:** none (independent of cold-start recovery  can run in parallel)
 **Blocks:** future quota-tier-driven dispatch decisions, post-incident accounting
 
 ---
@@ -18,7 +18,7 @@
 
 Three things are wrong with the quota accounting pipeline, observed at 2026-06-05 20:50 PT:
 
-1. **Stale quota state.** `.claude/quota_state.json` `timestamp` is `2026-05-20` — 16 days old. The 5-minute staleness rule in `docs/ORCHESTRATE_V4_COMMAND.md` would force a re-scrape. Any tier decision based on this snapshot is invalid.
+1. **Stale quota state.** `.claude/quota_state.json` `timestamp` is `2026-05-20`  16 days old. The 5-minute staleness rule in `docs/ORCHESTRATE_V4_COMMAND.md` would force a re-scrape. Any tier decision based on this snapshot is invalid.
 2. **Missing or stale ledger.** `API_EFFICIENCY_LEDGER.md` (referenced in `.claude/commands/orchestrate.md`) is the per-session token-usage accounting file. It may not exist in the repo root, or it may pre-date the current wake cycle by weeks. The audit trail for the swarm's consumption is broken.
 3. **No staleness event note.** The 16-day gap has not been documented. Future audits cannot reconstruct why the quota pipeline was rejected during the gap window.
 
@@ -48,15 +48,15 @@ Three things are wrong with the quota accounting pipeline, observed at 2026-06-0
 3. **Document the staleness event.**
    - Create `HANDOFF/STATE/2026-06-05_QUOTA_LEDGER_REPAIR.md` with exactly 3 lines of content:
      ```
-     # Quota ledger repair — 2026-06-05
+     # Quota ledger repair  2026-06-05
      [.claude/quota_state.json] was 16 days stale (timestamp 2026-05-20). Refreshed via OllamaQuotaScraper. Stale data was rejected per the 5-minute staleness rule in docs/ORCHESTRATE_V4_COMMAND.md. Ledger re-established; next audit cycle can proceed.
      ```
 
 ## File Targets
 
-- `.claude/quota_state.json` [REFRESH] — re-scrape, capture new timestamp
-- `API_EFFICIENCY_LEDGER.md` [VERIFY / CREATE / APPEND] — wake-cycle line
-- `HANDOFF/STATE/2026-06-05_QUOTA_LEDGER_REPAIR.md` [CREATE] — 3-line staleness event note
+- `.claude/quota_state.json` [REFRESH]  re-scrape, capture new timestamp
+- `API_EFFICIENCY_LEDGER.md` [VERIFY / CREATE / APPEND]  wake-cycle line
+- `HANDOFF/STATE/2026-06-05_QUOTA_LEDGER_REPAIR.md` [CREATE]  3-line staleness event note
 
 ## Build Verification Commands
 
@@ -91,7 +91,7 @@ See `docs/ORCHESTRATE_V4_COMMAND.md` for the quota-governor spec.
 1. `.claude/quota_state.json` `timestamp` is within 5 minutes of "now".
 2. `API_EFFICIENCY_LEDGER.md` exists and contains the `[2026-06-05]` wake-cycle line.
 3. `HANDOFF/STATE/2026-06-05_QUOTA_LEDGER_REPAIR.md` exists with the 3-line staleness event note.
-4. **CRITICAL:** this ticket is moved to `HANDOFF/done/` via `git mv` after steps 1–3 succeed.
+4. **CRITICAL:** this ticket is moved to `HANDOFF/done/` via `git mv` after steps 13 succeed.
 
 ## CRITICAL
 

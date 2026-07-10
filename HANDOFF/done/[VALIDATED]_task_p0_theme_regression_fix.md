@@ -1,14 +1,14 @@
 # MODEL: qwen3-coder-next:cloud
 # BUDGET: 1080
 
-# Task: Fix P0 Theme.kt Regression — Restore Status Bar Color
+# Task: Fix P0 Theme.kt Regression  Restore Status Bar Color
 
 **Priority:** P0
 **Model:** qwen3-coder-next:cloud
 **Budget:** 1080
 **Assigned to:** implementer
 **Created:** 2026-05-13
-**Status:** FAILED — prematurely moved to done/ without code changes. Theme.kt still does not set status bar color.
+**Status:** FAILED  prematurely moved to done/ without code changes. Theme.kt still does not set status bar color.
 **Source:** P0 Android Play Readiness regression audit
 
 ## Summary

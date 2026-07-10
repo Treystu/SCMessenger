@@ -3,20 +3,20 @@
 **Priority:** P3
 **Platform:** iOS
 **Status:** TODO
-**Source:** native sweep 2026-07-04 — follow-up gap on T17 in
+**Source:** native sweep 2026-07-04  follow-up gap on T17 in
 `docs/release-readiness-2026-07-02.md`, which is otherwise CONFIRMED FIXED in
 this sweep (re-verified against current source, see below). This is a residual
 sub-issue T17's own fix didn't fully close, not a re-report of T17 itself.
 
-## Status of T17 as originally filed (for context — do not re-fix this part)
+## Status of T17 as originally filed (for context  do not re-fix this part)
 
-T17(a) — tests sleeping instead of awaiting the spawned `Task` — is FIXED:
+T17(a)  tests sleeping instead of awaiting the spawned `Task`  is FIXED:
 `iOS/SCMessengerTests/MeshBackgroundServiceTests.swift` now does
 `let task = backgroundService.simulateBackgroundRefresh(); await task.value`
 instead of `Task.sleep`.
 
-T17(b) as originally filed — `simulateBackgroundRefresh()` skipping
-`quickPeerDiscovery()` — is FIXED: `MeshBackgroundService.swift:217-229` now
+T17(b) as originally filed  `simulateBackgroundRefresh()` skipping
+`quickPeerDiscovery()`  is FIXED: `MeshBackgroundService.swift:217-229` now
 calls `quickPeerDiscovery()`:
 
 ```swift
@@ -68,7 +68,7 @@ func simulateBackgroundProcessing() -> Task<Void, Never> {
 
 `cleanupOldMessages()` and `updatePeerLedger()` are silently skipped in the
 simulation. This is the exact same class of test/production drift T17(b)
-already fixed for `simulateBackgroundRefresh()` vs. its real handler — it just
+already fixed for `simulateBackgroundRefresh()` vs. its real handler  it just
 wasn't applied to `simulateBackgroundProcessing()`'s sibling real handler in
 the same pass. Any regression in `cleanupOldMessages()` or `updatePeerLedger()`
 (e.g. one of them silently failing or being removed) would NOT be caught by
@@ -97,7 +97,7 @@ func simulateBackgroundProcessing() -> Task<Void, Never> {
 ```
 
 Note: the real handler also runs `runMaintenanceCycle(budgetMs:)` on the Rust
-core afterward (line 200) — decide whether the simulation should call that too
+core afterward (line 200)  decide whether the simulation should call that too
 for full parity, or whether it's intentionally excluded (it may have side
 effects or timing behavior unsuitable for a fast test loop). If excluded
 intentionally, add a one-line comment explaining why, so the next audit
@@ -105,7 +105,7 @@ doesn't re-flag it as a gap.
 
 ## Files to Touch
 
-- `iOS/SCMessenger/SCMessenger/Services/MeshBackgroundService.swift` [EDIT] —
+- `iOS/SCMessenger/SCMessenger/Services/MeshBackgroundService.swift` [EDIT] 
   `simulateBackgroundProcessing()`, lines 231-243
 
 ## Verification

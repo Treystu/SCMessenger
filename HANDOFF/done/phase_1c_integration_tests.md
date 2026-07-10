@@ -35,8 +35,8 @@ cargo test -p scmessenger-core --test test_mesh_routing
 
 ## Success Criteria
 - [x] `cargo test --workspace` exits 0 (unit + CLI tests; 831 passed)
-- [ ] All named integration tests pass individually — BLOCKED (Windows rlib staleness)
-- [ ] No flaky test failures on retry — BLOCKED (see above)
+- [ ] All named integration tests pass individually  BLOCKED (Windows rlib staleness)
+- [ ] No flaky test failures on retry  BLOCKED (see above)
 
 ## Rules
 - Test naming convention: `integration_<domain>_<scenario>`

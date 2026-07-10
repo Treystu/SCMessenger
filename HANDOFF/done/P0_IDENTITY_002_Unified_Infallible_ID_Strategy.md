@@ -1,9 +1,9 @@
 # Unified Infallible Identity Strategy v1.0
 
 **Date:** 2026-04-23
-**Status:** PLAN — awaiting your approval before implementation
+**Status:** PLAN  awaiting your approval before implementation
 **Scope:** Android, iOS, CLI, Core (all variants)
-**Confidence:** High — based on exhaustive codebase audit of 47 source files
+**Confidence:** High  based on exhaustive codebase audit of 47 source files
 
 ---
 
@@ -28,21 +28,21 @@ Every identity in SCMessenger is derived from a single Ed25519 keypair. From tha
 
 ## 2. The Six Critical Inconsistencies (All Must Be Fixed)
 
-### CRITICAL-1: QR Export Creates Contacts with `identity_id`, Transport Resolves to `libp2p_peer_id` → Duplicate Contacts/Threads
+### CRITICAL-1: QR Export Creates Contacts with `identity_id`, Transport Resolves to `libp2p_peer_id`  Duplicate Contacts/Threads
 
 **Root cause:** `ContactImportParser.kt:25-31` reads `"identity_id"` from QR JSON and stores it as `contact.peerId`. But `resolveTransportIdentity()` in `MeshRepository.kt:6398-6405` was changed (March 2026 duplicate-thread fix) to return `canonicalPeerId = libp2pPeerId`. When the same peer is later discovered over LAN, their libp2p Peer ID doesn't match the stored identity_id. Result: **two contacts for one person, two message threads**.
 
 **Evidence:**
 ```kotlin
-// ContactImportParser.kt:25-31 — WRONG: stores identity_id as peerId
+// ContactImportParser.kt:25-31  WRONG: stores identity_id as peerId
 val peerId = json.getString("identity_id")  // caccf865...
 val publicKey = json.getString("public_key")  // c47ffd72...
 // Creates Contact(peerId="caccf865...", publicKey="c47ffd72...")
 
-// MeshRepository.kt:6398-6405 — transport resolves to libp2p_peer_id
+// MeshRepository.kt:6398-6405  transport resolves to libp2p_peer_id
 val canonicalPeerId = libp2pPeerId  // 12D3KooW...
-// upsertFederatedContact checks existingById["12D3KooW..."] ≠ stored["caccf865..."]
-// → Creates SECOND contact
+// upsertFederatedContact checks existingById["12D3KooW..."]  stored["caccf865..."]
+//  Creates SECOND contact
 ```
 
 **Fix:**
@@ -60,7 +60,7 @@ val canonicalPeerId = libp2pPeerId  // 12D3KooW...
 ```rust
 fn looks_like_blake3_id(s: &str) -> bool {
     s.len() == 64 && s.chars().all(|c| c.is_ascii_hexdigit() && c.is_ascii_lowercase())
-    // public_key_hex = 64 lowercase hex → ALSO MATCHES
+    // public_key_hex = 64 lowercase hex  ALSO MATCHES
 }
 ```
 
@@ -73,7 +73,7 @@ fn looks_like_blake3_id(s: &str) -> bool {
 **Root cause:** `core/src/store/contacts.rs:85-95` simply returns the input string unchanged:
 ```rust
 pub fn derive_public_key_from_peer_id(peer_id: &str) -> Option<String> {
-    Some(peer_id.to_string()) // STUB — does nothing
+    Some(peer_id.to_string()) // STUB  does nothing
 }
 ```
 
@@ -82,7 +82,7 @@ This is called by `reconcile_from_history()` to recover contacts from message hi
 **Fix:** Implement proper derivation:
 ```rust
 pub fn derive_public_key_from_peer_id(peer_id: &str) -> Option<String> {
-    // Try parse as libp2p PeerId → extract public key
+    // Try parse as libp2p PeerId  extract public key
     if let Ok(id) = libp2p::PeerId::from_str(peer_id) {
         if let Some(pk) = id.to_bytes().get(2..) {  // multihash prefix
             return Some(hex::encode(pk));
@@ -128,17 +128,17 @@ pub fn derive_public_key_from_peer_id(peer_id: &str) -> Option<String> {
 |-----------|----------|--------------|----------|
 | Contact storage key | `public_key_hex` | `identity_id`, `libp2p_peer_id` | `core/src/store/contacts.rs` |
 | QR code primary ID | `libp2p_peer_id` | `identity_id` | `MeshRepository.kt/swift` |
-| QR code pubkey | `public_key_hex` | — | `MeshRepository.kt/swift` |
-| QR code device ID | `device_id` | — | `MeshRepository.kt/swift` |
+| QR code pubkey | `public_key_hex` |  | `MeshRepository.kt/swift` |
+| QR code device ID | `device_id` |  | `MeshRepository.kt/swift` |
 | Contact add CLI arg | `libp2p_peer_id` | `identity_id` | `cli/src/main.rs` |
 | Contact add pubkey arg | `public_key_hex` | `identity_id` | `cli/src/main.rs` |
-| Message encryption | `public_key_hex` | — | `core/src/lib.rs` |
+| Message encryption | `public_key_hex` |  | `core/src/lib.rs` |
 | Network dial | `libp2p_peer_id` | `identity_id`, `public_key_hex` | `core/src/transport/` |
-| mDNS advertisement | `libp2p_peer_id` | — | `core/src/transport/discovery.rs` |
+| mDNS advertisement | `libp2p_peer_id` |  | `core/src/transport/discovery.rs` |
 | Display "Peer ID" | `libp2p_peer_id` | `identity_id` | All UI screens |
-| Display "Identity Hash" | `identity_id` | — | All UI screens |
-| Display "Public Key" | `public_key_hex` | — | All UI screens |
-| History lookup | `public_key_hex` | — | `core/src/store/history.rs` |
+| Display "Identity Hash" | `identity_id` |  | All UI screens |
+| Display "Public Key" | `public_key_hex` |  | All UI screens |
+| History lookup | `public_key_hex` |  | `core/src/store/history.rs` |
 | Contact lookup (any input) | Resolve to `public_key_hex` | Store raw input | `core/src/lib.rs` |
 | Transport identity resolution | `libp2p_peer_id` | `identity_id` | `core/src/mobile_bridge.rs` |
 
@@ -146,9 +146,9 @@ pub fn derive_public_key_from_peer_id(peer_id: &str) -> Option<String> {
 
 ## 4. Exact Remediation Plan (File by File)
 
-### Phase A: Core (Foundation) — Must Land First
+### Phase A: Core (Foundation)  Must Land First
 
-#### A1. `core/src/api.udl` — Add `libp2p_peer_id` to `Contact`
+#### A1. `core/src/api.udl`  Add `libp2p_peer_id` to `Contact`
 ```udl
 dictionary Contact {
     string peer_id;           // ALWAYS public_key_hex (canonical)
@@ -161,21 +161,21 @@ dictionary Contact {
 };
 ```
 
-#### A2. `core/src/store/contacts.rs` — Fix `derive_public_key_from_peer_id`
+#### A2. `core/src/store/contacts.rs`  Fix `derive_public_key_from_peer_id`
 Implement proper derivation as shown in HIGH-3 above. Also update `reconcile_from_history()` to call `resolve_identity()` before creating contacts.
 
-#### A3. `core/src/lib.rs` — Enforce `resolve_identity()` at all ingress points
+#### A3. `core/src/lib.rs`  Enforce `resolve_identity()` at all ingress points
 - `add_contact()`: call `resolve_identity(peer_id)` to canonicalize to `public_key_hex`
 - `prepare_message()`: resolve recipient to `public_key_hex`
 - `send_message()`: resolve recipient to `public_key_hex`, then derive `libp2p_peer_id` for transport
 
-#### A4. `core/src/mobile_bridge.rs` — `SwarmBridge.send_message()`
+#### A4. `core/src/mobile_bridge.rs`  `SwarmBridge.send_message()`
 Accept `recipient_identity_id` (any format), resolve to `public_key_hex` for encryption, derive `libp2p_peer_id` for dialing. Do NOT require caller to pass `libp2p_peer_id`.
 
 ### Phase B: Android
 
 #### B1. `android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt`
-- `getIdentityExportString()`: Change `"identity_id"` → `"peer_id"` with value `libp2p_peer_id`. Add `"device_id"`. Keep `"public_key"`.
+- `getIdentityExportString()`: Change `"identity_id"`  `"peer_id"` with value `libp2p_peer_id`. Add `"device_id"`. Keep `"public_key"`.
 - `resolveTransportIdentity()`: Ensure `canonicalPeerId` is resolved through `core.resolve_identity()` to guarantee `public_key_hex`.
 
 #### B2. `android/app/src/main/java/com/scmessenger/android/utils/ContactImportParser.kt`
@@ -185,26 +185,26 @@ Accept `recipient_identity_id` (any format), resolve to `public_key_hex` for enc
 - Store contact with `peer_id = public_key_hex`, `libp2p_peer_id = qr_peer_id`
 
 #### B3. `android/app/src/main/java/com/scmessenger/android/ui/identity/IdentityScreen.kt`
-- Rename "Peer ID" label → "Identity Hash" (shows `identity_id`)
+- Rename "Peer ID" label  "Identity Hash" (shows `identity_id`)
 - Add "Peer ID (Network)" field (shows `libp2p_peer_id`)
 - Add copy button for `libp2p_peer_id`
 
 ### Phase C: iOS
 
 #### C1. `ios/SCMessenger/SCMessenger/Data/MeshRepository.swift`
-- `getIdentityExportString()`: Change `"identity_id"` → `"peer_id"` with value `libp2p_peer_id`. Add `"device_id"`. Keep `"public_key"`.
+- `getIdentityExportString()`: Change `"identity_id"`  `"peer_id"` with value `libp2p_peer_id`. Add `"device_id"`. Keep `"public_key"`.
 - Same canonicalization logic as Android.
 
 #### C2. iOS QR import parser (find equivalent to `ContactImportParser.kt`)
 - Same fix: read `"peer_id"`, validate `12D3Koo...`, resolve to `public_key_hex`
 
 #### C3. `ios/SCMessenger/SCMessenger/Views/Settings/SettingsView.swift`
-- Already labels correctly ("Identity Hash" vs "Peer ID (Network)") — verify it shows `libp2p_peer_id`
+- Already labels correctly ("Identity Hash" vs "Peer ID (Network)")  verify it shows `libp2p_peer_id`
 - Ensure copy buttons copy the correct IDs
 
 ### Phase D: CLI
 
-#### D1. `cli/src/main.rs` — Fix `looks_like_blake3_id()`
+#### D1. `cli/src/main.rs`  Fix `looks_like_blake3_id()`
 ```rust
 fn looks_like_blake3_id(s: &str) -> bool {
     if s.len() != 64 { return false; }
@@ -219,12 +219,12 @@ fn looks_like_blake3_id(s: &str) -> bool {
 }
 ```
 
-#### D2. `cli/src/main.rs` — `cmd_contact_add()`
+#### D2. `cli/src/main.rs`  `cmd_contact_add()`
 - Accept `peer_id` (libp2p Peer ID) and `public_key` (hex)
 - Call `core.resolve_identity(peer_id)` to verify it resolves to the same public key
 - Store contact with `peer_id = public_key` (canonical)
 
-#### D3. `cli/src/main.rs` — `cmd_send_offline()`
+#### D3. `cli/src/main.rs`  `cmd_send_offline()`
 - Resolve recipient to `public_key_hex` via `core.resolve_identity()`
 - Derive `libp2p_peer_id` from public key for transport
 
@@ -255,28 +255,28 @@ transport=tcp
 ## 5. Verification Checklist (100% Must Pass)
 
 ### Unit Tests (Core)
-- [ ] `resolve_identity("12D3KooW...")` → returns `public_key_hex`
-- [ ] `resolve_identity("caccf865...")` → returns `public_key_hex`
-- [ ] `resolve_identity("c47ffd72...")` → returns `public_key_hex` (idempotent)
-- [ ] `derive_public_key_from_peer_id("12D3KooW...")` → returns `public_key_hex`
-- [ ] `derive_public_key_from_peer_id("c47ffd72...")` → returns `c47ffd72...`
-- [ ] `derive_public_key_from_peer_id("invalid")` → returns `None`
+- [ ] `resolve_identity("12D3KooW...")`  returns `public_key_hex`
+- [ ] `resolve_identity("caccf865...")`  returns `public_key_hex`
+- [ ] `resolve_identity("c47ffd72...")`  returns `public_key_hex` (idempotent)
+- [ ] `derive_public_key_from_peer_id("12D3KooW...")`  returns `public_key_hex`
+- [ ] `derive_public_key_from_peer_id("c47ffd72...")`  returns `c47ffd72...`
+- [ ] `derive_public_key_from_peer_id("invalid")`  returns `None`
 - [ ] Adding contact with `libp2p_peer_id` stores `public_key_hex` as key
 - [ ] Adding contact with `identity_id` stores `public_key_hex` as key
 - [ ] Adding contact with `public_key_hex` stores `public_key_hex` as key
-- [ ] Duplicate add (different ID format, same person) → updates existing, no duplicate
+- [ ] Duplicate add (different ID format, same person)  updates existing, no duplicate
 
 ### Integration Tests (Cross-Platform)
-- [ ] Android QR → iOS scan → contact stores correct `public_key_hex`
-- [ ] iOS QR → Android scan → contact stores correct `public_key_hex`
-- [ ] CLI `contact add <peer_id> <pubkey>` → stores `public_key_hex`
+- [ ] Android QR  iOS scan  contact stores correct `public_key_hex`
+- [ ] iOS QR  Android scan  contact stores correct `public_key_hex`
+- [ ] CLI `contact add <peer_id> <pubkey>`  stores `public_key_hex`
 - [ ] Android displays "Peer ID (Network)" = `libp2p_peer_id`
 - [ ] iOS displays "Peer ID (Network)" = `libp2p_peer_id`
 - [ ] CLI `identity` shows `libp2p_peer_id` and `identity_id` separately
-- [ ] Message send Android→iOS works after QR contact add
-- [ ] Message send iOS→Android works after QR contact add
-- [ ] Message send CLI→Android works after `contact add`
-- [ ] Message send CLI→iOS works after `contact add`
+- [ ] Message send AndroidiOS works after QR contact add
+- [ ] Message send iOSAndroid works after QR contact add
+- [ ] Message send CLIAndroid works after `contact add`
+- [ ] Message send CLIiOS works after `contact add`
 - [ ] No duplicate contacts after LAN discovery + QR add of same peer
 - [ ] No duplicate message threads after transport discovery of QR-added contact
 
@@ -312,11 +312,11 @@ If issues detected:
 |------|-----------|--------|------------|
 | Core UDL change breaks Android/iOS bindings | Low | Critical | Add `libp2p_peer_id` as optional; old bindings ignore it |
 | Contact migration corrupts existing data | Low | Critical | Backup before migration; idempotent migration |
-| QR format change breaks old app versions | Medium | Medium | Old apps can't scan new QR — acceptable (require update) |
+| QR format change breaks old app versions | Medium | Medium | Old apps can't scan new QR  acceptable (require update) |
 | `derive_public_key_from_peer_id` implementation wrong | Low | High | Unit test with known keypairs; verify round-trip |
 | iOS Swift optional unwrapping on new UDL fields | Medium | Medium | Mark new fields as optional in UDL; Swift handles nil |
 
-**Overall confidence: HIGH** — all changes are additive or renaming; no data format changes at the storage layer. The root cause is simply enforcing canonical IDs at ingress points.
+**Overall confidence: HIGH**  all changes are additive or renaming; no data format changes at the storage layer. The root cause is simply enforcing canonical IDs at ingress points.
 
 ---
 

@@ -1,4 +1,4 @@
-# TASK: PQC-01 — Add ML-KEM-768 dependency and smoke-test module
+# TASK: PQC-01  Add ML-KEM-768 dependency and smoke-test module
 
 Read `PQC_00_MASTER_PLAN.md` first. Depends on: nothing. Wave 0. Min tier: Haiku.
 
@@ -10,7 +10,7 @@ Read `PQC_00_MASTER_PLAN.md` first. Depends on: nothing. Wave 0. Min tier: Haiku
 
 ## Scope
 
-Add `libcrux-ml-kem` to the workspace and prove it compiles and round-trips on every target this repo builds. No integration with any existing crypto path — that is PQC-05/06.
+Add `libcrux-ml-kem` to the workspace and prove it compiles and round-trips on every target this repo builds. No integration with any existing crypto path  that is PQC-05/06.
 
 ## Steps
 

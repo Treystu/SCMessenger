@@ -11,21 +11,21 @@ Multiple Rust compiler warnings appear during build, indicating unused imports, 
 
 ## Changes Applied
 
-1. **swarm.rs:30** — Removed unused `PeerId as RoutingPeerId` import (kept `RoutingTransportType`)
-2. **swarm.rs:49** — Removed unused `Arc` import (changed `use std::sync::{Arc, Weak}` → `use std::sync::Weak`)
-3. **swarm.rs:677** — Prefixed unused `peer_id` with underscore: `peer_id: _`
-4. **swarm.rs:2840** — Prefixed unused `peer_hint` with underscore: `_peer_hint`
-5. **lib.rs:2276** — Prefixed unused `device_id` with underscore: `_device_id`
-6. **ratchet.rs:88** — Added `#[allow(dead_code)]` to `chain_key_bytes()` (API surface for future use)
-7. **ratchet.rs:92** — Added `#[allow(dead_code)]` to `index()` (API surface for future use)
-8. **swarm.rs:1117** — Added `#[allow(dead_code)]` to `SwarmHandle` struct (field kept for future use)
+1. **swarm.rs:30**  Removed unused `PeerId as RoutingPeerId` import (kept `RoutingTransportType`)
+2. **swarm.rs:49**  Removed unused `Arc` import (changed `use std::sync::{Arc, Weak}`  `use std::sync::Weak`)
+3. **swarm.rs:677**  Prefixed unused `peer_id` with underscore: `peer_id: _`
+4. **swarm.rs:2840**  Prefixed unused `peer_hint` with underscore: `_peer_hint`
+5. **lib.rs:2276**  Prefixed unused `device_id` with underscore: `_device_id`
+6. **ratchet.rs:88**  Added `#[allow(dead_code)]` to `chain_key_bytes()` (API surface for future use)
+7. **ratchet.rs:92**  Added `#[allow(dead_code)]` to `index()` (API surface for future use)
+8. **swarm.rs:1117**  Added `#[allow(dead_code)]` to `SwarmHandle` struct (field kept for future use)
 
 ## Verification
-- ✅ `cargo check -p scmessenger-core` — zero warnings
-- ✅ `cargo build -p scmessenger-core` — success, zero warnings
-- ✅ `cargo build -p scmessenger-mobile` — success, no regressions
-- ⚠️ `cargo test -p scmessenger-core` — pre-existing test compilation error (unrelated `is_peer_blocked` argument mismatch at lib.rs:3210)
-- ⚠️ `cargo build --workspace` — pre-existing errors in wasm and CLI crates (missing feature flags/dependencies)
+-  `cargo check -p scmessenger-core`  zero warnings
+-  `cargo build -p scmessenger-core`  success, zero warnings
+-  `cargo build -p scmessenger-mobile`  success, no regressions
+-  `cargo test -p scmessenger-core`  pre-existing test compilation error (unrelated `is_peer_blocked` argument mismatch at lib.rs:3210)
+-  `cargo build --workspace`  pre-existing errors in wasm and CLI crates (missing feature flags/dependencies)
 
 ## Rationale for `#[allow(dead_code)]` over removal
 - `chain_key_bytes()` and `index()` are `pub(crate)` API methods on the ratchet Chain, needed for session serialization/debugging

@@ -7,7 +7,7 @@
 **Source:** HANDOFF/backlog/P1_CORE_003_Mycorrhizal_Routing_Activation.md
 
 ### Current State
-Mycorrhizal Routing modules (10 files in `core/src/routing/`) are fully unit-tested but dormant — not wired to production transport dispatch. This includes path selection, quality scoring, and transport optimization.
+Mycorrhizal Routing modules (10 files in `core/src/routing/`) are fully unit-tested but dormant  not wired to production transport dispatch. This includes path selection, quality scoring, and transport optimization.
 
 ### Required Work
 1. Audit current routing module wiring in `core/src/routing/mod.rs`

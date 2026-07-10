@@ -23,13 +23,13 @@ The SCMessenger CLI daemon is running locally with the following endpoints:
 ## Mission
 
 1. **Verify daemon health** using the core_cli_driver skill (`dump_logs`, check for errors)
-2. **Test JSON-RPC WebSocket bridge** — connect to `ws://127.0.0.1:9000/ws` and send `Status` command
-3. **Attempt peer discovery** — check if any peers connect (monitor logs for `Connected` or `PeerDiscovered`)
-4. **Find the user** — the user (Treystu) is the only other expected peer. Check if their identity is in the connection ledger or if they appear via bootstrap.
-5. **Send a test message** — if a peer is found, attempt to send a message via JSON-RPC `Send` command or API `send_message_via_api`
-6. **Inject edge cases** — send malformed JSON-RPC, simulate offline state, attempt empty message
-7. **Document findings** — save results to `HANDOFF/IN_PROGRESS/CORE_DAEMON_TEST_<timestamp>.md`
-8. **Report crashes** — if daemon crashes or hangs, dump logs and save stack trace to `HANDOFF/IN_PROGRESS/CORE_CRASH_REPORT_<timestamp>.md`
+2. **Test JSON-RPC WebSocket bridge**  connect to `ws://127.0.0.1:9000/ws` and send `Status` command
+3. **Attempt peer discovery**  check if any peers connect (monitor logs for `Connected` or `PeerDiscovered`)
+4. **Find the user**  the user (Treystu) is the only other expected peer. Check if their identity is in the connection ledger or if they appear via bootstrap.
+5. **Send a test message**  if a peer is found, attempt to send a message via JSON-RPC `Send` command or API `send_message_via_api`
+6. **Inject edge cases**  send malformed JSON-RPC, simulate offline state, attempt empty message
+7. **Document findings**  save results to `HANDOFF/IN_PROGRESS/CORE_DAEMON_TEST_<timestamp>.md`
+8. **Report crashes**  if daemon crashes or hangs, dump logs and save stack trace to `HANDOFF/IN_PROGRESS/CORE_CRASH_REPORT_<timestamp>.md`
 
 ## Skill Commands Available
 ```bash

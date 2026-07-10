@@ -1,13 +1,13 @@
 # NEXT_ITER_02: Adversarial Security Review of the Fable 5 Sprint Diff
 
-**Priority:** P0 — MANDATORY before the sprint changes are considered mergeable
+**Priority:** P0  MANDATORY before the sprint changes are considered mergeable
 (CLAUDE.md Adversarial Review Protocol: all changes under `core/src/transport/`
 and `core/src/crypto/` require adversarial review)
 **Recommended worker:** sonnet, high effort. Findings rated Critical/High escalate to Fable.
 **Source:** The review was launched during the 2026-07-05/06 Fable session but the
 subagent hit the session token limit before producing output. It must be rerun.
 
-## Scope — review the sprint commit(s) touching:
+## Scope  review the sprint commit(s) touching:
 
 1. `core/src/transport/swarm.rs`
    - New `SwarmEvent2::ListenerFailed` variant, propagated from
@@ -31,12 +31,12 @@ subagent hit the session token limit before producing output. It must be rerun.
 ## Attack surfaces to probe (minimum)
 
 - start_swarm handshake: missed/double signals, timeout-then-late-success state
-  divergence (swarm thread keeps running after the FFI already returned Err —
+  divergence (swarm thread keeps running after the FFI already returned Err 
   what does the Kotlin layer believe vs. what is true?).
 - Reply channels: can an abandoned receiver (caller timed out) make
-  `reply.send().await` park the swarm event loop? (bounded channel of 1 —
+  `reply.send().await` park the swarm event loop? (bounded channel of 1 
   confirm sends can't block forever when the receiver is dropped; tokio mpsc
-  send to a closed channel returns Err immediately — verify that's the case
+  send to a closed channel returns Err immediately  verify that's the case
   in every new arm).
 - `*_blocking` helpers: enumerate every caller and prove none can execute on a
   tokio runtime worker thread (Handle::block_on panics there).
@@ -57,7 +57,7 @@ file, then move this file to `HANDOFF/done/`.
 
 ## Escalate to Fable if
 
-- Any Critical or High finding — Fable authored the diff and owns the fix.
+- Any Critical or High finding  Fable authored the diff and owns the fix.
 
 ---
 **COMPLETE 2026-07-06 (orchestrator): review delivered. VERDICT: NOT MERGEABLE.**

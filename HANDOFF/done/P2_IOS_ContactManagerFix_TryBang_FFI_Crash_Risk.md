@@ -37,12 +37,12 @@ Every other method on this same `extension ContactManager` (`add`, `get`, `list`
 and propagates errors via Swift `throws`. `count()`/`flush()` use the plain
 (non-error-lifting) `rustCall()` helper wrapped in `try!`, which crashes the whole
 app if the underlying Rust call ever panics or returns an unexpected FFI status
-(UniFFI's `rustCall()` — as opposed to `rustCallWithError()` — is documented
+(UniFFI's `rustCall()`  as opposed to `rustCallWithError()`  is documented
 upstream as "panics on any Rust-side error," which is the correct choice only when
 the corresponding Rust function is `#[uniffi::export]`ed as truly infallible).
 
 Whether `count()`/`flush()` on `core/src/store/contacts.rs` `ContactManager` are
-in fact infallible in the Rust source has NOT been confirmed in this sweep — that
+in fact infallible in the Rust source has NOT been confirmed in this sweep  that
 is the open question this task should resolve before or during the fix.
 
 ## Why this matters
@@ -77,17 +77,17 @@ Swift `Error`.
    miswired to the non-throwing `rustCall()` helper in this hand-written
    workaround file: switch both to `rustCallWithError(FfiConverterTypeIronCoreError.lift())`
    and update the Swift signatures to `throws` (this changes the
-   `ContactManagerProtocol` conformance signature for `count()`/`flush()` —
+   `ContactManagerProtocol` conformance signature for `count()`/`flush()` 
    check `ContactManagerProtocol`'s declaration and all callers of
    `.count()`/`.flush()` across the iOS app to update them to `try`/`try?`
    appropriately).
 
 ## Files to Touch
 
-- `iOS/SCMessenger/SCMessenger/ContactManagerFix.swift` [EDIT] — lines 79-89
+- `iOS/SCMessenger/SCMessenger/ContactManagerFix.swift` [EDIT]  lines 79-89
 - Possibly `core/src/store/contacts.rs` or wherever `ContactManager::count`/
   `flush` are defined, to confirm/adjust the Rust-side signature (read-only
-  investigation first — do not change Rust API surface without confirming this
+  investigation first  do not change Rust API surface without confirming this
   is the right layer to fix)
 - Any Swift callers of `.count()`/`.flush()` on `ContactManager` if the
   signature changes to `throws` (grep `iOS/` for `.count()` and `.flush()` on
@@ -95,7 +95,7 @@ Swift `Error`.
 
 ## Verification
 
-No Xcode/toolchain available in this sweep — this is a spec only. A
+No Xcode/toolchain available in this sweep  this is a spec only. A
 build-capable session should:
 1. Confirm the Rust-side fallibility of `count`/`flush` first (read-only).
 2. Apply whichever fix path applies from the plan above.

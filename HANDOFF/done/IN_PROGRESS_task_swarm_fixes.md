@@ -1,7 +1,7 @@
 # Agent Task: Fix transport/swarm.rs + remaining import errors
 
 **Assigned Model:** gemini-3-flash-preview:cloud
-**Task Type:** Quick Fix — Imports & Types
+**Task Type:** Quick Fix  Imports & Types
 
 ## CONTEXT
 After the IronCore struct is created by another agent, there will be remaining errors in:

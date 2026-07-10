@@ -32,7 +32,7 @@ Fix relay server connectivity failures and implement proper fallback mechanisms 
 ### 3. Multi-Transport Bootstrap with Racing
 **File:** `core/src/transport/bootstrap.rs`
 - Replace sequential bootstrap with racing: dial all transports to a relay in parallel
-- Fallback order per relay: QUIC → TCP → WebSocket (WSS on 443, WS on 80)
+- Fallback order per relay: QUIC  TCP  WebSocket (WSS on 443, WS on 80)
 - Circuit breaker integration (already exists in core/src/transport/circuit_breaker.rs)
 - First successful connection wins
 

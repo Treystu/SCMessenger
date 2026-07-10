@@ -19,8 +19,8 @@
 The sprint intentionally left three MeshRepository wrappers as bounded
 `runBlocking` bridge queries because their callers are deep sync UI paths:
 
-- `getTopics()` — caller: `TopicManager.refreshKnownTopics()` (plain fun)
-- `getExternalAddresses()` / `getListeningAddresses()` — callers:
+- `getTopics()`  caller: `TopicManager.refreshKnownTopics()` (plain fun)
+- `getExternalAddresses()` / `getListeningAddresses()`  callers:
   `updateBleIdentityBeacon()`, `setIdentityBeaconInternal()`,
   `encodeMeshMessagePayload()`, `getIdentityExportString()` (all plain funs)
 

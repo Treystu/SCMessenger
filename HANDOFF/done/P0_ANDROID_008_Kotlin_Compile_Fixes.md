@@ -2,8 +2,8 @@
 
 **Priority:** P0 (Build Blocking)  
 **Platform:** Android  
-**Estimated LoC Impact:** 150–250 LoC  
-**Source:** PRODUCTION_ROADMAP_PRIORITIZED.md — P0 Blocker #1  
+**Estimated LoC Impact:** 150250 LoC  
+**Source:** PRODUCTION_ROADMAP_PRIORITIZED.md  P0 Blocker #1  
 **Status:** COMPLETED  
 **Completion Commit:** fd5bbee7e4fa4746c4d82a30e7b85354c7b4f1d1  
 **Completion Date:** 2026-04-22
@@ -36,7 +36,7 @@ Fix 30+ Kotlin compilation errors preventing `./gradlew :app:compileDebugKotlin`
 **Fix Applied:** Added `coroutineScope { async { ... } }` pattern
 
 ### 5. Material 2 vs Material 3 SwipeToDismiss
-**File:** `ContactsScreen.kt:278–312`
+**File:** `ContactsScreen.kt:278312`
 **Error:** `SwipeToDismiss` in Material 3 project
 **Fix Applied:** Added proper Material 2 imports (`androidx.compose.material.SwipeToDismiss`, `rememberDismissState`) and marked with `@OptIn(ExperimentalMaterialApi::class)`
 

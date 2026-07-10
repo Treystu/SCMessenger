@@ -12,7 +12,7 @@ User reports clicking send button 100+ times with no response. No `SEND_BUTTON_C
 ## Root Cause
 UI thread was blocked by synchronous FFI calls during recomposition. Specifically:
 - `ChatScreen.kt` lines 56-57 called `viewModel.getContactForPeer()` and line 67 called `viewModel.isPeerAvailable()` synchronously during every recomposition
-- These called `canonicalContactId()` which invoked `ironCore?.resolveToIdentityId()` — a synchronous FFI call to Rust
+- These called `canonicalContactId()` which invoked `ironCore?.resolveToIdentityId()`  a synchronous FFI call to Rust
 - When the Rust core was busy, these calls blocked the UI thread for seconds, preventing click events from being dispatched
 - The `SEND_BUTTON_CLICKED` Timber log never executed because the onClick lambda never ran
 
@@ -24,7 +24,7 @@ UI thread was blocked by synchronous FFI calls during recomposition. Specificall
 
 3. **`ChatScreen.kt`**: Wrapped `getContactForPeer()` and `isPeerAvailable()` in `remember(normalizedPeerId)` so they're only recomputed when the conversation changes, not on every recomposition triggered by new messages or state updates.
 
-4. **`ConversationsViewModel.kt`**: Kept `getContactForPeer()` and `isPeerAvailable()` as non-suspend functions (since ConversationsScreen.kt also uses them in item composables) — the in-memory cache makes repeated calls fast.
+4. **`ConversationsViewModel.kt`**: Kept `getContactForPeer()` and `isPeerAvailable()` as non-suspend functions (since ConversationsScreen.kt also uses them in item composables)  the in-memory cache makes repeated calls fast.
 
 ## Build Verification
 - Rust `cargo check`: PASSED

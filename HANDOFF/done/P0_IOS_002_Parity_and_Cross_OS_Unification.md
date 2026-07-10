@@ -1,4 +1,4 @@
-# iOS/CORE/CLI Parity Plan — Android Fixes + Cross-OS Mesh Unification
+# iOS/CORE/CLI Parity Plan  Android Fixes + Cross-OS Mesh Unification
 
 **Date:** 2026-04-23
 **Priority:** P0
@@ -12,7 +12,7 @@
 This plan documents all Android fixes and cross-platform unification work that must be mirrored to iOS before the MacBook returns. The goal is a unified mesh network where Android, iOS, and CLI peers discover and message each other seamlessly on the same LAN.
 
 **Android fixes already landed (must be mirrored to iOS):**
-1. Cached bootstrap nodes (ANR fix — removed blocking network I/O from static init)
+1. Cached bootstrap nodes (ANR fix  removed blocking network I/O from static init)
 2. Async settings loading with default fallback
 3. Async diagnostics export (non-blocking I/O)
 4. Settings change debouncing (500ms)
@@ -54,7 +54,7 @@ This plan documents all Android fixes and cross-platform unification work that m
 
 **Contact Add Fails:**
 - iOS Settings shows identity hash (`caccf865...`)
-- User tries to add iOS contact from CLI: `scm contact add caccf865...` → fails
+- User tries to add iOS contact from CLI: `scm contact add caccf865...`  fails
 - CLI expects libp2p Peer ID (`12D3Koo...`)
 
 **QR Code Incompatibility:**
@@ -94,7 +94,7 @@ static var defaultBootstrapNodes: [String] {
 
 #### 3.1.2 Async Settings Loading with Default Fallback
 
-**File:** `ios/SCMessenger/SCMessenger/Data/MeshRepository.swift` — `startMeshService(config:)`
+**File:** `ios/SCMessenger/SCMessenger/Data/MeshRepository.swift`  `startMeshService(config:)`
 
 **Current (blocking):**
 ```swift
@@ -106,7 +106,7 @@ if settings?.internetEnabled == true {
 
 **Fix:** Use default settings for initial config, then async reload:
 ```swift
-// Use default settings for initial config — no blocking I/O
+// Use default settings for initial config  no blocking I/O
 let defaultSettings = MeshSettings(
     discoveryIntervalMs: 30000,
     batteryFloor: 20
@@ -130,7 +130,7 @@ Task {
 
 #### 3.1.3 Async Diagnostics Export
 
-**File:** `ios/SCMessenger/SCMessenger/Data/MeshRepository.swift` — `exportDiagnostics()`
+**File:** `ios/SCMessenger/SCMessenger/Data/MeshRepository.swift`  `exportDiagnostics()`
 
 **Current (synchronous, blocks main thread):**
 ```swift
@@ -216,13 +216,13 @@ try? meshService?.startSwarm(listenAddr: "/ip4/0.0.0.0/tcp/0")
 
 **Fix (match Android):**
 ```swift
-// Static port for LAN discoverability — same as Android
+// Static port for LAN discoverability  same as Android
 try? meshService?.startSwarm(listenAddr: "/ip4/0.0.0.0/tcp/9001")
 ```
 
 **Impact:** iOS is reachable at predictable port 9001. CLI can dial `/ip4/<lan_ip>/tcp/9001`.
 
-#### 3.2.2 Identity Display Fix — Show libp2p Peer ID
+#### 3.2.2 Identity Display Fix  Show libp2p Peer ID
 
 **File:** `ios/SCMessenger/SCMessenger/Views/Settings/SettingsView.swift`
 
@@ -264,7 +264,7 @@ HStack {
 
 #### 3.2.3 QR Code Format Unification
 
-**File:** `ios/SCMessenger/SCMessenger/Views/Settings/SettingsView.swift` — `IdentityQrSheet`
+**File:** `ios/SCMessenger/SCMessenger/Views/Settings/SettingsView.swift`  `IdentityQrSheet`
 
 **Current:** QR code contains full identity export JSON.
 
@@ -278,7 +278,7 @@ let qrPayload = "\(peerId):\(publicKey)"
 
 #### 3.2.4 Diagnostics File Sharing (iOS)
 
-**File:** New — `ios/SCMessenger/SCMessenger/Views/Settings/DiagnosticsView.swift` or `SettingsView.swift`
+**File:** New  `ios/SCMessenger/SCMessenger/Views/Settings/DiagnosticsView.swift` or `SettingsView.swift`
 
 **iOS doesn't use FileProvider like Android.** Use `UIActivityViewController`:
 ```swift
@@ -318,7 +318,7 @@ func shareDiagnostics() {
 3. Add contact: Same method
 
 **CLI Implementation:**
-1. `scm contact add <peer_id> <pubkey>` — already works
+1. `scm contact add <peer_id> <pubkey>`  already works
 2. QR scan not applicable for CLI
 
 #### 3.3.2 Unified mDNS Service Discovery
@@ -346,7 +346,7 @@ let txtRecord: [String: String] = [
 
 **Requirement:** Both mobile platforms must also refresh their advertised addresses when network changes (WiFi switch, IP renew).
 
-**iOS:** `NWPathMonitor` or `SCNetworkReachability` to detect network changes → re-broadcast mDNS with new IP.
+**iOS:** `NWPathMonitor` or `SCNetworkReachability` to detect network changes  re-broadcast mDNS with new IP.
 **Android:** Already handled by network callbacks.
 
 ---
@@ -365,7 +365,7 @@ let txtRecord: [String: String] = [
 string get_libp2p_peer_id();
 ```
 
-**Actually NOT needed** — `get_identity_info().libp2p_peer_id` is already available.
+**Actually NOT needed**  `get_identity_info().libp2p_peer_id` is already available.
 
 #### 3.4.2 Contact Lookup by Either ID Format
 
@@ -419,31 +419,31 @@ pub fn find_by_any_id(&self, any_id: &str) -> Option<Contact> {
 2. Check listening addresses via logs or API
 3. Verify port 9001 appears
 
-### Test 2: iOS→CLI LAN Discovery
+### Test 2: iOSCLI LAN Discovery
 1. Start CLI daemon on same LAN
 2. Start iOS app
 3. Check CLI `peers` output for iOS Peer ID
 4. Check iOS logs for CLI peer discovery
 
-### Test 3: iOS→CLI Message Delivery
+### Test 3: iOSCLI Message Delivery
 1. Add iOS Peer ID to CLI contacts
 2. Send message from CLI to iOS
 3. Verify message appears in iOS chat UI
 
-### Test 4: CLI→iOS Message Delivery
+### Test 4: CLIiOS Message Delivery
 1. Add CLI Peer ID to iOS contacts
 2. Send message from iOS to CLI
 3. Verify message appears in CLI console
 
-### Test 5: Android→iOS Message Delivery
+### Test 5: AndroidiOS Message Delivery
 1. Start both Android and iOS on same LAN
 2. Add each other as contacts using Peer IDs
-3. Send message Android → iOS
-4. Send message iOS → Android
+3. Send message Android  iOS
+4. Send message iOS  Android
 
 ### Test 6: QR Code Cross-Scan
-1. Generate QR on Android → scan with iOS → add contact
-2. Generate QR on iOS → scan with Android → add contact
+1. Generate QR on Android  scan with iOS  add contact
+2. Generate QR on iOS  scan with Android  add contact
 3. Verify both contacts work for messaging
 
 ### Test 7: iOS Settings No ANR
@@ -496,18 +496,18 @@ All Android fixes have been implemented, compiled, and verified:
 
 | Fix | File | Status |
 |-----|------|--------|
-| Create Identity race condition | `MeshRepository.kt` | ✅ Fixed — `ensureServiceInitializedBlocking()` |
-| Settings screen defaults | `SettingsViewModel.kt` | ✅ Fixed — defaults set immediately |
-| Settings reload on service start | `SettingsScreen.kt` | ✅ Fixed — `LaunchedEffect(serviceState)` |
-| Diagnostics export crash | `file_paths.xml` | ✅ Fixed — `<cache-path>` added |
-| Bootstrap ANR | `MeshRepository.kt` | ✅ Fixed — cached static nodes |
-| Async settings loading | `MeshRepository.kt` | ✅ Fixed — default settings first |
-| Settings debouncing | `SettingsViewModel.kt` | ✅ Fixed — 500ms throttle |
-| Async diagnostics | `MeshRepository.kt` | ✅ Fixed — IO dispatcher |
-| Static listen port | `MeshRepository.kt` | ✅ Fixed — port 9001 |
-| Identity display labels | `SettingsScreen.kt` | ✅ Fixed — "Peer ID (Network)" + "Identity Hash" |
-| QR format unified | `MeshRepository.kt` | ✅ Fixed — `"peer_id"` primary, `"device_id"` added |
-| Contact import parser | `ContactImportParser.kt` | ✅ Fixed — reads `"peer_id"` first |
+| Create Identity race condition | `MeshRepository.kt` |  Fixed  `ensureServiceInitializedBlocking()` |
+| Settings screen defaults | `SettingsViewModel.kt` |  Fixed  defaults set immediately |
+| Settings reload on service start | `SettingsScreen.kt` |  Fixed  `LaunchedEffect(serviceState)` |
+| Diagnostics export crash | `file_paths.xml` |  Fixed  `<cache-path>` added |
+| Bootstrap ANR | `MeshRepository.kt` |  Fixed  cached static nodes |
+| Async settings loading | `MeshRepository.kt` |  Fixed  default settings first |
+| Settings debouncing | `SettingsViewModel.kt` |  Fixed  500ms throttle |
+| Async diagnostics | `MeshRepository.kt` |  Fixed  IO dispatcher |
+| Static listen port | `MeshRepository.kt` |  Fixed  port 9001 |
+| Identity display labels | `SettingsScreen.kt` |  Fixed  "Peer ID (Network)" + "Identity Hash" |
+| QR format unified | `MeshRepository.kt` |  Fixed  `"peer_id"` primary, `"device_id"` added |
+| Contact import parser | `ContactImportParser.kt` |  Fixed  reads `"peer_id"` first |
 
 ## Appendix B: iOS Implementation Ready Checklist
 

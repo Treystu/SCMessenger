@@ -8,7 +8,7 @@ time_limit_ms: 120000
 phase: "MICRO"
 ---
 
-# MICRO_ANR_001: MeshRepository.kt Safe Return — Relay Identity Guard
+# MICRO_ANR_001: MeshRepository.kt Safe Return  Relay Identity Guard
 
 ## Objective
 Convert the `IllegalStateException` throw at `MeshRepository.kt:3986` into a safe, non-fatal return path that logs a warning and aborts the current operation gracefully.

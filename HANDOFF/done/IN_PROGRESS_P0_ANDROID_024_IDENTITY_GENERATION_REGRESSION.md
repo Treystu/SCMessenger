@@ -1,4 +1,4 @@
-# P0 — Android: Identity Generation Regression in Onboarding Flow
+# P0  Android: Identity Generation Regression in Onboarding Flow
 
 **Status:** OPEN
 **Severity:** P0 (blocker for new users)
@@ -9,14 +9,14 @@
 ## Symptoms (user-reported)
 
 - Onboarding flow's identity-creation step fails / misbehaves after the v0.2.3 update.
-- No FATAL exception observed in logcat for the identity path itself — user-visible failure is the gating signal.
+- No FATAL exception observed in logcat for the identity path itself  user-visible failure is the gating signal.
 
 ## What I could observe without modifying code
 
 1. `MeshRepository.createIdentity()` calls `ironCore.initializeIdentity()` and then `setNickname()`.
-2. Logcat shows `initializeIdentity` being invoked **8–10 times in a single second** during cold start. This is multi-component contention, not necessarily a user-visible failure, but it is suspicious.
-3. Identity *does* persist (cached fields visible: `peerId=12D3KooW…`, `id=df73bbfa…`, salt set, `identity_keys` blob in db) — but the pattern of repeated calls could mask a race where the *final* state is wrong.
-4. `OnboardingScreen.kt` `IdentityStep` does not appear to await `createIdentity` to completion before navigating forward — needs verification.
+2. Logcat shows `initializeIdentity` being invoked **810 times in a single second** during cold start. This is multi-component contention, not necessarily a user-visible failure, but it is suspicious.
+3. Identity *does* persist (cached fields visible: `peerId=12D3KooW`, `id=df73bbfa`, salt set, `identity_keys` blob in db)  but the pattern of repeated calls could mask a race where the *final* state is wrong.
+4. `OnboardingScreen.kt` `IdentityStep` does not appear to await `createIdentity` to completion before navigating forward  needs verification.
 
 ## Repro steps (for the subagent that picks this up)
 
@@ -30,18 +30,18 @@
 
 | File | Why |
 |---|---|
-| `android/app/src/main/java/com/scmessenger/android/onboarding/OnboardingScreen.kt` (lines 110–138) | The `IdentityStep` `createIdentity` call site. Check whether it `await`s the suspend function or fires-and-forgets; check for duplicate invocations on recomposition. |
-| `android/app/src/main/java/com/scmessenger/android/mesh/MeshRepository.kt` | `createIdentity()` — does it guard against re-entry? Does it surface errors to the UI or swallow them? |
+| `android/app/src/main/java/com/scmessenger/android/onboarding/OnboardingScreen.kt` (lines 110138) | The `IdentityStep` `createIdentity` call site. Check whether it `await`s the suspend function or fires-and-forgets; check for duplicate invocations on recomposition. |
+| `android/app/src/main/java/com/scmessenger/android/mesh/MeshRepository.kt` | `createIdentity()`  does it guard against re-entry? Does it surface errors to the UI or swallow them? |
 | `core/src/identity/` (IronCore FFI) | Confirm `initializeIdentity` is idempotent. If two callers race, do they clobber each other? |
-| `core/src/identity/identity_manager.rs` or equivalent | Salt/keys generation — could the regression be a deterministic-vs-random change? |
+| `core/src/identity/identity_manager.rs` or equivalent | Salt/keys generation  could the regression be a deterministic-vs-random change? |
 
 ## Hypothesis (entry point for the subagent)
 
 The most likely regression is **one of:**
 
-1. **Re-entrancy in `createIdentity()`** — recomposition or a LaunchedEffect re-fires the call, and the second call fails or overwrites the first.
-2. **Missing `await` in `IdentityStep`** — the function returns before identity is actually persisted; navigation proceeds, next step reads stale state.
-3. **Error swallow in `MeshRepository.createIdentity`** — returns `Result::Err` that the UI does not display, leaving the spinner forever.
+1. **Re-entrancy in `createIdentity()`**  recomposition or a LaunchedEffect re-fires the call, and the second call fails or overwrites the first.
+2. **Missing `await` in `IdentityStep`**  the function returns before identity is actually persisted; navigation proceeds, next step reads stale state.
+3. **Error swallow in `MeshRepository.createIdentity`**  returns `Result::Err` that the UI does not display, leaving the spinner forever.
 
 ## Cross-OS impact
 
@@ -75,7 +75,7 @@ If the bug is in `OnboardingScreen.kt` only, Android-only.
 
 Source on Windows: `/mnt/e/SCMessenger-Github-Repo/SCMessenger` (CRLF).
 Build copy on Linux ext4: `/home/scmessenger/scmessenger-build/` (LF, faster).
-Canonical build command lives in `HANDOFF/STATE/2026-06-05_ORCHESTRATION_INDEX.md` § Build Environment.
+Canonical build command lives in `HANDOFF/STATE/2026-06-05_ORCHESTRATION_INDEX.md`  Build Environment.
 
 ## Reference
 

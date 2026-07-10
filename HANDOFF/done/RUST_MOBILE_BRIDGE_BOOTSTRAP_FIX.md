@@ -11,7 +11,7 @@ Remove the entire method (doc comment + body). It references `self.bootstrap_add
 ### 2. Simplify get_connection_path_state() (lines ~334-352)
 Remove the `let bootstrap = self.bootstrap_addrs.lock().clone();` line.
 Remove the `if bootstrap.is_empty()` / `Bootstrapping` / `RelayFallback` branches.
-Simplified logic: if peers empty → Disconnected, else if listeners && !symmetric → DirectPreferred, else → RelayOnly.
+Simplified logic: if peers empty  Disconnected, else if listeners && !symmetric  DirectPreferred, else  RelayOnly.
 
 ### 3. Remove diagnostics line (line ~365)
 Delete `"bootstrap_addrs": self.bootstrap_addrs.lock().clone(),`
@@ -36,5 +36,5 @@ This test only tests the bootstrapping path state which no longer exists. Remove
 ## Verification
 After all changes, run: `cargo check --workspace`
 
-[NATIVE_SUB_AGENT: RESEARCH] — Read the file and map all bootstrap references before editing.
-[NATIVE_SUB_AGENT: LINT_FORMAT] — Run cargo check after editing to verify compilation.
+[NATIVE_SUB_AGENT: RESEARCH]  Read the file and map all bootstrap references before editing.
+[NATIVE_SUB_AGENT: LINT_FORMAT]  Run cargo check after editing to verify compilation.

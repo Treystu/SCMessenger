@@ -4,7 +4,7 @@
 
 ## P1: Network Type Debounce in NetworkDetector.kt
 
-**Source:** 2026-05-13 MASTER AUDIT — No network type debounce in `NetworkDetector.kt` (transport flapping risk)
+**Source:** 2026-05-13 MASTER AUDIT  No network type debounce in `NetworkDetector.kt` (transport flapping risk)
 
 ### Current State
 `NetworkDetector.kt` reacts to network type changes immediately without debouncing. Rapid network type transitions (e.g., WiFi to cellular and back within milliseconds) can cause transport flapping where the mesh stack rapidly switches between transports.

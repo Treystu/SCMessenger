@@ -2,13 +2,13 @@
 
 **Priority:** P0
 **Platform:** Android (Gradle/Test)
-**Source:** User build report — `./gradlew :app:assembleDebugUnitTest` / `:app:assembleDebugAndroidTest` failed with Kotlin daemon OOM
+**Source:** User build report  `./gradlew :app:assembleDebugUnitTest` / `:app:assembleDebugAndroidTest` failed with Kotlin daemon OOM
 
 ## Problem
 Clean build with tests (`:app:clean`, `:app:assembleDebug`, `:app:assembleDebugUnitTest`, `:app:assembleDebugAndroidTest`) fails:
 1. **Kotlin daemon crash**: `Connection to the Kotlin daemon has been unexpectedly lost`
 2. **JVM OOM**: `There is insufficient memory for the Java Runtime Environment to continue`
-3. **Debug build itself succeeds** — the failure is specific to test assembly
+3. **Debug build itself succeeds**  the failure is specific to test assembly
 
 The user confirmed: *"debug built this time.. let's treat that last build fail as specific to the tests"*
 
@@ -48,4 +48,4 @@ The user confirmed: *"debug built this time.. let's treat that last build fail a
 - [ ] `./gradlew :app:testDebugUnitTest` runs and reports test results
 - [ ] No Kotlin daemon crashes or JVM OOM errors
 
-[NATIVE_SUB_AGENT: RESEARCH] — Audit build.gradle.kts and gradle.properties before proposing fixes.
+[NATIVE_SUB_AGENT: RESEARCH]  Audit build.gradle.kts and gradle.properties before proposing fixes.

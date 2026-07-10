@@ -8,7 +8,7 @@
 **Agent:** implementer
 **Budget:** 1200s (MIXED tier)
 **Phase:** v0.2.1 P0 Android stability
-**Source:** MASTER_BUG_TRACKER.md P0 Android auto-backup issue + planfromclaudeforhermes §2 Phase D.1
+**Source:** MASTER_BUG_TRACKER.md P0 Android auto-backup issue + planfromclaudeforhermes 2 Phase D.1
 **Depends on:** P0_BUILD_001
 
 ---
@@ -69,7 +69,7 @@ Create `android/app/src/main/res/xml/data_extraction_rules.xml`:
 
 ## File Targets
 
-- `android/app/src/main/AndroidManifest.xml` [EDIT — add allowBackup=false, backup_rules, dataExtractionRules]
+- `android/app/src/main/AndroidManifest.xml` [EDIT  add allowBackup=false, backup_rules, dataExtractionRules]
 - `android/app/src/main/res/xml/backup_rules.xml` [NEW]
 - `android/app/src/main/res/xml/data_extraction_rules.xml` [NEW]
 
@@ -88,7 +88,7 @@ aapt dump xmltree app/build/outputs/apk/debug/app-debug.apk AndroidManifest.xml 
 2. Built APK manifest has `android:allowBackup="false"`
 3. `backup_rules.xml` excludes all 5 sensitive paths
 4. `data_extraction_rules.xml` excludes contacts/identity/sled
-5. Manual: uninstall app, reinstall → no stale data restored
+5. Manual: uninstall app, reinstall  no stale data restored
 6. Commit: `android: v0.2.1 disable auto-backup for sensitive data`
 
 ## CRITICAL

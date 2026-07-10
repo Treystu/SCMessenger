@@ -3,7 +3,7 @@
 **Priority:** P0
 **Type:** BUILD
 **Platform:** Windows CLI (Rust)
-**Estimated LoC Impact:** 200–400 LoC
+**Estimated LoC Impact:** 200400 LoC
 **Status:** COMPLETED
 **Date Completed:** 2026-04-22
 
@@ -33,7 +33,7 @@ Stabilize the Windows CLI integration tests and add BLE daemon edge-case handlin
    - Graceful fallback when BLE is unavailable
 
 ## Verification Checklist
-- [x] `cargo test -p scmessenger-cli` runs and passes ≥10 tests
+- [x] `cargo test -p scmessenger-cli` runs and passes 10 tests
 - [x] `cargo test --workspace` still passes library tests
 - [x] `cargo clippy -p scmessenger-cli` passes
 - [x] Windows build produces runnable `.exe`
@@ -59,10 +59,10 @@ Stabilize the Windows CLI integration tests and add BLE daemon edge-case handlin
 - Message relay configuration
 
 ## Files Modified
-- `cli/src/main.rs` — Testable modules already exported via lib.rs
-- `cli/src/cli.rs` — Unit tests for CLI parsing
-- `cli/tests/integration.rs` — Integration tests for relay and identity
-- `cli/src/ble_daemon.rs` — BLE edge case handling with Windows support
+- `cli/src/main.rs`  Testable modules already exported via lib.rs
+- `cli/src/cli.rs`  Unit tests for CLI parsing
+- `cli/tests/integration.rs`  Integration tests for relay and identity
+- `cli/src/ble_daemon.rs`  BLE edge case handling with Windows support
 
 ## Technical Notes
 

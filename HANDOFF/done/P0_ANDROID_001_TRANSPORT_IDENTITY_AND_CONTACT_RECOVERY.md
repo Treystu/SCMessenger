@@ -11,7 +11,7 @@
 **File:** `android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt` (line ~5971)
 
 When `canonicalContact == null`, the function now:
-- Checks `isBootstrapRelayPeerFromKey(normalizedKey)` — returns `null` for relay peers
+- Checks `isBootstrapRelayPeerFromKey(normalizedKey)`  returns `null` for relay peers
 - Validates the peer with `validatePeerBeforeContactCreation(peerId, normalizedKey)` before creating a contact
 - Calls `createEmergencyContact(normalizedKey)` to create a persistent contact entry
 - Logs via `logIdentityResolutionDetails(normalizedKey, emergencyContact, createdNew = true)`

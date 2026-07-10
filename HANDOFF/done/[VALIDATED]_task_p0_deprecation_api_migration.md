@@ -8,16 +8,16 @@
 **Budget:** 1200
 **Assigned to:** implementer
 **Created:** 2026-05-13
-**Source:** 2026-05-13 MASTER AUDIT — Deprecated API usage with @Suppress("DEPRECATION") at targetSdk=35
+**Source:** 2026-05-13 MASTER AUDIT  Deprecated API usage with @Suppress("DEPRECATION") at targetSdk=35
 
 ### Current State
 Two remaining @Suppress("DEPRECATION") sites require API migration:
 
-1. **MdnsServiceDiscovery.kt:459** — `nsdManager?.resolveService(serviceInfo, resolveListener)` is deprecated in API 33.
+1. **MdnsServiceDiscovery.kt:459**  `nsdManager?.resolveService(serviceInfo, resolveListener)` is deprecated in API 33.
    - Replacement: `resolveService(NsdServiceInfo, Executor, NsdManager.ResolveListener)`
    - Use `ContextCompat.getMainExecutor(context)` for the executor on API 33+, fallback to legacy API on older versions.
 
-2. **BleGattServer.kt:30** — `BluetoothManager.openGattServer(context, callback)` is deprecated in API 31.
+2. **BleGattServer.kt:30**  `BluetoothManager.openGattServer(context, callback)` is deprecated in API 31.
    - Replacement: `openGattServer(Context, Executor, BluetoothGattServerCallback)`
    - Use `ContextCompat.getMainExecutor(context)` for the executor on API 31+, fallback to legacy API on older versions.
    - Remove class-level @Suppress and use method-level suppression only in the fallback branch.

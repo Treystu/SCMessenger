@@ -119,26 +119,26 @@ documentation trail if the decision is to keep this disabled.
 ## RESOLUTION (2026-07-06, native Fable session)
 
 Operator sign-off was given explicitly ("Address ... to restore the disabled
-Android unit test suites" — session instruction 2026-07-05). Actions taken:
+Android unit test suites"  session instruction 2026-07-05). Actions taken:
 
 1. `android/app/build.gradle`: removed the `sourceSets.test/androidTest
    { java.srcDirs = [] }` emptying and the
    `tasks.withType(Test).configureEach { enabled = false }` block.
-   (The test dependencies were NOT actually commented out at resolution time —
+   (The test dependencies were NOT actually commented out at resolution time 
    that part of this file had gone stale; they were already active.)
 2. First real compile in a month surfaced drift, triaged as follows:
    - `MeshRepositoryTest.kt`: 4 tests wrapped in `runTest` (the
      `attemptWifiThenBleFallback` helper became suspend in the Fable 5 sprint).
    - `ConversationsViewModelTest.kt`: added the new `MessageRecord.status` param.
    - `IdentityViewModelTest.kt` + `IdentityCreationFlowTest.kt`: quarantined to
-     `android/app/src/test-quarantine/` (tracked, not deleted) — restoration is
+     `android/app/src/test-quarantine/` (tracked, not deleted)  restoration is
      `HANDOFF/todo/NEXT_ITER_01_Compile_Gates_And_Test_Triage.md`, which also
      owns the first full green run and per-test triage.
 3. `.claude/rules/android.md` / CLAUDE.md's RoleNavigationPolicyTest gate is
    real again (executes instead of NO-SOURCE skip).
 
 Investigation of the original disable (question 1 in this file): no technical
-blocker was found in the build files themselves — dependencies were intact and
+blocker was found in the build files themselves  dependencies were intact and
 main-source compilation was never the issue; the plausible motive remains
 "tests were failing/drifted and blocking builds." The honest verification
 story is now: gate re-enabled, drift triaged in the open via NEXT_ITER_01.

@@ -1,7 +1,7 @@
 # Agent Task: Test Compilation and Execution Gate
 
 **Model:** deepseek-v4-flash:cloud (fast reasoning)
-**Priority:** P1 — Verify test suite compiles and basic tests pass
+**Priority:** P1  Verify test suite compiles and basic tests pass
 
 ## Context
 The workspace compiles cleanly (`cargo check --workspace`, `cargo clippy`, `cargo fmt` all pass). Integration tests were recently fixed for the `prepare_message` signature change (String args). The test build requires dlltool on PATH for the GNU toolchain.
@@ -41,7 +41,7 @@ The workspace compiles cleanly (`cargo check --workspace`, `cargo clippy`, `carg
 
 ## Evidence Log (Orchestrator)
 
-**Status: BLOCKED — Pre-existing Windows rlib metadata issue (P0_BUILD_004)**
+**Status: BLOCKED  Pre-existing Windows rlib metadata issue (P0_BUILD_004)**
 **Date: 2026-05-01**
 **Agent: Master Orchestrator (kimi-k2.6:cloud)**
 

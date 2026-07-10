@@ -1,7 +1,7 @@
 # Agent Task: Android Gradle Build Verification
 
 **Model:** gemma4:31b:cloud (lightweight)
-**Priority:** P1 — Needed for Android deployment
+**Priority:** P1  Needed for Android deployment
 
 ## Context
 The SCMessenger Android build needs verification. The core Rust crate compiles cleanly (`cargo check --workspace` passes). The build.gradle already has the GNU target fix for UniFFI binding generation.

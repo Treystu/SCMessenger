@@ -1,28 +1,28 @@
-# Android Overhaul Status — 2026-04-23
+# Android Overhaul Status  2026-04-23
 
 ## Fixes Applied Today
 
 | Fix | File | Status |
 |-----|------|--------|
-| Create Identity race condition | `MeshRepository.kt` | **DEPLOYED** — `ensureServiceInitializedBlocking()` waits for service startup |
-| Settings screen defaults | `SettingsViewModel.kt` | **DEPLOYED** — defaults set immediately, no missing sections |
-| Settings reload on service start | `SettingsScreen.kt` | **DEPLOYED** — `LaunchedEffect(serviceState)` refreshes identity |
-| Diagnostics export crash | `file_paths.xml` | **DEPLOYED** — added `<cache-path>` for FileProvider |
-| Bootstrap ANR | `MeshRepository.kt` | **DEPLOYED** — cached static nodes, no network I/O on init |
-| Async settings loading | `MeshRepository.kt` | **DEPLOYED** — default settings first, async reload after |
-| Settings debouncing | `SettingsViewModel.kt` | **DEPLOYED** — 500ms timestamp-based throttle |
-| Async diagnostics | `MeshRepository.kt` | **DEPLOYED** — `exportDiagnosticsAsync()` on IO dispatcher |
-| Static listen port | `MeshRepository.kt` | **DEPLOYED** — port 9001 for LAN discovery |
+| Create Identity race condition | `MeshRepository.kt` | **DEPLOYED**  `ensureServiceInitializedBlocking()` waits for service startup |
+| Settings screen defaults | `SettingsViewModel.kt` | **DEPLOYED**  defaults set immediately, no missing sections |
+| Settings reload on service start | `SettingsScreen.kt` | **DEPLOYED**  `LaunchedEffect(serviceState)` refreshes identity |
+| Diagnostics export crash | `file_paths.xml` | **DEPLOYED**  added `<cache-path>` for FileProvider |
+| Bootstrap ANR | `MeshRepository.kt` | **DEPLOYED**  cached static nodes, no network I/O on init |
+| Async settings loading | `MeshRepository.kt` | **DEPLOYED**  default settings first, async reload after |
+| Settings debouncing | `SettingsViewModel.kt` | **DEPLOYED**  500ms timestamp-based throttle |
+| Async diagnostics | `MeshRepository.kt` | **DEPLOYED**  `exportDiagnosticsAsync()` on IO dispatcher |
+| Static listen port | `MeshRepository.kt` | **DEPLOYED**  port 9001 for LAN discovery |
 
 ## Pending Issues for Next Session
 
 ### Identity Display (CRITICAL-5 from ID audit)
 - **File:** `ui/screens/SettingsScreen.kt`, `ui/identity/IdentityScreen.kt`
-- **Issue:** Labels `identity_id` as "Peer ID" — users copy wrong ID
+- **Issue:** Labels `identity_id` as "Peer ID"  users copy wrong ID
 - **Fix:** Rename to "Identity Hash", add "Peer ID (Network)" showing `libp2p_peer_id`
 
 ### QR Code Format (CRITICAL-1 from ID audit)
-- **File:** `data/MeshRepository.kt` — `getIdentityExportString()`
+- **File:** `data/MeshRepository.kt`  `getIdentityExportString()`
 - **Issue:** QR exports `"identity_id"` as primary ID, creates broken contacts
 - **Fix:** Change to `"peer_id": "<libp2p_peer_id>"`, add `"device_id"`
 
@@ -40,14 +40,14 @@
 
 | Feature | Android | iOS | CLI | Status |
 |---------|---------|-----|-----|--------|
-| Static port 9001 | ✅ | ❌ (ephemeral) | ✅ (9001) | iOS needs fix |
-| Bootstrap caching | ✅ | ❌ (network I/O) | N/A | iOS needs fix |
-| Settings debounce | ✅ | ❌ | N/A | iOS needs fix |
-| Async diagnostics | ✅ | ❌ (sync) | N/A | iOS needs fix |
-| Peer ID display | ⚠️ (wrong label) | ⚠️ (shows hash) | ✅ | All need fix |
-| QR format | ⚠️ (exports hash) | ⚠️ (exports hash) | N/A | All need fix |
-| mDNS TXT records | ⚠️ (unknown format) | ⚠️ (unknown format) | N/A | Needs spec |
-| Contact add by Peer ID | ✅ | ❓ | ✅ | Needs test |
+| Static port 9001 |  |  (ephemeral) |  (9001) | iOS needs fix |
+| Bootstrap caching |  |  (network I/O) | N/A | iOS needs fix |
+| Settings debounce |  |  | N/A | iOS needs fix |
+| Async diagnostics |  |  (sync) | N/A | iOS needs fix |
+| Peer ID display |  (wrong label) |  (shows hash) |  | All need fix |
+| QR format |  (exports hash) |  (exports hash) | N/A | All need fix |
+| mDNS TXT records |  (unknown format) |  (unknown format) | N/A | Needs spec |
+| Contact add by Peer ID |  |  |  | Needs test |
 
 ## Next Steps
 
@@ -55,12 +55,12 @@
 2. **Identity display fix:** Update SettingsScreen labels, add libp2p Peer ID display
 3. **QR format fix:** Update `getIdentityExportString()` on both platforms
 4. **iOS parity:** Implement all Android fixes in Swift
-5. **Cross-OS test:** Android ↔ iOS ↔ CLI LAN messaging
+5. **Cross-OS test:** Android  iOS  CLI LAN messaging
 
 ## Agent Status
 
-- **implementer_1776983499** — Running, investigating Settings screen regression
-- ** architect_1776981804** — Stale (crashed)
-- **precision-validator_1776981818** — Stale (crashed)
+- **implementer_1776983499**  Running, investigating Settings screen regression
+- ** architect_1776981804**  Stale (crashed)
+- **precision-validator_1776981818**  Stale (crashed)
 
 *Prepared for full Android overhaul + iOS parity implementation*

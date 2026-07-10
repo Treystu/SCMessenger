@@ -15,7 +15,7 @@ The original "can't find crate for core" error was a symptom of deeper issues:
 
 3. **Incorrect `#[cfg]` guards**: `mdns` and `upnp` code was guarded with `#[cfg(not(target_arch = "wasm32"))]` but not `not(target_os = "android"))`. Since libp2p's `mdns` and `upnp` features aren't available on Android, this caused unresolved import/field errors.
 
-4. **Invalid `#[cfg]` block in match arms**: A `#[cfg(...)] { arm1, arm2 }` block inside a match expression is invalid Rust — each arm needs its own `#[cfg]`.
+4. **Invalid `#[cfg]` block in match arms**: A `#[cfg(...)] { arm1, arm2 }` block inside a match expression is invalid Rust  each arm needs its own `#[cfg]`.
 
 5. **Unused `Toggle` import on Android**: `Toggle` was only used by the `mdns` field, which is cfg'd out on Android.
 
@@ -43,14 +43,14 @@ The original "can't find crate for core" error was a symptom of deeper issues:
 - Added `#[allow(dead_code)]` to Android stub `connect_quic`
 
 ## Verification
-- ✅ `cargo ndk -t x86_64-linux-android build -p scmessenger-core` — zero errors, zero warnings
-- ✅ `cargo ndk -t aarch64-linux-android build -p scmessenger-core` — zero errors, zero warnings
-- ✅ `cargo ndk -t x86_64-linux-android -t aarch64-linux-android build -p scmessenger-core` — both succeed
-- ✅ Gradle `:app:assembleDebug` passes Rust compilation stage
-- ⚠️ Gradle `:app:assembleDebug` fails at Kotlin compilation (pre-existing `MeshForegroundService.kt:474` syntax error — unrelated)
-- ⚠️ APK on-device testing not yet possible (Kotlin issue blocks full APK build)
+-  `cargo ndk -t x86_64-linux-android build -p scmessenger-core`  zero errors, zero warnings
+-  `cargo ndk -t aarch64-linux-android build -p scmessenger-core`  zero errors, zero warnings
+-  `cargo ndk -t x86_64-linux-android -t aarch64-linux-android build -p scmessenger-core`  both succeed
+-  Gradle `:app:assembleDebug` passes Rust compilation stage
+-  Gradle `:app:assembleDebug` fails at Kotlin compilation (pre-existing `MeshForegroundService.kt:474` syntax error  unrelated)
+-  APK on-device testing not yet possible (Kotlin issue blocks full APK build)
 
 ## Remaining Issues
 - Kotlin compilation error in `MeshForegroundService.kt:474` (pre-existing, blocks full APK)
 - NDK version: `build.gradle` references `30.0.14904198`, original task mentioned `26.1.10909125` (gradle already updated)
-- `ANDROID_NDK_HOME` env var not set by default — needs to be set for cargo-ndk
+- `ANDROID_NDK_HOME` env var not set by default  needs to be set for cargo-ndk

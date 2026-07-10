@@ -17,10 +17,10 @@ fixed," this is part of the ~30-ticket remaining backlog.
 
 # P1_CLI_024_mDNS_TxtRecordTooLong_For_Circuit_Addresses
 
-**Status:** VERIFIED REMAINING WORK (driven by Claude Code 2026-06-04, log scm.log.2026-06-04-21 lines 1–4)
+**Status:** VERIFIED REMAINING WORK (driven by Claude Code 2026-06-04, log scm.log.2026-06-04-21 lines 14)
 **Agent:** rust-coder
 **Budget:** 1200s (MIXED tier)
-**Phase:** v0.2.1 P1 — local-discovery quality
+**Phase:** v0.2.1 P1  local-discovery quality
 **Source:** Live log inspection of running scmessenger-cli.exe (HEAD `14ea6d61`)
 **Depends on:** P0_BUILD_001
 
@@ -32,11 +32,11 @@ First 4 lines of `C:/Users/SCMessenger/AppData/Local/scmessenger/logs/scm.log.20
 
 ```
 WARN libp2p_mdns::behaviour::iface::dns: Excluding address from response: TxtRecordTooLong
-  address=/ip4/172.26.154.211/tcp/9002/ws/p2p/12D3KooW…/p2p-circuit/p2p/12D3KooW…/p2p-circuit/p2p/12D3KooW…
+  address=/ip4/172.26.154.211/tcp/9002/ws/p2p/12D3KooW/p2p-circuit/p2p/12D3KooW/p2p-circuit/p2p/12D3KooW
 ```
 
 The libp2p `swarm` advertises the local peer over mDNS with **every** listen address,
-including relayed/circuit addresses. Once the peer has used libp2p relay (the WSL↔Android
+including relayed/circuit addresses. Once the peer has used libp2p relay (the WSLAndroid
 mesh produces p2p-circuit addresses), the multiaddrs inflate past the 1300-byte mDNS TXT
 record limit and the mDNS daemon **silently drops** them.
 
@@ -82,8 +82,8 @@ In `core/src/transport/swarm.rs` (add a `#[cfg(test)] mod tests`):
 fn mdns_filter_drops_circuit_addresses() {
     let addrs = vec![
         "/ip4/192.168.0.230/tcp/9101".parse().unwrap(),
-        "/ip4/172.26.144.1/tcp/9101/p2p/12D3K…/p2p-circuit/p2p/12D3K…".parse().unwrap(),
-        "/ip4/172.26.154.211/tcp/9002/ws/p2p/12D3K…/p2p-circuit/p2p/12D3K…".parse().unwrap(),
+        "/ip4/172.26.144.1/tcp/9101/p2p/12D3K/p2p-circuit/p2p/12D3K".parse().unwrap(),
+        "/ip4/172.26.154.211/tcp/9002/ws/p2p/12D3K/p2p-circuit/p2p/12D3K".parse().unwrap(),
     ];
     let filtered = build_mdns_external_addrs(&addrs);
     assert_eq!(filtered.len(), 1);
@@ -93,7 +93,7 @@ fn mdns_filter_drops_circuit_addresses() {
 
 ## File Targets
 
-- `core/src/transport/swarm.rs` [EDIT — add `build_mdns_external_addrs`, wire it into mDNS init, add test]
+- `core/src/transport/swarm.rs` [EDIT  add `build_mdns_external_addrs`, wire it into mDNS init, add test]
 
 ## Build Verification Commands
 

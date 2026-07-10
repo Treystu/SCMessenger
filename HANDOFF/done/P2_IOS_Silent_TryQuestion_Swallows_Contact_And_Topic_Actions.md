@@ -5,7 +5,7 @@
 **Status:** TODO
 **Source:** native sweep 2026-07-04 (independent re-verification pass; distinct
 from T14/T15 in `docs/release-readiness-2026-07-02.md`, which cover
-`IdentityBackupSheets.swift` and `VerifySafetyNumberSheet.swift` specifically —
+`IdentityBackupSheets.swift` and `VerifySafetyNumberSheet.swift` specifically 
 both confirmed already fixed in this sweep. This task covers two *different*
 files with the same bug class that T15's fix did not touch.)
 
@@ -38,7 +38,7 @@ private func joinMesh() {
 }
 ```
 
-`leaveTopic` has no equivalent `do`/`catch` — if `unsubscribe(from:)` throws
+`leaveTopic` has no equivalent `do`/`catch`  if `unsubscribe(from:)` throws
 (e.g. storage error, topic not found), the UI gives no indication and the topic
 likely still shows as "joined" to the user (or worse, disappears from a list
 that assumed success), with no way to retry or understand why leaving failed.
@@ -62,7 +62,7 @@ since `loadRequests()` re-fetches the list), giving false positive feedback:
 the user believes they accepted a contact request, but the sender's message
 request may still be pending/unaccepted with no working key wired up (this is
 the same underlying `accept_message_request` codepath flagged as historically
-buggy in T2 of `docs/release-readiness-2026-07-02.md` — the CLI-side fix for
+buggy in T2 of `docs/release-readiness-2026-07-02.md`  the CLI-side fix for
 that is tracked separately; this task is specifically about the iOS UI not
 noticing or reporting when the call fails, regardless of the underlying cause).
 
@@ -91,14 +91,14 @@ private func leaveTopic(_ topic: String) {
 ```
 
 (Confirm `error` is displayed somewhere in this view's body already, since
-`joinMesh()` already relies on it — if so this is a drop-in fix with no new UI
+`joinMesh()` already relies on it  if so this is a drop-in fix with no new UI
 needed.)
 
 ### MainTabView.swift
 
 Only call `loadRequests()` on success, and surface an error otherwise. Exact UI
 treatment (toast, inline banner, alert) should match whatever pattern
-`MainTabView`/its parent already uses for other action failures — check
+`MainTabView`/its parent already uses for other action failures  check
 sibling views first. Minimal viable fix:
 
 ```swift
@@ -120,8 +120,8 @@ inventing a new mechanism.
 
 ## Files to Touch
 
-- `iOS/SCMessenger/SCMessenger/Views/Topics/JoinMeshView.swift` [EDIT] — lines 132-134
-- `iOS/SCMessenger/SCMessenger/Views/Navigation/MainTabView.swift` [EDIT] — lines 323-329
+- `iOS/SCMessenger/SCMessenger/Views/Topics/JoinMeshView.swift` [EDIT]  lines 132-134
+- `iOS/SCMessenger/SCMessenger/Views/Navigation/MainTabView.swift` [EDIT]  lines 323-329
   (and possibly the enclosing view's state declarations, to add an error property
   if none exists)
 

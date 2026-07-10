@@ -4,7 +4,7 @@
 
 ## P1: Enable MeshVpnService in AndroidManifest
 
-**Source:** 2026-05-13 MASTER AUDIT — MeshVpnService disabled by default in AndroidManifest (`android:enabled="false"`)
+**Source:** 2026-05-13 MASTER AUDIT  MeshVpnService disabled by default in AndroidManifest (`android:enabled="false"`)
 
 ### Current State
 The `MeshVpnService` is declared in `AndroidManifest.xml` with `android:enabled="false"`. This means the VPN-based mesh transport path is never activated, even on devices that support it.

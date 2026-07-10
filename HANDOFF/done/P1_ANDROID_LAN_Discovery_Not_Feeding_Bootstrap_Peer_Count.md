@@ -1,4 +1,4 @@
-# TASK: P1-ANDROID-LAN — LAN/mDNS discovery does not feed into MeshRepository's bootstrap/peer-count path
+# TASK: P1-ANDROID-LAN  LAN/mDNS discovery does not feed into MeshRepository's bootstrap/peer-count path
 
 ## Context
 
@@ -17,7 +17,7 @@ W MeshRepository: Bootstrap all-failed (consecutive=6), next attempt in 60000ms
 
 `peersDiscovered` stays at `0` throughout, and the only bootstrap attempts
 logged are against the `priority=[QUIC, TCP, WEBSOCKET_WSS, WEBSOCKET_WS]`
-list — i.e., internet-relay bootstrap nodes, which fail repeatedly
+list  i.e., internet-relay bootstrap nodes, which fail repeatedly
 (consecutive=6) since this test environment has no reachable relay servers.
 There is no log evidence that a successful LAN/mDNS peer resolution (see the
 companion ticket `P1_ANDROID_mDNS_Self_Loopback_Discovery.md` for the one
@@ -31,7 +31,7 @@ successfully discover the phone as a genuine remote peer earlier in the
 session (different app process instance, before the ANR-triggered restart
 documented in `P0_ANDROID_ANR_BatteryReceiver_Synchronous_FFI_Call.md`), and
 the phone actively dialed back to the Windows CLI on both TCP/9001 and
-WS/9002 — but transport negotiation failed both times (see the companion
+WS/9002  but transport negotiation failed both times (see the companion
 CLI-side ticket for that). So there is evidence of a working underlying LAN
 discovery/dial mechanism *at the transport layer*, but `MeshRepository`'s
 own bootstrap/peer-count reporting on the Android side never reflects LAN
@@ -60,7 +60,7 @@ aggregation just doesn't count them the same way as bootstrap-relay peers.
   `SwarmBridge`/`TransportManager` if they exist) proving a LAN peer
   resolution event results in a non-zero `peersDiscovered` stat.
 - Do not change the internet-relay bootstrap retry logic itself
-  (`Bootstrap all-failed` backoff) — that's working as designed for the
+  (`Bootstrap all-failed` backoff)  that's working as designed for the
   no-relay-reachable case; this ticket is scoped to making LAN peers visible
   in the same stats/bootstrap picture, not to changing retry/backoff
   behavior.
@@ -68,7 +68,7 @@ aggregation just doesn't count them the same way as bootstrap-relay peers.
   is actually on the Rust core side (`core/src/transport/` /
   `mobile_bridge.rs` not surfacing LAN peer events to the Kotlin layer in a
   way `MeshRepository` can consume), flag that specifically rather than
-  guessing at a Kotlin-only fix — a Rust-side transport change would require
+  guessing at a Kotlin-only fix  a Rust-side transport change would require
   the mandatory `crypto-security-auditor` review per
   `.claude/rules/security.md`.
 
@@ -79,7 +79,7 @@ aggregation just doesn't count them the same way as bootstrap-relay peers.
    feeds them (bootstrap-relay connections only? or does it also listen for
    a LAN/mDNS-sourced peer event?).
 2. Cross-reference with `TransportManager.kt`'s `getOrCreateMdns` (seen
-   logging `mDNS LAN peer resolved: ... — feeding to SwarmBridge`) — confirm
+   logging `mDNS LAN peer resolved: ...  feeding to SwarmBridge`)  confirm
    whether that "feeding to SwarmBridge" path has any return channel back
    into `MeshRepository`'s stats, or whether it's a one-way fire-and-forget
    into the Rust core with no Kotlin-side accounting.
@@ -93,7 +93,7 @@ aggregation just doesn't count them the same way as bootstrap-relay peers.
 
 - `android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt`
 - `android/app/src/main/java/com/scmessenger/android/transport/TransportManager.kt`
-- (possibly, if the gap is Rust-side) `mobile_bridge.rs` / relevant `core/src/transport/` files — flag as a separate task rather than silently expanding scope if so.
+- (possibly, if the gap is Rust-side) `mobile_bridge.rs` / relevant `core/src/transport/` files  flag as a separate task rather than silently expanding scope if so.
 
 ## Verification Commands
 

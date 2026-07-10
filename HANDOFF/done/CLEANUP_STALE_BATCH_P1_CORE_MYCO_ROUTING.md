@@ -1,6 +1,6 @@
 # CLEANUP: Stale BATCH_P1_CORE_MYCO_ROUTING from todo/
 
-**Status:** VERIFIED COMPLETE — No implementation work required
+**Status:** VERIFIED COMPLETE  No implementation work required
 **Agent:** Any (micro cleanup)
 **Budget:** 0s (instant)
 **Source:** HANDOFF/todo/BATCH_P1_CORE_MYCO_ROUTING.md
@@ -12,9 +12,9 @@
 The file `HANDOFF/todo/BATCH_P1_CORE_MYCO_ROUTING.md` is stale. It was completed on 2026-05-18 (commit `8a49c3ac`) when the Mycorrhizal Routing engine was verified as already fully active in the production send path.
 
 **Verification:**
-- `core/src/iron_core.rs:516-518` — `OptimizedRoutingEngine` initialized at identity creation
-- `core/src/transport/swarm.rs:3666-3716` — `SwarmCommand::SendMessage` calls `engine.route_message_optimized()`
-- `core/tests/integration_mycorrhizal_routing.rs` — 14 integration tests prove active routing
+- `core/src/iron_core.rs:516-518`  `OptimizedRoutingEngine` initialized at identity creation
+- `core/src/transport/swarm.rs:3666-3716`  `SwarmCommand::SendMessage` calls `engine.route_message_optimized()`
+- `core/tests/integration_mycorrhizal_routing.rs`  14 integration tests prove active routing
 - `docs/CURRENT_STATE.md` updated with verification details
 - `REMAINING_WORK_TRACKING.md` updated
 

@@ -28,11 +28,11 @@ S2-T1 (SwarmBridge Wiring)
    - `/scmessenger/global/v1` - global mesh chat
    - `/scmessenger/discovery/v1` - peer announcements
    - `/scmessenger/relay/v1` - message relaying
-5. Test: subscribe to discovery topic → receive peer announcements within 30s
-6. Handle topic message routing: topic → appropriate handler (chat vs discovery vs relay)
+5. Test: subscribe to discovery topic  receive peer announcements within 30s
+6. Handle topic message routing: topic  appropriate handler (chat vs discovery vs relay)
 
 ## Verification
-- Subscribe to `/scmessenger/discovery/v1` → peer announcements appear
+- Subscribe to `/scmessenger/discovery/v1`  peer announcements appear
 - Unsubscribe stops receiving messages for that topic
 - Topic messages route to correct handlers
 

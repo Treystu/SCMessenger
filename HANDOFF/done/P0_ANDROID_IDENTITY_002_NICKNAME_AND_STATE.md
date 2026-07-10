@@ -12,9 +12,9 @@
 **Problem:** IdentityScreen's `IdentityNotInitializedView` only has a "Create Identity" button with no nickname field. The `createIdentity()` in IdentityViewModel takes no nickname parameter.
 **Fix:** Add an editable nickname text field to `IdentityNotInitializedView`, pass nickname to `createIdentity(nickname)`, call `meshRepository.setNickname()` after creation like MainViewModel does.
 
-### Issue #5: `MainViewModel.createIdentity()` — `_isReady` false publish race
+### Issue #5: `MainViewModel.createIdentity()`  `_isReady` false publish race
 **File:** `android/app/src/main/java/com/scmessenger/android/ui/viewmodels/MainViewModel.kt:167-169`
-**Problem:** `meshRepository.isIdentityInitialized()` called from Main thread after createIdentity — may return false if service still starting.
+**Problem:** `meshRepository.isIdentityInitialized()` called from Main thread after createIdentity  may return false if service still starting.
 **Fix:** Add a retry/verify loop or delay before publishing `_isReady`.
 
 ### Issue #6: `_isReady` flicker on tab switch triggers navigation jump
@@ -39,10 +39,10 @@
 **Fix:** Consider whether callers of `getIdentityInfo()` should use the blocking `ensureServiceInitialized()` variant instead. Or document that `getIdentityInfo()` can return null and ensure all callers handle it.
 
 ## Files to Modify
-1. `android/app/src/main/java/com/scmessenger/android/ui/identity/IdentityScreen.kt` — add nickname field
-2. `android/app/src/main/java/com/scmessenger/android/ui/viewmodels/IdentityViewModel.kt` — add nickname param
-3. `android/app/src/main/java/com/scmessenger/android/ui/viewmodels/MainViewModel.kt` — verify _isReady logic
-4. `android/app/src/main/java/com/scmessenger/android/ui/MeshApp.kt` — debounce hasIdentity navigation
-5. `android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt` — verify getIdentityInfo flow
+1. `android/app/src/main/java/com/scmessenger/android/ui/identity/IdentityScreen.kt`  add nickname field
+2. `android/app/src/main/java/com/scmessenger/android/ui/viewmodels/IdentityViewModel.kt`  add nickname param
+3. `android/app/src/main/java/com/scmessenger/android/ui/viewmodels/MainViewModel.kt`  verify _isReady logic
+4. `android/app/src/main/java/com/scmessenger/android/ui/MeshApp.kt`  debounce hasIdentity navigation
+5. `android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt`  verify getIdentityInfo flow
 
-[NATIVE_SUB_AGENT: RESEARCH] — Trace all callers of getIdentityInfo() and isIdentityInitialized() to verify null-safety.
+[NATIVE_SUB_AGENT: RESEARCH]  Trace all callers of getIdentityInfo() and isIdentityInitialized() to verify null-safety.

@@ -9,10 +9,10 @@
 Current implementation uses ephemeral ECDH per-message but lacks proper ratcheting for forward secrecy. This means if a secret key is compromised, all historical messages can be decrypted.
 
 ## Current State
-- ✅ Ephemeral ECDH key exchange per message
-- ✅ Double Ratchet algorithm implemented (`core/src/crypto/ratchet.rs`)
-- ✅ Forward secrecy: compromise of secret key does not reveal past messages
-- ✅ Perfect forward secrecy implementation via key rotation after each message
+-  Ephemeral ECDH key exchange per message
+-  Double Ratchet algorithm implemented (`core/src/crypto/ratchet.rs`)
+-  Forward secrecy: compromise of secret key does not reveal past messages
+-  Perfect forward secrecy implementation via key rotation after each message
 
 ## Required Implementation
 
@@ -47,11 +47,11 @@ Current implementation uses ephemeral ECDH per-message but lacks proper ratcheti
 - Platform-specific crypto integration files
 
 ## Verification
-- ✅ Forward secrecy verified: compromise doesn't reveal past messages
-- ✅ Ratcheting protocol correctly implemented  
-- ✅ Cross-platform consistency confirmed
-- ✅ Performance impact acceptable (<10% overhead)
-- ✅ Backward compatibility maintained during transition
+-  Forward secrecy verified: compromise doesn't reveal past messages
+-  Ratcheting protocol correctly implemented  
+-  Cross-platform consistency confirmed
+-  Performance impact acceptable (<10% overhead)
+-  Backward compatibility maintained during transition
 
 ## Implementation Notes
 

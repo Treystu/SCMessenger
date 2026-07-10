@@ -1,7 +1,7 @@
 # P1_ANDROID_003: Identity Import Backup UI
 
 **Status:** TODO
-**Priority:** P1 — Feature completeness for Play Store
+**Priority:** P1  Feature completeness for Play Store
 **Estimated LoC Impact:** ~120
 
 ## Problem
@@ -31,6 +31,6 @@ Sub-agent audit found that "Import identity backup" is MISSING from the Android 
 
 ## Verification
 - [ ] `./gradlew :app:compileDebugKotlin` passes
-- [ ] Import button visible in Settings → Identity section
+- [ ] Import button visible in Settings  Identity section
 - [ ] Pasting a valid backup string restores identity
 - [ ] Pasting invalid string shows error without crash

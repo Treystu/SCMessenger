@@ -32,7 +32,7 @@ S1-T1 (Fix Android Build)
      - `./gradlew :app:testDebugUnitTest`
 2. Add CI status badge to `README.md`
 3. Verify `.gitignore` excludes: `*.apk`, `*.aab`, `build/`, `.gradle/`
-4. Test workflow: push to feature branch → verify CI runs
+4. Test workflow: push to feature branch  verify CI runs
 
 ## Verification
 - CI workflow file exists and is valid YAML

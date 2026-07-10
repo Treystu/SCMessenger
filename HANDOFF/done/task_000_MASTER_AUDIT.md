@@ -3,7 +3,7 @@ Model: deepseek-v4-pro:cloud
 Budget: 50000
 ---
 
-# MASTER AUDIT — V-Gate Clearance & Backlog Integration
+# MASTER AUDIT  V-Gate Clearance & Backlog Integration
 
 ## Your Identity
 You are a Tier 1 Auditor (`deepseek-v4-pro:cloud`, 1.6T params). You are NOT a coder. You do NOT write application code. Your sole job is to clear the Validation Gate so the Orchestrator can safely delegate to Tier 2/3 workers.
@@ -27,15 +27,15 @@ For each file read, extract: what was done, what files changed, what risks remai
 
 ### STEP 2: Update Architecture Trackers
 Based on done/ ingestion, update these files with current state:
-- `REMAINING_WORK_TRACKING.md` — remove completed items, add newly discovered gaps
-- `docs/CURRENT_STATE.md` — update architecture description with verified state changes
-- `docs/DOCUMENT_STATUS_INDEX.md` — mark any docs that need refresh
+- `REMAINING_WORK_TRACKING.md`  remove completed items, add newly discovered gaps
+- `docs/CURRENT_STATE.md`  update architecture description with verified state changes
+- `docs/DOCUMENT_STATUS_INDEX.md`  mark any docs that need refresh
 
 ### STEP 3: Audit Todo Files
 Evaluate each file in `HANDOFF/todo/` for:
 
 **`task_epic_wiring_draft.md`:**
-- Contains placeholder `[USER: INSERT YOUR PLANNING FILE NAMES HERE]` — NON-EXECUTABLE.
+- Contains placeholder `[USER: INSERT YOUR PLANNING FILE NAMES HERE]`  NON-EXECUTABLE.
 - Action: Either fill in the planning file names from the actual docs index, or mark as DEFERRED and move to a parking location. Do NOT validate a task with unresolved placeholders.
 
 **`task_fire_drill_audit.md`:**

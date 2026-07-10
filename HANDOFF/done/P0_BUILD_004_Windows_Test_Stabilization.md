@@ -1,6 +1,6 @@
 # P0_BUILD_004: Windows Integration Test Stabilization
 
-## Status: 🔴 P0 BLOCKER - Windows Build System Unstable
+## Status:  P0 BLOCKER - Windows Build System Unstable
 **Source:** Subagent feedback on rlib metadata / "can't find crate" errors
 
 ## Problem Statement
@@ -39,11 +39,11 @@ Windows-specific build issues preventing integration test compilation:
 ## Total Estimate: ~600 LoC
 
 ## Success Criteria
-1. ✅ `cargo test --workspace` completes without rlib errors on Windows
-2. ✅ All integration tests compile and run
-3. ✅ No more "can't find crate" errors  
-4. ✅ Windows build environment stable and reproducible
-5. ✅ Cross-platform test compatibility achieved
+1.  `cargo test --workspace` completes without rlib errors on Windows
+2.  All integration tests compile and run
+3.  No more "can't find crate" errors  
+4.  Windows build environment stable and reproducible
+5.  Cross-platform test compatibility achieved
 
 ## Special Instructions
 - Use `CARGO_INCREMENTAL=0` environment variable

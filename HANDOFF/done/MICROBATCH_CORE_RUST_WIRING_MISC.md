@@ -1,4 +1,4 @@
-# MICROBATCH: Core Rust Wiring — dspy, routing, relay, drift, CLI
+# MICROBATCH: Core Rust Wiring  dspy, routing, relay, drift, CLI
 
 You are a worker implementing wiring tasks for Rust core code. Each task requires you to:
 1. Find the target function in the specified file
@@ -15,29 +15,29 @@ After wiring, run: `cargo check --workspace`
 ## Tasks (15 items)
 
 ### dspy/modules.rs (6 tasks)
-1. **add_step** — `core/src/dspy/modules.rs`
-2. **build_security_audit_pipeline** — `core/src/dspy/modules.rs`
-3. **create_cot** — `core/src/dspy/modules.rs`
-4. **create_multihop** — `core/src/dspy/modules.rs`
-5. **create_optimizer** — `core/src/dspy/modules.rs`
-6. **run_optimization** — `core/src/dspy/modules.rs`
+1. **add_step**  `core/src/dspy/modules.rs`
+2. **build_security_audit_pipeline**  `core/src/dspy/modules.rs`
+3. **create_cot**  `core/src/dspy/modules.rs`
+4. **create_multihop**  `core/src/dspy/modules.rs`
+5. **create_optimizer**  `core/src/dspy/modules.rs`
+6. **run_optimization**  `core/src/dspy/modules.rs`
 
 ### routing/resume_prefetch.rs (4 tasks)
-7. **is_prefetch_complete** — `core/src/routing/resume_prefetch.rs`
-8. **is_prefetch_in_progress** — `core/src/routing/resume_prefetch.rs`
-9. **mark_refresh_failed** — `core/src/routing/resume_prefetch.rs`
-10. **next_refresh_hint** — `core/src/routing/resume_prefetch.rs`
-11. **start_refresh** — `core/src/routing/resume_prefetch.rs`
+7. **is_prefetch_complete**  `core/src/routing/resume_prefetch.rs`
+8. **is_prefetch_in_progress**  `core/src/routing/resume_prefetch.rs`
+9. **mark_refresh_failed**  `core/src/routing/resume_prefetch.rs`
+10. **next_refresh_hint**  `core/src/routing/resume_prefetch.rs`
+11. **start_refresh**  `core/src/routing/resume_prefetch.rs`
 
 ### relay/delegate_prewarm.rs (2 tasks)
-12. **refresh_delegate_routes** — `core/src/relay/delegate_prewarm.rs`
-13. **update_keepalive** — `core/src/relay/delegate_prewarm.rs`
+12. **refresh_delegate_routes**  `core/src/relay/delegate_prewarm.rs`
+13. **update_keepalive**  `core/src/relay/delegate_prewarm.rs`
 
 ### drift/frame.rs (1 task)
-14. **read_with_timeout** — `core/src/drift/frame.rs`
+14. **read_with_timeout**  `core/src/drift/frame.rs`
 
 ### cli/api.rs (1 task)
-15. **get_history_via_api** — `cli/src/api.rs`
+15. **get_history_via_api**  `cli/src/api.rs`
 
 Process each task one at a time. Read the task file from HANDOFF/todo/task_wire_<name>.md, implement the wiring, verify compilation, then move the task file to HANDOFF/done/.
 

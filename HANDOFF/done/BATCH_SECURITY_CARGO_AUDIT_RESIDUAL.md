@@ -1,6 +1,6 @@
 # BATCH_SECURITY_CARGO_AUDIT_RESIDUAL
 
-**Status:** RESEARCH COMPLETE — BLOCKED (requires libp2p major version upgrade)
+**Status:** RESEARCH COMPLETE  BLOCKED (requires libp2p major version upgrade)
 **Agent:** rust-coder_1779261571 (glm-5.1:cloud)
 **Budget:** 1800s (MIXED tier)
 **Source:** REMAINING_WORK_TRACKING.md 2026-04-29 audit entry, Cargo.lock current state
@@ -16,7 +16,7 @@ Cargo.lock still contains vulnerable transitive dependency versions. The `quinn-
 
 | Crate | Version | Status | CVE/Risk |
 |-------|---------|--------|----------|
-| `quinn-proto` | 0.11.14 | **FIXED** | HIGH DoS — upgrade satisfied |
+| `quinn-proto` | 0.11.14 | **FIXED** | HIGH DoS  upgrade satisfied |
 | `ring` | 0.16.20 | **VULNERABLE** | MEDIUM AES panic via `rcgen` / `libp2p-tls` transitive |
 | `ring` | 0.17.14 | Safe | Used by newer dep chain |
 | `rustls-webpki` | 0.101.7 | **VULNERABLE** | Name constraint + CRL parsing issues |
@@ -33,7 +33,7 @@ Cargo.lock still contains vulnerable transitive dependency versions. The `quinn-
 
 ---
 
-## Research Findings (Part A — COMPLETE)
+## Research Findings (Part A  COMPLETE)
 
 ### Dependency Chain Analysis
 
@@ -44,9 +44,9 @@ libp2p 0.53.2
   -> libp2p-quic 0.10.3 (requires libp2p-tls ^0.4.0)
     -> libp2p-tls 0.4.1
       -> rcgen ^0.11.3        (semver locks to 0.11.x)
-        -> ring 0.16.20       (VULNERABLE — MEDIUM AES panic)
+        -> ring 0.16.20       (VULNERABLE  MEDIUM AES panic)
       -> rustls-webpki ^0.101.4  (semver locks to 0.101.x)
-        -> rustls-webpki 0.101.7 (VULNERABLE — name constraint + CRL parsing)
+        -> rustls-webpki 0.101.7 (VULNERABLE  name constraint + CRL parsing)
       -> ring ^0.17.8         (safe, but rcgen also pulls ring 0.16.20)
 ```
 
@@ -55,10 +55,10 @@ libp2p 0.53.2
 | Crate | Current | Latest | Can upgrade within libp2p 0.53? | Notes |
 |-------|---------|--------|--------------------------------|-------|
 | `libp2p` | 0.53.2 | 0.56.0 | N/A (requires major bump) | Breaking API changes between 0.53 and 0.56 |
-| `libp2p-tls` | 0.4.1 | 0.6.2 | No — locked by libp2p-quic ^0.10.2 which requires ^0.4.0 | 0.6.x uses rcgen ^0.13 and rustls-webpki ^0.102+ |
-| `rcgen` | 0.11.3 | 0.14.8 | No — libp2p-tls requires ^0.11.3 | 0.13+ uses ring ^0.17 (fixes vuln) |
-| `rustls-webpki` | 0.101.7 | 0.104.0-alpha.7 | No — libp2p-tls requires ^0.101.4 | 0.101.7 is the latest 0.101.x (no patch fix available) |
-| `instant` | 0.1.13 | (unmaintained) | No — comes from libp2p 0.53.x | Removed in newer libp2p |
+| `libp2p-tls` | 0.4.1 | 0.6.2 | No  locked by libp2p-quic ^0.10.2 which requires ^0.4.0 | 0.6.x uses rcgen ^0.13 and rustls-webpki ^0.102+ |
+| `rcgen` | 0.11.3 | 0.14.8 | No  libp2p-tls requires ^0.11.3 | 0.13+ uses ring ^0.17 (fixes vuln) |
+| `rustls-webpki` | 0.101.7 | 0.104.0-alpha.7 | No  libp2p-tls requires ^0.101.4 | 0.101.7 is the latest 0.101.x (no patch fix available) |
+| `instant` | 0.1.13 | (unmaintained) | No  comes from libp2p 0.53.x | Removed in newer libp2p |
 | `bincode` | 1.3.3 | 2.x/3.x | Possible but risky | Wire format change breaks sled data compatibility |
 
 ### Conclusion
@@ -67,7 +67,7 @@ libp2p 0.53.2
 - **`instant 0.1.13`**: Also blocked by libp2p 0.53.2 upgrade.
 - **`bincode 1.3.3`**: Can be migrated to 2.x independently but requires wire-format-compatible data migration for existing sled databases.
 
-### Part B: Upgrade Status — BLOCKED
+### Part B: Upgrade Status  BLOCKED
 
 All four vulnerabilities require dependency upgrades that cannot be completed within the current semver constraints:
 
@@ -90,8 +90,8 @@ Since the full libp2p upgrade is beyond MIXED-tier scope, the recommended path i
    - Test coverage for backward-compatible deserialization
 
 3. **Short-term risk assessment**: Both vulnerabilities (ring AES panic, webpki name constraints) are MEDIUM severity and require specific attack conditions:
-   - `ring 0.16.20` AES panic: requires crafted input to reach AES code path through TLS handshake — mitigated by our TLS being used only for libp2p transport (not user-facing HTTPS)
-   - `rustls-webpki 0.101.7`: name constraint bypass and CRL parsing — limited exposure since we use libp2p TLS for P2P transport, not web certificate validation
+   - `ring 0.16.20` AES panic: requires crafted input to reach AES code path through TLS handshake  mitigated by our TLS being used only for libp2p transport (not user-facing HTTPS)
+   - `rustls-webpki 0.101.7`: name constraint bypass and CRL parsing  limited exposure since we use libp2p TLS for P2P transport, not web certificate validation
 
 ## Scope
 
@@ -113,24 +113,24 @@ Since the full libp2p upgrade is beyond MIXED-tier scope, the recommended path i
 
 ### Part C: Compile + Test Verification
 
-1. `cargo build --workspace` — must pass
-2. `cargo test --workspace` — must pass (all existing tests)
-3. `cargo clippy --workspace -- -D warnings` — must pass
+1. `cargo build --workspace`  must pass
+2. `cargo test --workspace`  must pass (all existing tests)
+3. `cargo clippy --workspace -- -D warnings`  must pass
 4. Verify `grep 'ring 0.16' Cargo.lock` returns empty
 5. Verify `grep 'rustls-webpki 0.101' Cargo.lock` returns empty
 
 ## Constraints
 
 - Do NOT break libp2p transport compilation (TLS, QUIC)
-- Do NOT change core crypto (XChaCha20-Poly1305, X25519) — this task is dependency management only
-- If upgrade path requires `libp2p` version bump, scope it carefully — libp2p upgrades can cascade
+- Do NOT change core crypto (XChaCha20-Poly1305, X25519)  this task is dependency management only
+- If upgrade path requires `libp2p` version bump, scope it carefully  libp2p upgrades can cascade
 - If upgrade is infeasible without breaking changes, document the blocker and propose alternative mitigation (feature flag isolation, etc.)
 - All changes require `deepseek-v3.2:cloud` adversarial review per `security.md`
 
 ## File Targets
 
 - `Cargo.toml` (workspace root and/or core/Cargo.toml) [EDIT]
-- `Cargo.lock` [AUTO-GENERATED — do not hand-edit]
+- `Cargo.lock` [AUTO-GENERATED  do not hand-edit]
 - `core/Cargo.toml` [MAY EDIT if libp2p/rcgen/rustls versions need changing]
 - `cli/Cargo.toml` [MAY EDIT if affected]
 
@@ -148,19 +148,19 @@ grep 'rustls-webpki 0\.101' Cargo.lock
 
 ## Acceptance Gates
 
-1. `cargo build --workspace` passes — N/A (no code changes made)
-2. `cargo test --workspace` passes — N/A
-3. `cargo clippy --workspace` passes — N/A
-4. `Cargo.lock` contains NO `ring` version < 0.17.0 — **BLOCKED** (requires libp2p 0.53 -> 0.56)
-5. `Cargo.lock` contains NO `rustls-webpki` version < 0.102.0 — **BLOCKED** (requires libp2p 0.53 -> 0.56)
-6. `REMAINING_WORK_TRACKING.md` updated with new cargo audit state — DONE
-7. Vulnerability blockers documented — DONE (see Research Findings above)
+1. `cargo build --workspace` passes  N/A (no code changes made)
+2. `cargo test --workspace` passes  N/A
+3. `cargo clippy --workspace` passes  N/A
+4. `Cargo.lock` contains NO `ring` version < 0.17.0  **BLOCKED** (requires libp2p 0.53 -> 0.56)
+5. `Cargo.lock` contains NO `rustls-webpki` version < 0.102.0  **BLOCKED** (requires libp2p 0.53 -> 0.56)
+6. `REMAINING_WORK_TRACKING.md` updated with new cargo audit state  DONE
+7. Vulnerability blockers documented  DONE (see Research Findings above)
 
 ## Outcome
 
-- Part A (Research): COMPLETE — full dependency chain analysis documented
-- Part B (Upgrade): BLOCKED — all 4 vulnerabilities require breaking dependency upgrades
-- Part C (Verification): N/A — no code changes
+- Part A (Research): COMPLETE  full dependency chain analysis documented
+- Part B (Upgrade): BLOCKED  all 4 vulnerabilities require breaking dependency upgrades
+- Part C (Verification): N/A  no code changes
 - Recommended next action: Create HEAVY-LIFT task for `libp2p 0.53 -> 0.56` migration
 
 ## CRITICAL

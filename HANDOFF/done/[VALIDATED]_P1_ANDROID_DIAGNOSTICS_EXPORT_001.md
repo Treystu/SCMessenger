@@ -17,8 +17,8 @@
 Android `DiagnosticsScreen.kt` shows live mesh diagnostics but has NO export/share functionality. CLI has no export command either. Users cannot generate diagnostic bundles for bug reporting.
 
 **Verified Code State:**
-- `MeshRepository.kt:4737` — `exportDiagnosticsAsync()` exists and returns a JSON string
-- `DiagnosticsScreen.kt:39` — No export/share button or action
+- `MeshRepository.kt:4737`  `exportDiagnosticsAsync()` exists and returns a JSON string
+- `DiagnosticsScreen.kt:39`  No export/share button or action
 - No FileProvider intent for sharing diagnostic text
 
 ## Scope

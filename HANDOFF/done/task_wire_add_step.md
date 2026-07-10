@@ -28,7 +28,7 @@ STATUS: SUCCESS_STOP
 
 **Target function: `add_step`**
 
-## core/src/dspy/modules.rs — function `add_step` (line 98)
+## core/src/dspy/modules.rs  function `add_step` (line 98)
 - **Calls out to:** none
 - **Structs in chunk:** DSPyModule, Input, Output, ModuleMetadata, ModuleMetadata
 

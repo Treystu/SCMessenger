@@ -47,7 +47,7 @@ This `.expect(...)` panics the entire process if even ONE stored record
 fails to deserialize as `MessageRecord`. Unlike the `parking_lot
 Mutex/RwLock never poisons` and `static multiaddr parse cannot fail`
 `.expect()` patterns found elsewhere in the sweep (which are genuine
-programmer invariants — those are fine and out of scope here), this one is
+programmer invariants  those are fine and out of scope here), this one is
 gated on **real, non-programmer-controlled input**: a sled record can fail
 to parse because of:
 - a genuine on-disk corruption (crash mid-write, disk error, filesystem bug),
@@ -59,7 +59,7 @@ to parse because of:
 
 Any of these turns a single bad message record into a full mesh node crash
 on the next retention sweep, instead of a recoverable storage error. This
-directly touches `store/` (sled persistence) — not `crypto/`, `transport/`,
+directly touches `store/` (sled persistence)  not `crypto/`, `transport/`,
 `routing/`, or `privacy/`, so the mandatory crypto-security-auditor
 adversarial review does NOT apply here, but general care with the
 `store/` module boundary rule in `.claude/rules/rust.md` still applies (all
@@ -71,16 +71,16 @@ poking from callers).
 - `enforce_retention` no longer panics on a single malformed/corrupt
   `msg_`-prefixed sled record.
 - A record that fails to deserialize is logged (`tracing::warn!` with the
-  key, in a form that doesn't leak message plaintext — key/metadata only)
+  key, in a form that doesn't leak message plaintext  key/metadata only)
   and either (a) skipped from the retention sort/prune pass, or (b) treated
   as maximally stale and removed during the same pass so corrupt records
   don't accumulate forever. Pick (b) if the codebase's existing error
   philosophy elsewhere in `store/` leans toward self-healing removal of
-  unparseable entries — check `store/contacts.rs` migration code and any
+  unparseable entries  check `store/contacts.rs` migration code and any
   existing "corrupt record" handling in `store/inbox.rs` /
   `store/outbox.rs` for precedent and stay consistent with whatever
   pattern already exists there.
-- Function signature can stay `pub fn enforce_retention(&self, max_messages: u32) -> Result<u32, IronCoreError>` — no new panics introduced, existing `Result` plumbing already handles the `StorageError` case for other failures in this function.
+- Function signature can stay `pub fn enforce_retention(&self, max_messages: u32) -> Result<u32, IronCoreError>`  no new panics introduced, existing `Result` plumbing already handles the `StorageError` case for other failures in this function.
 - No change to `MessageRecord`'s own (de)serialization format.
 - Add a unit test in `core/src/store/history.rs`'s existing test module: seed
   the backend with N valid `MessageRecord` entries plus one deliberately

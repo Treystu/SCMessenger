@@ -1,7 +1,7 @@
 # MODEL: qwen3-coder-next:cloud
 # BUDGET: 3600
 
-# CLI↔Android Native LAN Transport Unification
+# CLIAndroid Native LAN Transport Unification
 
 **Date:** 2026-04-23
 **Priority:** P0
@@ -29,7 +29,7 @@ CLI daemon and Android app cannot establish native libp2p connections over LAN, 
 - No mechanism to refresh addresses before dialing
 
 ### 2. Missing mDNS on Windows Daemon
-- `if-watch` disabled on Windows → mDNS/UPnP excluded
+- `if-watch` disabled on Windows  mDNS/UPnP excluded
 - Android app relies on mDNS for local discovery
 - Without mDNS, neither side can discover the other's current address
 
@@ -40,13 +40,13 @@ CLI daemon and Android app cannot establish native libp2p connections over LAN, 
 
 ### 4. Android Incoming Connection Issues
 - Android Doze mode may block incoming TCP connections
-- BLE beacon is active but no BLE → TCP bridge for direct messaging
+- BLE beacon is active but no BLE  TCP bridge for direct messaging
 - WiFi Direct initialized but not exchanging peer info
 
 ## Required Fixes
 
 ### Fix 1: Start Control API Alongside Daemon
-- **File:** `cli/src/main.rs` — `cmd_start()`
+- **File:** `cli/src/main.rs`  `cmd_start()`
 - **Change:** Spawn the hyper API server (port 9876) in the same tokio runtime as the warp server
 - **Verify:** `curl http://127.0.0.1:9876/api/status` returns JSON
 
@@ -65,17 +65,17 @@ CLI daemon and Android app cannot establish native libp2p connections over LAN, 
 - **Change:** Configure libp2p to use a static port (e.g., 9001) instead of ephemeral
 - **Add:** Port persistence across app restarts
 
-### Fix 5: CLI→Android Message Pipeline
-- **File:** `cli/src/main.rs` — `cmd_send_offline()`
+### Fix 5: CLIAndroid Message Pipeline
+- **File:** `cli/src/main.rs`  `cmd_send_offline()`
 - **Change:** When API is unavailable, use native `IronCore::send_message()` directly instead of just encrypting
 - **Add:** Retry with exponential backoff via daemon's outbox flush
 
 ## Test Plan
 
-1. Start Android app → verify it listens on static port 9001
-2. Start CLI daemon → verify it dials `192.168.0.x:9001`
-3. Send message from CLI → verify it reaches Android within 30s
-4. Reply from Android → verify CLI receives it
+1. Start Android app  verify it listens on static port 9001
+2. Start CLI daemon  verify it dials `192.168.0.x:9001`
+3. Send message from CLI  verify it reaches Android within 30s
+4. Reply from Android  verify CLI receives it
 5. Document in `HANDOFF/IN_PROGRESS/LAN_TRANSPORT_TEST.md`
 
 ## Acceptance Criteria
@@ -84,12 +84,12 @@ CLI daemon and Android app cannot establish native libp2p connections over LAN, 
 - [ ] Android app receives messages from CLI peer on same LAN
 - [ ] No API "expected value at line 1 column 1" errors
 - [ ] Ledger addresses refresh before dialing
-- [ ] Both sides show ≥1 connected peer
+- [ ] Both sides show 1 connected peer
 
 ## Related Tasks
 
-- `P0_IDENTITY_001_Unified_ID_System.md` — Peer ID display fix
-- `P0_CLI_002_LAN_Message_Test.md` — Original message test task
+- `P0_IDENTITY_001_Unified_ID_System.md`  Peer ID display fix
+- `P0_CLI_002_LAN_Message_Test.md`  Original message test task
 
 ## Notes
 

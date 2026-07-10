@@ -8,7 +8,7 @@ Enable deep links so users can share their SCMessenger identity via URL (e.g., `
 
 The app already has:
 - Identity export JSON with `public_key`, `peer_id`, `nickname`, `identity_id`
-- `ContactsScreen` → `AddContactDialog` with prefilled fields
+- `ContactsScreen`  `AddContactDialog` with prefilled fields
 - `MainActivity` handles `Intent.ACTION_SEND` for text sharing
 
 What's missing:

@@ -1,7 +1,7 @@
 # P0_ANDROID_STABILITY_001: ANR and Battery Drain Fixes
 
 **Status:** TODO
-**Priority:** P0 — Blocks Play Store submission (ANR + battery drain flags)
+**Priority:** P0  Blocks Play Store submission (ANR + battery drain flags)
 **Estimated LoC Impact:** ~150
 **Native Routing:** [NATIVE_SUB_AGENT: SECURITY_AUDIT] for wakelock changes
 
@@ -20,7 +20,7 @@ Sub-agent audit found critical stability issues:
 
 **File:** `android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt`
 - Line ~2990: Replace `runBlocking { bleScanner?.stopScanning() }` with `repoScope.launch { bleScanner?.stopScanning() }`
-- Line ~4091: `ensureServiceInitializedBlocking()` — add a non-blocking variant `ensureServiceInitialized()` that suspends, and convert callers
+- Line ~4091: `ensureServiceInitializedBlocking()`  add a non-blocking variant `ensureServiceInitialized()` that suspends, and convert callers
 
 ### 2. Fix Battery Drain
 **File:** `android/app/src/main/java/com/scmessenger/android/service/MeshForegroundService.kt`
@@ -38,7 +38,7 @@ Sub-agent audit found critical stability issues:
 
 **File:** `android/app/src/main/java/com/scmessenger/android/receiver/ShareReceiver.kt`
 - Line ~32: Same issue as BootReceiver
-- Fix: Same pattern — cancel scope after work completes
+- Fix: Same pattern  cancel scope after work completes
 
 ## Verification
 - [ ] `./gradlew :app:compileDebugKotlin` passes

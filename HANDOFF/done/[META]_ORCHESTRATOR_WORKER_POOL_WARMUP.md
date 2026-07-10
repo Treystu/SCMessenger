@@ -8,7 +8,7 @@
 **Agent:** qwen3-coder (META bootstrap; pre-dispatch for all P0 work)
 **Budget:** 600s (LIGHT tier)
 **Phase:** Worker pool warm-up (framework is already warm: Overseer Claude PID 17948 + Hermes Telegram active)
-**Source:** 2026-06-05 21:00 PT audit — framework warm (Overseer Claude + Hermes Telegram both running), but worker pool is empty (no agent currently processing a HANDOFF ticket)
+**Source:** 2026-06-05 21:00 PT audit  framework warm (Overseer Claude + Hermes Telegram both running), but worker pool is empty (no agent currently processing a HANDOFF ticket)
 **Depends on:** nothing (this IS the worker-pool-warmup edge)
 **Blocks:** `HANDOFF/todo/[VALIDATED]_P0_ANDROID_024_DISPATCH.md`, all P0/P1 dispatches, swarm re-warm
 
@@ -16,13 +16,13 @@
 
 ## Verified Gap
 
-The orchestrator framework is warm and live: Overseer Claude Code session (PID 17948, 3h+ runtime) and the Hermes Telegram gateway are both running. However, the **worker pool is empty** — no agent is currently processing a HANDOFF ticket. `bash .claude/orchestrator_manager.sh pool status` shows `Slots: 0/3` (the script's default max display, not the config truth) and `OS Processes: 0/3`. The real config: `.claude/agent_pool.json` sets `max_concurrent: 1` — only one worker can run at a time. `.claude/orchestrator_state.json` shows `active_native_agents: []`, `active_tasks: []`. The 5 surfaces that need to be re-established before the worker pool can fill its slot are: (1) quota state must be within the 5-min staleness rule, (2) `.claude/agents/` directory must exist for worker workspaces, (3) `HANDOFF/IN_PROGRESS/` must exist for the in-progress state machine step, (4) `HANDOFF/ORCHESTRATOR_LOG.md` must exist for action logging, (5) `pool status` must confirm the slot is free.
+The orchestrator framework is warm and live: Overseer Claude Code session (PID 17948, 3h+ runtime) and the Hermes Telegram gateway are both running. However, the **worker pool is empty**  no agent is currently processing a HANDOFF ticket. `bash .claude/orchestrator_manager.sh pool status` shows `Slots: 0/3` (the script's default max display, not the config truth) and `OS Processes: 0/3`. The real config: `.claude/agent_pool.json` sets `max_concurrent: 1`  only one worker can run at a time. `.claude/orchestrator_state.json` shows `active_native_agents: []`, `active_tasks: []`. The 5 surfaces that need to be re-established before the worker pool can fill its slot are: (1) quota state must be within the 5-min staleness rule, (2) `.claude/agents/` directory must exist for worker workspaces, (3) `HANDOFF/IN_PROGRESS/` must exist for the in-progress state machine step, (4) `HANDOFF/ORCHESTRATOR_LOG.md` must exist for action logging, (5) `pool status` must confirm the slot is free.
 
 **Verified environment facts:**
 - Branch: `integration/v0.2.2-pre-android-push-2026-06-05` (NOT `main`).
 - `HANDOFF/todo/` has 48 files; `HANDOFF/done/` has 562+ completed.
 - 4 modified files unrelated to this work (BleScanner.kt, build.gradle, 2 test files).
-- Quota state: `fiveHour: 70.9, sevenDay: 89.1` — at the stale-snapshot tier (MIXED→LIGHT), but data is rejected due to staleness.
+- Quota state: `fiveHour: 70.9, sevenDay: 89.1`  at the stale-snapshot tier (MIXEDLIGHT), but data is rejected due to staleness.
 
 ## Scope
 
@@ -33,7 +33,7 @@ The orchestrator framework is warm and live: Overseer Claude Code session (PID 1
 1. **Refresh quota state.**
    - Windows: `powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./OllamaQuotaScraper.ps1 -Quiet`
    - WSL/Unix: `bash ./OllamaQuotaScraper.sh` (if present; PowerShell Core works on Linux too)
-   - Verify: `jq -r .timestamp .claude/quota_state.json` returns a value within 5 minutes of `date -u +%Y-%m-%dT%H:%M:%SZ`. If the scraper is missing or fails, log the error to `HANDOFF/ORCHESTRATOR_LOG.md` and proceed — do not silently bypass.
+   - Verify: `jq -r .timestamp .claude/quota_state.json` returns a value within 5 minutes of `date -u +%Y-%m-%dT%H:%M:%SZ`. If the scraper is missing or fails, log the error to `HANDOFF/ORCHESTRATOR_LOG.md` and proceed  do not silently bypass.
 
 2. **Activate the orchestrator.**
    - Run: `bash .claude/orchestrator_manager.sh activate`
@@ -65,11 +65,11 @@ The orchestrator framework is warm and live: Overseer Claude Code session (PID 1
 
 ## File Targets
 
-- `.claude/quota_state.json` [REFRESH] — run scraper, verify timestamp
-- `.claude/orchestrator_state.json` [CREATE on miss] — orchestrator session state
-- `HANDOFF/IN_PROGRESS/` [CREATE DIR] — state-machine parking
-- `.claude/agents/` [CREATE DIR] — dispatched agent workspaces
-- `HANDOFF/ORCHESTRATOR_LOG.md` [CREATE] — audit log
+- `.claude/quota_state.json` [REFRESH]  run scraper, verify timestamp
+- `.claude/orchestrator_state.json` [CREATE on miss]  orchestrator session state
+- `HANDOFF/IN_PROGRESS/` [CREATE DIR]  state-machine parking
+- `.claude/agents/` [CREATE DIR]  dispatched agent workspaces
+- `HANDOFF/ORCHESTRATOR_LOG.md` [CREATE]  audit log
 
 ## Build Verification Commands
 

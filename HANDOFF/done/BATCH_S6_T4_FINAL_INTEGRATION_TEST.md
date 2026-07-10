@@ -23,14 +23,14 @@ All previous sprints (S1-S5)
    - `./gradlew :app:testDebugUnitTest` - all unit tests
    - `./gradlew :app:connectedAndroidTest` - instrumentation tests (if device available)
 2. Manual E2E test:
-   - Create identity → onboarding flow
+   - Create identity  onboarding flow
    - Add contact (QR scan)
-   - Send message → receive reply
+   - Send message  receive reply
    - Verify notification appears
 3. Stress test:
    - Send 50 messages rapidly
-   - Kill app during send → restart → verify outbox replay
-   - Airplane mode → queue messages → restore → verify delivery
+   - Kill app during send  restart  verify outbox replay
+   - Airplane mode  queue messages  restore  verify delivery
 4. Edge cases:
    - Identity backup/restore cycle
    - Contact with invalid public key (should reject)

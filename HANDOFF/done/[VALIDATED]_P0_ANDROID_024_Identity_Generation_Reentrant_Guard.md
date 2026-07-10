@@ -1,4 +1,4 @@
-## Triage Decision — 2026-06-08
+## Triage Decision  2026-06-08
 
 **Status:** SHIPPED
 **Bucket:** done (on integration/v0.2.2-pre-android-push-2026-06-05)
@@ -37,7 +37,7 @@ should also be moved to `done/` for the same reason.
 
 ## Verified Gap
 
-On v0.2.3 of the Android app, the onboarding flow's identity-creation step fails or reaches a broken state. Logcat shows 8–10 `initializeIdentity` calls in 1 second during cold start. Identity DOES persist (peerId, id, salt, identity_keys blob all present in db) — the user-visible failure is the broken onboarding UI.
+On v0.2.3 of the Android app, the onboarding flow's identity-creation step fails or reaches a broken state. Logcat shows 810 `initializeIdentity` calls in 1 second during cold start. Identity DOES persist (peerId, id, salt, identity_keys blob all present in db)  the user-visible failure is the broken onboarding UI.
 
 **Root cause (verified by previous diagnostic agent, see `E:\SCMessenger-build-p0-024\`):**
 - `MainViewModel.createIdentity()` (in `android/app/src/main/java/com/scmessenger/android/ui/viewmodels/MainViewModel.kt`) launches a coroutine via `viewModelScope.launch(Dispatchers.IO)`. The `_isCreatingIdentity` flag is set INSIDE the coroutine (around line 177), not before. Compose recomposition or a fast double-tap on the "Generate Identity" button can fire `createIdentity()` multiple times before the flag flips. Two coroutines then race through `meshRepository.createIdentity`, the FFI call, and the `_isReady` / preferences writes, leaving the UI in a broken intermediate state.
@@ -65,7 +65,7 @@ If the guard is missing, add it. If it is already present (as expected from the 
 
 In `E:\SCMessenger-build-p0-024\android\app\src\main\java\com\scmessenger\android\onboarding\OnboardingScreen.kt`:
 
-Find the "Generate Identity" Button (around line 252-261 per the ticket). Find its `enabled =` clause. Add `&& !isCreating` (or the actual StateFlow name used by the parent ViewModel — read the surrounding code to confirm). Cite P0_ANDROID_024 in a comment.
+Find the "Generate Identity" Button (around line 252-261 per the ticket). Find its `enabled =` clause. Add `&& !isCreating` (or the actual StateFlow name used by the parent ViewModel  read the surrounding code to confirm). Cite P0_ANDROID_024 in a comment.
 
 ### Part C: Add regression test (LOC: ~30, optional but recommended)
 
@@ -86,9 +86,9 @@ If dependency injection makes this hard, skip Part C and add a TODO comment.
 
 ## File Targets
 
-- `android/app/src/main/java/com/scmessenger/android/ui/viewmodels/MainViewModel.kt` [VERIFY/EDIT — re-entrancy guard]
-- `android/app/src/main/java/com/scmessenger/android/onboarding/OnboardingScreen.kt` [EDIT — Button enabled clause]
-- `android/app/src/test/java/com/scmessenger/android/ui/viewmodels/MainViewModelTest.kt` [NEW — optional test, only if feasible]
+- `android/app/src/main/java/com/scmessenger/android/ui/viewmodels/MainViewModel.kt` [VERIFY/EDIT  re-entrancy guard]
+- `android/app/src/main/java/com/scmessenger/android/onboarding/OnboardingScreen.kt` [EDIT  Button enabled clause]
+- `android/app/src/test/java/com/scmessenger/android/ui/viewmodels/MainViewModelTest.kt` [NEW  optional test, only if feasible]
 
 ## Build Verification Commands
 
@@ -110,7 +110,7 @@ cd /home/scemessenger/scmessenger-build/android
 1. `./gradlew :app:assembleDebug -x lint` succeeds
 2. The 10-line re-entrancy guard is present in `MainViewModel.createIdentity()`
 3. The Button in `OnboardingScreen.kt` has the defense-in-depth `&& !isCreating` clause
-4. NO commits, NO pushes — leave all changes uncommitted in the worktree for user review
+4. NO commits, NO pushes  leave all changes uncommitted in the worktree for user review
 5. The worktree at `E:\SCMessenger-build-p0-024\` must be left in a state where the user can `git diff` and see exactly what was changed
 
 ## Out of scope

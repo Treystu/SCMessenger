@@ -1,4 +1,4 @@
-# TASK: P0-CORE-SWARM-TEST-IMPORTS — `core/src/transport/swarm.rs` test module fails to compile (5 errors), blocks `cargo test --workspace --no-run`
+# TASK: P0-CORE-SWARM-TEST-IMPORTS  `core/src/transport/swarm.rs` test module fails to compile (5 errors), blocks `cargo test --workspace --no-run`
 
 ## Source
 
@@ -52,7 +52,7 @@ error: could not compile `scmessenger-core` (lib test) due to 5 previous errors
 
 Full log: `tmp/work_files/compile_gate/test_no_run.log`.
 
-## Root Cause Investigation (already done — do not re-derive)
+## Root Cause Investigation (already done  do not re-derive)
 
 The test module's import block is at `swarm.rs:5342-5348`:
 ```rust
@@ -68,20 +68,20 @@ use crate::store::relay_custody::RelayCustodyStore;
 use std::collections::HashMap;
 ```
 
-1. **`RegistrationMessage`** — not imported. Confirmed exported at
+1. **`RegistrationMessage`**  not imported. Confirmed exported at
    `core/src/transport/mod.rs:32` (`... RegistrationMessage, ...`). Fix:
    add `use crate::transport::RegistrationMessage;` (or add it to the
-   existing `use super::{...}` list if `swarm.rs` re-exports it — check
+   existing `use super::{...}` list if `swarm.rs` re-exports it  check
    which is more consistent with the rest of the file before picking).
 
-2. **`Multiaddr`** — `swarm.rs:49` has `use libp2p::{..., Multiaddr,
+2. **`Multiaddr`**  `swarm.rs:49` has `use libp2p::{..., Multiaddr,
    PeerId};` at the *outer* module scope, but `mod tests` only imports
    specific names via `use super::{...}`, not `use super::*`, so the outer
    `use` isn't visible inside the test module. Fix: add `use
    libp2p::Multiaddr;` inside the test module's import block.
 
-3. **`Libp2pPeerId`** — **investigated, not a simple missing-import case.**
-   Grepped the entire `core/src` tree for `Libp2pPeerId` — it appears
+3. **`Libp2pPeerId`**  **investigated, not a simple missing-import case.**
+   Grepped the entire `core/src` tree for `Libp2pPeerId`  it appears
    **exactly once**, at `swarm.rs:5574`, and is not defined, aliased, or
    imported anywhere else in the crate. The real libp2p type is imported as
    plain `PeerId` at `swarm.rs:49`. Two possible fixes, and the implementer
@@ -89,7 +89,7 @@ use std::collections::HashMap;
    `identify_log_dedup_suppresses_within_ttl`, lines ~5566-5578, testing a
    dedup map keyed by peer ID):
    - (a) the test meant `PeerId` (already imported outer-scope) and should
-     use `use libp2p::PeerId;` inside the test module — simplest, most
+     use `use libp2p::PeerId;` inside the test module  simplest, most
      likely correct if no other file in this codebase uses a
      `Libp2pPeerId` alias convention; OR
    - (b) if other transport code elsewhere in the codebase has a
@@ -97,13 +97,13 @@ use std::collections::HashMap;
      (e.g. to disambiguate from an internal `PeerId`-shaped type), that
      alias needs to be defined and imported instead. Grep for any other
      `XxxPeerId` alias pattern in `core/src/transport/` before assuming (a).
-   Do not guess blindly — actually check both possibilities before editing.
+   Do not guess blindly  actually check both possibilities before editing.
 
 ## Blast Radius
 
 `#[cfg(test)]`-only, confined to `core/src/transport/swarm.rs`. Does not
 affect `cargo build -p scmessenger-core`, `scmessenger-cli`,
-`scmessenger-mobile`, or the Android Gradle/cargo-ndk cross-compile path —
+`scmessenger-mobile`, or the Android Gradle/cargo-ndk cross-compile path 
 none of those compile core's test module. **Not a blocker for the current
 Windows/Android parity priority.** Blocks the mandatory `cargo test
 --workspace --no-run` compile gate only.
@@ -112,7 +112,7 @@ Windows/Android parity priority.** Blocks the mandatory `cargo test
 
 This touches `core/src/transport/` test code only (not the `swarm.rs`
 production code paths). Per `.claude/rules/security.md`, the Adversarial
-Review Protocol applies to changes in `core/src/transport/` broadly — since
+Review Protocol applies to changes in `core/src/transport/` broadly  since
 this is test-only import fixes with no production logic change, a full
 `crypto-security-auditor` pass is likely unnecessary, but flag this to the
 implementer to make the call explicitly rather than skip silently if the
@@ -133,7 +133,7 @@ cargo test -p scmessenger-core --lib
 
 ## Do NOT
 
-- Do not delete or `#[ignore]` these 3 tests to "fix" the compile gate —
+- Do not delete or `#[ignore]` these 3 tests to "fix" the compile gate 
   they test real registration/multiaddr/peer-dedup logic; the fix is
   correcting imports/aliasing, not removing coverage.
 - Do not guess the `Libp2pPeerId` fix without checking for an existing

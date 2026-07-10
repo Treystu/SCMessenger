@@ -2,7 +2,7 @@
 # FALLBACK: glm-5.1:cloud
 # BUDGET: 3600
 # TARGET: core/src/crypto/, core/src/transport/
-# NOTE: Retriaged from [FAILED]_ — switched from deepseek-v3.2:cloud. cargo-kani must be installed first.
+# NOTE: Retriaged from [FAILED]_  switched from deepseek-v3.2:cloud. cargo-kani must be installed first.
 
 ## P0: Formal Verification Harness (Kani + Proptest Baseline)
 

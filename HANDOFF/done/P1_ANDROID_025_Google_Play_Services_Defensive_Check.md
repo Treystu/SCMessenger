@@ -10,7 +10,7 @@ Add a defensive check for Google Play Services availability before using ML Kit'
 
 ## Implementation Plan
 
-### 1. `AddContactScreen.kt` — QRScanTab composable
+### 1. `AddContactScreen.kt`  QRScanTab composable
 Before calling `GmsBarcodeScanning.getClient()`, check availability:
 
 ```kotlin

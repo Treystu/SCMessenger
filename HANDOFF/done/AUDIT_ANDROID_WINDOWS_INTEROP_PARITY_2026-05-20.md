@@ -1,6 +1,6 @@
 # AUDIT_ANDROID_WINDOWS_INTEROP_PARITY_2026-05-20
 
-**Status:** VERIFIED AUDIT — GAPS IDENTIFIED
+**Status:** VERIFIED AUDIT  GAPS IDENTIFIED
 **Agent:** Orchestrator (kimi-k2.6:cloud)
 **Source:** Static analysis of Android UI, CLI commands, JSON-RPC methods, and UniFFI bindings
 
@@ -21,22 +21,22 @@ The core feature parity is strong, but **UI/experience gaps exist** where Androi
 ### Android Surface (UniFFI + Compose)
 
 **Screens (9 total):**
-- `OnboardingScreen.kt` — Identity creation, restore from backup
-- `IdentityScreen.kt` — View/edit identity, device ID, seniority, nickname
-- `ConversationsScreen.kt` — Conversation list with unread counts
-- `ChatScreen.kt` — Send/receive messages, view history
-- `ContactsScreen.kt` — Add, remove, search, view contacts
-- `ContactDetailScreen.kt` — Contact info, nickname editing
-- `AddContactScreen.kt` — Deep-link aware contact addition
-- `BlockedPeersScreen.kt` — Block/unblock peers, view blocked list
-- `RequestsInboxScreen.kt` — Accept/reject/block DM requests (NEW)
-- `SettingsScreen.kt` — Mesh settings, privacy, notification preferences
-- `DashboardScreen.kt` — Mesh topology, peer list, relay stats
-- `DiagnosticsScreen.kt` — Connection state, NAT status, ledger summary
-- `MeshSettingsScreen.kt` — Transport toggles, discovery mode
-- `PowerSettingsScreen.kt` — Battery-aware adjustments
-- `PeerListScreen.kt` — Discovered peer enumeration
-- `TopologyScreen.kt` — Network topology visualization
+- `OnboardingScreen.kt`  Identity creation, restore from backup
+- `IdentityScreen.kt`  View/edit identity, device ID, seniority, nickname
+- `ConversationsScreen.kt`  Conversation list with unread counts
+- `ChatScreen.kt`  Send/receive messages, view history
+- `ContactsScreen.kt`  Add, remove, search, view contacts
+- `ContactDetailScreen.kt`  Contact info, nickname editing
+- `AddContactScreen.kt`  Deep-link aware contact addition
+- `BlockedPeersScreen.kt`  Block/unblock peers, view blocked list
+- `RequestsInboxScreen.kt`  Accept/reject/block DM requests (NEW)
+- `SettingsScreen.kt`  Mesh settings, privacy, notification preferences
+- `DashboardScreen.kt`  Mesh topology, peer list, relay stats
+- `DiagnosticsScreen.kt`  Connection state, NAT status, ledger summary
+- `MeshSettingsScreen.kt`  Transport toggles, discovery mode
+- `PowerSettingsScreen.kt`  Battery-aware adjustments
+- `PeerListScreen.kt`  Discovered peer enumeration
+- `TopologyScreen.kt`  Network topology visualization
 
 **Repository Methods (~120 public):**
 Identity, contacts, messaging, blocking, history, settings, transport control, BLE/WiFi init, diagnostics, backups, notifications, receipt handling, routing hints, peer discovery.
@@ -44,29 +44,29 @@ Identity, contacts, messaging, blocking, history, settings, transport control, B
 ### Windows CLI Surface (clap subcommands)
 
 **Commands (22 top-level + subcommands):**
-- `init` — Initialize identity
+- `init`  Initialize identity
 - `identity {show, export, import, set-name, device-id, seniority, registration-state, sign-data, verify-signature}`
 - `contact {add, list, show, remove, search, set-local-nickname, set-nickname}`
 - `config {set, get, list, privacy}`
 - `history {--peer, --search, --limit}`
-- `start` — Start P2P node + embedded web server
-- `relay` — Run headless relay node
-- `send` — Send offline message
-- `status` — Network status
-- `mark-sent` — Mark outbox message delivered
-- `history-clear` — Clear all history
-- `history-enforce-retention` — Keep newest N messages
-- `history-prune-before` — Remove history older than timestamp
-- `stop` — Stop running node
+- `start`  Start P2P node + embedded web server
+- `relay`  Run headless relay node
+- `send`  Send offline message
+- `status`  Network status
+- `mark-sent`  Mark outbox message delivered
+- `history-clear`  Clear all history
+- `history-enforce-retention`  Keep newest N messages
+- `history-prune-before`  Remove history older than timestamp
+- `stop`  Stop running node
 - `block {add, remove, delete, list, check, count}`
-- `history-get` — Get message by ID
-- `history-stats` — History statistics
-- `history-count` — Total message count
-- `history-mark-delivered` — Mark message delivered
-- `history-clear-conversation` — Clear peer conversation
-- `history-remove-conversation` — Remove peer conversation
-- `history-delete` — Delete message by ID
-- `test` — Run self-tests
+- `history-get`  Get message by ID
+- `history-stats`  History statistics
+- `history-count`  Total message count
+- `history-mark-delivered`  Mark message delivered
+- `history-clear-conversation`  Clear peer conversation
+- `history-remove-conversation`  Remove peer conversation
+- `history-delete`  Delete message by ID
+- `test`  Run self-tests
 - `audit {export, verify, stats}`
 - `swarm {stats}`
 - `discovery {status, scan, peers}`
@@ -184,7 +184,7 @@ send_message, scan_peers, get_topology, get_identity, initialize_identity, get_c
 1. **Export/Import Identity Backup**
    - Android: Present in `IdentityScreen.kt` / `OnboardingScreen.kt`
    - CLI: Present as `identity export` / `identity import`
-   - **JSON-RPC: MISSING** — WASM/browser client cannot export/import identity backups
+   - **JSON-RPC: MISSING**  WASM/browser client cannot export/import identity backups
 
 2. **Requests Inbox UI**
    - Android: `RequestsInboxScreen.kt` + `NotificationActionReceiver.kt` complete
@@ -201,7 +201,7 @@ send_message, scan_peers, get_topology, get_identity, initialize_identity, get_c
 4. **Contact Nickname Management**
    - Android: Can set local nickname in `ContactDetailScreen.kt`
    - CLI: Has `contact set-local-nickname` and `contact set-nickname`
-   - **JSON-RPC: MISSING** — WASM cannot manage nicknames
+   - **JSON-RPC: MISSING**  WASM cannot manage nicknames
 
 5. **Message Search**
    - Android: No UI for searching messages
@@ -211,12 +211,12 @@ send_message, scan_peers, get_topology, get_identity, initialize_identity, get_c
 6. **History Management Commands**
    - Android: Can clear all history, clear conversation
    - CLI: Has granular history commands (enforce-retention, prune-before, delete-by-id, mark-delivered)
-   - **JSON-RPC: Only `clear_history`** — missing granular history ops
+   - **JSON-RPC: Only `clear_history`**  missing granular history ops
 
 7. **Privacy Configuration**
    - Android: SettingsScreen has toggles for onion, padding, cover traffic, timing
    - CLI: `config privacy` subcommand
-   - **JSON-RPC: MISSING** — WASM cannot configure privacy settings
+   - **JSON-RPC: MISSING**  WASM cannot configure privacy settings
 
 8. **Audit Log**
    - Android: No audit log UI
@@ -275,18 +275,18 @@ The JSON-RPC bridge (`wasm_support/rpc.rs`) is the **thinnest surface** and need
 ### P2: CLI Experience Gaps
 
 **Missing CLI commands:**
-- `requests` — View and manage pending DM requests
-- `notify` — Simulate notification actions (reply, mark-read, mute)
-- `diagnostics export` — Export full diagnostic bundle
+- `requests`  View and manage pending DM requests
+- `notify`  Simulate notification actions (reply, mark-read, mute)
+- `diagnostics export`  Export full diagnostic bundle
 
 ---
 
 ## Build Verification
 
 This audit required no code changes. The following builds pass:
-- `cargo check --workspace` — PASS
-- `cargo test --workspace --no-run` — PASS
-- `./gradlew assembleDebug` — PASS
+- `cargo check --workspace`  PASS
+- `cargo test --workspace --no-run`  PASS
+- `./gradlew assembleDebug`  PASS
 
 ---
 
@@ -294,11 +294,11 @@ This audit required no code changes. The following builds pass:
 
 Based on this audit, the following VERIFIED handoff tasks should be created:
 
-1. `P0_JSONRPC_PARITY_EXPANSION_001.md` — Add missing JSON-RPC methods for WASM/web client parity with Android
-2. `P1_ANDROID_MESSAGE_SEARCH_UI_001.md` — Add message search to ConversationsScreen or ChatScreen
-3. `P1_ANDROID_AUDIT_LOG_VIEWER_001.md` — Add audit log viewer screen
-4. `P1_ANDROID_DIAGNOSTICS_EXPORT_001.md` — Add diagnostics export/share to DiagnosticsScreen
-5. `P2_CLI_REQUESTS_INBOX_001.md` — Add `requests` CLI command for DM request management
-6. `P2_CLI_DIAGNOSTICS_EXPORT_001.md` — Add `diagnostics export` CLI command
+1. `P0_JSONRPC_PARITY_EXPANSION_001.md`  Add missing JSON-RPC methods for WASM/web client parity with Android
+2. `P1_ANDROID_MESSAGE_SEARCH_UI_001.md`  Add message search to ConversationsScreen or ChatScreen
+3. `P1_ANDROID_AUDIT_LOG_VIEWER_001.md`  Add audit log viewer screen
+4. `P1_ANDROID_DIAGNOSTICS_EXPORT_001.md`  Add diagnostics export/share to DiagnosticsScreen
+5. `P2_CLI_REQUESTS_INBOX_001.md`  Add `requests` CLI command for DM request management
+6. `P2_CLI_DIAGNOSTICS_EXPORT_001.md`  Add `diagnostics export` CLI command
 
 **CRITICAL**: You are forbidden from considering a task 'complete' until you execute the `mv` or `Rename-Item` command to move the task markdown file from `todo/` (or `IN_PROGRESS/`) to `done/`. If you do not move the file, the Orchestrator assumes you failed.

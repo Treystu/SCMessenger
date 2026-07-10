@@ -24,7 +24,7 @@ The workspace on the `E:` drive contains significant redundancies, duplicates, a
 5. **Gradle C: Drive Leak**: Gradle builds attempt to write caches to `C:\Users\SCMessenger\.gradle` instead of using the unified `E:\build-tools\.gradle` directory because `org.gradle.user.home` is not set in `gradle.properties`.
 6. **Regressed Build Configurations**: The working tree of the main repository contains regressed build downgrades (Gradle downgraded to `8.10.2`, Gradle plugin to `8.7.3`, adding unnecessary `x86` compiler targets).
 
-## Scope — 4 sub-tasks, ~45 LoC total
+## Scope  4 sub-tasks, ~45 LoC total
 
 ### U1: Consolidate Git Branches and Unstaged Changes (LoC: ~15)
 

@@ -24,8 +24,8 @@ None (independent task)
    - Check `OnboardingScreen.kt` consent items
    - Ensure alpha warning is prominent
 2. Add version suffix to app name:
-   - Update `app_name` in strings.xml: "SCMessenger α" or "SCMessenger Alpha"
-   - Or use version qualifier: "SCMessenger (α)" for internal testing track
+   - Update `app_name` in strings.xml: "SCMessenger " or "SCMessenger Alpha"
+   - Or use version qualifier: "SCMessenger ()" for internal testing track
 3. Update Play Store listing:
    - Short description: "Alpha: Secure mesh messaging"
    - Long description: Explain alpha status, expected bugs

@@ -26,13 +26,13 @@ S4-T3 (Data Persistence & Recovery)
    - Generate QR using ZXing or similar
    - Display QR in IdentityScreen
 2. Implement QR code scanning for identity restore:
-   - Scan QR → parse fields → validate
+   - Scan QR  parse fields  validate
    - Prompt for confirmation before restore
 3. Implement "Import Identity" flow in onboarding:
    - Add "I have a backup code" option
    - Show QR scanner
    - Verify backup code matches expected format
-4. Test: backup → wipe app → restore → verify same identity
+4. Test: backup  wipe app  restore  verify same identity
 5. Add backup reminder in settings (optional, not blocking)
 
 ## Verification

@@ -12,26 +12,26 @@ CRITICAL: You are forbidden from considering a task 'complete' until you execute
 ## Build Verification
 After wiring, run: `cargo check --workspace`
 
-## Tasks — Group A: Core Infrastructure Wiring (routing, relay, transport)
+## Tasks  Group A: Core Infrastructure Wiring (routing, relay, transport)
 
 
 ## Sub-batch 4 of 7
 
-1. **nonce_length_invariant** — core/src/crypto/ — Wire into nonce validation
-2. **ratchet_has_session** — core/src/crypto/ — Wire into session check path
-3. **ratchet_reset_session** — core/src/crypto/ — Wire into session reset
-4. **ratchet_session_count** — core/src/crypto/ — Wire into session diagnostics
-5. **decode_rejects_short_buffer** — core/src/drift/ — Wire into drift decode validation
-6. **proptest_different_ciphertexts_same_plaintext** — Wire into proptest harness
-7. **proptest_encrypt_decrypt_roundtrip** — Wire into proptest harness
-8. **proptest_envelope_field_lengths** — Wire into proptest harness
-9. **proptest_ratchet_forward_secrecy** — Wire into proptest harness
-10. **proptest_ratchet_roundtrip** — Wire into proptest harness
-11. **proptest_sign_verify_roundtrip** — Wire into proptest harness
-12. **proptest_wrong_key_fails** — Wire into proptest harness
+1. **nonce_length_invariant**  core/src/crypto/  Wire into nonce validation
+2. **ratchet_has_session**  core/src/crypto/  Wire into session check path
+3. **ratchet_reset_session**  core/src/crypto/  Wire into session reset
+4. **ratchet_session_count**  core/src/crypto/  Wire into session diagnostics
+5. **decode_rejects_short_buffer**  core/src/drift/  Wire into drift decode validation
+6. **proptest_different_ciphertexts_same_plaintext**  Wire into proptest harness
+7. **proptest_encrypt_decrypt_roundtrip**  Wire into proptest harness
+8. **proptest_envelope_field_lengths**  Wire into proptest harness
+9. **proptest_ratchet_forward_secrecy**  Wire into proptest harness
+10. **proptest_ratchet_roundtrip**  Wire into proptest harness
+11. **proptest_sign_verify_roundtrip**  Wire into proptest harness
+12. **proptest_wrong_key_fails**  Wire into proptest harness
 
-## Tasks — Group D: Relay, Storage, Abuse & Privacy Wiring
+## Tasks  Group D: Relay, Storage, Abuse & Privacy Wiring
 
-13. **relay_discovery_mut** — core/src/relay/ — Wire into relay discovery mutation
-14. **relay_jitter_delay** — core/src/relay/ — Wire into relay timing
-15. **relay_request_carries_ws13_metadata_when_set** — core/src/relay/ — Wire into WS1.3 relay request
+13. **relay_discovery_mut**  core/src/relay/  Wire into relay discovery mutation
+14. **relay_jitter_delay**  core/src/relay/  Wire into relay timing
+15. **relay_request_carries_ws13_metadata_when_set**  core/src/relay/  Wire into WS1.3 relay request

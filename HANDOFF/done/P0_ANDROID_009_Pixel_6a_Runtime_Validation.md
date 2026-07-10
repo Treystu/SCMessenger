@@ -3,7 +3,7 @@
 **Priority:** P0
 **Type:** VALIDATION
 **Platform:** Android (Google Pixel 6a)
-**Estimated LoC Impact:** 50–150 LoC (log parsing scripts + potential hotfixes)
+**Estimated LoC Impact:** 50150 LoC (log parsing scripts + potential hotfixes)
 **Status:** PASSED (with fix applied)
 **Date:** 2026-04-22
 
@@ -36,7 +36,7 @@ User has a Pixel 6a connected via USB and accessible to the agent through `adb`.
 
 **Root Cause:** Infinite recursion in fallback protocol:
 ```
-enhanceNetworkErrorLogging → trackNetworkFailure → triggerFallbackProtocol → bridge.dial() → Exception → enhanceNetworkErrorLogging (loop)
+enhanceNetworkErrorLogging  trackNetworkFailure  triggerFallbackProtocol  bridge.dial()  Exception  enhanceNetworkErrorLogging (loop)
 ```
 
 **Fix Applied:** Added recursion guard in `MeshRepository.kt`:

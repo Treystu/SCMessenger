@@ -11,7 +11,7 @@ phase: "MICRO"
 # MODEL: gemini-3-flash-preview:cloud
 # BUDGET: 120
 
-# MICRO_ANR_002: MeshRepository.kt Safe Return — Empty Message ID Guard
+# MICRO_ANR_002: MeshRepository.kt Safe Return  Empty Message ID Guard
 
 ## Objective
 Convert the `IllegalStateException` throw at `MeshRepository.kt:4001` into a safe, non-fatal return path.

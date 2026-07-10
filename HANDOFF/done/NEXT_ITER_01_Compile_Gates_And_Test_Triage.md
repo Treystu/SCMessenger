@@ -10,10 +10,10 @@ gates to cheaper workers, re-escalate to Fable only as needed)
 The Fable 5 networking/stabilization sprint (see `HANDOFF/done/FABLE_5_COMPREHENSIVE_AUDIT.md`,
 or `HANDOFF/todo/` if not yet moved) landed large changes:
 
-- `core/src/transport/swarm.rs` — ListenerFailed event variant + gossipsub reply channels
-- `core/src/mobile_bridge.rs` — 14 sync FFI fns converted to `async fn` (UniFFI suspend), startup-await in `start_swarm`
-- `android/.../MeshRepository.kt` and 8 other Kotlin files — suspend conversions, dedicated dispatchers
-- `android/app/build.gradle` — unit tests RE-ENABLED (operator-approved reversal of the 2026-06-06 disable)
+- `core/src/transport/swarm.rs`  ListenerFailed event variant + gossipsub reply channels
+- `core/src/mobile_bridge.rs`  14 sync FFI fns converted to `async fn` (UniFFI suspend), startup-await in `start_swarm`
+- `android/.../MeshRepository.kt` and 8 other Kotlin files  suspend conversions, dedicated dispatchers
+- `android/app/build.gradle`  unit tests RE-ENABLED (operator-approved reversal of the 2026-06-06 disable)
 - 4 tests in `MeshRepositoryTest.kt` wrapped in `runTest` for the now-suspend `attemptWifiThenBleFallback`
 
 Already verified when this handoff was written: `cargo check --workspace` PASS,
@@ -25,20 +25,20 @@ Run each gate below IN ORDER. Windows notes: run from Git Bash
 (`"C:\Program Files\Git\bin\bash.exe"`), and `export CARGO_INCREMENTAL=0` first.
 Never run two cargo/gradle builds concurrently.
 
-1. `cargo build --workspace` — must pass.
-2. `cargo clippy --workspace -- -D warnings -A clippy::empty_line_after_doc_comments` — must pass.
+1. `cargo build --workspace`  must pass.
+2. `cargo clippy --workspace -- -D warnings -A clippy::empty_line_after_doc_comments`  must pass.
    Mechanical fixes (unused imports, needless borrows) you may fix directly.
-3. `cargo test --workspace --no-run` — the compile gate. Test-code compile
+3. `cargo test --workspace --no-run`  the compile gate. Test-code compile
    errors from renamed helpers (e.g. `get_peers` -> `get_peers_blocking` in
    `core/src/mobile_bridge.rs` tests) are yours to fix mechanically.
-4. `cargo test --workspace` — run the suite. Pre-existing failures (verify via
+4. `cargo test --workspace`  run the suite. Pre-existing failures (verify via
    `git stash` + rerun if unsure) get documented, not silently fixed.
-5. `cargo check -p scmessenger-wasm --target wasm32-unknown-unknown` — must pass.
+5. `cargo check -p scmessenger-wasm --target wasm32-unknown-unknown`  must pass.
    Watch for: UniFFI 0.31 async exports on wasm32 (the 14 new `async fn` in
-   mobile_bridge.rs compile under the `wasm-unstable-single-threaded` feature —
+   mobile_bridge.rs compile under the `wasm-unstable-single-threaded` feature 
    if this errors, that is an ESCALATION, not a mechanical fix).
 6. `cd android && ./gradlew :app:assembleDebug :app:testDebugUnitTest -x lint`
-   — the unit test suite was re-enabled after a month disabled.
+    the unit test suite was re-enabled after a month disabled.
    TRIAGE STATE AT HANDOFF (2026-07-06, Fable session):
    - Main source compiles; `assembleDebug` PASSES.
    - `ConversationsViewModelTest.kt` fixed in-session (MessageRecord gained a
@@ -50,9 +50,9 @@ Never run two cargo/gradle builds concurrently.
      `IdentityViewModelTest.kt` (ViewModel moved packages + gained an
      identityCreationCoordinator dependency; needs rework against current API)
      and `IdentityCreationFlowTest.kt` (Compose UI test in the JVM unit-test
-     source set — has never compiled here; needs androidTest move or
-     Robolectric+compose-test deps — a structural decision).
-     YOUR JOB: restore both — fix them against current APIs, move them back
+     source set  has never compiled here; needs androidTest move or
+     Robolectric+compose-test deps  a structural decision).
+     YOUR JOB: restore both  fix them against current APIs, move them back
      into a compiling source set, and delete the quarantine dir when empty.
    - FIRST REAL RUN RESULT (2026-07-06): **101 tests completed, 94 passed,
      7 failed, 2 skipped.** `RoleNavigationPolicyTest` (the mandatory
@@ -60,19 +60,19 @@ Never run two cargo/gradle builds concurrently.
      ChatViewModelTest/ContactsViewModelTest/MockTestHelper/UniffiIntegrationTest
      (MessageRecord.status + Contact.verifiedAt/isTombstone constructor drift),
      AndroidPlatformBridgeTest (bogus `io.mockk.isNull` top-level import removed).
-   - THE 7 REMAINING FAILURES to triage (none look like sprint regressions —
+   - THE 7 REMAINING FAILURES to triage (none look like sprint regressions 
      the repository is mocked in all of them, so the Rust/FFI changes are
      not in play):
      a) `AndroidPlatformBridgeTest > battery broadcast onReceive returns
-        promptly despite slow FFI call` — InvocationTargetException at
+        promptly despite slow FFI call`  InvocationTargetException at
         test line 41 (`registerBatteryMonitor.invoke(bridge)`); this test was
         added by the /scmorc BatteryReceiver-ANR session while tests were
-        force-disabled and has NEVER executed — the reflection target throws a
+        force-disabled and has NEVER executed  the reflection target throws a
         RuntimeException against the mocked Context. Get the full stack from
         `android/app/build/reports/tests/testDebugUnitTest/` and fix the test
         harness (likely un-stubbed Context/registerReceiver overload), or the
         production registerBatteryMonitor if it's a real bug.
-     b) `SettingsViewModelTest` — all 6 tests NPE at test line 80
+     b) `SettingsViewModelTest`  all 6 tests NPE at test line 80
         (`viewModel = SettingsViewModel(...)` construction). The ViewModel's
         init drifted against the test's mock setup (note the test does NOT stub
         `repository.identityInfo`, which init collects). Fix the mock setup
@@ -85,7 +85,7 @@ Never run two cargo/gradle builds concurrently.
      or quarantine further tests to make the build green.
    - Watch `UniffiIntegrationTest.kt` specifically: if it fails to load the
      native library in the JVM test context, that is plausibly the original
-     (undocumented) reason tests were disabled in June — document it and
+     (undocumented) reason tests were disabled in June  document it and
      escalate rather than hacking around it.
 
 ## Completion criteria

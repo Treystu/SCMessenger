@@ -1,4 +1,4 @@
-# S3-T3: BLE Quota→AutoAdjust Integration
+# S3-T3: BLE QuotaAutoAdjust Integration
 
 ## Status
 - [ ] TODO
@@ -13,7 +13,7 @@ Sprint 3: BLE Completion
 ~100
 
 ## Depends
-S3-T1 (BLE→Core Message Forwarding)
+S3-T1 (BLECore Message Forwarding)
 
 ## Files
 - `android/app/src/main/java/com/scmessenger/android/transport/ble/BleQuotaManager.kt`
@@ -21,13 +21,13 @@ S3-T1 (BLE→Core Message Forwarding)
 - `android/app/src/main/java/com/scmessenger/android/service/MeshForegroundService.kt`
 
 ## Actions
-1. Wire `BleQuotaManager.currentCount` → `AndroidPlatformBridge.reportBleScanCount()`
+1. Wire `BleQuotaManager.currentCount`  `AndroidPlatformBridge.reportBleScanCount()`
 2. Implement `reportBleScanCount()` to call Rust `AutoAdjustEngine.reportBleScanCount()`
 3. Connect to `AutoAdjustEngine` profile adjustment:
-   - High quota usage → reduce scan frequency
-   - Low quota usage → allow more frequent scanning
+   - High quota usage  reduce scan frequency
+   - Low quota usage  allow more frequent scanning
 4. Propagate adjustment back to `BleScanner.applyScanSettings()`
-5. Test: exhaust BLE scan quota (5 starts in 30s on Android 12+) → verify reduced scan frequency
+5. Test: exhaust BLE scan quota (5 starts in 30s on Android 12+)  verify reduced scan frequency
 6. Handle Android 12+ quota enforcement gracefully (don't exceed, but prioritize discovery)
 
 ## Verification

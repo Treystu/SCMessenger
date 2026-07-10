@@ -1,8 +1,8 @@
-# FINAL WIRING AUDIT V2 — Google Play Readiness & Edge-Case Exception Sweep
+# FINAL WIRING AUDIT V2  Google Play Readiness & Edge-Case Exception Sweep
 
 **Date:** 2026-04-30
 **Auditor:** Claude Code Lead Auditor (read-only sweep)
-**Scope:** Repository-wide — Android `app/`, Rust `core/`, WASM `wasm/`, CLI `cli/`
+**Scope:** Repository-wide  Android `app/`, Rust `core/`, WASM `wasm/`, CLI `cli/`
 **Methodology:** Parallel agent grep; no files modified.
 
 ---
@@ -15,23 +15,23 @@ The findings below are real but mostly low-severity. The only item approaching P
 
 ---
 
-## P0 — Play Store Blockers / High Risk
+## P0  Play Store Blockers / High Risk
 
 ### P0-1: Deprecated API usage with `@Suppress("DEPRECATION")` (targetSdk=35)
 **Risk:** Google Play scans for deprecated API calls, especially when targetSdk is high. With targetSdk=35, these suppressions may trigger manual review flags.
 
 | File | Line | Deprecated API |
 |------|------|---------------|
-| `android/.../transport/MdnsServiceDiscovery.kt` | 199 | `resolvedInfo.host`, `resolvedInfo.port`, `resolvedInfo.attributes` — all deprecated on `NsdServiceInfo` |
-| `android/.../transport/MdnsServiceDiscovery.kt` | 231 | `resolvedInfo.host?.hostAddress` — use `hostAddresses` (API 34+) |
-| `android/.../transport/MdnsServiceDiscovery.kt` | 250 | `nsdManager?.resolveService(serviceInfo, resolveListener)` — overload deprecated |
-| `android/.../transport/ble/BleGattClient.kt` | 475 | `BluetoothGattCallback()` — no-arg constructor deprecated |
-| `android/.../transport/ble/BleGattServer.kt` | 260 | `BluetoothGattServerCallback()` — no-arg constructor deprecated |
-| `android/.../transport/WifiDirectTransport.kt` | 286-289 | `NetworkInfo` and `NetworkInfo.isConnected` — deprecated |
+| `android/.../transport/MdnsServiceDiscovery.kt` | 199 | `resolvedInfo.host`, `resolvedInfo.port`, `resolvedInfo.attributes`  all deprecated on `NsdServiceInfo` |
+| `android/.../transport/MdnsServiceDiscovery.kt` | 231 | `resolvedInfo.host?.hostAddress`  use `hostAddresses` (API 34+) |
+| `android/.../transport/MdnsServiceDiscovery.kt` | 250 | `nsdManager?.resolveService(serviceInfo, resolveListener)`  overload deprecated |
+| `android/.../transport/ble/BleGattClient.kt` | 475 | `BluetoothGattCallback()`  no-arg constructor deprecated |
+| `android/.../transport/ble/BleGattServer.kt` | 260 | `BluetoothGattServerCallback()`  no-arg constructor deprecated |
+| `android/.../transport/WifiDirectTransport.kt` | 286-289 | `NetworkInfo` and `NetworkInfo.isConnected`  deprecated |
 
 **Recommendation:** Each instance already has API-level branching. Audit each to confirm the fallback path for API 34+ actually works. Migrate mDNS resolution to the `NsdManager.ResolveListener` overload for API 34+ if not already done. Replace `BluetoothGattCallback()` with the `BluetoothDevice`-parameter constructor.
 
-### P0-2: Single foreground service type (`connectedDevice`) — no `dataSync`
+### P0-2: Single foreground service type (`connectedDevice`)  no `dataSync`
 **Risk:** If the foreground service performs any data synchronization (message relay, outbox flush) while the app is in the background, Google requires `foregroundServiceType="dataSync"` in addition to (or instead of) `connectedDevice`.
 
 **File:** `android/app/src/main/AndroidManifest.xml`, line 106
@@ -46,7 +46,7 @@ android:foregroundServiceType="connectedDevice|dataSync"
 
 ---
 
-## P1 — Feature Incomplete / Missing Wiring
+## P1  Feature Incomplete / Missing Wiring
 
 ### P1-1: Multi-device blocking not implemented
 **Files:** `core/src/store/blocked.rs`, lines 4, 17, 59
@@ -81,7 +81,7 @@ Neither method has a removal timeline. Callers may still be using the deprecated
 
 ---
 
-## P2 — Technical Debt / Code Quality
+## P2  Technical Debt / Code Quality
 
 ### P2-1: `IllegalStateException` proliferation in MeshRepository (14 throw sites)
 **File:** `android/.../data/MeshRepository.kt`
@@ -89,15 +89,15 @@ Neither method has a removal timeline. Callers may still be using the deprecated
 All 14 production-code `throw IllegalStateException(...)` calls are guard clauses for uninitialized state (`ironCore == null`, mesh service not running, etc.). This pattern converts recoverable state errors into crashes. Consider a sealed `Result` type or a `MeshStateException` hierarchy to allow callers (ViewModels) to handle gracefully rather than crashing.
 
 Key throw sites:
-- Line 117, 2023, 2047 — service startup failures
-- Line 2931, 3528, 3542, 3738, 3742 — core not initialized
-- Line 3616, 3717, 3730 — invalid key/identity format
-- Line 3837, 3985 — mesh service initialization
+- Line 117, 2023, 2047  service startup failures
+- Line 2931, 3528, 3542, 3738, 3742  core not initialized
+- Line 3616, 3717, 3730  invalid key/identity format
+- Line 3837, 3985  mesh service initialization
 
 ### P2-2: Duplicate notification channel creation
-Both `NotificationHelper.kt` (line 93, called from `MeshApplication.onCreate()`) and `MeshForegroundService.kt` (line 520) create the foreground service notification channel. The service-level creation at line 520-531 is a redundant fallback — it runs every time the service starts, even though the channel already exists from app launch. This is harmless but unnecessary.
+Both `NotificationHelper.kt` (line 93, called from `MeshApplication.onCreate()`) and `MeshForegroundService.kt` (line 520) create the foreground service notification channel. The service-level creation at line 520-531 is a redundant fallback  it runs every time the service starts, even though the channel already exists from app launch. This is harmless but unnecessary.
 
-### P2-3: `emptyList()` guard clauses are legitimate — no stubs found
+### P2-3: `emptyList()` guard clauses are legitimate  no stubs found
 All 9 instances of `return emptyList()` in `MeshRepository.kt` are guard-clause early returns (missing env var, missing file, null array, blank input, invalid peer ID). None are stubbed "not yet implemented" placeholders. No action needed.
 
 ### P2-4: Test mockk comments are contained to test files
@@ -118,7 +118,7 @@ All 4 `// mock` comments found are in `ConversationsViewModelTest.kt` (a test fi
 | Hardcoded API keys / passwords | 0 matches |
 | `PendingIntent` mutability flags | All compliant (7 IMMUTABLE, 1 MUTABLE for RemoteInput) |
 | NotificationChannel setup | 5 channels created at app launch, Android 14+ compliant |
-| `SCHEDULE_EXACT_ALARM` | Not needed — no AlarmManager usage |
+| `SCHEDULE_EXACT_ALARM` | Not needed  no AlarmManager usage |
 | `ForegroundServiceStartNotAllowedException` | Explicitly handled (string-name check for API 31+) |
 | `targetSdk` | 35 (current, correct) |
 | `minSdk` | 26 (correct for WiFi Aware) |

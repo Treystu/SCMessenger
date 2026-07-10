@@ -7,7 +7,7 @@
 
 ## Issues to Fix
 
-### Issue #7: SharedPreferences backup cleared → identity detection fails
+### Issue #7: SharedPreferences backup cleared  identity detection fails
 **File:** `android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt:3898-3930`
 **Problem:** `isIdentityInitialized()` fast path checks `identityBackupPrefs.contains(IDENTITY_BACKUP_KEY)`. If this key is lost (app data clear, upgrade, corruption), falls through to disk check. No backup redundancy.
 **Fix:** Consider:
@@ -21,9 +21,9 @@
 **Fix:** Add the SharedPreferences backup file to the exclusion list in StorageManager.
 
 ## Files to Modify
-1. `android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt` — harden isIdentityInitialized()
-2. `android/app/src/main/java/com/scmessenger/android/utils/StorageManager.kt` — protect backup prefs
-3. `android/app/src/main/java/com/scmessenger/android/data/PreferencesRepository.kt` — consider adding backup flag
+1. `android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt`  harden isIdentityInitialized()
+2. `android/app/src/main/java/com/scmessenger/android/utils/StorageManager.kt`  protect backup prefs
+3. `android/app/src/main/java/com/scmessenger/android/data/PreferencesRepository.kt`  consider adding backup flag
 
 ## Implementation Summary
 

@@ -4,7 +4,7 @@
 **Errors to fix:** 42 E0433 + 27 E0425 + 3 E0405 = ~50 errors in mobile_bridge.rs
 
 ## ROOT CAUSE
-The UDL declarations and rust source are mismatched. The pre-merge code NEVER had an `IronCore` struct — this was always a gap. We need a minimal stub to unblock compilation.
+The UDL declarations and rust source are mismatched. The pre-merge code NEVER had an `IronCore` struct  this was always a gap. We need a minimal stub to unblock compilation.
 
 ## REQUIRED WORK
 
@@ -70,4 +70,4 @@ use crate::transport::swarm::SwarmHandle;
 The scaffolding generates IdentityInfo, PreparedMessage, etc. from the UDL. These MUST be re-exported or defined in Rust. Check if the scaffolding types are properly in scope.
 
 ### VERIFICATION
-After all changes, run: `cargo check -p scmessenger-core` — must show 0 errors.
+After all changes, run: `cargo check -p scmessenger-core`  must show 0 errors.

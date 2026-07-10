@@ -1,4 +1,4 @@
-# S3-T1: BLE→Core Message Forwarding
+# S3-T1: BLECore Message Forwarding
 
 ## Status
 - [ ] TODO
@@ -22,15 +22,15 @@ S1-T3 (Core Integration Audit)
 - `android/app/src/main/java/com/scmessenger/android/service/MeshEventBus.kt`
 
 ## Actions
-1. Wire received BLE data → Core message parser:
-   - `BleL2capManager.onDataReceived` → parse drift frame → `MeshEventBus.messageReceived`
-   - `BleGattClient.onDataReceived` → parse drift frame → `MeshEventBus.messageReceived`
-   - `BleGattServer.onDataReceived` → parse drift frame → `MeshEventBus.messageReceived`
+1. Wire received BLE data  Core message parser:
+   - `BleL2capManager.onDataReceived`  parse drift frame  `MeshEventBus.messageReceived`
+   - `BleGattClient.onDataReceived`  parse drift frame  `MeshEventBus.messageReceived`
+   - `BleGattServer.onDataReceived`  parse drift frame  `MeshEventBus.messageReceived`
 2. Verify `MessageRecord` construction from BLE payload (peerId, content, timestamp, direction)
 3. Handle BLE data fragmentation (messages > MTU):
    - Implement fragmentation reassembly
    - Timeout incomplete fragments after 10s
-4. Test: send message over BLE → verify it appears in chat history
+4. Test: send message over BLE  verify it appears in chat history
 5. Handle encoding errors gracefully (log and drop malformed frames)
 
 ## Verification

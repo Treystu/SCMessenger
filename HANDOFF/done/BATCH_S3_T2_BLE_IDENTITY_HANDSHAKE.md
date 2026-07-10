@@ -13,7 +13,7 @@ Sprint 3: BLE Completion
 ~200
 
 ## Depends
-S3-T1 (BLE→Core Message Forwarding)
+S3-T1 (BLECore Message Forwarding)
 
 ## Files
 - `android/app/src/main/java/com/scmessenger/android/transport/ble/BleGattClient.kt`
@@ -25,13 +25,13 @@ S3-T1 (BLE→Core Message Forwarding)
    - GATT service UUID: `0000DF02-...` (Identity service)
    - Characteristics: `0xDF04` (Public Key write), `0xDF05` (Public Key notify)
 2. Implement handshake state machine:
-   - `INITIATING` → send our public key
-   - `KEY_EXCHANGE` → receive peer public key
-   - `ESTABLISHED` → store peer identity, notify UI
+   - `INITIATING`  send our public key
+   - `KEY_EXCHANGE`  receive peer public key
+   - `ESTABLISHED`  store peer identity, notify UI
 3. Store exchanged identity in contact manager:
    - Add to contacts if not exists
    - Update public key if contact exists
-4. Test: two devices meet over BLE → mutual identity exchange → contacts added
+4. Test: two devices meet over BLE  mutual identity exchange  contacts added
 5. Handle handshake timeout (30s) and retry
 
 ## Verification

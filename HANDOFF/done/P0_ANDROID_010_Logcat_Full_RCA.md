@@ -3,7 +3,7 @@
 **Priority:** P0
 **Type:** RCA + IMPLEMENTATION
 **Platform:** Android
-**Estimated LoC Impact:** 200–500 LoC (identity flow fixes + potential rollback)
+**Estimated LoC Impact:** 200500 LoC (identity flow fixes + potential rollback)
 
 ## Objective
 Perform full Root Cause Analysis on `android/android_logcat_4-22-26.md` (~1MB log), identify why the new identity generation flow broke the previously-working flow, and implement fixes or rollback the new flow entirely.
@@ -56,49 +56,49 @@ Perform full Root Cause Analysis on `android/android_logcat_4-22-26.md` (~1MB lo
 
 ### Three-Phase Crash Cascade
 
-**Phase 1** (PID 29537/30371/30825, 13:41–13:44): StackOverflowError
-- `enhanceNetworkErrorLogging` → `trackNetworkFailure` → `triggerFallbackProtocol` → `enhanceNetworkErrorLogging` infinite recursion
+**Phase 1** (PID 29537/30371/30825, 13:4113:44): StackOverflowError
+- `enhanceNetworkErrorLogging`  `trackNetworkFailure`  `triggerFallbackProtocol`  `enhanceNetworkErrorLogging` infinite recursion
 - `@Volatile inFallbackProtocol` boolean guard was race-unsafe: check-then-set pattern allowed concurrent coroutines to bypass the guard
 - JNI crash: "JNI DETECTED ERROR IN APPLICATION: JNI GetObjectField called with pending exception java.lang.StackOverflowError"
 
 **Phase 2** (PID 31824, 13:46): ANR
 - `isIdentityInitialized()` fast path returned `true` from SharedPreferences backup
-- But Rust core had `consent_granted=false` — identity could not actually be used
+- But Rust core had `consent_granted=false`  identity could not actually be used
 - App showed main navigation but identity-dependent operations (dial, swarm) silently failed
-- 292% CPU usage, 7975 minor page faults — main thread blocked for 5+ seconds
+- 292% CPU usage, 7975 minor page faults  main thread blocked for 5+ seconds
 - ANR: "Input dispatching timed out (Waited 5001ms for MotionEvent)"
 
 **Phase 3** (PID 1850, 13:48+): Permanent Identity Loss
 - After ANR kill, Rust core's sled database lost/corrupted (no clean shutdown)
 - `ensureLocalIdentityFederation()` found identity uninitialized, tried backup restore
 - Backup restore via `importIdentityBackup()` works (no consent check), but `grantConsent()` never called
-- `isIdentityInitialized()` returned `false` — SharedPreferences backup was lost because `persistIdentityBackup()` used `.apply()` (async write), killed before disk commit
+- `isIdentityInitialized()` returned `false`  SharedPreferences backup was lost because `persistIdentityBackup()` used `.apply()` (async write), killed before disk commit
 - App stuck in "Identity not initialized; onboarding required" + `ConsentRequired` exception loop
 
 ### Root Causes
 
-1. **PRIMARY: Missing `grantConsent()` call** — Rust core's `IronCore.initialize_identity()` requires `consent_granted=true`, but the Android Kotlin layer NEVER calls `ironCore.grantConsent()`. The OnboardingScreen consent checkbox only gates the UI button; consent is not propagated to the Rust core. Every `createIdentity()` call fails with `ConsentRequired`.
+1. **PRIMARY: Missing `grantConsent()` call**  Rust core's `IronCore.initialize_identity()` requires `consent_granted=true`, but the Android Kotlin layer NEVER calls `ironCore.grantConsent()`. The OnboardingScreen consent checkbox only gates the UI button; consent is not propagated to the Rust core. Every `createIdentity()` call fails with `ConsentRequired`.
 
-2. **Non-atomic fallback recursion guard** — `@Volatile var inFallbackProtocol: Boolean` uses check-then-set pattern which is racy across coroutine threads. Two threads can both read `false` and both enter the fallback path, causing StackOverflow.
+2. **Non-atomic fallback recursion guard**  `@Volatile var inFallbackProtocol: Boolean` uses check-then-set pattern which is racy across coroutine threads. Two threads can both read `false` and both enter the fallback path, causing StackOverflow.
 
-3. **Async identity backup persistence** — `persistIdentityBackup()` uses `SharedPreferences.edit().apply()` which writes to disk asynchronously. If the process is killed (ANR, StackOverflow, OOM) before the write completes, the identity backup is permanently lost.
+3. **Async identity backup persistence**  `persistIdentityBackup()` uses `SharedPreferences.edit().apply()` which writes to disk asynchronously. If the process is killed (ANR, StackOverflow, OOM) before the write completes, the identity backup is permanently lost.
 
-4. **`isIdentityInitialized()` false-positive fast path** — Returns `true` from SharedPreferences without verifying the Rust core actually has the identity. Creates state mismatch where UI shows main navigation but core operations fail.
+4. **`isIdentityInitialized()` false-positive fast path**  Returns `true` from SharedPreferences without verifying the Rust core actually has the identity. Creates state mismatch where UI shows main navigation but core operations fail.
 
 ### Resolution: Fix Forward
 
-Chosen approach: **Fix Forward** — minimal LoC, preserves existing flow structure, addresses all root causes.
+Chosen approach: **Fix Forward**  minimal LoC, preserves existing flow structure, addresses all root causes.
 
 ### Changes Implemented
 
 **File: `MeshRepository.kt`**
 
-1. **Consent grant in `createIdentity()`** — Added `ironCore?.grantConsent()` before `ironCore?.initializeIdentity()`. Maps OnboardingScreen's consent checkbox to the Rust core's consent gate.
+1. **Consent grant in `createIdentity()`**  Added `ironCore?.grantConsent()` before `ironCore?.initializeIdentity()`. Maps OnboardingScreen's consent checkbox to the Rust core's consent gate.
 
-2. **Consent grant in `ensureLocalIdentityFederation()`** — After successful backup restore, calls `core.grantConsent()`. Also grants consent unconditionally when identity is initialized (handles process restart where `consent_granted` resets to `false`).
+2. **Consent grant in `ensureLocalIdentityFederation()`**  After successful backup restore, calls `core.grantConsent()`. Also grants consent unconditionally when identity is initialized (handles process restart where `consent_granted` resets to `false`).
 
-3. **Atomic fallback recursion guard** — Changed `@Volatile var inFallbackProtocol: Boolean` to `AtomicBoolean` with `compareAndSet(false, true)` for race-free entry. Updated both `trackNetworkFailure()` and `triggerFallbackProtocol()`.
+3. **Atomic fallback recursion guard**  Changed `@Volatile var inFallbackProtocol: Boolean` to `AtomicBoolean` with `compareAndSet(false, true)` for race-free entry. Updated both `trackNetworkFailure()` and `triggerFallbackProtocol()`.
 
-4. **Synchronous backup persistence** — Changed `persistIdentityBackup()` from `.apply()` to `.commit()`. Ensures identity backup survives process kills.
+4. **Synchronous backup persistence**  Changed `persistIdentityBackup()` from `.apply()` to `.commit()`. Ensures identity backup survives process kills.
 
-5. **`isIdentityInitialized()` verification** — When SharedPreferences backup exists but Rust core reports uninitialized, triggers `restoreIdentityFromBackup()` + `grantConsent()`. Prevents false-positive state mismatch.
+5. **`isIdentityInitialized()` verification**  When SharedPreferences backup exists but Rust core reports uninitialized, triggers `restoreIdentityFromBackup()` + `grantConsent()`. Prevents false-positive state mismatch.

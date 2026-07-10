@@ -25,7 +25,7 @@ S4-T3 (Data Persistence & Recovery)
    - Read from cache without FFI call
    - Return cached data while Rust core initializes
 2. Fix any "Unavailable" gaps (30-60s was reported in ANR investigation)
-3. Test: kill app → restart → verify identity shown within 1s
+3. Test: kill app  restart  verify identity shown within 1s
 4. Verify onboarding doesn't show during cache load
 
 ## Verification

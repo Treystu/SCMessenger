@@ -1,4 +1,4 @@
-# 5-Gate Build Validation — Integration Branch
+# 5-Gate Build Validation  Integration Branch
 
 **Date:** 2026-06-10
 **Branch:** merge/integration-to-main-2026-06-10
@@ -24,7 +24,7 @@
 4. Installed `cargo-ndk 4.1.2` via `cargo install cargo-ndk`
 5. Wrote `$HOME/Library/Android/sdk/ndk/26.1.10909125/source.properties` confirm
 6. Created `android/local.properties` pointing at NDK r26b
-7. Created `android/gradle.properties.local-overrides` to fix Windows-shaped paths (`org.gradle.user.home=E:/build-tools/.gradle` → `${user.home}/.gradle`) and reduce Xmx4g → Xmx3g for 8GB host
+7. Created `android/gradle.properties.local-overrides` to fix Windows-shaped paths (`org.gradle.user.home=E:/build-tools/.gradle`  `${user.home}/.gradle`) and reduce Xmx4g  Xmx3g for 8GB host
 8. Wired JAVA_HOME to `/Applications/Android Studio.app/Contents/jbr/Contents/Home`
 
 ## Verifications and conclusions

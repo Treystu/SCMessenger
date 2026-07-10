@@ -13,15 +13,15 @@
 Android `NotificationHelper.kt` is fully implemented with DM vs DM Request classification, channels, actions, foreground suppression, and tap routing. **BUT** the action handlers and Requests Inbox UI are missing, creating a notification parity gap vs iOS.
 
 **Verified Code State:**
-- `NotificationHelper.kt` — Complete (lines 1-649): 5 channels, DM/DM Request classification, grouped messaging, identicon avatars, settings parity
-- `MeshForegroundService.kt:596` — `NotificationHelper.showMessageNotification()` IS called from message receive path with WS14 classification
-- `MeshRepository.kt` — `logDeliveryAttempt` uses proper `messageId` (fixed since March 2026)
+- `NotificationHelper.kt`  Complete (lines 1-649): 5 channels, DM/DM Request classification, grouped messaging, identicon avatars, settings parity
+- `MeshForegroundService.kt:596`  `NotificationHelper.showMessageNotification()` IS called from message receive path with WS14 classification
+- `MeshRepository.kt`  `logDeliveryAttempt` uses proper `messageId` (fixed since March 2026)
 
 **Verified Missing:**
 1. **No BroadcastReceivers** for notification actions: `ACTION_REPLY`, `ACTION_MARK_READ`, `ACTION_MUTE`, `ACTION_OPEN_REQUESTS`
 2. **No manifest registration** for action receivers in `AndroidManifest.xml`
-3. **No Requests Inbox UI screen** — `android/app/src/main/java/com/scmessenger/android/ui/screens/` has no `RequestsInboxScreen.kt`
-4. **No MainActivity intent handling** for `ACTION_OPEN_REQUESTS` — only handles `Intent.ACTION_VIEW` deep links (MainActivity.kt:122,256)
+3. **No Requests Inbox UI screen**  `android/app/src/main/java/com/scmessenger/android/ui/screens/` has no `RequestsInboxScreen.kt`
+4. **No MainActivity intent handling** for `ACTION_OPEN_REQUESTS`  only handles `Intent.ACTION_VIEW` deep links (MainActivity.kt:122,256)
 
 ## Scope
 
@@ -71,7 +71,7 @@ Android `NotificationHelper.kt` is fully implemented with DM vs DM Request class
 - `android/app/src/main/AndroidManifest.xml` [EDIT]
 - `android/app/src/main/java/com/scmessenger/android/ui/MainActivity.kt` [EDIT]
 - `android/app/src/main/res/values/strings.xml` [EDIT]
-- `android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt` [EDIT — add request-list/query methods if missing]
+- `android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt` [EDIT  add request-list/query methods if missing]
 
 ## Build Verification Commands
 

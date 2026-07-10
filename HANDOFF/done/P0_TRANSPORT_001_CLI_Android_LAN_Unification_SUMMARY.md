@@ -1,4 +1,4 @@
-# P0_TRANSPORT_001 CLI↔Android LAN Unification - Implementation Summary
+# P0_TRANSPORT_001 CLIAndroid LAN Unification - Implementation Summary
 
 **Date:** 2026-04-23
 **Task:** P0_TRANSPORT_001_CLI_Android_LAN_Unification
@@ -6,7 +6,7 @@
 
 ## Overview
 
-This task implemented CLI↔Android native libp2p LAN transport unification, fixing the connectivity issues that prevented message delivery between variants on the same local network.
+This task implemented CLIAndroid native libp2p LAN transport unification, fixing the connectivity issues that prevented message delivery between variants on the same local network.
 
 ## Problem Analysis
 
@@ -16,7 +16,7 @@ This task implemented CLI↔Android native libp2p LAN transport unification, fix
 | Address stale in ledger | No address refresh mechanism | FIXED |
 | No API server running | API was already started on port 9876 | VERIFIED |
 | Android ephemeral port | Using port 0 instead of static | FIXED |
-| CLI→Android message pipeline | Outbox retry mechanism | WORKING |
+| CLIAndroid message pipeline | Outbox retry mechanism | WORKING |
 
 ## Changes Made
 
@@ -93,8 +93,8 @@ use libp2p::{Multiaddr, PeerId};
 Comprehensive test plan covering:
 1. Static port verification (port 9001)
 2. CLI API server test
-3. Android→CLI message delivery
-4. CLI→Android message delivery
+3. AndroidCLI message delivery
+4. CLIAndroid message delivery
 5. Address staleness recovery
 6. Outbox retry mechanism
 
@@ -102,13 +102,13 @@ Comprehensive test plan covering:
 
 | Criteria | Status |
 |----------|--------|
-| CLI `scm send` works while daemon is running | ✓ API available |
-| Android app receives messages from CLI peer on same LAN | ✓ Port 9001 static |
-| No API "expected value at line 1 column 1" errors | ✓ API working |
-| Ledger addresses refresh before dialing | ✓ Periodic refresh added |
-| Both sides show ≥1 connected peer | ✓ Expected in tests |
-| Messages delivered within 30s on same LAN | ✓ Expected in tests |
-| Address stale after restart recovered automatically | ✓ Identify protocol handles this |
+| CLI `scm send` works while daemon is running |  API available |
+| Android app receives messages from CLI peer on same LAN |  Port 9001 static |
+| No API "expected value at line 1 column 1" errors |  API working |
+| Ledger addresses refresh before dialing |  Periodic refresh added |
+| Both sides show 1 connected peer |  Expected in tests |
+| Messages delivered within 30s on same LAN |  Expected in tests |
+| Address stale after restart recovered automatically |  Identify protocol handles this |
 
 ## Files Modified
 
@@ -131,7 +131,7 @@ Warnings: 0 new (only pre-existing warnings)
 
 1. Run manual tests per `HANDOFF/IN_PROGRESS/LAN_TRANSPORT_TEST.md`
 2. Verify Android app on target devices
-3. Confirm CLI→Android and Android→CLI message delivery
+3. Confirm CLIAndroid and AndroidCLI message delivery
 4. Test address recovery when Android restarts
 
 ## Rollback Instructions

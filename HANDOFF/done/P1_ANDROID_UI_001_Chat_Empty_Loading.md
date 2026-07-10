@@ -1,7 +1,7 @@
 # P1_ANDROID_UI_001: Chat Empty State and Loading Indicator
 
 **Status:** TODO
-**Priority:** P1 — User experience
+**Priority:** P1  User experience
 **Estimated LoC Impact:** ~80
 
 ## Problem
@@ -12,9 +12,9 @@ The Chat screen lacks:
 ## Exact Changes Required
 **File:** `android/app/src/main/java/com/scmessenger/android/ui/screens/ChatScreen.kt`
 - Add a `when` block around the message list:
-  - `messages.isEmpty() && isLoading` → show `CircularProgressIndicator` centered
-  - `messages.isEmpty() && !isLoading` → show empty state with icon + text ("No messages yet. Send a message to start the conversation.")
-  - `messages.isNotEmpty()` → show current message list
+  - `messages.isEmpty() && isLoading`  show `CircularProgressIndicator` centered
+  - `messages.isEmpty() && !isLoading`  show empty state with icon + text ("No messages yet. Send a message to start the conversation.")
+  - `messages.isNotEmpty()`  show current message list
 - Add `isLoading` state to `ChatViewModel` that tracks `getConversation()` loading
 
 ## Verification

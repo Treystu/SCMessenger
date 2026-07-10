@@ -8,15 +8,15 @@
 **Budget:** 1440
 **Assigned to:** worker
 **Created:** 2026-05-13
-**Status:** FAILED — prematurely moved to done/ without code changes. MeshForegroundService.kt still calls createNotificationChannel() redundantly.
+**Status:** FAILED  prematurely moved to done/ without code changes. MeshForegroundService.kt still calls createNotificationChannel() redundantly.
 **Source:** MASTER AUDIT 2026-05-13 (P1 Android Hardening, sub-task 3)
 
 ## Summary
 
 Notification channels are created in TWO places, causing redundant creation on every service start:
 
-1. `NotificationHelper.createNotificationChannels()` — called once from `MeshApplication.kt:43` at app startup
-2. `MeshForegroundService.createNotificationChannel()` — called from `MeshForegroundService.kt:414` on every service start
+1. `NotificationHelper.createNotificationChannels()`  called once from `MeshApplication.kt:43` at app startup
+2. `MeshForegroundService.createNotificationChannel()`  called from `MeshForegroundService.kt:414` on every service start
 
 This is a P2 bug: duplicate channel creation wastes resources and could cause race conditions.
 
@@ -27,10 +27,10 @@ This is a P2 bug: duplicate channel creation wastes resources and could cause ra
 3. Decide on single owner:
    - Option A: Remove from `MeshForegroundService`, keep in `NotificationHelper` (called once at app start)
    - Option B: Keep in `MeshForegroundService` only, remove from `NotificationHelper`/`MeshApplication`
-4. Implement the chosen approach — delete the duplicate
+4. Implement the chosen approach  delete the duplicate
 5. Ensure channels are still created before any notification is posted
 
-**Recommendation:** Option A — keep the centralized `NotificationHelper.createNotificationChannels()` called from `MeshApplication.onCreate()`. Remove the private `createNotificationChannel()` method and its call site from `MeshForegroundService`.
+**Recommendation:** Option A  keep the centralized `NotificationHelper.createNotificationChannels()` called from `MeshApplication.onCreate()`. Remove the private `createNotificationChannel()` method and its call site from `MeshForegroundService`.
 
 ## Verification
 

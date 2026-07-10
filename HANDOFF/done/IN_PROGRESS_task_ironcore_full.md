@@ -1,7 +1,7 @@
 # Agent Task: Create Full IronCore Implementation + Fix Compilation Errors
 
 **Assigned Model:** glm-5.1:cloud
-**Task Type:** Core Implementation — Rust
+**Task Type:** Core Implementation  Rust
 
 ## CONTEXT
 The codebase at C:\Users\kanal\Documents\Github\SCMessenger has ~73 compilation errors. 
@@ -19,7 +19,7 @@ Read these files to understand what mobile_bridge.rs expects from IronCore:
 
 ### Step 2: Create IronCore struct module
 Create file `core/src/iron_core.rs` with a FULL (not stub) `IronCore` struct that:
-- Holds fields: identity, outbox, inbox, contact_manager, history_manager, storage_manager, log_manager, blocked_manager, relay_registry, audit_log — all behind `Arc<RwLock<...>>` (parking_lot)
+- Holds fields: identity, outbox, inbox, contact_manager, history_manager, storage_manager, log_manager, blocked_manager, relay_registry, audit_log  all behind `Arc<RwLock<...>>` (parking_lot)
 - Has ALL constructors: `new()`, `with_storage(path)`, `with_storage_and_logs(path, log_dir)`
 - Has ALL methods mobile_bridge.rs calls (grep for `core.` and `IronCore::` in mobile_bridge.rs)
 - Each method should have a real (not todo!()) implementation where feasible

@@ -1,12 +1,35 @@
 # SCMessenger Remaining Work Tracking
 
 Status: Active
-Last updated: 2026-07-08 (native /scmorc lean-mode session, native Claude
-subscription at 98% weekly usage / resets 2026-07-10 — session ran on the
-Qwen/DashScope + agy-Gemini + ollama-cloud worker pools, near-zero native
-token spend; see `HANDOFF/todo/GEMINI_SCMORC_DRIVER_2026-07-07.md` for the
-lane-routing directive this session established for continued driving during
-the HARDLOCK window).
+Last updated: 2026-07-08 (Qwen session via /scmqwen orchestrator -- zero
+Anthropic cost, DashScope Qwen models with round-robin selection across 4
+tiers: [FLASH], [CODER], [THINK], [MAX]; 130+ Qwen models available, ~1M
+free tokens/model/90 days).
+
+## 2026-07-08 QWEN SESSION (/scmqwen orchestrator setup + Phase 1 status)
+
+- **Created `/scmqwen` command** (`.claude/commands/scmqwen.md`): Qwen-native
+  orchestrator analogous to `/scmorc` but dispatches to DashScope Qwen models
+  via `tmp/scmqwen/qwen_dispatch.sh` with round-robin model selection. Two
+  dispatch modes: ANALYZE (read-only) and PATCH (implementation). Same HANDOFF
+  state machine, build serialization, and escalation rules as `/scmorc`.
+- **Android emulator setup**: Installed emulator component (emulator.exe) via
+  sdkmanager. System image (API 35, Google APIs, x86_64) downloading in
+  background. AVD creation planned: `scm_pixel_35` with Pixel 6a profile.
+- **Environment fixed**: ANDROID_HOME and PATH updated permanently (setx) to
+  include Android SDK platform-tools and emulator paths.
+- **Queue cleaned**: Batch-moved 59 `[VALIDATED]_*` items from `HANDOFF/todo/`
+  to `HANDOFF/done/[VALIDATED]/`. Todo now has 25 files (4 active Phase 1,
+  2 NEEDS_PLANNING, 1 evidence, 18 frozen Phase 2).
+- **Iteration plan written**: `HANDOFF/plans/QWEN_ITERATION_PLAN_2026-07-08.md`
+  covering 2 iterations: (1) Emulator + baseline validation, (2) Phase 1
+  completion + WiFi Direct decision + exit review.
+- **Build gates verified**: `cargo check --workspace` PASS,
+  `cargo test --workspace --no-run` PASS (both clean).
+- **Working tree clean**: No uncommitted changes at session start.
+- **Phase 1 remaining items**: NEXT_ITER_04 (emulator retest), P1-17
+  (WiFi Direct, operator-gated), P1-14 (hostile-network), P1-18 (relay),
+  P1-19 (exit review). All other Phase 1 items completed by swarm/native.
 
 ## 2026-07-08 SESSION SUMMARY (BLE Outbound TX & Clippy Debt paid off)
 

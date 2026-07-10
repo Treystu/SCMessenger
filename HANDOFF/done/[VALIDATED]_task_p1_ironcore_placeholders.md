@@ -4,13 +4,13 @@
 
 ## P1: IronCore Placeholder Method Implementation
 
-**Source:** 2026-05-13 MASTER AUDIT — 3 IronCore placeholder methods: `export_logs()` returns empty, `record_log()` trace-only, `update_disk_stats()` no-op
+**Source:** 2026-05-13 MASTER AUDIT  3 IronCore placeholder methods: `export_logs()` returns empty, `record_log()` trace-only, `update_disk_stats()` no-op
 
 ### Current State
 Three methods in `IronCore` are stubbed out with no-op or empty implementations:
-- `export_logs()` — returns empty Vec
-- `record_log()` — trace-only, does not persist
-- `update_disk_stats()` — no-op, does not update storage metrics
+- `export_logs()`  returns empty Vec
+- `record_log()`  trace-only, does not persist
+- `update_disk_stats()`  no-op, does not update storage metrics
 
 ### Required Work
 1. Implement `export_logs()` to read and return actual log data from the log manager

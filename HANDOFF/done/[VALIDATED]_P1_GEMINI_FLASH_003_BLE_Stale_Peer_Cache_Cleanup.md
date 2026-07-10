@@ -2,10 +2,10 @@
 
 **Status:** ready
 **Bucket:** pending-dispatch
-**Cross-ref:** `STATE/PLAN_VERIFICATION_2026-06-11.md` §1 (BLE gaps — `on_read`/`on_write` no callers)
+**Cross-ref:** `STATE/PLAN_VERIFICATION_2026-06-11.md` 1 (BLE gaps  `on_read`/`on_write` no callers)
 **Decided by:** Hermes Agent (overseer) post-session audit
 **Routing model:** `gemini-3.5-flash:cloud` (single-method call + unit test)
-**Rationale:** D4 from the Android stability plan. Already partially wired per the slot2 log 2026-06-08 03:30 PT — `BleScanner.clearPeerCache()` is called on `onDiscoveryStop()`. What's missing: the unit test, and a small belt-and-suspenders null-check. ~20 LoC of test + ~5 LoC of safety. Trivial for Flash.
+**Rationale:** D4 from the Android stability plan. Already partially wired per the slot2 log 2026-06-08 03:30 PT  `BleScanner.clearPeerCache()` is called on `onDiscoveryStop()`. What's missing: the unit test, and a small belt-and-suspenders null-check. ~20 LoC of test + ~5 LoC of safety. Trivial for Flash.
 
 ---
 
@@ -13,12 +13,12 @@
 # BUDGET: 300
 # token_budget: 6000
 
-# P1_GEMINI_FLASH_003 — Stale BLE Peer Cache Cleanup + Unit Test
+# P1_GEMINI_FLASH_003  Stale BLE Peer Cache Cleanup + Unit Test
 
 **Status:** VERIFIED REMAINING WORK
 **Agent:** gemini-coder (Gemini 3.5 Flash)
 **Budget:** 300s (MICRO tier)
-**Phase:** v0.2.1 P1 — Android stability (D4)
+**Phase:** v0.2.1 P1  Android stability (D4)
 **Source:** `IN_PROGRESS_claude_slot2_status.md` 2026-06-08 03:30 PT (Bug 5 shipped, test missing)
 **Depends on:** none
 **Blocks:** none
@@ -41,14 +41,14 @@ In `android/app/src/main/java/com/scmessenger/android/transport/ble/BleScanner.k
 
 New file `android/app/src/test/java/com/scmessenger/android/transport/ble/BleScannerCacheTest.kt`:
 - Setup: populate cache with 5 fake peers
-- Test 1: `onDiscoveryStop()` → cache empty
-- Test 2: `onDiscoveryStop()` called twice → no exception (idempotent)
-- Test 3: 100 peers added → `clear()` reduces to 0
+- Test 1: `onDiscoveryStop()`  cache empty
+- Test 2: `onDiscoveryStop()` called twice  no exception (idempotent)
+- Test 3: 100 peers added  `clear()` reduces to 0
 
 ## File Targets
 
-- `android/app/src/main/java/com/scmessenger/android/transport/ble/BleScanner.kt` [EDIT — null-guard + log, ~5 LoC]
-- `android/app/src/test/java/com/scmessenger/android/transport/ble/BleScannerCacheTest.kt` [NEW — 3 test cases, ~20 LoC]
+- `android/app/src/main/java/com/scmessenger/android/transport/ble/BleScanner.kt` [EDIT  null-guard + log, ~5 LoC]
+- `android/app/src/test/java/com/scmessenger/android/transport/ble/BleScannerCacheTest.kt` [NEW  3 test cases, ~20 LoC]
 
 ## Build Verification
 
@@ -64,7 +64,7 @@ cd android
 1. APK builds
 2. `BleScannerCacheTest` passes all 3 cases
 3. Existing `RoleNavigationPolicyTest` still passes (no regression)
-4. Manual: Pixel 6a logcat after 5-min idle → no `peerCache` growth in heap dump
+4. Manual: Pixel 6a logcat after 5-min idle  no `peerCache` growth in heap dump
 
 ## CRITICAL
 

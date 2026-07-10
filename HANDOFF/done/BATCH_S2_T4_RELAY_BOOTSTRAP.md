@@ -28,11 +28,11 @@ S2-T1 (SwarmBridge Wiring)
    - Mark node unreachable after 3 consecutive failures
    - Log failure reason (timeout, refused, protocol error)
 3. Implement automatic failover:
-   - On relay failure → try next healthy node
+   - On relay failure  try next healthy node
    - Circuit breaker pattern (allowRequest check)
    - Backoff after repeated failures
 4. Add QUIC preference (per spec: cellular-friendly for NAT traversal)
-5. Test: kill primary relay → verify automatic switch to fallback
+5. Test: kill primary relay  verify automatic switch to fallback
 
 ## Verification
 - Relay connection succeeds within 10s of service start

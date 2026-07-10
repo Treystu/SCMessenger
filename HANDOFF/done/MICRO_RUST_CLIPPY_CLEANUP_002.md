@@ -45,9 +45,9 @@ serde_json::Value::Object(map)
 Or for mixed types, build a `serde_json::Value` via `serde_json::to_value(...)`.
 
 **Files to edit:**
-- `cli/src/server.rs` [EDIT] — search for `json!(` and replace with explicit Value construction
-- `cli/src/api.rs` [EDIT] — search for `json!(` and replace
-- `wasm/src/lib.rs` [EDIT] — search for `json!(` and replace
+- `cli/src/server.rs` [EDIT]  search for `json!(` and replace with explicit Value construction
+- `cli/src/api.rs` [EDIT]  search for `json!(` and replace
+- `wasm/src/lib.rs` [EDIT]  search for `json!(` and replace
 
 ## Build Verification Commands
 

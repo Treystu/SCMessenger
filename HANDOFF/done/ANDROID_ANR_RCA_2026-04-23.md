@@ -47,11 +47,11 @@ val DEFAULT_BOOTSTRAP_NODES: List<String> by lazy {
 **Problem:** `ensureServiceInitializedDeferred()` called `loadSettings()` synchronously inside the coroutine, creating a deadlock:
 
 ```
-UI thread → SettingsViewModel.loadIdentityInternal() 
-→ meshRepository.getIdentityInfoNonBlocking()
-→ ensureServiceInitializedDeferred() 
-→ loadSettings()  // Waits for Rust core not yet initialized
-→ BLOCKS
+UI thread  SettingsViewModel.loadIdentityInternal() 
+ meshRepository.getIdentityInfoNonBlocking()
+ ensureServiceInitializedDeferred() 
+ loadSettings()  // Waits for Rust core not yet initialized
+ BLOCKS
 ```
 
 **Impact:** Settings screen failed to load, triggering ANR watchdog timeout (5000ms).

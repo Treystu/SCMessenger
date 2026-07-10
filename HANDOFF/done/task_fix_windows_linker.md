@@ -58,7 +58,7 @@ Report: what was changed, build status, and any remaining blockers.
 - Build scripts (e.g. `serde`, `zerocopy`, `typenum`) compile for the HOST target (MSVC)
 - MSVC `link.exe` was NOT installed on this machine
 - `/usr/bin/link` (GNU coreutils hard-link utility) shadows `link.exe` on PATH
-- rustc invokes `/usr/bin/link` with MSVC-style arguments → `extra operand` failure
+- rustc invokes `/usr/bin/link` with MSVC-style arguments  `extra operand` failure
 
 ### Fix Applied
 1. **MSVC Build Tools v143 installed** on the host machine (executed outside agent scope)
@@ -80,7 +80,7 @@ Report: what was changed, build status, and any remaining blockers.
    - Removed stale `[target.x86_64-pc-windows-msvc]` section pointing to `rust-lld.exe`
    - Retained `incremental = false` for Android-specific builds
 6. **`docs/CURRENT_STATE.md` updated** (canonical doc sync per CLAUDE.md mandatory rules):
-   - Line 39: corrected stale claim that CLI build is "blocked on Windows by missing `dlltool.exe`" → now documents resolved state with MSVC Build Tools v143
+   - Line 39: corrected stale claim that CLI build is "blocked on Windows by missing `dlltool.exe`"  now documents resolved state with MSVC Build Tools v143
    - Line 40: clarified Android build requires `ANDROID_HOME` or auto-detected SDK path
 
 ### Verification Results
@@ -89,14 +89,14 @@ Report: what was changed, build status, and any remaining blockers.
 |---------|--------|--------|
 | `cargo build --workspace` | **PASS** (exit 0, 3m 19s) | Default MSVC target build (no `--target` override). All 4 crates compiled: `scmessenger-core`, `scmessenger-mobile`, `scmessenger-cli`, `scmessenger-wasm`. Post-cleanup regression verified after `android/.cargo/config.toml` fix. |
 | `cd android && ./gradlew :app:assembleDebug --rerun-tasks -x lint` | **PASS** (exit 0, 8m 14s, 46 tasks executed) | APK produced: `app/build/outputs/apk/debug/app-debug.apk` (29,756,445 bytes). cargo-ndk cross-compilation succeeded under MSVC. |
-| `cargo clippy --workspace -- -D warnings -A clippy::empty_line_after_doc_comments` | **FAIL** (pre-existing) | 7 errors in `core/src/identity/keys.rs` and `core/src/iron_core.rs` — uncommitted changes from prior wiring session (2026-04-29/30). NOT introduced by the linker fix.
+| `cargo clippy --workspace -- -D warnings -A clippy::empty_line_after_doc_comments` | **FAIL** (pre-existing) | 7 errors in `core/src/identity/keys.rs` and `core/src/iron_core.rs`  uncommitted changes from prior wiring session (2026-04-29/30). NOT introduced by the linker fix.
 | `cargo fmt --all -- --check` | **FAIL** (pre-existing) | Formatting drift in `core/src/iron_core.rs` from same prior session. NOT introduced by the linker fix.
-| `cargo test --workspace --no-run` | **FAIL** (pre-existing) | `error[E0786]: found invalid metadata files for crate scmessenger_core` — known Windows rlib metadata issue documented in `REMAINING_WORK_TRACKING.md` (P0_BUILD_004) and `.cargo/config.toml` (`incremental = false`). This is a carry-forward blocker, NOT a new regression from the linker fix. |
+| `cargo test --workspace --no-run` | **FAIL** (pre-existing) | `error[E0786]: found invalid metadata files for crate scmessenger_core`  known Windows rlib metadata issue documented in `REMAINING_WORK_TRACKING.md` (P0_BUILD_004) and `.cargo/config.toml` (`incremental = false`). This is a carry-forward blocker, NOT a new regression from the linker fix. |
 
 ### Remaining Blockers
 - **Compile gate (`cargo test --workspace --no-run`)**: Pre-existing Windows rlib metadata staleness issue (`P0_BUILD_004`). The `.cargo/config.toml` already sets `incremental = false` to mitigate. Full resolution likely requires upstream Rust/Cargo Windows fix or CI moving to Linux/macOS for integration test execution.
 - **Clippy/fmt debt**: Pre-existing regressions in `core/src/identity/keys.rs` and `core/src/iron_core.rs` from prior wiring session (2026-04-29/30). Tracked separately; not introduced by this task.
-- **Non-fatal warning**: `core/Cargo.toml` `default-features` ignored for `tokio-tungstenite` — upstream deprecation notice, does not block build.
+- **Non-fatal warning**: `core/Cargo.toml` `default-features` ignored for `tokio-tungstenite`  upstream deprecation notice, does not block build.
 
 ### Review Gate
 - [x] Wiring-verifier (`deepseek-v4-pro:cloud`) review and approval obtained before moving to `done/`.

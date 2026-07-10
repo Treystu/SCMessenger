@@ -4,13 +4,13 @@
 
 ## P1/P2: Android Hardening Remnants
 
-**Source:** 2026-05-13 MASTER AUDIT — Remaining P1/P2 items not covered by individual validated tasks
+**Source:** 2026-05-13 MASTER AUDIT  Remaining P1/P2 items not covered by individual validated tasks
 
 ### Items
-1. **P1: Network type debounce** — `NetworkDetector.kt` lacks debounce on network type changes, risking transport flapping
-2. **P1: Nickname DataStore fallback** — `SettingsViewModel.kt` DataStore fallback never pushes back to Rust Core when Core nickname is empty
-3. **P1: MeshVpnService disabled** — `AndroidManifest.xml` has `android:enabled="false"` on MeshVpnService
-4. **P2: Hardcoded strings** — 3 "Unknown" strings in Android UI not in `strings.xml`
+1. **P1: Network type debounce**  `NetworkDetector.kt` lacks debounce on network type changes, risking transport flapping
+2. **P1: Nickname DataStore fallback**  `SettingsViewModel.kt` DataStore fallback never pushes back to Rust Core when Core nickname is empty
+3. **P1: MeshVpnService disabled**  `AndroidManifest.xml` has `android:enabled="false"` on MeshVpnService
+4. **P2: Hardcoded strings**  3 "Unknown" strings in Android UI not in `strings.xml`
 
 ### Required Work
 1. Add debounce (300-500ms) to `NetworkDetector.kt` network type change callbacks

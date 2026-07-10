@@ -1,4 +1,4 @@
-# FINAL WIRING AUDIT — Repository-Wide Sweep
+# FINAL WIRING AUDIT  Repository-Wide Sweep
 
 **Date:** 2026-04-30
 **Scope:** `core/`, `android/`, `wasm/`, `cli/`
@@ -13,7 +13,7 @@
 - **0** `todo!()` / `unimplemented!()` macros found in production Rust code (both are clean).
 - **0** commented-out UniFFI/Rust calls found in Android Kotlin code.
 - **No hardcoded mock data** found in production API/RPC handlers (test mocks properly gated behind `#[cfg(test)]`).
-- **Major gap:** WASP thin client supports only 4 JSON-RPC methods — contacts, settings, history, and blocking are not exposed through the bridge.
+- **Major gap:** WASP thin client supports only 4 JSON-RPC methods  contacts, settings, history, and blocking are not exposed through the bridge.
 - **3 Placeholder methods** in IronCore need wiring (export_logs, record_log, update_disk_stats).
 - **3 "Unknown" hardcoded strings** in Android UI that should reference `strings.xml`.
 - **1 structural concern:** `blocked.rs` has deferred device-ID pairing infrastructure.
@@ -24,45 +24,45 @@
 
 ### CORE (scmessenger-core)
 
-#### P1 — Feature Incomplete
+#### P1  Feature Incomplete
 
 | File | Line | Description |
 |------|------|-------------|
 | `core/src/wasm_support/rpc.rs` | 51-61 | **ClientIntent enum has only 4 variants**: `SendMessage`, `ScanPeers`, `GetTopology`, `GetIdentity`. Missing: contact CRUD, settings read/write, history queries, blocking/unblocking, delivery status queries. The WASM thin client cannot manage contacts or settings through the daemon bridge. |
 | `core/src/wasm_support/rpc.rs` | 77-118 | **parse_intent() dispatches only 4 methods**: `send_message`, `scan_peers`, `get_topology`, `get_identity`. All other methods return `ERR_METHOD` (-32601). |
-| `core/src/wasm_support/rpc.rs` | 140-144 | **4 notification types defined** (`message_received`, `peer_discovered`, `mesh_topology_update`, `delivery_status`) with typed params and constructor functions — these are complete on the core side. |
-| `core/src/iron_core.rs` | 1034-1041 | **`update_disk_stats()` is a no-op placeholder** — only emits a debug trace. Does not adjust storage behavior. |
-| `core/src/iron_core.rs` | 1043-1046 | **`record_log()` is a no-op** — logs via tracing only; comment acknowledges "LogManager is not wired for arbitrary lines yet." |
-| `core/src/iron_core.rs` | 1048-1051 | **`export_logs()` returns empty string** — comment says "Placeholder: return empty log dump for now." |
-| `core/src/drift/envelope.rs` | 442 | **Placeholder `[0u8; 64]` signature** initialized before real signing at line 449. Not a bug (it's immediately overwritten), but a code smell — should use `[0u8; 64]` init inline or a dedicated "unsigned" constructor. |
+| `core/src/wasm_support/rpc.rs` | 140-144 | **4 notification types defined** (`message_received`, `peer_discovered`, `mesh_topology_update`, `delivery_status`) with typed params and constructor functions  these are complete on the core side. |
+| `core/src/iron_core.rs` | 1034-1041 | **`update_disk_stats()` is a no-op placeholder**  only emits a debug trace. Does not adjust storage behavior. |
+| `core/src/iron_core.rs` | 1043-1046 | **`record_log()` is a no-op**  logs via tracing only; comment acknowledges "LogManager is not wired for arbitrary lines yet." |
+| `core/src/iron_core.rs` | 1048-1051 | **`export_logs()` returns empty string**  comment says "Placeholder: return empty log dump for now." |
+| `core/src/drift/envelope.rs` | 442 | **Placeholder `[0u8; 64]` signature** initialized before real signing at line 449. Not a bug (it's immediately overwritten), but a code smell  should use `[0u8; 64]` init inline or a dedicated "unsigned" constructor. |
 
-#### P2 — Minor / Deferred
+#### P2  Minor / Deferred
 
 | File | Line | Description |
 |------|------|-------------|
 | `core/src/store/blocked.rs` | 4 | `// TODO: Add device ID to identity pairing for multi-device blocking.` |
 | `core/src/store/blocked.rs` | 17-19 | `/// TODO: Implement device ID pairing with identity` on `BlockedIdentity.device_id` field. |
 | `core/src/store/blocked.rs` | 59 | `/// TODO: Requires device ID infrastructure` on `with_device_id()`. |
-| `core/src/store/blocked.rs` | 51-56 | `full_relay()` creates a stub `BlockedIdentity::new("relay-stub")` for WASM compatibility — acceptable bridge code, not a gap. |
+| `core/src/store/blocked.rs` | 51-56 | `full_relay()` creates a stub `BlockedIdentity::new("relay-stub")` for WASM compatibility  acceptable bridge code, not a gap. |
 
 ### ANDROID (Kotlin/Compose)
 
-#### P1 — Feature Incomplete
+#### P1  Feature Incomplete
 
 | File | Line | Description |
 |------|------|-------------|
 | `android/.../ui/viewmodels/SettingsViewModel.kt` | 233, 260 | **Nickname DataStore fallback never pushes back to Rust Core.** When `getIdentityInfoNonBlocking()` returns null or incomplete, the ViewModel falls back to cached DataStore value but never calls `ironCore.updateNickname()` to sync it back into the Rust identity layer. This is the "identity death loop" root cause. |
-| `android/.../transport/NetworkDetector.kt` | 29-41 | **No debounce on network type transitions.** `_networkType` starts as `UNKNOWN` and flips on ConnectivityManager callbacks. Rapid flapping during network handoffs (WiFi → Cellular → WiFi) is not debounced, which can cause transport churn. |
+| `android/.../transport/NetworkDetector.kt` | 29-41 | **No debounce on network type transitions.** `_networkType` starts as `UNKNOWN` and flips on ConnectivityManager callbacks. Rapid flapping during network handoffs (WiFi  Cellular  WiFi) is not debounced, which can cause transport churn. |
 
-#### P2 — Minor UI Cleanup
+#### P2  Minor UI Cleanup
 
 | File | Line | Description |
 |------|------|-------------|
-| `android/.../ui/contacts/AddContactScreen.kt` | 205 | `nickname.ifBlank { "Unknown" }` — hardcoded English string. Should use `stringResource(R.string.unknown_contact)` or show a hint to set nickname. |
-| `android/.../ui/contacts/ContactDetailScreen.kt` | 223 | `contact.localNickname ?: contact.nickname ?: "Unknown"` — hardcoded English fallback. Same as above. |
-| `android/.../ui/viewmodels/DashboardViewModel.kt` | 309 | `else -> "Unknown"` in `determineTransport()` — hardcoded English. Should use `strings.xml` resource. |
-| `android/.../ui/dialogs/NetworkStatusDialog.kt` | 157 | `NetworkType.UNKNOWN -> "Unknown"` — hardcoded English. Should be a `strings.xml` resource. |
-| `android/.../ui/dashboard/PeerListScreen.kt` | 231 | `transport == "Unknown"` — hardcoded string comparison. Fragile; should use an enum or constant. |
+| `android/.../ui/contacts/AddContactScreen.kt` | 205 | `nickname.ifBlank { "Unknown" }`  hardcoded English string. Should use `stringResource(R.string.unknown_contact)` or show a hint to set nickname. |
+| `android/.../ui/contacts/ContactDetailScreen.kt` | 223 | `contact.localNickname ?: contact.nickname ?: "Unknown"`  hardcoded English fallback. Same as above. |
+| `android/.../ui/viewmodels/DashboardViewModel.kt` | 309 | `else -> "Unknown"` in `determineTransport()`  hardcoded English. Should use `strings.xml` resource. |
+| `android/.../ui/dialogs/NetworkStatusDialog.kt` | 157 | `NetworkType.UNKNOWN -> "Unknown"`  hardcoded English. Should be a `strings.xml` resource. |
+| `android/.../ui/dashboard/PeerListScreen.kt` | 231 | `transport == "Unknown"`  hardcoded string comparison. Fragile; should use an enum or constant. |
 
 #### Verified Clean (No Issues)
 
@@ -74,7 +74,7 @@
 
 ### WASM
 
-#### P1 — Missing Bridge Methods
+#### P1  Missing Bridge Methods
 
 | File | Line | Description |
 |------|------|-------------|
@@ -82,7 +82,7 @@
 | `wasm/src/daemon_bridge.rs` | 88-95 | **Only 2 `parse_*` functions**: `parse_response` and `parse_notification` (generic). No typed parsers for specific notification types (`mesh_topology_update`, `delivery_status`). The generic parsers work but callers must manually destructure the JSON. |
 | `wasm/src/daemon_bridge.rs` | 264-270 | **Non-WASM simulation path**: `connect()` on non-wasm32 emits only a tracing info line and returns `Ok(())`. This is intentional for native testing but means `request()` on native will never receive a response. |
 
-#### P2 — Minor / Cosmetic
+#### P2  Minor / Cosmetic
 
 | File | Line | Description |
 |------|------|-------------|
@@ -90,18 +90,18 @@
 
 ### CLI
 
-#### P1 — Missing Server Endpoints
+#### P1  Missing Server Endpoints
 
 | File | Line | Description |
 |------|------|-------------|
 | `cli/src/server.rs` | 338-400 | **`handle_jsonrpc_request()` handles only 4 ClientIntent variants**: `GetIdentity`, `SendMessage`, `ScanPeers`, `GetTopology`. No handlers for contacts, settings, history, or blocking. The WASM thin client has no way to manage its contact list through the daemon. |
-| `cli/src/server.rs` | 311-317 | **`_ui_cmd_tx` parameter is unused** in the dispatch match for `GetIdentity`, `ScanPeers`, and `GetTopology` — it's only consumed by `SendMessage`. The underscore prefix suppresses the warning but suggests unfinished wiring. |
+| `cli/src/server.rs` | 311-317 | **`_ui_cmd_tx` parameter is unused** in the dispatch match for `GetIdentity`, `ScanPeers`, and `GetTopology`  it's only consumed by `SendMessage`. The underscore prefix suppresses the warning but suggests unfinished wiring. |
 
-#### P2 — Minor / Cosmetic
+#### P2  Minor / Cosmetic
 
 | File | Line | Description |
 |------|------|-------------|
-| `cli/src/ble_daemon.rs` | 339 | `"Unknown"` fallback in `format_timestamp()` when chrono parsing fails. Cosmetic — timestamp formatting doesn't affect protocol. |
+| `cli/src/ble_daemon.rs` | 339 | `"Unknown"` fallback in `format_timestamp()` when chrono parsing fails. Cosmetic  timestamp formatting doesn't affect protocol. |
 
 ---
 
@@ -109,20 +109,20 @@
 
 Files currently modified (may overlap with findings):
 
-- `android/.../transport/MdnsServiceDiscovery.kt` — mDNS service discovery
-- `android/.../transport/TransportManager.kt` — transport lifecycle
-- `android/.../ui/identity/IdentityScreen.kt` — identity display
-- `android/.../ui/screens/SettingsScreen.kt` — settings UI
-- `android/.../ui/viewmodels/IdentityViewModel.kt` — identity state
-- `android/.../ui/viewmodels/MainViewModel.kt` — main nav state
-- `android/.../ui/viewmodels/MeshServiceViewModel.kt` — mesh service state
-- `android/.../ui/viewmodels/SettingsViewModel.kt` — settings state
-- `android/.../values/strings.xml` — string resources
-- `cli/src/main.rs` — CLI daemon main loop
-- `cli/src/server.rs` — HTTP/WS server
-- `core/src/iron_core.rs` — IronCore main entry point
-- `core/src/transport/behaviour.rs` — libp2p behaviour
-- `wasm/src/daemon_bridge.rs` — WASM daemon bridge
+- `android/.../transport/MdnsServiceDiscovery.kt`  mDNS service discovery
+- `android/.../transport/TransportManager.kt`  transport lifecycle
+- `android/.../ui/identity/IdentityScreen.kt`  identity display
+- `android/.../ui/screens/SettingsScreen.kt`  settings UI
+- `android/.../ui/viewmodels/IdentityViewModel.kt`  identity state
+- `android/.../ui/viewmodels/MainViewModel.kt`  main nav state
+- `android/.../ui/viewmodels/MeshServiceViewModel.kt`  mesh service state
+- `android/.../ui/viewmodels/SettingsViewModel.kt`  settings state
+- `android/.../values/strings.xml`  string resources
+- `cli/src/main.rs`  CLI daemon main loop
+- `cli/src/server.rs`  HTTP/WS server
+- `core/src/iron_core.rs`  IronCore main entry point
+- `core/src/transport/behaviour.rs`  libp2p behaviour
+- `wasm/src/daemon_bridge.rs`  WASM daemon bridge
 
 ---
 

@@ -264,12 +264,12 @@ class DiagnosticsReporter {
         // Show user-friendly summary
         val message = buildString {
             append("Network Status: ${report.networkType}\n")
-            append("Internet: ${if (report.connectivityTest.internetConnectivity) "✓" else "✗"}\n")
+            append("Internet: ${if (report.connectivityTest.internetConnectivity) "" else ""}\n")
             
             if (report.recommendations.isNotEmpty()) {
                 append("\nRecommendations:\n")
                 report.recommendations.forEach { rec ->
-                    append("• $rec\n")
+                    append(" $rec\n")
                 }
             }
         }
@@ -296,11 +296,11 @@ class DiagnosticsReporter {
 5. **User Reporting**: Verify diagnostics are user-friendly and actionable
 
 ## Success Criteria
-- ✅ Detailed error diagnostics for all network failure types
-- ✅ Comprehensive connectivity testing at startup
-- ✅ Accurate network type and restriction detection
-- ✅ Multiple fallback bootstrap sources
-- ✅ User-friendly diagnostics reporting
+-  Detailed error diagnostics for all network failure types
+-  Comprehensive connectivity testing at startup
+-  Accurate network type and restriction detection
+-  Multiple fallback bootstrap sources
+-  User-friendly diagnostics reporting
 
 ## Priority: URGENT
 Network connectivity is essential for app functionality. Without proper diagnostics, failures appear as generic "Network error" with no troubleshooting path.

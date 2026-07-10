@@ -1,4 +1,4 @@
-# TASK: CORE-SWEEP-02 — `IronCore::contacts_manager()`/`history_manager()` panic if the empty-path fallback also fails
+# TASK: CORE-SWEEP-02  `IronCore::contacts_manager()`/`history_manager()` panic if the empty-path fallback also fails
 
 ## Context
 
@@ -37,18 +37,18 @@ pub fn history_manager(&self) -> crate::mobile_bridge::HistoryManager {
 
 Both functions try the real storage path, retry the same path once, and if
 that still fails, fall back to constructing the manager against an empty
-(`""`) path as a last resort — and if THAT also fails, they `.expect()`,
+(`""`) path as a last resort  and if THAT also fails, they `.expect()`,
 panicking the whole process. This is reachable on real (non-programmer-error)
 conditions: a genuinely unwritable/permission-denied filesystem, out of
 disk space, a sandboxed mobile environment where even the fallback
 default path can't be opened, or a concurrent sled lock held by another
-process instance. On mobile this means a storage failure — which a user
+process instance. On mobile this means a storage failure  which a user
 could plausibly hit (full disk, revoked storage permission mid-session,
-restrictive OS sandbox) — crashes the entire app instead of surfacing a
+restrictive OS sandbox)  crashes the entire app instead of surfacing a
 recoverable error to the Kotlin/Swift caller.
 
 These are plain `IronCore`/bridge-layer accessors, not `crypto/`,
-`transport/`, `routing/`, or `privacy/` — the mandatory
+`transport/`, `routing/`, or `privacy/`  the mandatory
 crypto-security-auditor adversarial review does not apply, but this
 function is on the UniFFI mobile bridge boundary, so any signature change
 must be checked against Android/iOS callers (`android/`, `iOS/` Kotlin/Swift
@@ -61,14 +61,14 @@ sources) before landing.
 - Decide and implement one of:
   - (a) Change the return type to `Result<ContactManager, IronCoreError>` /
     `Result<HistoryManager, IronCoreError>` and propagate the error to
-    callers — check the UniFFI `.udl` interface definitions
+    callers  check the UniFFI `.udl` interface definitions
     (`core/src/api.udl` or wherever these are exposed) and all Kotlin/Swift
     call sites first, since this is a breaking signature change across the
     UniFFI boundary (mobile apps would need updated bindings + call-site
     handling).
   - (b) Keep the non-`Result` signature (avoiding an API-breaking change)
     but make the innermost fallback infallible instead of `.expect()`-able
-    — e.g. construct an in-memory-only/no-op manager variant that can never
+     e.g. construct an in-memory-only/no-op manager variant that can never
     fail to construct (if `ContactManager`/`HistoryManager` support an
     in-memory backend already, or if adding one is small; check
     `contacts_bridge.rs` and `mobile_bridge.rs` for an existing in-memory

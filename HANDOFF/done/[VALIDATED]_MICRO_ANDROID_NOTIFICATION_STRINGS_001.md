@@ -14,16 +14,16 @@
 
 ## Verified Gap
 
-`NotificationHelper.kt` contains hardcoded user-facing strings that violate android.md rules ("No hardcoded strings in UI — all user-facing text in `strings.xml`").
+`NotificationHelper.kt` contains hardcoded user-facing strings that violate android.md rules ("No hardcoded strings in UI  all user-facing text in `strings.xml`").
 
 **Verified Code State:**
-- `NotificationHelper.kt:330` — `.setLabel("Reply")` hardcoded
-- `NotificationHelper.kt:335` — `"Reply"` hardcoded (action title)
-- `NotificationHelper.kt:355` — `"Mark Read"` hardcoded (action title)
-- `NotificationHelper.kt:371` — `"Mute"` hardcoded (action title)
-- `NotificationHelper.kt:195` — `.setContentTitle("Mesh Network Active")` hardcoded (already in strings.xml as `mesh_service_notification_title` but NOT used)
-- `NotificationHelper.kt:509` — `.setContentTitle("Peer Discovered")` hardcoded
-- `NotificationHelper.kt:510` — `.setContentText("$peerId via $transport")` hardcoded format string
+- `NotificationHelper.kt:330`  `.setLabel("Reply")` hardcoded
+- `NotificationHelper.kt:335`  `"Reply"` hardcoded (action title)
+- `NotificationHelper.kt:355`  `"Mark Read"` hardcoded (action title)
+- `NotificationHelper.kt:371`  `"Mute"` hardcoded (action title)
+- `NotificationHelper.kt:195`  `.setContentTitle("Mesh Network Active")` hardcoded (already in strings.xml as `mesh_service_notification_title` but NOT used)
+- `NotificationHelper.kt:509`  `.setContentTitle("Peer Discovered")` hardcoded
+- `NotificationHelper.kt:510`  `.setContentText("$peerId via $transport")` hardcoded format string
 
 **Note:** The Requests Inbox strings were already added by the WS14.3 agent (see strings.xml lines 26-33).
 

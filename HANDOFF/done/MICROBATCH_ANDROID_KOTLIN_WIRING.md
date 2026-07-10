@@ -14,14 +14,14 @@ After wiring, run: `cd android && ./gradlew assembleDebug -x lint --quiet`
 
 ## Tasks (8 items)
 
-1. **clearAllHistory** — `android/app/src/main/java/com/scmessenger/android/ui/viewmodels/ConversationsViewModel.kt`
-2. **clearAllRequestNotifications** — `android/app/src/main/java/com/scmessenger/android/utils/NotificationHelper.kt`
-3. **clearAnrEvents** — `android/app/src/main/java/com/scmessenger/android/service/PerformanceMonitor.kt`
-4. **clearInput** — `android/app/src/main/java/com/scmessenger/android/ui/viewmodels/ChatViewModel.kt`
-5. **clearMessageNotifications** — `android/app/src/main/java/com/scmessenger/android/utils/NotificationHelper.kt`
-6. **clearSearch** — `android/app/src/main/java/com/scmessenger/android/ui/viewmodels/ContactsViewModel.kt`
-7. **isAtMaxDelay** — `android/app/src/main/java/com/scmessenger/android/utils/BackoffStrategy.kt`
-8. **resolveDeliveryState** — `android/app/src/main/java/com/scmessenger/android/ui/viewmodels/ConversationsViewModel.kt`
+1. **clearAllHistory**  `android/app/src/main/java/com/scmessenger/android/ui/viewmodels/ConversationsViewModel.kt`
+2. **clearAllRequestNotifications**  `android/app/src/main/java/com/scmessenger/android/utils/NotificationHelper.kt`
+3. **clearAnrEvents**  `android/app/src/main/java/com/scmessenger/android/service/PerformanceMonitor.kt`
+4. **clearInput**  `android/app/src/main/java/com/scmessenger/android/ui/viewmodels/ChatViewModel.kt`
+5. **clearMessageNotifications**  `android/app/src/main/java/com/scmessenger/android/utils/NotificationHelper.kt`
+6. **clearSearch**  `android/app/src/main/java/com/scmessenger/android/ui/viewmodels/ContactsViewModel.kt`
+7. **isAtMaxDelay**  `android/app/src/main/java/com/scmessenger/android/utils/BackoffStrategy.kt`
+8. **resolveDeliveryState**  `android/app/src/main/java/com/scmessenger/android/ui/viewmodels/ConversationsViewModel.kt`
 
 Process each task one at a time. Read the task file from HANDOFF/todo/task_wire_<name>.md, implement the wiring, verify compilation, then move the task file to HANDOFF/done/.
 

@@ -5,7 +5,7 @@
 **Budget:** 2000
 **Assigned to:** worker
 **Created:** 2026-05-13
-**Status:** IMPLEMENTATION DONE — verification only
+**Status:** IMPLEMENTATION DONE  verification only
 
 ## Summary
 
@@ -13,14 +13,14 @@ The P0 Android Google Play Readiness code changes have been implemented by worke
 
 ### Already Implemented (verify these exist):
 
-1. **AndroidManifest.xml** line 107: `android:foregroundServiceType="connectedDevice|dataSync"` — CONFIRMED
+1. **AndroidManifest.xml** line 107: `android:foregroundServiceType="connectedDevice|dataSync"`  CONFIRMED
 2. **MdnsServiceDiscovery.kt**: 3 `@Suppress("DEPRECATION")` sites resolved (host API, resolveService)
 3. **WifiDirectTransport.kt**: `IntentCompat.getParcelableExtra` migrated to `intent.getParcelableExtra<>()`
 4. **BleGattClient.kt**: Class-level `@Suppress("DEPRECATION")` removed, TRANSPORT_LE replaced
 5. **Theme.kt**: `window.statusBarColor` replaced with WindowCompat approach
 
 ### Known Regression (separate task handles this):
-- Theme.kt lost status bar color tinting → tracked in `[VALIDATED]_task_p0_theme_regression_fix.md`
+- Theme.kt lost status bar color tinting  tracked in `[VALIDATED]_task_p0_theme_regression_fix.md`
 
 ## What To Do
 

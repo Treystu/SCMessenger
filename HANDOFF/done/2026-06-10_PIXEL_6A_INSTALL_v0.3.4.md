@@ -1,4 +1,4 @@
-# 2026-06-10 — Pixel 6a Install Record
+# 2026-06-10  Pixel 6a Install Record
 
 **Device:** Pixel 6a (adb-26261JEGR01896-6pHTac, wireless adb)
 **Android:** 16
@@ -27,13 +27,13 @@
 4. cargo build -p scmessenger-cli: 24.41s PASS (91MB binary)
 5. ./gradlew :app:compileDebugKotlin: 6m 52s PASS
 
-## Changes since last build (v0.3.0 → v0.3.4)
+## Changes since last build (v0.3.0  v0.3.4)
 
-1. **eedbfb58** — mac-port of .claude/scripts/quota_lib.sh (regex compat for BSD sed/grep)
-2. **48110355** — P1_CLI_024 mDNS TxtRecordTooLong filter (rust-coder_1781140384)
+1. **eedbfb58**  mac-port of .claude/scripts/quota_lib.sh (regex compat for BSD sed/grep)
+2. **48110355**  P1_CLI_024 mDNS TxtRecordTooLong filter (rust-coder_1781140384)
 3. **Toolchain install**: Homebrew casks (android-commandlinetools, android-ndk, gh), cargo-ndk 4.1.2
-4. **CRLF → LF**: 128 .sh/.py/.gradle files
-5. **Cross-platform gradle.properties**: E:/build-tools/.gradle → ${user.home}/.gradle
+4. **CRLF  LF**: 128 .sh/.py/.gradle files
+5. **Cross-platform gradle.properties**: E:/build-tools/.gradle  ${user.home}/.gradle
 6. **Debug keystore**: created at ~/.android/debug.keystore (2048-bit RSA)
 7. **adb wired**: platform-tools in PATH (zprofile + zshrc)
 
@@ -46,7 +46,7 @@
 
 ## What to test on the device
 
-1. Open the app — should show onboarding or contacts screen (depending on prior state)
+1. Open the app  should show onboarding or contacts screen (depending on prior state)
 2. If onboarding: create identity, set nickname, advance
 3. Send/receive a message to test IronCore encrypt/decrypt
 4. Toggle WiFi Aware / BLE in Settings to verify transport activation

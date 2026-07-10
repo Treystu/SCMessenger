@@ -25,15 +25,15 @@ S1-T3 (Core Integration Audit)
    - Check SharedPreferences identity cache first
    - Load cached identity immediately (no FFI needed)
    - Fetch latest from Rust only after UI is interactive
-2. Test: delete app data → restore from backup code → verify identity intact
+2. Test: delete app data  restore from backup code  verify identity intact
 3. Implement outbox replay on crash recovery:
    - Persist outbox state to SharedPreferences
-   - On restart: reload outbox → resume pending messages
+   - On restart: reload outbox  resume pending messages
    - Mark messages as "pending retry" not "failed"
 4. Verify offline message queue persists across app restarts:
    - Queue survives `onDestroy()`
    - Queue survives force-kill (best effort via SharedPreferences)
-5. Test: airplane mode → queue 5 messages → toggle airplane off → all delivered
+5. Test: airplane mode  queue 5 messages  toggle airplane off  all delivered
 
 ## Verification
 - Messages in outbox survive app kill/restart

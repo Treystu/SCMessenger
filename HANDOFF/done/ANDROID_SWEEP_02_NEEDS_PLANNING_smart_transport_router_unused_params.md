@@ -1,4 +1,4 @@
-# TASK [NEEDS PLANNING]: Android — Unused Trace/Context Params in SmartTransportRouter.attemptDelivery and Conversation Row Composables
+# TASK [NEEDS PLANNING]: Android  Unused Trace/Context Params in SmartTransportRouter.attemptDelivery and Conversation Row Composables
 
 ## Context
 
@@ -6,7 +6,7 @@ Independent sweep of `android/app/src/main/java/com/scmessenger/android/`
 (2026-07-04), looking for gaps not already covered by
 `docs/release-readiness-2026-07-02.md` (T8-T13) or the existing HANDOFF
 backlog. This is distinct from T12 (WifiAwareTransport loopback proxy
-defects) — same general area (transport/delivery) but a different file and a
+defects)  same general area (transport/delivery) but a different file and a
 different kind of problem.
 
 `SmartTransportRouter.attemptDelivery()`
@@ -37,12 +37,12 @@ The single call site
 passes real values for all four: `envelopeData = encryptedData`, plus
 (need to confirm at the call site) real `listeners`, `traceMessageId`, and
 `attemptContext` values. The function accepts this data but silently drops it
-on the floor — the actual transport attempts happen via the `tryWifi`/
+on the floor  the actual transport attempts happen via the `tryWifi`/
 `tryBle`/`tryTcpMdns`/`tryCore` closures passed in from the caller, which
 presumably already capture what they need from `MeshRepository`'s scope.
 
 A structurally similar pattern exists in `ConversationsScreen.kt:271-272`
-(`ConversationRow` composable, name unconfirmed — read the surrounding
+(`ConversationRow` composable, name unconfirmed  read the surrounding
 function signature to get the exact name): `deliveryState` and
 `onNavigateToChat` parameters are also `@Suppress("UNUSED_PARAMETER")` with
 default values, suggesting they were added for a feature (per-message
@@ -55,22 +55,22 @@ Three different explanations are consistent with what's in the code, and
 picking the wrong one either deletes a parameter another change is mid-way
 through wiring up, or leaves genuinely dead plumbing in place indefinitely:
 
-1. **Genuinely dead plumbing** — these params were added in anticipation of
+1. **Genuinely dead plumbing**  these params were added in anticipation of
    a feature (structured trace logging keyed on `traceMessageId`/
    `attemptContext`; a `deliveryState` badge in the conversation row) that
    was descoped or deferred, and nobody went back to remove the now-unused
    parameters and their `@Suppress` annotations. Correct fix: remove the
    parameters, update the call site(s), drop the suppressions.
-2. **Incomplete instrumentation** — `traceMessageId` and `attemptContext`
+2. **Incomplete instrumentation**  `traceMessageId` and `attemptContext`
    look purpose-built for delivery-path tracing/diagnostics (compare to the
    `Timber.i`-heavy tracing already present elsewhere in
    `MeshRepository.kt`'s transport code). If so, the correct fix is to
    actually thread them into the `Timber` log lines inside
    `attemptDelivery()` (e.g. `Timber.d("[$traceMessageId] attempt via $type
-   ($attemptContext)")`) rather than deleting them — deleting would remove
+   ($attemptContext)")`) rather than deleting them  deleting would remove
    diagnostic capability the caller clearly intended to provide.
 3. **`deliveryState`/`onNavigateToChat` in `ConversationsScreen.kt`
-   specifically may be intentional API surface** — default-valued unused
+   specifically may be intentional API surface**  default-valued unused
    parameters on a composable can be a deliberate "reserved for caller" API
    shape (e.g. future per-row tap-to-open-chat behavor) rather than a bug.
    Needs a decision on whether `ConversationsScreen`'s conversation list rows
@@ -84,14 +84,14 @@ through wiring up, or leaves genuinely dead plumbing in place indefinitely:
 - Is there a tracing/observability requirement (existing design doc, HANDOFF
   task, or product decision) that `traceMessageId`/`attemptContext` were
   meant to serve? Check `HANDOFF/done/` for any prior task that introduced
-  these parameters — the commit that added them will explain intent.
+  these parameters  the commit that added them will explain intent.
 - Does tapping a row in the conversations list currently navigate to the
   chat screen via a different mechanism (e.g. an `onClick` on the outer
   `Row`/`Card` rather than via `onNavigateToChat`)? Read the full body of the
   composable at `ConversationsScreen.kt` around line 271 (not just the
   signature) to check.
 - If the answer to both is "no design intent found, no other navigation path
-  exists" — this is a bug (dead navigation callback) and should be
+  exists"  this is a bug (dead navigation callback) and should be
   re-classified as a straightforward wiring fix rather than a cleanup.
 
 ## Acceptance Criteria (once the above is resolved)

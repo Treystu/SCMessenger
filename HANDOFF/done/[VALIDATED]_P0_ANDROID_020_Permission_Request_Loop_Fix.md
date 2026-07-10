@@ -8,7 +8,7 @@
 **Agent:** implementer
 **Budget:** 1200s (MIXED tier)
 **Phase:** v0.2.1 P0 Android stability
-**Source:** ANDROID_PIXEL_6A_AUDIT_2026-04-17 §4 (BLE scan failures) + planfromclaudeforhermes §2 Phase D.2
+**Source:** ANDROID_PIXEL_6A_AUDIT_2026-04-17 4 (BLE scan failures) + planfromclaudeforhermes 2 Phase D.2
 **Depends on:** P0_BUILD_001
 
 ---
@@ -106,7 +106,7 @@ DisposableEffect(Unit) {
 ## File Targets
 
 - `android/app/src/main/java/com/scmessenger/android/utils/PermissionHelper.kt` [NEW]
-- `android/app/src/main/java/com/scmessenger/android/ui/MainActivity.kt` [EDIT — replace LaunchedEffect patterns]
+- `android/app/src/main/java/com/scmessenger/android/ui/MainActivity.kt` [EDIT  replace LaunchedEffect patterns]
 
 ## Build Verification Commands
 
@@ -121,10 +121,10 @@ cd android
 1. `./gradlew :app:compileDebugKotlin` passes
 2. `./gradlew :app:assembleDebug -x lint` produces APK
 3. No `LaunchedEffect(Unit) { requestPermissions` patterns remain in MainActivity
-4. New unit test: `PermissionHelperTest` covers Idle → Requesting → Granted, Idle → Denied → Retry, Denied → PermanentlyDenied
-5. Manual: install on device, deny permission → see system dialog ONCE; deny again with "don't ask again" → see "open settings" CTA, no more system dialogs
+4. New unit test: `PermissionHelperTest` covers Idle  Requesting  Granted, Idle  Denied  Retry, Denied  PermanentlyDenied
+5. Manual: install on device, deny permission  see system dialog ONCE; deny again with "don't ask again"  see "open settings" CTA, no more system dialogs
 6. Manual: rapid recomposition does NOT trigger additional permission dialogs
-7. Commit: `android: v0.2.1 permission state machine — no more request spam`
+7. Commit: `android: v0.2.1 permission state machine  no more request spam`
 
 ## CRITICAL
 

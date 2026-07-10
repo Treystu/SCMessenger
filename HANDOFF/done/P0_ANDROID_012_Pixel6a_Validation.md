@@ -36,7 +36,7 @@ The identity flow fixes from P0_ANDROID_010 need real-device validation. The Pix
 - Cold start time: 1065ms (no ANR)
 
 **Identity Flow:**
-- Identity created successfully — no `ConsentRequired` exceptions
+- Identity created successfully  no `ConsentRequired` exceptions
 - `grantConsent` called before `initializeIdentity` confirmed in logcat
 - `Identity initialized state: true` reported after creation
 
@@ -60,6 +60,6 @@ The identity flow fixes from P0_ANDROID_010 need real-device validation. The Pix
 
 ### Conclusion
 All three root causes from P0_ANDROID_010 are confirmed fixed on real hardware:
-1. `grantConsent()` before `initializeIdentity()` — working
-2. `AtomicBoolean` fallback guard — no StackOverflow
-3. Synchronous `commit()` backup — identity persists across restarts
+1. `grantConsent()` before `initializeIdentity()`  working
+2. `AtomicBoolean` fallback guard  no StackOverflow
+3. Synchronous `commit()` backup  identity persists across restarts

@@ -1,4 +1,4 @@
-# TASK: P1-ANDROID-MDNS — Phone's mDNS discovery resolves its own broadcast as a discovered peer
+# TASK: P1-ANDROID-MDNS  Phone's mDNS discovery resolves its own broadcast as a discovered peer
 
 ## Context
 
@@ -16,12 +16,12 @@ Logcat shows the phone's own mDNS service being registered, then immediately
 07-04 11:30:26.821  D MdnsServiceDiscovery: mDNS service resolved: 12D3KooWAqogPAB4QVRhBxaPSy5AKhjmcRw4mbcjSm4krF3ruBEh at 192.168.0.148:9001
 07-04 11:30:26.822  D MdnsServiceDiscovery: mDNS TXT records for 12D3KooWAqogPAB4QVRhBxaPSy5AKhjmcRw4mbcjSm4krF3ruBEh: {peer-id=12D3KooWAqogPAB4QVRhBxaPSy5AKhjmcRw4mbcjSm4krF3ruBEh, ...}
 07-04 11:30:26.823  I MdnsServiceDiscovery: mDNS: LAN peer resolved 12D3KooWAqogPAB4QVRhBxaPSy5AKhjmcRw4mbcjSm4krF3ruBEh -> /ip4/192.168.0.148/tcp/9001/p2p/12D3KooWAqogPAB4QVRhBxaPSy5AKhjmcRw4mbcjSm4krF3ruBEh -- notifying for SwarmBridge dial
-07-04 11:30:26.824  I TransportManager$getOrCreateMdns: mDNS LAN peer resolved: 12D3KooWAqogPAB4QVRhBxaPSy5AKhjmcRw4mbcjSm4krF3ruBEh at 192.168.0.148:9001 — feeding to SwarmBridge
+07-04 11:30:26.824  I TransportManager$getOrCreateMdns: mDNS LAN peer resolved: 12D3KooWAqogPAB4QVRhBxaPSy5AKhjmcRw4mbcjSm4krF3ruBEh at 192.168.0.148:9001  feeding to SwarmBridge
 ```
 
 Both the resolved peer-id (`12D3KooWAqogPAB4QVRhBxaPSy5AKhjmcRw4mbcjSm4krF3ruBEh`)
 and the resolved IP (`192.168.0.148`) are the **phone's own** identity and
-address — this is Android's `NsdManager` handing the app back its own service
+address  this is Android's `NsdManager` handing the app back its own service
 broadcast on the same host/network stack, not a genuinely remote peer. The
 code in `MdnsServiceDiscovery.kt` (`onServiceResolved`, around line 215-243)
 has no visible self-peer-id filter before invoking `onLanPeerResolved` ->
@@ -38,7 +38,7 @@ short-circuits self-dials. This needs to be checked, not assumed benign.
 ## Acceptance Criteria
 
 - `MdnsServiceDiscovery` (or `TransportManager`/`SwarmBridge`, whichever is
-  the more correct layer per existing conventions — read both before
+  the more correct layer per existing conventions  read both before
   deciding) filters out any resolved mDNS service whose peer-id matches the
   local node's own identity/peer-id before it reaches `onLanPeerResolved` /
   `SwarmBridge` dial.
@@ -49,11 +49,11 @@ short-circuits self-dials. This needs to be checked, not assumed benign.
   *different* peer-id still correctly triggers `onLanPeerResolved` (no
   regression).
 - Verify (via a code read of `SwarmBridge`/the Rust-side dial path) whether
-  self-dials were already being silently handled safely — if so, document
+  self-dials were already being silently handled safely  if so, document
   that finding in the PR/commit rather than assuming the fix is purely
   defensive; if not, this filter is a correctness fix, not just hygiene.
 - Because this touches `core/src/transport/` only insofar as verifying (not
-  necessarily changing) the Rust-side dial path's self-dial handling — if
+  necessarily changing) the Rust-side dial path's self-dial handling  if
   the investigation in the last bullet reveals the Rust side genuinely needs
   a change (not just the Kotlin-side filter), that Rust change requires the
   mandatory `crypto-security-auditor` adversarial review per

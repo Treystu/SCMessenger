@@ -3,14 +3,14 @@
 **Priority:** P0 (Performance Blocker)
 **Platform:** Android
 **Source:** User report + logcat `android/android_logcat_4-22-26.md`
-**Estimated LoC Impact:** 50–150 LoC
+**Estimated LoC Impact:** 50150 LoC
 
 ## Problem
-Settings screen takes 30–42 seconds to appear after app launch. Logcat shows:
+Settings screen takes 3042 seconds to appear after app launch. Logcat shows:
 ```
-18:25:04.391 — Skipped 2555 frames! The application may be doing too much work on its main thread.
-18:25:04.398 — Davey! duration=42656ms
-18:25:04.433 — Davey! duration=42708ms
+18:25:04.391  Skipped 2555 frames! The application may be doing too much work on its main thread.
+18:25:04.398  Davey! duration=42656ms
+18:25:04.433  Davey! duration=42708ms
 ```
 
 The hang occurs between app launch (18:24:08) and SettingsViewModel initialization (18:25:17), blocking the main thread for ~42 seconds.
@@ -54,7 +54,7 @@ The hang occurs between app launch (18:24:08) and SettingsViewModel initializati
 - [ ] No `Davey!` warnings >1000ms in logcat
 - [ ] Zero `Skipped frames` warnings during startup
 
-[NATIVE_SUB_AGENT: RESEARCH] — Profile MainActivity.onCreate and SettingsViewModel init paths before writing fixes.
+[NATIVE_SUB_AGENT: RESEARCH]  Profile MainActivity.onCreate and SettingsViewModel init paths before writing fixes.
 
 
 ---

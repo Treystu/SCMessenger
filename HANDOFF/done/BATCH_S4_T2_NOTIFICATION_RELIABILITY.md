@@ -1,4 +1,4 @@
-# S4-T2: Notification Reliability 🔴 P0
+# S4-T2: Notification Reliability  P0
 
 ## Status
 - [ ] TODO
@@ -27,17 +27,17 @@ S4-T1 (ANR Elimination)
    - `peer_events` (DEFAULT) - discovery
    - `system` (LOW) - system messages
 2. Verify reply-from-notification with `RemoteInput`:
-   - Tap reply → opens input → sends message
+   - Tap reply  opens input  sends message
    - Message appears in conversation
 3. Test DND suppression:
-   - Enable DND → send message → verify no notification
+   - Enable DND  send message  verify no notification
    - Check `NotificationManager.shouldSuppressNotification()`
 4. Test foreground app suppression:
-   - Open conversation with contact → send from other device
+   - Open conversation with contact  send from other device
    - Verify no notification (already viewing this conversation)
 5. Test classification:
-   - Known contact → DM channel
-   - Unknown sender → DM Request channel
+   - Known contact  DM channel
+   - Unknown sender  DM Request channel
 6. Create notification test matrix (all scenarios documented)
 
 ## Verification

@@ -4,7 +4,7 @@
 
 ## P1: WASM Thin Client JSON-RPC Method Expansion
 
-**Source:** 2026-05-13 MASTER AUDIT — WASM thin client supports only 4 JSON-RPC methods (missing contacts, settings, history, blocking)
+**Source:** 2026-05-13 MASTER AUDIT  WASM thin client supports only 4 JSON-RPC methods (missing contacts, settings, history, blocking)
 
 ### Current State
 The WASM thin client (`wasm/src/rpc.rs` JSON-RPC bridge) currently exposes only 4 methods. The audit found parity gaps vs the mobile clients.

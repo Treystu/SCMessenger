@@ -13,7 +13,7 @@ Delivery receipts are **already fully wired** on Android:
 
 2. **Receipt transmission**: `sendDeliveryReceiptAsync()` (lines 1659-1765) calls `ironCore.prepareReceipt(senderPublicKeyHex, messageId)` to create an encrypted receipt envelope, then transmits it via `attemptDirectSwarmDelivery()` with up to 6 retry attempts and exponential backoff.
 
-3. **Receipt consumption**: When a receipt arrives at the sender's device, `onReceiptReceived()` (lines 1544-1612) handles it — marks the message as delivered via `historyManager.markDelivered()`, removes it from the pending outbox, and emits `MessageEvent.Delivered()`.
+3. **Receipt consumption**: When a receipt arrives at the sender's device, `onReceiptReceived()` (lines 1544-1612) handles it  marks the message as delivered via `historyManager.markDelivered()`, removes it from the pending outbox, and emits `MessageEvent.Delivered()`.
 
 4. **Core Rust processing**: `receive_message()` (line 1602-1688) detects `MessageType::Receipt`, validates the sender/recipient, and updates history state.
 
@@ -21,6 +21,6 @@ Delivery receipts are **already fully wired** on Android:
 
 6. **Delivery convergence**: The swarm layer publishes `DeliveryConvergenceMarker` via gossipsub topic `sc-receipt-convergence` for relay-forwarded messages, enabling custody cleanup.
 
-No additional wiring is needed. The task description's claim that "receipts are generated but not properly integrated" is incorrect — the integration is complete.
+No additional wiring is needed. The task description's claim that "receipts are generated but not properly integrated" is incorrect  the integration is complete.
 
 ## No Changes Required

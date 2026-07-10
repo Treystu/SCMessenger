@@ -21,44 +21,44 @@ fixed," this is part of the ~30-ticket remaining backlog.
 **Agent:** implementer
 **Budget:** 1800s (MIXED tier)
 **Phase:** v0.2.1 P1 Android UX stability
-**Priority:** P1 (user-blocking — every user who skips onboarding hits this)
+**Priority:** P1 (user-blocking  every user who skips onboarding hits this)
 **Source:** Lucas 2026-06-08, Telegram DM: "issue for Android where identity generation isn't showing the (entropy canvas / finger-move) from within settings menu. It works from fresh install, but when in settings it's bugging out and not using the full flow. Plus I hit generate identity and it doesn't indicate that it's doing anything, so it seems hung, but then works after like 30 seconds."
 **Depends on:** none (independent)
 **Branch:** `fix/p1-android-settings-identity-entropy` (NEW, off origin/main `dd109707`)
-**Worktree:** TBD — pick from `E:\SCMessenger-build-p0-024\` or fresh
+**Worktree:** TBD  pick from `E:\SCMessenger-build-p0-024\` or fresh
 
 ---
 
 ## Verified Gap (with line citations)
 
-### Bug 1 — Settings → Identity path skips EntropyCanvas entirely
+### Bug 1  Settings  Identity path skips EntropyCanvas entirely
 
-The finger-move "Entropy Gathering Box" (`com.scmessenger.android.ui.components.EntropyCanvas`, 280dp Canvas, drag gesture → SHA-256 salt) is wired up **only in the onboarding flow**. The Settings → Identity path goes through a completely different ViewModel and a stub `IdentityNotInitializedView` that has **no entropy collection at all**.
+The finger-move "Entropy Gathering Box" (`com.scmessenger.android.ui.components.EntropyCanvas`, 280dp Canvas, drag gesture  SHA-256 salt) is wired up **only in the onboarding flow**. The Settings  Identity path goes through a completely different ViewModel and a stub `IdentityNotInitializedView` that has **no entropy collection at all**.
 
 Code path when the user taps "Create Identity" in Settings:
 
-1. `SettingsScreen.kt:158-160` — `IdentityUnavailableSection(onCreateIdentity = onNavigateToIdentity)` (just navigates away)
-2. `MeshApp.kt:246-249` — `onNavigateToIdentity = { navController.navigate(Screen.Identity.route) }`
-3. `MeshApp.kt:282-286` — `composable(Screen.Identity.route) { IdentityScreen(onNavigateBack = ...) }`
-4. `IdentityScreen.kt:38-93` — `IdentityScreen` uses **`IdentityViewModel`**, NOT `MainViewModel`
-5. `IdentityScreen.kt:87-92` — when `identityInfo.initialized != true`, renders `IdentityNotInitializedView`
-6. `IdentityScreen.kt:113-147` — `IdentityNotInitializedView` is a **bare** nickname field + "Create" button. **No EntropyCanvas. No salt collection. No "Move your finger" UI.**
+1. `SettingsScreen.kt:158-160`  `IdentityUnavailableSection(onCreateIdentity = onNavigateToIdentity)` (just navigates away)
+2. `MeshApp.kt:246-249`  `onNavigateToIdentity = { navController.navigate(Screen.Identity.route) }`
+3. `MeshApp.kt:282-286`  `composable(Screen.Identity.route) { IdentityScreen(onNavigateBack = ...) }`
+4. `IdentityScreen.kt:38-93`  `IdentityScreen` uses **`IdentityViewModel`**, NOT `MainViewModel`
+5. `IdentityScreen.kt:87-92`  when `identityInfo.initialized != true`, renders `IdentityNotInitializedView`
+6. `IdentityScreen.kt:113-147`  `IdentityNotInitializedView` is a **bare** nickname field + "Create" button. **No EntropyCanvas. No salt collection. No "Move your finger" UI.**
 
 Compare to the onboarding path (the working one):
 
-7. `OnboardingScreen.kt:65` — `val isCreating by viewModel.isCreatingIdentity.collectAsState()` (on `MainViewModel`)
-8. `OnboardingScreen.kt:241-248` — `if (nickname.trim().isNotEmpty()) { EntropyCanvas(onEntropyComplete = { salt -> touchEntropySalt = salt }) }`
-9. `OnboardingScreen.kt:255-264` — button enabled only when `touchEntropySalt != null && !isCreating`, calls `viewModel.createIdentity(nickname, touchEntropySalt)`
+7. `OnboardingScreen.kt:65`  `val isCreating by viewModel.isCreatingIdentity.collectAsState()` (on `MainViewModel`)
+8. `OnboardingScreen.kt:241-248`  `if (nickname.trim().isNotEmpty()) { EntropyCanvas(onEntropyComplete = { salt -> touchEntropySalt = salt }) }`
+9. `OnboardingScreen.kt:255-264`  button enabled only when `touchEntropySalt != null && !isCreating`, calls `viewModel.createIdentity(nickname, touchEntropySalt)`
 
 **The fix:** the Settings path must render the **same** `EntropyCanvas` flow as onboarding, or both must be refactored to share a single `IdentityCreationFlow` composable.
 
-### Bug 2 — "Generate Identity" silently hangs for ~30 seconds with no UI feedback
+### Bug 2  "Generate Identity" silently hangs for ~30 seconds with no UI feedback
 
 The user reports the button "doesn't indicate that it's doing anything, so it seems hung, but then works after like 30 seconds."
 
 Two compounding causes:
 
-**Cause 2a — `IdentityViewModel.createIdentity` flips `_isLoading` AFTER launching, not before.** `IdentityViewModel.kt:91-119`:
+**Cause 2a  `IdentityViewModel.createIdentity` flips `_isLoading` AFTER launching, not before.** `IdentityViewModel.kt:91-119`:
 
 ```kotlin
 fun createIdentity(nickname: String? = null) {
@@ -84,7 +84,7 @@ viewModelScope.launch(Dispatchers.IO) {
 
 The IdentityViewModel flow doesn't even have a re-entrancy guard at all. A second tap during the ~30s would race the same way the P0_ANDROID_024 race did.
 
-**Cause 2b — `IdentityNotInitializedView` doesn't render progress at all.** `IdentityScreen.kt:113-147`:
+**Cause 2b  `IdentityNotInitializedView` doesn't render progress at all.** `IdentityScreen.kt:113-147`:
 
 ```kotlin
 Button(onClick = { onCreateIdentity(nickname) }) {  // <-- no isLoading check
@@ -94,9 +94,9 @@ Button(onClick = { onCreateIdentity(nickname) }) {  // <-- no isLoading check
 
 There is no `CircularProgressIndicator`, no "Generating keys..." text, no disabled-while-busy state, no overlay. The button just sits there pressed until the FFI call returns. Lucas's "30 seconds" is consistent with Ed25519 keygen + sled write + identity federation setup + the implicit `getIdentityInfoNonBlocking` reload. That is heavy work, and the UI gives zero signal that it's happening.
 
-**Cause 2c — The `isLoading` state IS collected in `IdentityScreen` (line 44) but only used to gate the `CircularProgressIndicator` on the top-level `when` block (line 81-85), which is inside the `Scaffold` body and only shows when `isLoading == true` for the **whole screen**. So when `IdentityNotInitializedView` is showing, the loading spinner on the parent `Box` is *behind* the view, not in front of the button.**
+**Cause 2c  The `isLoading` state IS collected in `IdentityScreen` (line 44) but only used to gate the `CircularProgressIndicator` on the top-level `when` block (line 81-85), which is inside the `Scaffold` body and only shows when `isLoading == true` for the **whole screen**. So when `IdentityNotInitializedView` is showing, the loading spinner on the parent `Box` is *behind* the view, not in front of the button.**
 
-### Bug 3 — `IdentityViewModel.createIdentity` does not accept or use a touch-entropy salt
+### Bug 3  `IdentityViewModel.createIdentity` does not accept or use a touch-entropy salt
 
 `IdentityViewModel.kt:91`:
 
@@ -106,7 +106,7 @@ fun createIdentity(nickname: String? = null) {  // <-- no salt parameter
     meshRepository.createIdentity()              // <-- salt is null
 ```
 
-But `MeshRepository.createIdentity(customSalt: ByteArray? = null)` **does** accept a salt (`MeshRepository.kt:4373`). The onboarding path passes the salt from `EntropyCanvas.onEntropyComplete`. The Settings path silently drops the entropy-collection step entirely and calls with `null`. The user generates an identity that has **lower entropy than the onboarding path produces** — security regression, not just UX.
+But `MeshRepository.createIdentity(customSalt: ByteArray? = null)` **does** accept a salt (`MeshRepository.kt:4373`). The onboarding path passes the salt from `EntropyCanvas.onEntropyComplete`. The Settings path silently drops the entropy-collection step entirely and calls with `null`. The user generates an identity that has **lower entropy than the onboarding path produces**  security regression, not just UX.
 
 ---
 
@@ -184,8 +184,8 @@ fun IdentityCreationFlow(
 **Key UX improvements baked in:**
 - Button shows an inline spinner + "Generating keys..." text when `isCreating == true`. **No more silent 30-second hang.**
 - Button is disabled while `isCreating` (re-entrancy defense).
-- The `EntropyCanvas` is **always** shown when nickname is non-empty — same as onboarding.
-- Salt is passed through to `onCreate` — entropy is preserved.
+- The `EntropyCanvas` is **always** shown when nickname is non-empty  same as onboarding.
+- Salt is passed through to `onCreate`  entropy is preserved.
 
 ### Part B: Wire `IdentityViewModel` to accept and use the salt (~10 LoC)
 
@@ -267,14 +267,14 @@ identityInfo == null || identityInfo?.initialized != true -> {
 
 ## File Targets
 
-- `android/app/src/main/java/com/scmessenger/android/ui/identity/IdentityCreationFlow.kt` [NEW — shared composable]
-- `android/app/src/main/java/com/scmessenger/android/ui/identity/IdentityScreen.kt` [EDIT — use IdentityCreationFlow, pass isLoading, pass salt]
-- `android/app/src/main/java/com/scmessenger/android/ui/viewmodels/IdentityViewModel.kt` [EDIT — accept customSalt, add re-entrancy guard]
-- `android/app/src/main/java/com/scmessenger/android/ui/screens/OnboardingScreen.kt` [EDIT — use IdentityCreationFlow, remove inline duplicate]
+- `android/app/src/main/java/com/scmessenger/android/ui/identity/IdentityCreationFlow.kt` [NEW  shared composable]
+- `android/app/src/main/java/com/scmessenger/android/ui/identity/IdentityScreen.kt` [EDIT  use IdentityCreationFlow, pass isLoading, pass salt]
+- `android/app/src/main/java/com/scmessenger/android/ui/viewmodels/IdentityViewModel.kt` [EDIT  accept customSalt, add re-entrancy guard]
+- `android/app/src/main/java/com/scmessenger/android/ui/screens/OnboardingScreen.kt` [EDIT  use IdentityCreationFlow, remove inline duplicate]
 
 **Reuse (no edits needed):**
-- `android/app/src/main/java/com/scmessenger/android/ui/components/EntropyCanvas.kt` — already correct, no changes
-- `android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt:4373` — already accepts `customSalt: ByteArray? = null`
+- `android/app/src/main/java/com/scmessenger/android/ui/components/EntropyCanvas.kt`  already correct, no changes
+- `android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt:4373`  already accepts `customSalt: ByteArray? = null`
 
 ---
 
@@ -291,10 +291,10 @@ cd android
 ## Acceptance Gates
 
 1. **From a fresh install:** identity generation flow unchanged (still shows EntropyCanvas, still works).
-2. **From Settings → Identity (no identity yet):** the user sees a nickname field, the EntropyCanvas appears once nickname is entered, the "Create" button is disabled until entropy is collected, an inline spinner + "Generating keys..." text appears on the button during the FFI call, and the button is disabled until the call returns. **No 30-second silent hang.**
+2. **From Settings  Identity (no identity yet):** the user sees a nickname field, the EntropyCanvas appears once nickname is entered, the "Create" button is disabled until entropy is collected, an inline spinner + "Generating keys..." text appears on the button during the FFI call, and the button is disabled until the call returns. **No 30-second silent hang.**
 3. **Tap "Generate Identity" twice rapidly:** second tap is a no-op (re-entrancy guard), identity is still created exactly once.
 4. **Generated identity bytes match** the onboarding path's output format (entropy is preserved through `MeshRepository.createIdentity(customSalt)`).
-5. **No regression** in `OnboardingScreen` — same flow, same UX, same tests pass.
+5. **No regression** in `OnboardingScreen`  same flow, same UX, same tests pass.
 
 ## Tests to Add
 
@@ -311,10 +311,10 @@ cd android
 
 ## Pre-flight Reads (for the worker)
 
-- `android/app/src/main/java/com/scmessenger/android/ui/screens/OnboardingScreen.kt` lines 214-264 — the existing working flow to preserve
-- `android/app/src/main/java/com/scmessenger/android/ui/viewmodels/MainViewModel.kt` lines 175-240 — the existing working re-entrancy guard pattern to copy
-- `android/app/src/main/java/com/scmessenger/android/ui/components/EntropyCanvas.kt` — the entropy widget, no changes
-- `android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt:4373` — `createIdentity(customSalt: ByteArray? = null)` signature
+- `android/app/src/main/java/com/scmessenger/android/ui/screens/OnboardingScreen.kt` lines 214-264  the existing working flow to preserve
+- `android/app/src/main/java/com/scmessenger/android/ui/viewmodels/MainViewModel.kt` lines 175-240  the existing working re-entrancy guard pattern to copy
+- `android/app/src/main/java/com/scmessenger/android/ui/components/EntropyCanvas.kt`  the entropy widget, no changes
+- `android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt:4373`  `createIdentity(customSalt: ByteArray? = null)` signature
 
 ## CRITICAL
 

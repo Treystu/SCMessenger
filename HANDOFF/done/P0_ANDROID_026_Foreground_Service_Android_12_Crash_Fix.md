@@ -2,7 +2,7 @@
 
 ## Problem
 
-`MeshForegroundService.onStartCommand()` launched a coroutine and immediately returned `START_STICKY`. The actual `startForeground()` call happened asynchronously inside the coroutine (via `startMeshService()` → `tryStartForeground()`). On Android 12+ (API 31+), if `startForeground()` is not called within 5 seconds of `onStartCommand()` returning, the system throws `ForegroundServiceDidNotStartInTimeException` and kills the service.
+`MeshForegroundService.onStartCommand()` launched a coroutine and immediately returned `START_STICKY`. The actual `startForeground()` call happened asynchronously inside the coroutine (via `startMeshService()`  `tryStartForeground()`). On Android 12+ (API 31+), if `startForeground()` is not called within 5 seconds of `onStartCommand()` returning, the system throws `ForegroundServiceDidNotStartInTimeException` and kills the service.
 
 This would manifest as a crash on:
 - Android 12+ devices when the user starts the mesh service
@@ -51,8 +51,8 @@ Removed:
 
 ## Verification
 
-- `./gradlew :app:compileDebugKotlin` ✅
-- `./gradlew :app:bundleRelease` ✅
+- `./gradlew :app:compileDebugKotlin` 
+- `./gradlew :app:bundleRelease` 
 
 ## Play Store Impact
 

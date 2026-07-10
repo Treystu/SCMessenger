@@ -21,14 +21,14 @@ fixed," this is part of the ~30-ticket remaining backlog.
 **Agent:** worker
 **Budget:** 1200s (MIXED tier)
 **Phase:** v0.2.1 P1 Android stability
-**Source:** PRODUCTION_ROADMAP.md §1.2 (Verify message history persistence across app restarts) + planfromclaudeforhermes §2 Phase D.5
+**Source:** PRODUCTION_ROADMAP.md 1.2 (Verify message history persistence across app restarts) + planfromclaudeforhermes 2 Phase D.5
 **Depends on:** P0_BUILD_001
 
 ---
 
 ## Verified Gap
 
-Per `PRODUCTION_ROADMAP.md` §1.2: "Verify message history persistence across app restarts" — listed but not done.
+Per `PRODUCTION_ROADMAP.md` 1.2: "Verify message history persistence across app restarts"  listed but not done.
 
 No existing regression test for the "create message, force-stop app, restart, verify message present" flow.
 

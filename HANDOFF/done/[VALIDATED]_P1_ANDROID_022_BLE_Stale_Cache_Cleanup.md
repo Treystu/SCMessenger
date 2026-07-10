@@ -1,4 +1,4 @@
-## Triage Decision — 2026-06-08
+## Triage Decision  2026-06-08
 
 **Status:** SHIPPED
 **Bucket:** done (on integration/v0.2.2-pre-android-push-2026-06-05)
@@ -26,14 +26,14 @@ was created by gemini on 2026-06-05 20:17 PT.
 **Agent:** implementer
 **Budget:** 600s (MICRO tier)
 **Phase:** v0.2.1 P1 Android stability
-**Source:** PRODUCTION_ROADMAP.md §1.2 (gratuitous nearby entries persistence) + planfromclaudeforhermes §2 Phase D.4
+**Source:** PRODUCTION_ROADMAP.md 1.2 (gratuitous nearby entries persistence) + planfromclaudeforhermes 2 Phase D.4
 **Depends on:** P0_BUILD_001
 
 ---
 
 ## Verified Gap
 
-Per `PRODUCTION_ROADMAP.md` §1.2: "Fix gratuitous nearby entries persistence (stale peer cache after discovery stop)".
+Per `PRODUCTION_ROADMAP.md` 1.2: "Fix gratuitous nearby entries persistence (stale peer cache after discovery stop)".
 
 Per `HANDOFF/WIRING_TASK_INDEX.md` row 50: `task_wire_clearPeerCache` is one of 350 wiring tasks. `BleScanner.clearPeerCache()` exists in code per wiring manifest, but unit test coverage is missing.
 
@@ -78,7 +78,7 @@ fun onDiscoveryStop_callsClearPeerCache() {
 
 ## File Targets
 
-- `android/app/src/main/java/com/scmessenger/android/transport/ble/BleScanner.kt` [EDIT — verify clearPeerCache is called]
+- `android/app/src/main/java/com/scmessenger/android/transport/ble/BleScanner.kt` [EDIT  verify clearPeerCache is called]
 - `android/app/src/test/java/com/scmessenger/android/transport/ble/BleScannerTest.kt` [NEW]
 
 ## Build Verification Commands
@@ -95,7 +95,7 @@ cd android
 1. `./gradlew :app:assembleDebug -x lint` succeeds
 2. `BleScannerTest` passes (both test methods)
 3. `clearPeerCache()` is reachable from at least 2 call sites (onDiscoveryStop, transport pause)
-4. Manual: start BLE discovery → 5 peers discovered → stop discovery → 0 peers in cache
+4. Manual: start BLE discovery  5 peers discovered  stop discovery  0 peers in cache
 5. Commit: `android: v0.2.1 BLE scanner stale cache cleanup + unit test`
 
 ## CRITICAL

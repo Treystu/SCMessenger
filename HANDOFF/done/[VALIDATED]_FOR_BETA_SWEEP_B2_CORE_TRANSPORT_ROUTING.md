@@ -48,9 +48,9 @@ All B2 tasks from `HANDOFF/WIRING_PATCH_MANIFEST.md`:
    - `## Blockers & Risks`
 
 ## Output Artifact
-`HANDOFF/ACTIVE_LEDGER.md` — this is the canonical input for the Orchestrator's Phase 2 tasking.
+`HANDOFF/ACTIVE_LEDGER.md`  this is the canonical input for the Orchestrator's Phase 2 tasking.
 
 ## Constraints
 - Do NOT modify source code. This is a read-only sweep.
 - Do NOT run long-running tests; compile-gate and grep analysis only.
-- Do NOT claim tasks as complete — only report observed state.
+- Do NOT claim tasks as complete  only report observed state.

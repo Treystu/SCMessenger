@@ -25,8 +25,8 @@ S2-T1 (SwarmBridge Wiring)
 2. Verify received messages also go through dedup (cross-transport)
 3. Implement 300s TTL cache expiration (per spec)
 4. Test cross-transport dedup:
-   - Send message over BLE → delivery confirmed
-   - Same message arrives over WiFi within 5 minutes → suppress duplicate
+   - Send message over BLE  delivery confirmed
+   - Same message arrives over WiFi within 5 minutes  suppress duplicate
    - Verify single notification appears
 5. Handle cache eviction gracefully (no crashes on expired entries)
 6. Add metrics: dedup_hits, dedup_misses, dedup_cache_size

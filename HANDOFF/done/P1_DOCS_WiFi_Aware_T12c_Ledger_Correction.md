@@ -1,4 +1,4 @@
-# TASK: P1-DOCS-T12c — Correct stale T12c finding: WiFi Aware `send()` `false` is a deliberate documented no-op, not a missing write path
+# TASK: P1-DOCS-T12c  Correct stale T12c finding: WiFi Aware `send()` `false` is a deliberate documented no-op, not a missing write path
 
 **Tier:** [HAIKU] (docs-only, verbatim-scoped).
 **Gates:** none (documentation only; does not touch `core/src/crypto|transport|routing|privacy`).
@@ -11,9 +11,9 @@ P1-15 transport-matrix ground-truth audit (`HANDOFF/plans/P1-15_transport_matrix
 
 `docs/release-readiness-2026-07-02.md:426-429` records finding T12c:
 
-> (c) `PeerConnection.send()` is now a hard-coded `false` no-op while `sendData`-capable routes still call it — either restore a real write path or unregister WiFi Aware from those routes so delivery fails over loudly, not silently.
+> (c) `PeerConnection.send()` is now a hard-coded `false` no-op while `sendData`-capable routes still call it  either restore a real write path or unregister WiFi Aware from those routes so delivery fails over loudly, not silently.
 
-This finding is **stale**. The code it refers to — `AwareConnection.send()` at `android/app/src/main/java/com/scmessenger/android/transport/WifiAwareTransport.kt:512-519` — does return `false`, but it is a **deliberate, documented architectural dead-end**, and the "restore a real write path" remedy already exists via a different mechanism:
+This finding is **stale**. The code it refers to  `AwareConnection.send()` at `android/app/src/main/java/com/scmessenger/android/transport/WifiAwareTransport.kt:512-519`  does return `false`, but it is a **deliberate, documented architectural dead-end**, and the "restore a real write path" remedy already exists via a different mechanism:
 
 - `WifiAwareTransport.kt:401-425` `startLoopbackProxy` bridges the real cross-device WiFi Aware socket to a local loopback `ServerSocket` and reports `127.0.0.1:<port>` to `onDataPathConfirmed` (`:420`).
 - `AwareConnection.acceptAndPump` (`:446-481`) pumps bytes bidirectionally between the loopback socket and the peer socket.
@@ -32,7 +32,7 @@ Documentation only. One ledger entry in `docs/release-readiness-2026-07-02.md`. 
 
 ## Files to Touch
 
-- `docs/release-readiness-2026-07-02.md` (T12c entry, `:426-429`) — reclassify from "open code fix needed" to "resolved-by-design; residual is a live-device confirmation only". Cross-reference `HANDOFF/plans/P1-15_transport_matrix_audit.md`.
+- `docs/release-readiness-2026-07-02.md` (T12c entry, `:426-429`)  reclassify from "open code fix needed" to "resolved-by-design; residual is a live-device confirmation only". Cross-reference `HANDOFF/plans/P1-15_transport_matrix_audit.md`.
 - Any other ledger/status doc that cites T12c as an open WiFi Aware code gap (grep `T12c` repo-wide before editing).
 
 ## Verification Commands
@@ -44,6 +44,6 @@ grep -rn "T12c" docs/ HANDOFF/
 
 ## Do NOT
 
-- Do NOT delete the T12c entry — reclassify it (audit trail must show it was investigated and resolved-by-design, per the release-readiness doc's verified-vs-claimed style).
-- Do NOT assert the WiFi Aware path is device-verified — it is code-wired and reachable, but live carriage across two Aware radios is still [DEVICE][BLOCKED-HW] (one phone). Say exactly that.
-- Do NOT touch `WifiAwareTransport.kt` — the `send()` no-op is correct as documented; the fix is a ledger correction, not a code change.
+- Do NOT delete the T12c entry  reclassify it (audit trail must show it was investigated and resolved-by-design, per the release-readiness doc's verified-vs-claimed style).
+- Do NOT assert the WiFi Aware path is device-verified  it is code-wired and reachable, but live carriage across two Aware radios is still [DEVICE][BLOCKED-HW] (one phone). Say exactly that.
+- Do NOT touch `WifiAwareTransport.kt`  the `send()` no-op is correct as documented; the fix is a ledger correction, not a code change.

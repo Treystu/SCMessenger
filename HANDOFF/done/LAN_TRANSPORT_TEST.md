@@ -1,4 +1,4 @@
-# CLI↔Android Native LAN Transport Test Plan
+# CLIAndroid Native LAN Transport Test Plan
 
 **Date:** 2026-04-23
 **Task:** P0_TRANSPORT_001_CLI_Android_LAN_Unification
@@ -12,7 +12,7 @@
 | 2 | Address refresh via Identify | Added periodic refresh loop in CLI |
 | 3 | LAN Discovery (mDNS) | Android already uses mDNS |
 | 4 | Android static port 9001 | Changed from `/ip4/0.0.0.0/tcp/0` to `/ip4/0.0.0.0/tcp/9001` |
-| 5 | CLI→Android message pipeline | Outbox mechanism with retry logic |
+| 5 | CLIAndroid message pipeline | Outbox mechanism with retry logic |
 
 ## Test Environment
 
@@ -83,7 +83,7 @@ Listeners: ["/ip4/0.0.0.0/tcp/9001", ...]
 
 ---
 
-### Test 3: Android→CLI Message Delivery
+### Test 3: AndroidCLI Message Delivery
 
 **Objective:** Send message from Android to CLI on same LAN
 
@@ -100,7 +100,7 @@ Listeners: ["/ip4/0.0.0.0/tcp/9001", ...]
 
 **Expected Result:**
 ```
-← [CLI Contact Name]: [Message content]
+ [CLI Contact Name]: [Message content]
 ```
 
 **Pass Criteria:**
@@ -109,7 +109,7 @@ Listeners: ["/ip4/0.0.0.0/tcp/9001", ...]
 
 ---
 
-### Test 4: CLI→Android Message Delivery
+### Test 4: CLIAndroid Message Delivery
 
 **Objective:** Send message from CLI to Android on same LAN
 
@@ -186,13 +186,13 @@ Listeners: ["/ip4/0.0.0.0/tcp/9001", ...]
 
 | Criteria | Status |
 |----------|--------|
-| CLI `scm send` works while daemon is running | ☐ |
-| Android app receives messages from CLI peer on same LAN | ☐ |
-| No API "expected value at line 1 column 1" errors | ☐ |
-| Ledger addresses refresh before dialing | ☐ |
-| Both sides show ≥1 connected peer | ☐ |
-| Messages delivered within 30s on same LAN | ☐ |
-| Address stale after restart recovered automatically | ☐ |
+| CLI `scm send` works while daemon is running |  |
+| Android app receives messages from CLI peer on same LAN |  |
+| No API "expected value at line 1 column 1" errors |  |
+| Ledger addresses refresh before dialing |  |
+| Both sides show 1 connected peer |  |
+| Messages delivered within 30s on same LAN |  |
+| Address stale after restart recovered automatically |  |
 
 ## Known Issues / Notes
 
@@ -230,14 +230,14 @@ adb shell settings get global airplane_mode_on
 ## Rollback Plan
 
 If issues are found:
-1. Revert `MeshRepository.kt` port change: `9001` → `0`
+1. Revert `MeshRepository.kt` port change: `9001`  `0`
 2. Disable address refresh loop in CLI
 3. Re-enable ephemeral port mode for Android
 
 ## Related Files Modified
 
 1. `android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt`
-   - Changed: `startSwarm("/ip4/0.0.0.0/tcp/0")` → `startSwarm("/ip4/0.0.0.0/tcp/9001")`
+   - Changed: `startSwarm("/ip4/0.0.0.0/tcp/0")`  `startSwarm("/ip4/0.0.0.0/tcp/9001")`
 
 2. `cli/src/main.rs`
    - Changed: Added import `PeerId`
@@ -248,8 +248,8 @@ If issues are found:
 
 - [ ] Test 1: Static Port Configuration
 - [ ] Test 2: API Server Test
-- [ ] Test 3: Android→CLI Message
-- [ ] Test 4: CLI→Android Message
+- [ ] Test 3: AndroidCLI Message
+- [ ] Test 4: CLIAndroid Message
 - [ ] Test 5: Address Staleness
 - [ ] Test 6: Outbox Retry
 - [ ] All acceptance criteria met

@@ -5,7 +5,7 @@
 **Cross-ref:** `HANDOFF/ACTIVE_LEDGER.md` line 14 (1 warning, no callers)
 **Decided by:** Hermes Agent (overseer) post-session audit
 **Routing model:** `gemini-3.5-flash:cloud` (1-line Rust delete)
-**Rationale:** Per ACTIVE_LEDGER.md line 14: "Warnings: 1 — unused import `std::sync::Arc` in `wasm/src/transport.rs:17`". The warning has been there since 2026-05-13. Pure 1-line fix: delete the import. Trivial, ships in 60 seconds. Phase A.3 from the plan, the easiest of all 4 P0_BUILD items.
+**Rationale:** Per ACTIVE_LEDGER.md line 14: "Warnings: 1  unused import `std::sync::Arc` in `wasm/src/transport.rs:17`". The warning has been there since 2026-05-13. Pure 1-line fix: delete the import. Trivial, ships in 60 seconds. Phase A.3 from the plan, the easiest of all 4 P0_BUILD items.
 
 ---
 
@@ -13,12 +13,12 @@
 # BUDGET: 300
 # token_budget: 4000
 
-# P1_GEMINI_FLASH_012 — Remove Unused Arc Import in WASM Transport
+# P1_GEMINI_FLASH_012  Remove Unused Arc Import in WASM Transport
 
 **Status:** VERIFIED REMAINING WORK
 **Agent:** gemini-coder (Gemini 3.5 Flash)
 **Budget:** 300s (MICRO tier)
-**Phase:** v0.2.1 P0 — Gate restoration (A.3)
+**Phase:** v0.2.1 P0  Gate restoration (A.3)
 **Source:** `HANDOFF/ACTIVE_LEDGER.md` 2026-05-13 (the only warning in the workspace)
 **Depends on:** none
 **Blocks:** A.1, A.2 (cascade warnings)
@@ -32,13 +32,13 @@
 ## Scope (~1 LoC, 1 file)
 
 In `wasm/src/transport.rs`:
-- Line 17: `use std::sync::Arc;` → delete
+- Line 17: `use std::sync::Arc;`  delete
 
-If other unused imports exist in the same file, delete those too (probably not — ACTIVE_LEDGER only flagged Arc).
+If other unused imports exist in the same file, delete those too (probably not  ACTIVE_LEDGER only flagged Arc).
 
 ## File Targets
 
-- `wasm/src/transport.rs` [EDIT — delete 1 line]
+- `wasm/src/transport.rs` [EDIT  delete 1 line]
 
 ## Build Verification
 

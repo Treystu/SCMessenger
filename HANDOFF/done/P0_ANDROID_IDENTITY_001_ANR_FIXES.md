@@ -14,7 +14,7 @@
 
 ### Issue #2: `IdentityViewModel.loadIdentity()` runs FFI on Main thread
 **File:** `android/app/src/main/java/com/scmessenger/android/ui/viewmodels/IdentityViewModel.kt:46-66`
-**Problem:** `viewModelScope.launch { }` on Main → `getIdentityInfo()` does FFI + file I/O.
+**Problem:** `viewModelScope.launch { }` on Main  `getIdentityInfo()` does FFI + file I/O.
 **Fix:** Launch with `Dispatchers.IO`.
 
 ### Issue #3: `IdentityViewModel.getQrCodeData()` sync FFI on composition thread
@@ -25,14 +25,14 @@
 
 ### Issue #8: `SettingsViewModel.updateNickname()` runs on Main dispatcher
 **File:** `android/app/src/main/java/com/scmessenger/android/ui/viewmodels/SettingsViewModel.kt:280-290`
-**Problem:** `viewModelScope.launch { }` on Main → `setNickname()` does FFI + I/O.
+**Problem:** `viewModelScope.launch { }` on Main  `setNickname()` does FFI + I/O.
 **Fix:** Launch with `Dispatchers.IO`.
 
 ## Files to Modify
-1. `android/app/src/main/java/com/scmessenger/android/ui/viewmodels/MainViewModel.kt` — add IO dispatcher to createIdentity
-2. `android/app/src/main/java/com/scmessenger/android/ui/viewmodels/IdentityViewModel.kt` — add IO dispatcher to loadIdentity, make getQrCodeData suspend
-3. `android/app/src/main/java/com/scmessenger/android/ui/identity/IdentityScreen.kt` — collect qrCodeData from coroutine
-4. `android/app/src/main/java/com/scmessenger/android/ui/viewmodels/SettingsViewModel.kt` — add IO dispatcher to updateNickname
+1. `android/app/src/main/java/com/scmessenger/android/ui/viewmodels/MainViewModel.kt`  add IO dispatcher to createIdentity
+2. `android/app/src/main/java/com/scmessenger/android/ui/viewmodels/IdentityViewModel.kt`  add IO dispatcher to loadIdentity, make getQrCodeData suspend
+3. `android/app/src/main/java/com/scmessenger/android/ui/identity/IdentityScreen.kt`  collect qrCodeData from coroutine
+4. `android/app/src/main/java/com/scmessenger/android/ui/viewmodels/SettingsViewModel.kt`  add IO dispatcher to updateNickname
 
 ## Implementation Summary
 
@@ -61,8 +61,8 @@
 BUILD SUCCESSFUL
 ```
 
-[NATIVE_SUB_AGENT: RESEARCH] — Completed. All FFI calls now dispatch to IO properly.
-[NATIVE_SUB_AGENT: LINT_FORMAT] — Kotlin compilation passed with warnings only (no errors).
+[NATIVE_SUB_AGENT: RESEARCH]  Completed. All FFI calls now dispatch to IO properly.
+[NATIVE_SUB_AGENT: LINT_FORMAT]  Kotlin compilation passed with warnings only (no errors).
 
 ## Verification
 - [x] `./gradlew compileDebugKotlin` passes

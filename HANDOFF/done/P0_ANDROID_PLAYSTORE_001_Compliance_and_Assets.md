@@ -1,7 +1,7 @@
 # P0_ANDROID_PLAYSTORE_001: Play Store Compliance and Assets
 
 **Status:** TODO
-**Priority:** P0 — Blocks Play Store submission
+**Priority:** P0  Blocks Play Store submission
 **Estimated LoC Impact:** ~200
 **Native Routing:** [NATIVE_SUB_AGENT: LINT_FORMAT] after coding
 
@@ -16,7 +16,7 @@ The Android app is missing several Google Play Store submission requirements:
 
 ### 1. Privacy Policy
 - Create `docs/privacy_policy.md` with minimal policy covering:
-  - Data collected (contacts, messages, identity keys — all local-only)
+  - Data collected (contacts, messages, identity keys  all local-only)
   - No third-party sharing
   - E2EE messaging
   - User control over data (local storage only)
@@ -35,17 +35,17 @@ The Android app is missing several Google Play Store submission requirements:
   - Before requesting denied permissions, show a custom rationale dialog explaining WHY each permission is needed
   - Use `shouldShowRequestPermissionRationale()` to determine if rationale is needed
   - Map each permission to a human-readable reason:
-    - BLUETOOTH_SCAN → "Discover nearby mesh nodes"
-    - BLUETOOTH_ADVERTISE → "Advertise your device to mesh nodes"
-    - ACCESS_FINE_LOCATION → "Required by Android for Bluetooth Low Energy scanning"
-    - CAMERA → "Scan QR codes to add contacts"
+    - BLUETOOTH_SCAN  "Discover nearby mesh nodes"
+    - BLUETOOTH_ADVERTISE  "Advertise your device to mesh nodes"
+    - ACCESS_FINE_LOCATION  "Required by Android for Bluetooth Low Energy scanning"
+    - CAMERA  "Scan QR codes to add contacts"
 
 ### 4. Store Assets Prep
 - Create `fastlane/metadata/android/en-US/` structure
 - Add placeholder files for:
-  - `title.txt` — "SCMessenger"
-  - `short_description.txt` — "Secure, decentralized mesh messenger"
-  - `full_description.txt` — Expanded description
+  - `title.txt`  "SCMessenger"
+  - `short_description.txt`  "Secure, decentralized mesh messenger"
+  - `full_description.txt`  Expanded description
   - Note: Screenshots must be taken manually on device; add README documenting the process
 
 ## Verification

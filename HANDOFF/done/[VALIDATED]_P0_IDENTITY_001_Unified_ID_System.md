@@ -28,7 +28,7 @@ The current identity system uses multiple incompatible ID formats across app var
 
 1. **Android UI Layer:** `SettingsViewModel.getIdentityInfo()` returns `IdentityInfo` object; UI displays `info.id` (identity hash) instead of deriving/displaying the libp2p Peer ID
 2. **QR Code / Sharing:** Exporting identity uses identity hash, but other user cannot add via `scm contact add` because it expects libp2p Peer ID
-3. **Missing Cross-Reference:** No `identity.id` → `libp2p_peer_id` mapping exposed to users
+3. **Missing Cross-Reference:** No `identity.id`  `libp2p_peer_id` mapping exposed to users
 
 ## Implementation Summary
 
@@ -44,18 +44,18 @@ The current identity system uses multiple incompatible ID formats across app var
 
 ### 3. CLI Validation Fix -- IMPLEMENTED
 - `cli/src/main.rs` `cmd_contact()` now accepts 3 ID formats:
-  - libp2p Peer ID (`12D3Koo...`) — derived to public key, verified against `--public-key`
-  - Ed25519 public key hex (64 hex chars) — validated as valid curve point
-  - Blake3 identity ID (64 hex chars) — resolved via `IronCore::resolve_identity()`
+  - libp2p Peer ID (`12D3Koo...`)  derived to public key, verified against `--public-key`
+  - Ed25519 public key hex (64 hex chars)  validated as valid curve point
+  - Blake3 identity ID (64 hex chars)  resolved via `IronCore::resolve_identity()`
 - Added `looks_like_ed25519_pk()` helper to distinguish valid Ed25519 keys from Blake3 hashes
 - Updated `looks_like_blake3_id()` to also accept uppercase hex chars
 
 ### 4. Cross-Reference API -- IMPLEMENTED
 - Added `IronCore::get_libp2p_peer_id()` method (returns `Option<String>`)
 - Fixed `IronCore::resolve_identity()` to handle all 3 ID formats:
-  - Valid Ed25519 public key → returned as-is
-  - Blake3 identity ID → resolved via contact lookup, then local identity check
-  - libp2p Peer ID → public key extracted via `extract_public_key_from_peer_id()`
+  - Valid Ed25519 public key  returned as-is
+  - Blake3 identity ID  resolved via contact lookup, then local identity check
+  - libp2p Peer ID  public key extracted via `extract_public_key_from_peer_id()`
 - Added `WasmMeshNode::get_libp2p_peer_id()` for WASM parity
 
 ### 5. Ledger / Contact Store Unification -- IMPLEMENTED
@@ -73,15 +73,15 @@ The current identity system uses multiple incompatible ID formats across app var
 
 ## Files Modified
 
-- `core/src/iron_core.rs` — Added `get_libp2p_peer_id()`, fixed `resolve_identity()` to handle Blake3 hashes, fixed drift envelope error conversion
-- `core/src/identity/keys.rs` — Added 5 new unit tests for Peer ID round-trip and identity hash validation
-- `core/src/wasm_support/mesh.rs` — Added `get_libp2p_peer_id()` method
-- `cli/src/main.rs` — Rewrote `cmd_contact()` to accept 3 ID formats, added `looks_like_ed25519_pk()` helper
-- `core/src/message/codec.rs` — Fixed pre-existing `COMPRESSION_THRESHOLD`/`DRIFT_VERSION` import errors
+- `core/src/iron_core.rs`  Added `get_libp2p_peer_id()`, fixed `resolve_identity()` to handle Blake3 hashes, fixed drift envelope error conversion
+- `core/src/identity/keys.rs`  Added 5 new unit tests for Peer ID round-trip and identity hash validation
+- `core/src/wasm_support/mesh.rs`  Added `get_libp2p_peer_id()` method
+- `cli/src/main.rs`  Rewrote `cmd_contact()` to accept 3 ID formats, added `looks_like_ed25519_pk()` helper
+- `core/src/message/codec.rs`  Fixed pre-existing `COMPRESSION_THRESHOLD`/`DRIFT_VERSION` import errors
 
 ## Build Verification
 
-- `cargo check -p scmessenger-core` — PASSED
-- `cargo check -p scmessenger-cli` — PASSED
-- `cargo test -p scmessenger-core --lib identity::keys` — 10/10 PASSED (5 new tests)
-- `cargo test -p scmessenger-core --lib store::contacts` — 6/6 PASSED
+- `cargo check -p scmessenger-core`  PASSED
+- `cargo check -p scmessenger-cli`  PASSED
+- `cargo test -p scmessenger-core --lib identity::keys`  10/10 PASSED (5 new tests)
+- `cargo test -p scmessenger-core --lib store::contacts`  6/6 PASSED

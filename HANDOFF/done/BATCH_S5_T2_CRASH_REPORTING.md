@@ -28,7 +28,7 @@ S4-T1 (ANR Elimination)
 2. Verify ANR reporting enabled:
    - `FirebaseCrashlytics.getInstance().setCrashlyticsCollectionEnabled(true)`
    - Enable ANR monitoring in Firebase console
-3. Test: trigger exception → verify appears in console within 5 minutes
+3. Test: trigger exception  verify appears in console within 5 minutes
 4. Add custom keys for debugging:
    - `app_version`: BuildConfig.VERSION_NAME
    - `device_android_version`: Build.VERSION.SDK_INT
@@ -42,5 +42,5 @@ S4-T1 (ANR Elimination)
 
 ## Notes
 - Crashlytics free tier is sufficient for development
-- Consider Fabric→Firebase migration if using legacy
+- Consider FabricFirebase migration if using legacy
 - Test crash reporting before release

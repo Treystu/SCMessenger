@@ -1,7 +1,7 @@
 # Agent Task: Complete Android Build Fix (Full Implementation Only)
 
 **Delegated To:** rust-coder (glm-5.1:cloud)
-**Priority:** P0 — Blocking APK build
+**Priority:** P0  Blocking APK build
 **Depends On:** Phase 1A compilation baseline (passing)
 
 ## CONTEXT
@@ -42,11 +42,11 @@ After all fixes, `cargo check --workspace` must show 0 errors.
 Then `./gradlew assembleDebug -x lint` must show BUILD SUCCESSFUL.
 
 ## KEY FILES
-- `core/src/api.udl` — UDL interface definitions
-- `core/src/iron_core.rs` — IronCore implementation
-- `core/src/mobile_bridge.rs` — Mobile bridge types
-- `core/src/lib.rs` — Module declarations
-- `android/app/build.gradle` — Android build config
+- `core/src/api.udl`  UDL interface definitions
+- `core/src/iron_core.rs`  IronCore implementation
+- `core/src/mobile_bridge.rs`  Mobile bridge types
+- `core/src/lib.rs`  Module declarations
+- `android/app/build.gradle`  Android build config
 
 ## ENVIRONMENT
 - Default toolchain: stable-x86_64-pc-windows-gnu

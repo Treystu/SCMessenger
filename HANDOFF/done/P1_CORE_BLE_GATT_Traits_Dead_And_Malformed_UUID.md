@@ -1,4 +1,4 @@
-# TASK: P1-CORE-BLE-GATT — `GattServer`/`GattClient` traits have zero implementations (CORE_SWEEP_03) + malformed `GATT_SERVICE_UUID`
+# TASK: P1-CORE-BLE-GATT  `GattServer`/`GattClient` traits have zero implementations (CORE_SWEEP_03) + malformed `GATT_SERVICE_UUID`
 
 **Tier:** [SONNET] (a delete-with-decision or a wire-up; the design call is small and mechanical once the direction is picked).
 **Gates:** [AUDIT-GATE] (touches `core/src/transport/ble/`).
@@ -42,7 +42,7 @@ The GATT trait layer was scaffolded (SOVEREIGN_MESH_PLAN era, see `docs/historic
 
 - `core/src/transport/ble/gatt.rs` (traits + `GATT_SERVICE_UUID` + characteristic enum)
 - `core/src/transport/ble/mod.rs` (re-exports, line 27)
-- Coordinate with `P1_CLI_BLE_Outbound_TX_Path_Missing.md` — these two must not both edit the framing layer blind.
+- Coordinate with `P1_CLI_BLE_Outbound_TX_Path_Missing.md`  these two must not both edit the framing layer blind.
 
 ## Verification Commands
 
@@ -57,7 +57,7 @@ grep -rn "GattServer\|GattClient" core/ cli/ mobile/ --include=*.rs
 
 ## Do NOT
 
-- Do NOT "fix" the malformed UUID in isolation and leave the dead traits — pick (A) or (B) explicitly; a half-measure leaves a fixed-but-still-dead constant that invites future confusion.
-- Do NOT change the live UUIDs (`ble_mesh.rs:25`, `BleGattServer.kt:541`, `beacon.rs:15`) — they are correct and interoperate; only `gatt.rs`'s constant is wrong.
-- Do NOT remove the `GattFragmenter`/`GattReassembler` helpers if the BLE-TX ticket intends to reuse them for the CLI write path — confirm with that ticket's implementer first.
+- Do NOT "fix" the malformed UUID in isolation and leave the dead traits  pick (A) or (B) explicitly; a half-measure leaves a fixed-but-still-dead constant that invites future confusion.
+- Do NOT change the live UUIDs (`ble_mesh.rs:25`, `BleGattServer.kt:541`, `beacon.rs:15`)  they are correct and interoperate; only `gatt.rs`'s constant is wrong.
+- Do NOT remove the `GattFragmenter`/`GattReassembler` helpers if the BLE-TX ticket intends to reuse them for the CLI write path  confirm with that ticket's implementer first.
 - Mandatory `crypto-security-auditor` review before done (transport module). `release-gatekeeper` before merge.

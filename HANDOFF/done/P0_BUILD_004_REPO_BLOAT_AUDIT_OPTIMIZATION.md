@@ -2,7 +2,7 @@
 
 **Priority:** P0
 **Type:** BUILD
-**Status:** ✅ SAFE PHASE COMPLETE — risky items deferred to backlog
+**Status:**  SAFE PHASE COMPLETE  risky items deferred to backlog
 
 ## Completed Actions (Safe)
 1. **Removed `API_LIMIT_BACKUP_20260415_213830/`** from git tracking (~428 KB of backup snapshots)
@@ -12,10 +12,10 @@
 5. **Added entries to `.gitignore`** for all removed items to prevent re-tracking
 
 ## Deferred to Backlog (Risky / Needs Testing)
-- **Feature-gating `quinn` and `ureq`** — each used in only one file, but requires `#[cfg(feature)]` gates
-- **Feature-gating `dspy/` module** — has no external callers but may be needed for future orchestration
-- **11 `#[allow(dead_code)]` suppressions** — need per-case audit before removal
-- **Binary size optimization** — `cargo bloat` analysis requires WASM target and release build
+- **Feature-gating `quinn` and `ureq`**  each used in only one file, but requires `#[cfg(feature)]` gates
+- **Feature-gating `dspy/` module**  has no external callers but may be needed for future orchestration
+- **11 `#[allow(dead_code)]` suppressions**  need per-case audit before removal
+- **Binary size optimization**  `cargo bloat` analysis requires WASM target and release build
 
 ## Verification
 - `cargo build -p scmessenger-core` passes
@@ -64,14 +64,14 @@ The architect agent MUST produce a file `HANDOFF/review/P0_BUILD_004_BLOAT_OPTIM
 - **Prioritized action list:** safe changes first, then safe-with-test, then risky
 - **Rollback strategy** for each change (git command to revert)
 - **Verification checklist** to confirm no regressions after each change
-- **Explicit NO-GO items** — dependencies or code that looks unused but must be kept (e.g., platform-specific code, conditional compilation targets, security-critical deps)
+- **Explicit NO-GO items**  dependencies or code that looks unused but must be kept (e.g., platform-specific code, conditional compilation targets, security-critical deps)
 
 ## Phase 3: Execution (implementer agent)
 
 1. Execute ONLY the "safe" items from the plan first
 2. After each safe change: run `cargo check --workspace`, `cargo test --workspace`, and `./gradlew :app:compileDebugKotlin`
 3. Then execute "safe-with-test" items, running full test suite after each
-4. **DO NOT** execute "risky" items — move those to HANDOFF/backlog/ with detailed notes
+4. **DO NOT** execute "risky" items  move those to HANDOFF/backlog/ with detailed notes
 5. After all safe changes: run `cargo bloat` again to measure actual savings
 6. Write final results to `HANDOFF/done/P0_BUILD_004_REPO_BLOAT_AUDIT_OPTIMIZATION.md`
 
@@ -81,5 +81,5 @@ The architect agent MUST produce a file `HANDOFF/review/P0_BUILD_004_BLOAT_OPTIM
 - **Platform parity**: Changes must not break any platform (Rust core, Android, WASM, iOS, CLI)
 - **Security**: Do not remove any dependency in `core/src/crypto/` or any `proptest`/`kani` verification dependency
 
-[NATIVE_SUB_AGENT: RESEARCH] — Use native sub-agents to scan dependency trees and find unused imports before writing any code
-[NATIVE_SUB_AGENT: LINT_FORMAT] — Use native sub-agents to format Cargo.toml and build.gradle after edits
+[NATIVE_SUB_AGENT: RESEARCH]  Use native sub-agents to scan dependency trees and find unused imports before writing any code
+[NATIVE_SUB_AGENT: LINT_FORMAT]  Use native sub-agents to format Cargo.toml and build.gradle after edits

@@ -1,6 +1,6 @@
 # P0_ANTI_ABUSE_001: Critical Anti-Abuse Controls Implementation
 
-## Status: ✅ COMPLETE
+## Status:  COMPLETE
 
 ## Verification Summary (2026-04-20)
 - **Build**: `cargo build -p scmessenger-core` passes
@@ -13,7 +13,7 @@
 1. **`core/src/transport/reputation.rs`**:
    - Added `StorageBackend` persistence via `with_backend()` constructor
    - `load_from_storage()` / `persist_peer()` / `remove_peer_from_storage()` / `flush_to_storage()`
-   - `apply_decay()` — time-based reputation decay toward neutral (7-day default TTL)
+   - `apply_decay()`  time-based reputation decay toward neutral (7-day default TTL)
    - `PeerAbuseStats` now tracks `last_signal_epoch_secs` for cross-session persistence
    - `ReputationScore`, `AbuseSignal`, `PeerAbuseStats` now derive `Serialize`/`Deserialize`
    - `prune_stale()` now cleans storage entries too
@@ -27,8 +27,8 @@
    - `IronCore::new()` now creates `abuse_reputation` with `with_backend()` when storage is ready
 
 ## Success Criteria
-1. ✅ Reputation scores persist across sessions (sled-backed `StorageBackend`)
-2. ✅ Abuse detection triggers circuit breaking (relay.rs drops messages for abusive peers)
-3. ✅ Spam messages are automatically filtered (AutoBlockEngine + SpamDetectionEngine)
-4. ✅ Reputation affects relay priority and routing (rate_limit_multiplier + relay decisions)
-5. ✅ Cross-platform API consistency (api.udl + mobile_bridge + lib.rs public API)
+1.  Reputation scores persist across sessions (sled-backed `StorageBackend`)
+2.  Abuse detection triggers circuit breaking (relay.rs drops messages for abusive peers)
+3.  Spam messages are automatically filtered (AutoBlockEngine + SpamDetectionEngine)
+4.  Reputation affects relay priority and routing (rate_limit_multiplier + relay decisions)
+5.  Cross-platform API consistency (api.udl + mobile_bridge + lib.rs public API)

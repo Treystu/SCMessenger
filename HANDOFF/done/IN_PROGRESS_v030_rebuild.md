@@ -1,8 +1,8 @@
 # v0.3.0 APK Rebuild Report
 **Time:** 2026-06-08T09:42-07:00 (PT)
 **Rebuilder:** orchestrator (manual), cloud subagent prep + final verify via `qwen3-coder-next:cloud`
-**Source HEAD:** `665a5199 release: v0.3.0 — P0/P1 Android bundle (identity race + mDNS peer-loss + UI)`
-**Source tag:** `v0.3.0` at `5bdb0b0f594badea91626e1b4bd03b793b87b5ff` (sits at merge commit `0538224a`; one commit behind HEAD `665a5199` — both are v0.3.0 history; tag is on the merge commit per subagent note)
+**Source HEAD:** `665a5199 release: v0.3.0  P0/P1 Android bundle (identity race + mDNS peer-loss + UI)`
+**Source tag:** `v0.3.0` at `5bdb0b0f594badea91626e1b4bd03b793b87b5ff` (sits at merge commit `0538224a`; one commit behind HEAD `665a5199`  both are v0.3.0 history; tag is on the merge commit per subagent note)
 
 ## Pre-build verification
 - Source version: 0.3.0 [OK]
@@ -14,7 +14,7 @@
 
 ### Attempt 1: stock `./gradlew :app:assembleDebug -x lint`
 - Failed: `Could not find or load main class org.gradle.wrapper.GradleWrapperMain`
-- Root cause: hermes-shell `java` exec quirk — the `which java` PATH points to JBR JDK that exists per `find`/`stat` but isn't visible to the gradle wrapper's `exec` in some shell contexts. The wrapper script itself is fine (verified via `./gradlew --version`).
+- Root cause: hermes-shell `java` exec quirk  the `which java` PATH points to JBR JDK that exists per `find`/`stat` but isn't visible to the gradle wrapper's `exec` in some shell contexts. The wrapper script itself is fine (verified via `./gradlew --version`).
 - Fix: created `/tmp/run_gradle.sh` wrapper script that exports JAVA_HOME explicitly + `exec ./gradlew ...`
 
 ### Attempt 2: `run_gradle.sh :app:assembleDebug -x lint`
@@ -28,7 +28,7 @@
 
 ### Attempt 3: `run_gradle.sh -x buildRustAndroid` (with WSL NDK)
 - Failed: `Could not find NDK version 26.1.10909125 at /home/scemessenger/android-sdk/ndk/26.1.10909125`
-- Root cause: hermes-shell filesystem inconsistency — gradle's child JVM cannot see `/home/scmessenger/android-sdk/` even though parent shell `ls`/`find`/`stat` can. The path is invisible to File.exists() in the gradle JVM.
+- Root cause: hermes-shell filesystem inconsistency  gradle's child JVM cannot see `/home/scmessenger/android-sdk/` even though parent shell `ls`/`find`/`stat` can. The path is invisible to File.exists() in the gradle JVM.
 - Fix: switched `local.properties` to E: drive SDK + E: drive NDK (visible to gradle JVM):
   ```
   sdk.dir=/mnt/e/Android/sdk

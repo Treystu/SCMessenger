@@ -27,16 +27,16 @@
 
 ### 4. Scan Session Reuse (already existed)
 - BleScanner already returns early on duplicate `isScanning` check
-- No changes needed — session reuse was already implemented
+- No changes needed  session reuse was already implemented
 
 ### 5. Graceful Degradation
-- `handleBleTransportDegradation()` in MeshRepository — switches BLE to background mode on degradation
-- `recordTransportEvent()` — records transport health events, auto-checks for degradation
+- `handleBleTransportDegradation()` in MeshRepository  switches BLE to background mode on degradation
+- `recordTransportEvent()`  records transport health events, auto-checks for degradation
 - Periodic health check added to `startStorageMaintenance()` (every 15 min)
 - `getTransportHealthSummary()` exposed for diagnostics UI
 
 ### Build Verification
-- `./gradlew :app:compileDebugKotlin -x :app:buildRustAndroid` → **BUILD SUCCESSFUL**
+- `./gradlew :app:compileDebugKotlin -x :app:buildRustAndroid`  **BUILD SUCCESSFUL**
 
 ## Files Created
 1. `android/app/src/main/java/com/scmessenger/android/transport/ble/BleQuotaManager.kt`

@@ -26,10 +26,10 @@ S6-T1 (Identity Backup/Restore)
    - Display QR in modal/dialog
 2. Scan QR code to add contact:
    - Use camera permission
-   - Parse QR → extract peer_id, public_key
+   - Parse QR  extract peer_id, public_key
    - Prefill AddContactScreen with scanned data
    - Prompt for confirmation before adding
-3. Test: generate QR on Device A → scan on Device B → verify contact added
+3. Test: generate QR on Device A  scan on Device B  verify contact added
 4. Verify contact shows correct public key (user can verify manually)
 
 ## Verification

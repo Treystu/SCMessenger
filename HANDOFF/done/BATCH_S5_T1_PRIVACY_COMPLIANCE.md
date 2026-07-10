@@ -31,7 +31,7 @@ S4-T1 (ANR Elimination)
 3. Verify `neverForLocation` flags on permissions:
    - `BLUETOOTH_SCAN android:usesPermissionFlags="neverForLocation"`
    - `NEARBY_WIFI_DEVICES android:usesPermissionFlags="neverForLocation"`
-4. Test: fresh install → verify permissions requested correctly
+4. Test: fresh install  verify permissions requested correctly
 5. Complete Play Store Data Safety form with accurate info
 
 ## Verification

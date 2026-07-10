@@ -11,7 +11,7 @@ phase: "MICRO"
 # MODEL: gemini-3-flash-preview:cloud
 # BUDGET: 180
 
-# MICRO_ANR_003: MeshForegroundService.kt Safe Return — RUNNING State Guard
+# MICRO_ANR_003: MeshForegroundService.kt Safe Return  RUNNING State Guard
 
 ## Objective
 Convert the `IllegalStateException` throw at `MeshForegroundService.kt:168` into a safe log-and-return that prevents the service from crashing when the repository fails to reach RUNNING state.
@@ -39,7 +39,7 @@ Replace the `throw` with:
 - **Max LOC change:** <= 12
 
 ## Reference Context
-The function enclosing this code is `startMeshService()` or `onStartCommand()` — verify the exact enclosing function signature before inserting the return. The `isRunning` field is already declared at the class level.
+The function enclosing this code is `startMeshService()` or `onStartCommand()`  verify the exact enclosing function signature before inserting the return. The `isRunning` field is already declared at the class level.
 
 ## Success Criteria
 - [ ] `IllegalStateException` removed at line 168

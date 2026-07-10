@@ -12,20 +12,20 @@ CRITICAL: You are forbidden from considering a task 'complete' until you execute
 ## Build Verification
 After wiring, run: `cargo check --workspace`
 
-## Tasks — Group A: Core Infrastructure Wiring (routing, relay, transport)
+## Tasks  Group A: Core Infrastructure Wiring (routing, relay, transport)
 
 
 ## Sub-batch 7 of 7
 
-1. **get_iron_core_mode** — core/src/wasm_support/ — Wire into mode query
-2. **set_iron_core_mode** — core/src/wasm_support/ — Wire into mode config
-3. **get_swarm_bridge** — core/src/wasm_support/ — Wire into swarm bridge access
-4. **parse_response** — core/src/wasm_support/ — Wire into JSON-RPC response parsing
-5. **unknown_method_error** — core/src/wasm_support/ — Wire into JSON-RPC error handling
+1. **get_iron_core_mode**  core/src/wasm_support/  Wire into mode query
+2. **set_iron_core_mode**  core/src/wasm_support/  Wire into mode config
+3. **get_swarm_bridge**  core/src/wasm_support/  Wire into swarm bridge access
+4. **parse_response**  core/src/wasm_support/  Wire into JSON-RPC response parsing
+5. **unknown_method_error**  core/src/wasm_support/  Wire into JSON-RPC error handling
 
 ## Execution Strategy
 
-Work through groups A → B → C → D → E in order. After each group, run `cargo check --workspace` to verify compilation. Fix any errors before moving to the next group.
+Work through groups A  B  C  D  E in order. After each group, run `cargo check --workspace` to verify compilation. Fix any errors before moving to the next group.
 
 When all groups are complete and compilation passes, move ALL completed task files from `HANDOFF/todo/` to `HANDOFF/done/`.
 

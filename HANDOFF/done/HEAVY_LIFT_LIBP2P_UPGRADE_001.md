@@ -1,6 +1,6 @@
 # HEAVY_LIFT_LIBP2P_UPGRADE_001
 
-**Status:** VERIFIED REMAINING WORK — BLOCKED by breaking API changes
+**Status:** VERIFIED REMAINING WORK  BLOCKED by breaking API changes
 **Agent:** rust-coder (glm-5.1:cloud) + architect-planner (deepseek-v4-pro:cloud)
 **Budget:** 5400s+ (HEAVY-LIFT tier, requires Tier 1 window)
 **Phase:** v0.2.1+ security hardening

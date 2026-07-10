@@ -4,7 +4,7 @@
 
 ## P1: Multi-Device Blocking Implementation
 
-**Source:** 2026-05-13 MASTER AUDIT — Multi-device blocking not implemented (`blocked.rs` device-ID pairing)
+**Source:** 2026-05-13 MASTER AUDIT  Multi-device blocking not implemented (`blocked.rs` device-ID pairing)
 
 ### Current State
 The `blocked.rs` module blocks by peer identity but does not support device-ID-level blocking. When a user blocks a contact, all devices belonging to that identity should be blocked, but device-ID pairing is missing.

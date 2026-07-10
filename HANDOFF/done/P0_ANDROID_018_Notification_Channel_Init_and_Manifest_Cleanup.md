@@ -20,8 +20,8 @@ Removed unused `android.permission.WAKE_LOCK` declaration.
 
 ### 3. Branded Launcher Icons
 **Files:**
-- `android/app/src/main/res/drawable/ic_launcher_background.xml` — changed fill color from `#3DDC84` (Android green) to `#FF1A1A2E` (SCMessenger dark navy)
-- `android/app/src/main/res/drawable/ic_launcher_foreground.xml` — replaced Android "A" logo with the white SCMessenger splash icon shape (scaled to 108dp adaptive-icon safe zone)
+- `android/app/src/main/res/drawable/ic_launcher_background.xml`  changed fill color from `#3DDC84` (Android green) to `#FF1A1A2E` (SCMessenger dark navy)
+- `android/app/src/main/res/drawable/ic_launcher_foreground.xml`  replaced Android "A" logo with the white SCMessenger splash icon shape (scaled to 108dp adaptive-icon safe zone)
 
 ## Verification
 

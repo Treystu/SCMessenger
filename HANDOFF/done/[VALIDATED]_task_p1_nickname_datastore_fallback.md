@@ -4,7 +4,7 @@
 
 ## P1: Nickname DataStore Fallback to Rust Core
 
-**Source:** 2026-05-13 MASTER AUDIT — Nickname DataStore fallback never pushes back to Rust Core in `SettingsViewModel.kt`
+**Source:** 2026-05-13 MASTER AUDIT  Nickname DataStore fallback never pushes back to Rust Core in `SettingsViewModel.kt`
 
 ### Current State
 When the nickname is stored in the local Android DataStore as a fallback (e.g., when Rust Core is not yet initialized), the value is never pushed back to Rust Core once it becomes available. This means the federated nickname in the mesh can be stale or missing.

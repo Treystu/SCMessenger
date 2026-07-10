@@ -13,7 +13,7 @@ Sprint 3: BLE Completion
 ~100
 
 ## Depends
-S3-T1 (BLE→Core Message Forwarding)
+S3-T1 (BLECore Message Forwarding)
 
 ## Files
 - `android/app/src/main/java/com/scmessenger/android/transport/ble/BleScanner.kt`
@@ -32,7 +32,7 @@ S3-T1 (BLE→Core Message Forwarding)
    - 60s cooldown after failure
    - Resume scanning at reduced frequency
    - If recovery fails 3 times, stay degraded
-4. Test: simulate BLE failure → verify WiFi escalation → verify BLE recovery after cooldown
+4. Test: simulate BLE failure  verify WiFi escalation  verify BLE recovery after cooldown
 
 ## Verification
 - BLE failure triggers WiFi escalation (prioritize WiFi transports)

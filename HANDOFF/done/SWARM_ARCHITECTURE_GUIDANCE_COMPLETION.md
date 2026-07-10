@@ -23,10 +23,10 @@ Successfully fixed UniFFI binding compilation errors in the SCMessenger core lib
 - Preserved all existing functionality while fixing interface compliance
 
 ## Verification
-- ✅ Cargo check passes
-- ✅ Library compiles successfully
-- ✅ UniFFI binding generation succeeds
-- ⚠️ Unit tests have 1 unrelated failure (time calculation overflow in routing module)
+-  Cargo check passes
+-  Library compiles successfully
+-  UniFFI binding generation succeeds
+-  Unit tests have 1 unrelated failure (time calculation overflow in routing module)
 
 ## Next Steps
 - Address unrelated test failure in routing module
