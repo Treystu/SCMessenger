@@ -1955,6 +1955,7 @@ pub async fn start_swarm_with_config(
     {
         let local_peer_id = keypair.public().to_peer_id();
 
+        #[cfg(not(target_os = "android"))]
         let mut swarm: libp2p::Swarm<IronCoreBehaviour> =
             libp2p::SwarmBuilder::with_existing_identity(keypair)
                 .with_tokio()
@@ -1974,6 +1975,46 @@ pub async fn start_swarm_with_config(
                     cfg.with_idle_connection_timeout(web_time::Duration::from_secs(600))
                 })
                 .build();
+
+        #[cfg(target_os = "android")]
+        let mut swarm: libp2p::Swarm<IronCoreBehaviour> = {
+            use libp2p::Transport;
+            libp2p::SwarmBuilder::with_existing_identity(keypair)
+                .with_tokio()
+                .with_other_transport(
+                    |id_keys| -> std::result::Result<_, Box<dyn std::error::Error + Send + Sync>> {
+                        let tcp_transport1 = libp2p::tcp::tokio::Transport::new(libp2p::tcp::Config::default());
+                        let dns_tcp1 = libp2p::dns::tokio::Transport::custom(
+                            tcp_transport1,
+                            libp2p::dns::ResolverConfig::google(),
+                            libp2p::dns::ResolverOpts::default(),
+                        );
+                        let tcp_transport2 = libp2p::tcp::tokio::Transport::new(libp2p::tcp::Config::default());
+                        let dns_tcp2 = libp2p::dns::tokio::Transport::custom(
+                            tcp_transport2,
+                            libp2p::dns::ResolverConfig::google(),
+                            libp2p::dns::ResolverOpts::default(),
+                        );
+                        let ws_transport = libp2p::websocket::Config::new(dns_tcp2);
+                        let transport = dns_tcp1.or_transport(ws_transport);
+                        let noise = libp2p::noise::Config::new(id_keys)?;
+                        Ok(transport
+                            .upgrade(libp2p::core::upgrade::Version::V1Lazy)
+                            .authenticate(noise)
+                            .multiplex(libp2p::yamux::Config::default())
+                            .map(|(peer_id, conn), _| (peer_id, libp2p::core::muxing::StreamMuxerBox::new(conn))))
+                    }
+                )?
+                .with_relay_client(libp2p::noise::Config::new, libp2p::yamux::Config::default)?
+                .with_behaviour(|key, relay_client| {
+                    IronCoreBehaviour::new(key, relay_client, headless, discovery_config)
+                        .expect("Failed to create network behaviour")
+                })?
+                .with_swarm_config(|cfg: libp2p::swarm::Config| {
+                    cfg.with_idle_connection_timeout(web_time::Duration::from_secs(600))
+                })
+                .build()
+        };
 
         // Start listening on ports
         let mut bind_results = Vec::new();
