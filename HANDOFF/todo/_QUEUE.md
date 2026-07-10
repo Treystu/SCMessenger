@@ -44,8 +44,9 @@ Rules of engagement:
    decision) [DEVICE]. Needs a second CLI instance on the Windows box
    in relay mode, then phone offline-then-returning custody test.
 
-6. P1-19 Phase 1 exit review [OPUS+][HUMAN] -- release-gatekeeper over
-   the whole phase; operator signs waivers. GATE TO PHASE 2.
+6. `P1-19_Phase_1_Exit_Review.md` [OPUS+][HUMAN] -- Checklist for the
+   operator's sign-off, listing completed milestones, waivers, and exit check
+   steps. GATE TO PHASE 2.
 
 ## Phase 1 -- COMPLETED (swarm/native since 07-06)
 
