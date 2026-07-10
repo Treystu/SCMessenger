@@ -737,8 +737,10 @@ impl MeshService {
                                       _ => None,
                                   })
                               });
-                              let mut multiport_config = crate::transport::multiport::MultiPortConfig::default();
-                              multiport_config.preferred_port = preferred_port;
+                              let multiport_config = crate::transport::multiport::MultiPortConfig {
+                                  preferred_port,
+                                  ..Default::default()
+                              };
 
                               match crate::transport::start_swarm_with_config(
                                   libp2p_keys,
@@ -989,9 +991,11 @@ impl MeshService {
                                             ) => {
                                                 tracing::info!("Swarm listening on {}", addr);
                                                 eprintln!("[IronCore] [OK] Swarm listening on {}", addr);
-                                                let is_expected = expected_listen_addr.as_ref().map_or(false, |expected| expected == &addr);
-                                                let is_primary_tcp = expected_listen_addr.is_none() && addr.iter().any(|p| matches!(p, libp2p::multiaddr::Protocol::Tcp(_)));
-                                                
+                                                let is_expected = expected_listen_addr.as_ref() == Some(&addr);
+                                                // If we bound to 0.0.0.0, the emitted addr will be a specific interface IP.
+                                                // So we must also accept any TCP address if it was our primary transport.
+                                                let is_primary_tcp = addr.iter().any(|p| matches!(p, libp2p::multiaddr::Protocol::Tcp(_)));
+
                                                 if is_expected || is_primary_tcp || !await_listener {
                                                     if let Some(tx) = startup_signal.take() {
                                                         let _ = tx.try_send(Ok(()));
@@ -1027,8 +1031,10 @@ impl MeshService {
                                 Err(e) => {
                                     *swarm_mode_state.lock() = None;
                                     tracing::error!("Failed to start swarm: {:?}", e);
+                                    let err_msg = format!("START_SWARM_WITH_CONFIG ERROR: {:?}", e);
+                                    let _ = std::fs::write("/data/data/com.scmessenger.android/files/swarm_error.txt", &err_msg);
                                     if let Some(tx) = startup_signal.take() {
-                                        let _ = tx.try_send(Err(format!("{:?}", e)));
+                                        let _ = tx.try_send(Err(err_msg));
                                     }
                                 }
                             }
@@ -1036,10 +1042,9 @@ impl MeshService {
                     }
                     Err(e) => {
                         tracing::error!("Failed to create swarm Tokio runtime: {}", e);
-                        let _ = startup_tx.try_send(Err(format!(
-                            "failed to create swarm Tokio runtime: {}",
-                            e
-                        )));
+                        let err_msg = format!("failed to create swarm Tokio runtime: {}", e);
+                        let _ = std::fs::write("/data/data/com.scmessenger.android/files/swarm_error.txt", &err_msg);
+                        let _ = startup_tx.try_send(Err(err_msg));
                     }
                 }
             })

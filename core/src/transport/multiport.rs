@@ -63,14 +63,22 @@ pub fn generate_listen_addresses(config: &MultiPortConfig) -> Vec<(Multiaddr, u1
     // Helper to add IPv4 and IPv6 addresses for a port (both TCP and WS)
     let mut add_port = |port: u16| {
         if config.enable_ipv4 {
-            let tcp_addr: Multiaddr = format!("/ip4/0.0.0.0/tcp/{}", port).parse().unwrap();
-            let ws_addr: Multiaddr = format!("/ip4/0.0.0.0/tcp/{}/ws", port).parse().unwrap();
+            let tcp_addr: Multiaddr = format!("/ip4/0.0.0.0/tcp/{}", port)
+                .parse()
+                .expect("valid IPv4 TCP multiaddr format");
+            let ws_addr: Multiaddr = format!("/ip4/0.0.0.0/tcp/{}/ws", port)
+                .parse()
+                .expect("valid IPv4 WS multiaddr format");
             addresses.push((tcp_addr, port));
             addresses.push((ws_addr, port));
         }
         if config.enable_ipv6 {
-            let tcp_addr: Multiaddr = format!("/ip6/::/tcp/{}", port).parse().unwrap();
-            let ws_addr: Multiaddr = format!("/ip6/::/tcp/{}/ws", port).parse().unwrap();
+            let tcp_addr: Multiaddr = format!("/ip6/::/tcp/{}", port)
+                .parse()
+                .expect("valid IPv6 TCP multiaddr format");
+            let ws_addr: Multiaddr = format!("/ip6/::/tcp/{}/ws", port)
+                .parse()
+                .expect("valid IPv6 WS multiaddr format");
             addresses.push((tcp_addr, port));
             addresses.push((ws_addr, port));
         }
@@ -293,7 +301,11 @@ mod tests {
         };
         let addresses = generate_listen_addresses(&config);
 
-        assert_eq!(addresses.len(), 4, "Should have 4 custom addresses (TCP + WS)");
+        assert_eq!(
+            addresses.len(),
+            4,
+            "Should have 4 custom addresses (TCP + WS)"
+        );
         assert!(addresses.iter().any(|(_, port)| *port == 9999));
         assert!(addresses.iter().any(|(_, port)| *port == 8888));
     }

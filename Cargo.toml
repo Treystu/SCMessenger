@@ -2,7 +2,7 @@
 members = ["core", "cli", "wasm", "mobile", "desktop_bridge"]
 # wasm excluded from default members: requires wasm32 target
 # Build with: cargo build -p scmessenger-wasm --target wasm32-unknown-unknown
-# exclude = ["wasm"]
+exclude = ["wasm"]
 resolver = "2"
 
 [workspace.package]

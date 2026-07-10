@@ -6,7 +6,7 @@ fn main() {
 
     // Get git commit hash
     let git_hash = std::process::Command::new("git")
-        .args(&["rev-parse", "--short", "HEAD"])
+        .args(["rev-parse", "--short", "HEAD"])
         .output()
         .map(|output| {
             if output.status.success() {
@@ -19,7 +19,7 @@ fn main() {
 
     // Get git branch name
     let git_branch = std::process::Command::new("git")
-        .args(&["rev-parse", "--abbrev-ref", "HEAD"])
+        .args(["rev-parse", "--abbrev-ref", "HEAD"])
         .output()
         .map(|output| {
             if output.status.success() {

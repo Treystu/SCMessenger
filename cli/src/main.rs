@@ -456,8 +456,14 @@ async fn main() -> Result<()> {
         )
         .init();
 
-    tracing::info!("SCMessenger CLI starting up... (CLI Version: {})", VERSION_INFO);
-    tracing::info!("Core Provenance: {}", scmessenger_core::get_build_provenance());
+    tracing::info!(
+        "SCMessenger CLI starting up... (CLI Version: {})",
+        VERSION_INFO
+    );
+    tracing::info!(
+        "Core Provenance: {}",
+        scmessenger_core::get_build_provenance()
+    );
     tracing::info!("Log directory: {}", log_dir.display());
 
     // 4. Prune old logs (keep last 7 days)
@@ -533,7 +539,11 @@ async fn cmd_init(name: Option<String>) -> Result<()> {
     println!("  {} Configuration", "[OK]".green());
 
     let data_dir = config::Config::data_dir()?;
-    println!("  {} Data directory: {}", "[OK]".green(), data_dir.display());
+    println!(
+        "  {} Data directory: {}",
+        "[OK]".green(),
+        data_dir.display()
+    );
 
     let storage_path = data_dir.join("storage");
     let core = IronCore::with_storage(path_to_string(&storage_path)?);
@@ -608,7 +618,11 @@ async fn cmd_identity(action: Option<IdentityAction>) -> Result<()> {
             if let Some(path) = output {
                 std::fs::write(&path, &backup)
                     .with_context(|| format!("Failed to write backup file: {}", path))?;
-                println!("{} Backup written to {}", "[OK]".green(), path.bright_cyan());
+                println!(
+                    "{} Backup written to {}",
+                    "[OK]".green(),
+                    path.bright_cyan()
+                );
             } else {
                 println!("{}", "Backup payload:".bold());
                 println!("{}", backup);
@@ -1399,8 +1413,10 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
         .filter_map(|addr| addr.parse().ok())
         .collect();
 
-    let mut multiport_config = scmessenger_core::transport::multiport::MultiPortConfig::default();
-    multiport_config.preferred_port = Some(p2p_port);
+    let multiport_config = scmessenger_core::transport::multiport::MultiPortConfig {
+        preferred_port: Some(p2p_port),
+        ..Default::default()
+    };
 
     let swarm_handle = transport::start_swarm_with_config(
         network_keypair,
@@ -2383,7 +2399,11 @@ async fn cmd_relay(listen_addr: String, http_port: u16, node_name: Option<String
 
     // Start HTTP server (landing page + WebSocket)
     let (ui_broadcast, _ui_cmd_rx) = server::start(http_port, web_ctx.clone()).await?;
-    println!("{} HTTP server started on port {}", "[OK]".green(), http_port);
+    println!(
+        "{} HTTP server started on port {}",
+        "[OK]".green(),
+        http_port
+    );
 
     // Start swarm
     let listen_multiaddr: libp2p::Multiaddr =
@@ -2413,8 +2433,10 @@ async fn cmd_relay(listen_addr: String, http_port: u16, node_name: Option<String
         libp2p::multiaddr::Protocol::Tcp(port) => Some(port),
         _ => None,
     });
-    let mut multiport_config = scmessenger_core::transport::multiport::MultiPortConfig::default();
-    multiport_config.preferred_port = listen_port;
+    let multiport_config = scmessenger_core::transport::multiport::MultiPortConfig {
+        preferred_port: listen_port,
+        ..Default::default()
+    };
 
     let swarm_handle = transport::start_swarm_with_config(
         network_keypair,
@@ -3203,7 +3225,11 @@ async fn cmd_block(action: BlockAction) -> Result<()> {
         BlockAction::Remove { peer_id, device_id } => {
             core.unblock_peer(peer_id.clone(), device_id.clone())
                 .map_err(|e| anyhow::anyhow!("{}", e))?;
-            println!("{} Unblocked peer: {}", "[OK]".green(), peer_id.bright_cyan());
+            println!(
+                "{} Unblocked peer: {}",
+                "[OK]".green(),
+                peer_id.bright_cyan()
+            );
             if let Some(device_id) = device_id {
                 println!("  Device ID: {}", device_id.dimmed());
             }
@@ -3268,7 +3294,11 @@ async fn cmd_block(action: BlockAction) -> Result<()> {
                     println!("  Device ID: {}", device_id.dimmed());
                 }
             } else {
-                println!("{} {} is NOT blocked", "[OK]".green(), peer_id.bright_cyan());
+                println!(
+                    "{} {} is NOT blocked",
+                    "[OK]".green(),
+                    peer_id.bright_cyan()
+                );
                 if let Some(device_id) = device_id {
                     println!("  Device ID: {}", device_id.dimmed());
                 }

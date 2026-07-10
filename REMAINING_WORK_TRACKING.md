@@ -13,11 +13,21 @@ free tokens/model/90 days).
   via `tmp/scmqwen/qwen_dispatch.sh` with round-robin model selection. Two
   dispatch modes: ANALYZE (read-only) and PATCH (implementation). Same HANDOFF
   state machine, build serialization, and escalation rules as `/scmorc`.
+- **Model roster verified** (2026-07-08): 130+ Qwen models on DashScope
+  (Singapore region), ~1M free tokens/model/90 days. Active tiers:
+  [FLASH] `qwen3-coder-flash`/`qwen3.5-flash`, [CODER] `qwen3-coder-plus`/`qwen3-coder-plus-2025-09-23`,
+  [THINK] `qwen3-235b-a22b-thinking-2507`/`qwen3.5-122b-a10b`, [MAX] `qwen3-max-preview`.
+  Several models depleted 2026-07-08 (tracked in `tmp/scmqwen/round_robin_state.json`).
+- **Dispatch infrastructure**: `tmp/scmqwen/qwen_dispatch.sh` (round-robin stateful),
+  `tmp/scmqwen/provider.sh` (settings switcher), `tmp/scmqwen/provider.sh` sources
+  `~/.config/scmorc/dashscope.env` for API key. Worker scripts in `scripts/qwen_*_worker.py`
+  write responses to `~/.gemini/antigravity/brain/<uuid>/scratch/`.
 - **Android emulator setup**: Installed emulator component (emulator.exe) via
-  sdkmanager. System image (API 35, Google APIs, x86_64) downloading in
-  background. AVD creation planned: `scm_pixel_35` with Pixel 6a profile.
+  sdkmanager. System image (API 34, Google APIs, x86_64) downloaded. AVD created:
+  `scm_pixel_34` with Pixel 6a profile (API 34, not 35 as planned — API 35 image unavailable).
+  Emulator boots successfully with `-gpu swiftshader_indirect -no-audio -no-boot-anim`.
 - **Environment fixed**: ANDROID_HOME and PATH updated permanently (setx) to
-  include Android SDK platform-tools and emulator paths.
+  include Android SDK platform-tools, emulator, and cmdline-tools paths.
 - **Queue cleaned**: Batch-moved 59 `[VALIDATED]_*` items from `HANDOFF/todo/`
   to `HANDOFF/done/[VALIDATED]/`. Todo now has 25 files (4 active Phase 1,
   2 NEEDS_PLANNING, 1 evidence, 18 frozen Phase 2).
@@ -28,8 +38,13 @@ free tokens/model/90 days).
   `cargo test --workspace --no-run` PASS (both clean).
 - **Working tree clean**: No uncommitted changes at session start.
 - **Phase 1 remaining items**: NEXT_ITER_04 (emulator retest), P1-17
-  (WiFi Direct, operator-gated), P1-14 (hostile-network), P1-18 (relay),
-  P1-19 (exit review). All other Phase 1 items completed by swarm/native.
+  (WiFi Direct, operator-gated — WAIVED per emulator HW restriction),
+  P1-14 (hostile-network), P1-18 (relay), P1-19 (exit review). All other Phase 1 items completed by swarm/native.
+- **P1-17 WiFi Direct decision**: WAIVED for v1.0.0. The WiFi Direct cell
+  is Android-to-Android by physics (NAN), and the Android<->Windows
+  equivalent is already covered by mDNS/LAN + TCP. Building legacy-client
+  support adds CLI complexity for a cell that the operator's single-Pixel
+  test scenario doesn't exercise. Deferred to v1.1.
 
 ## 2026-07-08 SESSION SUMMARY (BLE Outbound TX & Clippy Debt paid off)
 

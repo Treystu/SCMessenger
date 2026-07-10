@@ -140,5 +140,7 @@ pub struct RegistrationStateInfo {
 
 /// Get build provenance information (git hash, branch, and build timestamp)
 pub fn get_build_provenance() -> String {
-    option_env!("SCM_BUILD_STAMP").unwrap_or("development build").to_string()
+    option_env!("SCM_BUILD_STAMP")
+        .unwrap_or("development build")
+        .to_string()
 }

@@ -657,7 +657,9 @@ pub async fn handle_jsonrpc_request(
         // ── History ──
         ClientIntent::GetHistory { limit } => {
             if let Some(ref core) = ctx.core {
-                let mgr = core.history_manager().expect("Failed to initialize history manager");
+                let mgr = core
+                    .history_manager()
+                    .expect("Failed to initialize history manager");
                 match mgr.recent(None, limit.unwrap_or(50) as u32) {
                     Ok(messages) => {
                         let list: Vec<Value> = messages
@@ -701,7 +703,9 @@ pub async fn handle_jsonrpc_request(
         }
         ClientIntent::GetConversation { peer_id, limit } => {
             if let Some(ref core) = ctx.core {
-                let mgr = core.history_manager().expect("Failed to initialize history manager");
+                let mgr = core
+                    .history_manager()
+                    .expect("Failed to initialize history manager");
                 match mgr.conversation(peer_id.clone(), limit.unwrap_or(50) as u32) {
                     Ok(messages) => {
                         let list: Vec<Value> = messages
@@ -1490,7 +1494,9 @@ pub async fn handle_jsonrpc_request(
         // ── History search/stats (P1) ──
         ClientIntent::SearchMessages { query, limit } => {
             if let Some(ref core) = ctx.core {
-                let mgr = core.history_manager().expect("Failed to initialize history manager");
+                let mgr = core
+                    .history_manager()
+                    .expect("Failed to initialize history manager");
                 match mgr.search(query, limit.unwrap_or(50) as u32) {
                     Ok(messages) => {
                         let list: Vec<Value> = messages
@@ -1534,7 +1540,9 @@ pub async fn handle_jsonrpc_request(
         }
         ClientIntent::GetHistoryStats {} => {
             if let Some(ref core) = ctx.core {
-                let mgr = core.history_manager().expect("Failed to initialize history manager");
+                let mgr = core
+                    .history_manager()
+                    .expect("Failed to initialize history manager");
                 match mgr.stats() {
                     Ok(stats) => {
                         let mut m = Map::new();
@@ -1569,7 +1577,9 @@ pub async fn handle_jsonrpc_request(
         }
         ClientIntent::MarkMessageDelivered { message_id } => {
             if let Some(ref core) = ctx.core {
-                let mgr = core.history_manager().expect("Failed to initialize history manager");
+                let mgr = core
+                    .history_manager()
+                    .expect("Failed to initialize history manager");
                 match mgr.mark_delivered(message_id) {
                     Ok(()) => {
                         let mut m = Map::new();
@@ -1598,7 +1608,9 @@ pub async fn handle_jsonrpc_request(
         }
         ClientIntent::DeleteMessage { message_id } => {
             if let Some(ref core) = ctx.core {
-                let mgr = core.history_manager().expect("Failed to initialize history manager");
+                let mgr = core
+                    .history_manager()
+                    .expect("Failed to initialize history manager");
                 match mgr.delete(message_id) {
                     Ok(()) => {
                         let mut m = Map::new();
@@ -1627,7 +1639,9 @@ pub async fn handle_jsonrpc_request(
         }
         ClientIntent::ClearConversation { peer_id } => {
             if let Some(ref core) = ctx.core {
-                let mgr = core.history_manager().expect("Failed to initialize history manager");
+                let mgr = core
+                    .history_manager()
+                    .expect("Failed to initialize history manager");
                 match mgr.clear_conversation(peer_id) {
                     Ok(()) => {
                         let mut m = Map::new();

@@ -1,8 +1,24 @@
 # SCMessenger Current State (Verified)
 
 Status: Active
-Last updated: 2026-07-08 (Fable 5 stabilization sprint)
+Last updated: 2026-07-09 (Qwen /scmqwen orchestrator session + emulator validation)
 Last verified: **2026-07-02** (v1.0.0 PR #1 merged, remaining items documented in `docs/release-readiness-2026-07-02.md`)
+
+---
+
+## 2026-07-09: Qwen /scmqwen Orchestrator Session — Emulator Setup & Phase 1 Audit
+
+**Status:** Infrastructure COMPLETE; Phase 1 remaining items audited and documented.
+
+Key outcomes:
+- **Created `/scmqwen` command** (`.claude/commands/scmqwen.md`): Qwen-native orchestrator dispatching to DashScope Qwen models via `tmp/scmqwen/qwen_dispatch.sh` with round-robin selection across 4 tiers ([FLASH], [CODER], [THINK], [MAX]). 130+ models available, ~1M free tokens/model/90 days. Two dispatch modes: ANALYZE (read-only) and PATCH (implementation).
+- **Model roster verified** (2026-07-08): Active models confirmed; several depleted 2026-07-08 (tracked in `tmp/scmqwen/round_robin_state.json`).
+- **Android emulator operational**: `scm_pixel_34` AVD (API 34, Google APIs, x86_64, Pixel 6a profile) boots successfully with `-gpu swiftshader_indirect -no-audio -no-boot-anim`. Emulator component installed; system image downloaded. Note: API 35 image unavailable, fell back to API 34.
+- **Environment hardened**: ANDROID_HOME and PATH permanently set (setx) for cargo-ndk, gradle, adb, emulator, sdkmanager, avdmanager.
+- **HANDOFF queue cleaned**: 59 `[VALIDATED]_*` items batch-moved from `HANDOFF/todo/` to `HANDOFF/done/[VALIDATED]/`. Active todo: 25 files.
+- **Build gates verified**: `cargo check --workspace` PASS, `cargo test --workspace --no-run` PASS.
+- **Phase 1 audit complete**: P1-17 WiFi Direct WAIVED (emulator HW restriction — Android<->Android cell is [BLOCKED-HW]; Android<->Windows equivalent covered by mDNS/LAN+TCP). Remaining: NEXT_ITER_04 (emulator retest), P1-14 (hostile-network), P1-18 (relay), P1-19 (exit review).
+- **Iteration plan**: `HANDOFF/plans/QWEN_ITERATION_PLAN_2026-07-08.md` defines 2 iterations: (1) Emulator + baseline validation, (2) Phase 1 completion + exit review.
 
 ---
 

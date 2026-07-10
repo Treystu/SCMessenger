@@ -97,7 +97,10 @@ impl PeerBroadcaster {
 
     /// Create a PeerListResponse with all currently connected peers
     #[cfg(not(target_arch = "wasm32"))]
-    pub fn create_peer_list_response(&self, local_peer: Option<(&PeerId, Vec<String>)>) -> RelayMessage {
+    pub fn create_peer_list_response(
+        &self,
+        local_peer: Option<(&PeerId, Vec<String>)>,
+    ) -> RelayMessage {
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .expect("system clock before UNIX_EPOCH")

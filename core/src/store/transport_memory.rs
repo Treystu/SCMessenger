@@ -44,7 +44,8 @@ impl TransportMemoryStore {
             ladder_rank,
         };
         let bytes = serde_json::to_vec(&entry).map_err(|e| e.to_string())?;
-        self.backend.put(Self::key(peer_id, network_fingerprint).as_bytes(), &bytes)?;
+        self.backend
+            .put(Self::key(peer_id, network_fingerprint).as_bytes(), &bytes)?;
         Ok(())
     }
 
@@ -53,8 +54,12 @@ impl TransportMemoryStore {
         peer_id: &PeerId,
         network_fingerprint: &str,
     ) -> Result<Option<TransportMemoryEntry>, String> {
-        if let Some(bytes) = self.backend.get(Self::key(peer_id, network_fingerprint).as_bytes())? {
-            let entry: TransportMemoryEntry = serde_json::from_slice(&bytes).map_err(|e| e.to_string())?;
+        if let Some(bytes) = self
+            .backend
+            .get(Self::key(peer_id, network_fingerprint).as_bytes())?
+        {
+            let entry: TransportMemoryEntry =
+                serde_json::from_slice(&bytes).map_err(|e| e.to_string())?;
             Ok(Some(entry))
         } else {
             Ok(None)

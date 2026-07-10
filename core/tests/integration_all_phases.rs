@@ -35,7 +35,7 @@ async fn test_all_six_phases_integrated() {
     let alice_peer_id = alice_keypair.public().to_peer_id();
     let bob_peer_id = bob_keypair.public().to_peer_id();
 
-    println!("✓ Created identities:");
+    println!("[OK] Created identities:");
     println!("  Alice:   {}", alice_peer_id);
     println!("  Bob:     {}", bob_peer_id);
 
@@ -46,6 +46,7 @@ async fn test_all_six_phases_integrated() {
         additional_ports: vec![],
         enable_ipv4: true,
         enable_ipv6: false,
+        preferred_port: None,
     };
 
     // Start Alice with multi-port
@@ -65,7 +66,7 @@ async fn test_all_six_phases_integrated() {
     .await
     .expect("Failed to start Alice");
 
-    println!("\n✓ Alice started (Phase 2: Multi-port listening)");
+    println!("\n[OK] Alice started (Phase 2: Multi-port listening)");
 
     // Wait for Alice to start listening
     let alice_addr: Option<Multiaddr>;
@@ -102,7 +103,7 @@ async fn test_all_six_phases_integrated() {
     .await
     .expect("Failed to start Bob");
 
-    println!("\n✓ Bob started (Phase 2: Multi-port listening)");
+    println!("\n[OK] Bob started (Phase 2: Multi-port listening)");
 
     // Wait for Bob to start listening
     let bob_addr: Option<Multiaddr>;
@@ -143,7 +144,7 @@ async fn test_all_six_phases_integrated() {
             event = alice_event_rx.recv() => {
                 match event {
                     Some(SwarmEvent2::PeerDiscovered(peer)) if peer == bob_peer_id => {
-                        println!("✓ Alice connected to Bob");
+                        println!("[OK] Alice connected to Bob");
                         alice_connected_to_bob = true;
                     }
                     _ => {}
@@ -152,7 +153,7 @@ async fn test_all_six_phases_integrated() {
             event = bob_event_rx.recv() => {
                 match event {
                     Some(SwarmEvent2::PeerDiscovered(peer)) if peer == alice_peer_id => {
-                        println!("✓ Bob connected to Alice");
+                        println!("[OK] Bob connected to Alice");
                         bob_connected_to_alice = true;
                     }
                     _ => {}
@@ -169,7 +170,7 @@ async fn test_all_six_phases_integrated() {
     }
 
     println!("\n=== PHASE 4: Bootstrap Capability ===");
-    println!("✓ Both nodes can now help others bootstrap (any node can be entry point)");
+    println!("[OK] Both nodes can now help others bootstrap (any node can be entry point)");
 
     // PHASE 1: Test address reflection
     println!("\n=== PHASE 1: Address Observation ===");
@@ -180,10 +181,10 @@ async fn test_all_six_phases_integrated() {
     .await
     {
         Ok(Ok(observed_addr)) => {
-            println!("✓ Bob observed Alice's address: {}", observed_addr);
+            println!("[OK] Bob observed Alice's address: {}", observed_addr);
         }
-        Ok(Err(e)) => println!("⚠ Address reflection failed: {}", e),
-        Err(_) => println!("⚠ Address reflection timeout"),
+        Ok(Err(e)) => println!("[WARNING] Address reflection failed: {}", e),
+        Err(_) => println!("[WARNING] Address reflection timeout"),
     }
 
     // PHASE 6 & 3: Test message delivery with retry and relay
@@ -199,7 +200,7 @@ async fn test_all_six_phases_integrated() {
     .await
     {
         Ok(Ok(())) => {
-            println!("✓ Message delivered successfully (Phase 6: Retry logic active)");
+            println!("[OK] Message delivered successfully (Phase 6: Retry logic active)");
 
             // Wait for Bob to receive it
             loop {
@@ -208,29 +209,29 @@ async fn test_all_six_phases_integrated() {
                         peer_id,
                         envelope_data,
                     })) if peer_id == alice_peer_id => {
-                        println!("✓ Bob received message from Alice");
+                        println!("[OK] Bob received message from Alice");
                         println!("  Message: {:?}", envelope_data);
                         break;
                     }
                     Ok(Some(_)) => continue,
                     _ => {
-                        println!("⚠ Timeout waiting for message");
+                        println!("[WARNING] Timeout waiting for message");
                         break;
                     }
                 }
             }
         }
         Ok(Err(e)) => {
-            println!("✗ Message delivery failed: {}", e);
+            println!("[FAIL] Message delivery failed: {}", e);
         }
         Err(_) => {
-            println!("✗ Message delivery timeout");
+            println!("[FAIL] Message delivery timeout");
         }
     }
 
     // PHASE 5: Reputation Tracking
     println!("\n=== PHASE 5: Reputation Tracking ===");
-    println!("✓ Reputation updated based on delivery success");
+    println!("[OK] Reputation updated based on delivery success");
     println!("  - Success rate: weighted 70%");
     println!("  - Latency: weighted 20%");
     println!("  - Recency: weighted 10%");
@@ -240,13 +241,13 @@ async fn test_all_six_phases_integrated() {
     println!("\n========================================");
     println!("VERIFICATION SUMMARY");
     println!("========================================");
-    println!("✓ Phase 1: Address Observation - ACTIVE");
-    println!("✓ Phase 2: Multi-Port Listening - ACTIVE");
-    println!("✓ Phase 3: Relay Capability - ACTIVE");
-    println!("✓ Phase 4: Bootstrap Capability - ACTIVE");
-    println!("✓ Phase 5: Reputation Tracking - ACTIVE");
-    println!("✓ Phase 6: Retry Logic - ACTIVE");
-    println!("\n🎉 ALL 6 PHASES FULLY INTEGRATED AND FUNCTIONAL");
+    println!("[OK] Phase 1: Address Observation - ACTIVE");
+    println!("[OK] Phase 2: Multi-Port Listening - ACTIVE");
+    println!("[OK] Phase 3: Relay Capability - ACTIVE");
+    println!("[OK] Phase 4: Bootstrap Capability - ACTIVE");
+    println!("[OK] Phase 5: Reputation Tracking - ACTIVE");
+    println!("[OK] Phase 6: Retry Logic - ACTIVE");
+    println!("\n[DONE] ALL 6 PHASES FULLY INTEGRATED AND FUNCTIONAL");
     println!("========================================\n");
 
     let _ = scmessenger_core::transport::swarm::SwarmHandle::shutdown(&alice_handle).await;
@@ -275,6 +276,7 @@ async fn test_message_retry_on_failure() {
         additional_ports: vec![],
         enable_ipv4: true,
         enable_ipv6: false,
+        preferred_port: None,
     };
 
     let (alice_event_tx, _alice_event_rx) = mpsc::channel(100);
@@ -293,8 +295,8 @@ async fn test_message_retry_on_failure() {
     .await
     .expect("Failed to start Alice");
 
-    println!("✓ Alice started");
-    println!("✓ Bob is offline (not started)");
+    println!("[OK] Alice started");
+    println!("[OK] Bob is offline (not started)");
     println!("\n=== Attempting to send message to offline Bob ===");
     println!("This should trigger retry logic with exponential backoff...\n");
 
@@ -308,21 +310,21 @@ async fn test_message_retry_on_failure() {
     .await
     {
         Ok(Err(e)) => {
-            println!("✓ Message eventually failed as expected: {}", e);
-            println!("✓ Retry logic attempted multiple paths");
-            println!("✓ Exponential backoff applied");
+            println!("[OK] Message eventually failed as expected: {}", e);
+            println!("[OK] Retry logic attempted multiple paths");
+            println!("[OK] Exponential backoff applied");
         }
         Ok(Ok(())) => {
-            println!("⚠ Message succeeded (unexpected - Bob was offline)");
+            println!("[WARNING] Message succeeded (unexpected - Bob was offline)");
         }
         Err(_) => {
-            println!("✓ Message still retrying after 15s (Phase 6 active)");
-            println!("✓ System will continue retrying in background");
+            println!("[OK] Message still retrying after 15s (Phase 6 active)");
+            println!("[OK] System will continue retrying in background");
         }
     }
 
     println!("\n========================================");
-    println!("✓ PHASE 6 RETRY LOGIC VERIFIED");
+    println!("[OK] PHASE 6 RETRY LOGIC VERIFIED");
     println!("========================================\n");
 
     let _ = scmessenger_core::transport::swarm::SwarmHandle::shutdown(&alice_handle).await;
@@ -350,7 +352,7 @@ async fn test_relay_protocol() {
     let bob_peer_id = bob_keypair.public().to_peer_id();
     let charlie_peer_id = charlie_keypair.public().to_peer_id();
 
-    println!("✓ Three nodes created:");
+    println!("[OK] Three nodes created:");
     println!("  Alice:   {}", alice_peer_id);
     println!("  Bob:     {} (will act as relay)", bob_peer_id);
     println!("  Charlie: {}", charlie_peer_id);
@@ -361,6 +363,7 @@ async fn test_relay_protocol() {
         additional_ports: vec![],
         enable_ipv4: true,
         enable_ipv6: false,
+        preferred_port: None,
     };
 
     // Start all three nodes
@@ -462,7 +465,7 @@ async fn test_relay_protocol() {
     // Wait for connections
     tokio::time::sleep(Duration::from_secs(2)).await;
 
-    println!("\n✓ Network topology established:");
+    println!("\n[OK] Network topology established:");
     println!("  Alice <-> Bob <-> Charlie");
     println!("\n=== Testing relay: Alice -> Bob -> Charlie ===");
 
@@ -476,20 +479,20 @@ async fn test_relay_protocol() {
     .await
     {
         Ok(Ok(())) => {
-            println!("✓ Message delivery initiated");
-            println!("✓ Bob acting as relay for Alice -> Charlie");
+            println!("[OK] Message delivery initiated");
+            println!("[OK] Bob acting as relay for Alice -> Charlie");
         }
         Ok(Err(e)) => {
-            println!("⚠ Message delivery had issues: {}", e);
+            println!("[WARNING] Message delivery had issues: {}", e);
             println!("  (This may be expected if relay path not yet established)");
         }
         Err(_) => {
-            println!("⚠ Message delivery timeout");
+            println!("[WARNING] Message delivery timeout");
         }
     }
 
     println!("\n========================================");
-    println!("✓ PHASE 3 RELAY PROTOCOL VERIFIED");
+    println!("[OK] PHASE 3 RELAY PROTOCOL VERIFIED");
     println!("  Nodes can relay messages for others");
     println!("========================================\n");
 

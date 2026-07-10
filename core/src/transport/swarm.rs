@@ -191,8 +191,9 @@ fn last_identified_log() -> &'static parking_lot::RwLock<HashMap<PeerId, Instant
 /// IncomingConnectionError. Distinguishes routine single LAN-probe noise
 /// (logged at debug!) from a genuine flood of negotiation failures from one
 /// address (warn!-worthy), independent of the per-event debug-level logging.
-static NEGOTIATION_FAILURE_COUNTS: std::sync::OnceLock<parking_lot::RwLock<HashMap<String, (u32, Instant)>>> =
-    std::sync::OnceLock::new();
+static NEGOTIATION_FAILURE_COUNTS: std::sync::OnceLock<
+    parking_lot::RwLock<HashMap<String, (u32, Instant)>>,
+> = std::sync::OnceLock::new();
 
 fn negotiation_failure_counts() -> &'static parking_lot::RwLock<HashMap<String, (u32, Instant)>> {
     NEGOTIATION_FAILURE_COUNTS.get_or_init(|| parking_lot::RwLock::new(HashMap::new()))
@@ -4309,38 +4310,44 @@ pub async fn start_swarm_with_config(
                                     }
                                 }
 
-                                let dial_res = if found_ip && target_peer_id.is_some() {
-                                    let pid = target_peer_id.unwrap();
-                                    let mut candidates = vec![addr.clone()];
-                                    let fp = crate::store::transport_memory::get_network_fingerprint();
+                                let dial_res = if found_ip {
+                                    match target_peer_id {
+                                        Some(pid) => {
+                                            let mut candidates = vec![addr.clone()];
+                                            let fp = crate::store::transport_memory::get_network_fingerprint();
 
-                                    if let Some(c) = &core_handle {
-                                        if let Some(c_arc) = c.upgrade() {
-                                            if let Ok(Some(last_good)) = c_arc.transport_memory.read().get_last_good(&pid, &fp) {
-                                                let mut a = base_prefix.clone();
-                                                if last_good.transport == "tcp" {
-                                                    a.push(libp2p::multiaddr::Protocol::Tcp(last_good.port));
-                                                } else {
-                                                    a.push(libp2p::multiaddr::Protocol::Udp(last_good.port));
+                                            if let Some(c) = &core_handle {
+                                                if let Some(c_arc) = c.upgrade() {
+                                                    if let Ok(Some(last_good)) = c_arc.transport_memory.read().get_last_good(&pid, &fp) {
+                                                        let mut a = base_prefix.clone();
+                                                        if last_good.transport == "tcp" {
+                                                            a.push(libp2p::multiaddr::Protocol::Tcp(last_good.port));
+                                                        } else {
+                                                            a.push(libp2p::multiaddr::Protocol::Udp(last_good.port));
+                                                        }
+                                                        a.push(libp2p::multiaddr::Protocol::P2p(pid));
+                                                        if !candidates.contains(&a) { candidates.push(a); }
+                                                    }
                                                 }
+                                            }
+
+                                            for port in [443, 80, 8080] {
+                                                let mut a = base_prefix.clone();
+                                                a.push(libp2p::multiaddr::Protocol::Tcp(port));
                                                 a.push(libp2p::multiaddr::Protocol::P2p(pid));
                                                 if !candidates.contains(&a) { candidates.push(a); }
                                             }
+
+                                            tracing::debug!("Dialing candidate ladder for {}: {:?}", pid, candidates);
+                                            let opts = libp2p::swarm::dial_opts::DialOpts::peer_id(pid)
+                                                .addresses(candidates)
+                                                .build();
+                                            swarm.dial(opts)
+                                        }
+                                        None => {
+                                            swarm.dial(addr.clone())
                                         }
                                     }
-
-                                    for port in [443, 80, 8080] {
-                                        let mut a = base_prefix.clone();
-                                        a.push(libp2p::multiaddr::Protocol::Tcp(port));
-                                        a.push(libp2p::multiaddr::Protocol::P2p(pid));
-                                        if !candidates.contains(&a) { candidates.push(a); }
-                                    }
-
-                                    tracing::debug!("Dialing candidate ladder for {}: {:?}", pid, candidates);
-                                    let opts = libp2p::swarm::dial_opts::DialOpts::peer_id(pid)
-                                        .addresses(candidates)
-                                        .build();
-                                    swarm.dial(opts)
                                 } else {
                                     swarm.dial(addr.clone())
                                 };

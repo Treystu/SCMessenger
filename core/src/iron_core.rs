@@ -290,7 +290,8 @@ impl IronCore {
         let security_audit_pipeline =
             Arc::new(crate::dspy::modules::ModuleFactory::build_security_audit_pipeline());
 
-        let transport_memory = crate::store::transport_memory::TransportMemoryStore::new(backend.clone());
+        let transport_memory =
+            crate::store::transport_memory::TransportMemoryStore::new(backend.clone());
 
         Self {
             identity: Arc::new(RwLock::new(IdentityManager::new())),
@@ -375,7 +376,8 @@ impl IronCore {
         let security_audit_pipeline =
             Arc::new(crate::dspy::modules::ModuleFactory::build_security_audit_pipeline());
 
-        let transport_memory = crate::store::transport_memory::TransportMemoryStore::new(backend.clone());
+        let transport_memory =
+            crate::store::transport_memory::TransportMemoryStore::new(backend.clone());
 
         Self {
             identity: Arc::new(RwLock::new(
@@ -465,7 +467,8 @@ impl IronCore {
         let security_audit_pipeline =
             Arc::new(crate::dspy::modules::ModuleFactory::build_security_audit_pipeline());
 
-        let transport_memory = crate::store::transport_memory::TransportMemoryStore::new(backend.clone());
+        let transport_memory =
+            crate::store::transport_memory::TransportMemoryStore::new(backend.clone());
 
         Self {
             identity: Arc::new(RwLock::new(

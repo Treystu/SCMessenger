@@ -1,9 +1,7 @@
 # _QUEUE -- Dispatch Order for the Full v1.0.0 Backlog
 
 Status: Active
-Last updated: 2026-07-08 (Qwen session -- /scmqwen orchestrator created,
-emulator setup in progress. Many Phase 1 items completed by swarm since
-the last queue update on 07-06.)
+Last updated: 2026-07-09 (Qwen session audited, emulator validated, P1-17 waived. NEXT_ITER_04 ready for emulator retest.)
 Owner: the acting orchestrator (any mode). Sequencing authority:
 `HANDOFF/V1_0_0_EXECUTION_PLAN.md` (operator-settled two-phase DAG -- do not
 relitigate). This file is the LIVE pick list: pull from the top, respect the
@@ -25,21 +23,23 @@ Rules of engagement:
 
 ## NOW -- Active Phase 1 items (ordered by dependency)
 
-1. **Emulator validation** [INFRA] Android emulator install in progress
-   (sdkmanager downloading system image). Once ready: boot AVD, verify
-   adb sees it, install a clean APK, confirm the swarm listener binds
-   (logcat shows `[OK] Swarm listening on ...`).
+1. **Emulator validation** [INFRA] **COMPLETE 2026-07-09** — AVD `scm_pixel_34` (API 34, Google APIs, x86_64, Pixel 6a) boots with `-gpu swiftshader_indirect -no-audio -no-boot-anim`. `adb devices` shows `emulator-5554 device`. `adb shell getprop sys.boot_completed` returns `1`. Ready for APK install and NEXT_ITER_04 test matrix.
 
-2. `NEXT_ITER_04_Live_Device_Retest_Pairing.md` [DEVICE][OPUS+ driving]
+2. `ESC_ANDROID_DNS_RESOLVER_FIX.md` [ESCALATION]
+   Hickory DNS resolver crashes on Android emulator due to missing /etc/resolv.conf.
+   **Priority: P0 -- BLOCKS emulator execution. Requires validation/planning before implementation.**
+
+3. `NEXT_ITER_04_Live_Device_Retest_Pairing.md` [DEVICE][OPUS+ driving]
    Subsumes the P1-04 rebuild-and-retest arm and the P1-09 LAN E2E
-   validation pass. Can now run against the emulator once item 1 lands.
+   validation pass. Can now run against the emulator once item 2 lands.
    **Priority: P0 -- this is the Phase 1 gating validation.**
 
-3. `P1-17_Windows_WiFi_Direct_Legacy_Client.md` [SONNET][AUDIT-GATE][DEVICE]
-   + `P1_CORE_WINDOWS_WIFI_DIRECT_Peer_Absent.md` (same cell).
-   **[HUMAN-gated]:** operator must decide build-vs-waive per design note
-   Section 2. If waived, narrow matrix cell to Android<->Android
-   [BLOCKED-HW] and close this ticket.
+~~3. `P1-17_Windows_WiFi_Direct_Legacy_Client.md` [SONNET][AUDIT-GATE][DEVICE]~~ WAIVED (Emulator HW restriction)
+~~   + `P1_CORE_WINDOWS_WIFI_DIRECT_Peer_Absent.md` (same cell).~~
+~~   **[HUMAN-gated]:** operator must decide build-vs-waive per design note~~
+~~   Section 2. If waived, narrow matrix cell to Android<->Android~~
+~~   [BLOCKED-HW] and close this ticket.~~
+**WAIVER CONFIRMED 2026-07-09**: WiFi Direct cell narrowed to Android<->Android [BLOCKED-HW]. Android<->Windows equivalent covered by mDNS/LAN + TCP. Deferred to v1.1.
 
 4. `P1-14 Hostile-network validation` [DEVICE] -- firewall profiles on
    Windows, test the adaptive port ladder. After emulator validates
@@ -78,6 +78,7 @@ Rules of engagement:
 ~~NEXT_ITER_03 Docs sync + residual debt~~ DONE
 ~~CLIPPY_DEBT_cli_desktop_bridge_dwarnings~~ DONE (commit dd52e75c)
 ~~Adaptive TTL test fix~~ DONE
+~~TASK_INFRA_CLAUDE_PATH_FIX~~ DONE (C:\Users\SCM\.local\bin added to User PATH)
 
 ## Phase 1 filler lane (independent, idle capacity only)
 

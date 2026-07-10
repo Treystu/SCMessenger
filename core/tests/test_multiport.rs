@@ -13,6 +13,7 @@ fn test_generate_listen_addresses() {
         additional_ports: vec![9999],
         enable_ipv4: true,
         enable_ipv6: false,
+        preferred_port: None,
     };
 
     let addresses = multiport::generate_listen_addresses(&config);
@@ -29,7 +30,7 @@ fn test_generate_listen_addresses() {
     assert!(addresses.iter().any(|(_, port)| *port == 9999));
     assert!(addresses.iter().any(|(_, port)| *port == 0)); // random port
 
-    println!("✓ Generated {} listen addresses", addresses.len());
+    println!("[OK] Generated {} listen addresses", addresses.len());
 }
 
 #[test]
@@ -40,6 +41,7 @@ fn test_ipv4_only_mode() {
         additional_ports: vec![],
         enable_ipv4: true,
         enable_ipv6: false,
+        preferred_port: None,
     };
 
     let addresses = multiport::generate_listen_addresses(&config);
@@ -51,7 +53,7 @@ fn test_ipv4_only_mode() {
         );
     }
 
-    println!("✓ IPv4-only mode generates only IPv4 addresses");
+    println!("[OK] IPv4-only mode generates only IPv4 addresses");
 }
 
 #[test]
@@ -62,6 +64,7 @@ fn test_ipv6_only_mode() {
         additional_ports: vec![],
         enable_ipv4: false,
         enable_ipv6: true,
+        preferred_port: None,
     };
 
     let addresses = multiport::generate_listen_addresses(&config);
@@ -73,7 +76,7 @@ fn test_ipv6_only_mode() {
         );
     }
 
-    println!("✓ IPv6-only mode generates only IPv6 addresses");
+    println!("[OK] IPv6-only mode generates only IPv6 addresses");
 }
 
 #[test]
@@ -84,6 +87,7 @@ fn test_custom_ports_only() {
         additional_ports: vec![9999, 8888, 7777],
         enable_ipv4: true,
         enable_ipv6: false,
+        preferred_port: None,
     };
 
     let addresses = multiport::generate_listen_addresses(&config);
@@ -93,7 +97,7 @@ fn test_custom_ports_only() {
     assert!(addresses.iter().any(|(_, port)| *port == 8888));
     assert!(addresses.iter().any(|(_, port)| *port == 7777));
 
-    println!("✓ Custom ports mode works correctly");
+    println!("[OK] Custom ports mode works correctly");
 }
 
 #[test]
@@ -131,7 +135,7 @@ fn test_bind_result_analysis() {
         scmessenger_core::transport::ConnectivityStatus::Excellent
     );
 
-    println!("✓ Bind result analysis categorizes correctly");
+    println!("[OK] Bind result analysis categorizes correctly");
 }
 
 #[test]
@@ -153,7 +157,7 @@ fn test_bind_analysis_excellent_connectivity() {
     let analysis = multiport::analyze_bind_results(&results);
     assert_eq!(analysis.status, ConnectivityStatus::Excellent);
 
-    println!("✓ Excellent connectivity detected correctly");
+    println!("[OK] Excellent connectivity detected correctly");
 }
 
 #[test]
@@ -169,7 +173,7 @@ fn test_bind_analysis_good_connectivity() {
     let analysis = multiport::analyze_bind_results(&results);
     assert_eq!(analysis.status, ConnectivityStatus::Good);
 
-    println!("✓ Good connectivity detected correctly");
+    println!("[OK] Good connectivity detected correctly");
 }
 
 #[test]
@@ -185,7 +189,7 @@ fn test_bind_analysis_moderate_connectivity() {
     let analysis = multiport::analyze_bind_results(&results);
     assert_eq!(analysis.status, ConnectivityStatus::Moderate);
 
-    println!("✓ Moderate connectivity detected correctly");
+    println!("[OK] Moderate connectivity detected correctly");
 }
 
 #[test]
@@ -210,7 +214,7 @@ fn test_bind_analysis_report_format() {
     assert!(report.contains("Permission denied") || report.contains("elevated privileges"));
     assert!(report.contains("Connectivity:"));
 
-    println!("✓ Bind analysis report is well-formatted");
+    println!("[OK] Bind analysis report is well-formatted");
     println!("\nSample report:\n{}", report);
 }
 
@@ -226,7 +230,7 @@ fn test_requires_elevated_privileges() {
         assert!(!multiport::requires_elevated_privileges(8080));
         assert!(!multiport::requires_elevated_privileges(9999));
 
-        println!("✓ Elevated privilege detection works correctly (Unix)");
+        println!("[OK] Elevated privilege detection works correctly (Unix)");
     }
 
     #[cfg(not(unix))]
@@ -235,7 +239,7 @@ fn test_requires_elevated_privileges() {
         assert!(!multiport::requires_elevated_privileges(80));
         assert!(!multiport::requires_elevated_privileges(443));
 
-        println!("✓ Elevated privilege detection works correctly (Windows)");
+        println!("[OK] Elevated privilege detection works correctly (Windows)");
     }
 }
 
@@ -249,7 +253,7 @@ fn test_default_multiport_config() {
     assert!(config.enable_ipv6);
     assert!(config.additional_ports.is_empty());
 
-    println!("✓ Default MultiPortConfig has sensible defaults");
+    println!("[OK] Default MultiPortConfig has sensible defaults");
 }
 
 #[tokio::test]
@@ -267,6 +271,7 @@ async fn test_multiport_swarm_integration() {
         additional_ports: vec![19999, 18888],
         enable_ipv4: true,
         enable_ipv6: false,
+        preferred_port: None,
     };
 
     let (event_tx, _event_rx) = tokio::sync::mpsc::channel(256);
@@ -291,21 +296,21 @@ async fn test_multiport_swarm_integration() {
         swarm.shutdown().await.ok();
     }
 
-    println!("✓ Swarm starts successfully with multi-port configuration");
+    println!("[OK] Swarm starts successfully with multi-port configuration");
 }
 
 #[test]
 fn test_phase_2_implementation_complete() {
     println!("\n=== Phase 2: Multi-Port Adaptive Listening ===");
-    println!("✓ MultiPortConfig defines port selection strategy");
-    println!("✓ generate_listen_addresses() creates address list");
-    println!("✓ BindResult tracks success/failure for each port");
-    println!("✓ BindAnalysis provides connectivity assessment");
-    println!("✓ ConnectivityStatus categorizes network capability");
-    println!("✓ start_swarm_with_config() enables multi-port binding");
-    println!("✓ Automatic privilege detection for low ports");
-    println!("✓ IPv4/IPv6 mode selection supported");
-    println!("✓ Priority ports (443, 80) maximize firewall traversal");
-    println!("✓ Random port ensures fallback connectivity");
+    println!("[OK] MultiPortConfig defines port selection strategy");
+    println!("[OK] generate_listen_addresses() creates address list");
+    println!("[OK] BindResult tracks success/failure for each port");
+    println!("[OK] BindAnalysis provides connectivity assessment");
+    println!("[OK] ConnectivityStatus categorizes network capability");
+    println!("[OK] start_swarm_with_config() enables multi-port binding");
+    println!("[OK] Automatic privilege detection for low ports");
+    println!("[OK] IPv4/IPv6 mode selection supported");
+    println!("[OK] Priority ports (443, 80) maximize firewall traversal");
+    println!("[OK] Random port ensures fallback connectivity");
     println!("\nPhase 2 implementation complete!");
 }

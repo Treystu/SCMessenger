@@ -209,7 +209,9 @@ fn test_wifi_aware_peer_discovered_triggers_data_path_and_dial() {
     // Confirm it's a real, mutual libp2p connection rather than a one-sided
     // dial attempt: the responder's swarm should see the initiator too.
     let responder_peers = rt
-        .block_on(responder_handle.get_peers())
+        .block_on(crate::transport::swarm::SwarmHandle::get_peers(
+            &responder_handle,
+        ))
         .expect("Failed to query responder peers");
     assert!(
         responder_peers.contains(&initiator_peer_id),

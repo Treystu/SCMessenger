@@ -16,8 +16,8 @@ use scmessenger_core::wasm_support::rpc::{notif_message_received, MessageReceive
 use scmessenger_core::IronCore;
 use std::collections::HashMap;
 use std::sync::Arc;
-use tokio::sync::Mutex;
 use std::sync::OnceLock;
+use tokio::sync::Mutex;
 use uuid::Uuid;
 
 #[derive(Clone)]
@@ -42,7 +42,8 @@ use crate::server::{UiEvent, UiOutbound};
 /// SCM GATT primary service UUID (must match `core/src/transport/ble/gatt.rs`).
 const GATT_SERVICE_UUID: u128 = 0x0000_DF01_0000_1000_8000_0080_5F9B_34FB;
 
-static ACTIVE_PEERS: OnceLock<std::sync::Mutex<HashMap<String, TrackingPeripheral>>> = OnceLock::new();
+static ACTIVE_PEERS: OnceLock<std::sync::Mutex<HashMap<String, TrackingPeripheral>>> =
+    OnceLock::new();
 
 fn get_active_peers() -> &'static std::sync::Mutex<HashMap<String, TrackingPeripheral>> {
     ACTIVE_PEERS.get_or_init(|| std::sync::Mutex::new(HashMap::new()))
@@ -118,7 +119,11 @@ impl Drop for PeerRegistryGuard {
                     map.remove(peer_id);
                     tracing::info!("BLE removed peer ID {} from active registry", peer_id);
                 } else {
-                    tracing::debug!("BLE peer ID {} retained in registry (MAC rotated from {})", peer_id, self.mac_addr);
+                    tracing::debug!(
+                        "BLE peer ID {} retained in registry (MAC rotated from {})",
+                        peer_id,
+                        self.mac_addr
+                    );
                 }
             }
         }
@@ -144,7 +149,10 @@ async fn subscribe_ingress_for_peripheral(
     // Try to read identity data to register peer_id
     // PeerRegistryGuard will remove peer_id from ACTIVE_PEERS automatically when this background
     // streaming task terminates (via early return, disconnect, or stream completion).
-    let mut guard = PeerRegistryGuard { peer_id: None, mac_addr: addr.clone() };
+    let mut guard = PeerRegistryGuard {
+        peer_id: None,
+        mac_addr: addr.clone(),
+    };
     let identity_uuid = scm_identity_uuid();
     let id_char = peripheral
         .characteristics()
@@ -159,16 +167,29 @@ async fn subscribe_ingress_for_peripheral(
                     if let Some(peer_id) = val.get("peer_id").and_then(|v| v.as_str()) {
                         if let Ok(parsed_peer_id) = peer_id.parse::<libp2p::PeerId>() {
                             let peer_id_str = parsed_peer_id.to_string();
-                            let mut map = get_active_peers().lock().expect("ACTIVE_PEERS lock poisoned");
+                            let mut map = get_active_peers()
+                                .lock()
+                                .expect("ACTIVE_PEERS lock poisoned");
                             if let Some(existing) = map.get(&peer_id_str) {
                                 tracing::info!("BLE correlated rotated MAC {} to existing logical peer ID {} (was {})", addr, peer_id_str, existing.address_string());
                             } else {
-                                tracing::info!("BLE mapped peripheral {} to peer ID {}", addr, peer_id_str);
+                                tracing::info!(
+                                    "BLE mapped peripheral {} to peer ID {}",
+                                    addr,
+                                    peer_id_str
+                                );
                             }
-                            map.insert(peer_id_str.clone(), TrackingPeripheral::Real(peripheral.clone()));
+                            map.insert(
+                                peer_id_str.clone(),
+                                TrackingPeripheral::Real(peripheral.clone()),
+                            );
                             guard.peer_id = Some(peer_id_str);
                         } else {
-                            tracing::warn!("BLE received invalid peer ID '{}' from {}", peer_id, addr);
+                            tracing::warn!(
+                                "BLE received invalid peer ID '{}' from {}",
+                                peer_id,
+                                addr
+                            );
                         }
                     }
                 }
@@ -220,7 +241,9 @@ async fn subscribe_ingress_for_peripheral(
 /// Send a SCMessenger message envelope over BLE to the registered peripheral
 pub async fn send_ble_message(recipient_peer_id: &str, data: &[u8]) -> Result<(), String> {
     let peripheral = {
-        let guard = get_active_peers().lock().expect("ACTIVE_PEERS lock poisoned");
+        let guard = get_active_peers()
+            .lock()
+            .expect("ACTIVE_PEERS lock poisoned");
         guard.get(recipient_peer_id).cloned()
     };
 
@@ -232,7 +255,11 @@ pub async fn send_ble_message(recipient_peer_id: &str, data: &[u8]) -> Result<()
     let ch = peripheral
         .characteristics()
         .iter()
-        .find(|c| c.uuid == msg_char_uuid && (c.properties.contains(CharPropFlags::WRITE) || c.properties.contains(CharPropFlags::WRITE_WITHOUT_RESPONSE)))
+        .find(|c| {
+            c.uuid == msg_char_uuid
+                && (c.properties.contains(CharPropFlags::WRITE)
+                    || c.properties.contains(CharPropFlags::WRITE_WITHOUT_RESPONSE))
+        })
         .cloned();
 
     let Some(ch) = ch else {
@@ -243,15 +270,24 @@ pub async fn send_ble_message(recipient_peer_id: &str, data: &[u8]) -> Result<()
     let fragments = scmessenger_core::transport::ble::GattFragmenter::fragment(data)
         .map_err(|e| format!("Fragmentation error: {:?}", e))?;
 
-    tracing::info!("BLE: sending {} fragments to {}", fragments.len(), recipient_peer_id);
+    tracing::info!(
+        "BLE: sending {} fragments to {}",
+        fragments.len(),
+        recipient_peer_id
+    );
     for fragment in fragments {
-        let write_type = if ch.properties.contains(CharPropFlags::WRITE_WITHOUT_RESPONSE) {
+        let write_type = if ch
+            .properties
+            .contains(CharPropFlags::WRITE_WITHOUT_RESPONSE)
+        {
             btleplug::api::WriteType::WithoutResponse
         } else {
             btleplug::api::WriteType::WithResponse
         };
 
-        peripheral.write(&ch, &fragment, write_type).await
+        peripheral
+            .write(&ch, &fragment, write_type)
+            .await
             .map_err(|e| format!("GATT write failed: {}", e))?;
     }
 
@@ -380,8 +416,7 @@ pub async fn run_ble_central_ingress(
                 if guard.len() > 2048 {
                     let now = std::time::Instant::now();
                     guard.retain(|_, s| {
-                        (s.active || s.failures != 0)
-                            && s.cooldown_until.is_none_or(|t| t > now)
+                        (s.active || s.failures != 0) && s.cooldown_until.is_none_or(|t| t > now)
                     });
                 }
                 let state = guard.entry(id_key.clone()).or_insert(PeripheralState {
@@ -553,7 +588,10 @@ mod tests {
         let new_mac = "11:22:33:44:55:66".to_string();
 
         // 1. Initial connection
-        let mut guard1 = PeerRegistryGuard { peer_id: None, mac_addr: old_mac.clone() };
+        let mut guard1 = PeerRegistryGuard {
+            peer_id: None,
+            mac_addr: old_mac.clone(),
+        };
         {
             let mut map = get_active_peers().lock().unwrap();
             map.insert(peer_id.clone(), TrackingPeripheral::Mock(old_mac.clone()));
@@ -561,12 +599,20 @@ mod tests {
         }
 
         assert_eq!(
-            get_active_peers().lock().unwrap().get(&peer_id).unwrap().address_string(),
+            get_active_peers()
+                .lock()
+                .unwrap()
+                .get(&peer_id)
+                .unwrap()
+                .address_string(),
             old_mac
         );
 
         // 2. MAC rotates mid-session (new connection established before old one drops)
-        let mut guard2 = PeerRegistryGuard { peer_id: None, mac_addr: new_mac.clone() };
+        let mut guard2 = PeerRegistryGuard {
+            peer_id: None,
+            mac_addr: new_mac.clone(),
+        };
         {
             let mut map = get_active_peers().lock().unwrap();
             // Correlate
@@ -584,7 +630,10 @@ mod tests {
 
         // 4. Assert session continuity (peer is still tracked with new MAC)
         let map = get_active_peers().lock().unwrap();
-        assert!(map.contains_key(&peer_id), "Peer should still be in registry");
+        assert!(
+            map.contains_key(&peer_id),
+            "Peer should still be in registry"
+        );
         assert_eq!(map.get(&peer_id).unwrap().address_string(), new_mac);
     }
 }

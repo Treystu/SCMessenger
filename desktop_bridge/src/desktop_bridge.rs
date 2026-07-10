@@ -140,7 +140,10 @@ impl DesktopBridge {
 
     /// Get the current tray status.
     pub fn get_tray_status(&self) -> crate::TrayStatus {
-        self.tray_status.lock().expect("tray_status lock poisoned").clone()
+        self.tray_status
+            .lock()
+            .expect("tray_status lock poisoned")
+            .clone()
     }
 
     /// Update the tray status and notify the delegate.
@@ -164,7 +167,10 @@ impl DesktopBridge {
 
     /// Get the current power state.
     pub fn get_power_state(&self) -> crate::PowerState {
-        self.power_state.lock().expect("power_state lock poisoned").clone()
+        self.power_state
+            .lock()
+            .expect("power_state lock poisoned")
+            .clone()
     }
 
     /// Refresh power state from system.
