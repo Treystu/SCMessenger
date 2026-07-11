@@ -132,6 +132,10 @@ pub struct RatchetSession {
     /// Our X25519 identity secret (for first DH ratchet step on receiver side).
     /// Kept only until the first DH ratchet is performed, then zeroized.
     our_identity_secret: Option<X25519StaticSecret>,
+    /// The negotiated cryptographic suite (from PQC-04).
+    pub negotiated_suite: Option<u8>,
+    /// The transcript hash binding the session to the negotiation (from PQC-04).
+    pub transcript_hash: Option<[u8; 32]>,
 }
 
 impl RatchetSession {
@@ -147,6 +151,8 @@ impl RatchetSession {
         dh_step_count: u32,
         initialized: bool,
         our_identity_secret: Option<X25519StaticSecret>,
+        negotiated_suite: Option<u8>,
+        transcript_hash: Option<[u8; 32]>,
     ) -> Self {
         Self {
             our_dh_secret,
@@ -159,6 +165,8 @@ impl RatchetSession {
             skipped_keys: HashMap::new(),
             initialized,
             our_identity_secret,
+            negotiated_suite,
+            transcript_hash,
         }
     }
 
@@ -233,6 +241,8 @@ impl RatchetSession {
             skipped_keys: HashMap::new(),
             initialized: true,
             our_identity_secret: None,
+            negotiated_suite: None,
+            transcript_hash: None,
         })
     }
 
@@ -272,6 +282,8 @@ impl RatchetSession {
             skipped_keys: HashMap::new(),
             initialized: false,
             our_identity_secret: Some(our_identity_secret),
+            negotiated_suite: None,
+            transcript_hash: None,
         })
     }
 

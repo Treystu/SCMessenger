@@ -2,6 +2,7 @@
 
 pub mod backup;
 pub mod encrypt;
+pub mod negotiation;
 pub mod pq;
 pub mod ratchet;
 pub mod session_manager;

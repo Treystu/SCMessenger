@@ -216,6 +216,10 @@ impl IdentityKeys {
     }
 }
 
+fn default_supported_suites() -> Vec<u8> {
+    vec![0x01]
+}
+
 /// Public key bundle containing Ed25519, X25519, and ML-KEM-768 public keys.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PublicKeyBundle {
@@ -223,6 +227,8 @@ pub struct PublicKeyBundle {
     pub x25519_public: [u8; 32],
     pub mlkem_encaps_key: Vec<u8>, // 1184 B
     pub created_at: u64,
+    #[serde(default = "default_supported_suites")]
+    pub supported_suites: Vec<u8>,
     pub signature: Vec<u8>, // Ed25519 over domain-separated bytes below
 }
 
@@ -236,13 +242,16 @@ pub fn sign_bundle(keys: &IdentityKeys) -> Result<PublicKeyBundle> {
         .unwrap_or_default()
         .as_secs();
 
-    // Signature input: b"iron-core keybundle v1" || ed25519_public || x25519_public || mlkem_encaps_key || created_at.to_le_bytes()
+    let supported_suites = vec![0x01, 0x02]; // Advertise v1 (legacy) and v2 (PQ)
+
+    // Signature input: b"iron-core keybundle v2" || ed25519_public || x25519_public || mlkem_encaps_key || created_at.to_le_bytes() || supported_suites
     let mut sig_input = Vec::new();
-    sig_input.extend_from_slice(b"iron-core keybundle v1");
+    sig_input.extend_from_slice(b"iron-core keybundle v2");
     sig_input.extend_from_slice(&ed25519_public);
     sig_input.extend_from_slice(&x25519_public);
     sig_input.extend_from_slice(&mlkem_encaps_key);
     sig_input.extend_from_slice(&created_at.to_le_bytes());
+    sig_input.extend_from_slice(&supported_suites);
 
     let signature = keys.sign(&sig_input)?;
 
@@ -251,21 +260,36 @@ pub fn sign_bundle(keys: &IdentityKeys) -> Result<PublicKeyBundle> {
         x25519_public,
         mlkem_encaps_key,
         created_at,
+        supported_suites,
         signature,
     })
 }
 
 /// Verify a public key bundle's cross-signature.
 pub fn verify_bundle(bundle: &PublicKeyBundle) -> Result<()> {
-    let mut sig_input = Vec::new();
-    sig_input.extend_from_slice(b"iron-core keybundle v1");
-    sig_input.extend_from_slice(&bundle.ed25519_public);
-    sig_input.extend_from_slice(&bundle.x25519_public);
-    sig_input.extend_from_slice(&bundle.mlkem_encaps_key);
-    sig_input.extend_from_slice(&bundle.created_at.to_le_bytes());
+    // Check v2 signature format first (with suites)
+    let mut sig_input_v2 = Vec::new();
+    sig_input_v2.extend_from_slice(b"iron-core keybundle v2");
+    sig_input_v2.extend_from_slice(&bundle.ed25519_public);
+    sig_input_v2.extend_from_slice(&bundle.x25519_public);
+    sig_input_v2.extend_from_slice(&bundle.mlkem_encaps_key);
+    sig_input_v2.extend_from_slice(&bundle.created_at.to_le_bytes());
+    sig_input_v2.extend_from_slice(&bundle.supported_suites);
 
-    let verified = IdentityKeys::verify(&sig_input, &bundle.signature, &bundle.ed25519_public)?;
-    if !verified {
+    if IdentityKeys::verify(&sig_input_v2, &bundle.signature, &bundle.ed25519_public).unwrap_or(false) {
+        return Ok(());
+    }
+
+    // Fallback to v1 signature format (legacy bundles loaded from store without suites signed in)
+    let mut sig_input_v1 = Vec::new();
+    sig_input_v1.extend_from_slice(b"iron-core keybundle v1");
+    sig_input_v1.extend_from_slice(&bundle.ed25519_public);
+    sig_input_v1.extend_from_slice(&bundle.x25519_public);
+    sig_input_v1.extend_from_slice(&bundle.mlkem_encaps_key);
+    sig_input_v1.extend_from_slice(&bundle.created_at.to_le_bytes());
+
+    let verified_v1 = IdentityKeys::verify(&sig_input_v1, &bundle.signature, &bundle.ed25519_public)?;
+    if !verified_v1 {
         return Err(anyhow::anyhow!("Invalid signature on key bundle"));
     }
     Ok(())

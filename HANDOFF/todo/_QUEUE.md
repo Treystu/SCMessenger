@@ -92,9 +92,13 @@ Rules of engagement:
 
 2. `PQC_03_IDENTITY_V2_KEYBUNDLE.md` [SONNET] **COMPLETE 2026-07-10** -- Identity v2 key bundle with ML-KEM-768 public key. All gates pass, migration tested.
 
-3. `PQC_04_SUITE_NEGOTIATION.md` [SONNET] -- Suite negotiation logic for hybrid X25519+ML-KEM-768. Depends on PQC-03 keypair availability.
+3. `PQC_04_SUITE_NEGOTIATION.md` [SONNET] **COMPLETE 2026-07-10** -- Suite negotiation logic for hybrid X25519+ML-KEM-768.
 
-PQC_00..14 (master plan `PQC_00_MASTER_PLAN.md`), TASK_KMP_*, WS-A
+4. `PQC_05_HYBRID_KEM_MODULE.md` [QWEN] **COMPLETE 2026-07-11** -- Hybrid KEM module (libcrux-ml-kem).
+
+5. `PQC_06_HYBRID_SESSION_INIT.md` [QWEN] -- Hybrid Session Establishment.
+
+PQC_07..14 (master plan `PQC_00_MASTER_PLAN.md`), TASK_KMP_*, WS-A
 release-readiness T/S items, WS-B crypto/transport hygiene trio (backup.rs KDF
 gap, WiFi Aware orphan, escalation-authority consolidation), WS-F close-out.
 Fine-planning happens as P2-00 after Phase 1 exit, per the execution plan.

@@ -212,6 +212,10 @@ pub struct SerializableRatchetSession {
     pub has_identity_secret: bool,
     /// Identity secret (hex-encoded), only present before first DH ratchet
     pub identity_secret_hex: Option<String>,
+    /// The negotiated cryptographic suite (from PQC-04)
+    pub negotiated_suite: Option<u8>,
+    /// The transcript hash binding the session to the negotiation (hex-encoded, from PQC-04)
+    pub transcript_hash_hex: Option<String>,
 }
 
 /// Serializable chain state.
@@ -245,6 +249,8 @@ impl SerializableRatchetSession {
             initialized: session.is_initialized(),
             has_identity_secret: session.has_identity_secret(),
             identity_secret_hex: session.identity_secret_bytes().map(hex::encode),
+            negotiated_suite: session.negotiated_suite,
+            transcript_hash_hex: session.transcript_hash.map(hex::encode),
         }
     }
 
@@ -330,6 +336,19 @@ impl SerializableRatchetSession {
             None
         };
 
+        let transcript_hash = if let Some(ref hex_str) = self.transcript_hash_hex {
+            let bytes = hex::decode(hex_str)
+                .map_err(|e| anyhow::anyhow!("Invalid transcript_hash_hex: {}", e))?;
+            if bytes.len() != 32 {
+                bail!("transcript_hash must be 32 bytes");
+            }
+            let mut arr = [0u8; 32];
+            arr.copy_from_slice(&bytes);
+            Some(arr)
+        } else {
+            None
+        };
+
         Ok(RatchetSession::reconstruct(
             our_dh_secret,
             our_dh_public,
@@ -340,6 +359,8 @@ impl SerializableRatchetSession {
             self.dh_step_count,
             self.initialized,
             our_identity_secret,
+            self.negotiated_suite,
+            transcript_hash,
         ))
     }
 }

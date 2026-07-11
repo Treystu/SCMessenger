@@ -260,6 +260,7 @@ dictionary MeshSettings {
     boolean notify_dm_request_in_foreground;
     boolean sound_enabled;
     boolean badge_enabled;
+    boolean require_pq;
 };
 
 

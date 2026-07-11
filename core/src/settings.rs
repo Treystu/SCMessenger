@@ -29,6 +29,7 @@ pub struct MeshSettings {
     pub notify_dm_request_in_foreground: bool,
     pub sound_enabled: bool,
     pub badge_enabled: bool,
+    pub require_pq: bool,
 }
 
 impl Default for MeshSettings {
@@ -54,6 +55,7 @@ impl Default for MeshSettings {
                 crate::notification_defaults::notify_dm_request_in_foreground(),
             sound_enabled: crate::notification_defaults::sound_enabled(),
             badge_enabled: crate::notification_defaults::badge_enabled(),
+            require_pq: false,
         }
     }
 }

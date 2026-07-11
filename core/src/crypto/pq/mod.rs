@@ -1,3 +1,6 @@
+// core/src/crypto/pq/mod.rs
+pub mod hybrid;
+
 use anyhow::{anyhow, Result};
 use libcrux_ml_kem::mlkem768;
 use libcrux_ml_kem::{MlKemCiphertext, MlKemPrivateKey, MlKemPublicKey};
