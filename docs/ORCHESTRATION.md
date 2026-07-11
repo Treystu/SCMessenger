@@ -51,9 +51,10 @@ python scripts/delegate_task.py \
 
 | Lane | Entry | Cost | Use for |
 |---|---|---|---|
-| Qwen/DashScope | `delegate_task.py --provider qwen --tier ...` | Free (~1M tok/model) | PRIMARY implementation lane: Rust, Python, docs, reviews |
+| Qwen/DashScope | `delegate_task.py --provider qwen --tier ...` | Free (~1M tok/model) | PRIMARY implementation lane (operator, 2026-07-07): feed-content generate -> script applies + auto-verifies; never touches the tree concurrently |
+| agy (Antigravity Gemini workers) | `agy -p "<prompt>" --model "Gemini 3.5 Flash (Medium)" --dangerously-skip-permissions --add-dir <repo>` (prompt/output files under `tmp/scmorc/agy-*`) | Free (separate pool) | Agentic (tool-using) free lane. Current fleet (2026-07-11): Gemini 3.5 Flash + Gemini 3.1 Pro (model strings verbatim from `agy models`, e.g. "Gemini 3.1 Pro (High)"). Print mode is reliable ONLY for small, well-bounded single-file/mechanical edits; larger work needs an interactive session. ONE tree-editing agy at a time (or give each its own git worktree). `--print-timeout` does not reliably kill the child -- monitor and Stop-Process if CPU sits near zero past the deadline. No commit authority |
 | OpenRouter | `delegate_task.py --provider openrouter --model <id>` | Free tier | Fallback when a Qwen model is saturated; large-context jobs |
-| Gemini/agy | Antigravity session per `docs/GEMINI_ORCHESTRATOR.md` | Free | Orchestration-only driver of the Qwen lane (writes task files, dispatches, verifies) |
+| Gemini orchestrator | Antigravity session per `docs/GEMINI_ORCHESTRATOR.md` | Free | Orchestration-only role variant: drives the Qwen lane (writes task files, dispatches, verifies), zero LOC itself |
 | Ollama cloud | swarm mode (`/orchestrate`, `/swarm`) | Free, weekly cap | Burst capacity when quota available (check first: it exhausts) |
 | Claude headless | `/scmorc` (per-task `claude -p` workers) | Anthropic quota | Audit-gate verdicts, judgment calls, escalations ONLY |
 | Claude native | main session + subagents | Anthropic quota | Synthesis, design, final gates. Subagents at haiku/sonnet tier only -- NEVER Fable-tier fan-outs |
@@ -66,12 +67,22 @@ claude-code-router if the full harness on free models is ever needed).
 
 Execution-plan tags map to models as follows:
 
-| Plan tag | Qwen (`--tier`) | Claude worker | Meaning |
-|---|---|---|---|
-| [HAIKU] | `standard` or `flash` | haiku | Mechanical, fully specified, low blast radius |
-| [SONNET] | `max` | sonnet | Scoped implementation, spec exists |
-| [OPUS+] | `thinking` | fable/opus (main session) | Design, diagnosis, spec-writing |
-| [AUDIT-GATE] | `thinking` (read-only verdict) | crypto-security-auditor subagent | Adversarial review, mandatory for crypto/transport/routing/privacy |
+| Plan tag | agy (Gemini) | Qwen (`--tier`) | Claude worker | Meaning |
+|---|---|---|---|---|
+| [HAIKU] | 3.5 Flash | `standard` or `flash` | haiku | Mechanical, fully specified, low blast radius |
+| [SONNET] | 3.1 Pro (or 3.5 Flash if well-specified) | `max` | sonnet | Scoped implementation, spec exists |
+| [OPUS+] | 3.1 Pro (spec draft only; judgment escalates) | `thinking` | fable/opus (main session) | Design, diagnosis, spec-writing |
+| [AUDIT-GATE] | -- (not an agy job) | `thinking` (read-only verdict) | crypto-security-auditor subagent | Adversarial review, mandatory for crypto/transport/routing/privacy |
+
+Lane preference for implementation work (operator-settled 2026-07-07,
+fleet updated 2026-07-11): Qwen scripted dispatch FIRST (the `--verify`
+auto-fix loop makes it self-correcting and it never collides with the
+tree); agy-Gemini in parallel for small bounded agentic edits (it is a
+separate free pool -- run pools concurrently, the tree and the single
+Windows build slot are the only serialization points); OpenRouter as
+spillover. Claude only for judgment, audits, and verdicts. agy's fleet
+changes over time -- verify with `agy models`, update this table when it
+shifts.
 
 Escalation direction is UP only on judgment calls: a worker that hits an
 architecture decision stops and reports; it does not improvise.
