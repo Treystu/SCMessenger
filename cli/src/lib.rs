@@ -14,3 +14,6 @@ pub mod ledger;
 pub mod server;
 pub mod transport_api;
 pub mod transport_bridge;
+
+#[cfg(target_os = "windows")]
+pub mod ble_windows;

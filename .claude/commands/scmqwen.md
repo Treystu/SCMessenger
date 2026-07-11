@@ -25,24 +25,26 @@ their OpenAI-compatible API. Zero Anthropic subscription cost. Free tier:
 - PROCESS OWNERSHIP. Track every in-flight dispatch. Before any build, reconcile
   against actual system state.
 
-## Model Roster (verified DashScope, 2026-07-08)
+## Model Roster (verified DashScope, 2026-07-10)
+
+For exact remaining quotas, see the [Qwen Model Quota Ledger](file:///c:/Users/SCM/Documents/GitHub/SCMessenger/docs/QWEN_QUOTA_LEDGER.md).
 
 ### Code-focused models (primary dispatch targets)
 
 | Tier | Model ID | Use for | Token budget |
-|------|----------|---------|-------------|
+|---|---|---|---|
 | [FLASH] | `qwen3-coder-flash` | Mechanical: doc fixes, strings.xml, HANDOFF hygiene, lint, renames | ~1M free |
 | [CODER] | `qwen3-coder-plus` | Standard implementation: Rust/Kotlin/WASM changes, most P1/P2 tasks | ~1M free |
 | [THINK] | `qwen3-235b-a22b-thinking-2507` | Hard analysis: root-cause diagnosis, multi-file architecture, adversarial review | ~1M free |
-| [MAX] | `qwen3.7-max` | Structural deadlocks, deep design, final verdicts | ~1M free |
+| [MAX] | `qwen-max` or `qwen3-max` | Structural deadlocks, deep design, final verdicts | ~1M free |
 
 ### General-purpose models (secondary, for docs/triage)
 
 | Model ID | Use for |
 |----------|---------|
-| `qwen3.5-plus` | Documentation, planning prose, non-code analysis |
+| `qwen3.5-plus-2026-02-15` | Documentation, planning prose, non-code analysis (substitute for unsupported `qwen3.5-plus`) |
 | `qwen3.5-flash` | Quick triage, pre-dispatch validation text analysis |
-| `qwen3-max` | Alternative to qwen3.7-max when round-robin needs variety |
+| `qwen3-max` | Alternative to qwen-max when round-robin needs variety |
 
 ### Round-Robin Selection (core mechanic)
 
@@ -52,9 +54,9 @@ per tier in `tmp/scmqwen/round_robin_state.json`. Each dispatch picks the
 next model in the tier's rotation:
 
 - [FLASH] rotation: `qwen3-coder-flash` -> `qwen3.5-flash` -> back to start
-- [CODER] rotation: `qwen3-coder-plus` -> `qwen3.6-plus` -> `qwen3-coder-plus-2025-09-23` -> back
+- [CODER] rotation: `qwen3-coder-plus` -> `qwen3-coder-plus-2025-09-23` -> `qwen3-coder-plus-2025-07-22` -> back
 - [THINK] rotation: `qwen3-235b-a22b-thinking-2507` -> `qwen3-max` -> `qwen3.5-122b-a10b` -> back
-- [MAX] rotation: `qwen3.7-max` -> `qwen3.6-max-preview` -> `qwen3-max-preview` -> back
+- [MAX] rotation: `qwen3-max` -> `qwen-max` -> `qwen3-max-preview` -> back
 
 Read the state file at dispatch time, pick the next model, write back the
 incremented counter. If a model errors (API timeout, 429, etc.), try the next

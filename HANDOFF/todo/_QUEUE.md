@@ -44,7 +44,7 @@ Rules of engagement:
    decision) [DEVICE]. Needs a second CLI instance on the Windows box
    in relay mode, then phone offline-then-returning custody test.
 
-6. `P1-19_Phase_1_Exit_Review.md` [OPUS+][HUMAN] -- Checklist for the
+6. `P1-19_Phase_1_Exit_Review.md` [OPUS+][HUMAN] **COMPLETE 2026-07-10** -- Checklist for the
    operator's sign-off, listing completed milestones, waivers, and exit check
    steps. GATE TO PHASE 2.
 

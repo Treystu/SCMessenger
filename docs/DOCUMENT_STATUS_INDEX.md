@@ -27,6 +27,8 @@ Purpose: classify documentation by lifecycle state so execution decisions use au
 | `.github/copilot-instructions.md`                     | Active | Canonical GitHub Copilot adapter to repo-agent guidance, including doc-sync and build-verify closeout rules |
 | `AGENTS.md`                                           | Active | Codex run policy, including mandatory doc sync and edited-target build verification |
 | `docs/DOCUMENT_STATUS_INDEX.md`                       | Active | Lifecycle map (this file)                                      |
+| `docs/QWEN_QUOTA_LEDGER.md`                           | Active | Verified DashScope Qwen models and quota ledger                |
+| `docs/WORK_DISPATCH_GUIDE.md`                         | Active | Playbook of exact manual commands for all dispatch methods    |
 | `docs/REPO_CONTEXT.md`                                | Active | Cross-component architecture and operating context             |
 | `docs/CURRENT_STATE.md`                               | Active | Verified current runtime/build state + ID management           |
 | `docs/ID_MANAGEMENT_ANALYSIS.md`                     | Active | Comprehensive ID system analysis and verification              |

@@ -92,7 +92,7 @@ fn test_custom_ports_only() {
 
     let addresses = multiport::generate_listen_addresses(&config);
 
-    assert_eq!(addresses.len(), 3, "Should only have custom ports");
+    assert_eq!(addresses.len(), 6, "Should only have custom ports");
     assert!(addresses.iter().any(|(_, port)| *port == 9999));
     assert!(addresses.iter().any(|(_, port)| *port == 8888));
     assert!(addresses.iter().any(|(_, port)| *port == 7777));

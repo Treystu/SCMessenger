@@ -13,6 +13,9 @@ mod server;
 mod transport_api;
 mod transport_bridge;
 
+#[cfg(target_os = "windows")]
+mod ble_windows;
+
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 use colored::*;
@@ -1474,8 +1477,9 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
         });
 
         let core_ble_adv = Arc::clone(&core);
+        let ui_ble_adv = ui_broadcast.clone();
         tokio::spawn(async move {
-            ble_mesh::run_ble_peripheral_advertising(core_ble_adv).await;
+            ble_mesh::run_ble_peripheral_advertising(core_ble_adv, ui_ble_adv).await;
         });
     }
 
@@ -2511,8 +2515,9 @@ async fn cmd_relay(listen_addr: String, http_port: u16, node_name: Option<String
         });
 
         let core_ble_adv = Arc::clone(&core_arc);
+        let ui_ble_adv = ui_broadcast.clone();
         tokio::spawn(async move {
-            ble_mesh::run_ble_peripheral_advertising(core_ble_adv).await;
+            ble_mesh::run_ble_peripheral_advertising(core_ble_adv, ui_ble_adv).await;
         });
     }
 

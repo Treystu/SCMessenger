@@ -17,6 +17,7 @@ ds_store
 **/.DS_Store
 
 # Local Data (Should not be committed)
+*apiKey*.csv
 contacts.db
 history.db
 identity.json

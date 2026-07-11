@@ -240,6 +240,17 @@ async fn subscribe_ingress_for_peripheral(
 
 /// Send a SCMessenger message envelope over BLE to the registered peripheral
 pub async fn send_ble_message(recipient_peer_id: &str, data: &[u8]) -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    {
+        if crate::ble_windows::get_message_characteristic().is_some() {
+            if let Err(e) = crate::ble_windows::send_windows_ble_notification(data).await {
+                tracing::debug!("Windows BLE: outgoing notification failed: {:?}", e);
+            } else {
+                return Ok(());
+            }
+        }
+    }
+
     let peripheral = {
         let guard = get_active_peers()
             .lock()
@@ -530,37 +541,41 @@ pub async fn run_ble_central_ingress(
     }
 }
 
-/// Run peripheral advertising.
-///
-/// This is intentionally a no-op stub, not a partial implementation:
-/// btleplug is central-only on desktop (no cross-platform peripheral/GATT-
-/// server API), and there is no other portable Rust crate for this. Making
-/// the CLI advertise as a BLE peripheral would need a separate
-/// platform-specific implementation per OS (BlueZ D-Bus GATT server +
-/// LEAdvertisingManager1 on Linux, CoreBluetooth's CBPeripheralManager via
-/// Objective-C/Swift FFI on macOS, WinRT's GattServiceProvider +
-/// BluetoothLEAdvertisementPublisher on Windows) — each independently
-/// substantial and, critically, unverifiable without physical BLE hardware
-/// per platform, which was not available when this was investigated. See
-/// `tasks/T1.8/progress.md` for the full writeup and recommendation.
-///
-/// This does not block real BLE connectivity: by design, mobile/native
-/// peers are the peripherals (they advertise) and this CLI is the central
-/// (it scans and connects) — see `run_ble_central_ingress`. The gap is
-/// only desktop-CLI-to-desktop-CLI discovery over BLE specifically.
-pub async fn run_ble_peripheral_advertising(_core: Arc<IronCore>) {
-    #[cfg(any(target_os = "linux", target_os = "windows", target_os = "macos"))]
-    {
-        tracing::warn!(
-            "BLE: peripheral advertising for service {:x} is not implemented on this platform \
-             (known limitation, not a bug — see tasks/T1.8/progress.md). This CLI still discovers \
-             and connects to BLE peripherals normally (mobile/native peers); it just cannot itself \
-             be discovered by another desktop CLI over BLE.",
-            GATT_SERVICE_UUID
-        );
+/// Helper to decode BLE message and push to UI. Used by both central and peripheral paths.
+pub fn handle_incoming_ble_payload(
+    core: &IronCore,
+    ui_tx: &tokio::sync::broadcast::Sender<UiOutbound>,
+    data: &[u8],
+) {
+    if let Some(params) = decode_ble_payload_for_ui(core, data) {
+        push_message_to_ui(ui_tx, params);
+    }
+}
 
-        loop {
-            tokio::time::sleep(std::time::Duration::from_secs(3600)).await;
+/// Run peripheral advertising.
+pub async fn run_ble_peripheral_advertising(core: Arc<IronCore>, ui_tx: tokio::sync::broadcast::Sender<UiOutbound>) {
+    #[cfg(target_os = "windows")]
+    {
+        if let Err(e) = crate::ble_windows::run_windows_ble_peripheral(core, ui_tx).await {
+            tracing::error!("BLE: Windows GATT server / advertising error: {:?}", e);
+        }
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        #[cfg(any(target_os = "linux", target_os = "macos"))]
+        {
+            tracing::warn!(
+                "BLE: peripheral advertising for service {:x} is not implemented on this platform \
+                 (known limitation, not a bug — see tasks/T1.8/progress.md). This CLI still discovers \
+                 and connects to BLE peripherals normally (mobile/native peers); it just cannot itself \
+                 be discovered by another desktop CLI over BLE.",
+                GATT_SERVICE_UUID
+            );
+
+            loop {
+                tokio::time::sleep(std::time::Duration::from_secs(3600)).await;
+            }
         }
     }
 }

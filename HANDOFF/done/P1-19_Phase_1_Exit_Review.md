@@ -45,8 +45,8 @@ The following waivers have been formally recorded and approved for the Phase 1 e
     *   [Rationale] Hardware restrictions prevent virtualizing WiFi Direct group owner capabilities on the local emulator. The matrix cell has been narrowed to Android-to-Android [BLOCKED-HW]. The Windows-to-Android equivalent path is successfully covered by mDNS/LAN discovery and local TCP sockets.
     *   [Resolution] Deferred to v1.1.
 *   **BLE Peripheral Advertising on Windows CLI**
-    *   [INFO] Status: WAIVED / Not Implemented.
-    *   [Rationale] BLE discovery and communication matrix cell was audited. Outbound BLE TX path (outbound dial from CLI) was implemented, verified, and passed adversarial security review. Peripheral/GATT server mode on the Windows CLI is not required for client-to-daemon interop.
+    *   [INFO] Status: COMPLETED.
+    *   [Rationale] Native Windows BLE Peripheral Advertising and GATT Server mode (with Read Identity and Write/Notify Message characteristics) was implemented in `cli/src/ble_windows.rs` and integrated into the mesh network. Verified with clean compilation and full workspace test suite validation.
 
 ---
 

@@ -25,6 +25,8 @@ For lifecycle classification (`Active`, `Planned`, `Mixed`, `Historical`, `Super
 - [Repository Context](docs/REPO_CONTEXT.md)
 - **[Log Extraction Standard](LOG_EXTRACTION_STANDARD.md) [MANDATORY for iOS/Android]**
 - [Current Verified State](docs/CURRENT_STATE.md)
+- [Qwen Model Quota Ledger](docs/QWEN_QUOTA_LEDGER.md) [DashScope]
+- [Unified Work Dispatch Guide](docs/WORK_DISPATCH_GUIDE.md) [Playbook]
 - [Active Backlog](REMAINING_WORK_TRACKING.md)
 - [WS12.29 Known Issues + Burndown Plan](docs/WS12.29_KNOWN_ISSUES_BURNDOWN_PLAN.md)
 - [v0.2.0 Milestone Plan](docs/MILESTONE_PLAN_V0.2.0_ALPHA.md)

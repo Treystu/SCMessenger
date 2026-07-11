@@ -1,8 +1,11 @@
 # Gemini 3.5 Flash Orchestrator — Quick Start
 
-Status: Ready for deployment
-Created: 2026-07-08
+Status: Active
+Last updated: 2026-07-10
 Purpose: Drive Phase 1 backlog forward during native Claude subscription HARDLOCK window (2026-07-08 to 2026-07-10 reset)
+
+[IMPORTANT]
+For detailed configuration, model fallbacks, Windows process slot calculations, and host verification procedures, please refer to the main runbook: [GEMINI_ORCHESTRATOR_RUNBOOK.md](file:///c:/Users/SCM/Documents/GitHub/SCMessenger/docs/GEMINI_ORCHESTRATOR_RUNBOOK.md).
 
 ## What This Does
 

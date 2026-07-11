@@ -57,21 +57,36 @@ check_prerequisites() {
 pick_next_task() {
   local domain_filter="${1:-}"
   local queue_file="$REPO_ROOT/HANDOFF/todo/_QUEUE.md"
+  local lines=()
 
+  # Find all candidate lines starting with optional whitespace, digits, and a dot,
+  # excluding crossed out (~~), completed, and waived tasks.
   if [[ -z "$domain_filter" ]]; then
-    # Pick first todo/ file in _QUEUE.md that is not [DEVICE]
-    grep -E '^\s+[0-9]+\.' "$queue_file" | \
-      grep -v '\[DEVICE\]' | \
-      head -1 | \
-      sed 's/.*`\(HANDOFF\/[^`]*\)`.*/\1/'
+    mapfile -t lines < <(grep -E '^\s*[0-9]+\.' "$queue_file" | grep -v '~~' | grep -v '\[DEVICE\]' | grep -vi -E '(complete|waived)' | tr -d '\r')
   else
-    # Pick first task in domain filter
-    grep -E "^\s+[0-9]+\." "$queue_file" | \
-      grep -i "$domain_filter" | \
-      grep -v '\[DEVICE\]' | \
-      head -1 | \
-      sed 's/.*`\(HANDOFF\/[^`]*\)`.*/\1/'
+    mapfile -t lines < <(grep -E '^\s*[0-9]+\.' "$queue_file" | grep -v '~~' | grep -v '\[DEVICE\]' | grep -vi -E '(complete|waived)' | grep -i "$domain_filter" | tr -d '\r')
   fi
+
+  for line in "${lines[@]}"; do
+    # Check if line contains backticks
+    if [[ "$line" =~ \`([^\`]+)\` ]]; then
+      local task_name="${BASH_REMATCH[1]}"
+      
+      # Determine candidate path
+      local path1="$task_name"
+      local path2="HANDOFF/todo/$task_name"
+      
+      if [[ -f "$REPO_ROOT/$path1" ]]; then
+        echo "$path1"
+        return 0
+      elif [[ -f "$REPO_ROOT/$path2" ]]; then
+        echo "$path2"
+        return 0
+      fi
+    fi
+  done
+  
+  return 1
 }
 
 # Pre-dispatch validation
@@ -141,6 +156,7 @@ dispatch_qwen() {
   local prompt_file="$1"
   local slug=$(basename "$prompt_file" .prompt.md)
   local response_file="$RESPONSE_DIR/${slug}.response.md"
+  local payload_file="$ORCHESTRATOR_DIR/payload_${slug}.json"
 
   if [[ ! -f ~/.config/scmorc/dashscope.env ]]; then
     echo "[ERROR] Qwen dispatch requires ~/.config/scmorc/dashscope.env"
@@ -149,19 +165,32 @@ dispatch_qwen() {
 
   source ~/.config/scmorc/dashscope.env
 
-  local prompt_json=$(sed 's/"/\\"/g; s/$/\\n/g' "$prompt_file" | tr -d '\n')
+  python -c '
+import json, sys
+prompt = open(sys.argv[1], encoding="utf-8").read()
+payload = {
+    "model": "qwen-turbo",
+    "messages": [
+        {"role": "user", "content": prompt}
+    ]
+}
+with open(sys.argv[2], "w", encoding="utf-8") as f:
+    json.dump(payload, f)
+' "$prompt_file" "$payload_file"
 
   echo "[INFO] Dispatching to Qwen (qwen-turbo)..."
 
-  curl -X POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions \
+  curl -X POST "${DASHSCOPE_OPENAI_BASE:-https://dashscope.aliyuncs.com/compatible-mode/v1}/chat/completions" \
     -H "Authorization: Bearer $DASHSCOPE_API_KEY" \
     -H "Content-Type: application/json" \
-    -d "{\"model\": \"qwen-turbo\", \"messages\": [{\"role\": \"user\", \"content\": \"$prompt_json\"}]}" \
+    -d @"$payload_file" \
     > "$response_file" 2>&1 || {
     echo "[ERROR] Qwen dispatch failed"
+    rm -f "$payload_file"
     return 1
   }
 
+  rm -f "$payload_file"
   echo "[OK] Qwen response saved to $response_file"
 }
 
@@ -187,7 +216,7 @@ run_orchestration() {
   if [[ "$args" == "dry-run" ]]; then
     echo "[INFO] Dry-run mode: validation only, no dispatch"
     local task_file=$(pick_next_task)
-    validate_task "$REPO_ROOT/$task_file"
+    validate_task "$task_file"
     echo "[INFO] Next task: $task_file"
     return 0
   fi

@@ -78,6 +78,17 @@ ORCHESTRATOR_PID_FILE=".claude/orchestrator.pid"
 # This MUST be checked BEFORE every agent launch.
 
 count_os_claude_processes() {
+    # Windows Host Support
+    if [[ "$(uname -s)" == *MINGW* || "$(uname -s)" == *MSYS* || "$(uname -s)" == *CYGWIN* ]]; then
+        local count
+        count=$(tasklist.exe 2>/dev/null | grep -i "claude.exe" | wc -l | tr -d ' ')
+        if [ -z "$count" ] || ! [[ "$count" =~ ^[0-9]+$ ]]; then
+            count=0
+        fi
+        echo "$count"
+        return
+    fi
+
     # 2026-06-11 macOS port fix: `pgrep -f` silently returns 0 lines on this
     # host even when a `claude` process is alive (sandbox/PID-namespace issue
     # in the shell context that runs the script), which made MAX_SUBAGENTS
