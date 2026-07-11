@@ -1,7 +1,14 @@
 # SCMessenger Document Status Index
 
 Status: Active
-Last updated: 2026-05-18 (WS13.6 completion)
+Last updated: 2026-07-11 (archive sweep: 25 stale docs moved to docs/historical/; see Section 9)
+
+NOTE (2026-07-11): rows in Sections 2-5 that reference files now under
+`docs/historical/` are Historical regardless of what the row says -- Section 9
+lists the moves. The active canonical chain for execution decisions is:
+`DOCUMENTATION.md` -> `docs/CURRENT_STATE.md` -> `REMAINING_WORK_TRACKING.md`
+-> `HANDOFF/V1_0_0_EXECUTION_PLAN.md` -> `docs/ORCHESTRATION.md` (orchestration
+protocol) -> `docs/V0.2.0_RESIDUAL_RISK_REGISTER.md`.
 
 Purpose: classify documentation by lifecycle state so execution decisions use authoritative files and historical content remains discoverable without causing drift.
 
@@ -116,6 +123,30 @@ These documents may contain both current and historical sections; verify section
    4. `docs/CURRENT_STATE.md` (verified baseline),
    5. `docs/REPO_CONTEXT.md` (architecture context).
 4. `scripts/docs_sync_check.sh` (Unix / Git Bash) or `scripts/docs_sync_check.ps1` (Windows PowerShell) should pass before finalizing implementation work or documentation-only changes.
+
+## 8a) 2026-07-11 archive sweep (all now Historical, under docs/historical/)
+
+Dated session artifacts and superseded-era docs moved out of docs/ root:
+ADB_SESSION_AUDIT_2026-03-18, ALPHA_RELEASE_AUDIT_V0.1.2,
+PARITY_AUDIT_V0.1.2_ALPHA, PARTNER_TEST_PLAYBOOK_V0.1.2_ALPHA,
+RELEASE_NOTES_V0.1.2_ALPHA, RCA_IOS_43K_SEND_FAILURES_2026-03-17,
+RCA_IOS_INCOMPLETE_DATA_ERROR_2026-03-11, SESSION_AUDIT_MAR-16-2026,
+ID_CONSISTENCY_AUDIT_2026-03-18, REPO_GITHUB_REALIGNMENT_FIRST_PASS_2026-03-07,
+implementation_cheatsheet_3.4.2026, CompleteThis,
+task20-build-reproducibility-summary, WS14_AUTOMATION_HANDOFF,
+WS14_HOURLY_AUTOMATION_PROMPT, Gemini_Readiness_Audit,
+Gemini_Strategy_Supplement, GEMINI_ORCHESTRATOR_RUNBOOK,
+MULTI_MODEL_ORCHESTRATION_STRATEGY, ORCHESTRATE_V4_COMMAND,
+WORK_DISPATCH_GUIDE (superseded by docs/ORCHESTRATION.md),
+ALPHA_BURNDOWN_V0.2.1, V0.2.1_ALPHA_ROLLOUT_PLAN, V0.2.1_NOTIFICATIONS_DM_PLAN,
+WS12.29_KNOWN_ISSUES_BURNDOWN_PLAN (superseded by REMAINING_WORK_TRACKING.md
++ HANDOFF/V1_0_0_EXECUTION_PLAN.md).
+
+New Active docs since the last index update: `docs/ORCHESTRATION.md` (master
+orchestration protocol, 2026-07-11), `docs/GEMINI_ORCHESTRATOR.md` (role
+protocol), `docs/ORCHESTRATION_PLAYBOOK.md` (quick reference),
+`HANDOFF/V1_0_0_EXECUTION_PLAN.md` (two-phase DAG, sequencing authority),
+`docs/release-readiness-2026-07-02.md` (verified-vs-claimed ledger).
 
 ## 8) Recent Canonical Sync
 

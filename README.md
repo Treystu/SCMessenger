@@ -1,275 +1,140 @@
 # SCMessenger
 
-**Status**: Active  
-**Last updated**: 2026-03-07  
-**Version**: v0.2.1 (alpha)
+**Status**: Active
+**Last updated**: 2026-07-11
+**Version**: v0.3.4 (alpha, driving to v1.0.0)
 
-**SCMessenger** (Sovereign Encrypted Messaging) is a highly resilient, cross-platform decentralized messaging mesh handling secure communications. Built with cutting-edge peer-to-peer technologies, it bypasses traditional central servers, utilizing BLE, mDNS, LAN, and Quic/TCP Relay circuits to ensure instantaneous delivery under any network condition.
+[![CI](https://github.com/Treystu/SCMessenger/actions/workflows/ci.yml/badge.svg)](https://github.com/Treystu/SCMessenger/actions/workflows/ci.yml)
+[![License: Unlicense](https://img.shields.io/badge/license-Unlicense-blue.svg)](LICENSE)
+[![Rust](https://img.shields.io/badge/rust-stable-orange.svg)](rust-toolchain.toml)
+[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 
-## Overview
+**Messaging that works when the internet does not.**
 
-SCMessenger is architected for total sovereignty and uncompromised privacy. It features:
-- **Rust Core**: A highly secure, multi-transport headless mesh daemon using `libp2p`.
-- **WASM Thin-Client Web UI**: A stunning browser-based interface running over a strict `localhost` multiplexed JSON-RPC WebSocket Bridge to perfectly sandbox cryptographic isolation.
-- **Native Android & iOS Clients**: Full-featured smart transport routers that elegantly fallback through Multipeer, Wi-Fi Direct, BLE, mDNS, and Internet Relay based on real-time sub-500ms connectivity races.
-- **Resilient Transport Matrix**: Automatic Transport path determination delivering messages whether on an airplane, in a crowded stadium, or on a cellular network traversing strict NATs using resilient UDP/QUIC forwarding.
+SCMessenger is a sovereign, end-to-end encrypted, decentralized messaging
+mesh. No servers. No accounts. No phone numbers. Your identity is a keypair
+you generate on-device; your messages travel over whatever path physically
+exists between you and your peer -- Bluetooth in a crowd, WiFi on a plane,
+LAN at home, or a relay across the internet -- racing every available
+transport and delivering over the first one that lands.
 
-## Table of Contents
+## Why it exists
 
-- [Prerequisites](#prerequisites)
-- [Quick Start](#quick-start)
-- [Platform-Specific Build Instructions](#platform-specific-build-instructions)
-- [Testing](#testing)
-- [Architecture & Documentation](#architecture--documentation)
-- [Contributing](#contributing)
-- [Security](#security)
-- [License](#license)
+Every mainstream messenger dies with its servers: censored, subpoenaed,
+rate-limited, or simply offline. SCMessenger assumes the worst-case network
+from the start -- no internet, no WiFi, a stranger's phone passing by on
+BLE -- and treats the happy path as a bonus. If any radio on your device can
+reach any radio on theirs, directly or through intermediate custody, the
+message gets through.
 
-## Prerequisites
+## How it works
 
-### All Platforms
+**Transport ladder, raced in parallel (sub-500ms failover):**
 
-- **Rust** 1.75.0 or later (see `rust-toolchain.toml`)
-- **Git** 2.30+
-- **Cargo** (comes with Rust)
-
-Install Rust:
-```bash
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+```
+BLE  ->  WiFi Aware / WiFi Direct (Android) | Multipeer (iOS)
+     ->  mDNS / LAN (TCP + WebSocket + QUIC)
+     ->  QUIC / TCP relay
+     ->  Internet relay (store-and-forward custody)
 ```
 
-### Platform-Specific Prerequisites
+- **Adaptive ports**: if the default port is firewalled, listeners and
+  dialers ladder through 443, 80, 8080, and ephemeral ports -- whatever
+  lands traffic on that network is the right port. Last-good routes are
+  remembered per network.
+- **Relay custody**: offline peers do not lose messages. Relays hold
+  encrypted envelopes until receipt confirmation, then release custody.
+- **Store**: local-only sled database; nothing leaves the device
+  unencrypted.
 
-- **Android**: Android SDK, NDK r26b, Java 17+ - See [Android Setup Guide](docs/platform/ANDROID_SETUP.md)
-- **iOS**: macOS, Xcode 15+, CocoaPods - See [iOS Setup Guide](docs/platform/IOS_SETUP.md)
-- **WASM**: Node.js 20+, wasm-pack - See [WASM Setup Guide](docs/platform/WASM_SETUP.md)
-- **CLI**: No additional requirements - See [CLI Setup Guide](docs/platform/CLI_SETUP.md)
+**Cryptography:**
 
-## Quick Start
+- Identity: Ed25519 signing keys, generated and held on-device.
+- Sessions: X25519 ECDH with a double ratchet; XChaCha20-Poly1305
+  authenticated encryption for every message.
+- **Post-quantum migration in progress**: hybrid X25519 + ML-KEM-768 key
+  agreement (libcrux), versioned wire envelopes, suite negotiation, and a
+  PQ-augmented ratchet are implemented and undergoing mandatory adversarial
+  review before v1.0.0. Old data always stays decryptable; new sessions
+  negotiate the strongest suite both ends support.
+- Privacy layer: onion routing and cover traffic modules for
+  metadata-resistant delivery.
+- Verification: property-based tests (proptest), Kani formal proofs on
+  crypto paths, and a standing adversarial-review gate on every change to
+  crypto, transport, routing, or privacy code.
 
-### 1. Clone the Repository
+## Platforms
+
+| Platform | Client | State |
+|---|---|---|
+| Windows / Linux / macOS | `scmessenger-cli` headless daemon + local web UI | Active; Windows CLI <-> Android validated end-to-end across LAN/TCP/relay (Phase 1 exit, 2026-07-10) |
+| Android | Kotlin / Jetpack Compose app | Active; full transport stack incl. BLE + WiFi Direct |
+| iOS | SwiftUI app | Feature-parity codebase (BLE, Multipeer, LAN, relay); bindings regen pending post-PQC |
+| Browser | WASM thin client over local JSON-RPC WebSocket | Active |
+| Linux desktop (KMP) | Compose Multiplatform | Planned (v1.0 scope) |
+
+One Rust core (`scmessenger-core`) drives all of them via UniFFI bindings
+(Android/iOS) and JSON-RPC (browser).
+
+## Quick start
 
 ```bash
+# Prerequisites: Rust stable (rustup), Git
 git clone https://github.com/Treystu/SCMessenger.git
 cd SCMessenger
-```
 
-### 2. Build and Test Core
-
-```bash
-# Build the workspace
+# Build and test the core
 cargo build --workspace
-
-# Run tests
 cargo test --workspace
 
-# Run formatting and linting
-cargo fmt --all -- --check
-cargo clippy --workspace -- -D warnings
-```
-
-### 3. Run the CLI
-
-```bash
-# Build and run the CLI
+# Run a node (HTTP UI on 9000, P2P on 9001, WASM bridge on 9002)
 cargo run --release --bin scmessenger-cli -- start
+
+# Run a headless relay node
+cargo run --release --bin scmessenger-cli -- relay --listen /ip4/0.0.0.0/tcp/0
 ```
 
-The daemon binds to `localhost:9002` for security.
+The daemon's control surfaces bind to localhost only. Linux builds need
+`libdbus-1-dev` and `pkg-config` (BLE support).
 
-## Platform-Specific Build Instructions
+Platform guides: [Android](docs/platform/ANDROID_SETUP.md) |
+[iOS](docs/platform/IOS_SETUP.md) | [WASM](docs/platform/WASM_SETUP.md) |
+[CLI](docs/platform/CLI_SETUP.md)
 
-### CLI (Linux, macOS, Windows)
+## Workspace layout
 
-```bash
-# Build release binary
-cargo build --release --bin scmessenger-cli
-
-# Binary location
-# Linux/macOS: target/release/scmessenger-cli
-# Windows: target/release/scmessenger-cli.exe
-
-# Run
-./target/release/scmessenger-cli --help
+```
+core/     scmessenger-core: identity, crypto, transport, store, routing, relay, privacy
+cli/      headless daemon + embedded web server
+mobile/   UniFFI bridge crate (Android/iOS bindings)
+wasm/     browser thin-client (JSON-RPC over WebSocket)
+android/  Kotlin/Compose app          iOS/      SwiftUI app
+docs/     canonical documentation     HANDOFF/  live task backlog
 ```
 
-**Platform-specific notes:**
-- **Linux**: Requires `build-essential`, `pkg-config`, `libssl-dev`
-- **macOS**: Xcode Command Line Tools required
-- **Windows**: MSVC build tools required
+## Documentation
 
-See [CLI Setup Guide](docs/platform/CLI_SETUP.md) for detailed instructions.
-
-### Android
-
-```bash
-# Add Android targets
-rustup target add aarch64-linux-android armv7-linux-androideabi x86_64-linux-android i686-linux-android
-
-# Build Rust core for Android
-cargo build --release --target aarch64-linux-android
-
-# Build Android app
-cd android
-./gradlew assembleDebug
-
-# Install on device
-./gradlew installDebug
-```
-
-**Requirements:**
-- Android SDK (API 26+)
-- NDK r26b
-- Java 17+
-
-See [Android Setup Guide](docs/platform/ANDROID_SETUP.md) for detailed instructions.
-
-### iOS
-
-```bash
-# Add iOS targets
-rustup target add aarch64-apple-ios aarch64-apple-ios-sim x86_64-apple-ios
-
-# Build Rust core for iOS
-cargo build --release --target aarch64-apple-ios
-
-# Install CocoaPods dependencies
-cd iOS
-pod install
-
-# Open in Xcode
-open SCMessenger.xcworkspace
-```
-
-**Requirements:**
-- macOS 13.0+
-- Xcode 15.0+
-- CocoaPods
-
-See [iOS Setup Guide](docs/platform/IOS_SETUP.md) for detailed instructions.
-
-### WASM
-
-```bash
-# Install wasm-pack
-curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
-
-# Add WASM target
-rustup target add wasm32-unknown-unknown
-
-# Build WASM package
-cd wasm
-wasm-pack build --target web --release
-
-# Optimize (optional)
-wasm-opt -Oz pkg/scmessenger_wasm_bg.wasm -o pkg/scmessenger_wasm_bg.wasm
-```
-
-**Requirements:**
-- Node.js 20+
-- wasm-pack
-- wasm-opt (optional, for optimization)
-
-See [WASM Setup Guide](docs/platform/WASM_SETUP.md) for detailed instructions.
-
-## Testing
-
-### Run All Tests
-
-```bash
-# Run all workspace tests
-cargo test --workspace
-
-# Run with logging
-RUST_LOG=debug cargo test --workspace -- --nocapture
-
-# Run specific platform tests
-cargo test -p scmessenger-core
-cargo test -p scmessenger-mobile
-cargo test -p scmessenger-wasm
-```
-
-### Platform-Specific Tests
-
-```bash
-# Android
-cd android && ./gradlew test
-
-# iOS
-cd iOS && xcodebuild test -workspace SCMessenger.xcworkspace -scheme SCMessenger -destination 'platform=iOS Simulator,name=iPhone 15'
-
-# WASM
-cd wasm && wasm-pack test --headless --firefox
-```
-
-### Integration Tests
-
-```bash
-# Run integration test suite
-cargo test --workspace --test '*'
-
-# Run specific integration test
-cargo test -p scmessenger-core --test integration_offline_partition_matrix
-```
-
-See [Testing Guide](docs/TESTING_GUIDE.md) for comprehensive testing documentation.
-
-## Architecture & Documentation
-
-### Core Documentation
-
-- **[Architecture Overview](docs/ARCHITECTURE.md)** - System architecture and design
-- **[Current State](docs/CURRENT_STATE.md)** - Implementation status and roadmap
-- **[Testing Guide](docs/TESTING_GUIDE.md)** - Testing strategy and practices
-- **[Deployment Guide](docs/DEPLOYMENT.md)** - Release and deployment procedures
-
-### Platform Guides
-
-- **[Android Setup](docs/platform/ANDROID_SETUP.md)** - Android development setup
-- **[iOS Setup](docs/platform/IOS_SETUP.md)** - iOS development setup
-- **[WASM Setup](docs/platform/WASM_SETUP.md)** - WASM development setup
-- **[CLI Setup](docs/platform/CLI_SETUP.md)** - CLI development setup
-
-### Troubleshooting
-
-- **[Build Issues](docs/troubleshooting/BUILD_ISSUES.md)** - Common build problems and solutions
-- **[CI Failures](docs/troubleshooting/CI_FAILURES.md)** - CI debugging guide
-- **[Runtime Issues](docs/troubleshooting/RUNTIME_ISSUES.md)** - Runtime debugging guide
+- [DOCUMENTATION.md](DOCUMENTATION.md) -- docs hub and navigation
+- [Architecture](docs/ARCHITECTURE.md) -- system design
+- [Current State](docs/CURRENT_STATE.md) -- verified implementation status
+- [v1.0.0 Execution Plan](HANDOFF/V1_0_0_EXECUTION_PLAN.md) -- the road to 1.0
+- [Testing Guide](docs/TESTING_GUIDE.md) -- gates and test inventory
+- [Protocol](docs/PROTOCOL.md) -- wire contract
 
 ## Contributing
 
-We welcome contributions! Please read our [Contributing Guide](CONTRIBUTING.md) for details on:
-
-- Development setup
-- Code style guidelines
-- Commit message format
-- Pull request process
-- Testing requirements
-
-### Quick Contribution Checklist
-
-- [ ] Fork the repository
-- [ ] Create a feature branch (`git checkout -b feat/my-feature`)
-- [ ] Make your changes
-- [ ] Run tests (`cargo test --workspace`)
-- [ ] Run linters (`cargo fmt --all && cargo clippy --workspace`)
-- [ ] Commit with conventional commits (`git commit -m "feat: add feature"`)
-- [ ] Push and create a pull request
+Contributions welcome -- see [CONTRIBUTING.md](CONTRIBUTING.md). The short
+version: fork, branch, `cargo test --workspace`, `cargo fmt` +
+`cargo clippy`, conventional commits, PR. Changes to `core/src/{crypto,
+transport,routing,privacy}` require adversarial security review before
+merge (see [SECURITY.md](SECURITY.md)).
 
 ## Security
 
-Security is a top priority for SCMessenger. If you discover a security vulnerability:
-
-- **DO NOT** open a public GitHub issue
-- Report privately via GitHub Security Advisories or email
-- See [Security Policy](SECURITY.md) for details
+Do not open public issues for vulnerabilities. Report privately via GitHub
+Security Advisories. Policy: [SECURITY.md](SECURITY.md).
 
 ## License
 
-The Unlicense
-
----
-
-**Project Status**: Alpha (v0.2.1)  
-**Supported Platforms**: Linux, macOS, Windows, Android, iOS, WASM  
-**Minimum Rust Version**: 1.75.0
+Public domain under [The Unlicense](LICENSE). Take it, fork it, ship it --
+sovereignty includes the code.

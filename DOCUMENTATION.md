@@ -26,18 +26,18 @@ For lifecycle classification (`Active`, `Planned`, `Mixed`, `Historical`, `Super
 - **[Log Extraction Standard](LOG_EXTRACTION_STANDARD.md) [MANDATORY for iOS/Android]**
 - [Current Verified State](docs/CURRENT_STATE.md)
 - [Qwen Model Quota Ledger](docs/QWEN_QUOTA_LEDGER.md) [DashScope]
-- [Unified Work Dispatch Guide](docs/WORK_DISPATCH_GUIDE.md) [Playbook]
+- [Unified Work Dispatch Guide](docs/historical/WORK_DISPATCH_GUIDE.md) [Playbook]
 - [Active Backlog](REMAINING_WORK_TRACKING.md)
-- [WS12.29 Known Issues + Burndown Plan](docs/WS12.29_KNOWN_ISSUES_BURNDOWN_PLAN.md)
+- [WS12.29 Known Issues + Burndown Plan](docs/historical/WS12.29_KNOWN_ISSUES_BURNDOWN_PLAN.md)
 - [v0.2.0 Milestone Plan](docs/MILESTONE_PLAN_V0.2.0_ALPHA.md)
 - [v0.2.0 Phase Prompts](docs/V0.2.0_PHASE_EXECUTION_PROMPTS.md)
 - [v0.2.0 Residual Risk Register](docs/V0.2.0_RESIDUAL_RISK_REGISTER.md)
 - [v0.2.1 Tight Pair / WS13 Plan](docs/V0.2.1_SINGLE_ACTIVE_DEVICE_TIGHT_PAIR_PLAN.md)
 - [v0.2.1 Residual Risk Register](docs/V0.2.1_RESIDUAL_RISK_REGISTER.md)
-- [v0.2.1 Alpha Rollout Plan](docs/V0.2.1_ALPHA_ROLLOUT_PLAN.md)
-- [**v0.2.1 Alpha Burndown (CI/tests/stubs/incomplete — comprehensive)**](docs/ALPHA_BURNDOWN_V0.2.1.md)
-- [WS14 Automation Handoff](docs/WS14_AUTOMATION_HANDOFF.md)
-- [WS14 Hourly Automation Prompt](docs/WS14_HOURLY_AUTOMATION_PROMPT.md)
+- [v0.2.1 Alpha Rollout Plan](docs/historical/V0.2.1_ALPHA_ROLLOUT_PLAN.md)
+- [**v0.2.1 Alpha Burndown (CI/tests/stubs/incomplete — comprehensive)**](docs/historical/ALPHA_BURNDOWN_V0.2.1.md)
+- [WS14 Automation Handoff](docs/historical/WS14_AUTOMATION_HANDOFF.md)
+- [WS14 Hourly Automation Prompt](docs/historical/WS14_HOURLY_AUTOMATION_PROMPT.md)
 - [WS13.6 Compatibility & Migration Matrix](docs/WS13.6_COMPATIBILITY_MIGRATION_MATRIX.md)
 - [WS13.6 Handover & Abandon Runbook](docs/WS13.6_HANDOVER_ABANDON_RUNBOOK.md)
 - [Platform Support Matrix](docs/PLATFORM_SUPPORT_MATRIX.md)
@@ -48,13 +48,13 @@ For lifecycle classification (`Active`, `Planned`, `Mixed`, `Historical`, `Super
 
 ## Planned Docs (Future Scope)
 
-- [v0.2.1 Notifications / WS14 Plan](docs/V0.2.1_NOTIFICATIONS_DM_PLAN.md)
+- [v0.2.1 Notifications / WS14 Plan](docs/historical/V0.2.1_NOTIFICATIONS_DM_PLAN.md)
 
 ## Active Supporting Audits and Execution Plans
 
-- [GitHub + Repo Realignment Audit (First Pass)](docs/REPO_GITHUB_REALIGNMENT_FIRST_PASS_2026-03-07.md)
+- [GitHub + Repo Realignment Audit (First Pass)](docs/historical/REPO_GITHUB_REALIGNMENT_FIRST_PASS_2026-03-07.md)
 - [Global Viability Audit](docs/global_viability_audit.md)
-- [Implementation Cheat Sheet (2026-03-04)](docs/implementation_cheatsheet_3.4.2026.md)
+- [Implementation Cheat Sheet (2026-03-04)](docs/historical/implementation_cheatsheet_3.4.2026.md)
 - [Deep Architectural Reasoning: DHT Optimization](docs/DEEP_ARCHITECTURAL_REASONING_DHT_OPTIMIZATION.md)
 
 ## Release Docs
@@ -135,12 +135,12 @@ Historical audit artifacts currently live under `docs/historical/`.
 ## Recent Execution Notes
 
 - WS14 hourly automation reset (2026-03-14 HST, audited the March 13 hourly automation drift, replaced the oversized WS13+WS14 prompt with a WS14-only one-phase-per-run prompt, and added a repo-owned handoff ledger while keeping the automation paused by default) is tracked in:
-  - `docs/WS14_AUTOMATION_HANDOFF.md`
-  - `docs/WS14_HOURLY_AUTOMATION_PROMPT.md`
+  - `docs/historical/WS14_AUTOMATION_HANDOFF.md`
+  - `docs/historical/WS14_HOURLY_AUTOMATION_PROMPT.md`
   - `docs/CURRENT_STATE.md`
   - `REMAINING_WORK_TRACKING.md`
   - `docs/V0.2.1_RESIDUAL_RISK_REGISTER.md`
-  - `docs/V0.2.1_NOTIFICATIONS_DM_PLAN.md`
+  - `docs/historical/V0.2.1_NOTIFICATIONS_DM_PLAN.md`
 
 - WS13.4/WS13.5 tight-pair execution (2026-03-13, relay registry/custody enforcement landed; sender-facing rejection UX landed; Android physical-device install+launch passed; iOS signed device install passed but automated launch was blocked because the connected iPhone was locked) is tracked in:
   - `docs/CURRENT_STATE.md`
@@ -293,7 +293,7 @@ Historical audit artifacts currently live under `docs/historical/`.
   - `docs/MILESTONE_PLAN_V0.2.0_ALPHA.md`
   - `docs/V0.2.0_RESIDUAL_RISK_REGISTER.md`
 - WS12.29 known-issues consolidation + full-functionality burndown plan (2026-03-03 HST, field iOS send-crash evidence + Android stale-route loops + clean remediation sequence) is tracked in:
-  - `docs/WS12.29_KNOWN_ISSUES_BURNDOWN_PLAN.md`
+  - `docs/historical/WS12.29_KNOWN_ISSUES_BURNDOWN_PLAN.md`
   - `docs/CURRENT_STATE.md`
   - `REMAINING_WORK_TRACKING.md`
   - `docs/MILESTONE_PLAN_V0.2.0_ALPHA.md`
@@ -301,7 +301,7 @@ Historical audit artifacts currently live under `docs/historical/`.
 - WS12.30 live verification feedback-loop orchestration (2026-03-03 HST, sequential phase gates + all-node-pairing validation + per-attempt evidence bundles) is tracked in:
   - `scripts/run5-live-feedback.sh`
   - `scripts/README.md`
-  - `docs/WS12.29_KNOWN_ISSUES_BURNDOWN_PLAN.md`
+  - `docs/historical/WS12.29_KNOWN_ISSUES_BURNDOWN_PLAN.md`
   - `docs/CURRENT_STATE.md`
   - `REMAINING_WORK_TRACKING.md`
   - `docs/MILESTONE_PLAN_V0.2.0_ALPHA.md`
@@ -317,7 +317,7 @@ Historical audit artifacts currently live under `docs/historical/`.
   - `REMAINING_WORK_TRACKING.md`
   - `docs/MILESTONE_PLAN_V0.2.0_ALPHA.md`
   - `docs/V0.2.0_RESIDUAL_RISK_REGISTER.md`
-  - `docs/WS12.29_KNOWN_ISSUES_BURNDOWN_PLAN.md`
+  - `docs/historical/WS12.29_KNOWN_ISSUES_BURNDOWN_PLAN.md`
 - WS12.35 non-device reliability reconciliation (2026-03-06 UTC, baseline CI drift fixes + deterministic sender-state gate reconciliation + iOS diagnostics pull hardening) is tracked in:
   - `docs/CURRENT_STATE.md`
   - `REMAINING_WORK_TRACKING.md`
@@ -333,7 +333,7 @@ Historical audit artifacts currently live under `docs/historical/`.
   - `docs/V0.2.0_RESIDUAL_RISK_REGISTER.md`
   - `docs/DOCUMENT_STATUS_INDEX.md`
 - GitHub + repo realignment first-pass planning audit (2026-03-07 UTC, comprehensive GitHub/repo hygiene and execution sequencing blueprint) is tracked in:
-  - `docs/REPO_GITHUB_REALIGNMENT_FIRST_PASS_2026-03-07.md`
+  - `docs/historical/REPO_GITHUB_REALIGNMENT_FIRST_PASS_2026-03-07.md`
   - `docs/CURRENT_STATE.md`
   - `REMAINING_WORK_TRACKING.md`
   - `docs/MILESTONE_PLAN_V0.2.0_ALPHA.md`
@@ -366,7 +366,7 @@ Historical audit artifacts currently live under `docs/historical/`.
 
 - Global viability audit + 10-action-item implementation cheatsheet (2026-03-04 HST, comprehensive audit of what works / what's broken / what's missing for global viability) is tracked in:
   - `docs/global_viability_audit.md`
-  - `docs/implementation_cheatsheet_3.4.2026.md`
+  - `docs/historical/implementation_cheatsheet_3.4.2026.md`
 
 ## Documentation Governance Rules
 
