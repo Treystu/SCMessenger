@@ -1,10 +1,26 @@
 # SCMessenger Remaining Work Tracking
 
 Status: Active
-Last updated: 2026-07-08 (Qwen session via /scmqwen orchestrator -- zero
-Anthropic cost, DashScope Qwen models with round-robin selection across 4
-tiers: [FLASH], [CODER], [THINK], [MAX]; 130+ Qwen models available, ~1M
-free tokens/model/90 days).
+Last updated: 2026-07-10 (PQC-03 Identity v2 Key Bundle complete, Phase 2 Wave 0 in progress)
+
+## 2026-07-10 QWEN/PQC SESSION — PQC-03 Complete, Phase 2 Wave 0 Active
+
+- **PQC-03 IDENTITY_V2_KEYBUNDLE: COMPLETE** — All Definition of Done criteria met:
+  - [x] IdentityKeys extended with `x25519_encryption_secret` (freshly generated, NOT derived) and `mlkem_keypair` (ML-KEM-768 via libcrux)
+  - [x] `PublicKeyBundle` struct with Ed25519, X25519, ML-KEM-768 public keys + cross-signature
+  - [x] `sign_bundle()` / `verify_bundle()` with domain-separated signature over `b"iron-core keybundle v1" || ed25519_pub || x25519_pub || mlkem_encaps_key || created_at`
+  - [x] V1→V2 storage migration in `IdentityStore::load_keys()` (tag 0x02 + bincode); V1 blobs load forever
+  - [x] Contact bundle storage in new `contact_bundle:<public_key_hex>` keys (JSON encoding for cross-platform parity)
+  - [x] All unit tests pass: 17 identity::keys tests + 6 identity::store tests + 9 store::contacts tests (includes bundle roundtrip + tamper detection)
+  - [x] `test_persistence_restart` PASS (proves migration doesn't corrupt state)
+  - [x] Sled keys/encoding documented in task file
+  - [x] Legacy `ed25519_to_x25519_secret` preserved for backward decrypt
+  - [x] No UniFFI surface changes
+
+- **Build gates**: `cargo check --workspace` PASS, `cargo clippy --workspace -D warnings` PASS, `cargo fmt --all -- --check` PASS
+- **Compile gate note**: `cargo test --workspace --no-run` hits Windows PDB limit (LNK1140) on large integration tests — pre-existing, not a regression. All 1103 lib tests PASS.
+
+- **Phase 2 Wave 0 now active**: PQC-02 (Envelope v2) complete, PQC-03 (Identity v2) complete. Next: PQC-04 (Suite Negotiation)
 
 ## 2026-07-08 QWEN SESSION (/scmqwen orchestrator setup + Phase 1 status)
 

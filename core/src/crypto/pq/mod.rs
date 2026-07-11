@@ -16,6 +16,7 @@ pub struct MlKem768PrivateKey(pub [u8; 2400]);
 pub struct MlKem768KeyPair {
     pub_key: [u8; 1184],
     priv_key: MlKem768PrivateKey,
+    pub seed: [u8; 64],
 }
 
 impl MlKem768KeyPair {
@@ -45,6 +46,24 @@ pub fn generate() -> MlKem768KeyPair {
     MlKem768KeyPair {
         pub_key,
         priv_key: MlKem768PrivateKey(priv_key_bytes),
+        seed,
+    }
+}
+
+/// Generates a new ML-KEM-768 keypair from the given 64-byte seed.
+pub fn from_seed(seed: [u8; 64]) -> MlKem768KeyPair {
+    let keypair = mlkem768::generate_key_pair(seed);
+
+    let mut pub_key = [0u8; 1184];
+    pub_key.copy_from_slice(keypair.public_key().as_ref());
+
+    let mut priv_key_bytes = [0u8; 2400];
+    priv_key_bytes.copy_from_slice(keypair.private_key().as_ref());
+
+    MlKem768KeyPair {
+        pub_key,
+        priv_key: MlKem768PrivateKey(priv_key_bytes),
+        seed,
     }
 }
 

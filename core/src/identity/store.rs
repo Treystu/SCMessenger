@@ -117,6 +117,12 @@ impl IdentityStore {
             Self::Persistent(db) => {
                 if let Some(bytes) = db.get(IDENTITY_KEY).map_err(|e| anyhow::anyhow!(e))? {
                     let keys = IdentityKeys::from_bytes(&bytes)?;
+                    if bytes.len() == 32 {
+                        tracing::info!(
+                            "Migrated v1 identity to v2 with fresh encryption and PQ keys"
+                        );
+                        self.save_keys(&keys)?;
+                    }
                     Ok(Some(keys))
                 } else {
                     Ok(None)
@@ -291,6 +297,45 @@ mod tests {
 
         let loaded_keys = loaded.unwrap();
         assert_eq!(keys.identity_id(), loaded_keys.identity_id());
+    }
+
+    #[test]
+    fn test_identity_store_migration() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("test_store").to_str().unwrap().to_string();
+
+        let v1_bytes = [42u8; 32];
+
+        // 1. Manually write a v1 key to persistent storage
+        {
+            let backend = Arc::new(crate::store::backend::SledStorage::new(&path).unwrap());
+            backend.put(IDENTITY_KEY, &v1_bytes).unwrap();
+        }
+
+        // 2. Load keys through IdentityStore. This should trigger migration to V2.
+        let migrated_keys = {
+            let backend = Arc::new(crate::store::backend::SledStorage::new(&path).unwrap());
+            let store = IdentityStore::persistent(backend);
+            let keys = store.load_keys().unwrap().unwrap();
+            assert_eq!(keys.signing_key.to_bytes(), v1_bytes);
+            keys
+        };
+
+        // 3. Verify that the raw bytes in DB are now V2
+        {
+            let backend = Arc::new(crate::store::backend::SledStorage::new(&path).unwrap());
+            let raw_bytes = backend.get(IDENTITY_KEY).unwrap().unwrap();
+            assert_eq!(raw_bytes[0], 0x02);
+            assert_ne!(raw_bytes.len(), 32);
+
+            let store = IdentityStore::persistent(backend);
+            let reloaded = store.load_keys().unwrap().unwrap();
+            assert_eq!(reloaded.signing_key.to_bytes(), v1_bytes);
+            assert_eq!(
+                x25519_dalek::PublicKey::from(&reloaded.x25519_encryption_secret).to_bytes(),
+                x25519_dalek::PublicKey::from(&migrated_keys.x25519_encryption_secret).to_bytes()
+            );
+        }
     }
 
     #[test]

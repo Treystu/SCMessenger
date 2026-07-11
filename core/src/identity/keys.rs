@@ -2,6 +2,7 @@
 
 use anyhow::Result;
 use ed25519_dalek::{Signature as Ed25519Signature, Signer, SigningKey, Verifier, VerifyingKey};
+use serde::{Deserialize, Serialize};
 use zeroize::Zeroize;
 
 /// Key pair for signing and verification
@@ -27,10 +28,21 @@ impl KeyPair {
     }
 }
 
-/// Identity keys (signing + optional encryption)
+/// Inner serializable format for V2 identity keys
+#[derive(Serialize, Deserialize, Zeroize)]
+#[zeroize(drop)]
+struct IdentityKeysV2Raw {
+    signing_key_bytes: [u8; 32],
+    x25519_secret_bytes: [u8; 32],
+    mlkem_seed: Vec<u8>,
+}
+
+/// Identity keys (signing + dedicated encryption + hybrid post-quantum key agreement)
 #[derive(Clone)]
 pub struct IdentityKeys {
     pub signing_key: SigningKey,
+    pub x25519_encryption_secret: x25519_dalek::StaticSecret,
+    pub mlkem_keypair: crate::crypto::pq::MlKem768KeyPair,
 }
 
 impl IdentityKeys {
@@ -41,7 +53,19 @@ impl IdentityKeys {
         rand::rngs::OsRng.fill_bytes(&mut secret_key_bytes);
         let signing_key = SigningKey::from_bytes(&secret_key_bytes);
         secret_key_bytes.zeroize();
-        Self { signing_key }
+
+        let mut x25519_bytes = [0u8; 32];
+        rand::rngs::OsRng.fill_bytes(&mut x25519_bytes);
+        let x25519_encryption_secret = x25519_dalek::StaticSecret::from(x25519_bytes);
+        x25519_bytes.zeroize();
+
+        let mlkem_keypair = crate::crypto::pq::generate();
+
+        Self {
+            signing_key,
+            x25519_encryption_secret,
+            mlkem_keypair,
+        }
     }
 
     /// Get public key as hex
@@ -81,17 +105,68 @@ impl IdentityKeys {
 
     /// Serialize keys to bytes
     pub fn to_bytes(&self) -> Vec<u8> {
-        self.signing_key.to_bytes().to_vec()
+        let mut raw = IdentityKeysV2Raw {
+            signing_key_bytes: self.signing_key.to_bytes(),
+            x25519_secret_bytes: self.x25519_encryption_secret.to_bytes(),
+            mlkem_seed: self.mlkem_keypair.seed.to_vec(),
+        };
+        let mut serialized = bincode::serialize(&raw)
+            .expect("bincode serialization of IdentityKeysV2Raw cannot fail");
+        raw.zeroize();
+        let mut result = Vec::with_capacity(1 + serialized.len());
+        result.push(0x02); // version tag
+        result.append(&mut serialized);
+        result
     }
 
     /// Deserialize keys from bytes
     pub fn from_bytes(bytes: &[u8]) -> Result<Self> {
-        let signing_key = SigningKey::from_bytes(
-            bytes
-                .try_into()
-                .map_err(|_| anyhow::anyhow!("Invalid key bytes"))?,
-        );
-        Ok(Self { signing_key })
+        if bytes.len() == 32 {
+            // V1 legacy format
+            let signing_key = SigningKey::from_bytes(
+                bytes
+                    .try_into()
+                    .map_err(|_| anyhow::anyhow!("Invalid V1 key bytes"))?,
+            );
+
+            // For V1 legacy decoding inside from_bytes, we generate temporary encryption keys.
+            // Note: IdentityStore::load_keys will check if it was V1 and persist the migration properly.
+            let mut x25519_bytes = [0u8; 32];
+            rand::RngCore::fill_bytes(&mut rand::rngs::OsRng, &mut x25519_bytes);
+            let x25519_encryption_secret = x25519_dalek::StaticSecret::from(x25519_bytes);
+            x25519_bytes.zeroize();
+            let mlkem_keypair = crate::crypto::pq::generate();
+
+            Ok(Self {
+                signing_key,
+                x25519_encryption_secret,
+                mlkem_keypair,
+            })
+        } else if bytes.first() == Some(&0x02) {
+            // V2 format
+            let mut raw: IdentityKeysV2Raw = bincode::deserialize(&bytes[1..])
+                .map_err(|e| anyhow::anyhow!("Failed to deserialize V2 keys: {}", e))?;
+            let signing_key = SigningKey::from_bytes(&raw.signing_key_bytes);
+            let x25519_encryption_secret =
+                x25519_dalek::StaticSecret::from(raw.x25519_secret_bytes);
+
+            let mut mlkem_seed_arr = [0u8; 64];
+            if raw.mlkem_seed.len() != 64 {
+                raw.zeroize();
+                return Err(anyhow::anyhow!("Invalid ML-KEM seed length in V2 keys"));
+            }
+            mlkem_seed_arr.copy_from_slice(&raw.mlkem_seed);
+            let mlkem_keypair = crate::crypto::pq::from_seed(mlkem_seed_arr);
+            mlkem_seed_arr.zeroize();
+            raw.zeroize();
+            Ok(Self {
+                signing_key,
+                x25519_encryption_secret,
+                mlkem_keypair,
+            })
+        } else {
+            Err(anyhow::anyhow!("Invalid identity keys format/tag"))
+        }
     }
 
     /// Convert to libp2p Keypair for network identity
@@ -139,6 +214,61 @@ impl IdentityKeys {
         let ed25519_keypair = libp2p::identity::ed25519::Keypair::from(ed25519_secret);
         Ok(libp2p::identity::Keypair::from(ed25519_keypair))
     }
+}
+
+/// Public key bundle containing Ed25519, X25519, and ML-KEM-768 public keys.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PublicKeyBundle {
+    pub ed25519_public: [u8; 32],
+    pub x25519_public: [u8; 32],
+    pub mlkem_encaps_key: Vec<u8>, // 1184 B
+    pub created_at: u64,
+    pub signature: Vec<u8>, // Ed25519 over domain-separated bytes below
+}
+
+/// Sign a public key bundle for the given identity keys.
+pub fn sign_bundle(keys: &IdentityKeys) -> Result<PublicKeyBundle> {
+    let ed25519_public = keys.signing_key.verifying_key().to_bytes();
+    let x25519_public = x25519_dalek::PublicKey::from(&keys.x25519_encryption_secret).to_bytes();
+    let mlkem_encaps_key = keys.mlkem_keypair.public_key().to_vec();
+    let created_at = web_time::SystemTime::now()
+        .duration_since(web_time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+
+    // Signature input: b"iron-core keybundle v1" || ed25519_public || x25519_public || mlkem_encaps_key || created_at.to_le_bytes()
+    let mut sig_input = Vec::new();
+    sig_input.extend_from_slice(b"iron-core keybundle v1");
+    sig_input.extend_from_slice(&ed25519_public);
+    sig_input.extend_from_slice(&x25519_public);
+    sig_input.extend_from_slice(&mlkem_encaps_key);
+    sig_input.extend_from_slice(&created_at.to_le_bytes());
+
+    let signature = keys.sign(&sig_input)?;
+
+    Ok(PublicKeyBundle {
+        ed25519_public,
+        x25519_public,
+        mlkem_encaps_key,
+        created_at,
+        signature,
+    })
+}
+
+/// Verify a public key bundle's cross-signature.
+pub fn verify_bundle(bundle: &PublicKeyBundle) -> Result<()> {
+    let mut sig_input = Vec::new();
+    sig_input.extend_from_slice(b"iron-core keybundle v1");
+    sig_input.extend_from_slice(&bundle.ed25519_public);
+    sig_input.extend_from_slice(&bundle.x25519_public);
+    sig_input.extend_from_slice(&bundle.mlkem_encaps_key);
+    sig_input.extend_from_slice(&bundle.created_at.to_le_bytes());
+
+    let verified = IdentityKeys::verify(&sig_input, &bundle.signature, &bundle.ed25519_public)?;
+    if !verified {
+        return Err(anyhow::anyhow!("Invalid signature on key bundle"));
+    }
+    Ok(())
 }
 
 /// Generate a Signal-style safety number from two public keys.
@@ -390,5 +520,117 @@ mod tests {
     fn test_safety_number_rejects_malformed_keys() {
         assert!(safety_number("not-hex", "also-not-hex").is_err());
         assert!(safety_number("abcd", "abcd").is_err()); // too short
+    }
+
+    #[test]
+    fn test_v2_keys_non_derivation() {
+        let keys = IdentityKeys::generate();
+        let ed25519_pub = keys.signing_key.verifying_key().to_bytes();
+        let x25519_pub_derived = crate::crypto::ed25519_public_to_x25519(&ed25519_pub).unwrap();
+        let x25519_pub_derived_bytes = x25519_pub_derived.to_bytes();
+        let x25519_pub_actual =
+            x25519_dalek::PublicKey::from(&keys.x25519_encryption_secret).to_bytes();
+
+        assert_ne!(
+            x25519_pub_derived_bytes, x25519_pub_actual,
+            "V2 X25519 key MUST be newly generated, NOT derived from Ed25519 identity key"
+        );
+    }
+
+    #[test]
+    fn test_bundle_sign_verify_tamper() {
+        let keys = IdentityKeys::generate();
+        let bundle = sign_bundle(&keys).unwrap();
+
+        // 1. Verify valid bundle succeeds
+        assert!(verify_bundle(&bundle).is_ok());
+
+        // 2. Tamper ed25519_public
+        let mut tampered = bundle.clone();
+        tampered.ed25519_public[0] ^= 1;
+        assert!(verify_bundle(&tampered).is_err());
+
+        // 3. Tamper x25519_public
+        let mut tampered = bundle.clone();
+        tampered.x25519_public[0] ^= 1;
+        assert!(verify_bundle(&tampered).is_err());
+
+        // 4. Tamper mlkem_encaps_key
+        let mut tampered = bundle.clone();
+        tampered.mlkem_encaps_key[0] ^= 1;
+        assert!(verify_bundle(&tampered).is_err());
+
+        // 5. Tamper created_at
+        let mut tampered = bundle.clone();
+        tampered.created_at ^= 1;
+        assert!(verify_bundle(&tampered).is_err());
+
+        // 6. Tamper signature
+        let mut tampered = bundle.clone();
+        tampered.signature[0] ^= 1;
+        assert!(verify_bundle(&tampered).is_err());
+    }
+
+    #[test]
+    fn test_v1_identity_migration_and_compatibility() {
+        // Create a legacy V1 identity (32 bytes raw seed)
+        let mut v1_seed = [0u8; 32];
+        rand::RngCore::fill_bytes(&mut rand::rngs::OsRng, &mut v1_seed);
+
+        // Parse V1 seed -> should generate X25519 and ML-KEM keys on the fly
+        let keys = IdentityKeys::from_bytes(&v1_seed).unwrap();
+        assert_eq!(keys.signing_key.to_bytes(), v1_seed);
+        assert_eq!(keys.mlkem_keypair.public_key().len(), 1184);
+
+        // Serialize it as V2 (tagged format)
+        let serialized = keys.to_bytes();
+        assert_eq!(serialized[0], 0x02);
+
+        // Parse serialized V2
+        let keys_restored = IdentityKeys::from_bytes(&serialized).unwrap();
+        assert_eq!(
+            keys_restored.signing_key.to_bytes(),
+            keys.signing_key.to_bytes()
+        );
+        assert_eq!(
+            x25519_dalek::PublicKey::from(&keys_restored.x25519_encryption_secret).to_bytes(),
+            x25519_dalek::PublicKey::from(&keys.x25519_encryption_secret).to_bytes()
+        );
+        assert_eq!(
+            keys_restored.mlkem_keypair.public_key(),
+            keys.mlkem_keypair.public_key()
+        );
+    }
+
+    #[test]
+    fn test_v1_backup_restore_migration() {
+        use crate::crypto::backup::{decrypt_backup, encrypt_backup};
+
+        // Create a legacy V1 identity seed
+        let v1_seed = [17u8; 32];
+
+        // Format legacy backup payload: bare hex-encoded 32-byte signing key
+        let payload = hex::encode(v1_seed);
+
+        // Encrypt the backup payload using password "secure-password"
+        let passphrase = "secure-password";
+        let encrypted_backup = encrypt_backup(&payload, passphrase, None).unwrap();
+
+        // Decrypt the backup
+        let decrypted_payload = decrypt_backup(&encrypted_backup, passphrase).unwrap();
+        assert_eq!(decrypted_payload, payload);
+
+        // Decode decrypted key bytes
+        let decrypted_bytes = hex::decode(&decrypted_payload).unwrap();
+        assert_eq!(decrypted_bytes, v1_seed);
+
+        // Restore keys through IdentityKeys::from_bytes (should automatically generate encryption/PQ keys)
+        let restored_keys = IdentityKeys::from_bytes(&decrypted_bytes).unwrap();
+        assert_eq!(restored_keys.signing_key.to_bytes(), v1_seed);
+        assert_eq!(restored_keys.mlkem_keypair.public_key().len(), 1184);
+
+        // Verify we can sign a bundle
+        let bundle = sign_bundle(&restored_keys).unwrap();
+        assert!(verify_bundle(&bundle).is_ok());
     }
 }

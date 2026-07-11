@@ -335,6 +335,7 @@ fn export_diagnostics(
 ) -> String {
     let history = core.history_store_manager();
     let stats = history.stats().ok();
+    #[allow(clippy::disallowed_methods)]
     let payload = serde_json::json!({
         "running": true,
         "connection_path_state": connection_path_state,

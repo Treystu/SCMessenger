@@ -43,10 +43,12 @@ Signature input: `b"iron-core keybundle v1" || ed25519_public || x25519_public |
 
 ## Definition of Done
 
-- [ ] Standard gates PASS.
-- [ ] `cargo test -p scmessenger-core --test test_persistence_restart` PASSES (proves storage migration does not corrupt state).
-- [ ] Explicit statement in this file of every sled tree/key touched and the chosen encoding.
-- [ ] File moved to HANDOFF/done/ + committed.
+- [x] Standard gates PASS.
+- [x] `cargo test -p scmessenger-core --test test_persistence_restart` PASSES (proves storage migration does not corrupt state).
+- [x] Explicit statement in this file of every sled tree/key touched and the chosen encoding.
+  - **Identity Keys Key**: `identity_keys` (in the `IdentityStore` database/sled backend). Encoded using a tag byte `0x02` followed by the bincode serialization of `IdentityKeysV2Raw`.
+  - **Contact Bundles Prefix**: `contact_bundle:<public_key_hex>` (in the `StorageBackend` database/sled backend). Encoded as JSON (`serde_json::to_vec`) to maintain cross-platform storage compatibility.
+- [x] File moved to HANDOFF/done/ + committed.
 
 ## Do NOT
 

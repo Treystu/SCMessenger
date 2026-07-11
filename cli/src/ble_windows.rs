@@ -5,15 +5,15 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex, OnceLock};
 use tracing::{debug, error, info, warn};
 
+use crate::server::UiOutbound;
 use scmessenger_core::transport::ble::{GattFragmentHeader, GattReassembler};
 use scmessenger_core::IronCore;
-use crate::server::UiOutbound;
 
-use windows::core::{GUID, HSTRING, Result as WinResult};
+use windows::core::{Result as WinResult, GUID, HSTRING};
 use windows::Devices::Bluetooth::GenericAttributeProfile::{
     GattCharacteristicProperties, GattLocalCharacteristic, GattLocalCharacteristicParameters,
-    GattProtectionLevel, GattServiceProvider, GattServiceProviderAdvertisingParameters,
-    GattReadRequestedEventArgs, GattWriteRequestedEventArgs,
+    GattProtectionLevel, GattReadRequestedEventArgs, GattServiceProvider,
+    GattServiceProviderAdvertisingParameters, GattWriteRequestedEventArgs,
 };
 use windows::Foundation::TypedEventHandler;
 use windows::Storage::Streams::{DataReader, DataWriter};
@@ -43,7 +43,9 @@ pub fn get_message_characteristic() -> Option<GattLocalCharacteristic> {
 }
 
 /// Send a message to all subscribed centrals over Windows BLE GATT notification.
-pub async fn send_windows_ble_notification(data: &[u8]) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+pub async fn send_windows_ble_notification(
+    data: &[u8],
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let Some(msg_char) = get_message_characteristic() else {
         return Err("Windows BLE: Message characteristic not initialized".into());
     };
@@ -52,7 +54,10 @@ pub async fn send_windows_ble_notification(data: &[u8]) -> Result<(), Box<dyn st
     let fragments = scmessenger_core::transport::ble::GattFragmenter::fragment(data)
         .map_err(|e| format!("GATT fragmentation error: {:?}", e))?;
 
-    debug!("Windows BLE: sending {} fragments to subscribed clients", fragments.len());
+    debug!(
+        "Windows BLE: sending {} fragments to subscribed clients",
+        fragments.len()
+    );
     for fragment in fragments {
         let msg_char_clone = msg_char.clone();
         let fragment_clone = fragment.clone();
@@ -67,13 +72,15 @@ pub async fn send_windows_ble_notification(data: &[u8]) -> Result<(), Box<dyn st
             };
             op.await?;
             Ok::<(), Box<dyn std::error::Error + Send + Sync>>(())
-        }).await??;
+        })
+        .await??;
     }
 
     Ok(())
 }
 
 /// Run Windows WinRT BLE Peripheral GATT Server and Advertising.
+#[allow(clippy::disallowed_methods)]
 pub async fn run_windows_ble_peripheral(
     core: Arc<IronCore>,
     ui_tx: tokio::sync::broadcast::Sender<UiOutbound>,
@@ -93,36 +100,42 @@ pub async fn run_windows_ble_peripheral(
     parameters.SetWriteProtectionLevel(GattProtectionLevel::Plain)?;
     parameters.SetCharacteristicProperties(GattCharacteristicProperties::Read)?;
 
-    let identity_result = service.CreateCharacteristicAsync(identity_uuid, &parameters)?.await?;
+    let identity_result = service
+        .CreateCharacteristicAsync(identity_uuid, &parameters)?
+        .await?;
     let identity_char = identity_result.Characteristic()?;
 
     // Setup ReadRequested handler for Identity
     let read_core = Arc::clone(&core);
-    identity_char.ReadRequested(&TypedEventHandler::new(move |_sender: windows::core::Ref<'_, GattLocalCharacteristic>, args: windows::core::Ref<'_, GattReadRequestedEventArgs>| {
-        let args_ref = args.ok()?;
-        let deferral = args_ref.GetDeferral()?;
-        let args_clone = args_ref.clone();
-        let read_core_clone = read_core.clone();
-        tokio::spawn(async move {
-            if let Ok(request_op) = args_clone.GetRequestAsync() {
-                if let Ok(request) = request_op.await {
-                    let info = read_core_clone.get_identity_info();
-                    let peer_id_str = info.libp2p_peer_id.unwrap_or_default();
-                    let response_json = serde_json::json!({ "peer_id": peer_id_str }).to_string();
-                    let response_bytes = response_json.as_bytes().to_vec();
+    identity_char.ReadRequested(&TypedEventHandler::new(
+        move |_sender: windows::core::Ref<'_, GattLocalCharacteristic>,
+              args: windows::core::Ref<'_, GattReadRequestedEventArgs>| {
+            let args_ref = args.ok()?;
+            let deferral = args_ref.GetDeferral()?;
+            let args_clone = args_ref.clone();
+            let read_core_clone = read_core.clone();
+            tokio::spawn(async move {
+                if let Ok(request_op) = args_clone.GetRequestAsync() {
+                    if let Ok(request) = request_op.await {
+                        let info = read_core_clone.get_identity_info();
+                        let peer_id_str = info.libp2p_peer_id.unwrap_or_default();
+                        let response_json =
+                            serde_json::json!({ "peer_id": peer_id_str }).to_string();
+                        let response_bytes = response_json.as_bytes().to_vec();
 
-                    if let Ok(writer) = DataWriter::new() {
-                        let _ = writer.WriteBytes(&response_bytes);
-                        if let Ok(buffer) = writer.DetachBuffer() {
-                            let _ = request.RespondWithValue(&buffer);
+                        if let Ok(writer) = DataWriter::new() {
+                            let _ = writer.WriteBytes(&response_bytes);
+                            if let Ok(buffer) = writer.DetachBuffer() {
+                                let _ = request.RespondWithValue(&buffer);
+                            }
                         }
                     }
                 }
-            }
-            let _ = deferral.Complete();
-        });
-        Ok(())
-    }))?;
+                let _ = deferral.Complete();
+            });
+            Ok(())
+        },
+    ))?;
 
     // 2. Message Characteristic (0xDF03)
     let message_uuid = GUID::from_u128(MESSAGE_CHAR_UUID);
@@ -135,7 +148,9 @@ pub async fn run_windows_ble_peripheral(
             | GattCharacteristicProperties::Notify,
     )?;
 
-    let message_result = service.CreateCharacteristicAsync(message_uuid, &parameters)?.await?;
+    let message_result = service
+        .CreateCharacteristicAsync(message_uuid, &parameters)?
+        .await?;
     let message_char = message_result.Characteristic()?;
 
     // Store for outbound notification writes
@@ -212,11 +227,15 @@ fn handle_write_request(
         Vec::new()
     };
 
-    let mut buffers = get_reassembly_buffers().lock().unwrap();
-    let state = buffers.entry(device_id.to_string()).or_insert_with(|| ConnectionState {
-        fragments: HashMap::new(),
-        total_fragments: Some(total),
-    });
+    let mut buffers = get_reassembly_buffers()
+        .lock()
+        .expect("reassembly buffers lock poisoned");
+    let state = buffers
+        .entry(device_id.to_string())
+        .or_insert_with(|| ConnectionState {
+            fragments: HashMap::new(),
+            total_fragments: Some(total),
+        });
 
     state.fragments.insert(index, payload);
 

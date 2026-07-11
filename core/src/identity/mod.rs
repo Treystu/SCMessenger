@@ -3,7 +3,7 @@
 pub mod keys;
 mod store;
 
-pub use keys::{IdentityKeys, KeyPair};
+pub use keys::{sign_bundle, verify_bundle, IdentityKeys, KeyPair, PublicKeyBundle};
 pub use store::{DeviceMetadata, IdentityStore};
 
 use crate::dspy::signatures::{blake3_hash, get_signature, signature_fingerprint};
@@ -84,10 +84,10 @@ impl IdentityManager {
         self.hydrate_from_store()?;
 
         if self.keys.is_some() {
-            tracing::info!("🔑 Loaded existing identity");
+            tracing::info!("[OK] Loaded existing identity");
         } else {
             // Generate new keys
-            tracing::info!("🔑 Generating new identity");
+            tracing::info!("[OK] Generating new identity");
             let keys = IdentityKeys::generate();
             self.store.save_keys(&keys)?;
             self.keys = Some(keys);

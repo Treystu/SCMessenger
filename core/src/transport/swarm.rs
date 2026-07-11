@@ -1983,13 +1983,15 @@ pub async fn start_swarm_with_config(
                 .with_tokio()
                 .with_other_transport(
                     |id_keys| -> std::result::Result<_, Box<dyn std::error::Error + Send + Sync>> {
-                        let tcp_transport1 = libp2p::tcp::tokio::Transport::new(libp2p::tcp::Config::default());
+                        let tcp_transport1 =
+                            libp2p::tcp::tokio::Transport::new(libp2p::tcp::Config::default());
                         let dns_tcp1 = libp2p::dns::tokio::Transport::custom(
                             tcp_transport1,
                             libp2p::dns::ResolverConfig::google(),
                             libp2p::dns::ResolverOpts::default(),
                         );
-                        let tcp_transport2 = libp2p::tcp::tokio::Transport::new(libp2p::tcp::Config::default());
+                        let tcp_transport2 =
+                            libp2p::tcp::tokio::Transport::new(libp2p::tcp::Config::default());
                         let dns_tcp2 = libp2p::dns::tokio::Transport::custom(
                             tcp_transport2,
                             libp2p::dns::ResolverConfig::google(),
@@ -2002,8 +2004,10 @@ pub async fn start_swarm_with_config(
                             .upgrade(libp2p::core::upgrade::Version::V1Lazy)
                             .authenticate(noise)
                             .multiplex(libp2p::yamux::Config::default())
-                            .map(|(peer_id, conn), _| (peer_id, libp2p::core::muxing::StreamMuxerBox::new(conn))))
-                    }
+                            .map(|(peer_id, conn), _| {
+                                (peer_id, libp2p::core::muxing::StreamMuxerBox::new(conn))
+                            }))
+                    },
                 )?
                 .with_relay_client(libp2p::noise::Config::new, libp2p::yamux::Config::default)?
                 .with_behaviour(|key, relay_client| {

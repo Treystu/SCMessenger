@@ -2,6 +2,7 @@
 //
 // Refactored to use generic StorageBackend for cross-platform parity (Sled/IndexedDB/Memory).
 
+use crate::identity::PublicKeyBundle;
 use crate::store::backend::StorageBackend;
 use crate::store::history::HistoryManager;
 use crate::IronCoreError;
@@ -62,9 +63,14 @@ impl Contact {
 /// `Arc<dyn StorageBackend>` instance, so without a prefix, `list()`/`count()`
 /// would scan (and try to parse as `Contact`) every other subsystem's keys too.
 const CONTACT_KEY_PREFIX: &[u8] = b"contact:";
+const CONTACT_BUNDLE_KEY_PREFIX: &[u8] = b"contact_bundle:";
 
 fn contact_key(peer_id: &str) -> Vec<u8> {
     [CONTACT_KEY_PREFIX, peer_id.as_bytes()].concat()
+}
+
+fn contact_bundle_key(public_key_hex: &str) -> Vec<u8> {
+    [CONTACT_BUNDLE_KEY_PREFIX, public_key_hex.as_bytes()].concat()
 }
 
 #[derive(Clone)]
@@ -231,11 +237,48 @@ impl ContactManager {
     }
 
     pub fn remove(&self, peer_id: String) -> Result<(), IronCoreError> {
+        if let Some(contact) = self.get(peer_id.clone())? {
+            let bundle_key = contact_bundle_key(&contact.public_key);
+            let _ = self.backend.remove(&bundle_key);
+        }
         let key = contact_key(&peer_id);
         self.backend
             .remove(&key)
             .map_err(|_| IronCoreError::StorageError)?;
         Ok(())
+    }
+
+    /// Save a contact's public key bundle.
+    pub fn save_contact_bundle(
+        &self,
+        public_key_hex: &str,
+        bundle: &PublicKeyBundle,
+    ) -> Result<(), IronCoreError> {
+        let key = contact_bundle_key(public_key_hex);
+        let value = serde_json::to_vec(bundle).map_err(|_| IronCoreError::Internal)?;
+        self.backend
+            .put(&key, &value)
+            .map_err(|_| IronCoreError::StorageError)?;
+        Ok(())
+    }
+
+    /// Load a contact's public key bundle.
+    pub fn get_contact_bundle(
+        &self,
+        public_key_hex: &str,
+    ) -> Result<Option<PublicKeyBundle>, IronCoreError> {
+        let key = contact_bundle_key(public_key_hex);
+        if let Some(data) = self
+            .backend
+            .get(&key)
+            .map_err(|_| IronCoreError::StorageError)?
+        {
+            let bundle: PublicKeyBundle =
+                serde_json::from_slice(&data).map_err(|_| IronCoreError::Internal)?;
+            Ok(Some(bundle))
+        } else {
+            Ok(None)
+        }
     }
 
     pub fn list(&self) -> Result<Vec<Contact>, IronCoreError> {
@@ -538,5 +581,38 @@ mod tests {
         assert_eq!(mgr.list().unwrap().len(), 0);
         assert!(backend.get(b"some-other-key").unwrap().is_some());
         assert!(backend.get(b"different-key").unwrap().is_some());
+    }
+
+    #[test]
+    fn test_contact_bundle_storage() {
+        use crate::identity::{sign_bundle, IdentityKeys};
+
+        let mgr = make_manager();
+        let keys = IdentityKeys::generate();
+        let bundle = sign_bundle(&keys).unwrap();
+
+        // 1. Initially there is no bundle
+        let loaded = mgr.get_contact_bundle("some-pubkey").unwrap();
+        assert!(loaded.is_none());
+
+        // 2. Save and load the bundle
+        mgr.save_contact_bundle("some-pubkey", &bundle).unwrap();
+        let loaded = mgr.get_contact_bundle("some-pubkey").unwrap().unwrap();
+        assert_eq!(loaded.ed25519_public, bundle.ed25519_public);
+        assert_eq!(loaded.x25519_public, bundle.x25519_public);
+        assert_eq!(loaded.mlkem_encaps_key, bundle.mlkem_encaps_key);
+        assert_eq!(loaded.created_at, bundle.created_at);
+        assert_eq!(loaded.signature, bundle.signature);
+
+        // 3. Add contact, verify remove deletes bundle
+        let contact = Contact::new("peer-bundle-test".to_string(), "some-pubkey".to_string());
+        mgr.add(contact).unwrap();
+        mgr.remove("peer-bundle-test".to_string()).unwrap();
+
+        let loaded = mgr.get_contact_bundle("some-pubkey").unwrap();
+        assert!(
+            loaded.is_none(),
+            "bundle must be deleted when contact is removed"
+        );
     }
 }

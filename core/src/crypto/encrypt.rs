@@ -454,7 +454,7 @@ pub fn sign_envelope_v2(
 ) -> Result<crate::message::SignedEnvelopeV2> {
     let envelope_bytes = bincode::serialize(&envelope)
         .map_err(|e| anyhow::anyhow!("Failed to serialize envelope V2: {}", e))?;
-    
+
     // Tagged byte sequence: tag byte included in signed data
     let mut tagged_bytes = Vec::with_capacity(envelope_bytes.len() + 1);
     tagged_bytes.push(crate::message::WIRE_TAG_V2);
@@ -492,7 +492,7 @@ pub fn verify_envelope_v2(signed_envelope: &crate::message::SignedEnvelopeV2) ->
     // Recreate tagged bytes (tag byte + serialized envelope V2)
     let envelope_bytes = bincode::serialize(&signed_envelope.envelope)
         .map_err(|e| anyhow::anyhow!("Failed to serialize envelope V2: {}", e))?;
-    
+
     let mut tagged_bytes = Vec::with_capacity(envelope_bytes.len() + 1);
     tagged_bytes.push(crate::message::WIRE_TAG_V2);
     tagged_bytes.extend_from_slice(&envelope_bytes);

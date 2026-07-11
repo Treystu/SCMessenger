@@ -624,7 +624,10 @@ mod tests {
                     assert_eq!(case.nonce, decoded_env.nonce);
                     assert_eq!(case.ciphertext, decoded_env.ciphertext);
                     assert_eq!(case.ratchet_dh_public, decoded_env.ratchet_dh_public);
-                    assert_eq!(case.ratchet_message_number, decoded_env.ratchet_message_number);
+                    assert_eq!(
+                        case.ratchet_message_number,
+                        decoded_env.ratchet_message_number
+                    );
                     assert_eq!(case.pq_kem_ciphertext, decoded_env.pq_kem_ciphertext);
                     assert_eq!(case.pq_encaps_key, decoded_env.pq_encaps_key);
                     assert_eq!(case.transcript_hash, decoded_env.transcript_hash);
@@ -686,7 +689,10 @@ mod tests {
 
         let wire = WireEnvelope::V1(envelope.clone());
         let encoded = encode_wire_envelope(&wire).unwrap();
-        assert_ne!(encoded[0], WIRE_TAG_V2, "V1 encoding must not start with WIRE_TAG_V2");
+        assert_ne!(
+            encoded[0], WIRE_TAG_V2,
+            "V1 encoding must not start with WIRE_TAG_V2"
+        );
 
         let decoded = decode_wire_envelope(&encoded).unwrap();
         match decoded {

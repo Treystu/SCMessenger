@@ -155,7 +155,6 @@ pub enum WireSignedEnvelope {
     V2(SignedEnvelopeV2),
 }
 
-
 impl Message {
     /// Create a new text message
     pub fn text(sender_id: String, recipient_id: String, text: &str) -> Self {

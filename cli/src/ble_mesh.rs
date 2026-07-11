@@ -553,7 +553,10 @@ pub fn handle_incoming_ble_payload(
 }
 
 /// Run peripheral advertising.
-pub async fn run_ble_peripheral_advertising(core: Arc<IronCore>, ui_tx: tokio::sync::broadcast::Sender<UiOutbound>) {
+pub async fn run_ble_peripheral_advertising(
+    core: Arc<IronCore>,
+    ui_tx: tokio::sync::broadcast::Sender<UiOutbound>,
+) {
     #[cfg(target_os = "windows")]
     {
         if let Err(e) = crate::ble_windows::run_windows_ble_peripheral(core, ui_tx).await {
