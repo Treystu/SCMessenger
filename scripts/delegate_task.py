@@ -78,7 +78,27 @@ def extract_file_blocks(content):
         if filename.endswith(VALID_EXTENSIONS) and not any(f == filename for f, _ in results):
             results.append((filename, m.group(2)))
 
+    # Pattern C: entire response is one raw file with no fences at all
+    # (observed from qwen3-max): first line is "// path" or "# path".
+    if not results and "```" not in content:
+        lines = content.lstrip("\n").split("\n")
+        first = lines[0].strip() if lines else ""
+        if first.startswith("// ") or first.startswith("# "):
+            filename = first.replace("// ", "").replace("# ", "").strip()
+            if filename.endswith(VALID_EXTENSIONS):
+                results.append((filename, "\n".join(lines[1:])))
+
     return results
+
+def extract_diff_blocks(content):
+    """
+    Extract raw diff text from fenced ```diff blocks.
+    Returns a list of strings, each being the content of one diff block.
+    """
+    diff_blocks = []
+    for match in re.finditer(r"```diff\n(.*?)\n```", content, re.DOTALL):
+        diff_blocks.append(match.group(1))
+    return diff_blocks
 
 def send_request(args, prompt, resolved_model, display_model, round_num=None):
     payload = {
@@ -86,9 +106,15 @@ def send_request(args, prompt, resolved_model, display_model, round_num=None):
         "temperature": 0.1
     }
 
+    system_message = ""
+    if args.mode == "full":
+        system_message = "You are a senior Rust engineer. Strictly provide full file contents in code blocks with // filename as the first line inside the block."
+    else:  # diff mode
+        system_message = "Return your changes as unified diffs, one fenced ```diff block per file, using standard `--- a/<path>` and `+++ b/<path>` headers with 3 lines of context. Do NOT return full files. For a NEW file, use `--- /dev/null` and `+++ b/<path>`."
+
     if args.provider == "ollama":
         payload["messages"] = [
-            {"role": "system", "content": "You are a senior Rust engineer. Strictly provide full file contents in code blocks with // filename as the first line inside the block."},
+            {"role": "system", "content": system_message},
             {"role": "user", "content": prompt}
         ]
         payload["stream"] = False
@@ -96,7 +122,7 @@ def send_request(args, prompt, resolved_model, display_model, round_num=None):
         headers = {"Content-Type": "application/json"}
     else:
         payload["messages"] = [
-            {"role": "system", "content": "You are a senior Rust engineer. Strictly provide full file contents in code blocks with // filename as the first line inside the block."},
+            {"role": "system", "content": system_message},
             {"role": "user", "content": prompt}
         ]
         req_url = QWEN_URL if args.provider == "qwen" else OPENROUTER_URL
@@ -153,6 +179,39 @@ def apply_file_blocks(file_blocks):
             f.write(file_content)
     return True
 
+def apply_diff_blocks(diff_blocks, task_base_name, round_num):
+    if not diff_blocks:
+        return False, []
+
+    # Concatenate all diff blocks; git requires a trailing newline
+    full_diff = "\n".join(diff_blocks)
+    if not full_diff.endswith("\n"):
+        full_diff += "\n"
+    patchfile = f"tmp/{task_base_name}_patch_round{round_num}.diff"
+    with open(patchfile, "w", encoding="utf-8", newline="\n") as f:
+        f.write(full_diff)
+
+    # --recount: models fabricate hunk offsets; --ignore-whitespace: CRLF drift
+    result = subprocess.run(
+        ["git", "apply", "--recount", "--ignore-whitespace",
+         "--whitespace=nowarn", patchfile],
+        capture_output=True,
+        text=True
+    )
+    if result.returncode != 0:
+        print(f"[WARN] git apply: {result.stderr.strip()[:300]}")
+
+    if result.returncode == 0:
+        # Parse touched files from +++ lines
+        touched_files = []
+        for line in full_diff.splitlines():
+            if line.startswith("+++ b/"):
+                filepath = line[6:].split('\t')[0]
+                touched_files.append(filepath)
+        return True, touched_files
+    else:
+        return False, []
+
 def main():
     parser = argparse.ArgumentParser(description="Universal Swarm Delegate Script")
     parser.add_argument("--task", required=True, help="Task markdown file path (e.g., HANDOFF/todo/PQC_07_PQ_RATCHET.md)")
@@ -164,6 +223,7 @@ def main():
     parser.add_argument("--apply", action="store_true", help="Auto-apply the generated code blocks back into the files")
     parser.add_argument("--verify", type=str, help='Verification command to run after applying changes (e.g., "cargo check -p scmessenger-core")')
     parser.add_argument("--max-rounds", type=int, default=3, help="Maximum number of model calls including the first one (default: 3)")
+    parser.add_argument("--mode", choices=["full", "diff"], default="full", help="Output mode: full files or unified diffs (default: full)")
 
     args = parser.parse_args()
 
@@ -177,7 +237,8 @@ def main():
     with open(args.task, "r", encoding="utf-8") as f:
         task_content = f.read()
 
-    prompt = f"""
+    if args.mode == "full":
+        prompt = f"""
 You are a senior Rust systems engineer and cryptographer. Your task is to implement the following:
 
 ### Requirements:
@@ -186,6 +247,15 @@ You are a senior Rust systems engineer and cryptographer. Your task is to implem
 Please provide the FULL, completely updated/new contents of the relevant files using standard Markdown code blocks.
 The exact filename must be the first line inside the code block (e.g., `// core/src/crypto/session_manager.rs`).
 DO NOT output partial files, snippets, or diffs. Output the ENTIRE file content. Preserve all existing logic unless it contradicts the requirements.
+"""
+    else:  # diff mode
+        prompt = f"""
+You are a senior Rust systems engineer and cryptographer. Your task is to implement the following:
+
+### Requirements:
+{task_content}
+
+Return your changes as unified diffs, one fenced ```diff block per file, using standard `--- a/<path>` and `+++ b/<path>` headers with 3 lines of context. Do NOT return full files. For a NEW file, use `--- /dev/null` and `+++ b/<path>`.
 """
 
     if args.files:
@@ -221,14 +291,45 @@ DO NOT output partial files, snippets, or diffs. Output the ENTIRE file content.
     content, response_file = send_request(args, prompt, resolved_model, display_model)
     print(f"Response received and saved to {response_file}!")
 
+    task_base_name = os.path.basename(args.task).split('.')[0]
+    current_mode = args.mode
+    applied_successfully = False
+    touched_files = []
+
     if args.apply:
-        file_blocks = extract_file_blocks(content)
-        if not file_blocks:
-            print("Warning: No properly formatted code blocks found to apply.")
-        else:
-            applied = apply_file_blocks(file_blocks)
-            if applied:
-                print(f"Successfully applied {len(file_blocks)} file(s).")
+        if current_mode == "diff":
+            diff_blocks = extract_diff_blocks(content)
+            if not diff_blocks:
+                print("[WARN] No diff blocks found in response; falling back to full-file mode for this task")
+                current_mode = "full"
+                file_blocks = extract_file_blocks(content)
+                if file_blocks:
+                    applied_successfully = apply_file_blocks(file_blocks)
+                    touched_files = [f for f, _ in file_blocks]
+                else:
+                    print("Warning: No properly formatted code blocks found to apply.")
+            else:
+                success, files = apply_diff_blocks(diff_blocks, task_base_name, 1)
+                if success:
+                    applied_successfully = True
+                    touched_files = files
+                    print(f"Successfully applied diff to {len(touched_files)} file(s): {', '.join(touched_files)}")
+                else:
+                    print("[WARN] diff apply failed; falling back to full-file mode for this task")
+                    current_mode = "full"
+                    file_blocks = extract_file_blocks(content)
+                    if file_blocks:
+                        applied_successfully = apply_file_blocks(file_blocks)
+                        touched_files = [f for f, _ in file_blocks]
+                    else:
+                        print("Warning: No properly formatted code blocks found to apply.")
+        else:  # full mode
+            file_blocks = extract_file_blocks(content)
+            if not file_blocks:
+                print("Warning: No properly formatted code blocks found to apply.")
+            else:
+                applied_successfully = apply_file_blocks(file_blocks)
+                touched_files = [f for f, _ in file_blocks]
 
         # Verification loop
         if args.verify and args.apply:
@@ -247,6 +348,9 @@ DO NOT output partial files, snippets, or diffs. Output the ENTIRE file content.
                 )
 
                 if result.returncode == 0:
+                    if not applied_successfully:
+                        print("[WARN] verify passed but no changes were ever applied -- vacuous success")
+                        sys.exit(3)
                     print(f"[OK] verify passed on round {current_round}")
                     sys.exit(0)
                 else:
@@ -258,36 +362,77 @@ DO NOT output partial files, snippets, or diffs. Output the ENTIRE file content.
                     else:
                         print(f"[ROUND {current_round}] verify failed (exit {result.returncode}); re-dispatching fix...")
 
-                        # Build follow-up prompt
+                        # Build follow-up prompt based on current mode
                         combined_output = (result.stdout + result.stderr)[-6000:]
-                        follow_up_prompt = (
-                            "Your previous attempt was applied but verification failed.\n"
-                            f"Verification command: {args.verify}\n"
-                            f"Last 6000 characters of output:\n```\n{combined_output}\n```\n\n"
-                            "### Current Relevant File Contents:\n"
-                        )
-                        for filepath in args.files:
-                            try:
-                                with open(filepath, "r", encoding="utf-8") as f:
-                                    follow_up_prompt += f"\n--- {filepath} ---\n```rust\n{f.read()}\n```\n"
-                            except Exception as e:
-                                print(f"Warning: Could not read {filepath}: {e}")
+                        if current_mode == "diff":
+                            follow_up_prompt = (
+                                "Your previous attempt was applied but verification failed.\n"
+                                f"Verification command: {args.verify}\n"
+                                f"Last 6000 characters of output:\n```\n{combined_output}\n```\n\n"
+                                "### Current Relevant File Contents:\n"
+                            )
+                            for filepath in args.files:
+                                try:
+                                    with open(filepath, "r", encoding="utf-8") as f:
+                                        follow_up_prompt += f"\n--- {filepath} ---\n```rust\n{f.read()}\n```\n"
+                                except Exception as e:
+                                    print(f"Warning: Could not read {filepath}: {e}")
 
-                        follow_up_prompt += (
-                            "\nPlease provide the FULL, completely updated/new contents of the relevant files using standard Markdown code blocks.\n"
-                            "The exact filename must be the first line inside the code block (e.g., `// core/src/crypto/session_manager.rs`).\n"
-                            "DO NOT output partial files, snippets, or diffs. Output the ENTIRE file content. Preserve all existing logic unless it contradicts the requirements."
-                        )
+                            follow_up_prompt += (
+                                "\nReturn your corrective changes as unified diffs, one fenced ```diff block per file, using standard `--- a/<path>` and `+++ b/<path>` headers with 3 lines of context. Do NOT return full files. For a NEW file, use `--- /dev/null` and `+++ b/<path>`."
+                            )
+                        else:  # full mode
+                            follow_up_prompt = (
+                                "Your previous attempt was applied but verification failed.\n"
+                                f"Verification command: {args.verify}\n"
+                                f"Last 6000 characters of output:\n```\n{combined_output}\n```\n\n"
+                                "### Current Relevant File Contents:\n"
+                            )
+                            for filepath in args.files:
+                                try:
+                                    with open(filepath, "r", encoding="utf-8") as f:
+                                        follow_up_prompt += f"\n--- {filepath} ---\n```rust\n{f.read()}\n```\n"
+                                except Exception as e:
+                                    print(f"Warning: Could not read {filepath}: {e}")
+
+                            follow_up_prompt += (
+                                "\nPlease provide the FULL, completely updated/new contents of the relevant files using standard Markdown code blocks.\n"
+                                "The exact filename must be the first line inside the code block (e.g., `// core/src/crypto/session_manager.rs`).\n"
+                                "DO NOT output partial files, snippets, or diffs. Output the ENTIRE file content. Preserve all existing logic unless it contradicts the requirements."
+                            )
 
                         current_round += 1
                         content, response_file = send_request(args, follow_up_prompt, resolved_model, display_model, current_round)
                         print(f"Response received and saved to {response_file}!")
 
-                        file_blocks = extract_file_blocks(content)
-                        if not file_blocks:
-                            print("[WARN] round response had no applicable file blocks; counting as a failed round")
-                        else:
-                            apply_file_blocks(file_blocks)
+                        if current_mode == "diff":
+                            diff_blocks = extract_diff_blocks(content)
+                            if not diff_blocks:
+                                print("[WARN] round response had no diff blocks; falling back to full-file mode")
+                                current_mode = "full"
+                                file_blocks = extract_file_blocks(content)
+                                if file_blocks:
+                                    apply_file_blocks(file_blocks)
+                                else:
+                                    print("[WARN] round response had no applicable file blocks; counting as a failed round")
+                            else:
+                                success, files = apply_diff_blocks(diff_blocks, task_base_name, current_round)
+                                if success:
+                                    applied_successfully = True
+                                else:
+                                    print("[WARN] diff apply failed; falling back to full-file mode for subsequent rounds")
+                                    current_mode = "full"
+                                    file_blocks = extract_file_blocks(content)
+                                    if file_blocks:
+                                        applied_successfully = apply_file_blocks(file_blocks) or applied_successfully
+                                    else:
+                                        print("[WARN] round response had no applicable file blocks; counting as a failed round")
+                        else:  # full mode
+                            file_blocks = extract_file_blocks(content)
+                            if not file_blocks:
+                                print("[WARN] round response had no applicable file blocks; counting as a failed round")
+                            else:
+                                applied_successfully = apply_file_blocks(file_blocks) or applied_successfully
 
 if __name__ == "__main__":
     main()

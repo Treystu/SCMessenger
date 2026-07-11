@@ -117,9 +117,11 @@ Rules of engagement:
    rewritten consistent (via Qwen dispatch); delegate_task.py gained
    `--verify`/`--max-rounds` auto-fix loop (live-tested: happy path exit 0,
    bounded failure exit 2) and a language-tag-agnostic parser.
-   `TASK_DELEGATE_VERIFY_LOOP.md` + `UNIFY_GEMINI_DOCS.md` in done/.
-   Remaining: `TASK_DELEGATE_DIFF_MODE.md` [QWEN][standard] (opt-in unified-diff
-   mode to cut full-file token waste).
+   `TASK_DELEGATE_VERIFY_LOOP.md` + `UNIFY_GEMINI_DOCS.md` +
+   `TASK_DELEGATE_DIFF_MODE.md` all in done/. Diff mode (`--mode diff`)
+   live-tested: model diff applied via git apply --recount, verify green.
+   Parser handles fenced (any language tag), filename-before-block, and
+   raw-unfenced response formats; vacuous-success guarded (exit 3).
 
 10. `TASK_CI_IOS_MACOS_RUNNER_FIX.md` [SONNET][INFRA] -- repo is PUBLIC so
    GitHub macOS runners are free; fix ios-build-test.yml (failure masking,
