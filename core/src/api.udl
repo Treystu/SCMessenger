@@ -359,6 +359,7 @@ enum AuditEventType {
     "BackupImported",
     "ConsentGranted",
     "StorageCompacted",
+    "LegacyStaticEcdhSend",
 };
 
 /// Individual auditable event with cryptographic chaining

@@ -1,3 +1,4 @@
+// core/src/crypto/session_manager.rs
 use super::ratchet::{Chain, RatchetKey, RatchetSession};
 use crate::store::backend::StorageBackend;
 use anyhow::{bail, Result};
@@ -98,6 +99,85 @@ impl RatchetSessionManager {
             .sessions
             .get_mut(peer_id)
             .expect("session just inserted"))
+    }
+
+
+    /// Get or create a hybrid ratchet session for a peer (as sender).
+    pub fn get_or_create_session_hybrid(
+        &mut self,
+        peer_id: &str,
+        our_signing_key: &ed25519_dalek::SigningKey,
+        our_bundle: &crate::identity::PublicKeyBundle,
+        their_bundle: &crate::identity::PublicKeyBundle,
+    ) -> Result<&mut RatchetSession> {
+        if !self.sessions.contains_key(peer_id) {
+            let (suite, hash) = crate::crypto::negotiation::negotiate_suite(
+                &our_bundle.supported_suites,
+                &their_bundle.supported_suites,
+                &our_bundle.ed25519_public,
+                &their_bundle.ed25519_public,
+            )?;
+
+            let session = if suite == 0x02 {
+                RatchetSession::init_as_sender_hybrid(
+                    our_signing_key,
+                    their_bundle,
+                    hash,
+                )?
+            } else {
+                let their_x25519 = crate::crypto::encrypt::ed25519_public_to_x25519(&their_bundle.ed25519_public)?;
+                let mut s = RatchetSession::init_as_sender(our_signing_key, &their_x25519)?;
+                s.negotiated_suite = Some(suite);
+                s.transcript_hash = Some(hash);
+                s
+            };
+
+            self.sessions.insert(peer_id.to_string(), session);
+        }
+        Ok(self.sessions.get_mut(peer_id).expect("session just inserted"))
+    }
+
+    /// Create a receiver hybrid session.
+    pub fn create_receiver_session_hybrid(
+        &mut self,
+        peer_id: &str,
+        our_signing_key: &ed25519_dalek::SigningKey,
+        our_x25519_secret: &x25519_dalek::StaticSecret,
+        our_mlkem_keypair: &crate::crypto::pq::MlKem768KeyPair,
+        our_bundle: &crate::identity::PublicKeyBundle,
+        their_bundle: &crate::identity::PublicKeyBundle,
+        hct_opt: Option<&crate::crypto::pq::hybrid::HybridCiphertext>,
+    ) -> Result<&mut RatchetSession> {
+        let (suite, hash) = crate::crypto::negotiation::negotiate_suite(
+            &their_bundle.supported_suites, // Initiator's suites
+            &our_bundle.supported_suites,   // Responder's suites
+            &their_bundle.ed25519_public,   // Initiator's ed25519
+            &our_bundle.ed25519_public,     // Responder's ed25519
+        )?;
+
+        let sender_x25519 = x25519_dalek::PublicKey::from(their_bundle.x25519_public);
+        let session = if suite == 0x02 {
+            if let Some(hct) = hct_opt {
+                RatchetSession::init_as_receiver_hybrid(
+                    our_signing_key,
+                    our_x25519_secret,
+                    our_mlkem_keypair,
+                    their_bundle,
+                    hct,
+                    hash,
+                )?
+            } else {
+                anyhow::bail!("Suite 0x02 requires hybrid ciphertext for receiver initialization");
+            }
+        } else {
+            let mut s = RatchetSession::init_as_receiver(our_signing_key, &sender_x25519)?;
+            s.negotiated_suite = Some(suite);
+            s.transcript_hash = Some(hash);
+            s
+        };
+
+        self.sessions.insert(peer_id.to_string(), session);
+        Ok(self.sessions.get_mut(peer_id).expect("session just inserted"))
     }
 
     /// Get an existing session for a peer (returns None if no session exists).
@@ -216,6 +296,10 @@ pub struct SerializableRatchetSession {
     pub negotiated_suite: Option<u8>,
     /// The transcript hash binding the session to the negotiation (hex-encoded, from PQC-04)
     pub transcript_hash_hex: Option<String>,
+    #[serde(default)]
+    pub peer_confirmed: bool,
+    pub bootstrap_hct_ephemeral_hex: Option<String>,
+    pub bootstrap_hct_mlkem_hex: Option<String>,
 }
 
 /// Serializable chain state.
@@ -251,6 +335,9 @@ impl SerializableRatchetSession {
             identity_secret_hex: session.identity_secret_bytes().map(hex::encode),
             negotiated_suite: session.negotiated_suite,
             transcript_hash_hex: session.transcript_hash.map(hex::encode),
+            peer_confirmed: session.peer_confirmed,
+            bootstrap_hct_ephemeral_hex: session.bootstrap_hct.as_ref().map(|h| hex::encode(h.x25519_ephemeral_public)),
+            bootstrap_hct_mlkem_hex: session.bootstrap_hct.as_ref().map(|h| hex::encode(&h.mlkem_ciphertext)),
         }
     }
 
@@ -349,6 +436,21 @@ impl SerializableRatchetSession {
             None
         };
 
+
+        let bootstrap_hct = if let (Some(e_hex), Some(m_hex)) = (self.bootstrap_hct_ephemeral_hex, self.bootstrap_hct_mlkem_hex) {
+            let e_bytes = hex::decode(e_hex).map_err(|e| anyhow::anyhow!("bad eph: {}", e))?;
+            let m_bytes = hex::decode(m_hex).map_err(|e| anyhow::anyhow!("bad mlkem: {}", e))?;
+            if e_bytes.len() != 32 || m_bytes.len() != 1088 { anyhow::bail!("bad hct lengths"); }
+            let mut e_arr = [0u8; 32];
+            e_arr.copy_from_slice(&e_bytes);
+            Some(crate::crypto::pq::hybrid::HybridCiphertext {
+                x25519_ephemeral_public: e_arr,
+                mlkem_ciphertext: m_bytes,
+            })
+        } else {
+            None
+        };
+
         Ok(RatchetSession::reconstruct(
             our_dh_secret,
             our_dh_public,
@@ -361,6 +463,12 @@ impl SerializableRatchetSession {
             our_identity_secret,
             self.negotiated_suite,
             transcript_hash,
+            self.peer_confirmed,
+            bootstrap_hct,
+            None, // pq_our_keypair
+            None, // pq_prev_keypair  
+            None, // pq_their_encaps_key
+            None, // pq_pending_ct
         ))
     }
 }

@@ -44,6 +44,8 @@ pub enum AuditEventType {
     ConsentGranted,
     /// Storage compaction executed to reclaim space
     StorageCompacted,
+    /// Static ECDH send used as fallback (legacy path)
+    LegacyStaticEcdhSend,
 }
 
 impl fmt::Display for AuditEventType {
@@ -62,6 +64,7 @@ impl fmt::Display for AuditEventType {
             AuditEventType::BackupImported => write!(f, "BackupImported"),
             AuditEventType::ConsentGranted => write!(f, "ConsentGranted"),
             AuditEventType::StorageCompacted => write!(f, "StorageCompacted"),
+            AuditEventType::LegacyStaticEcdhSend => write!(f, "LegacyStaticEcdhSend"),
         }
     }
 }

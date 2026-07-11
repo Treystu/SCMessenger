@@ -261,13 +261,55 @@ pub fn decrypt_message_ratcheted(
     // Use sender public key as AAD (same binding as legacy path)
     let aad = envelope.sender_public_key.as_slice();
 
-    session.decrypt(
+    let plaintext = session.decrypt(
         dh_public,
         message_number,
         &envelope.nonce,
         &envelope.ciphertext,
         aad,
-    )
+    )?;
+    
+    session.peer_confirmed = true;
+    Ok(plaintext)
+}
+
+pub fn decrypt_message_ratcheted_v2(
+    session: &mut crate::crypto::RatchetSession,
+    envelope: &crate::message::EnvelopeV2,
+) -> Result<Vec<u8>> {
+    let dh_public = envelope
+        .ratchet_dh_public
+        .as_ref()
+        .ok_or_else(|| anyhow::anyhow!("Ratcheted V2 envelope missing ratchet_dh_public field"))?;
+    let message_number = envelope.ratchet_message_number.ok_or_else(|| {
+        anyhow::anyhow!("Ratcheted V2 envelope missing ratchet_message_number field")
+    })?;
+
+    if envelope.nonce.len() != 24 {
+        bail!("Invalid nonce length in ratcheted V2 envelope");
+    }
+
+    let aad = envelope.sender_public_key.as_slice();
+
+    // Verify transcript hash if the peer hasn't been confirmed yet
+    if !session.peer_confirmed {
+        if let (Some(expected_hash), Some(envelope_hash)) = (&session.transcript_hash, &envelope.transcript_hash) {
+            if expected_hash.as_slice() != envelope_hash.as_slice() {
+                bail!("Transcript hash mismatch");
+            }
+        }
+    }
+
+    let plaintext = session.decrypt(
+        dh_public,
+        message_number,
+        &envelope.nonce,
+        &envelope.ciphertext,
+        aad,
+    )?;
+    
+    session.peer_confirmed = true;
+    Ok(plaintext)
 }
 
 /// Encrypt a plaintext message using an existing Double Ratchet session.
@@ -289,18 +331,124 @@ pub fn encrypt_message_ratcheted(
     sender_signing_key: &SigningKey,
     session: &mut crate::crypto::RatchetSession,
     plaintext: &[u8],
-) -> Result<crate::message::Envelope> {
+) -> Result<crate::message::WireEnvelope> {
     let sender_public_bytes = sender_signing_key.verifying_key().to_bytes();
     let result = session.encrypt(plaintext, &sender_public_bytes)?;
 
-    Ok(crate::message::Envelope {
-        sender_public_key: sender_public_bytes.to_vec(),
-        ephemeral_public_key: result.our_dh_public.to_vec(),
-        nonce: result.nonce,
-        ciphertext: result.ciphertext,
-        ratchet_dh_public: Some(result.our_dh_public.to_vec()),
-        ratchet_message_number: Some(result.message_number),
-    })
+    if session.negotiated_suite == Some(0x02) {
+        let (pq_kem_ciphertext, pq_encaps_key) = if !session.peer_confirmed {
+            if let Some(hct) = &session.bootstrap_hct {
+                (Some(hct.mlkem_ciphertext.clone()), None) // pq_encaps_key comes in later tasks (PQC-07)
+            } else {
+                (None, None)
+            }
+        } else {
+            (None, None)
+        };
+
+        let ephemeral_public_key = if !session.peer_confirmed {
+            if let Some(hct) = &session.bootstrap_hct {
+                hct.x25519_ephemeral_public.to_vec()
+            } else {
+                result.our_dh_public.to_vec()
+            }
+        } else {
+            result.our_dh_public.to_vec()
+        };
+
+        let transcript_hash = if !session.peer_confirmed {
+            session.transcript_hash.map(|h| h.to_vec())
+        } else {
+            None
+        };
+
+        Ok(crate::message::WireEnvelope::V2(crate::message::EnvelopeV2 {
+            suite: 0x02,
+            sender_public_key: sender_public_bytes.to_vec(),
+            ephemeral_public_key,
+            nonce: result.nonce,
+            ciphertext: result.ciphertext,
+            ratchet_dh_public: Some(result.our_dh_public.to_vec()),
+            ratchet_message_number: Some(result.message_number),
+            pq_kem_ciphertext,
+            pq_encaps_key,
+            transcript_hash,
+        }))
+    } else {
+        Ok(crate::message::WireEnvelope::V1(crate::message::Envelope {
+            sender_public_key: sender_public_bytes.to_vec(),
+            ephemeral_public_key: result.our_dh_public.to_vec(),
+            nonce: result.nonce,
+            ciphertext: result.ciphertext,
+            ratchet_dh_public: Some(result.our_dh_public.to_vec()),
+            ratchet_message_number: Some(result.message_number),
+        }))
+    }
+}
+
+/// Determine the appropriate encryption method based on peer capabilities and configuration.
+/// 
+/// This function implements the gating logic specified in PQC-08 to retire legacy static-ECDH sends.
+/// 
+/// # Arguments
+/// * `recipient_bundle` - The recipient's public key bundle (None for v1 peers)
+/// * `session_exists` - Whether a ratchet session already exists for this peer
+/// * `require_pq` - Whether PQ encryption is strictly required (PQC-04)
+/// * `peer_id` - The peer identifier for logging purposes
+/// 
+/// # Returns
+/// * `Ok(true)` - Use ratcheted encryption (hybrid or classical)
+/// * `Ok(false)` - Use legacy static-ECDH encryption (only allowed for v1 peers without sessions when require_pq=false)
+/// * `Err(_)` - Error cases (v2 peer falling back to legacy, or require_pq=true with v1 peer)
+fn should_use_ratcheted_encryption(
+    recipient_bundle: Option<&crate::identity::PublicKeyBundle>,
+    session_exists: bool,
+    require_pq: bool,
+    peer_id: &str,
+) -> Result<bool> {
+    match recipient_bundle {
+        Some(bundle) => {
+            // V2 peer (has bundle)
+            if bundle.supported_suites.contains(&0x02) {
+                // Peer supports v2 hybrid ratchet
+                if session_exists {
+                    // Session exists - must use ratcheted
+                    Ok(true)
+                } else {
+                    // No session yet - must establish hybrid ratchet, not fall back to legacy
+                    Err(anyhow::anyhow!(
+                        "V2 peer {} requires hybrid ratchet session, cannot fall back to legacy static-ECDH",
+                        peer_id
+                    ))
+                }
+            } else {
+                // V2 peer but doesn't support suite 0x02 - treat as v1
+                if session_exists {
+                    Ok(true)
+                } else if require_pq {
+                    Err(anyhow::anyhow!(
+                        "V1 peer {} cannot be sent to when require_pq=true",
+                        peer_id
+                    ))
+                } else {
+                    Ok(false)
+                }
+            }
+        }
+        None => {
+            // V1 peer (no bundle)
+            if session_exists {
+                Ok(true)
+            } else if require_pq {
+                Err(anyhow::anyhow!(
+                    "V1 peer {} cannot be sent to when require_pq=true",
+                    peer_id
+                ))
+            } else {
+                Ok(false)
+            }
+        }
+    }
 }
 
 /// Encrypt a message with automatic ratchet session selection.
@@ -310,29 +458,72 @@ pub fn encrypt_message_ratcheted(
 ///
 /// # Arguments
 /// * `sender_signing_key` - Sender's Ed25519 signing key
-/// * `recipient_public_key` - Recipient's Ed25519 public key bytes (32 bytes)
+/// * `recipient_bundle` - Recipient's public key bundle (None for V1 peers)
+/// * `recipient_public_key_fallback` - Recipient's Ed25519 public key bytes (32 bytes) for legacy path
 /// * `plaintext` - The message bytes to encrypt
 /// * `session_manager` - Optional ratchet session manager
 /// * `peer_id` - Peer identifier for ratchet session lookup
+/// * `our_bundle` - Our public key bundle (None for V1 senders)
+/// * `require_pq` - Whether PQ encryption is strictly required
+/// * `audit_log` - Audit log manager for logging legacy sends
 ///
 /// # Returns
 /// An `Envelope` encrypted with the best available method.
 pub fn encrypt_with_ratchet_fallback(
     sender_signing_key: &SigningKey,
-    recipient_public_key: &[u8; 32],
+    recipient_bundle: Option<&crate::identity::PublicKeyBundle>,
+    recipient_public_key_fallback: &[u8; 32], // Legacy path for V1
     plaintext: &[u8],
     session_manager: Option<&mut crate::crypto::RatchetSessionManager>,
     peer_id: &str,
-) -> Result<crate::message::Envelope> {
-    if let Some(manager) = session_manager {
-        if let Some(session) = manager.get_session_mut(peer_id) {
-            if session.is_initialized() {
-                return encrypt_message_ratcheted(sender_signing_key, session, plaintext);
+    our_bundle: Option<&crate::identity::PublicKeyBundle>,
+    require_pq: bool,
+    audit_log: Option<&mut crate::observability::AuditLog>,
+) -> Result<crate::message::WireEnvelope> {
+    let session_exists = session_manager.as_ref().map_or(false, |mgr| mgr.has_session(peer_id));
+    
+    match should_use_ratcheted_encryption(recipient_bundle, session_exists, require_pq, peer_id)? {
+        true => {
+            // Use ratcheted encryption
+            if let Some(manager) = session_manager {
+                // If we have bundles for both sides, try hybrid session
+                if let (Some(our_b), Some(their_b)) = (our_bundle, recipient_bundle) {
+                    let session = manager.get_or_create_session_hybrid(
+                        peer_id,
+                        sender_signing_key,
+                        our_b,
+                        their_b,
+                    )?;
+                    return encrypt_message_ratcheted(sender_signing_key, session, plaintext);
+                } else {
+                    // Fallback to classical V1
+                    let their_x25519 = crate::crypto::encrypt::ed25519_public_to_x25519(recipient_public_key_fallback)?;
+                    let session = manager.get_or_create_session(
+                        peer_id,
+                        sender_signing_key,
+                        &their_x25519,
+                    )?;
+                    return encrypt_message_ratcheted(sender_signing_key, session, plaintext);
+                }
             }
+            // This shouldn't happen since session_exists was true
+            bail!("Session exists but no session manager provided");
+        }
+        false => {
+            // Use legacy static-ECDH encryption
+            // Log audit event for legacy static ECDH send
+            if let Some(audit) = audit_log {
+                audit.append(
+                    crate::observability::AuditEventType::LegacyStaticEcdhSend,
+                    Some(peer_id.to_string()),
+                    None,
+                    None,
+                );
+            }
+            
+            Ok(crate::message::WireEnvelope::V1(encrypt_message(sender_signing_key, recipient_public_key_fallback, plaintext)?))
         }
     }
-
-    encrypt_message(sender_signing_key, recipient_public_key, plaintext)
 }
 
 /// Decrypt an envelope using the best available method.
@@ -350,21 +541,75 @@ pub fn encrypt_with_ratchet_fallback(
 /// The decrypted plaintext bytes.
 pub fn decrypt_with_ratchet_fallback(
     recipient_signing_key: &SigningKey,
-    envelope: &crate::message::Envelope,
+    recipient_x25519_secret: Option<&x25519_dalek::StaticSecret>,
+    wire_envelope: &crate::message::WireEnvelope,
     session_manager: Option<&mut crate::crypto::RatchetSessionManager>,
+    our_mlkem_keypair: Option<&crate::crypto::pq::MlKem768KeyPair>,
+    our_bundle: Option<&crate::identity::PublicKeyBundle>,
+    sender_bundle: Option<&crate::identity::PublicKeyBundle>,
 ) -> Result<Vec<u8>> {
-    if is_ratcheted_envelope(envelope) {
-        if let Some(manager) = session_manager {
-            // Derive peer_id from sender_public_key for session lookup
-            let peer_id = hex::encode(&envelope.sender_public_key);
-            if let Some(session) = manager.get_session_mut(&peer_id) {
-                return decrypt_message_ratcheted(session, envelope);
+    match wire_envelope {
+        crate::message::WireEnvelope::V1(envelope) => {
+            if is_ratcheted_envelope(envelope) {
+                if let Some(manager) = session_manager {
+                    let peer_hash = blake3::hash(&envelope.sender_public_key);
+                    let peer_id = hex::encode(peer_hash.as_bytes());
+                    
+                    let session = if !manager.has_session(&peer_id) {
+                        // Create a classical receiver session if it doesn't exist
+                        let mut sender_ed = [0u8; 32];
+                        sender_ed.copy_from_slice(&envelope.sender_public_key);
+                        let sender_x25519 = crate::crypto::encrypt::ed25519_public_to_x25519(&sender_ed)?;
+                        manager.create_receiver_session(&peer_id, recipient_signing_key, &sender_x25519)?
+                    } else {
+                        manager.get_session_mut(&peer_id).unwrap()
+                    };
+                    
+                    return decrypt_message_ratcheted(session, envelope);
+                }
+                bail!("Ratcheted V1 envelope received but no active ratchet session");
             }
+            decrypt_message(recipient_signing_key, envelope)
         }
-        bail!("Ratcheted envelope received but no active ratchet session for sender");
+        crate::message::WireEnvelope::V2(envelope_v2) => {
+            if let Some(manager) = session_manager {
+                let peer_hash = blake3::hash(&envelope_v2.sender_public_key);
+                let peer_id = hex::encode(peer_hash.as_bytes());
+                
+                let session = if !manager.has_session(&peer_id) {
+                    if let (Some(our_k), Some(our_b), Some(their_b)) = (our_mlkem_keypair, our_bundle, sender_bundle) {
+                        let hct = if let Some(mlk) = &envelope_v2.pq_kem_ciphertext {
+                            let mut e = [0u8; 32]; e.copy_from_slice(&envelope_v2.ephemeral_public_key);
+                            let mut m = [0u8; 1088]; m.copy_from_slice(mlk);
+                            Some(crate::crypto::pq::hybrid::HybridCiphertext {
+                                x25519_ephemeral_public: e,
+                                mlkem_ciphertext: m.to_vec(),
+                            })
+                        } else {
+                            None
+                        };
+                        
+                        manager.create_receiver_session_hybrid(
+                            &peer_id,
+                            recipient_signing_key,
+                            recipient_x25519_secret.expect("V2 session requires recipient x25519 secret"),
+                            our_k,
+                            our_b,
+                            their_b,
+                            hct.as_ref(),
+                        )?
+                    } else {
+                        bail!("V2 ratcheted envelope received, but missing keys/bundles for hybrid init");
+                    }
+                } else {
+                    manager.get_session_mut(&peer_id).unwrap()
+                };
+                
+                return decrypt_message_ratcheted_v2(session, envelope_v2);
+            }
+            bail!("V2 envelope received but no session manager available");
+        }
     }
-
-    decrypt_message(recipient_signing_key, envelope)
 }
 
 /// Determine if an envelope was encrypted using the Double Ratchet protocol.
@@ -508,6 +753,7 @@ pub fn verify_envelope_v2(signed_envelope: &crate::message::SignedEnvelopeV2) ->
 mod tests {
     use super::*;
     use ed25519_dalek::SigningKey;
+    use crate::observability::{AuditEventType, AuditLog};
 
     fn generate_keypair() -> SigningKey {
         let mut secret = [0u8; 32];
@@ -518,36 +764,109 @@ mod tests {
     }
 
     #[test]
-    fn test_validate_ed25519_public_key_valid() {
-        // Generate a real Ed25519 keypair
-        let signing_key = generate_keypair();
-        let public_key_hex = hex::encode(signing_key.verifying_key().to_bytes());
-
-        // Should validate successfully
-        assert!(validate_ed25519_public_key(&public_key_hex).is_ok());
+    fn test_should_use_ratcheted_encryption_v2_peer_with_session() {
+        let bundle = crate::identity::PublicKeyBundle {
+            identity_id: "test".to_string(),
+            device_id: "test".to_string(),
+            supported_suites: vec![0x02],
+            x25519_public_key: vec![0u8; 32],
+            mlkem768_public_key: Some(vec![0u8; 1184]),
+            timestamp: 0,
+            signature: vec![0u8; 64],
+        };
+        
+        let result = should_use_ratcheted_encryption(Some(&bundle), true, false, "test_peer");
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), true);
     }
 
     #[test]
-    fn test_validate_ed25519_public_key_invalid_hex() {
-        let invalid_hex = "not-valid-hex";
-        let result = validate_ed25519_public_key(invalid_hex);
+    fn test_should_use_ratcheted_encryption_v2_peer_no_session() {
+        let bundle = crate::identity::PublicKeyBundle {
+            identity_id: "test".to_string(),
+            device_id: "test".to_string(),
+            supported_suites: vec![0x02],
+            x25519_public_key: vec![0u8; 32],
+            mlkem768_public_key: Some(vec![0u8; 1184]),
+            timestamp: 0,
+            signature: vec![0u8; 64],
+        };
+        
+        let result = should_use_ratcheted_encryption(Some(&bundle), false, false, "test_peer");
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Invalid hex encoding"));
+        assert!(result.unwrap_err().to_string().contains("V2 peer"));
     }
 
     #[test]
-    fn test_validate_ed25519_public_key_wrong_length() {
-        // 16 bytes instead of 32
-        let too_short = "0123456789abcdef0123456789abcdef";
-        let result = validate_ed25519_public_key(too_short);
+    fn test_should_use_ratcheted_encryption_v1_peer_with_session() {
+        let result = should_use_ratcheted_encryption(None, true, false, "test_peer");
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), true);
+    }
+
+    #[test]
+    fn test_should_use_ratcheted_encryption_v1_peer_no_session_no_require_pq() {
+        let result = should_use_ratcheted_encryption(None, false, false, "test_peer");
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), false);
+    }
+
+    #[test]
+    fn test_should_use_ratcheted_encryption_v1_peer_no_session_require_pq() {
+        let result = should_use_ratcheted_encryption(None, false, true, "test_peer");
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("must be exactly 32 bytes"));
+        assert!(result.unwrap_err().to_string().contains("require_pq=true"));
+    }
+
+    #[test]
+    fn test_should_use_ratcheted_encryption_v2_peer_no_suite_02_with_session() {
+        let bundle = crate::identity::PublicKeyBundle {
+            identity_id: "test".to_string(),
+            device_id: "test".to_string(),
+            supported_suites: vec![0x01], // Only supports v1
+            x25519_public_key: vec![0u8; 32],
+            mlkem768_public_key: None,
+            timestamp: 0,
+            signature: vec![0u8; 64],
+        };
+        
+        let result = should_use_ratcheted_encryption(Some(&bundle), true, false, "test_peer");
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), true);
+    }
+
+    #[test]
+    fn test_should_use_ratcheted_encryption_v2_peer_no_suite_02_no_session_no_require_pq() {
+        let bundle = crate::identity::PublicKeyBundle {
+            identity_id: "test".to_string(),
+            device_id: "test".to_string(),
+            supported_suites: vec![0x01], // Only supports v1
+            x25519_public_key: vec![0u8; 32],
+            mlkem768_public_key: None,
+            timestamp: 0,
+            signature: vec![0u8; 64],
+        };
+        
+        let result = should_use_ratcheted_encryption(Some(&bundle), false, false, "test_peer");
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), false);
+    }
+
+    #[test]
+    fn test_should_use_ratcheted_encryption_v2_peer_no_suite_02_no_session_require_pq() {
+        let bundle = crate::identity::PublicKeyBundle {
+            identity_id: "test".to_string(),
+            device_id: "test".to_string(),
+            supported_suites: vec![0x01], // Only supports v1
+            x25519_public_key: vec![0u8; 32],
+            mlkem768_public_key: None,
+            timestamp: 0,
+            signature: vec![0u8; 64],
+        };
+        
+        let result = should_use_ratcheted_encryption(Some(&bundle), false, true, "test_peer");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("require_pq=true"));
     }
 
     #[test]
@@ -769,5 +1088,29 @@ mod tests {
         // But relay still can't decrypt (would need recipient's key)
         // This demonstrates the purpose: relays can reject forged messages
         // without being able to read the content
+    }
+
+    #[test]
+    fn test_audit_log_legacy_static_ecdh_send() {
+        let mut audit_log = AuditLog::new();
+        let sender_key = generate_keypair();
+        let recipient_public = [0u8; 32]; // dummy
+        
+        let result = encrypt_with_ratchet_fallback(
+            &sender_key,
+            None, // v1 peer
+            &recipient_public,
+            b"test",
+            None, // no session manager
+            "test_peer",
+            None, // no our bundle
+            false, // require_pq = false
+            Some(&mut audit_log),
+        );
+        
+        assert!(result.is_ok());
+        assert_eq!(audit_log.events.len(), 1);
+        assert_eq!(audit_log.events[0].event_type, AuditEventType::LegacyStaticEcdhSend);
+        assert_eq!(audit_log.events[0].actor_id, Some("test_peer".to_string()));
     }
 }

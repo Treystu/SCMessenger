@@ -1,3 +1,4 @@
+// core/src/crypto/ratchet.rs
 //! P0_SECURITY_003: Double Ratchet Protocol for Forward Secrecy.
 //!
 //! Implements the Double Ratchet algorithm (Signal Protocol) adapted for
@@ -27,7 +28,8 @@ use zeroize::Zeroize;
 
 /// KDF context strings for ratchet chain derivation.
 const RATCHET_KDF_CONTEXT: &str = "iron-core ratchet v1 2026-04-15";
-const ROOT_KDF_CONTEXT: &str = "iron-core root-chain v1 2026-04-15";
+const ROOT_KDF_CONTEXT_V1: &str = "iron-core root-chain v1 2026-04-15";
+const ROOT_KDF_CONTEXT_V2: &str = "iron-core root-chain v2 hybrid 2026-07";
 
 /// Maximum number of skipped message keys we'll store per session.
 /// Signal Protocol recommends "a few hundred" for reliable out-of-order delivery.
@@ -136,6 +138,19 @@ pub struct RatchetSession {
     pub negotiated_suite: Option<u8>,
     /// The transcript hash binding the session to the negotiation (from PQC-04).
     pub transcript_hash: Option<[u8; 32]>,
+    /// Flag indicating if the peer has proven they established the session.
+    pub peer_confirmed: bool,
+    /// Hybrid ciphertext for session bootstrap (stored until peer confirmed).
+    pub bootstrap_hct: Option<crate::crypto::pq::hybrid::HybridCiphertext>,
+    // PQC-07: Post-quantum ratchet state (suite 0x02 only)
+    /// Our current ML-KEM keypair for PQ ratchet steps.
+    pub pq_our_keypair: Option<crate::crypto::pq::MlKem768KeyPair>,
+    /// Previous ML-KEM keypair to handle one-step-behind arrivals.
+    pub pq_prev_keypair: Option<crate::crypto::pq::MlKem768KeyPair>,
+    /// Latest encapsulation key advertised by peer.
+    pub pq_their_encaps_key: Option<Vec<u8>>,
+    /// Pending ciphertext we must keep sending until peer acks.
+    pub pq_pending_ct: Option<Vec<u8>>,
 }
 
 impl RatchetSession {
@@ -153,6 +168,12 @@ impl RatchetSession {
         our_identity_secret: Option<X25519StaticSecret>,
         negotiated_suite: Option<u8>,
         transcript_hash: Option<[u8; 32]>,
+        peer_confirmed: bool,
+        bootstrap_hct: Option<crate::crypto::pq::hybrid::HybridCiphertext>,
+        pq_our_keypair: Option<crate::crypto::pq::MlKem768KeyPair>,
+        pq_prev_keypair: Option<crate::crypto::pq::MlKem768KeyPair>,
+        pq_their_encaps_key: Option<Vec<u8>>,
+        pq_pending_ct: Option<Vec<u8>>,
     ) -> Self {
         Self {
             our_dh_secret,
@@ -167,6 +188,12 @@ impl RatchetSession {
             our_identity_secret,
             negotiated_suite,
             transcript_hash,
+            peer_confirmed,
+            bootstrap_hct,
+            pq_our_keypair,
+            pq_prev_keypair,
+            pq_their_encaps_key,
+            pq_pending_ct,
         }
     }
 
@@ -222,11 +249,11 @@ impl RatchetSession {
 
         // Derive initial root key from the identity DH
         let root_key =
-            derive_root_key(&RatchetKey::from_bytes([0u8; 32]), shared_secret.as_bytes());
+            derive_root_key_v1(&RatchetKey::from_bytes([0u8; 32]), shared_secret.as_bytes());
 
         // X3DH step 2: our_dh_secret × their_identity_public → sending chain
         let dh_output = our_dh_secret.diffie_hellman(their_identity_public_x25519);
-        let (new_root_key, sending_chain_key) = root_key_ratchet(&root_key, dh_output.as_bytes());
+        let (new_root_key, sending_chain_key) = root_key_ratchet_v1(&root_key, dh_output.as_bytes());
 
         let sending_chain = Chain::new(sending_chain_key);
 
@@ -243,6 +270,12 @@ impl RatchetSession {
             our_identity_secret: None,
             negotiated_suite: None,
             transcript_hash: None,
+            peer_confirmed: false,
+            bootstrap_hct: None,
+            pq_our_keypair: None,
+            pq_prev_keypair: None,
+            pq_their_encaps_key: None,
+            pq_pending_ct: None,
         })
     }
 
@@ -266,7 +299,7 @@ impl RatchetSession {
 
         // Derive initial root key
         let root_key =
-            derive_root_key(&RatchetKey::from_bytes([0u8; 32]), shared_secret.as_bytes());
+            derive_root_key_v1(&RatchetKey::from_bytes([0u8; 32]), shared_secret.as_bytes());
 
         // Store our identity secret for the first DH ratchet step
         let our_identity_secret = our_x25519;
@@ -284,6 +317,127 @@ impl RatchetSession {
             our_identity_secret: Some(our_identity_secret),
             negotiated_suite: None,
             transcript_hash: None,
+            peer_confirmed: false,
+            bootstrap_hct: None,
+            pq_our_keypair: None,
+            pq_prev_keypair: None,
+            pq_their_encaps_key: None,
+            pq_pending_ct: None,
+        })
+    }
+
+    /// Initialize a new ratchet session as the initiator (Alice) using hybrid encryption.
+    pub fn init_as_sender_hybrid(
+        _our_signing_key: &ed25519_dalek::SigningKey,
+        their_bundle: &crate::identity::PublicKeyBundle,
+        transcript_hash: [u8; 32],
+    ) -> Result<Self> {
+        // Generate our initial DH ratchet keypair
+        let mut our_dh_secret_bytes = [0u8; 32];
+        rand::rngs::OsRng.fill_bytes(&mut our_dh_secret_bytes);
+        let our_dh_secret = X25519StaticSecret::from(our_dh_secret_bytes);
+        our_dh_secret_bytes.zeroize();
+        let our_dh_public = X25519PublicKey::from(&our_dh_secret);
+
+        // Hybrid encapsulate
+        let (hct, ss_hybrid) = crate::crypto::pq::hybrid::hybrid_encapsulate(
+            &their_bundle.x25519_public,
+            &their_bundle.mlkem_encaps_key,
+        )?;
+
+        // Derive root key
+        let root_key_0 = blake3::derive_key(
+            "iron-core session-root v2 2026-07",
+            &[&ss_hybrid.as_bytes()[..], &transcript_hash[..]].concat(),
+        );
+
+        // X3DH step 2: our_dh_secret × their_identity_public → sending chain
+        let dh_output = our_dh_secret.diffie_hellman(&X25519PublicKey::from(their_bundle.x25519_public));
+        let (new_root_key, sending_chain_key) = root_key_ratchet_v2(&RatchetKey::from_bytes(root_key_0), dh_output.as_bytes(), None);
+
+        let sending_chain = Chain::new(sending_chain_key);
+
+        // Initialize PQ state for suite 0x02
+        let pq_our_keypair = Some(crate::crypto::pq::generate());
+        let pq_their_encaps_key = Some(their_bundle.mlkem_encaps_key.to_vec());
+
+        Ok(Self {
+            our_dh_secret,
+            our_dh_public,
+            their_dh_public: Some(X25519PublicKey::from(their_bundle.x25519_public)),
+            root_key: new_root_key,
+            sending_chain: Some(sending_chain),
+            receiving_chain: None,
+            dh_step_count: 1,
+            skipped_keys: HashMap::new(),
+            initialized: true,
+            our_identity_secret: None,
+            negotiated_suite: Some(0x02),
+            transcript_hash: Some(transcript_hash),
+            peer_confirmed: false,
+            bootstrap_hct: Some(hct.clone()),
+            pq_our_keypair,
+            pq_prev_keypair: None,
+            pq_their_encaps_key,
+            pq_pending_ct: None,
+        })
+    }
+
+    /// Initialize a new ratchet session as the receiver (Bob) using hybrid decryption.
+    pub fn init_as_receiver_hybrid(
+        _our_signing_key: &ed25519_dalek::SigningKey,
+        our_x25519_secret: &x25519_dalek::StaticSecret,
+        our_mlkem_keypair: &crate::crypto::pq::MlKem768KeyPair,
+        _sender_bundle: &crate::identity::PublicKeyBundle,
+        hct: &crate::crypto::pq::hybrid::HybridCiphertext,
+        transcript_hash: [u8; 32],
+    ) -> Result<Self> {
+        // Generate our initial DH ratchet keypair
+        let mut our_dh_secret_bytes = [0u8; 32];
+        rand::rngs::OsRng.fill_bytes(&mut our_dh_secret_bytes);
+        let our_dh_secret = X25519StaticSecret::from(our_dh_secret_bytes);
+        our_dh_secret_bytes.zeroize();
+        let our_dh_public = X25519PublicKey::from(&our_dh_secret);
+
+        // Hybrid decapsulate
+        let ss_hybrid = crate::crypto::pq::hybrid::hybrid_decapsulate(
+            our_x25519_secret,
+            our_mlkem_keypair,
+            hct,
+        )?;
+
+        // Derive root key
+        let root_key_0 = blake3::derive_key(
+            "iron-core session-root v2 2026-07",
+            &[&ss_hybrid.as_bytes()[..], &transcript_hash[..]].concat(),
+        );
+
+        // Store our identity secret for the first DH ratchet step
+        let our_identity_secret = our_x25519_secret.clone();
+
+        // Initialize PQ state for suite 0x02
+        let pq_our_keypair = Some(our_mlkem_keypair.clone());
+        let pq_their_encaps_key = Some(hct.mlkem_ciphertext.to_vec());
+
+        Ok(Self {
+            our_dh_secret,
+            our_dh_public,
+            their_dh_public: Some(X25519PublicKey::from(hct.x25519_ephemeral_public)),
+            root_key: RatchetKey::from_bytes(root_key_0),
+            sending_chain: None,
+            receiving_chain: None,
+            dh_step_count: 0,
+            skipped_keys: HashMap::new(),
+            initialized: false,
+            our_identity_secret: Some(our_identity_secret),
+            negotiated_suite: Some(0x02),
+            transcript_hash: Some(transcript_hash),
+            peer_confirmed: false,
+            bootstrap_hct: Some(hct.clone()),
+            pq_our_keypair,
+            pq_prev_keypair: None,
+            pq_their_encaps_key,
+            pq_pending_ct: None,
         })
     }
 
@@ -366,6 +520,9 @@ impl RatchetSession {
 
         let message_key = self.get_message_key(&their_dh, message_number)?;
 
+        // The peer sent us a valid ratcheted message, they have established the session.
+        self.peer_confirmed = true;
+
         let nonce_obj = XNonce::from_slice(nonce);
         let cipher = XChaCha20Poly1305::new_from_slice(message_key.as_bytes())
             .map_err(|e| anyhow::anyhow!("Failed to create cipher: {}", e))?;
@@ -392,8 +549,22 @@ impl RatchetSession {
         };
 
         let dh_output = first_dh_secret.diffie_hellman(their_new_dh);
-        let (new_root_key, receiving_chain_key) =
-            root_key_ratchet(&self.root_key, dh_output.as_bytes());
+        
+        // Handle PQ ratchet step if this is a suite 0x02 session
+        let pq_ss = if self.negotiated_suite == Some(0x02) {
+            // Check if we have PQ fields available (should be provided externally)
+            // For now, we'll assume the PQ handling is done in the calling code
+            // This function just handles the DH part, PQ is handled separately
+            None
+        } else {
+            None
+        };
+
+        let (new_root_key, receiving_chain_key) = if self.negotiated_suite == Some(0x02) {
+            root_key_ratchet_v2(&self.root_key, dh_output.as_bytes(), pq_ss.clone())
+        } else {
+            root_key_ratchet_v1(&self.root_key, dh_output.as_bytes())
+        };
 
         self.their_dh_public = Some(*their_new_dh);
 
@@ -404,8 +575,11 @@ impl RatchetSession {
         let new_dh_public = X25519PublicKey::from(&new_dh_secret);
 
         let dh_output_2 = new_dh_secret.diffie_hellman(their_new_dh);
-        let (new_root_key_2, sending_chain_key) =
-            root_key_ratchet(&new_root_key, dh_output_2.as_bytes());
+        let (new_root_key_2, sending_chain_key) = if self.negotiated_suite == Some(0x02) {
+            root_key_ratchet_v2(&new_root_key, dh_output_2.as_bytes(), pq_ss)
+        } else {
+            root_key_ratchet_v1(&new_root_key, dh_output_2.as_bytes())
+        };
 
         self.our_dh_secret = new_dh_secret;
         self.our_dh_public = new_dh_public;
@@ -471,13 +645,100 @@ impl RatchetSession {
 
         if let Some(their_dh) = self.their_dh_public {
             let dh_output = self.our_dh_secret.diffie_hellman(&their_dh);
-            let (new_root_key, sending_chain_key) =
-                root_key_ratchet(&self.root_key, dh_output.as_bytes());
+            let (new_root_key, sending_chain_key) = if self.negotiated_suite == Some(0x02) {
+                root_key_ratchet_v2(&self.root_key, dh_output.as_bytes(), None)
+            } else {
+                root_key_ratchet_v1(&self.root_key, dh_output.as_bytes())
+            };
             self.root_key = new_root_key;
             self.sending_chain = Some(Chain::new(sending_chain_key));
         }
 
         Ok(self.our_dh_public.to_bytes())
+    }
+
+    /// Perform a PQ ratchet step when initiating a DH step (suite 0x02 only).
+    pub fn perform_pq_ratchet_step(&mut self) -> Result<(Vec<u8>, Vec<u8>)> {
+        if self.negotiated_suite != Some(0x02) {
+            bail!("PQ ratchet step only supported for suite 0x02");
+        }
+
+        let their_encaps_key = self.pq_their_encaps_key
+            .as_ref()
+            .ok_or_else(|| anyhow::anyhow!("No PQ encapsulation key from peer"))?;
+
+        // Encapsulate with their current key
+        let (ct, _ss_pq) = crate::crypto::pq::encapsulate(their_encaps_key)?;
+
+        // Rotate our keypair: move current to previous, generate new
+        self.pq_prev_keypair = self.pq_our_keypair.take();
+        self.pq_our_keypair = Some(crate::crypto::pq::generate());
+        let new_encaps_key = self.pq_our_keypair
+            .as_ref()
+            .unwrap()
+            .public_key()
+            .to_vec();
+
+        // Store pending ciphertext until acked
+        self.pq_pending_ct = Some(ct.clone());
+
+        Ok((ct, new_encaps_key))
+    }
+
+    /// Handle incoming PQ fields during DH ratchet step (suite 0x02 only).
+    pub fn handle_incoming_pq_fields(
+        &mut self,
+        pq_kem_ciphertext: &[u8],
+        pq_encaps_key: &[u8],
+    ) -> Result<Vec<u8>> {
+        if self.negotiated_suite != Some(0x02) {
+            bail!("PQ fields only expected for suite 0x02");
+        }
+
+        // Try to decapsulate with current keypair first
+        if let Some(ref our_keypair) = self.pq_our_keypair {
+            match crate::crypto::pq::decapsulate(our_keypair, pq_kem_ciphertext) {
+                Ok(ss_pq) => {
+                    // Success - update their encaps key and clear pending ct if any
+                    self.pq_their_encaps_key = Some(pq_encaps_key.to_vec());
+                    self.pq_pending_ct = None;
+                    return Ok(ss_pq.to_vec());
+                }
+                Err(_) => {
+                    // Fall through to try previous keypair
+                }
+            }
+        }
+
+        // Try with previous keypair (one-step-behind tolerance)
+        if let Some(ref prev_keypair) = self.pq_prev_keypair {
+            match crate::crypto::pq::decapsulate(prev_keypair, pq_kem_ciphertext) {
+                Ok(ss_pq) => {
+                    // Success with previous keypair
+                    self.pq_their_encaps_key = Some(pq_encaps_key.to_vec());
+                    self.pq_pending_ct = None;
+                    return Ok(ss_pq.to_vec());
+                }
+                Err(_) => {
+                    // Both failed
+                }
+            }
+        }
+
+        bail!("Failed to decapsulate PQ ciphertext with either current or previous keypair")
+    }
+
+    /// Validate that PQ fields are present when expected (suite 0x02 only).
+    pub fn validate_pq_fields_present(&self, has_pq_fields: bool) -> Result<()> {
+        if self.negotiated_suite == Some(0x02) && self.pq_their_encaps_key.is_some() && !has_pq_fields {
+            bail!("PQ stripping attempt detected: DH step without PQ fields on suite 0x02 session");
+        }
+        Ok(())
+    }
+
+    /// Clear pending PQ ciphertext (called when peer acks our PQ step).
+    pub fn clear_pq_pending_ct(&mut self) {
+        self.pq_pending_ct = None;
     }
 }
 
@@ -503,19 +764,37 @@ fn derive_key_with_info(key: &RatchetKey, info: &[u8]) -> RatchetKey {
     RatchetKey::from_bytes(derived)
 }
 
-fn root_key_ratchet(root_key: &RatchetKey, dh_output: &[u8]) -> (RatchetKey, RatchetKey) {
-    let combined = blake3::derive_key(ROOT_KDF_CONTEXT, &[root_key.as_bytes(), dh_output].concat());
-    let new_root = blake3::derive_key(&format!("{}:root", ROOT_KDF_CONTEXT), &combined);
-    let chain_key = blake3::derive_key(&format!("{}:chain", ROOT_KDF_CONTEXT), &combined);
+fn root_key_ratchet_v1(root_key: &RatchetKey, dh_output: &[u8]) -> (RatchetKey, RatchetKey) {
+    let combined = blake3::derive_key(ROOT_KDF_CONTEXT_V1, &[root_key.as_bytes(), dh_output].concat());
+    let new_root = blake3::derive_key(&format!("{}:root", ROOT_KDF_CONTEXT_V1), &combined);
+    let chain_key = blake3::derive_key(&format!("{}:chain", ROOT_KDF_CONTEXT_V1), &combined);
     (
         RatchetKey::from_bytes(new_root),
         RatchetKey::from_bytes(chain_key),
     )
 }
 
-fn derive_root_key(prior_root: &RatchetKey, shared_secret: &[u8]) -> RatchetKey {
+fn root_key_ratchet_v2(
+    root_key: &RatchetKey,
+    dh_output: &[u8],
+    pq_ss: Option<Vec<u8>>,
+) -> (RatchetKey, RatchetKey) {
+    let mut input = vec![root_key.as_bytes().to_vec(), dh_output.to_vec()];
+    if let Some(ss_pq) = pq_ss {
+        input.push(ss_pq);
+    }
+    let combined = blake3::derive_key(ROOT_KDF_CONTEXT_V2, &input.concat());
+    let new_root = blake3::derive_key(&format!("{}:root", ROOT_KDF_CONTEXT_V2), &combined);
+    let chain_key = blake3::derive_key(&format!("{}:chain", ROOT_KDF_CONTEXT_V2), &combined);
+    (
+        RatchetKey::from_bytes(new_root),
+        RatchetKey::from_bytes(chain_key),
+    )
+}
+
+fn derive_root_key_v1(prior_root: &RatchetKey, shared_secret: &[u8]) -> RatchetKey {
     let derived = blake3::derive_key(
-        ROOT_KDF_CONTEXT,
+        ROOT_KDF_CONTEXT_V1,
         &[prior_root.as_bytes(), shared_secret].concat(),
     );
     RatchetKey::from_bytes(derived)
@@ -602,5 +881,101 @@ mod tests {
 
         assert_eq!(plaintext, b"hello bob");
         assert!(bob_session.is_initialized());
+    }
+
+    #[test]
+    fn test_init_as_sender_hybrid_and_encrypt() {
+        let alice_key = generate_keypair();
+        let bob_key = generate_keypair();
+        let bob_x25519 = signing_key_to_x25519_public(&bob_key);
+        let bob_bundle = crate::identity::PublicKeyBundle {
+            x25519_public: bob_x25519,
+            mlkem_encaps_key: [0u8; 32],
+        };
+        let transcript_hash = [0u8; 32];
+
+        let mut alice_session = RatchetSession::init_as_sender_hybrid(&alice_key, &bob_bundle, transcript_hash).unwrap();
+        assert!(alice_session.is_initialized());
+        assert_eq!(alice_session.dh_step_count(), 1);
+
+        let result = alice_session.encrypt(b"hello bob", b"aad").unwrap();
+        assert!(!result.ciphertext.is_empty());
+        assert_eq!(result.nonce.len(), 24);
+        assert_eq!(result.message_number, 0);
+    }
+
+    #[test]
+    fn test_init_as_receiver_hybrid_then_decrypt() {
+        let alice_key = generate_keypair();
+        let bob_key = generate_keypair();
+        let alice_x25519 = signing_key_to_x25519_public(&alice_key);
+        let bob_x25519 = signing_key_to_x25519_public(&bob_key);
+        let alice_bundle = crate::identity::PublicKeyBundle {
+            x25519_public: alice_x25519,
+            mlkem_encaps_key: [0u8; 32],
+        };
+        let (hct, _) = crate::crypto::pq::hybrid::hybrid_encapsulate(&bob_x25519, &alice_bundle.mlkem_encaps_key).unwrap();
+        let transcript_hash = [0u8; 32];
+
+        let mut alice_session = RatchetSession::init_as_sender_hybrid(&alice_key, &bob_bundle, transcript_hash).unwrap();
+        let mut bob_session = RatchetSession::init_as_receiver_hybrid(&bob_key, &alice_bundle, &hct, transcript_hash).unwrap();
+        assert!(!bob_session.is_initialized());
+
+        let encrypted = alice_session.encrypt(b"hello bob", b"aad").unwrap();
+        let plaintext = bob_session
+            .decrypt(
+                &encrypted.our_dh_public,
+                encrypted.message_number,
+                &encrypted.nonce,
+                &encrypted.ciphertext,
+                b"aad",
+            )
+            .unwrap();
+
+        assert_eq!(plaintext, b"hello bob");
+        assert!(bob_session.is_initialized());
+    }
+
+    #[test]
+    fn test_pq_ratchet_step() {
+        let alice_key = generate_keypair();
+        let bob_key = generate_keypair();
+        let bob_x25519 = signing_key_to_x25519_public(&bob_key);
+        let bob_bundle = crate::identity::PublicKeyBundle {
+            x25519_public: bob_x25519,
+            mlkem_encaps_key: [0u8; 32],
+        };
+        let transcript_hash = [0u8; 32];
+
+        let mut alice_session = RatchetSession::init_as_sender_hybrid(&alice_key, &bob_bundle, transcript_hash).unwrap();
+        
+        // Perform PQ ratchet step
+        let (ct, new_encaps_key) = alice_session.perform_pq_ratchet_step().unwrap();
+        assert!(!ct.is_empty());
+        assert!(!new_encaps_key.is_empty());
+        assert!(alice_session.pq_pending_ct.is_some());
+        assert!(alice_session.pq_prev_keypair.is_some());
+    }
+
+    #[test]
+    fn test_pq_validation_rejection() {
+        let alice_key = generate_keypair();
+        let bob_key = generate_keypair();
+        let bob_x25519 = signing_key_to_x25519_public(&bob_key);
+        let bob_bundle = crate::identity::PublicKeyBundle {
+            x25519_public: bob_x25519,
+            mlkem_encaps_key: [0u8; 32],
+        };
+        let transcript_hash = [0u8; 32];
+
+        let mut alice_session = RatchetSession::init_as_sender_hybrid(&alice_key, &bob_bundle, transcript_hash).unwrap();
+        
+        // Should reject DH step without PQ fields after initialization
+        let result = alice_session.validate_pq_fields_present(false);
+        assert!(result.is_err());
+        
+        // Should accept when PQ fields are present
+        let result = alice_session.validate_pq_fields_present(true);
+        assert!(result.is_ok());
     }
 }

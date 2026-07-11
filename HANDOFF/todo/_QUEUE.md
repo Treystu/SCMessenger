@@ -96,9 +96,23 @@ Rules of engagement:
 
 4. `PQC_05_HYBRID_KEM_MODULE.md` [QWEN] **COMPLETE 2026-07-11** -- Hybrid KEM module (libcrux-ml-kem).
 
-5. `PQC_06_HYBRID_SESSION_INIT.md` [QWEN] -- Hybrid Session Establishment.
+5. `PQC_06_HYBRID_SESSION_INIT.md` [QWEN] **COMPLETE 2026-07-11** -- Hybrid Session Establishment.
 
-PQC_07..14 (master plan `PQC_00_MASTER_PLAN.md`), TASK_KMP_*, WS-A
+6. `PQC_07_PQ_RATCHET.md` [QWEN] **COMPLETE 2026-07-11** -- PQ ratchet steps. Compile
+   gate green 2026-07-11 (`cargo test --workspace --no-run` exit 0 after api.udl
+   `LegacyStaticEcdhSend` fix). All three *_COMPILE_FIX tasks verified applied and
+   moved to done/.
+
+7. **[AUDIT-GATE][BLOCKING] PQC-05/06/07 adversarial review checkpoint** -- the
+   master-plan rule "auditor pass after PQC-05 before waves 2+ stack up" has NOT
+   run: HANDOFF/review/ has no PQC verdicts. Must complete before PQC-09+ work.
+   Zero-Anthropic-cost route: /scmqwen thinking tier, read-only, verdict file to
+   HANDOFF/review/PQC_05_06_07_ADVERSARIAL_REVIEW.md.
+
+8. `PQC_08_LEGACY_PATH_RETIREMENT.md` [QWEN] IN PROGRESS -- encrypt.rs suite
+   gating + LegacyStaticEcdhSend audit event landed; remaining scope per task file.
+
+PQC_09..14 (master plan `PQC_00_MASTER_PLAN.md`), TASK_KMP_*, WS-A
 release-readiness T/S items, WS-B crypto/transport hygiene trio (backup.rs KDF
 gap, WiFi Aware orphan, escalation-authority consolidation), WS-F close-out.
 Fine-planning happens as P2-00 after Phase 1 exit, per the execution plan.

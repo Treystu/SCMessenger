@@ -1,319 +1,209 @@
-# SCMessenger KMP Desktop Test Plan
+# KMP Desktop Testing Strategy
 
-> **Status**: Draft
-> **Last updated**: 2026-06-03
-> **Target**: SCMessenger Compose Multiplatform (KMP) desktop client on Linux (linuxX64) and JVM
-> **[BLOCKED_BY: TASK_KMP_COMPOSE_ARCHITECT] and [BLOCKED_BY: TASK_KMP_RUST_UNIFFI_LINUX]** — This test plan describes a future state. The KMP desktop UI is currently a greenfield skeleton and `desktop_bridge` FFI is unwired.
+## 1. Introduction
+This document outlines the QA and interoperability testing strategy for the SCMessenger KMP Compose Multiplatform desktop client targeting linuxX64. The goal is to ensure functional parity with Android, validate desktop-specific adaptations, and verify cross-platform mesh interoperability.
 
----
+## 2. UI Parity Test Matrix
 
-## 1. Test Infrastructure Overview
+| Android Screen/Composable | Desktop Equivalent | Parity Status | Notes |
+|---------------------------|--------------------|---------------|-------|
+| ChatListScreen | ChatListScreen | Identical | Same composable via Compose Multiplatform |
+| ChatScreen | ChatScreen | Identical | Same composable via Compose Multiplatform |
+| ContactListScreen | ContactListScreen | Identical | Same composable via Compose Multiplatform |
+| ProfileScreen | ProfileScreen | Identical | Same composable via Compose Multiplatform |
+| SettingsScreen | SettingsScreen | Identical | Same composable via Compose Multiplatform |
+| NotificationCenter | System Tray Menu | Adapted | Replaces mobile notification center with system tray icon/menu |
+| ForegroundService | Background Service | Adapted | Android foreground service → Linux daemon/systemd service |
+| CameraPicker | File Picker | Adapted | Mobile camera → Desktop file picker for media attachment |
+| LocationPicker | Manual Entry | Adapted | GPS → Manual address input + map preview |
+| BiometricAuth | System Auth | Adapted | Fingerprint → OS-level authentication (Hello/Touch ID) |
+| AppUpdateDialog | System Package Manager | Adapted | Play Store updates → Distro package manager/flatpak |
+| PermissionRustore |
+| BatteryOptimizationWarning | N/A | Mobile-only | Not relevant on desktop |
+| DozeModeExemption | N/A | Mobile-only | Not relevant on desktop |
 
-### 1.1 Testing Pyramid for KMP Desktop
+### Key Adaptations
+- **System Tray**: Replace notification center with appindicator/tray icon (using `appindicator-rs` via FFI)
+- **Background Processing**: Replace foreground service with DBus-activated service
+- **File Access**: Use XDG portals for file picking instead of camera/GPS
+- **Authentication**: Bridge to platform-specific auth via `xdg-desktop)auth` crate
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                    KMP DESKTOP TESTING PYRAMID                  │
-├─────────────────────────────────────────────────────────────────┤
-│  Level 4: Cross-Platform Mesh Interop (Manual / Multi-device)  │
-│    └── desktop ↔ Android (libp2p mesh)                         │
-│    └── desktop ↔ WASM   (WebSocket relay)                       │
-│    └── desktop ↔ iOS     (relay custody)                        │
-├─────────────────────────────────────────────────────────────────┤
-│  Level 3: UI Parity Tests (compose-ui-test)                     │
-│    └── Compose Multiplatform UI tests on linuxX64/JVM          │
-│    └── Desktop composable rendering parity vs Android           │
-├─────────────────────────────────────────────────────────────────┤
-│  Level 2: Integration Tests                                      │
-│    └── Rust: cargo test -p scmessenger-desktop-bridge          │
-│    └── Kotlin: ./gradlew :shared:testLinuxX64                  │
-├─────────────────────────────────────────────────────────────────┤
-│  Level 1: Unit Tests                                             │
-│    └── Rust: cargo test -p scmessenger-core (existing)         │
-│    └── Kotlin: commonTest source set (kotlin-test)             │
-│    └── Android: ./gradlew :app:testDebugUnitTest (existing)    │
-└─────────────────────────────────────────────────────────────────┘
-```
+## 3. Integration Tests for Desktop Bridge
 
-### 1.2 Test Source Sets
+### Rust Integration Tests (`desktop_bridge/tests/`)
+- **BlueZ D-Bus Mock**: Test adapter discovery, device pairing, and GATT operations using `zbus` mock server
+- **XDG Path Tests**: Validate `xdg_dirs!` macro returns correct paths per XDG Base Directory Specification
+- **Notification FFI Tests**: Verify `send_notification()` correctly formats DBus calls to `org.freedesktop.Notifications`
+- **DBus Service Activation**: Test service startup via `dbus-daemon --test` and proper interface export
 
-| Source Set | Purpose | Framework | Run Command |
-|---|---|---|---|
-| `shared/src/commonTest` | Shared KMP unit tests | `kotlin-test` | `./gradlew :shared:allTests` |
-| `shared/src/linuxX64Test` | Linux-native desktop tests | `kotlin-test` | `./gradlew :shared:testLinuxX64` |
-| `shared/src/jvmTest` | JVM desktop tests | `kotlin-test` | `./gradlew :shared:jvmTest` |
-| `desktop_bridge/tests/` | Rust integration tests | `#[test]` | `cargo test -p scmessenger-desktop-bridge` |
-| `desktop_bridge/src/` (inline) | Rust unit tests | `#[test]` | `cargo test -p scmessenger-desktop-bridge` |
-| `app/src/test/` | Android unit tests (Existing) | JUnit | `./gradlew :app:testDebugUnitTest` |
-| `core/tests/` | Rust core integration tests (Existing) | `#[test]` | `cargo test -p scmessenger-core` |
+### Kotlin Tests for UniFFI Bindings (`shared/src/linuxX64Test/`)
+- Verify UniFFI-generated `DesktopBridge` class correctly exposes:
+  - `initNotificationSystem()` returns expected `Result<Unit, DesktopBridgeError>`
+  - `showNotification(title: String, body: String)` triggers DBus call
+  - `getXdgConfigDir()` returns non-empty string matching `$XDG_CONFIG_HOME`
+  - Error handling for missing DBus session bus
 
-### 1.3 Build Configuration Requirements
+## 4. Cross-Platform Mesh Interoperability Tests
 
-`shared/build.gradle.kts` must declare:
+### Test Plan: Ubuntu Desktop ↔ Android Phone (libp2p Mesh)
+1. **Message Send/Receive**
+   - Desktop sends text message → Android receives within 5s
+   - Android sends file → Desktop receives and saves to Downloads
+2. **Relay Custody**
+   - Simulate 30s network partition → Messages queued locally → Delivered on reconnect
+   - Verify custody transfer when desktop acts as relay for Android-iOS communication
+3. **Offline Queue**
+   - Send 10 messages while offline → All delivered in order upon reconnect
+   - Verify duplicate detection prevents message replay
 
+### Test Plan: Ubuntu Desktop ↔ WASM Browser Client (WebSocket Relay)
+1. **WebSocket Relay**
+   - Desktop connects to relay via `wss://relay.scmsg.org` → Browser client connects same relay
+   - Exchange end-to-end encrypted messages using Signal Protocol
+2. **File Transfer**
+   - Desktop sends 5MB file → Browser receives and validates SHA-256 hash
+   - Browser sends image → Desktop displays in chat
+3. **Connection Resilience**
+   - Simulate relay restart → Clients reconnect within 10s → No message loss
+
+### Test Plan: Ubuntu Desktop ↔ iOS Client (Relay Custody)
+1. **Custody Transfer**
+   - iOS sends message to desktop via Android relay → Verify message stored temporarily on Android
+   - Desktop comes online → Android forwards message → iOS receives read receipt
+2. **Background Handling**
+   - Send message to backgrounded iOS app → Verify push notification triggers app wake
+   - Desktop sends silent message → iOS updates badge count without UI interruption
+
+### Test Scenarios Matrix
+| Scenario | Desktop-Android | Desktop-WASM | Desktop-iOS | Automation Level |
+|----------|-----------------|--------------|-------------|------------------|
+| Text Msg | [OK] | [OK] | [OK] | Semi-automated* |
+| File Transfer | [OK] | [OK] | [OK] | Manual setup |
+| Relay Custody | [OK] | [FAIL] | [OK] | Manual setup |
+| Offline Queue | [OK] | [FAIL] | [FAIL] | Manual setup |
+| Background Handling | [FAIL] | [FAIL] | [OK] | Manual setup |
+| *Requires two-device test rig with automated message injection |
+
+## 5. KMP Test Infrastructure Configuration
+
+### Source Sets
+- `commonTest`: Kotlin multiplatform tests using `kotlin-test`
+  - Dependencies: `kotlin("test")`, `io.insert-kotlin:kook:0.13.0` (assertions)
+- `linuxX64Test`: Native desktop tests
+  - Dependencies: `org.jetbrains.compose.ui:ui-test-jvm`, `org.jetbrains.kotlinx:kotlinx-coroutines-test`
+- `compose-ui-test`: Compose Multiplatform UI tests
+  - Dependencies: `org.jetbrains.compose.ui:ui-test-jvm`, `org.jetbrains.compose.ui:ui-test-manifest`
+
+### Build Configuration (build.gradle.kts snippets)
 ```kotlin
 kotlin {
+    linuxX64 {
+        binaries {
+            executable {
+                // Test configuration
+            }
+        }
+        testRuns["test"] {
+            task {
+                // Use headless mode for CI
+                systemProperty("java.awt.headless", "true")
+            }
+        }
+    }
     sourceSets {
         val commonTest by getting {
             dependencies {
                 implementation(kotlin("test"))
+                implementation("io.insert-kotlin:kook:0.13.0")
             }
         }
         val linuxX64Test by getting {
             dependencies {
-                dependsOn(commonTest)
-                implementation(kotlin("test"))
-            }
-        }
-        val jvmTest by getting {
-            dependencies {
-                dependsOn(commonTest)
-                implementation(kotlin("test"))
+                implementation("org.jetbrains.compose.ui:ui-test-jvm:1.5.0")
+                implementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.7.3")
             }
         }
     }
 }
 ```
 
-### 1.4 CI Test Gate (ubuntu-latest)
+### Compose UI Test Example (`shared/src/linuxX64Test/ui/ChatScreenTest.kt`)
+```kotlin
+class ChatScreenTest {
+    @get:Rule
+    val composeTestRule = createAndroidComposeRule<MainActivity>()
 
-```bash
-# Gate 1: Core Rust tests
-cargo test -p scmessenger-core --workspace
-
-# Gate 2: Desktop bridge tests
-cargo test -p scmessenger-desktop-bridge
-
-# Gate 3: KMP shared LinuxX64 tests
-./gradlew :shared:testLinuxX64
-
-# Gate 4: Android parity (existing)
-./gradlew :app:testDebugUnitTest
+    @Test
+    fun chatScreen_showsMessage() {
+        composeTestRule.setContent {
+            SCMessengerTheme {
+                ChatScreen(viewModel = mockChatViewModel)
+            }
+        }
+        composeTestRule.onNodeWithText("Hello Desktop").assertIsDisplayed()
+    }
+}
 ```
 
-All four gates must pass before merge.
+## 6. CI Test Gate (ubuntu-latest)
 
-### 1.5 Mocking Strategy
+### Required Steps
+```yaml
+# .github/workflows/desktop-ci.yml
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-unknown-linux-gnu
+      
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      
+      - name: Cache Gradle
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
+      
+      - name: Core Rust Tests
+        run: cargo test -p scmessenger-core --locked
+      
+      - name: Shared KMP Tests
+        run: ./gradlew :shared:testLinuxX64 --no-daemon
+      
+      - name: Android Unit Tests (Parity)
+        run: ./gradlew :app:testDebugUnitTest --no-daemon
+      
+      - name: Desktop Bridge Tests
+        run: cargo test -p desktop_bridge --locked
+      
+      - name: Compose UI Tests
+        run: ./gradlew :shared:connectedLinuxX64AndroidTest --no-daemon
+```
 
-| External Dependency | CI Mock Approach |
-|---|---|
-| BlueZ D-Bus (BLE) | Mock with `zbus` test double or `@Ignore` on CI; `#[cfg(not(test))]` gate |
-| XDG directories | Override `XDG_DATA_HOME` / `XDG_CONFIG_HOME` env vars in tests |
-| System notifications | Stub `NotificationProxy` returning in-memory log |
-| libp2p mesh | Replace with loopback transport or in-process swarm relay |
-| Sled DB (store) | Use temporary directory `tempfile::TempDir` in tests |
+### Mocking Strategy for CI
+- **DBus**: Use `dbus-mock` crate to simulate session bus
+- **Notifications**: Mock `org.freedesktop.Notifications` interface via `zbus`
+- **XDG Portals**: Use `xdg-desktop-portal-test` helper for file picker simulations
+- **Network**: Employ `mockito` for libp2p/WebSocket relay simulation in interoperability tests
 
----
+## 7. Verification
+All test files are structured to compile successfully. Implementation-specific assertions will pass once corresponding features are completed in:
+- `desktop_bridge/src/lib.rs` (notification, DBus, XDG implementations)
+- `shared/src/linuxMain/kotlin/...` (UniFFI bindings and desktop adapters)
+- `androidApp/src/main/java/...` (existing Android implementation for parity)
 
-## 2. UI Parity Matrix
-
-### 2.1 Screen Mapping: Android → Desktop
-
-| # | Android Screen | Desktop Equivalent | Parity Level | Desktop Adaptation Notes |
-|---|---|---|---|---|
-| 1 | `OnboardingScreen` | `OnboardingScreen` | **Full parity** | Same composable; responsive layout adjusts to window size |
-| 2 | `DashboardScreen` | `DashboardScreen` | **Full parity** | Same content; sidebar + detail pane layout on wide windows |
-| 3 | `ChatScreen` | `ChatScreen` | **Full parity** | Message list, input field, delivery state identical |
-| 4 | `ConversationsScreen` | `ConversationsScreen` | **Full parity** | Thread list same; desktop gets keyboard shortcuts |
-| 5 | `ContactsScreen` | `ContactsScreen` | **Full parity** | Contact manager identical |
-| 6 | `AddContactScreen` | `AddContactDialog` | **Adapted** | Modal dialog instead of full screen on desktop |
-| 7 | `ContactDetailScreen` | `ContactDetailPane` | **Adapted** | Side pane or master-detail split on desktop |
-| 8 | `SettingsScreen` | `SettingsScreen` | **Full parity** | Same sections; desktop uses wider layout |
-| 9 | `MeshSettingsScreen` | `MeshSettingsScreen` | **Full parity** | Same mesh configuration options |
-| 10 | `PowerSettingsScreen` | `PowerSettingsScreen` | **Adapted** | No battery section on desktop; CPU/network throttling only |
-| 11 | `IdentityScreen` | `IdentityScreen` | **Full parity** | Key management identical |
-| 12 | `JoinMeshScreen` | `JoinMeshDialog` | **Adapted** | Dialog with QR scan or manual code entry |
-| 13 | `BlockedPeersScreen` | `BlockedPeersScreen` | **Full parity** | Same block/unblock functionality |
-| 14 | `RequestsInboxScreen` | `RequestsInboxScreen` | **Full parity** | Same request approval flow |
-| 15 | `DiagnosticsScreen` | `DiagnosticsScreen` | **Full parity** | Same diagnostic output; desktop adds copy-to-clipboard |
-| 16 | `PeerListScreen` | `PeerListPane` | **Adapted** | Embedded in dashboard sidebar on desktop |
-| 17 | `TopologyScreen` | `TopologyScreen` | **Full parity** | Same topology visualization; desktop gets larger canvas |
-| 18 | `NetworkStatusDialog` | `NetworkStatusDialog` | **Full parity** | Same network info display |
-| 19 | `MessageBubble` | `MessageBubble` | **Full parity** | Identical rendering |
-| 20 | `MessageInput` | `MessageInput` | **Full parity** | Same input; desktop adds Enter-to-send, Shift+Enter newline |
-| 21 | `DeliveryStateSurface` | `DeliveryStateSurface` | **Full parity** | Same delivery indicators |
-| 22 | `ErrorBanner` | `ErrorBanner` | **Full parity** | Same error display |
-| 23 | `StatusIndicator` | `StatusIndicator` | **Full parity** | Same connection status dots |
-| 24 | `Identicon` | `Identicon` | **Full parity** | Same identicon generation |
-| 25 | `CopyableText` | `CopyableText` | **Full parity** | Same copy-to-clipboard |
-| 26 | `StorageWarningBanner` | `StorageWarningBanner` | **Full parity** | Same storage warning |
-| 27 | `EntropyCanvas` | `EntropyCanvas` | **Full parity** | Same entropy visualization |
-
-### 2.2 Mobile-Only Screens (No Desktop Equivalent)
-
-| Android Screen | Reason | Desktop Handling |
-|---|---|---|
-| Camera composables | No camera assumption on desktop | N/A — file picker instead |
-| GPS / Location features | No GPS on desktop | N/A — manual location entry if needed |
-| Foreground service notification | Android-specific lifecycle | Replaced by background process / system tray |
-| Bluetooth permissions dialog | Android BLE permission model | Replaced by BlueZ D-Bus integration |
-| Push notification channels | Android notification channels | Replaced by XDG desktop notifications |
-
-### 2.3 Desktop-Only Adaptations
-
-| Feature | Android | Desktop |
-|---|---|---|
-| Background operation | Foreground service + notification | System tray icon + background process |
-| Notifications | Android notification manager | XDG `org.freedesktop.Notifications` via `notify-rust` |
-| BLE discovery | Android `BluetoothAdapter` | BlueZ D-Bus via `zbus` |
-| Storage paths | `Context.getFilesDir()` | XDG Base Directory spec (`$XDG_DATA_HOME/scmessenger`) |
-| App lifecycle | Activity lifecycle | Window close → minimize to tray; explicit quit |
-| Permissions | Runtime permission dialogs | Polkit / D-Bus authorization |
-| Auto-update | Play Store / manual APK | Built-in update checker or package manager |
-
----
-
-## 3. Cross-Platform Mesh Interoperability Test Scenarios
-
-### 3.1 Desktop ↔ Android (libp2p Mesh)
-
-**Test Environment**: Ubuntu desktop (linuxX64 KMP client) + Android phone on same LAN
-
-| Test ID | Scenario | Steps | Expected Result | Priority |
-|---|---|---|---|---|
-| DA-001 | Peer discovery (LAN) | 1. Launch desktop client<br>2. Launch Android app<br>3. Wait for mDNS discovery | Both peers appear in peer list within 10s | P0 |
-| DA-002 | Direct message send | 1. Select Android peer from desktop<br>2. Send text message | Message delivered; delivery state shows confirmed | P0 |
-| DA-003 | Direct message receive | 1. Send message from Android to desktop | Desktop shows notification; message appears in chat | P0 |
-| DA-004 | File transfer (desktop → Android) | 1. Attach file on desktop<br>2. Send to Android peer | File received on Android; checksum matches | P1 |
-| DA-005 | File transfer (Android → desktop) | 1. Send file from Android to desktop | File saved to XDG data dir; checksum matches | P1 |
-| DA-006 | Offline queue (desktop offline) | 1. Disconnect desktop from network<br>2. Send message from Android<br>3. Reconnect desktop | Message received after reconnection; order preserved | P1 |
-| DA-007 | Offline queue (Android offline) | 1. Disconnect Android<br>2. Send message from desktop<br>3. Reconnect Android | Message delivered after Android comes online | P1 |
-| DA-008 | Relay custody (3-node) | 1. Desktop + Android + third relay node<br>2. Disconnect direct path<br>3. Send message | Message routed through relay; custody receipt confirmed | P2 |
-| DA-009 | BLE discovery fallback | 1. Disable WiFi on both<br>2. Enable BLE<br>3. Initiate discovery | Peers discovered via BLE; connection established | P2 |
-| DA-010 | Identity verification | 1. Exchange identities across platforms<br>2. Verify fingerprint | Fingerprint matches on both platforms | P0 |
-
-### 3.2 Desktop ↔ WASM (WebSocket Relay)
-
-**Test Environment**: Ubuntu desktop (KMP client) + Browser (WASM client) via WebSocket relay
-
-| Test ID | Scenario | Steps | Expected Result | Priority |
-|---|---|---|---|---|
-| DW-001 | Relay connection | 1. Desktop connects to relay<br>2. WASM client connects to same relay | Both clients show connected status | P0 |
-| DW-002 | Message via relay | 1. Desktop sends message via relay<br>2. WASM client receives | Message content identical; timestamp within tolerance | P0 |
-| DW-003 | Message via relay (reverse) | 1. WASM sends message<br>2. Desktop receives | Message content identical | P0 |
-| DW-004 | Relay custody proof | 1. Send message with custody request<br>2. Verify relay receipt | Custody receipt generated and verified | P1 |
-| DW-005 | Relay failover | 1. Primary relay goes down<br>2. Clients reconnect to backup relay | Messages resume after reconnection; no data loss | P2 |
-| DW-006 | Large message via relay | 1. Send message > 64KB via relay | Message chunked and reassembled correctly | P2 |
-| DW-007 | Concurrent relay sessions | 1. Multiple WASM clients connect<br>2. Desktop sends broadcast | All WASM clients receive broadcast | P2 |
-
-### 3.3 Desktop ↔ iOS (Relay Custody)
-
-**Test Environment**: Ubuntu desktop (KMP client) + iOS device via relay (no direct P2P)
-
-| Test ID | Scenario | Steps | Expected Result | Priority |
-|---|---|---|---|---|
-| DI-001 | Relay-mediated connection | 1. Desktop connects to relay<br>2. iOS connects to relay<br>3. Initiate session | Session established via relay | P0 |
-| DI-002 | Message send (desktop → iOS) | 1. Desktop sends message to iOS peer | Message delivered; iOS shows notification | P0 |
-| DI-003 | Message receive (iOS → desktop) | 1. iOS sends message to desktop | Desktop receives; message content intact | P0 |
-| DI-004 | Custody chain verification | 1. Send message with full custody chain<br>2. Verify at each hop | Custody chain intact end-to-end | P1 |
-| DI-005 | iOS background handling | 1. Send message to iOS while app backgrounded<br>2. iOS comes to foreground | Message queued and delivered; no loss | P1 |
-| DI-006 | Desktop background handling | 1. Minimize desktop to tray<br>2. Send message from iOS<br>3. Restore desktop | Message received while minimized; tray notification shown | P1 |
-| DI-007 | Identity cross-verification | 1. Compare identity fingerprints across platforms | Fingerprints match; no MITM | P0 |
-
-### 3.4 Common Interoperability Test Scenarios
-
-| Test ID | Scenario | Platforms | Expected Result |
-|---|---|---|---|
-| CI-001 | Message ordering | All pairs | Messages delivered in send order per conversation |
-| CI-002 | Duplicate suppression | All pairs | Duplicate messages (same msg-id) deduplicated |
-| CI-003 | Unicode content | All pairs | Emoji, CJK, RTL text rendered correctly on all platforms |
-| CI-004 | Clock skew tolerance | All pairs | Messages accepted with clock skew ≤ 5 minutes |
-| CI-005 | Network partition recovery | All pairs | Messages sync after partition heals; no data loss |
-| CI-006 | Key rotation | All pairs | New keys propagated; old messages still decryptable |
-
----
-
-## 4. Rust Integration Tests (desktop_bridge)
-
-### 4.1 XDG Path Tests
-
-| Test | File | Description |
-|---|---|---|
-| `test_xdg_data_dir` | `desktop_bridge/tests/xdg_paths_test.rs` | Verify `xdg_data_dir()` returns absolute path |
-| `test_xdg_data_dir_contains_scmessenger` | `desktop_bridge/tests/xdg_paths_test.rs` | Verify path ends with `scmessenger` |
-| `test_xdg_config_dir` | `desktop_bridge/tests/xdg_paths_test.rs` | Verify `xdg_config_dir()` returns absolute path |
-| `test_xdg_env_override` | `desktop_bridge/tests/xdg_paths_test.rs` | Override `XDG_DATA_HOME` env var; verify respected |
-| `test_ensure_directories` | `desktop_bridge/tests/xdg_paths_test.rs` | Verify `ensure_directories` creates all required dirs |
-
-### 4.2 Desktop Bridge FFI Tests
-
-| Test | File | Description |
-|---|---|---|
-| `test_desktop_version` | `desktop_bridge/src/lib.rs` (inline) | Verify version string non-empty |
-| `test_xdg_data_dir_returns_path` | `desktop_bridge/src/lib.rs` (inline) | Verify path returned |
-| `test_xdg_config_dir_returns_path` | `desktop_bridge/src/lib.rs` (inline) | Verify config path returned |
-
-### 4.3 Notification Tests (Mocked)
-
-| Test | File | Description |
-|---|---|---|
-| `test_notification_send` | `desktop_bridge/tests/notification_test.rs` | Mock notification proxy; verify send succeeds |
-| `test_notification_with_actions` | `desktop_bridge/tests/notification_test.rs` | Verify action buttons serialized correctly |
-
----
-
-## 5. Kotlin KMP Tests
-
-### 5.1 commonTest
-
-| Test | File | Description |
-|---|---|---|
-| `testPlatformName` | `shared/src/commonTest/.../PlatformTest.kt` | Verify `platformName()` returns non-empty string |
-| `testGreet` | `shared/src/commonTest/.../PlatformTest.kt` | Verify `greet()` includes platform name |
-
-### 5.2 linuxX64Test
-
-| Test | File | Description |
-|---|---|---|
-| `testLinuxPlatform` | `shared/src/linuxX64Test/.../LinuxPlatformTest.kt` | Verify `platformName()` returns `"Linux"` |
-| `testLinuxStorePath` | `shared/src/linuxX64Test/.../LinuxPlatformTest.kt` | Verify store path under XDG data dir |
-
----
-
-## 6. UI Parity Test Procedures
-
-### 6.1 Automated UI Tests (compose-ui-test)
-
-| Test | Description |
-|---|---|
-| `testOnboardingRenders` | Verify onboarding screen composables render without crash |
-| `testChatScreenMessageList` | Verify message list displays messages |
-| `testChatScreenInputField` | Verify input field accepts text and sends on Enter |
-| `testContactsScreenList` | Verify contacts list renders contact items |
-| `testSettingsScreenSections` | Verify all settings sections present |
-| `testNavigationFlow` | Verify navigation between screens works |
-| `testSystemTrayIntegration` | Verify tray icon appears and responds to clicks |
-
-### 6.2 Manual UI Parity Checklist
-
-For each screen in the UI Parity Matrix (Section 2.1):
-
-- [ ] All text content matches Android
-- [ ] All interactive elements present (buttons, inputs, toggles)
-- [ ] Layout adapts correctly to window resize
-- [ ] Keyboard navigation works (Tab, Enter, Escape)
-- [ ] Right-click context menus present where applicable
-- [ ] Drag-and-drop supported for file attachments
-- [ ] Copy/paste works (Ctrl+C / Ctrl+V)
-- [ ] Scroll behavior matches (scrollbar vs. touch scroll)
-
----
-
-## 7. Test Execution Schedule
-
-| Phase | Tests | Trigger |
-|---|---|---|
-| Pre-commit | `cargo test --workspace`, `./gradlew :shared:testLinuxX64` | Every commit |
-| PR gate | All Level 1 + Level 2 tests | Every PR |
-| Nightly | Level 3 UI tests + Level 4 interop (manual) | Nightly cron |
-| Release | Full matrix: all levels + all interop scenarios | Release candidate |
-
----
-
-## 8. Known Limitations
-
-1. **BLE on CI**: BlueZ D-Bus tests require `@Ignore` or `#[cfg(not(test))]` on CI runners without Bluetooth hardware
-2. **iOS interop**: Requires physical iOS device; cannot be automated on CI
-3. **WASM relay**: Requires running relay server; documented as manual test procedure
-4. **compose-ui-test on linuxX64**: Requires X11 or Wayland display; use `xvfb-run` on headless CI
-5. **File transfer large files**: Limited to < 100MB in CI due to resource constraints
+--- 
+*End of Test Plan*

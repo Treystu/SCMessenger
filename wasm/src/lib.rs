@@ -76,6 +76,7 @@ impl Default for MeshSettings {
 impl From<MeshSettings> for scmessenger_core::MeshSettings {
     fn from(wasm: MeshSettings) -> Self {
         scmessenger_core::MeshSettings {
+            require_pq: false,
             relay_enabled: wasm.relay_enabled,
             max_relay_budget: wasm.max_relay_budget,
             battery_floor: wasm.battery_floor,
