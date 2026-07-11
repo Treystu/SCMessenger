@@ -22,6 +22,12 @@ transport parity — top priority). Dispatch order: `HANDOFF/todo/_QUEUE.md`.
 3. **`/scmorc`** — headless per-task `claude -p` workers on the Anthropic subscription (`.claude/commands/scmorc.md`). Gold standard for batch processing.
 4. **`/scm`** — native cowork orchestrator using the `Agent` tool (`.claude/commands/scm.md`).
 
+Cross-mode protocol (state machine, dispatcher, tier routing, commit
+authority, token-efficiency rules): `docs/ORCHESTRATION.md` — supersedes role
+docs where they conflict. Foreign-model dispatch goes through
+`scripts/delegate_task.py` (always pass `--verify` so fix loops run locally,
+not through the orchestrator).
+
 ## Workspace Structure
 
 ```

@@ -1,10 +1,10 @@
 # GEMINI.md
-
 Status: Active
-Last updated: 2026-07-06
+Last updated: 2026-07-11
 
-This file exists so Gemini-family tools (Antigravity/`agy`, Gemini CLI) load
-the repo contract automatically. The contract itself is `AGENTS.md` — read it
-in full before doing anything. You are almost certainly the FOREIGN WORKER
-capability class defined there: implement, report in the required format,
-never build, never commit, never push.
+Gemini-family tools (Antigravity/agy, Gemini CLI) must read, in order:
+1. AGENTS.md — hard rules and capability class (you are FOREIGN WORKER)
+2. docs/GEMINI_ORCHESTRATOR.md — live orchestration protocol (delegation loop, model fleet, commands)
+3. docs/ORCHESTRATION.md — master protocol (single source of truth; overrides all role-specific docs)
+
+You are the orchestrator. Do not implement. Delegate to Qwen. See docs/GEMINI_ORCHESTRATOR.md.

@@ -5,6 +5,7 @@ import json
 import os
 import re
 import sys
+import subprocess
 
 QWEN_URL = "https://ws-2vzz894jwsk3t27r.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1/chat/completions"
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
@@ -62,8 +63,8 @@ def extract_file_blocks(content):
     """
     results = []
 
-    # Pattern A: filename inside block
-    for block in re.finditer(r"```(?:rust|python|sh|toml|bash|)\n(.*?)\n```", content, re.DOTALL):
+    # Pattern A: filename inside block (any language tag)
+    for block in re.finditer(r"```[a-zA-Z]*\n(.*?)\n```", content, re.DOTALL):
         lines = block.group(1).split("\n")
         first = lines[0].strip()
         if first.startswith("// ") or first.startswith("# "):
@@ -72,12 +73,85 @@ def extract_file_blocks(content):
                 results.append((filename, "\n".join(lines[1:])))
 
     # Pattern B: filename before block (e.g. "// scripts/foo.py\n```python\n...")
-    for m in re.finditer(r"^(//\s*\S+\.\w+)\s*\n```(?:rust|python|sh|toml|bash|)\n(.*?)\n```", content, re.DOTALL | re.MULTILINE):
+    for m in re.finditer(r"^(//\s*\S+\.\w+)\s*\n```[a-zA-Z]*\n(.*?)\n```", content, re.DOTALL | re.MULTILINE):
         filename = m.group(1).replace("// ", "").strip()
         if filename.endswith(VALID_EXTENSIONS) and not any(f == filename for f, _ in results):
             results.append((filename, m.group(2)))
 
     return results
+
+def send_request(args, prompt, resolved_model, display_model, round_num=None):
+    payload = {
+        "model": resolved_model,
+        "temperature": 0.1
+    }
+
+    if args.provider == "ollama":
+        payload["messages"] = [
+            {"role": "system", "content": "You are a senior Rust engineer. Strictly provide full file contents in code blocks with // filename as the first line inside the block."},
+            {"role": "user", "content": prompt}
+        ]
+        payload["stream"] = False
+        req_url = OLLAMA_URL
+        headers = {"Content-Type": "application/json"}
+    else:
+        payload["messages"] = [
+            {"role": "system", "content": "You are a senior Rust engineer. Strictly provide full file contents in code blocks with // filename as the first line inside the block."},
+            {"role": "user", "content": prompt}
+        ]
+        req_url = QWEN_URL if args.provider == "qwen" else OPENROUTER_URL
+        api_key = get_api_key(args.provider)
+        if not api_key:
+            print(f"Error: API key for {args.provider} is not set.")
+            sys.exit(1)
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json"
+        }
+
+    req = urllib.request.Request(req_url, headers=headers, data=json.dumps(payload).encode("utf-8"))
+
+    try:
+        with urllib.request.urlopen(req, timeout=600) as r:
+            resp = json.loads(r.read().decode("utf-8"))
+
+            if args.provider == "ollama":
+                content = resp.get("message", {}).get("content", "")
+            else:
+                content = resp["choices"][0]["message"]["content"]
+
+            os.makedirs("tmp", exist_ok=True)
+            base_name = os.path.basename(args.task).split('.')[0]
+            if round_num is not None:
+                response_file = f"tmp/{base_name}_response_round{round_num}.md"
+            else:
+                response_file = f"tmp/{base_name}_response.md"
+            with open(response_file, "w", encoding="utf-8") as f:
+                f.write(content)
+
+            return content, response_file
+
+    except urllib.error.HTTPError as e:
+        print(f"HTTP error: {e.code} - {e.read().decode('utf-8')}")
+        sys.exit(1)
+    except urllib.error.URLError as e:
+        print(f"Network error: {e}")
+        sys.exit(1)
+    except Exception as e:
+        print(f"Error processing request: {e}")
+        sys.exit(1)
+
+def apply_file_blocks(file_blocks):
+    if not file_blocks:
+        return False
+    for filename, file_content in file_blocks:
+        print(f"Applying updates to {filename}...")
+        dir_name = os.path.dirname(filename)
+        if dir_name:
+            os.makedirs(dir_name, exist_ok=True)
+        with open(filename, "w", encoding="utf-8") as f:
+            f.write(file_content)
+    return True
 
 def main():
     parser = argparse.ArgumentParser(description="Universal Swarm Delegate Script")
@@ -88,8 +162,13 @@ def main():
                         help="Qwen tier for auto model selection: thinking > max > standard > plus > flash")
     parser.add_argument("--files", nargs="*", default=[], help="List of source files to include in context")
     parser.add_argument("--apply", action="store_true", help="Auto-apply the generated code blocks back into the files")
+    parser.add_argument("--verify", type=str, help='Verification command to run after applying changes (e.g., "cargo check -p scmessenger-core")')
+    parser.add_argument("--max-rounds", type=int, default=3, help="Maximum number of model calls including the first one (default: 3)")
 
     args = parser.parse_args()
+
+    if args.verify and not args.apply:
+        print("Warning: --verify is only meaningful with --apply; ignoring --verify.")
 
     if not os.path.exists(args.task):
         print(f"Error: Task file {args.task} not found.")
@@ -132,36 +211,6 @@ DO NOT output partial files, snippets, or diffs. Output the ENTIRE file content.
             sys.exit(1)
         resolved_model = args.model
 
-    payload = {
-        "model": resolved_model,
-        "temperature": 0.1
-    }
-
-    if args.provider == "ollama":
-        payload["messages"] = [
-            {"role": "system", "content": "You are a senior Rust engineer. Strictly provide full file contents in code blocks with // filename as the first line inside the block."},
-            {"role": "user", "content": prompt}
-        ]
-        payload["stream"] = False
-        req_url = OLLAMA_URL
-        headers = {"Content-Type": "application/json"}
-    else:
-        payload["messages"] = [
-            {"role": "system", "content": "You are a senior Rust engineer. Strictly provide full file contents in code blocks with // filename as the first line inside the block."},
-            {"role": "user", "content": prompt}
-        ]
-        req_url = QWEN_URL if args.provider == "qwen" else OPENROUTER_URL
-        api_key = get_api_key(args.provider)
-        if not api_key:
-            print(f"Error: API key for {args.provider} is not set.")
-            sys.exit(1)
-        headers = {
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json"
-        }
-
-    req = urllib.request.Request(req_url, headers=headers, data=json.dumps(payload).encode("utf-8"))
-
     if args.provider == "qwen" and args.tier:
         display_model = f"{resolved_model} [tier: {args.tier}]"
     else:
@@ -169,45 +218,76 @@ DO NOT output partial files, snippets, or diffs. Output the ENTIRE file content.
 
     print(f"Dispatching task {os.path.basename(args.task)} to {args.provider} ({display_model})...")
 
-    try:
-        with urllib.request.urlopen(req, timeout=600) as r:
-            resp = json.loads(r.read().decode("utf-8"))
+    content, response_file = send_request(args, prompt, resolved_model, display_model)
+    print(f"Response received and saved to {response_file}!")
 
-            if args.provider == "ollama":
-                content = resp.get("message", {}).get("content", "")
-            else:
-                content = resp["choices"][0]["message"]["content"]
+    if args.apply:
+        file_blocks = extract_file_blocks(content)
+        if not file_blocks:
+            print("Warning: No properly formatted code blocks found to apply.")
+        else:
+            applied = apply_file_blocks(file_blocks)
+            if applied:
+                print(f"Successfully applied {len(file_blocks)} file(s).")
 
-            os.makedirs("tmp", exist_ok=True)
-            response_file = f"tmp/{os.path.basename(args.task).split('.')[0]}_response.md"
-            with open(response_file, "w", encoding="utf-8") as f:
-                f.write(content)
+        # Verification loop
+        if args.verify and args.apply:
+            verify_env = os.environ.copy()
+            verify_env["CARGO_INCREMENTAL"] = "0"
 
-            print(f"Response received and saved to {response_file}!")
+            current_round = 1
+            while current_round <= args.max_rounds:
+                print(f"[ROUND {current_round}] Running verification command: {args.verify}")
+                result = subprocess.run(
+                    args.verify,
+                    shell=True,
+                    capture_output=True,
+                    text=True,
+                    env=verify_env
+                )
 
-            if args.apply:
-                file_blocks = extract_file_blocks(content)
-                if not file_blocks:
-                    print("Warning: No properly formatted code blocks found to apply.")
+                if result.returncode == 0:
+                    print(f"[OK] verify passed on round {current_round}")
+                    sys.exit(0)
                 else:
-                    for filename, file_content in file_blocks:
-                        print(f"Applying updates to {filename}...")
-                        dir_name = os.path.dirname(filename)
-                        if dir_name:
-                            os.makedirs(dir_name, exist_ok=True)
-                        with open(filename, "w", encoding="utf-8") as f:
-                            f.write(file_content)
-                    print(f"Successfully applied {len(file_blocks)} file(s).")
+                    if current_round >= args.max_rounds:
+                        last_output = (result.stdout + result.stderr)[-2000:]
+                        print(f"[FAIL] verify still failing after {args.max_rounds} rounds")
+                        print(last_output)
+                        sys.exit(2)
+                    else:
+                        print(f"[ROUND {current_round}] verify failed (exit {result.returncode}); re-dispatching fix...")
 
-    except urllib.error.HTTPError as e:
-        print(f"HTTP error: {e.code} - {e.read().decode('utf-8')}")
-        sys.exit(1)
-    except urllib.error.URLError as e:
-        print(f"Network error: {e}")
-        sys.exit(1)
-    except Exception as e:
-        print(f"Error processing request: {e}")
-        sys.exit(1)
+                        # Build follow-up prompt
+                        combined_output = (result.stdout + result.stderr)[-6000:]
+                        follow_up_prompt = (
+                            "Your previous attempt was applied but verification failed.\n"
+                            f"Verification command: {args.verify}\n"
+                            f"Last 6000 characters of output:\n```\n{combined_output}\n```\n\n"
+                            "### Current Relevant File Contents:\n"
+                        )
+                        for filepath in args.files:
+                            try:
+                                with open(filepath, "r", encoding="utf-8") as f:
+                                    follow_up_prompt += f"\n--- {filepath} ---\n```rust\n{f.read()}\n```\n"
+                            except Exception as e:
+                                print(f"Warning: Could not read {filepath}: {e}")
+
+                        follow_up_prompt += (
+                            "\nPlease provide the FULL, completely updated/new contents of the relevant files using standard Markdown code blocks.\n"
+                            "The exact filename must be the first line inside the code block (e.g., `// core/src/crypto/session_manager.rs`).\n"
+                            "DO NOT output partial files, snippets, or diffs. Output the ENTIRE file content. Preserve all existing logic unless it contradicts the requirements."
+                        )
+
+                        current_round += 1
+                        content, response_file = send_request(args, follow_up_prompt, resolved_model, display_model, current_round)
+                        print(f"Response received and saved to {response_file}!")
+
+                        file_blocks = extract_file_blocks(content)
+                        if not file_blocks:
+                            print("[WARN] round response had no applicable file blocks; counting as a failed round")
+                        else:
+                            apply_file_blocks(file_blocks)
 
 if __name__ == "__main__":
     main()

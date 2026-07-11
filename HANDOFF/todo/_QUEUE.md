@@ -112,7 +112,16 @@ Rules of engagement:
 8. `PQC_08_LEGACY_PATH_RETIREMENT.md` [QWEN] IN PROGRESS -- encrypt.rs suite
    gating + LegacyStaticEcdhSend audit event landed; remaining scope per task file.
 
-9. `TASK_CI_IOS_MACOS_RUNNER_FIX.md` [SONNET][INFRA] -- repo is PUBLIC so
+9. **Orchestration unification COMPLETE 2026-07-11** -- `docs/ORCHESTRATION.md`
+   is now the master protocol (all modes); GEMINI.md + ORCHESTRATION_PLAYBOOK.md
+   rewritten consistent (via Qwen dispatch); delegate_task.py gained
+   `--verify`/`--max-rounds` auto-fix loop (live-tested: happy path exit 0,
+   bounded failure exit 2) and a language-tag-agnostic parser.
+   `TASK_DELEGATE_VERIFY_LOOP.md` + `UNIFY_GEMINI_DOCS.md` in done/.
+   Remaining: `TASK_DELEGATE_DIFF_MODE.md` [QWEN][standard] (opt-in unified-diff
+   mode to cut full-file token waste).
+
+10. `TASK_CI_IOS_MACOS_RUNNER_FIX.md` [SONNET][INFRA] -- repo is PUBLIC so
    GitHub macOS runners are free; fix ios-build-test.yml (failure masking,
    lowercase paths, missing -project, no triggers) + bindings-drift gate.
    Unblocks the iOS parity lane without local Mac hardware.

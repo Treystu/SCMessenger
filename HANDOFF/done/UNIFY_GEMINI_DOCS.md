@@ -37,6 +37,16 @@ Rewrite `docs/ORCHESTRATION_PLAYBOOK.md` to:
 - Add a note at the top: "See docs/GEMINI_ORCHESTRATOR.md for the full protocol. This file is the quick command reference."
 - Keep the 5-step structure but make it accurate
 
+## Additional requirement (2026-07-11)
+
+A new master protocol doc now exists: `docs/ORCHESTRATION.md`. Both rewritten
+files must state that they are subordinate to it: GEMINI.md adds it as
+reading item 3; ORCHESTRATION_PLAYBOOK.md's top note becomes: "Subordinate to
+docs/ORCHESTRATION.md (master protocol) and docs/GEMINI_ORCHESTRATOR.md (role
+protocol). This file is the quick command reference." Also mention the new
+dispatcher flags `--tier`, `--verify "<cmd>"`, and `--max-rounds N` in the
+playbook's dispatch example.
+
 ## Rules
 - No emoji
 - Return full content of both files
