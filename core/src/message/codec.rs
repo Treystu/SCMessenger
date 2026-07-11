@@ -5,7 +5,10 @@
 // decode_envelope tries DriftEnvelope first; if the version byte doesn't match,
 // it falls back to legacy bincode for backward compatibility with older nodes.
 
-use super::types::{Envelope, Message};
+use super::types::{
+    Envelope, EnvelopeV2, Message, SignedEnvelope, SignedEnvelopeV2, WireEnvelope,
+    WireSignedEnvelope, WIRE_TAG_V2,
+};
 use crate::drift::envelope::COMPRESSION_THRESHOLD;
 use crate::drift::DRIFT_VERSION;
 use crate::drift::{DriftEnvelope, EnvelopeType};
@@ -181,6 +184,198 @@ fn encode_drift_envelope(envelope: &Envelope) -> Result<Vec<u8>> {
     };
 
     Ok(drift_env.to_bytes()?)
+}
+
+/// Encode a WireEnvelope to bytes for transmission.
+pub fn encode_wire_envelope(wire_envelope: &WireEnvelope) -> Result<Vec<u8>> {
+    match wire_envelope {
+        WireEnvelope::V1(env) => {
+            let bytes = bincode::serialize(env)?;
+            if bytes.len() > MAX_MESSAGE_SIZE {
+                bail!("Encoded V1 envelope too large");
+            }
+            Ok(bytes)
+        }
+        WireEnvelope::V2(env) => {
+            let env_bytes = bincode::serialize(env)?;
+            let mut bytes = Vec::with_capacity(env_bytes.len() + 1);
+            bytes.push(WIRE_TAG_V2);
+            bytes.extend_from_slice(&env_bytes);
+            if bytes.len() > MAX_MESSAGE_SIZE {
+                bail!("Encoded V2 envelope too large");
+            }
+            Ok(bytes)
+        }
+    }
+}
+
+/// Decode bytes to a WireEnvelope.
+pub fn decode_wire_envelope(buf: &[u8]) -> Result<WireEnvelope> {
+    if buf.is_empty() {
+        bail!("Empty envelope buffer");
+    }
+    if buf.len() > MAX_MESSAGE_SIZE {
+        bail!("Envelope buffer too large");
+    }
+
+    if buf[0] == WIRE_TAG_V2 {
+        // Try V2 decode first
+        match bincode::deserialize::<EnvelopeV2>(&buf[1..]) {
+            Ok(env) => {
+                // Strict length validations
+                if env.sender_public_key.len() != 32 {
+                    bail!("Invalid V2 sender public key length");
+                }
+                if env.ephemeral_public_key.len() != 32 {
+                    bail!("Invalid V2 ephemeral public key length");
+                }
+                if env.nonce.len() != 24 {
+                    bail!("Invalid V2 nonce length");
+                }
+                if let Some(ref dh_pk) = env.ratchet_dh_public {
+                    if dh_pk.len() != 32 {
+                        bail!("Invalid V2 ratchet DH public key length");
+                    }
+                }
+                if let Some(ref ct) = env.pq_kem_ciphertext {
+                    if ct.len() != 1088 {
+                        bail!("Invalid V2 PQ KEM ciphertext length");
+                    }
+                }
+                if let Some(ref key) = env.pq_encaps_key {
+                    if key.len() != 1184 {
+                        bail!("Invalid V2 PQ encapsulation key length");
+                    }
+                }
+                if let Some(ref hash) = env.transcript_hash {
+                    if hash.len() != 32 {
+                        bail!("Invalid V2 transcript hash length");
+                    }
+                }
+                return Ok(WireEnvelope::V2(env));
+            }
+            Err(_) => {
+                // Fall through to V1 decode of the whole buffer
+            }
+        }
+    }
+
+    // Try V1 decode
+    let env: Envelope = bincode::deserialize(buf)?;
+    if env.sender_public_key.len() != 32 {
+        bail!("Invalid V1 sender public key length");
+    }
+    if env.ephemeral_public_key.len() != 32 {
+        bail!("Invalid V1 ephemeral public key length");
+    }
+    if env.nonce.len() != 24 {
+        bail!("Invalid V1 nonce length");
+    }
+    if let Some(ref dh_pk) = env.ratchet_dh_public {
+        if dh_pk.len() != 32 {
+            bail!("Invalid V1 ratchet DH public key length");
+        }
+    }
+    Ok(WireEnvelope::V1(env))
+}
+
+/// Encode a WireSignedEnvelope to bytes for transmission.
+pub fn encode_wire_signed_envelope(wire_signed: &WireSignedEnvelope) -> Result<Vec<u8>> {
+    match wire_signed {
+        WireSignedEnvelope::V1(env) => {
+            let bytes = bincode::serialize(env)?;
+            if bytes.len() > MAX_MESSAGE_SIZE {
+                bail!("Encoded V1 signed envelope too large");
+            }
+            Ok(bytes)
+        }
+        WireSignedEnvelope::V2(env) => {
+            let env_bytes = bincode::serialize(env)?;
+            let mut bytes = Vec::with_capacity(env_bytes.len() + 1);
+            bytes.push(WIRE_TAG_V2);
+            bytes.extend_from_slice(&env_bytes);
+            if bytes.len() > MAX_MESSAGE_SIZE {
+                bail!("Encoded V2 signed envelope too large");
+            }
+            Ok(bytes)
+        }
+    }
+}
+
+/// Decode bytes to a WireSignedEnvelope.
+pub fn decode_wire_signed_envelope(buf: &[u8]) -> Result<WireSignedEnvelope> {
+    if buf.is_empty() {
+        bail!("Empty signed envelope buffer");
+    }
+    if buf.len() > MAX_MESSAGE_SIZE {
+        bail!("Signed envelope buffer too large");
+    }
+
+    if buf[0] == WIRE_TAG_V2 {
+        // Try V2 decode first
+        match bincode::deserialize::<SignedEnvelopeV2>(&buf[1..]) {
+            Ok(env) => {
+                // Strict length validations
+                if env.envelope.sender_public_key.len() != 32 {
+                    bail!("Invalid V2 signed sender public key length");
+                }
+                if env.envelope.ephemeral_public_key.len() != 32 {
+                    bail!("Invalid V2 signed ephemeral public key length");
+                }
+                if env.envelope.nonce.len() != 24 {
+                    bail!("Invalid V2 signed nonce length");
+                }
+                if env.signature.len() != 64 {
+                    bail!("Invalid V2 signature length");
+                }
+                if let Some(ref dh_pk) = env.envelope.ratchet_dh_public {
+                    if dh_pk.len() != 32 {
+                        bail!("Invalid V2 signed ratchet DH public key length");
+                    }
+                }
+                if let Some(ref ct) = env.envelope.pq_kem_ciphertext {
+                    if ct.len() != 1088 {
+                        bail!("Invalid V2 signed PQ KEM ciphertext length");
+                    }
+                }
+                if let Some(ref key) = env.envelope.pq_encaps_key {
+                    if key.len() != 1184 {
+                        bail!("Invalid V2 signed PQ encapsulation key length");
+                    }
+                }
+                if let Some(ref hash) = env.envelope.transcript_hash {
+                    if hash.len() != 32 {
+                        bail!("Invalid V2 signed transcript hash length");
+                    }
+                }
+                return Ok(WireSignedEnvelope::V2(env));
+            }
+            Err(_) => {
+                // Fall through to V1 decode of the whole buffer
+            }
+        }
+    }
+
+    // Try V1 decode
+    let env: SignedEnvelope = bincode::deserialize(buf)?;
+    if env.envelope.sender_public_key.len() != 32 {
+        bail!("Invalid V1 signed sender public key length");
+    }
+    if env.envelope.ephemeral_public_key.len() != 32 {
+        bail!("Invalid V1 signed ephemeral public key length");
+    }
+    if env.envelope.nonce.len() != 24 {
+        bail!("Invalid V1 signed nonce length");
+    }
+    if env.signature.len() != 64 {
+        bail!("Invalid V1 signed signature length");
+    }
+    if let Some(ref dh_pk) = env.envelope.ratchet_dh_public {
+        if dh_pk.len() != 32 {
+            bail!("Invalid V1 signed ratchet DH public key length");
+        }
+    }
+    Ok(WireSignedEnvelope::V1(env))
 }
 
 #[cfg(test)]
@@ -383,5 +578,162 @@ mod tests {
         let restored = decode_envelope(&bytes).unwrap();
         assert_eq!(restored.ciphertext.len(), 512);
         assert!(restored.ciphertext.iter().all(|&b| b == 0xAB));
+    }
+
+    #[test]
+    fn test_v2_envelope_roundtrip_all_combinations() {
+        let cases = vec![
+            // Case 1: All Option fields set to None
+            EnvelopeV2 {
+                suite: 0x02,
+                sender_public_key: vec![1u8; 32],
+                ephemeral_public_key: vec![2u8; 32],
+                nonce: vec![3u8; 24],
+                ciphertext: vec![4u8; 100],
+                ratchet_dh_public: None,
+                ratchet_message_number: None,
+                pq_kem_ciphertext: None,
+                pq_encaps_key: None,
+                transcript_hash: None,
+            },
+            // Case 2: Some Option fields set
+            EnvelopeV2 {
+                suite: 0x02,
+                sender_public_key: vec![1u8; 32],
+                ephemeral_public_key: vec![2u8; 32],
+                nonce: vec![3u8; 24],
+                ciphertext: vec![4u8; 100],
+                ratchet_dh_public: Some(vec![5u8; 32]),
+                ratchet_message_number: Some(42),
+                pq_kem_ciphertext: Some(vec![6u8; 1088]),
+                pq_encaps_key: Some(vec![7u8; 1184]),
+                transcript_hash: Some(vec![8u8; 32]),
+            },
+        ];
+
+        for case in cases {
+            let wire = WireEnvelope::V2(case.clone());
+            let encoded = encode_wire_envelope(&wire).expect("failed to encode wire envelope");
+            assert_eq!(encoded[0], WIRE_TAG_V2);
+            let decoded = decode_wire_envelope(&encoded).expect("failed to decode wire envelope");
+            match decoded {
+                WireEnvelope::V2(decoded_env) => {
+                    assert_eq!(case.suite, decoded_env.suite);
+                    assert_eq!(case.sender_public_key, decoded_env.sender_public_key);
+                    assert_eq!(case.ephemeral_public_key, decoded_env.ephemeral_public_key);
+                    assert_eq!(case.nonce, decoded_env.nonce);
+                    assert_eq!(case.ciphertext, decoded_env.ciphertext);
+                    assert_eq!(case.ratchet_dh_public, decoded_env.ratchet_dh_public);
+                    assert_eq!(case.ratchet_message_number, decoded_env.ratchet_message_number);
+                    assert_eq!(case.pq_kem_ciphertext, decoded_env.pq_kem_ciphertext);
+                    assert_eq!(case.pq_encaps_key, decoded_env.pq_encaps_key);
+                    assert_eq!(case.transcript_hash, decoded_env.transcript_hash);
+                }
+                _ => panic!("Expected WireEnvelope::V2"),
+            }
+        }
+    }
+
+    #[test]
+    fn test_v2_signed_envelope_roundtrip() {
+        use rand::RngCore;
+        let mut secret = [0u8; 32];
+        rand::rngs::OsRng.fill_bytes(&mut secret);
+        let signing_key = ed25519_dalek::SigningKey::from_bytes(&secret);
+        let public_key = signing_key.verifying_key();
+
+        let envelope = EnvelopeV2 {
+            suite: 0x02,
+            sender_public_key: public_key.to_bytes().to_vec(),
+            ephemeral_public_key: vec![2u8; 32],
+            nonce: vec![3u8; 24],
+            ciphertext: vec![4u8; 100],
+            ratchet_dh_public: Some(vec![5u8; 32]),
+            ratchet_message_number: Some(42),
+            pq_kem_ciphertext: Some(vec![6u8; 1088]),
+            pq_encaps_key: Some(vec![7u8; 1184]),
+            transcript_hash: Some(vec![8u8; 32]),
+        };
+
+        let signed = crate::crypto::sign_envelope_v2(envelope, &signing_key).unwrap();
+        crate::crypto::verify_envelope_v2(&signed).unwrap();
+
+        let wire = WireSignedEnvelope::V2(signed.clone());
+        let encoded = encode_wire_signed_envelope(&wire).unwrap();
+        assert_eq!(encoded[0], WIRE_TAG_V2);
+
+        let decoded = decode_wire_signed_envelope(&encoded).unwrap();
+        match decoded {
+            WireSignedEnvelope::V2(decoded_signed) => {
+                assert_eq!(signed.envelope.suite, decoded_signed.envelope.suite);
+                assert_eq!(signed.signature, decoded_signed.signature);
+                crate::crypto::verify_envelope_v2(&decoded_signed).unwrap();
+            }
+            _ => panic!("Expected WireSignedEnvelope::V2"),
+        }
+    }
+
+    #[test]
+    fn test_v1_wire_disambiguation() {
+        let envelope = Envelope {
+            sender_public_key: vec![1u8; 32],
+            ephemeral_public_key: vec![2u8; 32],
+            nonce: vec![3u8; 24],
+            ciphertext: vec![4u8; 100],
+            ratchet_dh_public: None,
+            ratchet_message_number: None,
+        };
+
+        let wire = WireEnvelope::V1(envelope.clone());
+        let encoded = encode_wire_envelope(&wire).unwrap();
+        assert_ne!(encoded[0], WIRE_TAG_V2, "V1 encoding must not start with WIRE_TAG_V2");
+
+        let decoded = decode_wire_envelope(&encoded).unwrap();
+        match decoded {
+            WireEnvelope::V1(decoded_env) => {
+                assert_eq!(envelope.sender_public_key, decoded_env.sender_public_key);
+            }
+            _ => panic!("Expected WireEnvelope::V1"),
+        }
+    }
+
+    #[test]
+    fn test_v2_length_validation_failures() {
+        let mut valid_env = EnvelopeV2 {
+            suite: 0x02,
+            sender_public_key: vec![1u8; 32],
+            ephemeral_public_key: vec![2u8; 32],
+            nonce: vec![3u8; 24],
+            ciphertext: vec![4u8; 100],
+            ratchet_dh_public: Some(vec![5u8; 32]),
+            ratchet_message_number: Some(42),
+            pq_kem_ciphertext: Some(vec![6u8; 1088]),
+            pq_encaps_key: Some(vec![7u8; 1184]),
+            transcript_hash: Some(vec![8u8; 32]),
+        };
+
+        // Test invalid sender_public_key length
+        valid_env.sender_public_key = vec![1u8; 31];
+        let encoded = bincode::serialize(&valid_env).unwrap();
+        let mut tagged = vec![WIRE_TAG_V2];
+        tagged.extend_from_slice(&encoded);
+        assert!(decode_wire_envelope(&tagged).is_err());
+        valid_env.sender_public_key = vec![1u8; 32];
+
+        // Test invalid nonce length
+        valid_env.nonce = vec![3u8; 25];
+        let encoded = bincode::serialize(&valid_env).unwrap();
+        let mut tagged = vec![WIRE_TAG_V2];
+        tagged.extend_from_slice(&encoded);
+        assert!(decode_wire_envelope(&tagged).is_err());
+        valid_env.nonce = vec![3u8; 24];
+
+        // Test invalid pq_kem_ciphertext length
+        valid_env.pq_kem_ciphertext = Some(vec![6u8; 1087]);
+        let encoded = bincode::serialize(&valid_env).unwrap();
+        let mut tagged = vec![WIRE_TAG_V2];
+        tagged.extend_from_slice(&encoded);
+        assert!(decode_wire_envelope(&tagged).is_err());
+        valid_env.pq_kem_ciphertext = Some(vec![6u8; 1088]);
     }
 }

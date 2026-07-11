@@ -15,8 +15,8 @@ mod kani_proofs;
 pub use encrypt::{
     decrypt_message, decrypt_message_ratcheted, decrypt_with_ratchet_fallback,
     ed25519_public_to_x25519, ed25519_to_x25519_secret, encrypt_message, encrypt_message_ratcheted,
-    encrypt_with_ratchet_fallback, is_ratcheted_envelope, sign_envelope,
-    validate_ed25519_public_key, verify_envelope,
+    encrypt_with_ratchet_fallback, is_ratcheted_envelope, sign_envelope, sign_envelope_v2,
+    validate_ed25519_public_key, verify_envelope, verify_envelope_v2,
 };
 pub use ratchet::{RatchetEncryptResult, RatchetKey, RatchetSession};
 pub use session_manager::{RatchetSessionManager, SerializableRatchetSession};

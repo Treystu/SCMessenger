@@ -105,6 +105,57 @@ pub struct SignedEnvelope {
     pub signature: Vec<u8>,
 }
 
+pub const WIRE_TAG_V2: u8 = 0x02;
+
+/// Next-generation encrypted envelope supporting hybrid post-quantum cryptography.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct EnvelopeV2 {
+    /// Suite identifier (from PQC-00 suite registry)
+    pub suite: u8,
+    /// Sender's Ed25519 public key (32 bytes)
+    pub sender_public_key: Vec<u8>,
+    /// Ephemeral X25519 public key (32 bytes)
+    pub ephemeral_public_key: Vec<u8>,
+    /// XChaCha20-Poly1305 nonce (24 bytes)
+    pub nonce: Vec<u8>,
+    /// Encrypted + authenticated ciphertext
+    pub ciphertext: Vec<u8>,
+    /// Double Ratchet: sender's current DH ratchet public key (32 bytes)
+    pub ratchet_dh_public: Option<Vec<u8>>,
+    /// Double Ratchet: message number in the current sending chain
+    pub ratchet_message_number: Option<u32>,
+    /// ML-KEM-768 ciphertext (1088 bytes)
+    pub pq_kem_ciphertext: Option<Vec<u8>>,
+    /// Sender's next ML-KEM encapsulation key (1184 bytes)
+    pub pq_encaps_key: Option<Vec<u8>>,
+    /// Suite negotiation binding hash (32 bytes)
+    pub transcript_hash: Option<Vec<u8>>,
+}
+
+/// A signed v2 envelope.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct SignedEnvelopeV2 {
+    /// The encrypted v2 envelope
+    pub envelope: EnvelopeV2,
+    /// Ed25519 signature over the wire format of the envelope
+    pub signature: Vec<u8>,
+}
+
+/// Polymorphic envelope wrapper for transport.
+#[derive(Debug, Clone)]
+pub enum WireEnvelope {
+    V1(Envelope),
+    V2(EnvelopeV2),
+}
+
+/// Polymorphic signed envelope wrapper for transport.
+#[derive(Debug, Clone)]
+pub enum WireSignedEnvelope {
+    V1(SignedEnvelope),
+    V2(SignedEnvelopeV2),
+}
+
+
 impl Message {
     /// Create a new text message
     pub fn text(sender_id: String, recipient_id: String, text: &str) -> Self {

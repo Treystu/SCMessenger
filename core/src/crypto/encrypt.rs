@@ -446,6 +446,64 @@ pub fn verify_envelope(signed_envelope: &crate::message::SignedEnvelope) -> Resu
     Ok(())
 }
 
+/// Sign a v2 envelope.
+/// We sign the tagged envelope representation (0x02 || bincode(EnvelopeV2)) to authenticate the version tag.
+pub fn sign_envelope_v2(
+    envelope: crate::message::EnvelopeV2,
+    sender_signing_key: &SigningKey,
+) -> Result<crate::message::SignedEnvelopeV2> {
+    let envelope_bytes = bincode::serialize(&envelope)
+        .map_err(|e| anyhow::anyhow!("Failed to serialize envelope V2: {}", e))?;
+    
+    // Tagged byte sequence: tag byte included in signed data
+    let mut tagged_bytes = Vec::with_capacity(envelope_bytes.len() + 1);
+    tagged_bytes.push(crate::message::WIRE_TAG_V2);
+    tagged_bytes.extend_from_slice(&envelope_bytes);
+
+    let signature = sender_signing_key.sign(&tagged_bytes);
+
+    Ok(crate::message::SignedEnvelopeV2 {
+        envelope,
+        signature: signature.to_bytes().to_vec(),
+    })
+}
+
+/// Verify a signed v2 envelope's signature.
+pub fn verify_envelope_v2(signed_envelope: &crate::message::SignedEnvelopeV2) -> Result<()> {
+    if signed_envelope.envelope.sender_public_key.len() != 32 {
+        bail!("Invalid sender public key length in V2 envelope");
+    }
+
+    let mut sender_public_bytes = [0u8; 32];
+    sender_public_bytes.copy_from_slice(&signed_envelope.envelope.sender_public_key);
+
+    let verifying_key = VerifyingKey::from_bytes(&sender_public_bytes)
+        .map_err(|e| anyhow::anyhow!("Invalid sender public key: {}", e))?;
+
+    if signed_envelope.signature.len() != 64 {
+        bail!("Invalid V2 signature length");
+    }
+
+    let mut signature_bytes = [0u8; 64];
+    signature_bytes.copy_from_slice(&signed_envelope.signature);
+
+    let signature = Ed25519Signature::from_bytes(&signature_bytes);
+
+    // Recreate tagged bytes (tag byte + serialized envelope V2)
+    let envelope_bytes = bincode::serialize(&signed_envelope.envelope)
+        .map_err(|e| anyhow::anyhow!("Failed to serialize envelope V2: {}", e))?;
+    
+    let mut tagged_bytes = Vec::with_capacity(envelope_bytes.len() + 1);
+    tagged_bytes.push(crate::message::WIRE_TAG_V2);
+    tagged_bytes.extend_from_slice(&envelope_bytes);
+
+    verifying_key
+        .verify(&tagged_bytes, &signature)
+        .map_err(|e| anyhow::anyhow!("V2 signature verification failed: {}", e))?;
+
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

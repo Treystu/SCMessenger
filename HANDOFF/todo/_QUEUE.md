@@ -86,7 +86,12 @@ Rules of engagement:
   from prior sessions that were validated-complete but never moved to
   done/. Batch-move to `HANDOFF/done/[VALIDATED]/` for a clean signal.
 
-## Phase 2 -- FROZEN until P1-19 passes
+## NOW -- Active Phase 2 items (PQC Wave 0)
+
+1. `PQC_02_ENVELOPE_V2.md` [SONNET] **COMPLETE 2026-07-10** -- Envelope v2 wire format with suite tag and PQ fields.
+2. `PQC_03_IDENTITY_V2_KEYBUNDLE.md` [SONNET] -- Identity v2 key bundle with ML-KEM-768 public key.
+
+## Phase 2 backlog
 
 PQC_00..14 (master plan `PQC_00_MASTER_PLAN.md`), TASK_KMP_*, WS-A
 release-readiness T/S items, WS-B crypto/transport hygiene trio (backup.rs KDF
