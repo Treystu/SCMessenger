@@ -1,7 +1,31 @@
 # _QUEUE -- Dispatch Order for the Full v1.0.0 Backlog
 
 Status: Active
-Last updated: 2026-07-09 (Qwen session audited, emulator validated, P1-17 waived. NEXT_ITER_04 ready for emulator retest.)
+Last updated: 2026-07-11 (backlog groomed for execution: done-files swept out of
+todo/, review checkpoint now a dispatchable task, decision points refreshed.
+Delegation protocol: docs/ORCHESTRATION.md.)
+
+## EXECUTION ORDER -- next dispatches (pull top-down)
+
+1. `PQC_REVIEW_CHECKPOINT_05_06_07.md` [THINKING][AUDIT-GATE][BLOCKING] --
+   read-only Qwen thinking dispatch; command inside the task file. Gates
+   everything PQC below.
+2. `PQC_08_LEGACY_PATH_RETIREMENT.md` [QWEN max, --verify compile gate] --
+   IN PROGRESS, encrypt.rs gating landed; finish remaining scope. Can run
+   in parallel with item 1 (already-written code; review covers it).
+3. `TASK_CI_IOS_MACOS_RUNNER_FIX.md` [SONNET or QWEN max] -- independent of
+   PQC; workflow FIX is dispatchable now, the RUN needs the operator's
+   GitHub billing unlock first.
+4. After checkpoint PASS: `PQC_09_HYBRID_ONION.md` and
+   `PQC_10_MLDSA_IDENTITY_SIGNATURES.md` (parallel lanes, different files);
+   then `PQC_11` (after 10) -> `PQC_12` -> `PQC_13` -> `PQC_08` final
+   compat pass -> `PQC_14`.
+5. `TASK_KMP_RUST_UNIFFI_LINUX.md` [QWEN max] anytime (verify-only start);
+   `TASK_KMP_COMPOSE_ARCHITECT.md` is [HUMAN-gated] -- spec targets Compose
+   on linuxX64 native but Compose Desktop is JVM-only; operator must settle
+   the stack before any dispatch.
+6. [NEEDS PLANNING] pair (BLE GATT traits, CLI orphaned modules) --
+   [OPUS+/decision] items; hold for a Claude session or operator call.
 Owner: the acting orchestrator (any mode). Sequencing authority:
 `HANDOFF/V1_0_0_EXECUTION_PLAN.md` (operator-settled two-phase DAG -- do not
 relitigate). This file is the LIVE pick list: pull from the top, respect the
@@ -36,13 +60,16 @@ Rules of engagement:
 ~~   [BLOCKED-HW] and close this ticket.~~
 **WAIVER CONFIRMED 2026-07-09**: WiFi Direct cell narrowed to Android<->Android [BLOCKED-HW]. Android<->Windows equivalent covered by mDNS/LAN + TCP. Deferred to v1.1.
 
-4. `P1-14 Hostile-network validation` [DEVICE] -- firewall profiles on
-   Windows, test the adaptive port ladder. After emulator validates
-   baseline LAN connectivity (item 2).
+4. `P1-14 Hostile-network validation` [DEVICE] -- **POST-EXIT VERIFICATION
+   DEBT**: not individually closed before the P1-19 sign-off. Planned closure:
+   AWS docker rig netem/firewall profiles (operator approved AWS 2026-07-11,
+   reversing the plan's AWS-excluded note; rig prerequisites in the 2026-07-11
+   deploy-infra audit: --http-bind flag + /health route + cloud/mesh compose
+   repair).
 
-5. P1-18 Relay cells (LAN custody 3-node, then [HUMAN] WAN endpoint
-   decision) [DEVICE]. Needs a second CLI instance on the Windows box
-   in relay mode, then phone offline-then-returning custody test.
+5. P1-18 Relay cells [DEVICE] -- **POST-EXIT VERIFICATION DEBT**, same
+   vehicle: 3-node custody chain + WAN relay live proof on the AWS rig
+   (public P2P port vs home Windows CLI + emulator).
 
 6. `P1-19_Phase_1_Exit_Review.md` [OPUS+][HUMAN] **COMPLETE 2026-07-10** -- Checklist for the
    operator's sign-off, listing completed milestones, waivers, and exit check
@@ -80,11 +107,10 @@ Rules of engagement:
 
 ## Phase 1 filler lane (independent, idle capacity only)
 
-- `P1_ANDROID_FABLE_5_DISCOVERY_REPORT.md` is EVIDENCE, not a task --
-  move to docs/historical/ at P1 exit.
-- All `[VALIDATED]_*` items in todo/ (~55 files) are historical records
-  from prior sessions that were validated-complete but never moved to
-  done/. Batch-move to `HANDOFF/done/[VALIDATED]/` for a clean signal.
+Both filler items CLOSED 2026-07-11: FABLE_5 discovery report moved to
+docs/historical/; the [VALIDATED]_* sweep was completed in a prior session.
+todo/ now contains only live tasks (verified: 16 files + REJECTED/ + this
+queue).
 
 ## NOW -- Active Phase 2 items (ordered by dependency)
 
@@ -106,8 +132,9 @@ Rules of engagement:
 7. **[AUDIT-GATE][BLOCKING] PQC-05/06/07 adversarial review checkpoint** -- the
    master-plan rule "auditor pass after PQC-05 before waves 2+ stack up" has NOT
    run: HANDOFF/review/ has no PQC verdicts. Must complete before PQC-09+ work.
-   Zero-Anthropic-cost route: /scmqwen thinking tier, read-only, verdict file to
-   HANDOFF/review/PQC_05_06_07_ADVERSARIAL_REVIEW.md.
+   NOW DISPATCHABLE: task file `PQC_REVIEW_CHECKPOINT_05_06_07.md` contains the
+   exact read-only Qwen thinking command; verdict lands at
+   HANDOFF/review/PQC_05_06_07_ADVERSARIAL_REVIEW.md. Zero Anthropic cost.
 
 8. `PQC_08_LEGACY_PATH_RETIREMENT.md` [QWEN] IN PROGRESS -- encrypt.rs suite
    gating + LegacyStaticEcdhSend audit event landed; remaining scope per task file.
@@ -133,12 +160,25 @@ release-readiness T/S items, WS-B crypto/transport hygiene trio (backup.rs KDF
 gap, WiFi Aware orphan, escalation-authority consolidation), WS-F close-out.
 Fine-planning happens as P2-00 after Phase 1 exit, per the execution plan.
 
-## Open decision points for operator
+## Open decision points for operator (refreshed 2026-07-11)
 
-1. **WiFi Direct scope** -- P1-17 needs build-vs-waive decision.
-2. **Internet relay live proof** -- need a public endpoint (home-router
-   port-forward to CLI relay, or waive WAN-live with LAN-relay evidence).
-3. **Second Android device** -- WiFi Aware cell is [BLOCKED-HW] with one
-   phone. Acquire or waive.
-4. **WSL2 for KMP Linux validation** -- accepted with BlueZ caveat, or
-   name real Linux hardware later.
+1. ~~WiFi Direct scope~~ RESOLVED: waived 2026-07-09, v1.1.
+2. **Internet relay live proof** -- AWS approved 2026-07-11; needs the rig
+   built (P1-14/P1-18 entries above). Record the plan revision in
+   HANDOFF/V1_0_0_EXECUTION_PLAN.md when the rig lands.
+3. **GitHub billing unlock** -- Actions jobs are created but blocked:
+   "account is locked due to a billing issue" (personal account governs the
+   public repo; the Enterprise trial does not cover it). Fix billing or
+   transfer the repo into the trial org. Unblocks free macOS runners ->
+   the whole iOS lane.
+4. **iOS scope** -- operator wants iOS parity, but iOS is NOT in the settled
+   v1.0.0 scope list. Decide: amend the execution plan (in-scope v1.0) or
+   declare it the v1.1 headline. Either way: single Swift bindings +
+   XCFramework regen cycle AFTER PQC-10 lands.
+5. **KMP D2 stack correction** -- TASK_KMP_COMPOSE_ARCHITECT targets Compose
+   UI on linuxX64 native; Compose Desktop is JVM-only. Pick: JVM desktop
+   target (recommended) or a different UI stack. Blocks D2 dispatch.
+6. **Second Android device / WiFi Aware cell** -- still [BLOCKED-HW];
+   acquire or record the waiver in the exit matrix.
+7. **WSL2 for KMP Linux validation** -- accepted with BlueZ caveat, or name
+   real Linux hardware later.
