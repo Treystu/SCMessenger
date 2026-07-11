@@ -112,6 +112,11 @@ Rules of engagement:
 8. `PQC_08_LEGACY_PATH_RETIREMENT.md` [QWEN] IN PROGRESS -- encrypt.rs suite
    gating + LegacyStaticEcdhSend audit event landed; remaining scope per task file.
 
+9. `TASK_CI_IOS_MACOS_RUNNER_FIX.md` [SONNET][INFRA] -- repo is PUBLIC so
+   GitHub macOS runners are free; fix ios-build-test.yml (failure masking,
+   lowercase paths, missing -project, no triggers) + bindings-drift gate.
+   Unblocks the iOS parity lane without local Mac hardware.
+
 PQC_09..14 (master plan `PQC_00_MASTER_PLAN.md`), TASK_KMP_*, WS-A
 release-readiness T/S items, WS-B crypto/transport hygiene trio (backup.rs KDF
 gap, WiFi Aware orphan, escalation-authority consolidation), WS-F close-out.
