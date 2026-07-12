@@ -1,4 +1,3 @@
-// core/src/crypto/ratchet.rs
 //! P0_SECURITY_003: Double Ratchet Protocol for Forward Secrecy.
 //!
 //! Implements the Double Ratchet algorithm (Signal Protocol) adapted for
@@ -422,7 +421,7 @@ impl RatchetSession {
         Ok(Self {
             our_dh_secret,
             our_dh_public,
-            their_dh_public: Some(X25519PublicKey::from(hct.x25519_ephemeral_public)),
+            their_dh_public: None, // Fixed: should be None initially, like classical receiver
             root_key: RatchetKey::from_bytes(root_key_0),
             sending_chain: None,
             receiving_chain: None,
@@ -888,9 +887,15 @@ mod tests {
         let alice_key = generate_keypair();
         let bob_key = generate_keypair();
         let bob_x25519 = signing_key_to_x25519_public(&bob_key);
+        let bob_ed25519 = bob_key.verifying_key().to_bytes();
+        let bob_mlkem_keypair = crate::crypto::pq::generate();
         let bob_bundle = crate::identity::PublicKeyBundle {
-            x25519_public: bob_x25519,
-            mlkem_encaps_key: [0u8; 32],
+            ed25519_public: bob_ed25519,
+            x25519_public: bob_x25519.to_bytes(),
+            mlkem_encaps_key: bob_mlkem_keypair.public_key().to_vec(),
+            created_at: 0,
+            supported_suites: vec![0x02],
+            signature: vec![],
         };
         let transcript_hash = [0u8; 32];
 
@@ -910,15 +915,30 @@ mod tests {
         let bob_key = generate_keypair();
         let alice_x25519 = signing_key_to_x25519_public(&alice_key);
         let bob_x25519 = signing_key_to_x25519_public(&bob_key);
+        let alice_ed25519 = alice_key.verifying_key().to_bytes();
         let alice_bundle = crate::identity::PublicKeyBundle {
-            x25519_public: alice_x25519,
-            mlkem_encaps_key: [0u8; 32],
+            ed25519_public: alice_ed25519,
+            x25519_public: alice_x25519.to_bytes(),
+            mlkem_encaps_key: crate::crypto::pq::generate().public_key().to_vec(),
+            created_at: 0,
+            supported_suites: vec![0x02],
+            signature: vec![],
         };
-        let (hct, _) = crate::crypto::pq::hybrid::hybrid_encapsulate(&bob_x25519, &alice_bundle.mlkem_encaps_key).unwrap();
+        let bob_mlkem_keypair = crate::crypto::pq::generate();
+        let bob_bundle = crate::identity::PublicKeyBundle {
+            ed25519_public: bob_key.verifying_key().to_bytes(),
+            x25519_public: bob_x25519.to_bytes(),
+            mlkem_encaps_key: bob_mlkem_keypair.public_key().to_vec(),
+            created_at: 0,
+            supported_suites: vec![0x02],
+            signature: vec![],
+        };
         let transcript_hash = [0u8; 32];
 
         let mut alice_session = RatchetSession::init_as_sender_hybrid(&alice_key, &bob_bundle, transcript_hash).unwrap();
-        let mut bob_session = RatchetSession::init_as_receiver_hybrid(&bob_key, &alice_bundle, &hct, transcript_hash).unwrap();
+        let hct = alice_session.bootstrap_hct.clone().expect("sender_hybrid sets bootstrap_hct");
+        let bob_x25519_secret = super::super::encrypt::ed25519_to_x25519_secret(&bob_key);
+        let mut bob_session = RatchetSession::init_as_receiver_hybrid(&bob_key, &bob_x25519_secret, &bob_mlkem_keypair, &alice_bundle, &hct, transcript_hash).unwrap();
         assert!(!bob_session.is_initialized());
 
         let encrypted = alice_session.encrypt(b"hello bob", b"aad").unwrap();
@@ -941,9 +961,15 @@ mod tests {
         let alice_key = generate_keypair();
         let bob_key = generate_keypair();
         let bob_x25519 = signing_key_to_x25519_public(&bob_key);
+        let bob_ed25519 = bob_key.verifying_key().to_bytes();
+        let bob_mlkem_keypair = crate::crypto::pq::generate();
         let bob_bundle = crate::identity::PublicKeyBundle {
-            x25519_public: bob_x25519,
-            mlkem_encaps_key: [0u8; 32],
+            ed25519_public: bob_ed25519,
+            x25519_public: bob_x25519.to_bytes(),
+            mlkem_encaps_key: bob_mlkem_keypair.public_key().to_vec(),
+            created_at: 0,
+            supported_suites: vec![0x02],
+            signature: vec![],
         };
         let transcript_hash = [0u8; 32];
 
@@ -962,9 +988,15 @@ mod tests {
         let alice_key = generate_keypair();
         let bob_key = generate_keypair();
         let bob_x25519 = signing_key_to_x25519_public(&bob_key);
+        let bob_ed25519 = bob_key.verifying_key().to_bytes();
+        let bob_mlkem_keypair = crate::crypto::pq::generate();
         let bob_bundle = crate::identity::PublicKeyBundle {
-            x25519_public: bob_x25519,
-            mlkem_encaps_key: [0u8; 32],
+            ed25519_public: bob_ed25519,
+            x25519_public: bob_x25519.to_bytes(),
+            mlkem_encaps_key: bob_mlkem_keypair.public_key().to_vec(),
+            created_at: 0,
+            supported_suites: vec![0x02],
+            signature: vec![],
         };
         let transcript_hash = [0u8; 32];
 

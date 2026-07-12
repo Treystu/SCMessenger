@@ -129,7 +129,16 @@ queue).
    `LegacyStaticEcdhSend` fix). All three *_COMPILE_FIX tasks verified applied and
    moved to done/.
 
-7. **[AUDIT-GATE][BLOCKING] PQC-05/06/07 adversarial review checkpoint** -- the
+7. **[AUDIT-GATE] PQC-05/06/07 adversarial review checkpoint** -- COMPLETE
+   2026-07-11. Verdict: FAIL (one CRITICAL, confirmed) at
+   HANDOFF/review/PQC_05_06_07_ADVERSARIAL_REVIEW.md. CRITICAL: PQC-07's PQ
+   ratchet step is implemented but never called from the live
+   encrypt/decrypt path (ML-KEM secret fixed at bootstrap, never refreshed).
+   Follow-up: `PQC_07_WIRE_RATCHET_STEP.md` [QWEN max][AUDIT-GATE][BLOCKING]
+   -- must land + pass a re-review before PQC-11/13 (PQC-09/10 may proceed
+   in parallel, unaffected by this gap).
+
+7a. ~~[AUDIT-GATE][BLOCKING] PQC-05/06/07 adversarial review checkpoint~~ -- the
    master-plan rule "auditor pass after PQC-05 before waves 2+ stack up" has NOT
    run: HANDOFF/review/ has no PQC verdicts. Must complete before PQC-09+ work.
    NOW DISPATCHABLE: task file `PQC_REVIEW_CHECKPOINT_05_06_07.md` contains the

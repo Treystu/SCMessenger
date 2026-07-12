@@ -32,7 +32,9 @@ fn test_pq_session_full_send_receive() {
         plaintext1,
         Some(&mut alice_manager),
         &bob_id,
-        Some(&alice_bundle)
+        Some(&alice_bundle),
+        false,
+        None
     ).unwrap();
     
     // Should be V2
@@ -68,7 +70,9 @@ fn test_pq_session_full_send_receive() {
         plaintext2,
         Some(&mut bob_manager),
         &alice_id,
-        Some(&bob_bundle)
+        Some(&bob_bundle),
+        false,
+        None
     ).unwrap();
     
     // Should be V2, but without PQ init fields because peer is confirmed
@@ -105,13 +109,15 @@ fn test_pq_session_lost_first_envelope() {
     // Alice sends msg 1
     let env1 = encrypt_with_ratchet_fallback(
         &alice.signing_key, Some(&bob_bundle), &bob_bundle.ed25519_public,
-        b"Msg 1", Some(&mut alice_manager), &bob_id, Some(&alice_bundle)
+        b"Msg 1", Some(&mut alice_manager), &bob_id, Some(&alice_bundle),
+        false, None
     ).unwrap();
     
     // Alice sends msg 2
     let env2 = encrypt_with_ratchet_fallback(
         &alice.signing_key, Some(&bob_bundle), &bob_bundle.ed25519_public,
-        b"Msg 2", Some(&mut alice_manager), &bob_id, Some(&alice_bundle)
+        b"Msg 2", Some(&mut alice_manager), &bob_id, Some(&alice_bundle),
+        false, None
     ).unwrap();
     
     // Bob only receives msg 2 (msg 1 lost)
@@ -143,7 +149,8 @@ fn test_pq_session_transcript_mismatch() {
     // Alice sends
     let mut env = encrypt_with_ratchet_fallback(
         &alice.signing_key, Some(&bob_bundle), &bob_bundle.ed25519_public,
-        b"Secret", Some(&mut alice_manager), &bob_id, Some(&alice_bundle)
+        b"Secret", Some(&mut alice_manager), &bob_id, Some(&alice_bundle),
+        false, None
     ).unwrap();
     
     // Tamper with transcript hash
@@ -176,7 +183,8 @@ fn test_v2_initiator_to_v1_peer() {
     // Alice initiates, but bob only supports V1
     let env = encrypt_with_ratchet_fallback(
         &alice.signing_key, Some(&bob_v1_bundle), &bob_v1_bundle.ed25519_public,
-        b"Fallback", Some(&mut alice_manager), &bob_id, Some(&alice_bundle)
+        b"Fallback", Some(&mut alice_manager), &bob_id, Some(&alice_bundle),
+        false, None
     ).unwrap();
     
     // Should fallback to V1
@@ -205,7 +213,8 @@ fn test_pq_session_persistence() {
     // Alice sends
     let env = encrypt_with_ratchet_fallback(
         &alice.signing_key, Some(&bob_bundle), &bob_bundle.ed25519_public,
-        b"Msg", Some(&mut alice_manager), &bob_id, Some(&alice_bundle)
+        b"Msg", Some(&mut alice_manager), &bob_id, Some(&alice_bundle),
+        false, None
     ).unwrap();
     
     decrypt_with_ratchet_fallback(
@@ -221,7 +230,8 @@ fn test_pq_session_persistence() {
     // Alice sends again
     let env2 = encrypt_with_ratchet_fallback(
         &alice.signing_key, Some(&bob_bundle), &bob_bundle.ed25519_public,
-        b"Msg 2", Some(&mut new_alice), &bob_id, Some(&alice_bundle)
+        b"Msg 2", Some(&mut new_alice), &bob_id, Some(&alice_bundle),
+        false, None
     ).unwrap();
     
     let dec2 = decrypt_with_ratchet_fallback(

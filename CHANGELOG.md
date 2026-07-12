@@ -35,6 +35,35 @@ assigned — an account-level problem, see
 - Added `docs/release-readiness-2026-07-02.md`: evidence-based release
   readiness assessment and ordered handoff task list.
 
+## [0.3.5] — 2026-07-11
+
+### Added
+- Post-quantum hybrid migration (PQC-01 through PQC-08): ML-KEM-768
+  primitives, hybrid X25519+ML-KEM-768 session establishment, suite
+  negotiation (0x01 legacy / 0x02 hybrid), PQ-augmented double ratchet,
+  legacy static-ECDH retirement gating with audit logging.
+- `docs/ORCHESTRATION.md`: unified cross-mode orchestration protocol
+  (state machine, dispatcher, tier routing, commit authority) covering
+  native Claude, Qwen/DashScope, OpenRouter, agy/Gemini, and Ollama lanes.
+- `scripts/delegate_task.py`: `--verify`/`--max-rounds` auto-fix loop and
+  `--mode diff` unified-diff support, reducing compile-fix round trips.
+
+### Fixed
+- Restored the `cargo test --workspace --no-run` compile gate: fixed a
+  UniFFI enum/UDL mismatch (`LegacyStaticEcdhSend`), 41 stale-struct-shape
+  errors in `core/src/crypto/{encrypt,ratchet}.rs` unit tests, a
+  production bug where legacy-ECDH audit events recorded the peer under
+  the wrong field, and a test bug where a hybrid-ratchet receiver test
+  decapsulated a mismatched ciphertext.
+- iOS CI workflow (`ios-build-test.yml`): removed failure-masking
+  (`xcpretty || true`), fixed lowercase path references, added a Swift
+  bindings drift gate.
+
+### Changed
+- Repository hygiene: archived 25 stale/superseded docs to
+  `docs/historical/`, rewrote `README.md` and GitHub repo metadata for
+  accuracy, groomed `HANDOFF/todo/` to live tasks only.
+
 ## [1.0.0-rc2] — 2026-06-17
 
 Release candidate completing the Fable 5 plan. All core subsystems implemented,

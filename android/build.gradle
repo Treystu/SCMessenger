@@ -31,8 +31,8 @@ buildscript {
         // at runtime, eliminating the v0.3.2 NPE at
         // IdentityScreen.ProofOfWorkList.currentStage.id that the v0.3.3 defense-
         // in-depth `?: return` workaround merely silenced.
-        versionCode = 12
-        versionName = '0.3.4'
+        versionCode = 13
+        versionName = '0.3.5'
     }
     
     repositories {

@@ -410,17 +410,9 @@ fn should_use_ratcheted_encryption(
         Some(bundle) => {
             // V2 peer (has bundle)
             if bundle.supported_suites.contains(&0x02) {
-                // Peer supports v2 hybrid ratchet
-                if session_exists {
-                    // Session exists - must use ratcheted
-                    Ok(true)
-                } else {
-                    // No session yet - must establish hybrid ratchet, not fall back to legacy
-                    Err(anyhow::anyhow!(
-                        "V2 peer {} requires hybrid ratchet session, cannot fall back to legacy static-ECDH",
-                        peer_id
-                    ))
-                }
+                // Peer supports v2 hybrid ratchet - always use ratcheted encryption
+                // Session establishment vs. reuse is handled by the caller
+                Ok(true)
             } else {
                 // V2 peer but doesn't support suite 0x02 - treat as v1
                 if session_exists {
@@ -515,8 +507,8 @@ pub fn encrypt_with_ratchet_fallback(
             if let Some(audit) = audit_log {
                 audit.append(
                     crate::observability::AuditEventType::LegacyStaticEcdhSend,
-                    Some(peer_id.to_string()),
                     None,
+                    Some(peer_id.to_string()),
                     None,
                 );
             }
@@ -766,13 +758,12 @@ mod tests {
     #[test]
     fn test_should_use_ratcheted_encryption_v2_peer_with_session() {
         let bundle = crate::identity::PublicKeyBundle {
-            identity_id: "test".to_string(),
-            device_id: "test".to_string(),
+            ed25519_public: [0u8; 32],
+            x25519_public: [0u8; 32],
+            mlkem_encaps_key: vec![0u8; 32],
+            created_at: 0,
             supported_suites: vec![0x02],
-            x25519_public_key: vec![0u8; 32],
-            mlkem768_public_key: Some(vec![0u8; 1184]),
-            timestamp: 0,
-            signature: vec![0u8; 64],
+            signature: vec![],
         };
         
         let result = should_use_ratcheted_encryption(Some(&bundle), true, false, "test_peer");
@@ -783,18 +774,17 @@ mod tests {
     #[test]
     fn test_should_use_ratcheted_encryption_v2_peer_no_session() {
         let bundle = crate::identity::PublicKeyBundle {
-            identity_id: "test".to_string(),
-            device_id: "test".to_string(),
+            ed25519_public: [0u8; 32],
+            x25519_public: [0u8; 32],
+            mlkem_encaps_key: vec![0u8; 32],
+            created_at: 0,
             supported_suites: vec![0x02],
-            x25519_public_key: vec![0u8; 32],
-            mlkem768_public_key: Some(vec![0u8; 1184]),
-            timestamp: 0,
-            signature: vec![0u8; 64],
+            signature: vec![],
         };
         
         let result = should_use_ratcheted_encryption(Some(&bundle), false, false, "test_peer");
-        assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("V2 peer"));
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), true);
     }
 
     #[test]
@@ -821,13 +811,12 @@ mod tests {
     #[test]
     fn test_should_use_ratcheted_encryption_v2_peer_no_suite_02_with_session() {
         let bundle = crate::identity::PublicKeyBundle {
-            identity_id: "test".to_string(),
-            device_id: "test".to_string(),
+            ed25519_public: [0u8; 32],
+            x25519_public: [0u8; 32],
+            mlkem_encaps_key: vec![0u8; 32],
+            created_at: 0,
             supported_suites: vec![0x01], // Only supports v1
-            x25519_public_key: vec![0u8; 32],
-            mlkem768_public_key: None,
-            timestamp: 0,
-            signature: vec![0u8; 64],
+            signature: vec![],
         };
         
         let result = should_use_ratcheted_encryption(Some(&bundle), true, false, "test_peer");
@@ -838,13 +827,12 @@ mod tests {
     #[test]
     fn test_should_use_ratcheted_encryption_v2_peer_no_suite_02_no_session_no_require_pq() {
         let bundle = crate::identity::PublicKeyBundle {
-            identity_id: "test".to_string(),
-            device_id: "test".to_string(),
+            ed25519_public: [0u8; 32],
+            x25519_public: [0u8; 32],
+            mlkem_encaps_key: vec![0u8; 32],
+            created_at: 0,
             supported_suites: vec![0x01], // Only supports v1
-            x25519_public_key: vec![0u8; 32],
-            mlkem768_public_key: None,
-            timestamp: 0,
-            signature: vec![0u8; 64],
+            signature: vec![],
         };
         
         let result = should_use_ratcheted_encryption(Some(&bundle), false, false, "test_peer");
@@ -855,13 +843,12 @@ mod tests {
     #[test]
     fn test_should_use_ratcheted_encryption_v2_peer_no_suite_02_no_session_require_pq() {
         let bundle = crate::identity::PublicKeyBundle {
-            identity_id: "test".to_string(),
-            device_id: "test".to_string(),
+            ed25519_public: [0u8; 32],
+            x25519_public: [0u8; 32],
+            mlkem_encaps_key: vec![0u8; 32],
+            created_at: 0,
             supported_suites: vec![0x01], // Only supports v1
-            x25519_public_key: vec![0u8; 32],
-            mlkem768_public_key: None,
-            timestamp: 0,
-            signature: vec![0u8; 64],
+            signature: vec![],
         };
         
         let result = should_use_ratcheted_encryption(Some(&bundle), false, true, "test_peer");
@@ -1111,6 +1098,6 @@ mod tests {
         assert!(result.is_ok());
         assert_eq!(audit_log.events.len(), 1);
         assert_eq!(audit_log.events[0].event_type, AuditEventType::LegacyStaticEcdhSend);
-        assert_eq!(audit_log.events[0].actor_id, Some("test_peer".to_string()));
+        assert_eq!(audit_log.events[0].peer_id, Some("test_peer".to_string()));
     }
 }

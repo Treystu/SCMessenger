@@ -7,6 +7,7 @@
 # reported back to the orchestrator via callback URL.
 #
 # Triggers: Manual dispatch with sprint_id and git_branch inputs
+#           Plus push and pull_request on iOS/** and core/src/api.udl
 #
 # Jobs:
 #   build-ios:       Cross-compile Rust → iOS, build XCFramework, run XCTest
@@ -28,6 +29,16 @@ on:
         required: true
         default: main
         type: string
+  pull_request:
+    paths:
+      - 'iOS/**'
+      - 'core/src/api.udl'
+      - 'mobile/**'
+  push:
+    paths:
+      - 'iOS/**'
+      - 'core/src/api.udl'
+      - 'mobile/**'
 
 env:
   CARGO_TERM_COLOR: always
@@ -73,6 +84,15 @@ jobs:
       - name: Build Rust core for iOS Simulator (aarch64-apple-ios-sim)
         run: cargo build --release --target aarch64-apple-ios-sim -p scmessenger-core
 
+      # --- Host Native Build for Bindings Generation ---
+      - name: Build host native library for bindings generation
+        run: cargo build -p scmessenger-mobile
+
+      # --- Swift Bindings Drift Check ---
+      - name: Verify Swift bindings are up to date
+        run: |
+          ./scripts/verify_ios_bindings.sh
+
       # --- XCFramework ---
       - name: Build XCFramework
         run: |
@@ -81,35 +101,39 @@ jobs:
 
       - name: Verify XCFramework exists
         run: |
-          if [ ! -d "ios/SCMessengerCore.xcframework" ]; then
-            echo "ERROR: XCFramework not found at ios/SCMessengerCore.xcframework"
-            ls -la ios/
+          if [ ! -d "iOS/SCMessengerCore.xcframework" ]; then
+            echo "ERROR: XCFramework not found at iOS/SCMessengerCore.xcframework"
+            ls -la iOS/
             exit 1
           fi
           echo "XCFramework generated successfully:"
-          ls -la ios/SCMessengerCore.xcframework/
+          ls -la iOS/SCMessengerCore.xcframework/
 
       # --- iOS Simulator Test ---
       - name: Build for testing (iOS Simulator)
-        working-directory: ios
+        working-directory: iOS
         run: |
+          set -o pipefail
           xcodebuild build-for-testing \
+            -project iOS/SCMessenger/SCMessenger.xcodeproj \
             -scheme SCMessenger \
             -destination 'platform=iOS Simulator,name=iPhone 15' \
             -configuration Debug \
             CODE_SIGNING_ALLOWED=NO \
-            | xcpretty || true
+            | xcpretty
 
       - name: Run iOS tests
-        working-directory: ios
+        working-directory: iOS
         run: |
+          set -o pipefail
           xcodebuild test \
+            -project iOS/SCMessenger/SCMessenger.xcodeproj \
             -scheme SCMessenger \
             -destination 'platform=iOS Simulator,name=iPhone 15' \
             -configuration Debug \
             -resultBundlePath ../test-results/ios-test-results.xcresult \
             CODE_SIGNING_ALLOWED=NO \
-            | xcpretty || true
+            | xcpretty
 
       # --- Artifacts ---
       - name: Upload test results

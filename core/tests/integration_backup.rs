@@ -312,12 +312,16 @@ fn iron_core_backup_restore_preserves_ratchet_continuity_and_contacts() {
         let sessions = alice.ratchet_sessions_handle();
         let mut guard = sessions.write();
         let session = guard.get_session_mut("bob").expect("alice session exists");
-        encrypt_message_ratcheted(
+        let wire_envelope = encrypt_message_ratcheted(
             &alice.test_only_identity_signing_key(),
             session,
             b"hello bob, before backup",
         )
-        .expect("alice encrypts first message")
+        .expect("alice encrypts first message");
+        match wire_envelope {
+            scmessenger_core::message::WireEnvelope::V1(env) => env,
+            scmessenger_core::message::WireEnvelope::V2(_) => panic!("expected classical V1 envelope in this test"),
+        }
     };
     {
         let sessions = bob.ratchet_sessions_handle();
@@ -375,12 +379,16 @@ fn iron_core_backup_restore_preserves_ratchet_continuity_and_contacts() {
         let session = guard
             .get_session_mut("bob")
             .expect("restored session exists");
-        encrypt_message_ratcheted(
+        let wire_envelope = encrypt_message_ratcheted(
             &alice_restored.test_only_identity_signing_key(),
             session,
             b"hello bob, after restore",
         )
-        .expect("restored session encrypts next message")
+        .expect("restored session encrypts next message");
+        match wire_envelope {
+            scmessenger_core::message::WireEnvelope::V1(env) => env,
+            scmessenger_core::message::WireEnvelope::V2(_) => panic!("expected classical V1 envelope in this test"),
+        }
     };
     {
         let sessions = bob.ratchet_sessions_handle();
