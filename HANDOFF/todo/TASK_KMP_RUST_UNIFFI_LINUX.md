@@ -1,5 +1,21 @@
 # TASK: KMP Scaffolding & Rust Integration — Rust & UniFFI Linux Specialist
 
+Status update 2026-07-12 (reality-check pass): steps 1-4 are DONE --
+`desktop_bridge/` exists in the workspace with real, substantial modules
+(`ble.rs`, `notification.rs`, `power.rs`, `socket_activation.rs`, `tray.rs`,
+`xdg_paths.rs`, `types.rs`), has its own UniFFI proc-macro scaffolding
+(`uniffi::setup_scaffolding!()` in `lib.rs`), and is a workspace member.
+**Step 5 is NOT done**: confirmed via `grep` that `desktop_bridge/Cargo.toml`
+has zero occurrences of `gen-bindings`/`gen_kotlin`/`[[bin]]` -- unlike
+`core/Cargo.toml`, which has a full `gen-bindings` feature + `gen_kotlin`
+bin target, `desktop_bridge` has no binding-generation mechanism set up at
+all yet, and no desktop-specific generated `.kt` file was found anywhere in
+the repo (only `core/target/generated-sources/uniffi/kotlin/uniffi/api/api.kt`,
+which is the existing mobile/core binding, not a desktop_bridge one).
+Remaining work: add the same `gen-bindings` feature + `gen_kotlin`-equivalent
+bin to `desktop_bridge/Cargo.toml`, generate its Kotlin bindings, and verify
+they compile against KMP targeting `linuxX64`.
+
 ## Agent Role
 Agent 1: Rust & UniFFI Linux Specialist
 
