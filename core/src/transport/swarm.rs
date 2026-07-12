@@ -4189,8 +4189,35 @@ pub async fn start_swarm_with_config(
                                     .try_into()
                                     .expect("blake3 hash should be at least 4 bytes");
 
-                                // Route message using mycorrhizal routing engine
-                                let routing_decision = {
+                                // Route message using mycorrhizal routing engine.
+                                //
+                                // CRITICAL BYPASS: the mycorrhizal engine only ever sees a
+                                // 4-byte hint -- it has no way to know we already hold an
+                                // active libp2p connection to this exact peer_id right now,
+                                // and its layers (negative cache/prefetch/multipath/base
+                                // discovery) are designed for *indirect* routing when the
+                                // path genuinely isn't known. Without this check, a message
+                                // to an already-connected peer could get decided as
+                                // StoreAndCarry/RouteDiscovery and queued indefinitely
+                                // instead of dispatched immediately (see
+                                // HANDOFF/todo/CRITICAL_OUTBOX_NEVER_FLUSHES_DESPITE_ACTIVE_CONNECTION.md).
+                                // The wasm32 SendMessage variant already does this ("simple
+                                // direct send without complex routing") -- this mirrors that
+                                // pattern for the native path instead of consulting the
+                                // hint-only engine when we don't need to.
+                                let routing_decision = if swarm.is_connected(&peer_id) {
+                                    RoutingDecision {
+                                        message_id: message_id.as_bytes()[0..16].try_into().unwrap_or([0u8; 16]),
+                                        recipient_hint: hint,
+                                        primary: NextHop::Direct {
+                                            peer_id: peer_id_bytes,
+                                            transport: RoutingTransportType::TCP,
+                                        },
+                                        alternatives: vec![],
+                                        decided_by: RoutingLayer::Local,
+                                        confidence: 1.0,
+                                    }
+                                } else {
                                     let mut guard = routing_engine_handle.write();
                                     if let Some(ref mut engine) = guard.as_mut() {
                                         engine.route_message_optimized(

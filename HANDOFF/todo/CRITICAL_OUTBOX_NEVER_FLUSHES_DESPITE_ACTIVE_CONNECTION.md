@@ -119,26 +119,88 @@ to pin down definitively - static tracing has identified the architectural
 gap (no connection-aware routing bypass) but not yet the EXACT reason THIS
 message specifically never got attempted or never got acknowledged.
 
-## What to investigate
+## Update 2026-07-12: Site 2 fix applied; a THIRD, separate gap confirmed
 
-1. Add temporary tracing at Site 1 (which branch: outbox vs drift-store) and
-   Site 2 (does `send_request` get called for this message_id, does a
-   response ever arrive) to pin down exactly where the flow stops for THIS
-   message, before writing the fix.
-2. The fix itself (once confirmed): add an early `swarm.is_connected(&peer_id)`
-   check before invoking `route_message_optimized` at Site 2, constructing
-   `RoutingDecision { primary: NextHop::Direct { peer_id, transport: TCP },
-   decided_by: RoutingLayer::Local, confidence: 1.0, .. }` directly when
-   true (bypassing the hint-only engine entirely, matching the WASM path's
-   "simple direct send" pattern). Consider whether Site 1's outbox/drift
-   branching also needs the same connection-aware check, or whether it's
-   fine as pure durability-queuing as long as Site 2 actually delivers.
-3. Is there ANY outbox flush/retry mechanism at all? `attempts=0` after 11
-   hours suggests either no periodic retry exists, or it exists but is
-   itself broken/never triggered. Check `core/src/store/outbox.rs` and
-   whatever's supposed to call it periodically - this matters regardless of
-   the Site 1/2 fix, as the retry path for messages queued while genuinely
-   offline.
+**Site 2 fix APPLIED** (`core/src/transport/swarm.rs`, native
+`SwarmCommand::SendMessage` handler): added an early
+`swarm.is_connected(&peer_id)` check that constructs
+`RoutingDecision { primary: NextHop::Direct { peer_id: peer_id_bytes,
+transport: RoutingTransportType::TCP }, decided_by: RoutingLayer::Local,
+confidence: 1.0, .. }` directly when true, bypassing
+`route_message_optimized` entirely (matching the wasm32 variant's existing
+"simple direct send" pattern). Compile/test verification in progress; live
+re-verification (repeat the CLI<->Android test, confirm bytesTransferred>0)
+still required before this is DONE - do not mark closed on compile-pass alone.
+
+**Site 3, confirmed via dedicated investigation
+(`INVESTIGATE_OUTBOX_RETRY_MECHANISM.md`, done/): the outbox has NO
+retry/flush mechanism at all - not broken, MISSING.** `core/src/store/outbox.rs`
+has `enqueue`/`drain_for_peer`/`peek_for_peer`/`record_attempt`/`remove` as
+pure data-management primitives, but nothing anywhere in the codebase calls
+`record_attempt` or periodically scans the queue to attempt (re)delivery.
+This is independent of the Site 2 fix and matters for the genuinely-offline
+case: Site 2's fix only helps messages sent while ALREADY connected - a
+message queued while the recipient is truly offline would sit forever with
+`attempts=0` even after the recipient reconnects, since nothing ever comes
+back to try again. **A periodic outbox-flush loop needs to be built from
+scratch** (e.g. in the swarm event loop, on a timer and/or on peer-connected
+events: scan `outbox` for entries whose recipient just connected, call
+`drain_for_peer`, attempt delivery via the same dispatch path as Site 2,
+`record_attempt`/`remove` on success or failure).
+
+## Update 2026-07-12: adversarial review + live re-verification of Site 2
+
+**Adversarial review verdict (crypto-security-auditor): NEEDS FIXES, but the
+diff itself is safe to keep.** No race condition (single-threaded swarm event
+loop, no `.await` between the `is_connected` check and dispatch), no
+reputation/rate-limit/abuse-guardrail bypass (those gates only exist on the
+inbound relay path, never touched by outbound `SendMessage`), hardcoded
+`RoutingTransportType::TCP` and `confidence: 1.0` are both cosmetic (proven by
+tracing `routing_decision_to_ranked_routes` - the embedded `peer_id`/transport
+fields are discarded in favor of the real `target_peer` parameter). Two real
+gaps flagged: (B) no regression test exercises the `is_connected==true` bypass
+branch - needs one before this is considered done; (C) this diff alone does
+**not** close this ticket - Site 1 (`iron_core.rs`) and Site 3 (outbox
+flush/retry) remain untouched, confirmed by the reviewer independently
+re-deriving the same three-site breakdown this doc already had.
+
+**Live re-verification: Site 2 fix CONFIRMED WORKING.** Rebuilt the CLI with
+the fix, restarted the daemon against the same live Android emulator
+connection used for the original 11-hour-stuck repro. Result:
+```
+ROUTE_DECISION ... route=direct ... policy_reason=DIRECT_FROM_ROUTING_ENGINE ... relay_score=1.000
+[OK] Message delivered successfully to 12D3KooWSLkR1yNngFGG7mheNM4wbQYRRo4D9599Rwga1gvcVfY7 (5-11ms)
+```
+Multiple messages delivered in single-digit milliseconds immediately upon
+reconnection, versus the old behavior (`StoreAndCarry`/`confidence=0.0`,
+never delivered for 11 hours). This confirms Site 2 does what it was meant
+to do for the direction it covers (CLI-as-sender to an already-connected
+peer). See the newly filed
+`CRITICAL_ANDROID_FALSE_DELIVERY_FAILURE_NO_RECEIPT_ACK.md` for a separate,
+Android-side bug found via the same live session (Android-as-sender message
+delivered successfully but self-reported as failed due to a missing
+receipt/ack path) - unrelated to Site 2/3 but discovered in the same
+investigation.
+
+## What's left to do
+
+1. Finish compile/test verification of the Site 2 fix (in progress).
+2. Mandatory adversarial review of the Site 2 diff (`core/src/transport/`).
+3. Live re-verification: repeat the Windows-CLI<->Android-emulator test,
+   confirm a message sent to an ALREADY-connected peer now actually arrives
+   (bytesTransferred>0, visible in recipient history) - this validates Site
+   2 specifically, not Site 3.
+4. Separately, design and implement the Site 3 outbox-flush loop (new work,
+   not a wiring fix - track as its own follow-up once Site 2 is confirmed
+   live, to keep this ticket's scope reviewable in one pass). Consider
+   whether it belongs in `core/src/transport/swarm.rs` (has peer-connected
+   events already) or `core/src/store/outbox.rs` itself with an external
+   trigger.
+5. Still open: whether Site 1's (`iron_core.rs::prepare_message_internal`)
+   outbox/drift-store branching needs its own connection-aware check, or
+   whether it's fine as pure durability-queuing now that Site 2 delivers
+   immediately when connected and Site 3 (once built) handles the
+   reconnect-later case.
 
 ## Separate, smaller finding worth folding into cleanup
 
