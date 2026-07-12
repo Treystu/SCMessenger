@@ -57,23 +57,88 @@ recognized the direct connection and delivered immediately, or at minimum
 retried against the known-active connection instead of leaving the message
 in the outbox indefinitely with zero attempts.
 
+## Root cause - traced 2026-07-12, precise, two distinct gap sites
+
+Both confirmed by direct source reading (not speculation), same underlying
+pattern: the "mycorrhizal" mesh-routing engine (`route_message_optimized`,
+`core/src/routing/optimized_engine.rs:70`) only ever receives a 4-byte
+blake3 `recipient_hint` - it has NO way to know "the caller already has a
+`libp2p::PeerId` for this recipient AND the swarm may already be directly
+connected to it right now." Its layers (negative cache -> prefetch cache ->
+multipath -> base engine hierarchical discovery) are all designed for
+*indirect*/relay routing when you genuinely don't know the path - there is
+no "check `swarm.is_connected(&peer_id)` first" bypass anywhere before
+falling through to these hint-only layers, even though `NextHop::Direct
+{ peer_id, transport }` already exists as a variant
+(`core/src/routing/engine.rs:19`) and `swarm.is_connected()` is already used
+elsewhere in `swarm.rs` (e.g. lines 1190, 3125) - the pieces to fix this
+exist, they're just not wired together at the send call sites.
+
+**Site 1 - `core/src/iron_core.rs::prepare_message_internal` (~line 693-741):**
+calls `self.make_routing_decision(hint, ...)` to decide `outbox.enqueue()`
+vs `drift_store.insert()` (StoreAndCarry -> drift custody, per the
+`handoff_to_drift` bool at line 707-712). This function is called by
+`prepare_message_with_id`, which is the FIRST thing `handle_send_message`
+(`cli/src/api_axum.rs:33`) calls, before `swarm_handle.send_message`. This
+queuing itself may be intentional (durability - always persist before
+attempting live send), so this site alone may not be the bug; needs
+confirming whether it's the `outbox_enqueue` I observed or a red herring
+from a different call (`prepare_onion_message`'s relay-selection path at
+line 681 also touches routing).
+
+**Site 2 - `core/src/transport/swarm.rs`, `SwarmCommand::SendMessage` handler
+(~line 4177-4266, the non-wasm variant):** calls `route_message_optimized`
+with only a hint derived from the ALREADY-KNOWN `peer_id` parameter, then
+converts the decision to routes via `routing_decision_to_ranked_routes`
+(line 847) and dispatches via `dispatch_ranked_route` (line 792). Traced
+`dispatch_ranked_route` fully: for a single-hop path (true for BOTH
+`NextHop::Direct` and `NextHop::StoreAndCarry`, since
+`routing_decision_to_ranked_routes` builds `path: vec![*target_peer]` for
+both - see lines 887-893 and 943-952) it unconditionally calls
+`swarm.behaviour_mut().messaging.send_request(&target_peer, ...)` - so a
+StoreAndCarry decision does NOT skip the network attempt at this layer.
+**Important contrast:** the `#[cfg(target_arch = "wasm32")]` variant of this
+same handler (~line 4268) explicitly comments "WASM: Simple direct send
+without complex routing" and skips the whole routing-engine detour entirely
+- proving the "just send directly when you already have a peer_id" pattern
+is an intentional, working design elsewhere in this codebase; it's simply
+missing from the native (non-wasm) path.
+
+**Still unresolved:** given Site 2's `send_request` call is unconditional,
+the actual network attempt may have genuinely fired - the persistent
+`attempts=0`/`bytesTransferred=0` result over 11 hours could mean the
+`send_request` call itself failed/errored silently (not logged), OR the
+reply-channel bookkeeping (`pending_messages` map, storing `reply_tx`
+for later resolution - line 4254) never got resolved and the request
+response never arrived/was never processed, OR Site 1's queuing happened
+but Site 2 (`swarm_handle.send_message`) was never actually reached/awaited
+for this specific message. This needs live instrumentation (temporary
+`eprintln!`/`tracing` at each site, similar to how the PQC-07 cadence bug
+was empirically diagnosed this session) rather than further static reading
+to pin down definitively - static tracing has identified the architectural
+gap (no connection-aware routing bypass) but not yet the EXACT reason THIS
+message specifically never got attempted or never got acknowledged.
+
 ## What to investigate
 
-1. Trace `core/src/routing/optimized_engine.rs`'s routing decision logic:
-   why does it not check "is this recipient's underlying peer_id part of an
-   active swarm connection" before falling back to `StoreAndCarry`/
-   `RouteDiscovery`? Is there a missing mapping from `recipient_id`
-   (public-key-hex/canonical ID) to the swarm's connected `PeerId` set?
-2. Is there ANY outbox flush/retry mechanism at all? `attempts=0` after 11
+1. Add temporary tracing at Site 1 (which branch: outbox vs drift-store) and
+   Site 2 (does `send_request` get called for this message_id, does a
+   response ever arrive) to pin down exactly where the flow stops for THIS
+   message, before writing the fix.
+2. The fix itself (once confirmed): add an early `swarm.is_connected(&peer_id)`
+   check before invoking `route_message_optimized` at Site 2, constructing
+   `RoutingDecision { primary: NextHop::Direct { peer_id, transport: TCP },
+   decided_by: RoutingLayer::Local, confidence: 1.0, .. }` directly when
+   true (bypassing the hint-only engine entirely, matching the WASM path's
+   "simple direct send" pattern). Consider whether Site 1's outbox/drift
+   branching also needs the same connection-aware check, or whether it's
+   fine as pure durability-queuing as long as Site 2 actually delivers.
+3. Is there ANY outbox flush/retry mechanism at all? `attempts=0` after 11
    hours suggests either no periodic retry exists, or it exists but is
    itself broken/never triggered. Check `core/src/store/outbox.rs` and
-   whatever's supposed to call it periodically.
-3. Confirm whether this reproduces with the SAME identifier convention
-   throughout - i.e. is part of the problem that `recipient_id` in the
-   outbox/routing layer is the public-key-hex while the swarm's connected
-   peers are tracked by libp2p `PeerId`, and something in between
-   (`extract_public_key_from_peer_id`/reverse lookup) is either missing or
-   not being consulted by the routing decision?
+   whatever's supposed to call it periodically - this matters regardless of
+   the Site 1/2 fix, as the retry path for messages queued while genuinely
+   offline.
 
 ## Separate, smaller finding worth folding into cleanup
 
