@@ -100,16 +100,75 @@ into `MeshRepository.kt`'s `awaiting_receipt_delay_sec=30` wait. Whatever
 receipt Android's retry loop is actually waiting for is either a different,
 not-yet-located mechanism, or genuinely does not exist end-to-end yet.
 
+## ROOT CAUSE FOUND (2026-07-12, definitive, traced end to end)
+
+The receipt mechanism is not missing conceptually -- Android's
+`sendDeliveryReceiptAsync`/`onReceiptReceived` (`MeshRepository.kt:2118,
+2255`) and the core's `prepare_receipt`/`on_receipt_received` FFI trait
+(`iron_core.rs:1567`, `api.udl:108`) all genuinely exist and are real,
+working infrastructure on the Android side. The break is that **nothing in
+the shared Rust core ever recognizes an incoming payload as a receipt and
+fires that callback** -- confirmed by grepping all of `core/src/` for
+`Receipt`: it appears in exactly two places, `iron_core.rs:1572`
+(construction/JSON-serialize in `prepare_receipt`) and the `lib.rs`
+re-export. There is no classification logic anywhere in
+`core/src/transport/swarm.rs` or `core/src/mobile_bridge.rs` that inspects
+an incoming message and routes it to `on_receipt_received` -- that trait
+method is defined and forwarded (`mobile_bridge.rs:1907-1910`) but never
+actually invoked by anything. It is dead-on-arrival infrastructure, the same
+shape of bug as the outbox's unused `record_attempt` found earlier this
+session.
+
+The ONLY code anywhere that attempts to recognize an incoming receipt lives
+in the CLI's own client code, not the shared core:
+`cli/src/main.rs:1913-1925`, a `MessageType::Receipt` match arm that calls
+`bincode::deserialize::<scmessenger_core::Receipt>(&msg.payload)`. But
+`prepare_receipt` (`iron_core.rs:1581`) builds the payload with
+`serde_json::to_vec(&receipt)` -- **JSON, not bincode.** Deserializing a JSON
+byte string as bincode will fail (`Err`, silently swallowed by the `if let
+Ok(...)` with no `else`), so even the CLI's own hand-rolled receipt
+recognition is broken by a serialization-format mismatch with the very
+function that produces the payload it's trying to read.
+
+Net effect: a receipt genuinely cannot complete its round trip today, on
+either end, for two independent reasons stacked on top of each other:
+1. Shared core (affects Android specifically, since Android has no other
+   receipt-recognition code path): no incoming-message classification
+   exists to ever call `on_receipt_received` -- so `onReceiptReceived` in
+   Kotlin can never fire no matter what the CLI sends.
+2. CLI's own ad-hoc classification (which the shared core lacks): even if it
+   were reachable, its bincode deserialization would fail against the
+   JSON payload `prepare_receipt` actually produces.
+
+This is NOT the `swarm.rs` routing bug (Site 2, already fixed and verified
+this session) -- confirmed live: the receipt payload itself was proven to
+physically transmit successfully (`[OK] Message delivered successfully to
+12D3KooW... (9-12ms)` immediately following `Sending delivery ACK for
+<id> to <peer>` in the CLI's own log, 2026-07-12 21:47:20). The bytes
+arrive; nothing on the receiving end (whichever side receives it) is wired
+to recognize them as a receipt.
+
 ## What's left to do
 
-1. Trace whether a receipt/ack message type exists in the wire protocol at
-   all (`core/src/crypto/encrypt.rs` envelope types, `core/src/routing/`
-   request-response protocol) -- if genuinely missing, this needs a small
-   protocol addition (peer sends a lightweight ack envelope back on
-   successful decrypt/store of an incoming message), not just a client fix.
-   `DELIVERY_CONVERGENCE_TOPIC` is confirmed NOT this mechanism (see above) --
-   don't re-investigate it, look elsewhere (grep `MeshRepository.kt` for what
-   populates `awaiting_receipt_delay_sec`/what it's actually keyed on first).
+1. Add message classification in the shared core's incoming-message path
+   (`core/src/transport/swarm.rs`'s request-response `Message::Request`
+   handler is the natural place, mirroring how `RelayMessage::from_bytes` is
+   already tried there for relay discovery) that attempts
+   `serde_json::from_slice::<crate::Receipt>(&data)` and, on success, invokes
+   the `on_receipt_received` delegate callback instead of treating it as a
+   normal text message.
+2. Fix `cli/src/main.rs:1915`'s `bincode::deserialize` to `serde_json::from_slice`
+   to match what `prepare_receipt` actually produces (or standardize both
+   producer and consumer on one format explicitly -- either is fine, they
+   just need to agree).
+3. Once wired, the retry loop hardening from the original writeup still
+   applies as defense-in-depth: a confirmed transport-layer send success
+   should not be retried indefinitely just because the (now-fixed) receipt
+   hasn't arrived yet within the 30s window -- widen the window or treat
+   "sent successfully" as a distinct, less alarming state than "definitely
+   failed" while waiting.
+4. `DELIVERY_CONVERGENCE_TOPIC` remains confirmed NOT relevant (see above);
+   don't re-investigate it.
 2. If an ack mechanism exists but isn't wired to this Android retry path,
    find where it should terminate the retry loop and wire it.
 3. Regardless of ack fix, make the retry loop itself safer: a confirmed
