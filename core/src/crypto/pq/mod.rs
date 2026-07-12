@@ -1,5 +1,6 @@
 // core/src/crypto/pq/mod.rs
 pub mod hybrid;
+pub mod mldsa;
 
 use anyhow::{anyhow, Result};
 use libcrux_ml_kem::mlkem768;

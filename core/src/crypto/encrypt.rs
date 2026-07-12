@@ -306,7 +306,17 @@ pub fn decrypt_message_ratcheted_v2(
     // here for post-confirmation messages, which represent a genuine PQ
     // ratchet step from perform_pq_ratchet_step, not the initial bootstrap.
     if session.negotiated_suite == Some(0x02) && session.peer_confirmed {
-        session.validate_pq_fields_present(envelope.pq_kem_ciphertext.is_some())?;
+        // The anti-stripping check only applies at genuine cadence boundaries
+        // (mirrors encrypt_message_ratcheted's own `current_message_number % 100
+        // == 0` trigger). pq_their_encaps_key is already `Some` from the initial
+        // bootstrap handshake, so checking on every message would flag every
+        // ordinary in-between message as a stripping attempt -- PQ fields are
+        // only ever expected on the message numbers that actually trigger a
+        // fresh PQ ratchet step.
+        let expects_pq_fields = message_number > 0 && message_number % 100 == 0;
+        if expects_pq_fields {
+            session.validate_pq_fields_present(envelope.pq_kem_ciphertext.is_some())?;
+        }
         if let (Some(pq_kem_ciphertext), Some(pq_encaps_key)) =
             (&envelope.pq_kem_ciphertext, &envelope.pq_encaps_key)
         {
@@ -789,6 +799,8 @@ mod tests {
             created_at: 0,
             supported_suites: vec![0x02],
             signature: vec![],
+            mldsa_public: None,
+            mldsa_signature: None,
         };
         
         let result = should_use_ratcheted_encryption(Some(&bundle), true, false, "test_peer");
@@ -805,6 +817,8 @@ mod tests {
             created_at: 0,
             supported_suites: vec![0x02],
             signature: vec![],
+            mldsa_public: None,
+            mldsa_signature: None,
         };
         
         let result = should_use_ratcheted_encryption(Some(&bundle), false, false, "test_peer");
@@ -842,6 +856,8 @@ mod tests {
             created_at: 0,
             supported_suites: vec![0x01], // Only supports v1
             signature: vec![],
+            mldsa_public: None,
+            mldsa_signature: None,
         };
         
         let result = should_use_ratcheted_encryption(Some(&bundle), true, false, "test_peer");
@@ -858,6 +874,8 @@ mod tests {
             created_at: 0,
             supported_suites: vec![0x01], // Only supports v1
             signature: vec![],
+            mldsa_public: None,
+            mldsa_signature: None,
         };
         
         let result = should_use_ratcheted_encryption(Some(&bundle), false, false, "test_peer");
@@ -874,6 +892,8 @@ mod tests {
             created_at: 0,
             supported_suites: vec![0x01], // Only supports v1
             signature: vec![],
+            mldsa_public: None,
+            mldsa_signature: None,
         };
         
         let result = should_use_ratcheted_encryption(Some(&bundle), false, true, "test_peer");

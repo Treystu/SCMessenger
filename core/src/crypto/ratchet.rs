@@ -204,7 +204,17 @@ impl RatchetSession {
         self.their_dh_public.as_ref().map(|k| k.to_bytes())
     }
 
+    #[cfg(not(feature = "test-utils"))]
     pub(crate) fn root_key_bytes(&self) -> [u8; 32] {
+        *self.root_key.as_bytes()
+    }
+
+    /// Exposed `pub` only under `test-utils` so external integration tests can
+    /// assert the PQ ratchet cadence actually refreshed the root key; kept
+    /// `pub(crate)` otherwise so raw root-key material never enters the
+    /// library's default public API surface.
+    #[cfg(feature = "test-utils")]
+    pub fn root_key_bytes(&self) -> [u8; 32] {
         *self.root_key.as_bytes()
     }
 
@@ -896,6 +906,8 @@ mod tests {
             created_at: 0,
             supported_suites: vec![0x02],
             signature: vec![],
+            mldsa_public: None,
+            mldsa_signature: None,
         };
         let transcript_hash = [0u8; 32];
 
@@ -923,6 +935,8 @@ mod tests {
             created_at: 0,
             supported_suites: vec![0x02],
             signature: vec![],
+            mldsa_public: None,
+            mldsa_signature: None,
         };
         let bob_mlkem_keypair = crate::crypto::pq::generate();
         let bob_bundle = crate::identity::PublicKeyBundle {
@@ -932,6 +946,8 @@ mod tests {
             created_at: 0,
             supported_suites: vec![0x02],
             signature: vec![],
+            mldsa_public: None,
+            mldsa_signature: None,
         };
         let transcript_hash = [0u8; 32];
 
@@ -970,6 +986,8 @@ mod tests {
             created_at: 0,
             supported_suites: vec![0x02],
             signature: vec![],
+            mldsa_public: None,
+            mldsa_signature: None,
         };
         let transcript_hash = [0u8; 32];
 
@@ -997,6 +1015,8 @@ mod tests {
             created_at: 0,
             supported_suites: vec![0x02],
             signature: vec![],
+            mldsa_public: None,
+            mldsa_signature: None,
         };
         let transcript_hash = [0u8; 32];
 

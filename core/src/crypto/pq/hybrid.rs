@@ -20,6 +20,7 @@ use blake3::derive_key;
 use crate::crypto::pq::{encapsulate, decapsulate, MlKem768KeyPair};
 use rand::rngs::OsRng;
 use rand::RngCore;
+use serde::{Deserialize, Serialize};
 use x25519_dalek::{StaticSecret, PublicKey};
 use zeroize::Zeroize;
 
@@ -39,7 +40,7 @@ impl RatchetKey {
 }
 
 /// A combined KEM ciphertext for the hybrid X25519+ML-KEM-768 scheme.
-#[derive(Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HybridCiphertext {
     pub x25519_ephemeral_public: [u8; 32],
     pub mlkem_ciphertext: Vec<u8>, // 1088 B, length-validated

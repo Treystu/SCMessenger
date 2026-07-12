@@ -2099,19 +2099,21 @@ impl IronCore {
         if relay_keys.is_empty() {
             return Ok(envelope_data);
         }
-        let path: Vec<[u8; 32]> = relay_keys
+        let path: Vec<crate::privacy::onion::HopAddress> = relay_keys
             .iter()
             .map(|hex| {
                 let bytes = hex::decode(hex).map_err(|_| IronCoreError::InvalidInput)?;
-                <[u8; 32]>::try_from(bytes.as_slice()).map_err(|_| IronCoreError::InvalidInput)
+                let arr = <[u8; 32]>::try_from(bytes.as_slice())
+                    .map_err(|_| IronCoreError::InvalidInput)?;
+                Ok(crate::privacy::onion::HopAddress::Classical(arr))
             })
             .collect::<Result<Vec<_>, IronCoreError>>()?;
-        let envelope =
-            crate::privacy::onion::construct_onion(path, &envelope_data).map_err(|e| {
+        let result =
+            crate::privacy::onion::construct_onion(path, &envelope_data, false).map_err(|e| {
                 tracing::warn!("Onion layer construction failed: {:?}", e);
                 IronCoreError::CryptoError
             })?;
-        bincode::serialize(&envelope).map_err(|_| IronCoreError::Internal)
+        bincode::serialize(&result).map_err(|_| IronCoreError::Internal)
     }
 
     /// Peel one layer of an onion-routed envelope (relay-side operation).
@@ -2129,13 +2131,13 @@ impl IronCore {
                 IronCoreError::InvalidInput
             })?;
         let (next_hop, remaining) =
-            crate::privacy::onion::peel_layer(&envelope, &secret).map_err(|e| {
+            crate::privacy::onion::peel_layer(&envelope, &secret, None).map_err(|e| {
                 tracing::warn!("Onion peel failed: {:?}", e);
                 IronCoreError::CryptoError
             })?;
         let remaining_data = bincode::serialize(&remaining).unwrap_or(remaining);
         Ok(crate::PeelResult {
-            next_hop: next_hop.map(|h| h.to_vec()),
+            next_hop: next_hop.map(|h| h.x25519_public().to_vec()),
             remaining_data,
         })
     }

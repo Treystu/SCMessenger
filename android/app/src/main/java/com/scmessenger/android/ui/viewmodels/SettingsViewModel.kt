@@ -208,7 +208,8 @@ class SettingsViewModel @Inject constructor(
             notifyDmInForeground = false,
             notifyDmRequestInForeground = true,
             soundEnabled = true,
-            badgeEnabled = true
+            badgeEnabled = true,
+            requirePq = false,
         )
 
         viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {

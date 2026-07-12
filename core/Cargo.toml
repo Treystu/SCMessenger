@@ -28,6 +28,7 @@ hex = { workspace = true }
 rand = { workspace = true }
 zeroize = { workspace = true }
 libcrux-ml-kem = { workspace = true }
+ml-dsa = { version = "0.1.1", features = ["getrandom"] }
 bs58 = "0.5"
 uniffi = { workspace = true, features = ["wasm-unstable-single-threaded"] }
 anyhow = { workspace = true }
@@ -176,3 +177,7 @@ path = "tests/test_persistence_restart.rs"
 [[test]]
 name = "test_mesh_routing"
 path = "tests/test_mesh_routing.rs"
+[[test]]
+name = "integration_pq_session"
+path = "tests/integration_pq_session.rs"
+required-features = ["test-utils"]

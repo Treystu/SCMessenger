@@ -4946,7 +4946,8 @@ open class MeshRepository(
                     notifyDmInForeground = false,
                     notifyDmRequestInForeground = true,
                     soundEnabled = true,
-                    badgeEnabled = true
+                    badgeEnabled = true,
+                    requirePq = false,
                 )
                 val config = uniffi.api.MeshServiceConfig(
                     discoveryIntervalMs = 30000u,
@@ -5580,7 +5581,8 @@ open class MeshRepository(
                 notifyDmInForeground = false,
                 notifyDmRequestInForeground = true,
                 soundEnabled = true,
-                badgeEnabled = true
+                badgeEnabled = true,
+                requirePq = false,
             )
     }
 

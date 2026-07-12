@@ -38,3 +38,19 @@ Audit finding F5: Ed25519 signatures become forgeable once a CRQC exists (not re
 
 - Add ML-DSA signatures to per-message envelopes or relay custody paths (explicitly out of scope this release).
 - Implement OR-fallback verification anywhere.
+
+## Dependency selection: PRE-VERIFIED (2026-07-11, via crates.io API, do not re-research)
+
+`libcrux-ml-dsa` does NOT exist on crates.io as of this date (libcrux only
+publishes `libcrux-ml-kem`, no ML-DSA crate yet). Use the RustCrypto option
+instead: crate `ml-dsa`, version `0.1.1`, repository
+https://github.com/RustCrypto/signatures/tree/master/ml-dsa. Confirmed via
+crates.io metadata: description states "FIPS-204 (final)" explicitly (not a
+pre-standard Dilithium API) -- this satisfies the task's hard requirement.
+Pure Rust, rust_version 1.85 (well within this workspace's toolchain).
+Verify no_std/wasm32 compatibility empirically via the standard gates
+(the wasm32 gate is already required in Definition of Done) rather than
+re-researching -- if it fails to compile for wasm32-unknown-unknown, stop
+and escalate rather than substituting a different crate silently.
+Record `ml-dsa = "0.1.1"` in `core/Cargo.toml` and run the Cargo.lock audit
+as instructed in Steps item 1.

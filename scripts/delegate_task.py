@@ -145,7 +145,18 @@ def send_request(args, prompt, resolved_model, display_model, round_num=None):
             if args.provider == "ollama":
                 content = resp.get("message", {}).get("content", "")
             else:
-                content = resp["choices"][0]["message"]["content"]
+                message = resp["choices"][0]["message"]
+                content = message.get("content")
+                if not content:
+                    # Some reasoning models (e.g. tencent/hy3) leave `content`
+                    # null/empty and put the actual answer in `reasoning` on
+                    # harder/longer prompts. Fall back rather than crash.
+                    reasoning = message.get("reasoning")
+                    if reasoning:
+                        print("[WARN] response had empty content; falling back to the 'reasoning' field")
+                        content = reasoning
+                    else:
+                        content = ""
 
             os.makedirs("tmp", exist_ok=True)
             base_name = os.path.basename(args.task).split('.')[0]
@@ -168,21 +179,55 @@ def send_request(args, prompt, resolved_model, display_model, round_num=None):
         print(f"Error processing request: {e}")
         sys.exit(1)
 
-def apply_file_blocks(file_blocks):
+def _filter_allowed(paths, allowed_files):
+    """Return (allowed, rejected) subsets of paths against the allowlist.
+    Rejection is a hard safety gate: models have been observed writing to
+    files never listed in --files/--allow-new-file (e.g. hallucinating an
+    unrelated module rewrite mid-dispatch), silently, with no warning ever
+    surfacing until a later `git diff` review caught it by chance."""
+    allowed_set = set(os.path.normpath(p) for p in allowed_files)
+    allowed, rejected = [], []
+    for p in paths:
+        (allowed if os.path.normpath(p) in allowed_set else rejected).append(p)
+    return allowed, rejected
+
+def apply_file_blocks(file_blocks, allowed_files):
     if not file_blocks:
         return False
+    names = [f for f, _ in file_blocks]
+    _, rejected = _filter_allowed(names, allowed_files)
+    if rejected:
+        print(f"[REJECTED] model targeted file(s) outside --files/--allow-new-file, NOT writing: {rejected}")
+        print("If this is a legitimate new file, re-run with --allow-new-file <path> for each one.")
+    applied_any = False
     for filename, file_content in file_blocks:
-        print(f"Applying updates to {filename}...")
-        dir_name = os.path.dirname(filename)
-        if dir_name:
-            os.makedirs(dir_name, exist_ok=True)
-        with open(filename, "w", encoding="utf-8") as f:
-            f.write(file_content)
-    return True
+        if os.path.normpath(filename) in set(os.path.normpath(p) for p in allowed_files):
+            print(f"Applying updates to {filename}...")
+            dir_name = os.path.dirname(filename)
+            if dir_name:
+                os.makedirs(dir_name, exist_ok=True)
+            with open(filename, "w", encoding="utf-8") as f:
+                f.write(file_content)
+            applied_any = True
+    return applied_any
 
-def apply_diff_blocks(diff_blocks, task_base_name, round_num):
+def _diff_target_files(diff_text):
+    return [line[6:].split('\t')[0] for line in diff_text.splitlines()
+            if line.startswith("+++ b/")]
+
+def apply_diff_blocks(diff_blocks, task_base_name, round_num, allowed_files):
     if not diff_blocks:
         return False, []
+
+    targets = [t for block in diff_blocks for t in _diff_target_files(block)]
+    allowed, rejected = _filter_allowed(targets, allowed_files)
+    if rejected:
+        print(f"[REJECTED] diff targets file(s) outside --files/--allow-new-file, dropping those hunks: {rejected}")
+        diff_blocks = [b for b in diff_blocks if all(
+            os.path.normpath(t) in set(os.path.normpath(p) for p in allowed_files)
+            for t in _diff_target_files(b))]
+        if not diff_blocks:
+            return False, []
 
     # Concatenate all diff blocks; git requires a trailing newline
     full_diff = "\n".join(diff_blocks)
@@ -221,6 +266,7 @@ def main():
     parser.add_argument("--tier", choices=["thinking", "max", "standard", "plus", "flash"],
                         help="Qwen tier for auto model selection: thinking > max > standard > plus > flash")
     parser.add_argument("--files", nargs="*", default=[], help="List of source files to include in context")
+    parser.add_argument("--allow-new-file", nargs="*", default=[], help="Paths the model is allowed to CREATE that are not in --files (e.g. a new module). Anything else the model targets is rejected, not written.")
     parser.add_argument("--apply", action="store_true", help="Auto-apply the generated code blocks back into the files")
     parser.add_argument("--verify", type=str, help='Verification command to run after applying changes (e.g., "cargo check -p scmessenger-core")')
     parser.add_argument("--max-rounds", type=int, default=3, help="Maximum number of model calls including the first one (default: 3)")
@@ -296,6 +342,7 @@ Return your changes as unified diffs, one fenced ```diff block per file, using s
     current_mode = args.mode
     applied_successfully = False
     touched_files = []
+    allowed_files = list(args.files) + list(args.allow_new_file)
 
     if args.apply:
         if current_mode == "diff":
@@ -305,12 +352,12 @@ Return your changes as unified diffs, one fenced ```diff block per file, using s
                 current_mode = "full"
                 file_blocks = extract_file_blocks(content)
                 if file_blocks:
-                    applied_successfully = apply_file_blocks(file_blocks)
+                    applied_successfully = apply_file_blocks(file_blocks, allowed_files)
                     touched_files = [f for f, _ in file_blocks]
                 else:
                     print("Warning: No properly formatted code blocks found to apply.")
             else:
-                success, files = apply_diff_blocks(diff_blocks, task_base_name, 1)
+                success, files = apply_diff_blocks(diff_blocks, task_base_name, 1, allowed_files)
                 if success:
                     applied_successfully = True
                     touched_files = files
@@ -320,7 +367,7 @@ Return your changes as unified diffs, one fenced ```diff block per file, using s
                     current_mode = "full"
                     file_blocks = extract_file_blocks(content)
                     if file_blocks:
-                        applied_successfully = apply_file_blocks(file_blocks)
+                        applied_successfully = apply_file_blocks(file_blocks, allowed_files)
                         touched_files = [f for f, _ in file_blocks]
                     else:
                         print("Warning: No properly formatted code blocks found to apply.")
@@ -329,7 +376,7 @@ Return your changes as unified diffs, one fenced ```diff block per file, using s
             if not file_blocks:
                 print("Warning: No properly formatted code blocks found to apply.")
             else:
-                applied_successfully = apply_file_blocks(file_blocks)
+                applied_successfully = apply_file_blocks(file_blocks, allowed_files)
                 touched_files = [f for f, _ in file_blocks]
 
         # Verification loop
@@ -413,11 +460,11 @@ Return your changes as unified diffs, one fenced ```diff block per file, using s
                                 current_mode = "full"
                                 file_blocks = extract_file_blocks(content)
                                 if file_blocks:
-                                    apply_file_blocks(file_blocks)
+                                    apply_file_blocks(file_blocks, allowed_files)
                                 else:
                                     print("[WARN] round response had no applicable file blocks; counting as a failed round")
                             else:
-                                success, files = apply_diff_blocks(diff_blocks, task_base_name, current_round)
+                                success, files = apply_diff_blocks(diff_blocks, task_base_name, current_round, allowed_files)
                                 if success:
                                     applied_successfully = True
                                 else:
@@ -425,7 +472,7 @@ Return your changes as unified diffs, one fenced ```diff block per file, using s
                                     current_mode = "full"
                                     file_blocks = extract_file_blocks(content)
                                     if file_blocks:
-                                        applied_successfully = apply_file_blocks(file_blocks) or applied_successfully
+                                        applied_successfully = apply_file_blocks(file_blocks, allowed_files) or applied_successfully
                                     else:
                                         print("[WARN] round response had no applicable file blocks; counting as a failed round")
                         else:  # full mode
@@ -433,7 +480,7 @@ Return your changes as unified diffs, one fenced ```diff block per file, using s
                             if not file_blocks:
                                 print("[WARN] round response had no applicable file blocks; counting as a failed round")
                             else:
-                                applied_successfully = apply_file_blocks(file_blocks) or applied_successfully
+                                applied_successfully = apply_file_blocks(file_blocks, allowed_files) or applied_successfully
 
 if __name__ == "__main__":
     main()

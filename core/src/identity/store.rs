@@ -312,7 +312,9 @@ mod tests {
             backend.put(IDENTITY_KEY, &v1_bytes).unwrap();
         }
 
-        // 2. Load keys through IdentityStore. This should trigger migration to V2.
+        // 2. Load keys through IdentityStore. This should trigger migration to V3
+        // (V1 legacy keys now generate X25519, ML-KEM, and ML-DSA material on load,
+        // so the migrated form is persisted directly as V3, not an intermediate V2).
         let migrated_keys = {
             let backend = Arc::new(crate::store::backend::SledStorage::new(&path).unwrap());
             let store = IdentityStore::persistent(backend);
@@ -321,11 +323,11 @@ mod tests {
             keys
         };
 
-        // 3. Verify that the raw bytes in DB are now V2
+        // 3. Verify that the raw bytes in DB are now V3
         {
             let backend = Arc::new(crate::store::backend::SledStorage::new(&path).unwrap());
             let raw_bytes = backend.get(IDENTITY_KEY).unwrap().unwrap();
-            assert_eq!(raw_bytes[0], 0x02);
+            assert_eq!(raw_bytes[0], 0x03);
             assert_ne!(raw_bytes.len(), 32);
 
             let store = IdentityStore::persistent(backend);

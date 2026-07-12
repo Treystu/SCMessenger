@@ -30,3 +30,12 @@ Audit finding F4: `core/src/privacy/onion.rs` wraps each layer with ephemeral X2
 ## Do NOT
 
 - Change cover-traffic/padding logic (`privacy/cover.rs`) except where hint sizes must match new layer sizes — if padding assumptions break, list them here and escalate rather than guessing.
+
+## Correction (2026-07-11, verified against current source)
+
+The function names in this spec are stale. The REAL current functions in
+`core/src/privacy/onion.rs` are `construct_onion` (not
+`create_onion_envelope`) and `peel_layer` (not `peel_onion_layer`), at
+different line numbers than stated above (file is 508 lines total). Read
+the actual file (provided in context) and work against its real structure;
+ignore the specific line-number ranges in "Steps" item 2 above.

@@ -45,13 +45,66 @@ Rules of engagement:
 - Orchestrator modes available: `/scmorc` (Claude native), `/scmqwen`
   (Qwen/DashScope, zero Anthropic cost, round-robin model selection).
 
+## Farm Use Case -- Primary v1.0.0 Validator (operator directive, 2026-07-11)
+
+The 28-acre farm deployment (12 dispersed users, patchy/no cellular,
+localized farm WiFi, in-person BLE encounters) is the primary real-world
+validator for v1.0.0. A feature that doesn't serve this environment is not a
+priority. This does NOT relitigate anything already decided below (Phase 1
+transport parity is COMPLETE, WiFi Direct is WAIVED, WiFi Aware is
+NOT-orphaned per B3) -- it re-ranks what happens next:
+
+1. **P0 -- Farm-critical transport continuity.** mDNS local discovery
+   (farmhouse cluster), QUIC/TCP internet-bridge dialing (bridging the
+   cellular/WiFi gap so relaying keeps working when a node has internet and
+   others don't), and BLE sneakernet sync (outbox flush on physical
+   passing-by, e.g. a tractor route) must work TOGETHER as one continuous
+   flow, not just pass in isolation. Live-test priority: prove the CURRENT
+   session's Windows-CLI<->Android-emulator delivery test works FIRST (in
+   progress), then design a farm-topology live/simulated test that exercises
+   all three transports in one session before further PQC depth work.
+   This ranks ABOVE PQC-09..14 depth work in the dispatch order below --
+   PQC-09/10 recovery is already done and gated on its own adversarial
+   review (`PQC_09_SECURITY_REVIEW_FIXES.md`, parked, not urgent since
+   onion routing is not yet wired into any live path).
+2. **WiFi Aware/Direct: kept, deprioritized, NOT deleted.** Both are real,
+   tested, working code (B3 finding below; WiFi Direct waived 2026-07-09 for
+   v1.1 on Android<->Android only, with Android<->Windows already covered by
+   mDNS/LAN+TCP). An earlier draft of this directive called for deleting
+   them as "stubs" -- confirmed factually wrong (11+ passing WiFi Aware
+   tests, 7+ passing WiFi Direct tests) and rejected 2026-07-11. They simply
+   rank below the P0 farm-critical transports in dispatch order; no code
+   change needed.
+3. **Identity-optional "headless routing backbone" node: NOT SUPPORTED
+   today** (investigation `INVESTIGATE_IDENTITY_OPTIONAL_RELAY_MODE.md`,
+   completed 2026-07-11, moved to done/). `IronCore::new()` can start the
+   transport/swarm layer without identity, but ALL message processing,
+   routing, and relay custody operations require initialized identity keys
+   (`core/src/iron_core.rs` `receive_message`/`prepare_message_internal`
+   both `.ok_or(NotInitialized)` on missing keys; `RelayCustodyStore` custody
+   accept path likewise). The CLI's existing `relay` command still calls
+   `initialize_identity()` - it's a node WITH identity that also relays, not
+   an anonymous packet forwarder. Making this real would need architectural
+   work to separate packet-level forwarding from identity-dependent message
+   handling - this is a BIGGER design item, not a small task. Sized/tracked,
+   not yet scheduled; lower priority than the P0 transport-continuity item
+   above.
+4. **12-node Docker farm simulation folds into the existing AWS rig, not a
+   new provisioning effort.** The AWS docker rig already approved
+   2026-07-11 for P1-14/P1-18 (hostile-network netem/firewall validation)
+   is extended with a 3-group topology: Group A (farmhouse, shared bridge
+   network, tests mDNS), Group B (far-field/cellular, isolated network
+   settings, tests internet-relay cross-node dialing), Group C (dead zones,
+   offline + BLE-simulation triggers). See P1-14/P1-18 below for the rig
+   itself; this note just fixes scope so it isn't accidentally duplicated.
+
 ## NOW -- Active Phase 1 items (ordered by dependency)
 
 1. **Emulator validation** [INFRA] **COMPLETE 2026-07-09** — AVD `scm_pixel_34` (API 34, Google APIs, x86_64, Pixel 6a) boots with `-gpu swiftshader_indirect -no-audio -no-boot-anim`. `adb devices` shows `emulator-5554 device`. `adb shell getprop sys.boot_completed` returns `1`. Ready for APK install and NEXT_ITER_04 test matrix.
 
 2. `ESC_ANDROID_DNS_RESOLVER_FIX.md` [ESCALATION] **COMPLETE 2026-07-10** — Solved hickory-dns crash on Android by implementing custom DNS fallback configuration (Option A) with Google Public DNS nameservers. Bypasses file system lookup while preserving WAN-dial capability.
 
-3. `NEXT_ITER_04_Live_Device_Retest_Pairing.md` [DEVICE][OPUS+ driving] **COMPLETE 2026-07-10** — Android APK built successfully, deployed to emulator, and paired with Windows CLI daemon over port-forwarding. Full E2E synchronization and messaging verified.
+3. `NEXT_ITER_04_Live_Device_Retest_Pairing.md` [DEVICE][OPUS+ driving] **RE-VERIFIED 2026-07-12, PARTIALLY REGRESSED/NEVER FULLY TRUE** — this entry's "Full E2E synchronization and messaging verified" claim does NOT hold as stated. Live re-test 2026-07-12: found the Android emulator had been stuck at `peersDiscovered=0`/`Bootstrap all-failed` for 100+ consecutive attempts BEFORE this re-test (contradicting "verified"). Root-caused and fixed the connectivity gap this session (config.json `bootstrap_nodes` entry + `adb forward`, NOT `SC_BOOTSTRAP_NODES` which doesn't wire into the CLI's `start` path - see below) - CLI<->Android transport connection now genuinely confirmed live for the first time (`peersDiscovered` 0->1, stable 11+ hours). BUT actual message delivery is separately, critically broken - see `CRITICAL_OUTBOX_NEVER_FLUSHES_DESPITE_ACTIVE_CONNECTION.md` (todo/): a sent message sat in the outbox with `attempts=0` for 11 hours despite a continuously active direct connection to the exact recipient. Whatever produced the original "COMPLETE... messaging verified" claim either tested something narrower than real message delivery, or has since regressed - do not trust prior "COMPLETE" claims on this task class without re-proving them live, per the operator's standing caution this session.
 
 ~~3. `P1-17_Windows_WiFi_Direct_Legacy_Client.md` [SONNET][AUDIT-GATE][DEVICE]~~ WAIVED (Emulator HW restriction)
 ~~   + `P1_CORE_WINDOWS_WIFI_DIRECT_Peer_Absent.md` (same cell).~~
@@ -70,6 +123,12 @@ Rules of engagement:
 5. P1-18 Relay cells [DEVICE] -- **POST-EXIT VERIFICATION DEBT**, same
    vehicle: 3-node custody chain + WAN relay live proof on the AWS rig
    (public P2P port vs home Windows CLI + emulator).
+
+   **Farm-sim scope note (2026-07-11):** this AWS rig is the SAME rig the
+   12-node farm-topology simulation (see "Farm Use Case" section above)
+   extends -- 3 docker-compose groups (A: farmhouse/mDNS-bridge, B: far-field/
+   internet-relay, C: dead-zone/BLE-offline) layered onto the netem/firewall
+   profile work, not a second provisioning effort.
 
 6. `P1-19_Phase_1_Exit_Review.md` [OPUS+][HUMAN] **COMPLETE 2026-07-10** -- Checklist for the
    operator's sign-off, listing completed milestones, waivers, and exit check
@@ -137,10 +196,20 @@ queue).
    Follow-up `PQC_07_WIRE_RATCHET_STEP.md` LANDED 2026-07-11 (hand-applied
    after 2 Qwen dispatch failures -- truncation then a non-applying diff;
    compile gate + all existing tests green). Remaining:
-   `PQC_07_CADENCE_TEST_COVERAGE.md` [QWEN standard] -- no test yet proves
-   the 100-message cadence trigger actually fires; a second adversarial
-   pass should re-review the wiring once that test exists, before
-   unfreezing PQC-11/13 (PQC-09/10 may proceed in parallel, unaffected).
+   `PQC_07_CADENCE_TEST_COVERAGE.md` **DONE 2026-07-11** (moved to done/) --
+   test added, all 6 tests in `integration_pq_session.rs` green, fixed 2
+   real bugs it caught along the way (suite negotiation advertised
+   unimplemented suite 0x03 causing V1 fallback; anti-stripping check fired
+   on every ordinary message instead of only at cadence boundaries). It ALSO
+   caught something much bigger: **[CRITICAL] the decapsulated PQ shared
+   secret is never mixed into root_key, anywhere, ever** -
+   `handle_dh_ratchet` in `core/src/crypto/ratchet.rs` hardcodes its `pq_ss`
+   input to `None` unconditionally. The ongoing PQ ratchet cadence is
+   cryptographically inert post-bootstrap. Tracked at
+   `PQC_07_PQ_SECRET_NEVER_MIXED_INTO_ROOT_KEY.md` (todo/, CRITICAL,
+   mandatory adversarial review). **PQC-11/13 stay frozen** until that
+   lands - this is exactly the kind of gap the "second adversarial pass"
+   note below was meant to catch.
 
 7a. ~~[AUDIT-GATE][BLOCKING] PQC-05/06/07 adversarial review checkpoint~~ -- the
    master-plan rule "auditor pass after PQC-05 before waves 2+ stack up" has NOT
@@ -170,7 +239,20 @@ queue).
 
 PQC_09..14 (master plan `PQC_00_MASTER_PLAN.md`), TASK_KMP_*, WS-A
 release-readiness T/S items, WS-B crypto/transport hygiene trio (backup.rs KDF
-gap, WiFi Aware orphan, escalation-authority consolidation), WS-F close-out.
+gap, escalation-authority consolidation), WS-F close-out.
+
+**WiFi Aware orphan (B3): CLOSED as false positive, 2026-07-11** (agy
+investigation, spot-verified against source). `WifiAwareTransport.kt`'s
+`send()` returning `false` is intentional and documented -- delivery
+happens via a loopback TCP proxy that libp2p dials directly
+(`mobile_bridge.rs:1422` confirms `wifi_aware_transport` is actively used,
+not orphaned). No fix needed; B3 no longer blocks anything. NOTE: while
+verifying this, spotted a separate possible issue nearby
+(`mobile_bridge.rs` ~1422: WiFi Aware PMK derivation uses a hardcoded
+`[0x42u8; 32]` byte array as `derive_key` input rather than real shared
+secret material -- would make the PMK identical across all peers/sessions,
+defeating pairwise isolation. NOT yet investigated further -- may be
+intentional test scaffolding or a real gap. Flagged as its own task.
 Fine-planning happens as P2-00 after Phase 1 exit, per the execution plan.
 
 ## Open decision points for operator (refreshed 2026-07-11)
