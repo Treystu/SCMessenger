@@ -698,22 +698,9 @@ class ContactsViewModel @Inject constructor(
 
     /**
      * Update search query.
-     * Uses repository's searchContacts for server-side search when available.
      */
     fun setSearchQuery(query: String) {
         _searchQuery.value = query
-        // Also trigger repository-level search for comprehensive results
-        if (query.isNotBlank()) {
-            viewModelScope.launch {
-                try {
-                    val results = meshRepository.searchContacts(query)
-                    // Merge with local filter results for display
-                    Timber.d("Repository search returned ${results.size} contacts for '$query'")
-                } catch (e: Exception) {
-                    Timber.e(e, "Failed to search contacts in repository")
-                }
-            }
-        }
     }
 
     /**
