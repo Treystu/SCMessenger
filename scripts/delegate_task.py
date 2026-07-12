@@ -103,7 +103,8 @@ def extract_diff_blocks(content):
 def send_request(args, prompt, resolved_model, display_model, round_num=None):
     payload = {
         "model": resolved_model,
-        "temperature": 0.1
+        "temperature": 0.1,
+        "max_tokens": 16000
     }
 
     system_message = ""

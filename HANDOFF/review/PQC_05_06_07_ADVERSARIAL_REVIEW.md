@@ -15,7 +15,22 @@ neither hallucinated response was applied (no `--apply` used). OpenRouter's
 Nemotron-3-Ultra produced a real prose-only verdict on the first retry with
 a reinforced anti-code-dump prompt.
 
-## VERDICT: FAIL (one CRITICAL integration gap, confirmed)
+## VERDICT: FAIL (one CRITICAL integration gap, confirmed) -- WIRING FIX LANDED 2026-07-11
+
+`PQC_07_WIRE_RATCHET_STEP.md` is implemented and committed: sender side now
+triggers `perform_pq_ratchet_step()` every 100 messages post-confirmation;
+receiver side calls `validate_pq_fields_present()` +
+`handle_incoming_pq_fields()` for post-confirmation messages only (the
+bootstrap ciphertext on the first message is deliberately NOT reprocessed
+here, since `init_as_receiver_hybrid` already consumes it at session
+setup). Full workspace compile gate green, all existing tests pass.
+REMAINING GAP: no test exercises the 100-message cadence path itself (see
+`HANDOFF/todo/PQC_07_CADENCE_TEST_COVERAGE.md`) -- treat this finding as
+"fix landed, not yet proven by a dedicated test" until that lands. A
+second adversarial pass should re-review the actual wiring code once that
+test exists, since the fix was hand-applied by the orchestrator after two
+Qwen dispatch failures (truncation, then a diff that didn't apply) rather
+than a clean model-generated-and-verified round trip.
 
 ## CONFIRMED CRITICAL FINDING
 

@@ -300,6 +300,20 @@ pub fn decrypt_message_ratcheted_v2(
         }
     }
 
+    // Handle ongoing PQ ratchet fields (suite 0x02 only). The bootstrap
+    // ciphertext (first message, !peer_confirmed) is already consumed by
+    // init_as_receiver_hybrid at session setup -- only process pq fields
+    // here for post-confirmation messages, which represent a genuine PQ
+    // ratchet step from perform_pq_ratchet_step, not the initial bootstrap.
+    if session.negotiated_suite == Some(0x02) && session.peer_confirmed {
+        session.validate_pq_fields_present(envelope.pq_kem_ciphertext.is_some())?;
+        if let (Some(pq_kem_ciphertext), Some(pq_encaps_key)) =
+            (&envelope.pq_kem_ciphertext, &envelope.pq_encaps_key)
+        {
+            session.handle_incoming_pq_fields(pq_kem_ciphertext, pq_encaps_key)?;
+        }
+    }
+
     let plaintext = session.decrypt(
         dh_public,
         message_number,
@@ -335,16 +349,27 @@ pub fn encrypt_message_ratcheted(
     let sender_public_bytes = sender_signing_key.verifying_key().to_bytes();
     let result = session.encrypt(plaintext, &sender_public_bytes)?;
 
+    // PQ ratchet cadence: trigger every 100 messages after peer confirmation.
+    // This provides ongoing PQ forward secrecy beyond just the bootstrap.
+    let mut pq_kem_ciphertext = None;
+    let mut pq_encaps_key = None;
+
     if session.negotiated_suite == Some(0x02) {
-        let (pq_kem_ciphertext, pq_encaps_key) = if !session.peer_confirmed {
+        if !session.peer_confirmed {
             if let Some(hct) = &session.bootstrap_hct {
-                (Some(hct.mlkem_ciphertext.clone()), None) // pq_encaps_key comes in later tasks (PQC-07)
-            } else {
-                (None, None)
+                pq_kem_ciphertext = Some(hct.mlkem_ciphertext.clone());
+                pq_encaps_key = None; // pq_encaps_key comes in later tasks (PQC-07)
             }
-        } else {
-            (None, None)
-        };
+        } else if let Some((_, chain_index)) = session.sending_chain_state() {
+            // chain_index is the next message number to be sent.
+            let current_message_number = chain_index.saturating_sub(1);
+            if current_message_number > 0 && current_message_number % 100 == 0 {
+                if let Ok((ct, encaps_key)) = session.perform_pq_ratchet_step() {
+                    pq_kem_ciphertext = Some(ct);
+                    pq_encaps_key = Some(encaps_key);
+                }
+            }
+        }
 
         let ephemeral_public_key = if !session.peer_confirmed {
             if let Some(hct) = &session.bootstrap_hct {

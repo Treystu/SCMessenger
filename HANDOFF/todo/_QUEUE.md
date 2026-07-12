@@ -134,9 +134,13 @@ queue).
    HANDOFF/review/PQC_05_06_07_ADVERSARIAL_REVIEW.md. CRITICAL: PQC-07's PQ
    ratchet step is implemented but never called from the live
    encrypt/decrypt path (ML-KEM secret fixed at bootstrap, never refreshed).
-   Follow-up: `PQC_07_WIRE_RATCHET_STEP.md` [QWEN max][AUDIT-GATE][BLOCKING]
-   -- must land + pass a re-review before PQC-11/13 (PQC-09/10 may proceed
-   in parallel, unaffected by this gap).
+   Follow-up `PQC_07_WIRE_RATCHET_STEP.md` LANDED 2026-07-11 (hand-applied
+   after 2 Qwen dispatch failures -- truncation then a non-applying diff;
+   compile gate + all existing tests green). Remaining:
+   `PQC_07_CADENCE_TEST_COVERAGE.md` [QWEN standard] -- no test yet proves
+   the 100-message cadence trigger actually fires; a second adversarial
+   pass should re-review the wiring once that test exists, before
+   unfreezing PQC-11/13 (PQC-09/10 may proceed in parallel, unaffected).
 
 7a. ~~[AUDIT-GATE][BLOCKING] PQC-05/06/07 adversarial review checkpoint~~ -- the
    master-plan rule "auditor pass after PQC-05 before waves 2+ stack up" has NOT
