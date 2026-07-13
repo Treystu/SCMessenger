@@ -479,7 +479,8 @@ class ContactsViewModel @Inject constructor(
         nickname: String? = null,
         libp2pPeerId: String? = null,
         listeners: List<String> = emptyList(),
-        notes: String? = null
+        notes: String? = null,
+        onComplete: ((Boolean) -> Unit)? = null
     ) {
         viewModelScope.launch {
             try {
@@ -488,14 +489,17 @@ class ContactsViewModel @Inject constructor(
                 // Validate public key format before storing
                 if (trimmedKey.isEmpty()) {
                     _error.value = "Public key cannot be empty"
+                    onComplete?.invoke(false)
                     return@launch
                 }
                 if (trimmedKey.length != 64) {
                     _error.value = "Public key must be exactly 64 hex characters (got ${trimmedKey.length})"
+                    onComplete?.invoke(false)
                     return@launch
                 }
                 if (!trimmedKey.all { it in '0'..'9' || it in 'a'..'f' || it in 'A'..'F' }) {
                     _error.value = "Public key contains invalid characters (must be hex: 0-9, a-f)"
+                    onComplete?.invoke(false)
                     return@launch
                 }
 
@@ -543,11 +547,12 @@ class ContactsViewModel @Inject constructor(
                 }
 
                 loadContacts()
-
                 Timber.i("Contact added: $peerId")
+                onComplete?.invoke(true)
             } catch (e: Exception) {
                 _error.value = "Failed to add contact: ${e.message}"
                 Timber.e(e, "Failed to add contact")
+                onComplete?.invoke(false)
             }
         }
     }

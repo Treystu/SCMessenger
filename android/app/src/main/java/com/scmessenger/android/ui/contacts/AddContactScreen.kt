@@ -145,15 +145,18 @@ fun AddContactScreen(
                                 nickname = nickname.takeIf { it.isNotBlank() },
                                 libp2pPeerId = libp2pPeerId,
                                 listeners = listeners,
-                                notes = notes.takeIf { it.isNotBlank() }
+                                notes = notes.takeIf { it.isNotBlank() },
+                                onComplete = { success ->
+                                    isAdding = false
+                                    if (success) {
+                                        peerId = ""
+                                        publicKey = ""
+                                        nickname = ""
+                                        notes = ""
+                                        onContactAdded()
+                                    }
+                                }
                             )
-                            // Reset form
-                            peerId = ""
-                            publicKey = ""
-                            nickname = ""
-                            notes = ""
-                            isAdding = false
-                            onContactAdded()
                         }
                     }
                 )
@@ -291,6 +294,7 @@ private fun ManualEntryTab(
                 Text(stringResource(R.string.contacts_action_add))
             }
         }
+        Spacer(modifier = Modifier.navigationBarsPadding())
     }
 }
 
