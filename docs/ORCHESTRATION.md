@@ -1,14 +1,19 @@
 # SCMessenger Orchestration Protocol (Master)
 
 Status: Active
-Last updated: 2026-07-11
+Last updated: 2026-07-13 (canonical launch sequence added, Section 2.1;
+farm-first sequencing per `HANDOFF/plans/FARM_FINAL_PLAN.md`; fusion_lite
+integrated into the verification ladder)
 
 This is the single source of truth for HOW work gets orchestrated in this
 repo, regardless of which model is orchestrating (Claude, Gemini, Qwen, or a
 human). Role-specific docs (`docs/GEMINI_ORCHESTRATOR.md`, the `/scmorc` and
 `/scmqwen` command files) are subordinate to this file: where they conflict,
-this file wins. WHAT to work on is owned by `HANDOFF/todo/_QUEUE.md` and
-`HANDOFF/V1_0_0_EXECUTION_PLAN.md` -- never relitigate sequencing here.
+this file wins. WHAT to work on is owned by `HANDOFF/todo/_QUEUE.md`
+(re-ranked farm-first 2026-07-13), `HANDOFF/plans/FARM_FINAL_PLAN.md` (the
+farm deployment plan: WS-FARM gap ledger, FD readiness drills, AD
+architecture decisions), and `HANDOFF/V1_0_0_EXECUTION_PLAN.md` -- never
+relitigate sequencing here.
 
 ## 1. The one state machine
 
@@ -46,6 +51,59 @@ python scripts/delegate_task.py \
   (docs).
 - Responses are saved under `tmp/` for audit; `--apply` writes files
   directly.
+
+### 2.1 The launch sequence (canonical, all modes)
+
+Every orchestrator mode (`/scmorc`, `/scmqwen`, `/scm`, Gemini, swarm)
+follows THIS sequence per task. Mode command files carry mode-specific
+mechanics only; the sequence itself lives here.
+
+1. **PICK.** Pull from the top of `HANDOFF/todo/_QUEUE.md` (farm-first
+   order, re-ranked 2026-07-13). NEW farm tasks not yet cut into task files
+   have ticket-ready specs in `HANDOFF/plans/FARM_FINAL_PLAN.md` Section 4
+   (WS-FARM-A..H) -- cut the task file first, then dispatch it. Respect the
+   standing freezes (PQC-11/13 behind PQC_07 root-key fix; PQC-09 wiring
+   behind the AD-8 onion seam freeze).
+2. **VALIDATE** (orchestrator-local, cheap): read the task file, grep the
+   target. FALSE_POSITIVE / ALREADY_WIRED -> done/ with note.
+   NEEDS_REVIEW -> operator. VALID -> continue.
+3. **ROUTE down the free-first ladder** (Section 3 has full lane details;
+   Section 4 maps plan tags to models):
+   - a. **Qwen scripted** (`delegate_task.py --provider qwen --tier <t>
+     --files ... --apply --verify "<gate>" --max-rounds 3`) -- PRIMARY for
+     all implementation. The `--verify` loop self-corrects locally.
+   - b. **agy/Gemini** -- in parallel (separate free pool) for small,
+     well-bounded single-file/mechanical agentic edits. One tree-editing
+     agy at a time; AGENTS.md FOREIGN WORKER header; no commit authority.
+   - c. **OpenRouter free** (`delegate_task.py --provider openrouter
+     --model <id>`) -- spillover when Qwen tiers saturate; large-context.
+   - d. **fusion_lite** (`scripts/fusion_lite.py`, PAID, hard-capped) --
+     never an implementation lane. Narrow second-opinion panel+judge for
+     planning/verification questions answerable from pasted context.
+     Cost discipline is absolute: `--max-cost 0.01` (the default) is the
+     OPERATOR-SET ceiling -- never raise it without explicit operator
+     approval in-session; set `FUSION_LITE_EXPECT_KEY_LABEL`; log actual
+     cost per run in the dispatch log. See `docs/FUSION_LITE.md`.
+   - e. **Claude** (headless `claude -p` per `/scmorc`, or native
+     subagents) -- judgment, audit-gate verdicts, design decisions, and
+     the escalation terminus ONLY. Anthropic tokens are the scarcest
+     resource; they never do work a free lane can.
+   Escalation is by RECORDED FAILURE only: two failed attempts at a rung
+   before moving up; never re-run an identical model+prompt more than
+   twice.
+4. **VERIFY centrally.** The orchestrator is the single writer for build
+   gates (Windows serialization rule). Scoped gates per Section 6.
+   Additional triangulation rung for DELIVERY-LOGIC diffs (outbox, receipt,
+   custody, retry -- the FARM WS-A class, per
+   `OUTBOX_FLUSH_ON_CONNECT_RETRY.md`'s protocol): one fusion_lite panel
+   run OR 3 distinct Qwen verifier dispatches must find no issues before
+   commit. This supplements, never replaces, the `[AUDIT-GATE]` on
+   crypto/transport/routing/privacy.
+5. **CLOSE with evidence.** Farm-plan tasks tied to an FD drill
+   (`FARM_FINAL_PLAN.md` Section 5) close only when the drill/sim evidence
+   is logged to the dated ledger doc. Task-file move + queue update + commit
+   in one atomic step (Section 1). Dispatch log line includes lane, model,
+   result, and cost (fusion_lite runs: actual dollars).
 
 ## 3. Lane inventory and when to use each
 

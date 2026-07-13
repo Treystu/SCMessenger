@@ -99,9 +99,14 @@ Best for: code changes, bug fixes, feature implementation.
 
 ## The Loop
 
-1. READ BACKLOG. Start with `HANDOFF/todo/_QUEUE.md` -- the live pick list.
-   Pull from the top; respect dependency notes. Group by domain to maximize
-   prompt reuse (same source files across consecutive tasks).
+1. READ BACKLOG. Start with `HANDOFF/todo/_QUEUE.md` -- the live pick list,
+   re-ranked FARM-FIRST 2026-07-13 per `HANDOFF/plans/FARM_FINAL_PLAN.md`
+   (ticket-ready specs for new items in its Section 4; standing freezes:
+   PQC-11/13 behind the PQC_07 root-key fix, PQC-09 wiring behind the AD-8
+   onion seam freeze). Pull from the top; respect dependency notes. Group by
+   domain to maximize prompt reuse (same source files across consecutive
+   tasks). The canonical cross-lane launch sequence is
+   `docs/ORCHESTRATION.md` Section 2.1 -- this mode is ladder rung (a).
 
 2. PRE-DISPATCH VALIDATION (orchestrator-local, cheap):
    - Read the task file; identify the concrete target (symbol/file/function).
@@ -133,6 +138,13 @@ Best for: code changes, bug fixes, feature implementation.
      Two failures -> escalate tier.
    - Diff touches `core/src/{crypto,transport,routing,privacy}`: mandatory
      adversarial review -- dispatch a [THINK] ANALYZE worker.
+   - Diff touches DELIVERY LOGIC (outbox, receipt, custody, retry -- farm
+     WS-A class): triangulate before commit -- 3 distinct Qwen verifier
+     dispatches (different models via round-robin) OR one fusion_lite panel
+     run (`scripts/fusion_lite.py`, paid, `--max-cost 0.01` ceiling, cost
+     logged) must find no issues. Per `docs/ORCHESTRATION.md` Section 2.1.
+   - Farm-plan tasks tied to an FD drill (`FARM_FINAL_PLAN.md` Section 5):
+     not done until drill/sim evidence is logged to the dated ledger doc.
 
 6. MARK COMPLETE. Real diff + passing gate (+ security review if required):
    move task file to `HANDOFF/done/`, update `REMAINING_WORK_TRACKING.md`.
@@ -184,13 +196,21 @@ the relevant source. Guidelines:
   that the worker needs to understand the change.
 - For multi-file changes: embed each file separately with clear headers.
 
-## Integration with agy/Gemini Workers
+## Integration with the other lanes (agy/Gemini, OpenRouter, fusion_lite)
 
-When both /scmqwen and agy/Gemini foreign workers are available:
-- Route mechanical/filler tasks to agy (free, fast).
+Full ladder: `docs/ORCHESTRATION.md` Section 2.1. Within this mode:
+- Route mechanical/filler tasks to agy (free, fast, separate pool -- run
+  concurrently; one tree-editing agy at a time).
 - Route code implementation to [CODER] tier Qwen models (better at Rust/Kotlin).
 - Route adversarial reviews to [THINK] or [MAX] Qwen (deeper reasoning).
 - Route documentation to `qwen3.5-plus` (good prose, cheap).
+- OpenRouter free models (`delegate_task.py --provider openrouter`) are
+  spillover when a Qwen tier saturates, and the large-context lane.
+- fusion_lite (`scripts/fusion_lite.py`) is the ONLY paid rung: narrow
+  planning/verification second opinions, `--max-cost 0.01` hard ceiling
+  (operator-set -- never raise without approval), `FUSION_LITE_EXPECT_KEY_LABEL`
+  set, actual cost logged per run. Never implementation, never a substitute
+  for the adversarial-review gate.
 - The orchestrator tracks all in-flight work regardless of source.
 
 ## Loop Control and Finalization

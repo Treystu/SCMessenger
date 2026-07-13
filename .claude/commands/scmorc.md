@@ -42,7 +42,7 @@ Log every dispatch as one line appended to `tmp/scmorc/dispatch_log.md`: `[YYYY-
 
 ## The Loop
 
-1. READ BACKLOG. **Start with `HANDOFF/todo/_QUEUE.md` — the live dependency-ordered pick list; pull from the top.** It encodes the operator-settled Phase 1 (Windows/Android parity) -> Phase 2 sequencing from `HANDOFF/V1_0_0_EXECUTION_PLAN.md`; consult the plan itself only when the queue is ambiguous or exhausted, and keep the queue's statuses updated as tasks move. [DEVICE]-tagged items need the operator + Pixel — prep their playbooks but work the next non-device item instead of blocking. Group upcoming tasks by domain (rust-core / android / wasm / desktop / docs) and drain one domain at a time — this maximizes prompt-cache reuse (see Caching).
+1. READ BACKLOG. **Start with `HANDOFF/todo/_QUEUE.md` — the live dependency-ordered pick list, re-ranked FARM-FIRST 2026-07-13; pull from the top.** Sequencing now comes from `HANDOFF/plans/FARM_FINAL_PLAN.md` (delivery-truth WS-A, crypto-soundness WS-E, reach WS-B, iOS lane WS-C, then the rest) layered over `HANDOFF/V1_0_0_EXECUTION_PLAN.md`; consult the plans only when the queue is ambiguous or exhausted, and keep the queue's statuses updated as tasks move. NEW farm items without task files yet: cut the file from the plan's Section 4 spec first, then dispatch. Respect standing freezes (PQC-11/13 behind the PQC_07 root-key fix; PQC-09 wiring behind the AD-8 onion seam freeze). [DEVICE]-tagged items run on the Android emulator (operator's Pixel is broken) or on farm-mate hardware scheduled with the operator — prep playbooks but work the next non-device item instead of blocking. Group upcoming tasks by domain (rust-core / android / wasm / desktop / docs) and drain one domain at a time — this maximizes prompt-cache reuse (see Caching).
 2. PRE-DISPATCH VALIDATION (orchestrator-local, cheap — never spend a worker on a dead task):
    - Read the task file; identify the concrete target (symbol/file/function). Grep for it.
    - FALSE_POSITIVE (target is test/Kani/proptest scaffolding or inside a `GOLDEN_*` literal): move task to `HANDOFF/done/` with a note; next task.
@@ -50,7 +50,13 @@ Log every dispatch as one line appended to `tmp/scmorc/dispatch_log.md`: `[YYYY-
    - NEEDS_REVIEW (target missing/ambiguous): stop and ask the operator.
    - VALID: continue.
 3. WRITE WORKER PROMPT to `tmp/scmorc/<slug>.prompt.md` using the Worker Prompt Contract below. Self-contained: requirements, exact file paths, acceptance criteria, exact build gate command.
-4. LAUNCH (Bash tool, `run_in_background: true` so the harness notifies you on exit — do not sleep/poll):
+4. LAUNCH — LANE-AWARE (canonical ladder: `docs/ORCHESTRATION.md` Section 2.1). A Claude worker is the LAST resort, not the default:
+   - **Free lanes first, always.** Implementation goes to Qwen scripted dispatch (`python scripts/delegate_task.py --task <file> --provider qwen --tier <thinking|max|standard|plus|flash> --files <targets> --apply --verify "<gate>" --max-rounds 3`); small bounded mechanical/agentic edits can run in parallel on agy/Gemini (separate free pool, one tree-editor at a time, AGENTS.md FOREIGN WORKER header); OpenRouter free (`--provider openrouter --model <id>`) is spillover when Qwen tiers saturate.
+   - **fusion_lite** (`python scripts/fusion_lite.py --prompt-file <f> --panel <2-4 models> --judge <m>` — PAID, `--max-cost 0.01` ceiling, never raised without operator approval, `FUSION_LITE_EXPECT_KEY_LABEL` set, actual cost logged): narrow planning/verification second opinions only, never implementation, never a substitute for the audit gate.
+   - **Claude workers (below) only for:** [AUDIT-GATE] adversarial verdicts (fable), [OPUS+] judgment/design that free lanes cannot carry, or a task with two recorded free-lane failures. Every Claude dispatch burns the shared subscription window — the Quota Governor applies on top of this ladder.
+   - Log EVERY dispatch regardless of lane to `tmp/scmorc/dispatch_log.md` with lane + model + result (+ cost for fusion_lite).
+
+   Claude-lane mechanics (Bash tool, `run_in_background: true` so the harness notifies you on exit — do not sleep/poll):
 
    ```bash
    claude -p "$(cat tmp/scmorc/<slug>.prompt.md)" \
@@ -68,6 +74,8 @@ Log every dispatch as one line appended to `tmp/scmorc/dispatch_log.md`: `[YYYY-
    - `git diff --stat` scoped to the task's files. ZERO-DIFF RE-QUEUE: worker claimed DONE with no code change -> do not trust it; task stays in `todo/`, log `requeued`.
    - Real diff: run the matching gate yourself (Rust: `CARGO_INCREMENTAL=0 cargo check --workspace -q --message-format=short`; Android: `cd android && ./gradlew assembleDebug -x lint --quiet`; WASM: `CARGO_INCREMENTAL=0 cargo check -p scmessenger-wasm --target wasm32-unknown-unknown -q --message-format=short`; Desktop: `CARGO_INCREMENTAL=0 cargo check -p scmessenger-desktop-bridge -q --message-format=short`).
    - Diff touches `core/src/crypto/`, `core/src/transport/`, `core/src/routing/`, or `core/src/privacy/`: mandatory adversarial review — launch a read-only fable worker per the routing table before marking done.
+   - Diff touches DELIVERY LOGIC (outbox, receipt, custody, retry — the farm WS-A class): triangulate before commit per `docs/ORCHESTRATION.md` Section 2.1 step 4 — one fusion_lite panel run (capped $0.01) OR 3 distinct Qwen verifier dispatches must find no issues. Supplements the audit gate, never replaces it.
+   - Farm-plan tasks tied to an FD drill (`FARM_FINAL_PLAN.md` Section 5): not done until the drill/sim evidence is logged to the dated ledger doc, regardless of green gates.
    - Gate fails: feed ONLY the short-format error lines (never full logs) back via `claude -r <session-uuid> -p "Gate failed: <error lines>. Fix and re-verify."` — resuming reuses the worker's warm cache. Two failed fixes -> escalate up the ladder with a fresh worker.
 6. MARK COMPLETE. Only after real diff + passing gate (+ security review where required): move the task file to `HANDOFF/done/`, update `REMAINING_WORK_TRACKING.md` if it tracks the item.
 7. CHECKPOINT. `git add -A && git commit -m "native: completed [Task Name]"` (provenance stays `native:` — these are native-subscription workers, not the swarm). Record gate pass/fail in the message. Never push unless asked.
