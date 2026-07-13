@@ -18,6 +18,7 @@ use crate::abuse::auto_block::{AutoBlockConfig, AutoBlockEngine};
 use crate::abuse::spam_detection::{SpamDetectionConfig, SpamDetectionEngine};
 use crate::abuse::EnhancedAbuseReputationManager;
 use crate::crypto::{decrypt_message, encrypt_message, session_manager::RatchetSessionManager};
+use crate::crypto::encrypt::{ed25519_public_to_x25519, ed25519_to_x25519_secret};
 use crate::drift::{MeshStore, NetworkState, RelayConfig, RelayEngine};
 use crate::identity::IdentityManager;
 use crate::message::{decode_envelope, decode_message, Message};
@@ -1347,6 +1348,40 @@ impl IronCore {
             None,
         );
         Ok(backup)
+    }
+
+    /// Derive a WiFi Aware Pairwise Master Key (PMK) unique to the local
+    /// identity and the given remote peer, via X25519 ECDH. Replaces a
+    /// prior hardcoded key-material bug where every peer/session derived
+    /// the same PMK, defeating pairwise isolation.
+    ///
+    /// `remote_pubkey_bytes` must be exactly 32 bytes (the remote peer's
+    /// Ed25519 public key). `Vec<u8>` is used at this boundary rather than
+    /// `[u8; 32]` because fixed-size arrays are not UniFFI-safe FFI types.
+    pub fn derive_wifi_aware_pmk(
+        &self,
+        remote_pubkey_bytes: Vec<u8>,
+    ) -> Result<Vec<u8>, IronCoreError> {
+        if remote_pubkey_bytes.len() != 32 {
+            return Err(IronCoreError::InvalidInput);
+        }
+        let mut remote_pubkey_arr = [0u8; 32];
+        remote_pubkey_arr.copy_from_slice(&remote_pubkey_bytes);
+
+        let identity = self.identity.read();
+        let keys = identity.keys().ok_or(IronCoreError::NotInitialized)?;
+
+        let local_x25519_secret = ed25519_to_x25519_secret(&keys.signing_key);
+        let remote_x25519_public = ed25519_public_to_x25519(&remote_pubkey_arr)
+            .map_err(|_| IronCoreError::CryptoError)?;
+
+        let shared_secret = local_x25519_secret.diffie_hellman(&remote_x25519_public);
+
+        Ok(blake3::derive_key(
+            "SCMessenger Wi-Fi Aware PMK",
+            shared_secret.as_bytes(),
+        )
+        .to_vec())
     }
 
     pub fn export_identity_backup_with_salt(

@@ -1414,11 +1414,30 @@ impl MeshService {
 
         let transport_opt = self.wifi_aware_transport.lock().clone();
         let swarm_bridge = self.swarm_bridge.clone();
+        let core_opt = self.get_core();
         if let Some(transport) = transport_opt {
             let rt = swarm_bridge.get_runtime_handle();
             rt.spawn(async move {
                 if let Ok(peer_id_parsed) = peer_id.parse::<libp2p::PeerId>() {
-                    let pmk = blake3::derive_key("SCMessenger Wi-Fi Aware PMK", &[0x42u8; 32]);
+                    let peer_id_bytes = peer_id_parsed.to_bytes();
+                    let remote_pubkey_bytes: Vec<u8> = if peer_id_bytes.len() >= 32 {
+                        peer_id_bytes[peer_id_bytes.len() - 32..].to_vec()
+                    } else {
+                        vec![0u8; 32]
+                    };
+                    let pmk_result = core_opt
+                        .as_ref()
+                        .ok_or(crate::IronCoreError::NotInitialized)
+                        .and_then(|core| core.derive_wifi_aware_pmk(remote_pubkey_bytes));
+                    let pmk_vec = match pmk_result {
+                        Ok(pmk) => pmk,
+                        Err(_) => return,
+                    };
+                    let mut pmk = [0u8; 32];
+                    if pmk_vec.len() != 32 {
+                        return;
+                    }
+                    pmk.copy_from_slice(&pmk_vec);
                     if let Ok(path_info) = transport.create_data_path(peer_id_parsed, &pmk).await {
                         let multiaddr_str = if path_info.ip_address.contains(':') {
                             format!("/ip6/{}/tcp/{}", path_info.ip_address, path_info.port)
