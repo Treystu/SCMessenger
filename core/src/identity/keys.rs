@@ -184,7 +184,7 @@ impl IdentityKeys {
             let x25519_encryption_secret = x25519_dalek::StaticSecret::from(x25519_bytes);
             x25519_bytes.zeroize();
             let mlkem_keypair = crate::crypto::pq::generate();
-            
+
             // Generate ML-DSA keypair for migration
             let mldsa_keypair = Some(crate::crypto::pq::mldsa::MlDsa65KeyPair::generate());
 
@@ -211,7 +211,7 @@ impl IdentityKeys {
             let mlkem_keypair = crate::crypto::pq::from_seed(mlkem_seed_arr);
             mlkem_seed_arr.zeroize();
             raw.zeroize();
-            
+
             // Generate ML-DSA keypair for migration
             let mldsa_keypair = Some(crate::crypto::pq::mldsa::MlDsa65KeyPair::generate());
 
@@ -237,7 +237,7 @@ impl IdentityKeys {
             mlkem_seed_arr.copy_from_slice(&raw.mlkem_seed);
             let mlkem_keypair = crate::crypto::pq::from_seed(mlkem_seed_arr);
             mlkem_seed_arr.zeroize();
-            
+
             // Reconstruct the ML-DSA keypair deterministically from its
             // persisted 32-byte seed (mldsa_secret_key holds the seed, see
             // to_bytes() above) -- this restores the SAME identity, not a
@@ -310,7 +310,7 @@ fn default_supported_suites() -> Vec<u8> {
 pub struct PublicKeyBundle {
     pub ed25519_public: [u8; 32],
     pub x25519_public: [u8; 32],
-    pub mlkem_encaps_key: Vec<u8>, // 1184 B
+    pub mlkem_encaps_key: Vec<u8>,     // 1184 B
     pub mldsa_public: Option<Vec<u8>>, // 1952 B (None for older bundles)
     pub created_at: u64,
     #[serde(default = "default_supported_suites")]
@@ -374,12 +374,12 @@ pub fn sign_bundle(keys: &IdentityKeys) -> Result<PublicKeyBundle> {
 pub fn verify_bundle(bundle: &PublicKeyBundle) -> Result<()> {
     // Determine which signature format to use based on presence of ML-DSA fields
     let has_mldsa = bundle.mldsa_public.is_some() && bundle.mldsa_signature.is_some();
-    
+
     if has_mldsa {
         // V3 format with ML-DSA signatures - both must verify
         let mldsa_public = bundle.mldsa_public.as_ref().unwrap();
         let mldsa_signature = bundle.mldsa_signature.as_ref().unwrap();
-        
+
         // Signature input: b"iron-core keybundle v3" || ed25519_public || x25519_public || mlkem_encaps_key || mldsa_public || created_at.to_le_bytes() || supported_suites
         let mut sig_input = Vec::new();
         sig_input.extend_from_slice(b"iron-core keybundle v3");
@@ -389,15 +389,17 @@ pub fn verify_bundle(bundle: &PublicKeyBundle) -> Result<()> {
         sig_input.extend_from_slice(mldsa_public);
         sig_input.extend_from_slice(&bundle.created_at.to_le_bytes());
         sig_input.extend_from_slice(&bundle.supported_suites);
-        
+
         // Verify Ed25519 signature
-        let ed_verified = IdentityKeys::verify(&sig_input, &bundle.signature, &bundle.ed25519_public)
-            .unwrap_or(false);
-        
+        let ed_verified =
+            IdentityKeys::verify(&sig_input, &bundle.signature, &bundle.ed25519_public)
+                .unwrap_or(false);
+
         // Verify ML-DSA signature
-        let mldsa_verified = crate::crypto::pq::mldsa::verify(&sig_input, mldsa_signature, mldsa_public)
-            .unwrap_or(false);
-        
+        let mldsa_verified =
+            crate::crypto::pq::mldsa::verify(&sig_input, mldsa_signature, mldsa_public)
+                .unwrap_or(false);
+
         if ed_verified && mldsa_verified {
             Ok(())
         } else {
@@ -408,13 +410,15 @@ pub fn verify_bundle(bundle: &PublicKeyBundle) -> Result<()> {
             if !mldsa_verified {
                 eprintln!("ML-DSA signature verification failed for dual-signed bundle");
             }
-            Err(anyhow::anyhow!("Dual signature verification failed: both signatures must be valid"))
+            Err(anyhow::anyhow!(
+                "Dual signature verification failed: both signatures must be valid"
+            ))
         }
     } else {
         // Legacy format without ML-DSA - only Ed25519 signature required
         // Log that this is an older bundle (in real implementation, this would use tracing)
         eprintln!("Accepting bundle without ML-DSA signatures (legacy compatibility)");
-        
+
         // Check v2 signature format first (with suites)
         let mut sig_input_v2 = Vec::new();
         sig_input_v2.extend_from_slice(b"iron-core keybundle v2");
@@ -424,7 +428,9 @@ pub fn verify_bundle(bundle: &PublicKeyBundle) -> Result<()> {
         sig_input_v2.extend_from_slice(&bundle.created_at.to_le_bytes());
         sig_input_v2.extend_from_slice(&bundle.supported_suites);
 
-        if IdentityKeys::verify(&sig_input_v2, &bundle.signature, &bundle.ed25519_public).unwrap_or(false) {
+        if IdentityKeys::verify(&sig_input_v2, &bundle.signature, &bundle.ed25519_public)
+            .unwrap_or(false)
+        {
             return Ok(());
         }
 
@@ -436,7 +442,8 @@ pub fn verify_bundle(bundle: &PublicKeyBundle) -> Result<()> {
         sig_input_v1.extend_from_slice(&bundle.mlkem_encaps_key);
         sig_input_v1.extend_from_slice(&bundle.created_at.to_le_bytes());
 
-        let verified_v1 = IdentityKeys::verify(&sig_input_v1, &bundle.signature, &bundle.ed25519_public)?;
+        let verified_v1 =
+            IdentityKeys::verify(&sig_input_v1, &bundle.signature, &bundle.ed25519_public)?;
         if !verified_v1 {
             return Err(anyhow::anyhow!("Invalid signature on key bundle"));
         }
@@ -510,7 +517,7 @@ mod tests {
 
         let signature = keys.sign(data).unwrap();
         assert_eq!(signature.len(), 64); // Ed25519 signature = 64 bytes
-        
+
         let mldsa_signature = keys.sign_mldsa(data).unwrap();
         assert_eq!(mldsa_signature.len(), 3309); // ML-DSA-65 signature = 3309 bytes
     }
@@ -753,24 +760,24 @@ mod tests {
     fn test_dual_signature_verification() {
         let keys = IdentityKeys::generate();
         let bundle = sign_bundle(&keys).unwrap();
-        
+
         // Both signatures should be present
         assert!(bundle.mldsa_public.is_some());
         assert!(bundle.mldsa_signature.is_some());
-        
+
         // Valid bundle should verify
         assert!(verify_bundle(&bundle).is_ok());
-        
+
         // Tamper Ed25519 signature only
         let mut tampered = bundle.clone();
         tampered.signature[0] ^= 1;
         assert!(verify_bundle(&tampered).is_err());
-        
+
         // Tamper ML-DSA signature only
         let mut tampered = bundle.clone();
         tampered.mldsa_signature.as_mut().unwrap()[0] ^= 1;
         assert!(verify_bundle(&tampered).is_err());
-        
+
         // Tamper both signatures
         let mut tampered = bundle.clone();
         tampered.signature[0] ^= 1;
@@ -783,14 +790,15 @@ mod tests {
         // Create a bundle without ML-DSA fields (simulate older version)
         let keys = IdentityKeys::generate();
         let ed25519_public = keys.signing_key.verifying_key().to_bytes();
-        let x25519_public = x25519_dalek::PublicKey::from(&keys.x25519_encryption_secret).to_bytes();
+        let x25519_public =
+            x25519_dalek::PublicKey::from(&keys.x25519_encryption_secret).to_bytes();
         let mlkem_encaps_key = keys.mlkem_keypair.public_key().to_vec();
         let created_at = web_time::SystemTime::now()
             .duration_since(web_time::UNIX_EPOCH)
             .unwrap_or_default()
             .as_secs();
         let supported_suites = vec![0x01, 0x02];
-        
+
         let mut sig_input_v2 = Vec::new();
         sig_input_v2.extend_from_slice(b"iron-core keybundle v2");
         sig_input_v2.extend_from_slice(&ed25519_public);
@@ -798,9 +806,9 @@ mod tests {
         sig_input_v2.extend_from_slice(&mlkem_encaps_key);
         sig_input_v2.extend_from_slice(&created_at.to_le_bytes());
         sig_input_v2.extend_from_slice(&supported_suites);
-        
+
         let signature = keys.sign(&sig_input_v2).unwrap();
-        
+
         let legacy_bundle = PublicKeyBundle {
             ed25519_public,
             x25519_public,
@@ -811,7 +819,7 @@ mod tests {
             signature,
             mldsa_signature: None,
         };
-        
+
         // Should accept with log message (we check it doesn't error)
         assert!(verify_bundle(&legacy_bundle).is_ok());
     }

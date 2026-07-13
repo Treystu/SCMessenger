@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use x25519_dalek::{EphemeralSecret, PublicKey};
 
-use crate::crypto::pq::hybrid::{hybrid_encapsulate, hybrid_decapsulate, HybridCiphertext};
+use crate::crypto::pq::hybrid::{hybrid_decapsulate, hybrid_encapsulate, HybridCiphertext};
 use crate::identity::keys::PublicKeyBundle;
 
 /// Maximum number of hops in an onion circuit
@@ -171,10 +171,9 @@ pub fn construct_onion(
             _ => unreachable!(),
         };
 
-        let (hybrid_ct, shared_secret) = hybrid_encapsulate(
-            &bundle.x25519_public,
-            &bundle.mlkem_encaps_key,
-        ).map_err(|_| OnionError::EncryptionFailed)?;
+        let (hybrid_ct, shared_secret) =
+            hybrid_encapsulate(&bundle.x25519_public, &bundle.mlkem_encaps_key)
+                .map_err(|_| OnionError::EncryptionFailed)?;
 
         // Derive encryption key from shared secret
         let key = derive_layer_key(shared_secret.as_bytes());
@@ -200,8 +199,8 @@ pub fn construct_onion(
             payload: encrypted_payload,
         };
 
-        current_layer_data = bincode::serialize(&hybrid_layer)
-            .map_err(|_| OnionError::InvalidEnvelope)?;
+        current_layer_data =
+            bincode::serialize(&hybrid_layer).map_err(|_| OnionError::InvalidEnvelope)?;
         remaining_layers = current_layer_data.clone();
     } else {
         // Classical destination layer
@@ -253,8 +252,8 @@ pub fn construct_onion(
             encrypted_payload,
         };
 
-        current_layer_data = bincode::serialize(&classical_layer)
-            .map_err(|_| OnionError::InvalidEnvelope)?;
+        current_layer_data =
+            bincode::serialize(&classical_layer).map_err(|_| OnionError::InvalidEnvelope)?;
         remaining_layers = current_layer_data.clone();
     }
 
@@ -270,10 +269,9 @@ pub fn construct_onion(
                 _ => unreachable!(),
             };
 
-            let (hybrid_ct, shared_secret) = hybrid_encapsulate(
-                &bundle.x25519_public,
-                &bundle.mlkem_encaps_key,
-            ).map_err(|_| OnionError::EncryptionFailed)?;
+            let (hybrid_ct, shared_secret) =
+                hybrid_encapsulate(&bundle.x25519_public, &bundle.mlkem_encaps_key)
+                    .map_err(|_| OnionError::EncryptionFailed)?;
 
             // For relay layers, routing_info contains the next hop's address info
             let next_hop_info = if next_hop.is_hybrid() {
@@ -287,8 +285,7 @@ pub fn construct_onion(
             } else {
                 // Next hop is classical - include just X25519 key
                 let next_pk = next_hop.x25519_public();
-                bincode::serialize(&(false, next_pk))
-                    .map_err(|_| OnionError::InvalidEnvelope)?
+                bincode::serialize(&(false, next_pk)).map_err(|_| OnionError::InvalidEnvelope)?
             };
 
             // Combine next_hop_info and remaining_layers
@@ -319,8 +316,8 @@ pub fn construct_onion(
                 payload: encrypted_payload,
             };
 
-            current_layer_data = bincode::serialize(&hybrid_layer)
-                .map_err(|_| OnionError::InvalidEnvelope)?;
+            current_layer_data =
+                bincode::serialize(&hybrid_layer).map_err(|_| OnionError::InvalidEnvelope)?;
             remaining_layers = current_layer_data.clone();
         } else {
             // Classical relay layer
@@ -349,8 +346,7 @@ pub fn construct_onion(
                     .map_err(|_| OnionError::InvalidEnvelope)?
             } else {
                 let next_pk = next_hop.x25519_public();
-                bincode::serialize(&(false, next_pk))
-                    .map_err(|_| OnionError::InvalidEnvelope)?
+                bincode::serialize(&(false, next_pk)).map_err(|_| OnionError::InvalidEnvelope)?
             };
 
             let cipher = XChaCha20Poly1305::new(&key);
@@ -387,8 +383,8 @@ pub fn construct_onion(
                 encrypted_payload,
             };
 
-            current_layer_data = bincode::serialize(&classical_layer)
-                .map_err(|_| OnionError::InvalidEnvelope)?;
+            current_layer_data =
+                bincode::serialize(&classical_layer).map_err(|_| OnionError::InvalidEnvelope)?;
             remaining_layers = current_layer_data.clone();
         }
     }
@@ -492,12 +488,14 @@ pub fn peel_layer(
                     .map_err(|_| OnionError::InvalidHopAddress)?;
 
                 let next_hop = if is_hybrid {
-                    let next_bundle: PublicKeyBundle = bincode::deserialize_from(&mut routing_cursor)
-                        .map_err(|_| OnionError::InvalidHopAddress)?;
+                    let next_bundle: PublicKeyBundle =
+                        bincode::deserialize_from(&mut routing_cursor)
+                            .map_err(|_| OnionError::InvalidHopAddress)?;
                     HopAddress::Hybrid(next_bundle)
                 } else {
-                    let next_pk: [u8; X25519_KEY_SIZE] = bincode::deserialize_from(&mut routing_cursor)
-                        .map_err(|_| OnionError::InvalidHopAddress)?;
+                    let next_pk: [u8; X25519_KEY_SIZE] =
+                        bincode::deserialize_from(&mut routing_cursor)
+                            .map_err(|_| OnionError::InvalidHopAddress)?;
                     HopAddress::Classical(next_pk)
                 };
 
@@ -510,15 +508,12 @@ pub fn peel_layer(
                 .map_err(|_| OnionError::InvalidEnvelope)?;
 
             let relay_secret = x25519_dalek::StaticSecret::from(*relay_secret_key);
-            let relay_mlkem_keypair = relay_mlkem_keypair
-                .ok_or(OnionError::MissingPqKeys)?;
+            let relay_mlkem_keypair = relay_mlkem_keypair.ok_or(OnionError::MissingPqKeys)?;
 
             // Decapsulate hybrid shared secret
-            let shared_secret = hybrid_decapsulate(
-                &relay_secret,
-                relay_mlkem_keypair,
-                &hybrid_layer.hybrid_ct,
-            ).map_err(|_| OnionError::HybridDecryptionFailed)?;
+            let shared_secret =
+                hybrid_decapsulate(&relay_secret, relay_mlkem_keypair, &hybrid_layer.hybrid_ct)
+                    .map_err(|_| OnionError::HybridDecryptionFailed)?;
 
             // Derive encryption key from shared secret
             let key = derive_layer_key(shared_secret.as_bytes());
@@ -552,28 +547,28 @@ pub fn peel_layer(
             // Read the boolean indicating if next hop is hybrid
             let is_hybrid: bool = bincode::deserialize_from(&mut payload_cursor)
                 .map_err(|_| OnionError::InvalidEnvelope)?;
-            
+
             if is_hybrid {
                 // Next hop is hybrid - read the full bundle
                 let next_bundle: PublicKeyBundle = bincode::deserialize_from(&mut payload_cursor)
                     .map_err(|_| OnionError::InvalidEnvelope)?;
                 let next_hop = HopAddress::Hybrid(next_bundle);
-                
+
                 // Get remaining layers (everything after the bundle)
                 let remaining_start = payload_cursor.position() as usize;
                 let remaining_layers = payload_plaintext[remaining_start..].to_vec();
-                
+
                 Ok((Some(next_hop), remaining_layers))
             } else {
                 // Next hop is classical - read just the X25519 key
                 let next_pk: [u8; X25519_KEY_SIZE] = bincode::deserialize_from(&mut payload_cursor)
                     .map_err(|_| OnionError::InvalidEnvelope)?;
                 let next_hop = HopAddress::Classical(next_pk);
-                
+
                 // Get remaining layers (everything after the key)
                 let remaining_start = payload_cursor.position() as usize;
                 let remaining_layers = payload_plaintext[remaining_start..].to_vec();
-                
+
                 Ok((Some(next_hop), remaining_layers))
             }
         }
@@ -586,11 +581,8 @@ pub fn construct_classical_onion(
     path: Vec<[u8; X25519_KEY_SIZE]>,
     payload: &[u8],
 ) -> Result<OnionEnvelope, OnionError> {
-    let hop_addresses: Vec<HopAddress> = path
-        .into_iter()
-        .map(HopAddress::Classical)
-        .collect();
-    
+    let hop_addresses: Vec<HopAddress> = path.into_iter().map(HopAddress::Classical).collect();
+
     let result = construct_onion(hop_addresses, payload, false)?;
     Ok(result.envelope)
 }
@@ -628,7 +620,7 @@ mod tests {
         let x25519_secret = StaticSecret::random_from_rng(rand::thread_rng());
         let x25519_public = PublicKey::from(&x25519_secret).to_bytes();
         let mlkem_keypair = generate();
-        
+
         let bundle = PublicKeyBundle {
             ed25519_public: [0u8; 32], // Not used for onion routing
             x25519_public,
@@ -639,7 +631,7 @@ mod tests {
             mldsa_public: None,
             mldsa_signature: None,
         };
-        
+
         (HopAddress::Hybrid(bundle), x25519_secret, mlkem_keypair)
     }
 
@@ -654,11 +646,11 @@ mod tests {
         let (hop1, _, _) = create_test_bundle();
         let (hop2, _, _) = create_test_bundle();
         let (dest, _, _) = create_test_bundle();
-        
+
         let path = vec![hop1, hop2, dest];
         let payload = b"hello world";
         let result = construct_onion(path, payload, true);
-        
+
         assert!(result.is_ok());
         let result = result.unwrap();
         assert_eq!(result.pq_hops, 3);
@@ -671,11 +663,11 @@ mod tests {
         let (hop1, _, _) = create_test_bundle();
         let (hop2, _) = create_classical_hop();
         let (dest, _, _) = create_test_bundle();
-        
+
         let path = vec![hop1, hop2, dest];
         let payload = b"test message";
         let result = construct_onion(path, payload, false);
-        
+
         assert!(result.is_ok());
         let result = result.unwrap();
         assert_eq!(result.pq_hops, 2);
@@ -687,13 +679,16 @@ mod tests {
         let (hop1, _, _) = create_test_bundle();
         let (hop2, _) = create_classical_hop();
         let (dest, _, _) = create_test_bundle();
-        
+
         let path = vec![hop1, hop2, dest];
         let payload = b"test message";
         let result = construct_onion(path, payload, true);
-        
+
         assert!(result.is_err());
-        assert!(matches!(result.err().unwrap(), OnionError::MixedHopsNotAllowed));
+        assert!(matches!(
+            result.err().unwrap(),
+            OnionError::MixedHopsNotAllowed
+        ));
     }
 
     #[test]
@@ -701,11 +696,11 @@ mod tests {
         let (hop1, _) = create_classical_hop();
         let (hop2, _) = create_classical_hop();
         let (dest, _) = create_classical_hop();
-        
+
         let path = vec![hop1, hop2, dest];
         let payload = b"test message";
         let result = construct_onion(path, payload, false);
-        
+
         assert!(result.is_ok());
         let result = result.unwrap();
         assert_eq!(result.pq_hops, 0);
@@ -719,13 +714,9 @@ mod tests {
         let path = vec![dest_hop];
         let payload = b"secret message";
         let result = construct_onion(path, payload, true).unwrap();
-        
-        let peeled = peel_layer(
-            &result.envelope,
-            &dest_secret.to_bytes(),
-            Some(&dest_mlkem),
-        );
-        
+
+        let peeled = peel_layer(&result.envelope, &dest_secret.to_bytes(), Some(&dest_mlkem));
+
         assert!(peeled.is_ok());
         let (next_hop, decrypted_payload) = peeled.unwrap();
         assert!(next_hop.is_none());
@@ -736,17 +727,17 @@ mod tests {
     fn test_peel_layer_hybrid_relay() {
         let (relay_hop, relay_secret, relay_mlkem) = create_test_bundle();
         let (dest_hop, _, _) = create_test_bundle();
-        
+
         let path = vec![relay_hop, dest_hop];
         let payload = b"test message";
         let result = construct_onion(path, payload, true).unwrap();
-        
+
         let peeled = peel_layer(
             &result.envelope,
             &relay_secret.to_bytes(),
             Some(&relay_mlkem),
         );
-        
+
         assert!(peeled.is_ok());
         let (next_hop, remaining_layers) = peeled.unwrap();
         assert!(next_hop.is_some());
@@ -759,32 +750,25 @@ mod tests {
         let (hop1, hop1_secret, hop1_mlkem) = create_test_bundle();
         let (hop2, hop2_secret) = create_classical_hop();
         let (dest, _, _) = create_test_bundle();
-        
+
         let path = vec![hop1, hop2, dest];
         let payload = b"test message";
         let result = construct_onion(path, payload, false).unwrap();
-        
+
         // Peel first layer (hybrid)
-        let peeled1 = peel_layer(
-            &result.envelope,
-            &hop1_secret.to_bytes(),
-            Some(&hop1_mlkem),
-        ).unwrap();
+        let peeled1 =
+            peel_layer(&result.envelope, &hop1_secret.to_bytes(), Some(&hop1_mlkem)).unwrap();
         assert!(peeled1.0.unwrap().is_hybrid() == false); // hop2 is classical
-        
+
         // Create envelope for second layer
         let second_envelope = OnionEnvelope {
             version: 0x01, // classical
             layer_data: peeled1.1,
             remaining_layers: vec![],
         };
-        
+
         // Peel second layer (classical)
-        let peeled2 = peel_layer(
-            &second_envelope,
-            &hop2_secret.to_bytes(),
-            None,
-        ).unwrap();
+        let peeled2 = peel_layer(&second_envelope, &hop2_secret.to_bytes(), None).unwrap();
         assert!(peeled2.0.unwrap().is_hybrid()); // dest is hybrid
     }
 
@@ -792,25 +776,28 @@ mod tests {
     fn test_tampered_hybrid_layer_fails_cleanly() {
         let (relay_hop, relay_secret, relay_mlkem) = create_test_bundle();
         let (dest_hop, _, _) = create_test_bundle();
-        
+
         let path = vec![relay_hop, dest_hop];
         let payload = b"test message";
         let mut result = construct_onion(path, payload, true).unwrap();
-        
+
         // Tamper with the hybrid ciphertext
-        let mut hybrid_layer: HybridOnionLayer = bincode::deserialize(&result.envelope.layer_data)
-            .unwrap();
+        let mut hybrid_layer: HybridOnionLayer =
+            bincode::deserialize(&result.envelope.layer_data).unwrap();
         hybrid_layer.hybrid_ct.mlkem_ciphertext[0] ^= 1;
         result.envelope.layer_data = bincode::serialize(&hybrid_layer).unwrap();
-        
+
         let peeled = peel_layer(
             &result.envelope,
             &relay_secret.to_bytes(),
             Some(&relay_mlkem),
         );
-        
+
         assert!(peeled.is_err());
-        assert!(matches!(peeled.err().unwrap(), OnionError::DecryptionFailed));
+        assert!(matches!(
+            peeled.err().unwrap(),
+            OnionError::DecryptionFailed
+        ));
     }
 
     #[test]
@@ -818,28 +805,28 @@ mod tests {
         // Test that classical circuits work exactly as before
         let relay_secret = StaticSecret::random_from_rng(rand::thread_rng());
         let relay_pk = PublicKey::from(&relay_secret);
-        
+
         let dest_secret = StaticSecret::random_from_rng(rand::thread_rng());
         let dest_pk = PublicKey::from(&dest_secret);
-        
+
         let path = vec![*relay_pk.as_bytes(), *dest_pk.as_bytes()];
         let payload = b"test message";
-        
+
         // Use the backward compatibility function
         let envelope = construct_classical_onion(path, payload).unwrap();
         assert_eq!(envelope.version, 0x01);
-        
+
         // Peel first layer (relay)
         let peeled1 = peel_layer(&envelope, &relay_secret.to_bytes(), None).unwrap();
         assert!(peeled1.0.is_some());
-        
+
         // Create envelope for destination layer
         let dest_envelope = OnionEnvelope {
             version: 0x01,
             layer_data: peeled1.1,
             remaining_layers: vec![],
         };
-        
+
         // Peel destination layer
         let peeled2 = peel_layer(&dest_envelope, &dest_secret.to_bytes(), None).unwrap();
         assert!(peeled2.0.is_none());
@@ -849,7 +836,7 @@ mod tests {
     #[test]
     fn test_proptest_arbitrary_bytes_no_panic() {
         use proptest::prelude::*;
-        
+
         proptest! {
             #[test]
             fn arbitrary_bytes_dont_panic(data in any::<Vec<u8>>()) {
@@ -858,7 +845,7 @@ mod tests {
                     layer_data: data.clone(),
                     remaining_layers: vec![],
                 };
-                
+
                 let secret = [0u8; 32];
                 let _ = peel_layer(&envelope, &secret, None);
                 // Should not panic regardless of input
@@ -873,7 +860,7 @@ mod tests {
 
         let err = OnionError::TooManyHops(5);
         assert!(err.to_string().contains("max"));
-        
+
         let err = OnionError::MixedHopsNotAllowed;
         assert!(err.to_string().contains("mixed"));
     }

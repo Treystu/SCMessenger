@@ -9,8 +9,10 @@
 //! expanded key directly (the crate does not implement `serde::Serialize`).
 
 use anyhow::{anyhow, Result};
-use ml_dsa::{Generate, KeyExport, KeyInit, Keypair, MlDsa65, Signature, SignatureEncoding, Signer,
-             SigningKey, VerifyingKey};
+use ml_dsa::{
+    Generate, KeyExport, KeyInit, Keypair, MlDsa65, Signature, SignatureEncoding, Signer,
+    SigningKey, VerifyingKey,
+};
 
 /// Wrapper for an ML-DSA-65 keypair.
 #[derive(Clone)]
@@ -38,8 +40,8 @@ impl MlDsa65KeyPair {
                 seed_bytes.len()
             ));
         }
-        let seed = ml_dsa::Seed::try_from(seed_bytes)
-            .map_err(|_| anyhow!("Invalid ML-DSA-65 seed"))?;
+        let seed =
+            ml_dsa::Seed::try_from(seed_bytes).map_err(|_| anyhow!("Invalid ML-DSA-65 seed"))?;
         Ok(Self {
             inner: SigningKey::<MlDsa65>::new(&seed),
         })
@@ -91,13 +93,13 @@ mod tests {
     fn test_mldsa_sign_verify() {
         let keypair = MlDsa65KeyPair::generate();
         let data = b"test message";
-        
+
         let signature = keypair.sign(data).unwrap();
         let public_key = keypair.public_key();
-        
+
         let valid = verify(data, &signature, &public_key).unwrap();
         assert!(valid);
-        
+
         // Test with wrong data
         let invalid = verify(b"wrong data", &signature, &public_key).unwrap();
         assert!(!invalid);

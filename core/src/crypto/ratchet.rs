@@ -262,7 +262,8 @@ impl RatchetSession {
 
         // X3DH step 2: our_dh_secret × their_identity_public → sending chain
         let dh_output = our_dh_secret.diffie_hellman(their_identity_public_x25519);
-        let (new_root_key, sending_chain_key) = root_key_ratchet_v1(&root_key, dh_output.as_bytes());
+        let (new_root_key, sending_chain_key) =
+            root_key_ratchet_v1(&root_key, dh_output.as_bytes());
 
         let sending_chain = Chain::new(sending_chain_key);
 
@@ -361,8 +362,13 @@ impl RatchetSession {
         );
 
         // X3DH step 2: our_dh_secret × their_identity_public → sending chain
-        let dh_output = our_dh_secret.diffie_hellman(&X25519PublicKey::from(their_bundle.x25519_public));
-        let (new_root_key, sending_chain_key) = root_key_ratchet_v2(&RatchetKey::from_bytes(root_key_0), dh_output.as_bytes(), None);
+        let dh_output =
+            our_dh_secret.diffie_hellman(&X25519PublicKey::from(their_bundle.x25519_public));
+        let (new_root_key, sending_chain_key) = root_key_ratchet_v2(
+            &RatchetKey::from_bytes(root_key_0),
+            dh_output.as_bytes(),
+            None,
+        );
 
         let sending_chain = Chain::new(sending_chain_key);
 
@@ -558,7 +564,7 @@ impl RatchetSession {
         };
 
         let dh_output = first_dh_secret.diffie_hellman(their_new_dh);
-        
+
         // Handle PQ ratchet step if this is a suite 0x02 session
         let pq_ss = if self.negotiated_suite == Some(0x02) {
             // Check if we have PQ fields available (should be provided externally)
@@ -672,7 +678,8 @@ impl RatchetSession {
             bail!("PQ ratchet step only supported for suite 0x02");
         }
 
-        let their_encaps_key = self.pq_their_encaps_key
+        let their_encaps_key = self
+            .pq_their_encaps_key
             .as_ref()
             .ok_or_else(|| anyhow::anyhow!("No PQ encapsulation key from peer"))?;
 
@@ -682,11 +689,7 @@ impl RatchetSession {
         // Rotate our keypair: move current to previous, generate new
         self.pq_prev_keypair = self.pq_our_keypair.take();
         self.pq_our_keypair = Some(crate::crypto::pq::generate());
-        let new_encaps_key = self.pq_our_keypair
-            .as_ref()
-            .unwrap()
-            .public_key()
-            .to_vec();
+        let new_encaps_key = self.pq_our_keypair.as_ref().unwrap().public_key().to_vec();
 
         // Store pending ciphertext until acked
         self.pq_pending_ct = Some(ct.clone());
@@ -739,7 +742,10 @@ impl RatchetSession {
 
     /// Validate that PQ fields are present when expected (suite 0x02 only).
     pub fn validate_pq_fields_present(&self, has_pq_fields: bool) -> Result<()> {
-        if self.negotiated_suite == Some(0x02) && self.pq_their_encaps_key.is_some() && !has_pq_fields {
+        if self.negotiated_suite == Some(0x02)
+            && self.pq_their_encaps_key.is_some()
+            && !has_pq_fields
+        {
             bail!("PQ stripping attempt detected: DH step without PQ fields on suite 0x02 session");
         }
         Ok(())
@@ -774,7 +780,10 @@ fn derive_key_with_info(key: &RatchetKey, info: &[u8]) -> RatchetKey {
 }
 
 fn root_key_ratchet_v1(root_key: &RatchetKey, dh_output: &[u8]) -> (RatchetKey, RatchetKey) {
-    let combined = blake3::derive_key(ROOT_KDF_CONTEXT_V1, &[root_key.as_bytes(), dh_output].concat());
+    let combined = blake3::derive_key(
+        ROOT_KDF_CONTEXT_V1,
+        &[root_key.as_bytes(), dh_output].concat(),
+    );
     let new_root = blake3::derive_key(&format!("{}:root", ROOT_KDF_CONTEXT_V1), &combined);
     let chain_key = blake3::derive_key(&format!("{}:chain", ROOT_KDF_CONTEXT_V1), &combined);
     (
@@ -911,7 +920,9 @@ mod tests {
         };
         let transcript_hash = [0u8; 32];
 
-        let mut alice_session = RatchetSession::init_as_sender_hybrid(&alice_key, &bob_bundle, transcript_hash).unwrap();
+        let mut alice_session =
+            RatchetSession::init_as_sender_hybrid(&alice_key, &bob_bundle, transcript_hash)
+                .unwrap();
         assert!(alice_session.is_initialized());
         assert_eq!(alice_session.dh_step_count(), 1);
 
@@ -951,10 +962,23 @@ mod tests {
         };
         let transcript_hash = [0u8; 32];
 
-        let mut alice_session = RatchetSession::init_as_sender_hybrid(&alice_key, &bob_bundle, transcript_hash).unwrap();
-        let hct = alice_session.bootstrap_hct.clone().expect("sender_hybrid sets bootstrap_hct");
+        let mut alice_session =
+            RatchetSession::init_as_sender_hybrid(&alice_key, &bob_bundle, transcript_hash)
+                .unwrap();
+        let hct = alice_session
+            .bootstrap_hct
+            .clone()
+            .expect("sender_hybrid sets bootstrap_hct");
         let bob_x25519_secret = super::super::encrypt::ed25519_to_x25519_secret(&bob_key);
-        let mut bob_session = RatchetSession::init_as_receiver_hybrid(&bob_key, &bob_x25519_secret, &bob_mlkem_keypair, &alice_bundle, &hct, transcript_hash).unwrap();
+        let mut bob_session = RatchetSession::init_as_receiver_hybrid(
+            &bob_key,
+            &bob_x25519_secret,
+            &bob_mlkem_keypair,
+            &alice_bundle,
+            &hct,
+            transcript_hash,
+        )
+        .unwrap();
         assert!(!bob_session.is_initialized());
 
         let encrypted = alice_session.encrypt(b"hello bob", b"aad").unwrap();
@@ -991,8 +1015,10 @@ mod tests {
         };
         let transcript_hash = [0u8; 32];
 
-        let mut alice_session = RatchetSession::init_as_sender_hybrid(&alice_key, &bob_bundle, transcript_hash).unwrap();
-        
+        let mut alice_session =
+            RatchetSession::init_as_sender_hybrid(&alice_key, &bob_bundle, transcript_hash)
+                .unwrap();
+
         // Perform PQ ratchet step
         let (ct, new_encaps_key) = alice_session.perform_pq_ratchet_step().unwrap();
         assert!(!ct.is_empty());
@@ -1020,12 +1046,14 @@ mod tests {
         };
         let transcript_hash = [0u8; 32];
 
-        let mut alice_session = RatchetSession::init_as_sender_hybrid(&alice_key, &bob_bundle, transcript_hash).unwrap();
-        
+        let mut alice_session =
+            RatchetSession::init_as_sender_hybrid(&alice_key, &bob_bundle, transcript_hash)
+                .unwrap();
+
         // Should reject DH step without PQ fields after initialization
         let result = alice_session.validate_pq_fields_present(false);
         assert!(result.is_err());
-        
+
         // Should accept when PQ fields are present
         let result = alice_session.validate_pq_fields_present(true);
         assert!(result.is_ok());

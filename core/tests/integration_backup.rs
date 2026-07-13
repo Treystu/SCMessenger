@@ -320,7 +320,9 @@ fn iron_core_backup_restore_preserves_ratchet_continuity_and_contacts() {
         .expect("alice encrypts first message");
         match wire_envelope {
             scmessenger_core::message::WireEnvelope::V1(env) => env,
-            scmessenger_core::message::WireEnvelope::V2(_) => panic!("expected classical V1 envelope in this test"),
+            scmessenger_core::message::WireEnvelope::V2(_) => {
+                panic!("expected classical V1 envelope in this test")
+            }
         }
     };
     {
@@ -387,7 +389,9 @@ fn iron_core_backup_restore_preserves_ratchet_continuity_and_contacts() {
         .expect("restored session encrypts next message");
         match wire_envelope {
             scmessenger_core::message::WireEnvelope::V1(env) => env,
-            scmessenger_core::message::WireEnvelope::V2(_) => panic!("expected classical V1 envelope in this test"),
+            scmessenger_core::message::WireEnvelope::V2(_) => {
+                panic!("expected classical V1 envelope in this test")
+            }
         }
     };
     {

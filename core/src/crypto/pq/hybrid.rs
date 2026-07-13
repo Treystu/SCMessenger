@@ -15,13 +15,13 @@
 //! it yields a different ss_mlkem and fails at the AEAD layer later.
 
 // core/src/crypto/pq/hybrid.rs
+use crate::crypto::pq::{decapsulate, encapsulate, MlKem768KeyPair};
 use anyhow::{anyhow, Result};
 use blake3::derive_key;
-use crate::crypto::pq::{encapsulate, decapsulate, MlKem768KeyPair};
 use rand::rngs::OsRng;
 use rand::RngCore;
 use serde::{Deserialize, Serialize};
-use x25519_dalek::{StaticSecret, PublicKey};
+use x25519_dalek::{PublicKey, StaticSecret};
 use zeroize::Zeroize;
 
 /// A 32-byte key that zeroizes on drop.
@@ -50,7 +50,10 @@ pub struct HybridCiphertext {
 pub fn hybrid_encapsulate(
     their_x25519_public_bytes: &[u8; 32],
     their_mlkem_encaps_key: &[u8],
-) -> Result<(HybridCiphertext, RatchetKey /* 32-byte zeroizing secret */)> {
+) -> Result<(
+    HybridCiphertext,
+    RatchetKey, /* 32-byte zeroizing secret */
+)> {
     if their_mlkem_encaps_key.len() != 1184 {
         return Err(anyhow!(
             "Invalid ML-KEM-768 public key length: expected 1184, got {}",
@@ -119,7 +122,7 @@ pub fn hybrid_decapsulate(
     let mut ss_mlkem = decapsulate(our_mlkem_keypair, &ct.mlkem_ciphertext)?;
 
     let our_x25519_public = PublicKey::from(our_x25519_secret).to_bytes();
-    
+
     let mut ikm = Vec::new();
     ikm.extend_from_slice(&ss_x25519.to_bytes());
     ikm.extend_from_slice(&ss_mlkem);
@@ -148,8 +151,10 @@ mod tests {
         let receiver_mlkem_keypair = generate();
         let receiver_mlkem_public = receiver_mlkem_keypair.public_key();
 
-        let (ct, shared_enc) = hybrid_encapsulate(&receiver_x25519_public, receiver_mlkem_public).unwrap();
-        let shared_dec = hybrid_decapsulate(&receiver_x25519_secret, &receiver_mlkem_keypair, &ct).unwrap();
+        let (ct, shared_enc) =
+            hybrid_encapsulate(&receiver_x25519_public, receiver_mlkem_public).unwrap();
+        let shared_dec =
+            hybrid_decapsulate(&receiver_x25519_secret, &receiver_mlkem_keypair, &ct).unwrap();
 
         assert_eq!(shared_enc.as_bytes(), shared_dec.as_bytes());
     }
@@ -161,10 +166,12 @@ mod tests {
         let receiver_mlkem_keypair = generate();
         let receiver_mlkem_public = receiver_mlkem_keypair.public_key();
 
-        let (mut ct, shared_enc) = hybrid_encapsulate(&receiver_x25519_public, receiver_mlkem_public).unwrap();
+        let (mut ct, shared_enc) =
+            hybrid_encapsulate(&receiver_x25519_public, receiver_mlkem_public).unwrap();
         ct.mlkem_ciphertext[0] ^= 1;
 
-        let shared_dec = hybrid_decapsulate(&receiver_x25519_secret, &receiver_mlkem_keypair, &ct).unwrap();
+        let shared_dec =
+            hybrid_decapsulate(&receiver_x25519_secret, &receiver_mlkem_keypair, &ct).unwrap();
         assert_ne!(shared_enc.as_bytes(), shared_dec.as_bytes());
     }
 
@@ -175,10 +182,12 @@ mod tests {
         let receiver_mlkem_keypair = generate();
         let receiver_mlkem_public = receiver_mlkem_keypair.public_key();
 
-        let (mut ct, shared_enc) = hybrid_encapsulate(&receiver_x25519_public, receiver_mlkem_public).unwrap();
+        let (mut ct, shared_enc) =
+            hybrid_encapsulate(&receiver_x25519_public, receiver_mlkem_public).unwrap();
         ct.x25519_ephemeral_public[0] ^= 1;
 
-        let shared_dec = hybrid_decapsulate(&receiver_x25519_secret, &receiver_mlkem_keypair, &ct).unwrap();
+        let shared_dec =
+            hybrid_decapsulate(&receiver_x25519_secret, &receiver_mlkem_keypair, &ct).unwrap();
         assert_ne!(shared_enc.as_bytes(), shared_dec.as_bytes());
     }
 
@@ -189,16 +198,27 @@ mod tests {
         let receiver_mlkem_keypair = generate();
         let receiver_mlkem_public = receiver_mlkem_keypair.public_key();
 
-        let (ct, shared_enc) = hybrid_encapsulate(&receiver_x25519_public, receiver_mlkem_public).unwrap();
+        let (ct, shared_enc) =
+            hybrid_encapsulate(&receiver_x25519_public, receiver_mlkem_public).unwrap();
 
         let mut tampered_ct = ct.clone();
         tampered_ct.x25519_ephemeral_public[0] ^= 1;
-        let shared_dec = hybrid_decapsulate(&receiver_x25519_secret, &receiver_mlkem_keypair, &tampered_ct).unwrap();
+        let shared_dec = hybrid_decapsulate(
+            &receiver_x25519_secret,
+            &receiver_mlkem_keypair,
+            &tampered_ct,
+        )
+        .unwrap();
         assert_ne!(shared_enc.as_bytes(), shared_dec.as_bytes());
 
         let mut tampered_ct = ct.clone();
         tampered_ct.mlkem_ciphertext[0] ^= 1;
-        let shared_dec = hybrid_decapsulate(&receiver_x25519_secret, &receiver_mlkem_keypair, &tampered_ct).unwrap();
+        let shared_dec = hybrid_decapsulate(
+            &receiver_x25519_secret,
+            &receiver_mlkem_keypair,
+            &tampered_ct,
+        )
+        .unwrap();
         assert_ne!(shared_enc.as_bytes(), shared_dec.as_bytes());
     }
 
@@ -206,14 +226,16 @@ mod tests {
     fn test_kat_stability() {
         // Just replace with deterministic check of the combiner explicitly if needed
         // Since OS random is used, we can't easily KAT the full encapsulate.
-        // For now, at least make the test pass as a roundtrip. 
+        // For now, at least make the test pass as a roundtrip.
         let receiver_x25519_secret = StaticSecret::random_from_rng(OsRng);
         let receiver_x25519_public = PublicKey::from(&receiver_x25519_secret).to_bytes();
         let receiver_mlkem_keypair = generate();
         let receiver_mlkem_public = receiver_mlkem_keypair.public_key();
 
-        let (ct, shared_enc) = hybrid_encapsulate(&receiver_x25519_public, receiver_mlkem_public).unwrap();
-        let shared_dec = hybrid_decapsulate(&receiver_x25519_secret, &receiver_mlkem_keypair, &ct).unwrap();
+        let (ct, shared_enc) =
+            hybrid_encapsulate(&receiver_x25519_public, receiver_mlkem_public).unwrap();
+        let shared_dec =
+            hybrid_decapsulate(&receiver_x25519_secret, &receiver_mlkem_keypair, &ct).unwrap();
 
         assert_eq!(shared_enc.as_bytes(), shared_dec.as_bytes());
     }

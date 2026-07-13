@@ -5,7 +5,7 @@ use std::collections::HashSet;
 /// Returns `(negotiated_suite, transcript_hash)`.
 ///
 /// The transcript hash MUST be computed by the INITIATOR with `our_` prefix referring to the initiator
-/// and `their_` prefix referring to the responder. The responder recomputes this from their perspective 
+/// and `their_` prefix referring to the responder. The responder recomputes this from their perspective
 /// by calling this function where `our_` refers to the INITIATOR and `their_` refers to the RESPONDER.
 /// This means the responder calls this function passing the initiator's properties as `our_...` to match.
 pub fn negotiate_suite(
@@ -17,11 +17,11 @@ pub fn negotiate_suite(
     let our_set: HashSet<u8> = our_suites.iter().cloned().collect();
     let their_set: HashSet<u8> = their_suites.iter().cloned().collect();
     let intersection: Vec<u8> = our_set.intersection(&their_set).cloned().collect();
-    
+
     if intersection.is_empty() {
         return Err(crate::IronCoreError::CryptoError);
     }
-    
+
     let negotiated_suite = *intersection.iter().max().unwrap();
 
     let mut material = Vec::new();
@@ -48,7 +48,7 @@ mod tests {
         let their_suites = [0x03, 0x04];
         let our_pub = [0u8; 32];
         let their_pub = [1u8; 32];
-        
+
         let result = negotiate_suite(&our_suites, &their_suites, &our_pub, &their_pub);
         assert!(result.is_err());
     }
@@ -59,7 +59,7 @@ mod tests {
         let their_suites = [0x01, 0x02];
         let our_pub = [0u8; 32];
         let their_pub = [1u8; 32];
-        
+
         let (suite, _) = negotiate_suite(&our_suites, &their_suites, &our_pub, &their_pub).unwrap();
         assert_eq!(suite, 0x01);
     }
@@ -70,7 +70,7 @@ mod tests {
         let their_suites = [0x01, 0x02, 0xFF, 0xFE];
         let our_pub = [0u8; 32];
         let their_pub = [1u8; 32];
-        
+
         let (suite, _) = negotiate_suite(&our_suites, &their_suites, &our_pub, &their_pub).unwrap();
         assert_eq!(suite, 0xFF);
     }
@@ -81,16 +81,19 @@ mod tests {
         let their_suites = [0x01, 0x02, 0x03];
         let our_pub = [0u8; 32];
         let their_pub = [1u8; 32];
-        
-        let (suite_1, hash_1) = negotiate_suite(&our_suites, &their_suites, &our_pub, &their_pub).unwrap();
+
+        let (suite_1, hash_1) =
+            negotiate_suite(&our_suites, &their_suites, &our_pub, &their_pub).unwrap();
         // The responder calls it passing the INITIATOR's stuff as "our" to ensure identical material order
-        let (suite_2, hash_2) = negotiate_suite(&our_suites, &their_suites, &our_pub, &their_pub).unwrap();
-        
+        let (suite_2, hash_2) =
+            negotiate_suite(&our_suites, &their_suites, &our_pub, &their_pub).unwrap();
+
         assert_eq!(suite_1, suite_2);
         assert_eq!(hash_1, hash_2);
-        
+
         // If responder accidentally inverted the args (used their own suites as `our`), the hash MUST mismatch!
-        let (_, hash_inverted) = negotiate_suite(&their_suites, &our_suites, &their_pub, &our_pub).unwrap();
+        let (_, hash_inverted) =
+            negotiate_suite(&their_suites, &our_suites, &their_pub, &our_pub).unwrap();
         assert_ne!(hash_1, hash_inverted);
     }
 }

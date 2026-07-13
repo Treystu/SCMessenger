@@ -17,8 +17,8 @@ use std::sync::Arc;
 use crate::abuse::auto_block::{AutoBlockConfig, AutoBlockEngine};
 use crate::abuse::spam_detection::{SpamDetectionConfig, SpamDetectionEngine};
 use crate::abuse::EnhancedAbuseReputationManager;
-use crate::crypto::{decrypt_message, encrypt_message, session_manager::RatchetSessionManager};
 use crate::crypto::encrypt::{ed25519_public_to_x25519, ed25519_to_x25519_secret};
+use crate::crypto::{decrypt_message, encrypt_message, session_manager::RatchetSessionManager};
 use crate::drift::{MeshStore, NetworkState, RelayConfig, RelayEngine};
 use crate::identity::IdentityManager;
 use crate::message::{decode_envelope, decode_message, Message};
@@ -1372,16 +1372,12 @@ impl IronCore {
         let keys = identity.keys().ok_or(IronCoreError::NotInitialized)?;
 
         let local_x25519_secret = ed25519_to_x25519_secret(&keys.signing_key);
-        let remote_x25519_public = ed25519_public_to_x25519(&remote_pubkey_arr)
-            .map_err(|_| IronCoreError::CryptoError)?;
+        let remote_x25519_public =
+            ed25519_public_to_x25519(&remote_pubkey_arr).map_err(|_| IronCoreError::CryptoError)?;
 
         let shared_secret = local_x25519_secret.diffie_hellman(&remote_x25519_public);
 
-        Ok(blake3::derive_key(
-            "SCMessenger Wi-Fi Aware PMK",
-            shared_secret.as_bytes(),
-        )
-        .to_vec())
+        Ok(blake3::derive_key("SCMessenger Wi-Fi Aware PMK", shared_secret.as_bytes()).to_vec())
     }
 
     pub fn export_identity_backup_with_salt(
@@ -2165,8 +2161,8 @@ impl IronCore {
                 tracing::warn!("Failed to deserialize onion envelope: {:?}", e);
                 IronCoreError::InvalidInput
             })?;
-        let (next_hop, remaining) =
-            crate::privacy::onion::peel_layer(&envelope, &secret, None).map_err(|e| {
+        let (next_hop, remaining) = crate::privacy::onion::peel_layer(&envelope, &secret, None)
+            .map_err(|e| {
                 tracing::warn!("Onion peel failed: {:?}", e);
                 IronCoreError::CryptoError
             })?;
