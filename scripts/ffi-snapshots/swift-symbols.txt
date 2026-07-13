@@ -28,7 +28,7 @@ open func computeRelayAdjustment(profile: AdjustmentProfile) -> RelayAdjustment 
 open func contactDisplayName(peerId: String) -> String  {
 open func contactFederatedNickname(peerId: String) -> String?  {
 open func contactUpdateLastKnownDeviceId(peerId: String, deviceId: String?)throws   {try rustCallWithError(FfiConverterTypeIronCoreError_lift) {
-open func contactsManager() -> ContactManager  {
+open func contactsManager()throws  -> ContactManager  {
 open func conversation(peerId: String, limit: UInt32)throws  -> [MessageRecord]  {
 open func count() -> UInt32  {
 open func count() -> UInt32  {
@@ -37,9 +37,9 @@ open func custodyGetRegistrationStateInfo(identityId: String) -> RegistrationSta
 open func custodyRegistrationTransitions(identityId: String) -> String  {
 open func defaultSettings() -> MeshSettings  {
 open func delete(id: String)throws   {try rustCallWithError(FfiConverterTypeIronCoreError_lift) {
+open func deriveWifiAwarePmk(remotePubkeyBytes: Data)throws  -> Data  {
 open func deviceId() -> String?  {
-open func dial(multiaddr: String)throws   {try rustCallWithError(FfiConverterTypeIronCoreError_lift) {
-open func dialAsync(multiaddr: String)async throws   {
+open func dial(multiaddr: String)async throws   {
 open func dialableAddresses() -> [LedgerEntry]  {
 open func dispatchBlePacket(peerId: String, data: Data)  {try! rustCall() {
 open func dispatchProximityPacket(peerId: String, transport: ProximityTransport, data: Data)  {try! rustCall() {
@@ -56,6 +56,10 @@ open func exportAuditLog()throws  -> String  {
 open func exportDiagnostics() -> String  {
 open func exportIdentityBackup(passphrase: String)throws  -> String  {
 open func exportIdentityBackup(passphrase: String)throws  -> String  {
+open func exportIdentityBackupFast(passphrase: String)throws  -> String  {
+open func exportIdentityBackupFast(passphrase: String)throws  -> String  {
+open func exportIdentityBackupFastWithSalt(passphrase: String, salt: Data)throws  -> String  {
+open func exportIdentityBackupFastWithSalt(passphrase: String, salt: Data?)throws  -> String  {
 open func exportIdentityBackupWithSalt(passphrase: String, salt: Data)throws  -> String  {
 open func exportIdentityBackupWithSalt(passphrase: String, salt: Data?)throws  -> String  {
 open func exportLogs()throws  -> String  {
@@ -76,13 +80,13 @@ open func getCore() -> IronCore?  {
 open func getDeviceId() -> String?  {
 open func getDeviceState() -> DeviceState?  {
 open func getDiskStats() -> DiskStats  {
-open func getExternalAddresses() -> [String]  {
+open func getExternalAddresses()async  -> [String]  {
 open func getIdentityInfo() -> IdentityInfo  {
 open func getLibp2pPeerId() -> String?  {
-open func getListeners() -> [String]  {
+open func getListeners()async  -> [String]  {
 open func getNatStatus() -> String  {
 open func getPeerReputation(peerId: String) -> Double  {
-open func getPeers() -> [String]  {
+open func getPeers()async  -> [String]  {
 open func getPreferredRelays(limit: UInt32) -> [LedgerEntry]  {
 open func getPrivacyConfig() -> String  {
 open func getRegistrationState(identityId: String) -> RegistrationStateInfo  {
@@ -90,10 +94,10 @@ open func getSeniorityTimestamp() -> UInt64?  {
 open func getState() -> ServiceState  {
 open func getStats() -> ServiceStats  {
 open func getSwarmBridge() -> SwarmBridge  {
-open func getTopics() -> [String]  {
+open func getTopics()async  -> [String]  {
 open func grantConsent()  {try! rustCall() {
 open func hideMessagesForPeer(peerId: String)throws  -> UInt32  {
-open func historyManager() -> HistoryManager  {
+open func historyManager()throws  -> HistoryManager  {
 open func identityId() -> String?  {
 open func importIdentityBackup(backup: String, passphrase: String)throws   {try rustCallWithError(FfiConverterTypeIronCoreError_lift) {
 open func importIdentityBackup(backup: String, passphrase: String)throws   {try rustCallWithError(FfiConverterTypeIronCoreError_lift) {
@@ -153,7 +157,7 @@ open func prepareOnionMessage(envelopeData: Data, relayPublicKeysJson: String)th
 open func prepareReceipt(recipientPublicKeyHex: String, messageId: String)throws  -> Data  {
 open func pruneBefore(beforeTimestamp: UInt64)throws  -> UInt32  {
 open func publicKeyHex() -> String?  {
-open func publishTopic(topic: String, data: Data)throws   {try rustCallWithError(FfiConverterTypeIronCoreError_lift) {
+open func publishTopic(topic: String, data: Data)async throws   {
 open func randomPort() -> UInt16  {
 open func randomPort() -> UInt16  {
 open func ratchetHasSession(peerId: String) -> Bool  {
@@ -201,10 +205,10 @@ open func save(settings: MeshSettings)throws   {try rustCallWithError(FfiConvert
 open func saveWithEntries(entries: [LedgerEntry])throws   {try rustCallWithError(FfiConverterTypeIronCoreError_lift) {
 open func search(query: String)throws  -> [Contact]  {
 open func search(query: String, limit: UInt32)throws  -> [MessageRecord]  {
-open func sendMessage(peerId: String, data: Data, recipientIdentityId: String?, intendedDeviceId: String?)throws   {try rustCallWithError(FfiConverterTypeIronCoreError_lift) {
+open func sendMessage(peerId: String, data: Data, recipientIdentityId: String?, intendedDeviceId: String?)async throws   {
 open func sendMessageStatus(peerId: String, data: Data, recipientIdentityId: String?, intendedDeviceId: String?) -> String?  {
-open func sendMessageStatus(peerId: String, data: Data, recipientIdentityId: String?, intendedDeviceId: String?) -> String?  {
-open func sendToAllPeers(data: Data)throws   {try rustCallWithError(FfiConverterTypeIronCoreError_lift) {
+open func sendMessageStatus(peerId: String, data: Data, recipientIdentityId: String?, intendedDeviceId: String?)async  -> String?  {
+open func sendToAllPeers(data: Data)async throws   {
 open func setDelegate(delegate: CoreDelegate?)  {try! rustCall() {
 open func setDelegate(delegate: CoreDelegate?)  {try! rustCall() {
 open func setLocalNickname(peerId: String, nickname: String?)throws   {try rustCallWithError(FfiConverterTypeIronCoreError_lift) {
@@ -212,8 +216,8 @@ open func setNickname(nickname: String)throws   {try rustCallWithError(FfiConver
 open func setNickname(peerId: String, nickname: String?)throws   {try rustCallWithError(FfiConverterTypeIronCoreError_lift) {
 open func setPlatformBridge(bridge: PlatformBridge?)  {try! rustCall() {
 open func setPrivacyConfig(json: String)throws   {try rustCallWithError(FfiConverterTypeIronCoreError_lift) {
-open func setRelayBudget(messagesPerHour: UInt32)  {try! rustCall() {
-open func shutdown()  {try! rustCall() {
+open func setRelayBudget(messagesPerHour: UInt32)async   {
+open func shutdown()async   {
 open func signData(data: Data)throws  -> SignatureResult  {
 open func start()throws   {try rustCallWithError(FfiConverterTypeIronCoreError_lift) {
 open func start()throws   {try rustCallWithError(FfiConverterTypeIronCoreError_lift) {
@@ -221,7 +225,7 @@ open func startSwarm(listenAddr: String, bootstrapAddrs: [String])throws   {try 
 open func stats()throws  -> HistoryStats  {
 open func stop()  {try! rustCall() {
 open func stop()  {try! rustCall() {
-open func subscribeTopic(topic: String)throws   {try rustCallWithError(FfiConverterTypeIronCoreError_lift) {
+open func subscribeTopic(topic: String)async throws   {
 open func summary() -> String  {
 open func swarmCanBootstrapOthers() -> Bool  {
 open func swarmGetBestPaths(targetPeerId: String, count: UInt32) -> [[String]]  {
@@ -229,12 +233,12 @@ open func swarmGetBestRelays(count: UInt32) -> [String]  {
 open func swarmGetBootstrapCandidates() -> [String]  {
 open func unblockPeer(peerId: String, deviceId: String?)throws   {try rustCallWithError(FfiConverterTypeIronCoreError_lift) {
 open func unhideMessagesForPeer(peerId: String)throws  -> UInt32  {
-open func unsubscribeTopic(topic: String)throws   {try rustCallWithError(FfiConverterTypeIronCoreError_lift) {
+open func unsubscribeTopic(topic: String)async throws   {
 open func unverify(peerId: String)throws   {try rustCallWithError(FfiConverterTypeIronCoreError_lift) {
 open func updateDeviceId(peerId: String, deviceId: String?)throws   {try rustCallWithError(FfiConverterTypeIronCoreError_lift) {
 open func updateDeviceState(profile: DeviceProfile)  {try! rustCall() {
 open func updateDiskStats(totalBytes: UInt64, freeBytes: UInt64)  {try! rustCall() {
-open func updateKeepalive(peerId: String, intervalSecs: UInt64)throws   {try rustCallWithError(FfiConverterTypeIronCoreError_lift) {
+open func updateKeepalive(peerId: String, intervalSecs: UInt64)async throws   {
 open func updateLastSeen(peerId: String)throws   {try rustCallWithError(FfiConverterTypeIronCoreError_lift) {
 open func validate(settings: MeshSettings)throws   {try rustCallWithError(FfiConverterTypeIronCoreError_lift) {
 open func validateAuditChain()throws   {try rustCallWithError(FfiConverterTypeIronCoreError_lift) {
@@ -355,6 +359,7 @@ public func blockedIdentityNew(peerId: String) -> BlockedIdentity  {
 public func blockedIdentityWithDeviceId(blocked: BlockedIdentity, deviceId: String) -> BlockedIdentity  {
 public func blockedIdentityWithNotes(blocked: BlockedIdentity, notes: String) -> BlockedIdentity  {
 public func blockedIdentityWithReason(blocked: BlockedIdentity, reason: String) -> BlockedIdentity  {
+public func getBuildProvenance() -> String  {
 public func recommendedTransport(peerId: String) -> ProximityTransport  {
 public func safetyNumber(ourPubkeyHex: String, theirPubkeyHex: String) -> String  {
 public func uniffiCloneHandle() -> UInt64 {

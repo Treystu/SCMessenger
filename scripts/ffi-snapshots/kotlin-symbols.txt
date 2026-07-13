@@ -101,8 +101,8 @@ fun `custodyGetRegistrationStateInfo`(`identityId`: kotlin.String): Registration
 fun `custodyRegistrationTransitions`(`identityId`: kotlin.String): kotlin.String
 fun `defaultSettings`(): MeshSettings
 fun `delete`(`id`: kotlin.String)
+fun `deriveWifiAwarePmk`(`remotePubkeyBytes`: kotlin.ByteArray): kotlin.ByteArray
 fun `deviceId`(): kotlin.String?
-fun `dial`(`multiaddr`: kotlin.String)
 fun `dialableAddresses`(): List<LedgerEntry>
 fun `dispatchBlePacket`(`peerId`: kotlin.String, `data`: kotlin.ByteArray)
 fun `dispatchProximityPacket`(`peerId`: kotlin.String, `transport`: ProximityTransport, `data`: kotlin.ByteArray)
@@ -117,6 +117,10 @@ fun `emergencyRecover`(`history`: HistoryManager): kotlin.UInt
 fun `enforceRetention`(`maxMessages`: kotlin.UInt): kotlin.UInt
 fun `exportAuditLog`(): kotlin.String
 fun `exportDiagnostics`(): kotlin.String
+fun `exportIdentityBackupFastWithSalt`(`passphrase`: kotlin.String, `salt`: kotlin.ByteArray): kotlin.String
+fun `exportIdentityBackupFastWithSalt`(`passphrase`: kotlin.String, `salt`: kotlin.ByteArray?): kotlin.String
+fun `exportIdentityBackupFast`(`passphrase`: kotlin.String): kotlin.String
+fun `exportIdentityBackupFast`(`passphrase`: kotlin.String): kotlin.String
 fun `exportIdentityBackupWithSalt`(`passphrase`: kotlin.String, `salt`: kotlin.ByteArray): kotlin.String
 fun `exportIdentityBackupWithSalt`(`passphrase`: kotlin.String, `salt`: kotlin.ByteArray?): kotlin.String
 fun `exportIdentityBackup`(`passphrase`: kotlin.String): kotlin.String
@@ -132,18 +136,16 @@ fun `getAuditLog`(): List<AuditEvent>
 fun `getAutoAdjustEngine`(): AutoAdjustEngine
 fun `getAutoAdjustEngine`(): AutoAdjustEngine
 fun `getBlockedPeerDevices`(`peerId`: kotlin.String): List<kotlin.String>
+fun `getBuildProvenance`(): kotlin.String {
 fun `getConnectionPathState`(): ConnectionPathState
 fun `getCore`(): IronCore?
 fun `getDeviceId`(): kotlin.String?
 fun `getDeviceState`(): DeviceState?
 fun `getDiskStats`(): DiskStats
-fun `getExternalAddresses`(): List<kotlin.String>
 fun `getIdentityInfo`(): IdentityInfo
 fun `getLibp2pPeerId`(): kotlin.String?
-fun `getListeners`(): List<kotlin.String>
 fun `getNatStatus`(): kotlin.String
 fun `getPeerReputation`(`peerId`: kotlin.String): kotlin.Double
-fun `getPeers`(): List<kotlin.String>
 fun `getPreferredRelays`(`limit`: kotlin.UInt): List<LedgerEntry>
 fun `getPrivacyConfig`(): kotlin.String
 fun `getRegistrationState`(`identityId`: kotlin.String): RegistrationStateInfo
@@ -151,7 +153,6 @@ fun `getSeniorityTimestamp`(): kotlin.ULong?
 fun `getState`(): ServiceState
 fun `getStats`(): ServiceStats
 fun `getSwarmBridge`(): SwarmBridge
-fun `getTopics`(): List<kotlin.String>
 fun `get`(`id`: kotlin.String): MessageRecord?
 fun `get`(`peerId`: kotlin.String): Contact?
 fun `grantConsent`()
@@ -228,7 +229,6 @@ fun `prepareOnionMessage`(`envelopeData`: kotlin.ByteArray, `relayPublicKeysJson
 fun `prepareReceipt`(`recipientPublicKeyHex`: kotlin.String, `messageId`: kotlin.String): kotlin.ByteArray
 fun `pruneBefore`(`beforeTimestamp`: kotlin.ULong): kotlin.UInt
 fun `publicKeyHex`(): kotlin.String?
-fun `publishTopic`(`topic`: kotlin.String, `data`: kotlin.ByteArray)
 fun `randomPort`(): kotlin.UShort
 fun `randomPort`(): kotlin.UShort
 fun `ratchetHasSession`(`peerId`: kotlin.String): kotlin.Boolean
@@ -280,10 +280,7 @@ fun `search`(`query`: kotlin.String): List<Contact>
 fun `search`(`query`: kotlin.String, `limit`: kotlin.UInt): List<MessageRecord>
 fun `sendBlePacket`(`peerId`: kotlin.String, `data`: kotlin.ByteArray)
 fun `sendMessageStatus`(`peerId`: kotlin.String, `data`: kotlin.ByteArray, `recipientIdentityId`: kotlin.String?, `intendedDeviceId`: kotlin.String?): kotlin.String?
-fun `sendMessageStatus`(`peerId`: kotlin.String, `data`: kotlin.ByteArray, `recipientIdentityId`: kotlin.String?, `intendedDeviceId`: kotlin.String?): kotlin.String?
-fun `sendMessage`(`peerId`: kotlin.String, `data`: kotlin.ByteArray, `recipientIdentityId`: kotlin.String?, `intendedDeviceId`: kotlin.String?)
 fun `sendProximityPacket`(`peerId`: kotlin.String, `transport`: ProximityTransport, `data`: kotlin.ByteArray)
-fun `sendToAllPeers`(`data`: kotlin.ByteArray)
 fun `setDelegate`(`delegate`: CoreDelegate?)
 fun `setDelegate`(`delegate`: CoreDelegate?)
 fun `setLocalNickname`(`peerId`: kotlin.String, `nickname`: kotlin.String?)
@@ -291,8 +288,6 @@ fun `setNickname`(`nickname`: kotlin.String)
 fun `setNickname`(`peerId`: kotlin.String, `nickname`: kotlin.String?)
 fun `setPlatformBridge`(`bridge`: PlatformBridge?)
 fun `setPrivacyConfig`(`json`: kotlin.String)
-fun `setRelayBudget`(`messagesPerHour`: kotlin.UInt)
-fun `shutdown`()
 fun `signData`(`data`: kotlin.ByteArray): SignatureResult
 fun `startSwarm`(`listenAddr`: kotlin.String, `bootstrapAddrs`: List<kotlin.String>)
 fun `start`()
@@ -300,7 +295,6 @@ fun `start`()
 fun `stats`(): HistoryStats
 fun `stop`()
 fun `stop`()
-fun `subscribeTopic`(`topic`: kotlin.String)
 fun `summary`(): kotlin.String
 fun `swarmCanBootstrapOthers`(): kotlin.Boolean
 fun `swarmGetBestPaths`(`targetPeerId`: kotlin.String, `count`: kotlin.UInt): List<List<kotlin.String>>
@@ -308,12 +302,10 @@ fun `swarmGetBestRelays`(`count`: kotlin.UInt): List<kotlin.String>
 fun `swarmGetBootstrapCandidates`(): List<kotlin.String>
 fun `unblockPeer`(`peerId`: kotlin.String, `deviceId`: kotlin.String?)
 fun `unhideMessagesForPeer`(`peerId`: kotlin.String): kotlin.UInt
-fun `unsubscribeTopic`(`topic`: kotlin.String)
 fun `unverify`(`peerId`: kotlin.String)
 fun `updateDeviceId`(`peerId`: kotlin.String, `deviceId`: kotlin.String?)
 fun `updateDeviceState`(`profile`: DeviceProfile)
 fun `updateDiskStats`(`totalBytes`: kotlin.ULong, `freeBytes`: kotlin.ULong)
-fun `updateKeepalive`(`peerId`: kotlin.String, `intervalSecs`: kotlin.ULong)
 fun `updateLastSeen`(`peerId`: kotlin.String)
 fun `updatePeerTransports`(`peerId`: kotlin.String, `transports`: List<ProximityTransport>)
 fun `validateAuditChain`()
@@ -412,3 +404,17 @@ object NoHandle// Magic number for the Rust proxy to call using the same mechani
 object UniffiNullRustCallStatusErrorHandler: UniffiRustCallStatusErrorHandler<InternalException> {
 object UniffiWithHandle
 sealed class IronCoreException(message: String): kotlin.Exception(message) {
+suspend fun `dial`(`multiaddr`: kotlin.String)
+suspend fun `getExternalAddresses`(): List<kotlin.String>
+suspend fun `getListeners`(): List<kotlin.String>
+suspend fun `getPeers`(): List<kotlin.String>
+suspend fun `getTopics`(): List<kotlin.String>
+suspend fun `publishTopic`(`topic`: kotlin.String, `data`: kotlin.ByteArray)
+suspend fun `sendMessageStatus`(`peerId`: kotlin.String, `data`: kotlin.ByteArray, `recipientIdentityId`: kotlin.String?, `intendedDeviceId`: kotlin.String?): kotlin.String?
+suspend fun `sendMessage`(`peerId`: kotlin.String, `data`: kotlin.ByteArray, `recipientIdentityId`: kotlin.String?, `intendedDeviceId`: kotlin.String?)
+suspend fun `sendToAllPeers`(`data`: kotlin.ByteArray)
+suspend fun `setRelayBudget`(`messagesPerHour`: kotlin.UInt)
+suspend fun `shutdown`()
+suspend fun `subscribeTopic`(`topic`: kotlin.String)
+suspend fun `unsubscribeTopic`(`topic`: kotlin.String)
+suspend fun `updateKeepalive`(`peerId`: kotlin.String, `intervalSecs`: kotlin.ULong)

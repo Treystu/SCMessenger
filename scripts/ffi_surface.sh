@@ -26,7 +26,12 @@ extract_kotlin_symbols() {
     # Top-level free functions get their closing KDoc `*/` on the same
     # physical line as `fun` in UniFFI's generated Kotlin, so the pattern
     # must allow (and strip) an optional leading `*/` before the keyword.
-    grep -E '^\s*(\*/\s*)?(fun |class |interface |enum |object |data class |sealed class |value class )' "$kt_file" | \
+    # UniFFI emits async methods as `suspend fun` on the interface (and
+    # `override suspend fun` on the impl); allow an optional `suspend ` before
+    # `fun ` so async methods are tracked. `override ...` impl lines are still
+    # excluded (they start with `override`, not `suspend`/`fun`), so each
+    # method is counted once at its interface declaration.
+    grep -E '^\s*(\*/\s*)?(suspend )?(fun |class |interface |enum |object |data class |sealed class |value class )' "$kt_file" | \
         sed -E 's/^\s*(\*\/\s*)?//' | sort
 }
 
