@@ -330,8 +330,12 @@ Tier tags follow the repo convention and route to models per
 
 - **C1** GitHub billing unlock (or repo transfer into the trial org).
   [HUMAN] — the single cheapest unblock in the whole plan.
-- **C2** `TASK_CI_IOS_MACOS_RUNNER_FIX.md` — already dispatchable; fixes
-  workflow masking/paths/triggers + bindings-drift gate. [SONNET/CODER].
+- **C2** iOS CI runner fix — the task file lives at
+  `HANDOFF/done/TASK_CI_IOS_MACOS_RUNNER_FIX.md` but its own header still
+  says TODO (premature done-move pattern this repo has hit before).
+  Verify-first whether the ios-build-test.yml fixes (failure masking,
+  iOS/ casing, -project flag, triggers, bindings-drift gate) actually
+  landed; re-open and implement if not. [SONNET/CODER, verify-first].
 - **C3** XCFramework + Swift bindings regen — AFTER PQC-10 lands (single
   regen cycle, per the queue's standing note). [SONNET, mechanical parts
   HAIKU]. [DEVICE: at least one farm iPhone for smoke test].

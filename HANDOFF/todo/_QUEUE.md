@@ -32,10 +32,12 @@ drills; Section 7 records this re-rank).
    [SONNET high][AUDIT-GATE] + B2 bootstrap unification [SONNET]; then B3
    farm-anchor runbook/config [SONNET + HUMAN firewall/DDNS] and B4 cloud
    relays on AWS + Alibaba free tier [SONNET + HUMAN provisioning].
-6. iOS lane opener: GitHub billing unlock [HUMAN] then
-   `TASK_CI_IOS_MACOS_RUNNER_FIX.md` [SONNET or QWEN max] (workflow FIX is
-   dispatchable now). iOS is v1.0.0 farm-gating per decision 4 RESOLVED
-   below. (FARM WS-C.)
+6. iOS lane opener: GitHub billing unlock [HUMAN] then verify
+   `HANDOFF/done/TASK_CI_IOS_MACOS_RUNNER_FIX.md` -- NOTE: file was moved to
+   done/ but its own header still says TODO (premature-move pattern);
+   verify-first whether ios-build-test.yml fixes actually landed, re-open if
+   not [SONNET]. iOS is v1.0.0 farm-gating per decision 4 RESOLVED below.
+   (FARM WS-C.)
 7. B5/B6: P1-14/P1-18 verification debt + 12-node farm simulation on the B4
    rig [SONNET][DEVICE]; then FD drills per FARM plan Section 5.
 8. Meeting Mode design note [OPUS+/THINK] (FARM WS-D1), then D2/D3 impl
