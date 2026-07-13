@@ -1,0 +1,264 @@
+diff --git a/core/src/crypto/encrypt.rs b/core/src/crypto/encrypt.rs
+index daffb827..67c012c1 100644
+--- a/core/src/crypto/encrypt.rs
++++ b/core/src/crypto/encrypt.rs
+@@ -261,14 +261,16 @@ pub fn decrypt_message_ratcheted(
+     // Use sender public key as AAD (same binding as legacy path)
+     let aad = envelope.sender_public_key.as_slice();
+ 
++    // Legacy (non-V2) envelopes never carry PQ ratchet fields.
+     let plaintext = session.decrypt(
+         dh_public,
+         message_number,
+         &envelope.nonce,
+         &envelope.ciphertext,
+         aad,
++        None,
+     )?;
+-    
++
+     session.peer_confirmed = true;
+     Ok(plaintext)
+ }
+@@ -305,6 +307,13 @@ pub fn decrypt_message_ratcheted_v2(
+     // init_as_receiver_hybrid at session setup -- only process pq fields
+     // here for post-confirmation messages, which represent a genuine PQ
+     // ratchet step from perform_pq_ratchet_step, not the initial bootstrap.
++    //
++    // The decapsulated shared secret is captured (not discarded) and
++    // threaded into `session.decrypt(...)` below so that, if this message
++    // also advances the DH ratchet position, the fresh PQ material gets
++    // mixed into the root key via `handle_dh_ratchet` instead of being
++    // silently dropped (see HANDOFF/todo/PQC_07_PQ_SECRET_NEVER_MIXED_INTO_ROOT_KEY.md).
++    let mut fresh_pq_ss: Option<Vec<u8>> = None;
+     if session.negotiated_suite == Some(0x02) && session.peer_confirmed {
+         // The anti-stripping check only applies at genuine cadence boundaries
+         // (mirrors encrypt_message_ratcheted's own `current_message_number % 100
+@@ -320,7 +329,8 @@ pub fn decrypt_message_ratcheted_v2(
+         if let (Some(pq_kem_ciphertext), Some(pq_encaps_key)) =
+             (&envelope.pq_kem_ciphertext, &envelope.pq_encaps_key)
+         {
+-            session.handle_incoming_pq_fields(pq_kem_ciphertext, pq_encaps_key)?;
++            fresh_pq_ss =
++                Some(session.handle_incoming_pq_fields(pq_kem_ciphertext, pq_encaps_key)?);
+         }
+     }
+ 
+@@ -330,8 +340,9 @@ pub fn decrypt_message_ratcheted_v2(
+         &envelope.nonce,
+         &envelope.ciphertext,
+         aad,
++        fresh_pq_ss,
+     )?;
+-    
++
+     session.peer_confirmed = true;
+     Ok(plaintext)
+ }
+diff --git a/core/src/crypto/proptest_harness.rs b/core/src/crypto/proptest_harness.rs
+index d2aa0258..09f67cb6 100644
+--- a/core/src/crypto/proptest_harness.rs
++++ b/core/src/crypto/proptest_harness.rs
+@@ -141,6 +141,7 @@ proptest! {
+             &encrypted.nonce,
+             &encrypted.ciphertext,
+             b"aad",
++            None,
+         ).unwrap();
+ 
+         prop_assert_eq!(decrypted, plaintext);
+diff --git a/core/src/crypto/ratchet.rs b/core/src/crypto/ratchet.rs
+index 49eaf59c..a2cda701 100644
+--- a/core/src/crypto/ratchet.rs
++++ b/core/src/crypto/ratchet.rs
+@@ -503,6 +503,12 @@ impl RatchetSession {
+     }
+ 
+     /// Decrypt a message using the receiving chain.
++    ///
++    /// `pq_ss` carries the freshly-decapsulated ML-KEM shared secret (from a
++    /// prior call to `handle_incoming_pq_fields`) for suite 0x02 sessions
++    /// whose DH position is about to advance in this call. Pass `None` for
++    /// suite 0x01 (classical) sessions or when no fresh PQ fields were
++    /// processed for this message.
+     pub fn decrypt(
+         &mut self,
+         their_dh_public: &[u8],
+@@ -510,6 +516,7 @@ impl RatchetSession {
+         nonce: &[u8],
+         ciphertext: &[u8],
+         aad: &[u8],
++        pq_ss: Option<Vec<u8>>,
+     ) -> Result<Vec<u8>> {
+         if their_dh_public.len() != 32 {
+             bail!("Invalid DH public key length");
+@@ -524,7 +531,7 @@ impl RatchetSession {
+         };
+ 
+         if dh_changed {
+-            self.handle_dh_ratchet(&their_dh)?;
++            self.handle_dh_ratchet(&their_dh, pq_ss)?;
+         }
+ 
+         let message_key = self.get_message_key(&their_dh, message_number)?;
+@@ -547,7 +554,15 @@ impl RatchetSession {
+             .map_err(|_| anyhow::anyhow!("Decryption failed"))
+     }
+ 
+-    fn handle_dh_ratchet(&mut self, their_new_dh: &X25519PublicKey) -> Result<()> {
++    /// `pq_ss` is the freshly-decapsulated ML-KEM shared secret for suite
++    /// 0x02 sessions (from `handle_incoming_pq_fields`, called by the
++    /// caller before this DH ratchet step), or `None` for suite 0x01
++    /// sessions / DH steps with no accompanying fresh PQ material.
++    fn handle_dh_ratchet(
++        &mut self,
++        their_new_dh: &X25519PublicKey,
++        pq_ss: Option<Vec<u8>>,
++    ) -> Result<()> {
+         let first_dh_secret = if let Some(identity_secret) = self.our_identity_secret.take() {
+             identity_secret
+         } else {
+@@ -558,16 +573,6 @@ impl RatchetSession {
+         };
+ 
+         let dh_output = first_dh_secret.diffie_hellman(their_new_dh);
+-        
+-        // Handle PQ ratchet step if this is a suite 0x02 session
+-        let pq_ss = if self.negotiated_suite == Some(0x02) {
+-            // Check if we have PQ fields available (should be provided externally)
+-            // For now, we'll assume the PQ handling is done in the calling code
+-            // This function just handles the DH part, PQ is handled separately
+-            None
+-        } else {
+-            None
+-        };
+ 
+         let (new_root_key, receiving_chain_key) = if self.negotiated_suite == Some(0x02) {
+             root_key_ratchet_v2(&self.root_key, dh_output.as_bytes(), pq_ss.clone())
+@@ -885,6 +890,7 @@ mod tests {
+                 &encrypted.nonce,
+                 &encrypted.ciphertext,
+                 b"aad",
++                None,
+             )
+             .unwrap();
+ 
+@@ -965,6 +971,7 @@ mod tests {
+                 &encrypted.nonce,
+                 &encrypted.ciphertext,
+                 b"aad",
++                None,
+             )
+             .unwrap();
+ 
+diff --git a/core/tests/integration_pq_session.rs b/core/tests/integration_pq_session.rs
+index 036e8f7b..02de5bcf 100644
+--- a/core/tests/integration_pq_session.rs
++++ b/core/tests/integration_pq_session.rs
+@@ -373,15 +373,45 @@ fn test_pq_ratchet_cadence_refreshes_shared_secret() {
+     // (Already proven by the assert_eq!(decrypted, plaintext) inside the loop
+     // for every message including the triggering one.)
+ 
+-    // Step 5: DISABLED -- see HANDOFF/todo/PQC_07_PQ_SECRET_NEVER_MIXED_INTO_ROOT_KEY.md
+-    // (CRITICAL, filed 2026-07-11). This assertion is the actual point of this
+-    // test per its task spec ("proving the fresh PQ shared secret actually
+-    // entered the KDF, not just that the ciphertext was transmitted"), and it
+-    // correctly FAILS against current production code: `handle_dh_ratchet` in
+-    // core/src/crypto/ratchet.rs hardcodes its `pq_ss` input to `None`
+-    // unconditionally, so the decapsulated PQ shared secret from
+-    // `handle_incoming_pq_fields` is computed and discarded, never mixed into
+-    // root_key, on either side, ever. Re-enable this once that ticket lands:
++    // Step 5: STILL DISABLED after the 2026-07-12 wiring fix -- see
++    // HANDOFF/todo/PQC_07_PQ_SECRET_NEVER_MIXED_INTO_ROOT_KEY.md.
++    //
++    // The literal bug described in that ticket (`handle_dh_ratchet` hardcoding
++    // `pq_ss` to `None` unconditionally) IS fixed: `RatchetSession::decrypt`
++    // and `handle_dh_ratchet` now take a real `pq_ss: Option<Vec<u8>>` and
++    // `decrypt_message_ratcheted_v2` threads the freshly-decapsulated secret
++    // from `handle_incoming_pq_fields` through to it instead of discarding it.
++    //
++    // That fix alone does not make THIS assertion pass, and empirically does
++    // not (verified 2026-07-12): `handle_dh_ratchet` (and hence the PQ-secret
++    // mixing into root_key) only runs when `dh_changed` is true in
++    // `RatchetSession::decrypt`. In this test's scenario Alice sends 105
++    // messages one-directionally with no reply from Bob after the initial
++    // handshake, so her own DH public key never changes across the whole
++    // loop -- the ONE DH crossing that occurs (Bob processing Alice's first
++    // loop message) happens long before the message-100 PQ cadence trigger,
++    // and nothing after it is a DH crossing on EITHER side. So ALICE's own
++    // session's root key (what this assertion inspects) is never touched by
++    // handle_dh_ratchet during or after the cadence trigger, regardless of
++    // the pq_ss wiring fix -- there's no DH-ratchet-based mixing OPPORTUNITY
++    // in this code path for the sender's own session.
++    //
++    // Making this assertion pass requires a genuinely separate design
++    // decision: whether/how a pure PQ-cadence event (no accompanying DH
++    // motion) should refresh root_key immediately and independently on each
++    // side. Naively mixing `ss_pq` into each side's local `root_key` snapshot
++    // at that point (sender in `perform_pq_ratchet_step`, receiver in
++    // `handle_incoming_pq_fields`) was evaluated and rejected: Alice's and
++    // Bob's `root_key` values are NOT equal at arbitrary points between DH
++    // crossings (by design -- each double-ratchet crossing leaves the
++    // receiving party "one preemptive round ahead" of the sender until the
++    // next reply), so mixing the same `ss_pq` into two different snapshots
++    // produces two different results and would desynchronize the parties'
++    // root-key state, breaking chain-key derivation at the NEXT genuine DH
++    // crossing. This is a protocol design question (see
++    // PQC_07_PQ_SECRET_NEVER_MIXED_INTO_ROOT_KEY.md point 2), not a wiring
++    // bug, and needs its own design + mandatory adversarial crypto review
++    // before implementation. Re-enable this once that lands:
+     //
+     // let root_key_after = alice_manager.get_session(&bob_id).unwrap().root_key_bytes();
+     // assert_ne!(root_key_before.unwrap(), root_key_after, "Root key should change after PQ ratchet step");
+diff --git a/core/tests/integration_ratchet_persistence.rs b/core/tests/integration_ratchet_persistence.rs
+index 3b9b6a07..0849bf9d 100644
+--- a/core/tests/integration_ratchet_persistence.rs
++++ b/core/tests/integration_ratchet_persistence.rs
+@@ -101,6 +101,7 @@ fn ratchet_persistence_with_message_exchange() {
+                 &ct.nonce,
+                 &ct.ciphertext,
+                 aad,
++                None,
+             )
+             .unwrap();
+         assert_eq!(String::from_utf8(pt).unwrap(), format!("A->B {}", i));
+@@ -122,6 +123,7 @@ fn ratchet_persistence_with_message_exchange() {
+                 &ct.nonce,
+                 &ct.ciphertext,
+                 aad,
++                None,
+             )
+             .unwrap();
+         assert_eq!(String::from_utf8(pt).unwrap(), format!("B->A {}", i));
+@@ -155,6 +157,7 @@ fn ratchet_persistence_with_message_exchange() {
+             &ct_post.nonce,
+             &ct_post.ciphertext,
+             aad,
++            None,
+         )
+         .unwrap();
+     assert_eq!(String::from_utf8(pt).unwrap(), post_msg);
+@@ -170,6 +173,7 @@ fn ratchet_persistence_with_message_exchange() {
+             &ct_bob.nonce,
+             &ct_bob.ciphertext,
+             aad,
++            None,
+         )
+         .unwrap();
+     assert_eq!(String::from_utf8(pt).unwrap(), bob_reply);
+@@ -205,6 +209,7 @@ fn ratchet_persistence_out_of_order_messages() {
+                 &ct.nonce,
+                 &ct.ciphertext,
+                 aad,
++                None,
+             )
+             .unwrap();
+         assert_eq!(String::from_utf8(pt).unwrap(), format!("msg {}", i));
+@@ -235,6 +240,7 @@ fn ratchet_persistence_out_of_order_messages() {
+             &ct.nonce,
+             &ct.ciphertext,
+             aad,
++            None,
+         );
+         assert!(
+             result.is_ok(),
