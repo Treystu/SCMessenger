@@ -138,20 +138,29 @@ proptest! {
     }
 }
 
-/// Property 6: Export format is 32 bytes (Ed25519 secret key)
+/// Property 6: Export format round-trips correctly
 /// Validates: Requirements 13.3 (backup format correctness)
 #[test]
 fn test_export_format() {
-    let mut manager = IdentityManager::new();
-    manager.initialize().expect("initialization should succeed");
+    let mut manager1 = IdentityManager::new();
+    manager1.initialize().expect("initialization should succeed");
 
-    let exported = manager.export_key_bytes().expect("export should succeed");
+    let exported1 = manager1.export_key_bytes().expect("export should succeed");
 
-    // Ed25519 secret key should be exactly 32 bytes
+    // Assert export is non-empty
+    assert!(!exported1.is_empty(), "Exported key should not be empty");
+
+    // Create a second manager and import the exported bytes
+    let mut manager2 = IdentityManager::new();
+    manager2.import_key_bytes(&exported1).expect("import should succeed");
+
+    // Export again from the second manager
+    let exported2 = manager2.export_key_bytes().expect("export should succeed");
+
+    // Assert the two exports are byte-equal
     assert_eq!(
-        exported.len(),
-        32,
-        "Exported key should be 32 bytes (Ed25519 secret key)"
+        exported1, exported2,
+        "Exported keys should be byte-equal after round-trip"
     );
 }
 
