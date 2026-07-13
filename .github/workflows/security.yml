@@ -92,10 +92,10 @@ jobs:
             let body = '## Security Vulnerabilities Detected\n\n';
             body += `**Scan Date:** ${new Date().toISOString().split('T')[0]}\n\n`;
             body += '### Summary\n\n';
-            body += `- 🔴 Critical: ${severityCounts.critical}\n`;
-            body += `- 🟠 High: ${severityCounts.high}\n`;
-            body += `- 🟡 Medium: ${severityCounts.medium}\n`;
-            body += `- 🟢 Low: ${severityCounts.low}\n\n`;
+            body += `- [CRITICAL] Critical: ${severityCounts.critical}\n`;
+            body += `- [HIGH] High: ${severityCounts.high}\n`;
+            body += `- [MEDIUM] Medium: ${severityCounts.medium}\n`;
+            body += `- [LOW] Low: ${severityCounts.low}\n\n`;
             body += '### Vulnerabilities\n\n';
             
             // Sort by severity (critical first)
@@ -180,10 +180,7 @@ jobs:
           fetch-depth: 0  # Full history for comprehensive scanning
       
       - name: Run Gitleaks
-        uses: gitleaks/gitleaks-action@v2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITLEAKS_CONFIG: .gitleaks.toml
+        run: docker run --rm -v ${{ github.workspace }}:/repo zricethezav/gitleaks:latest detect --source=/repo --config=/repo/.gitleaks.toml --report-path=/repo/gitleaks-report.json --no-banner --redact
       
       - name: Upload Gitleaks report
         if: failure()
