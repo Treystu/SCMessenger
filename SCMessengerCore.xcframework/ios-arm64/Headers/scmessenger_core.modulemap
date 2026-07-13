@@ -1,7 +1,0 @@
-module scmessenger_core {
-    header "scmessenger_core.h"
-    export *
-    use "Darwin"
-    use "_Builtin_stdbool"
-    use "_Builtin_stdint"
-}

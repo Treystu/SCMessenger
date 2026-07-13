@@ -331,3 +331,12 @@ pnpm-debug.log*
 # Python bytecode
 __pycache__/
 *.py[cod]
+
+# Exceptions to keep intentionally tracked files
+!docs/historical/**
+!iOS/SCMessenger/SCMessenger.xcodeproj/project.xcworkspace/
+!iOS/SCMessenger/SCMessenger.xcodeproj/project.xcworkspace/contents.xcworkspacedata
+!iOS/SCMessengerCore.xcframework/
+!iOS/SCMessengerCore.xcframework/**
+!log-visualizer/package-lock.json
+
