@@ -1,31 +1,56 @@
 # _QUEUE -- Dispatch Order for the Full v1.0.0 Backlog
 
 Status: Active
-Last updated: 2026-07-11 (backlog groomed for execution: done-files swept out of
-todo/, review checkpoint now a dispatchable task, decision points refreshed.
-Delegation protocol: docs/ORCHESTRATION.md.)
+Last updated: 2026-07-13 (EXECUTION ORDER re-ranked per
+`HANDOFF/plans/FARM_FINAL_PLAN.md` — the definitive farm deployment plan.
+Farm delivery-truth and crypto-soundness now outrank PQC depth work. iOS
+scope decision RESOLVED (in v1.0.0, farm-gating). Delegation protocol:
+docs/ORCHESTRATION.md.)
 
 ## EXECUTION ORDER -- next dispatches (pull top-down)
 
-1. `PQC_REVIEW_CHECKPOINT_05_06_07.md` [THINKING][AUDIT-GATE][BLOCKING] --
-   read-only Qwen thinking dispatch; command inside the task file. Gates
-   everything PQC below.
-2. `PQC_08_LEGACY_PATH_RETIREMENT.md` [QWEN max, --verify compile gate] --
-   IN PROGRESS, encrypt.rs gating landed; finish remaining scope. Can run
-   in parallel with item 1 (already-written code; review covers it).
-3. `TASK_CI_IOS_MACOS_RUNNER_FIX.md` [SONNET or QWEN max] -- independent of
-   PQC; workflow FIX is dispatchable now, the RUN needs the operator's
-   GitHub billing unlock first.
-4. After checkpoint PASS: `PQC_09_HYBRID_ONION.md` and
-   `PQC_10_MLDSA_IDENTITY_SIGNATURES.md` (parallel lanes, different files);
-   then `PQC_11` (after 10) -> `PQC_12` -> `PQC_13` -> `PQC_08` final
-   compat pass -> `PQC_14`.
-5. `TASK_KMP_RUST_UNIFFI_LINUX.md` [QWEN max] anytime (verify-only start);
-   `TASK_KMP_COMPOSE_ARCHITECT.md` is [HUMAN-gated] -- spec targets Compose
-   on linuxX64 native but Compose Desktop is JVM-only; operator must settle
-   the stack before any dispatch.
-6. [NEEDS PLANNING] pair (BLE GATT traits, CLI orphaned modules) --
-   [OPUS+/decision] items; hold for a Claude session or operator call.
+Re-ranked 2026-07-13 per `HANDOFF/plans/FARM_FINAL_PLAN.md` (Section 4 has
+ticket-ready specs for all NEW items; Section 5 defines the FD readiness
+drills; Section 7 records this re-rank).
+
+1. `OUTBOX_FLUSH_ON_CONNECT_RETRY.md` [SONNET/CODER][P0 farm-critical] --
+   reuse the 296-line reference patch in `HANDOFF/review/`; the exact
+   failing-test fix is written in the ticket. (FARM WS-A1.)
+2. Receipt round-trip fix per
+   `CRITICAL_ANDROID_FALSE_DELIVERY_FAILURE_NO_RECEIPT_ACK.md` steps 1-2:
+   core incoming-receipt classification + CLI serde_json fix
+   [SONNET/CODER][AUDIT-GATE: touches transport/swarm.rs]; then step 3
+   Android retry suppression [SONNET, Kotlin-side]. (FARM WS-A2/A3.)
+3. `PQC_07_PQ_SECRET_NEVER_MIXED_INTO_ROOT_KEY.md` [SONNET][AUDIT-GATE,
+   CRITICAL] plus family: `PQC_07_FORCE_RATCHET_SAME_DEFECT.md`,
+   `PQC_07_PQ_REFRESH_WITHOUT_DH_CROSSING.md`,
+   `PQC_RATCHET_SKIPPED_KEYS_NOT_PERSISTED.md`. PQC-11/13 stay frozen until
+   these land (standing rule). (FARM WS-E.)
+4. `PQC_08_LEGACY_PATH_RETIREMENT.md` [QWEN max, --verify compile gate] --
+   IN PROGRESS; finish remaining scope.
+5. FARM-B reach lane: B1 DNS-name-first hardening (IP-flip mandate)
+   [SONNET high][AUDIT-GATE] + B2 bootstrap unification [SONNET]; then B3
+   farm-anchor runbook/config [SONNET + HUMAN firewall/DDNS] and B4 cloud
+   relays on AWS + Alibaba free tier [SONNET + HUMAN provisioning].
+6. iOS lane opener: GitHub billing unlock [HUMAN] then
+   `TASK_CI_IOS_MACOS_RUNNER_FIX.md` [SONNET or QWEN max] (workflow FIX is
+   dispatchable now). iOS is v1.0.0 farm-gating per decision 4 RESOLVED
+   below. (FARM WS-C.)
+7. B5/B6: P1-14/P1-18 verification debt + 12-node farm simulation on the B4
+   rig [SONNET][DEVICE]; then FD drills per FARM plan Section 5.
+8. Meeting Mode design note [OPUS+/THINK] (FARM WS-D1), then D2/D3 impl
+   [SONNET][AUDIT-GATE: transport/ble/].
+9. F1 ledger convergence test + F2 custody persistence verify-first
+   [SONNET high]. (FARM WS-F.)
+10. After item 3 lands: `PQC_10_MLDSA_IDENTITY_SIGNATURES.md`; then PQC_11
+    -> PQC_12 -> PQC_13 -> PQC_08 final compat pass -> PQC_14. PQC-09
+    wiring stays parked (FARM AD-8 onion seam freeze;
+    `PQC_09_SECURITY_REVIEW_FIXES.md` remains parked). iOS C3 XCFramework
+    regen waits for PQC-10 (single regen cycle).
+11. `TASK_KMP_RUST_UNIFFI_LINUX.md` [QWEN max] anytime (verify-only start);
+    `TASK_KMP_COMPOSE_ARCHITECT.md` [HUMAN-gated] unchanged.
+12. [NEEDS PLANNING] pair: BLE GATT traits decision FOLDS INTO FARM WS-D1
+    design note; CLI orphaned modules still holds for a Claude session.
 Owner: the acting orchestrator (any mode). Sequencing authority:
 `HANDOFF/V1_0_0_EXECUTION_PLAN.md` (operator-settled two-phase DAG -- do not
 relitigate). This file is the LIVE pick list: pull from the top, respect the
@@ -46,6 +71,13 @@ Rules of engagement:
   (Qwen/DashScope, zero Anthropic cost, round-robin model selection).
 
 ## Farm Use Case -- Primary v1.0.0 Validator (operator directive, 2026-07-11)
+
+**2026-07-13: this directive is now fully elaborated in
+`HANDOFF/plans/FARM_FINAL_PLAN.md`** — topology (Puna/Pahoa/Kalapana, fiber
+anchor + DDNS, half WiFi-mesh half cellular, half-or-more iPhone), eight
+architecture decisions (AD-1..8), the complete gap ledger (WS-FARM-A..H)
+with model-tier routing, ten readiness drills (FD-1..10), and the rollout
+sequence (F0..F5). The plan refines this section; it does not relitigate it.
 
 The 28-acre farm deployment (12 dispersed users, patchy/no cellular,
 localized farm WiFi, in-person BLE encounters) is the primary real-world
@@ -266,10 +298,13 @@ Fine-planning happens as P2-00 after Phase 1 exit, per the execution plan.
    public repo; the Enterprise trial does not cover it). Fix billing or
    transfer the repo into the trial org. Unblocks free macOS runners ->
    the whole iOS lane.
-4. **iOS scope** -- operator wants iOS parity, but iOS is NOT in the settled
-   v1.0.0 scope list. Decide: amend the execution plan (in-scope v1.0) or
-   declare it the v1.1 headline. Either way: single Swift bindings +
-   XCFramework regen cycle AFTER PQC-10 lands.
+4. ~~iOS scope~~ **RESOLVED 2026-07-13**: half or more of the farm's users
+   carry iPhones (operator-confirmed), so iOS parity is IN v1.0.0 scope and
+   farm-gating (FARM plan AD-7 / WS-FARM-C). Execution plan amended by this
+   entry. Single Swift bindings + XCFramework regen cycle AFTER PQC-10
+   lands, unchanged. Distribution decision (Apple Developer account for
+   TestFlight, USD 99/yr) is a new [HUMAN] item — required before the F3
+   pilot phase.
 5. **KMP D2 stack correction** -- TASK_KMP_COMPOSE_ARCHITECT targets Compose
    UI on linuxX64 native; Compose Desktop is JVM-only. Pick: JVM desktop
    target (recommended) or a different UI stack. Blocks D2 dispatch.

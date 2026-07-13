@@ -418,3 +418,78 @@ definition:
   documented in ARCHITECTURE/docs. [HAIKU/FLASH — mechanical]. Keeps
   `PQC_09_SECURITY_REVIEW_FIXES.md` parked with a clear conscience.
 
+## 5. Farm Readiness Drills — what "perfect" means, made literal
+
+Repo standard applies: every gating drill passes TWICE, reproducibly,
+cold-start included, evidence logged to the dated ledger doc
+(`docs/release-readiness-YYYY-MM-DD.md` style). Simulated first on the B4/B6
+rig, then live at the farm. GATE = blocks farm rollout; STRETCH = recorded,
+not blocking.
+
+| ID | Drill | Pass criteria | Gate? |
+|---|---|---|---|
+| FD-1 | LAN pairwise (S1) | Any two farm-WiFi nodes: discovery + E2E delivery + verified receipt, both directions, cold start included | GATE |
+| FD-2 | Cellular-to-farm (S2) | Cellular-only node <-> farm-WiFi node via anchor: delivery + receipt both ways; carrier-filtered path lands via 443/WSS ladder | GATE |
+| FD-3 | Town dial-back (S3) | Real Pahoa/Hilo WiFi + cellular: roamer reaches farm peers, drains queued messages both directions within 60 s of connectivity | GATE |
+| FD-4 | Meeting room (S4) | 6+ mixed iOS/Android devices, foreground, one room, no WiFi/internet required: all-pairs message delivery, 30-minute soak, zero lost messages | GATE |
+| FD-5 | Fiber-cut (S6) | Kill WAN at the firewall: S1 unaffected; cellular nodes fail over to cloud relays; restore fiber -> full reconvergence unattended <15 min | GATE |
+| FD-6 | IP-flip (AD-2) | Force WAN IP change + DDNS update while a remote node is active: remote node reconnects unattended, no restart, <15 min | GATE |
+| FD-7 | Drive-by sneakernet (S5) | Slow drive-past at the choke point flushes queued custody between two nodes | STRETCH |
+| FD-8 | Stale rejoin (D2/AD-4) | Node offline 14 days (simulated clock) rejoins on ONE contact: ledger reconverges, queued custody drains, ratchet still decrypts (E3) | GATE |
+| FD-9 | Overnight soak (G4) | 2+ real phones idle-connected overnight: no ANR, no service death, battery drain recorded and acceptable | GATE |
+| FD-10 | Delivery-truth audit (D3) | During FD-1..4: zero false "failed" for delivered messages, zero checkmarks without verified receipt | GATE |
+
+FD-4 and FD-9 need real farm-mate hardware [DEVICE][HUMAN]; everything else
+has a rig-simulated first pass.
+
+## 6. Rollout sequence (the seed planting)
+
+- **F0 — Stabilize (now):** WS-FARM-A (A1-A4) + WS-FARM-E (E1-E4) + B1/B2.
+  Exit: compile/test/clippy/fmt gates green; A-fixes live-verified
+  CLI<->emulator; adversarial verdicts on file.
+- **F1 — Infrastructure up:** B3 anchor live on farm fiber [HUMAN firewall],
+  B4 cloud relays live, B5/B6 rig proofs green. Exit: FD-2/FD-5/FD-6 pass on
+  the rig; FD-2 passes live with Lucas's own devices.
+- **F2 — Daily-drive (dogfood):** Lucas + household devices run it as the
+  actual messenger for a week. G1/G2 land here. Exit: FD-1/FD-3/FD-10 live,
+  plus a week of honest daily use with zero silent losses.
+- **F3 — Pilot (2-3 friendly farm-mates):** C-lane must be done for iPhone
+  pilots (C1-C5); G3 onboarding + G5 install paths ready. Exit: pilots
+  message daily without hand-holding; FD-9 on their hardware.
+- **F4 — Full farm:** everyone in; FD-4 executed at a real community meeting
+  (dry-run first); FD-8 verified on a genuinely-lapsed device. Exit: the
+  farm uses it because it works, not because Lucas asks them to.
+- **F5 — Island seeds:** publish the anchor-kit runbook (B3 generalized: any
+  community = one DNS name + one always-on box + config); Hilo early adopters
+  as voluntary relay nodes; WASM/browser client via CLI bridge for
+  desktop-only users. No code changes required by design (D5).
+
+## 7. Queue re-rank + honesty ledger
+
+`HANDOFF/todo/_QUEUE.md` EXECUTION ORDER re-ranked 2026-07-13 to: A1 -> A2/A3
+-> E1 (with E2/E3 following) -> B1/B2 -> C1/C2 [HUMAN+SONNET] -> B3/B4/B5 ->
+D1 -> F1/F2 -> remainder per Section 4 dependencies. PQC-09..14 depth work
+stays behind E1 and the C3 regen point exactly as already queued. New tasks
+(A4, B1, B3, B4, B6, D1, F1, F2, G2, G3, H1) are cut into task files by the
+next orchestrator session directly from this plan's specs — each WS entry
+above is written to be ticket-ready.
+
+**Honesty ledger (what this plan trusts vs verified):**
+- No cargo/gradle/device command was run in this session (planning session,
+  Windows toolchain untouched). All code-state claims trace to: the queue and
+  execution plan (operator-maintained), tickets with recorded live evidence
+  (outbox/receipt CRITICALs, 2026-07-12 live tests), and direct source reads
+  this session (behaviour.rs stack, bootstrap.rs empty defaults + dns flag,
+  ledger_exchange/LedgerManager, relay 443 rationale, iOS transport files,
+  privacy module presence, scmorc routing table).
+- Prior "COMPLETE" claims in this repo have failed live re-verification
+  before (NEXT_ITER_04 history). This plan therefore treats NOTHING as
+  farm-ready until its FD drill passes — including things marked done.
+- Unverified assumptions flagged in-plan: farm WiFi is one L2 segment (S1),
+  Android concurrent-GATT ceiling on farm-mates' actual devices (D1 measures
+  it), MeshStore custody persistence (F2 verify-first), iOS dns4 dialing
+  (C4), Alibaba free-tier egress limits for relay duty (B4 confirms).
+- The single most leveraged unknowns for the farm: A2 receipt round-trip
+  (delivery truth) and B1 IP-flip behavior (mandatory requirement). Both get
+  drills, not just tests.
+
