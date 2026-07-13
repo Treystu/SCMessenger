@@ -70,87 +70,115 @@ extension ContactManager: ContactManagerProtocol {
     
     public func add(contact: Contact) throws {
         try rustCallWithError(FfiConverterTypeIronCoreError.lift()) {
-            uniffi_scmessenger_core_fn_method_contactmanager_add(self.uniffiClonePointer(),
-                FfiConverterTypeContact.lower(contact), $0
+            uniffi_scmessenger_core_fn_method_contactmanager_add(
+                self.uniffiClonePointer(),
+                FfiConverterTypeContact.lower(contact),
+                $0
             )
         }
     }
     
     public func count() -> UInt32 {
         // Rust API contractually cannot fail; verified against core/src/store/contacts.rs line 351 and core/src/contacts_bridge.rs line 330
-        return try! rustCall() {
-            uniffi_scmessenger_core_fn_method_contactmanager_count(self.uniffiClonePointer(), $0)
+        do {
+            return try rustCall {
+                uniffi_scmessenger_core_fn_method_contactmanager_count(self.uniffiClonePointer(), $0)
+            }
+        } catch {
+            print("Error: ContactManager.count failed: \(error)")
+            return 0
         }
     }
     
     public func flush() {
         // Rust API contractually cannot fail; verified against core/src/store/contacts.rs line 355 and core/src/contacts_bridge.rs line 335
-        try! rustCall() {
-            uniffi_scmessenger_core_fn_method_contactmanager_flush(self.uniffiClonePointer(), $0)
+        do {
+            try rustCall {
+                uniffi_scmessenger_core_fn_method_contactmanager_flush(self.uniffiClonePointer(), $0)
+            }
+        } catch {
+            print("Error: ContactManager.flush failed: \(error)")
         }
     }
     
     public func get(peerId: String) throws -> Contact? {
         return try rustCallWithError(FfiConverterTypeIronCoreError.lift()) {
-            uniffi_scmessenger_core_fn_method_contactmanager_get(self.uniffiClonePointer(),
-                FfiConverterString.lower(peerId), $0
+            uniffi_scmessenger_core_fn_method_contactmanager_get(
+                self.uniffiClonePointer(),
+                FfiConverterString.lower(peerId),
+                $0
             )
         }
     }
     
     public func list() throws -> [Contact] {
         return try rustCallWithError(FfiConverterTypeIronCoreError.lift()) {
-            uniffi_scmessenger_core_fn_method_contactmanager_list(self.uniffiClonePointer(), $0)
+            uniffi_scmessenger_core_fn_method_contactmanager_list(
+                self.uniffiClonePointer(),
+                $0
+            )
         }
     }
     
     public func remove(peerId: String) throws {
         try rustCallWithError(FfiConverterTypeIronCoreError.lift()) {
-            uniffi_scmessenger_core_fn_method_contactmanager_remove(self.uniffiClonePointer(),
-                FfiConverterString.lower(peerId), $0
+            uniffi_scmessenger_core_fn_method_contactmanager_remove(
+                self.uniffiClonePointer(),
+                FfiConverterString.lower(peerId),
+                $0
             )
         }
     }
     
     public func search(query: String) throws -> [Contact] {
         return try rustCallWithError(FfiConverterTypeIronCoreError.lift()) {
-            uniffi_scmessenger_core_fn_method_contactmanager_search(self.uniffiClonePointer(),
-                FfiConverterString.lower(query), $0
+            uniffi_scmessenger_core_fn_method_contactmanager_search(
+                self.uniffiClonePointer(),
+                FfiConverterString.lower(query),
+                $0
             )
         }
     }
     
     public func setLocalNickname(peerId: String, nickname: String?) throws {
         try rustCallWithError(FfiConverterTypeIronCoreError.lift()) {
-            uniffi_scmessenger_core_fn_method_contactmanager_set_local_nickname(self.uniffiClonePointer(),
+            uniffi_scmessenger_core_fn_method_contactmanager_set_local_nickname(
+                self.uniffiClonePointer(),
                 FfiConverterString.lower(peerId),
-                FfiConverterOptionString.lower(nickname), $0
+                FfiConverterOptionString.lower(nickname),
+                $0
             )
         }
     }
     
     public func setNickname(peerId: String, nickname: String?) throws {
         try rustCallWithError(FfiConverterTypeIronCoreError.lift()) {
-            uniffi_scmessenger_core_fn_method_contactmanager_set_nickname(self.uniffiClonePointer(),
+            uniffi_scmessenger_core_fn_method_contactmanager_set_nickname(
+                self.uniffiClonePointer(),
                 FfiConverterString.lower(peerId),
-                FfiConverterOptionString.lower(nickname), $0
+                FfiConverterOptionString.lower(nickname),
+                $0
             )
         }
     }
     
     public func updateDeviceId(peerId: String, deviceId: String?) throws {
         try rustCallWithError(FfiConverterTypeIronCoreError.lift()) {
-            uniffi_scmessenger_core_fn_method_contactmanager_update_device_id(self.uniffiClonePointer(),
+            uniffi_scmessenger_core_fn_method_contactmanager_update_device_id(
+                self.uniffiClonePointer(),
                 FfiConverterString.lower(peerId),
-                FfiConverterOptionString.lower(deviceId), $0
+                FfiConverterOptionString.lower(deviceId),
+                $0
             )
         }
     }
     
     public func updateLastSeen(peerId: String) throws {
         try rustCallWithError(FfiConverterTypeIronCoreError.lift()) {
-            uniffi_scmessenger_core_fn_method_contactmanager_update_last_seen(self.uniffiClonePointer(),
-                FfiConverterString.lower(peerId), $0
+            uniffi_scmessenger_core_fn_method_contactmanager_update_last_seen(
+                self.uniffiClonePointer(),
+                FfiConverterString.lower(peerId),
+                $0
             )
         }
     }
