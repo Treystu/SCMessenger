@@ -261,3 +261,160 @@ documented (one function, one decision) so v1.1 completion is a wire-up plus
 adversarial review, not a redesign. Cover traffic / padding / timing stay
 out of the UI (removed 2026-04-20, stays removed until real).
 
+## 4. Gap ledger — all work between today and the farm seed
+
+Tier tags follow the repo convention and route to models per
+`docs/ORCHESTRATION.md` / the `/scmorc` routing table:
+- [HAIKU] -> haiku(low) native / [FLASH] qwen — mechanical, spec-in-ticket.
+- [SONNET] -> sonnet(medium, escalate to high) / [CODER] qwen — standard
+  implementation; the DEFAULT for this plan. Most tasks below are
+  deliberately specified tightly enough for this tier.
+- [OPUS+] -> opus(high) / [THINK|MAX] qwen — design notes, root-cause,
+  anything whose failure mode is "confidently wrong".
+- [AUDIT] -> mandatory adversarial review (fable(high) native read-only /
+  deepseek in ollama swarm) — every diff in crypto/transport/routing/privacy.
+- [DEVICE] real hardware/live network; [HUMAN] operator action.
+
+### WS-FARM-A — Delivery truth (P0, blocks everything user-facing)
+
+- **A1** Outbox enqueue-on-disconnect + flush-on-connect with retry.
+  Ticket: `OUTBOX_FLUSH_ON_CONNECT_RETRY.md` (re-scoped 2026-07-13, reuse the
+  296-line reference patch; the exact failing-test fix is written in the
+  ticket). [SONNET/CODER]. Delivery logic — careful review, no formal audit
+  gate (store/ tree), verification protocol per ticket.
+- **A2** Receipt round-trip: core incoming-message classification fires
+  `on_receipt_received`; fix CLI `bincode` vs JSON mismatch (standardize on
+  serde_json both ends). Ticket: `CRITICAL_ANDROID_FALSE_DELIVERY...md` steps
+  1-2. [SONNET/CODER][AUDIT — touches transport/swarm.rs incoming path].
+- **A3** Android retry suppression: transport-success is terminal-ish
+  ("sent, unconfirmed"), never escalates to failed/corrupted; widen receipt
+  window; Kotlin regression test (mock success, no receipt). Ticket steps
+  3-4. [SONNET/CODER], Kotlin-side.
+- **A4** Outbox <-> drift custody single-ownership audit: verify (test-first)
+  that a message is owned by exactly one queue at a time and a receipt clears
+  both; wire the StoreAndCarry -> custody handoff if the trace shows a gap.
+  [SONNET(high)], becomes [AUDIT] if fixes land in routing/. New task, cut
+  from this plan.
+- **A5** iOS parity for A1-A3 semantics once the iOS lane opens (same state
+  machine, `MessageStatus`-style honest states). [SONNET], after C-lane.
+
+### WS-FARM-B — Reach every node from anywhere (DDNS + anchors)
+
+- **B1** DNS-name-first hardening: re-resolve on dial failure; negative-cache
+  keys must not poison hostnames on IP flip; ledger stores hostnames for
+  DNS-named peers; integration test with mid-session resolution change.
+  [SONNET(high)][AUDIT — transport/ + routing/]. New task, cut from this plan.
+- **B2** Bootstrap unification: wire `SC_BOOTSTRAP_NODES` through the CLI
+  `start` path or retire it explicitly; document/fold the CLI promiscuous
+  bootstrap (`cli/src/bootstrap.rs`) vs core `BootstrapManager` vs config.json
+  into ONE documented precedence. Finding recorded in the outbox CRITICAL
+  ticket. [SONNET/CODER].
+- **B3** Farm anchor deployment runbook + config: CLI relay on the Windows
+  box; listen ladder per AD-3; DDNS multiaddr advertised; autostart on boot;
+  `--http-bind` flag + `/health` route (rig prerequisites already flagged in
+  the queue 2026-07-11). [SONNET for the flag/health work; HUMAN for firewall
+  port-forwards and DDNS record].
+- **B4** Cloud relays: deploy CLI relay to AWS free tier + Alibaba free tier
+  as secondary bootstrap/relay; both entries ship in farm config after the
+  anchor. Doubles as the docker sim rig host (P1-14/P1-18 + the 3-group farm
+  topology already scoped in the queue). [SONNET + HUMAN provisioning].
+- **B5** P1-14 hostile-network + P1-18 relay/WAN live proof — the standing
+  post-exit verification debt, now executed on the B4 rig with the farm
+  topology (Group A farmhouse/mDNS, Group B far-field/internet-relay, Group C
+  dead-zone/BLE-offline). [SONNET driving][DEVICE].
+- **B6** 12-node farm simulation soak on the rig: all six scenarios of
+  Section 2 encoded as compose profiles + netem; runs before every farm APK/
+  TestFlight push. [SONNET after B4/B5].
+
+### WS-FARM-C — iOS lane (device-mix gate)
+
+- **C1** GitHub billing unlock (or repo transfer into the trial org).
+  [HUMAN] — the single cheapest unblock in the whole plan.
+- **C2** `TASK_CI_IOS_MACOS_RUNNER_FIX.md` — already dispatchable; fixes
+  workflow masking/paths/triggers + bindings-drift gate. [SONNET/CODER].
+- **C3** XCFramework + Swift bindings regen — AFTER PQC-10 lands (single
+  regen cycle, per the queue's standing note). [SONNET, mechanical parts
+  HAIKU]. [DEVICE: at least one farm iPhone for smoke test].
+- **C4** iOS farm-pillar verification pass: dns4 dial-back, mDNS LAN, BLE
+  pairwise to Android, receipts/outbox semantics (A5), background-BLE
+  staleness honesty (fable5plan T1.6 hardening items fold in here).
+  [SONNET][DEVICE: real iPhones — the farm-mates' phones are the fleet].
+- **C5** Distribution decision: Apple Developer account (USD 99/yr) +
+  TestFlight vs alternatives. Required before F3 pilot. [HUMAN].
+
+### WS-FARM-D — Meeting Mode (S4)
+
+- **D1** Design note: connection budget/rotation for 6-10 devices vs
+  Android concurrent-GATT ceiling; in-room star-hub election (reuse
+  GO-intent/charging heuristics); Multipeer offload for iOS pairs; gossipsub
+  room-topic fan-out; group-thread scope call. 2-3 pages in HANDOFF/plans/,
+  decomposes into D2/D3 sized [SONNET]. [OPUS+/THINK — this is the one
+  genuinely novel design in the plan].
+- **D2** Implementation per D1 (Rust link budget + Kotlin/Swift session
+  management). [SONNET/CODER][AUDIT — transport/ble/].
+- **D3** L2CAP fragmentation hardening under loss (reassembly timeout,
+  per-peer memory cap, CRC assert, 10k-stream proptest — fable5plan T1.5
+  spec is still accurate). [SONNET/CODER].
+- **D4** Room drill FD-4 execution + evidence. [DEVICE][HUMAN: needs 6-10
+  actual humans — schedule against a real community meeting dry-run].
+
+### WS-FARM-E — Crypto soundness before the seed ships
+
+The farm pitch is security; shipping known-broken PQ crypto to the seed
+community is not an option. All are existing tickets, all [AUDIT] by
+definition:
+- **E1** `PQC_07_PQ_SECRET_NEVER_MIXED_INTO_ROOT_KEY.md` — CRITICAL: the PQ
+  ratchet is cryptographically inert post-bootstrap today. [SONNET impl,
+  fable adversarial review]. PQC-11/13 stay frozen until this lands (standing
+  queue rule).
+- **E2** `PQC_07_FORCE_RATCHET_SAME_DEFECT.md` + 
+  `PQC_07_PQ_REFRESH_WITHOUT_DH_CROSSING.md` — same defect family. [SONNET].
+- **E3** `PQC_RATCHET_SKIPPED_KEYS_NOT_PERSISTED.md` — restart mid-
+  conversation must not brick decryption (farm reality: phones die daily).
+  [SONNET].
+- **E4** `PQC_08_LEGACY_PATH_RETIREMENT.md` — finish remaining scope (in
+  progress). [SONNET/CODER].
+- Explicitly NOT farm-gating: PQC-09 wiring (AD-8 freeze), PQC-10..14 depth
+  work — they proceed in the background lane and C3 waits on PQC-10.
+
+### WS-FARM-F — Cooperative ledger + custody convergence
+
+- **F1** `integration_ledger_convergence.rs`: N in-process nodes, arbitrary
+  connect graph -> superset convergence; stale-node (simulated 2-week-old
+  ledger) rejoin -> full reconverge on one contact; all discovery surfaces
+  write into the one ledger (audit included). [SONNET(high)][AUDIT if fixes
+  touch transport/]. New task, cut from this plan.
+- **F2** Drift custody persistence audit: does `MeshStore` custody survive
+  process death on mobile (fable5plan flagged in-memory construction at
+  `iron_core.rs:264` — verify-first, fix with `StorageBackend`/sled if
+  confirmed, cap + eviction with DropReason). [SONNET(high), verify-first].
+- **F3** Contact-window efficiency: custody sync completes useful transfer in
+  a 10 s BLE contact (S5); rate limiter must not starve short windows.
+  Existing T2.2-shaped test scenario. [SONNET]. Stretch, not gating.
+
+### WS-FARM-G — Field ops, honesty, adoption
+
+- **G1** `NETWORKERROR_OBSERVABILITY_GAP.md` (existing ticket) + routing
+  telemetry ring buffer in the diagnostics report (fable5plan T3.4 spec):
+  when a farm-mate says "it didn't send", the device must be able to say WHY
+  without adb. [SONNET/CODER].
+- **G2** Honest message states surfaced in UI on BOTH platforms:
+  Queued -> InCustody -> Sent(unconfirmed) -> Delivered(receipt-verified),
+  no checkmark without a verified receipt (depends on A2). [SONNET].
+- **G3** Onboarding path for non-technical farm-mates: QR contact exchange
+  verified end-to-end, first-run defaults pointing at the farm anchor config,
+  one-page paper quickstart (English, plain). [SONNET + HAIKU docs].
+- **G4** Battery honesty soak: overnight foreground-service soak on 2+ real
+  phones with the mesh idle-connected; measure and record drain; tune
+  keepalives if >5%/night class. [DEVICE].
+- **G5** Install/update path: Android APK direct (or Obtainium-friendly
+  release), iOS per C5; update cadence documented (farm gets stable tags
+  only, never main). [HAIKU docs + HUMAN release discipline].
+
+### WS-FARM-H — Onion seam freeze
+
+- **H1** Seam-freeze test per AD-8: privacy module compiles + unit tests in
+  every gate run; zero live-path call sites asserted; wiring point
+  documented in ARCHITECTURE/docs. [HAIKU/FLASH — mechanical]. Keeps
+  `PQC_09_SECURITY_REVIEW_FIXES.md` parked with a clear conscience.
+
