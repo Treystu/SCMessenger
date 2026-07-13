@@ -1,0 +1,421 @@
+diff --git a/cli/src/main.rs b/cli/src/main.rs
+index 1c073729..85c73217 100644
+--- a/cli/src/main.rs
++++ b/cli/src/main.rs
+@@ -2940,6 +2940,8 @@ async fn queue_message_for_later_delivery(
+                 envelope_data: envelope_bytes,
+                 queued_at: now,
+                 attempts: 0,
++                last_attempt_at: None,
++                next_retry_at: None,
+             };
+             match outbox.enqueue(queued_msg) {
+                 Ok(()) => {
+diff --git a/core/src/iron_core.rs b/core/src/iron_core.rs
+index af2340b2..1d2d87ec 100644
+--- a/core/src/iron_core.rs
++++ b/core/src/iron_core.rs
+@@ -691,6 +691,45 @@ impl IronCore {
+             }
+         }
+ 
++        // Check if recipient is currently connected
++        let is_connected = self.swarm_is_peer_connected(recipient_id);
++
++        if !is_connected {
++            // Recipient not connected - enqueue to outbox for later delivery
++            tracing::info!(
++                event = "recipient_offline",
++                message_id = %message_id,
++                recipient_id = %recipient_id,
++                action = "enqueuing_to_outbox"
++            );
++
++            let _ = self.outbox.write().enqueue(QueuedMessage {
++                message_id: message_id.clone(),
++                recipient_id: recipient_id.to_string(),
++                envelope_data: envelope_data.clone(),
++                queued_at: web_time::SystemTime::now()
++                    .duration_since(web_time::UNIX_EPOCH)
++                    .unwrap_or_default()
++                    .as_millis() as u64,
++                attempts: 0,
++                last_attempt_at: None,
++                next_retry_at: None,
++            });
++
++            return Ok(crate::PreparedMessage {
++                message_id,
++                envelope_data,
++            });
++        }
++
++        // Recipient is connected - proceed with direct send
++        tracing::info!(
++            event = "recipient_online",
++            message_id = %message_id,
++            recipient_id = %recipient_id,
++            action = "direct_send"
++        );
++
+         // Check routing decision
+         let hint = blake3::hash(recipient_id.as_bytes()).as_bytes()[0..4]
+             .try_into()
+@@ -729,16 +768,8 @@ impl IronCore {
+             self.drift_store.write().insert(stored_env);
+             tracing::info!("StoreAndCarry route resolved for {}. Handoff to Drift custody and bypassed active outbox.", message_id);
+         } else {
+-            let _ = self.outbox.write().enqueue(QueuedMessage {
+-                message_id: message_id.clone(),
+-                recipient_id: recipient_id.to_string(),
+-                envelope_data: envelope_data.clone(),
+-                queued_at: web_time::SystemTime::now()
+-                    .duration_since(web_time::UNIX_EPOCH)
+-                    .unwrap_or_default()
+-                    .as_millis() as u64,
+-                attempts: 0,
+-            });
++            // Direct send path - message will be sent via swarm
++            // If send fails, caller should handle re-enqueueing
+         }
+ 
+         self.audit_log.write().append(
+@@ -925,6 +956,10 @@ impl IronCore {
+         {
+             return;
+         }
++
++        // Notify outbox of connection
++        self.outbox.write().peer_connected(&peer_id);
++
+         if let Some(delegate) = self.delegate.read().as_ref() {
+             delegate.on_peer_discovered(peer_id.clone());
+         }
+@@ -932,6 +967,9 @@ impl IronCore {
+ 
+     /// Notify the core that a peer disconnected.
+     pub fn notify_peer_disconnected(&self, peer_id: String) {
++        // Notify outbox of disconnection
++        self.outbox.write().peer_disconnected(&peer_id);
++
+         if let Some(delegate) = self.delegate.read().as_ref() {
+             delegate.on_peer_disconnected(peer_id.clone());
+         }
+@@ -2768,6 +2806,10 @@ impl IronCore {
+     pub fn flush_outbox_for_peer(&self, peer_id: &str) -> Vec<QueuedMessage> {
+         self.outbox.write().drain_for_peer(peer_id)
+     }
++    /// Check if a peer is connected in the swarm (via outbox state tracker)
++    pub fn swarm_is_peer_connected(&self, peer_id: &str) -> bool {
++        self.outbox.read().is_peer_connected(peer_id)
++    }
+     pub fn contacts_store_manager(&self) -> CoreContactManager {
+         self.contact_manager.read().clone()
+     }
+diff --git a/core/src/store/outbox.rs b/core/src/store/outbox.rs
+index 1bf450dd..64d616a1 100644
+--- a/core/src/store/outbox.rs
++++ b/core/src/store/outbox.rs
+@@ -21,6 +21,12 @@ const MAX_DELIVERY_ATTEMPTS: u32 = 12;
+ 
+ const QUEUE_PREFIX: &[u8] = b"outbox_";
+ 
++/// Initial backoff delay in milliseconds
++const INITIAL_BACKOFF_MS: u64 = 1000;
++
++/// Maximum backoff delay in milliseconds
++const MAX_BACKOFF_MS: u64 = 60_000;
++
+ /// A queued outbound message
+ #[derive(Debug, Clone, Serialize, Deserialize)]
+ pub struct QueuedMessage {
+@@ -34,6 +40,10 @@ pub struct QueuedMessage {
+     pub queued_at: u64,
+     /// Number of delivery attempts
+     pub attempts: u32,
++    /// Last attempt timestamp (unix timestamp in millis)
++    pub last_attempt_at: Option<u64>,
++    /// Next scheduled retry time (unix timestamp in millis)
++    pub next_retry_at: Option<u64>,
+ }
+ 
+ /// Storage backend for outbox
+@@ -49,6 +59,10 @@ enum OutboxBackend {
+ pub struct Outbox {
+     backend: OutboxBackend,
+     storage_manager: Option<Arc<StorageManager>>,
++    /// Callback for sending messages to peers (set during initialization)
++    send_callback: Option<Arc<dyn Fn(&str, Vec<u8>) -> Result<(), String> + Send + Sync>>,
++    /// Connection state tracker for peers
++    peer_connections: HashMap<String, bool>,
+ }
+ 
+ impl Outbox {
+@@ -60,6 +74,8 @@ impl Outbox {
+                 total: 0,
+             },
+             storage_manager: None,
++            send_callback: None,
++            peer_connections: HashMap::new(),
+         }
+     }
+ 
+@@ -71,6 +87,8 @@ impl Outbox {
+         Self {
+             backend: OutboxBackend::Persistent(backend),
+             storage_manager: Some(storage_manager),
++            send_callback: None,
++            peer_connections: HashMap::new(),
+         }
+     }
+ 
+@@ -79,6 +97,8 @@ impl Outbox {
+         Self {
+             backend: OutboxBackend::Persistent(backend),
+             storage_manager: None,
++            send_callback: None,
++            peer_connections: HashMap::new(),
+         }
+     }
+ 
+@@ -92,6 +112,171 @@ impl Outbox {
+         }
+     }
+ 
++    /// Set the callback for sending messages to peers
++    pub fn set_send_callback<F>(&mut self, callback: F)
++    where
++        F: Fn(&str, Vec<u8>) -> Result<(), String> + Send + Sync + 'static,
++    {
++        self.send_callback = Some(Arc::new(callback));
++    }
++
++    /// Notify outbox that a peer has connected
++    pub fn peer_connected(&mut self, peer_id: &str) {
++        self.peer_connections.insert(peer_id.to_string(), true);
++        // Attempt to flush queued messages for this peer
++        let _ = self.flush_peer_messages(peer_id);
++    }
++
++    /// Notify outbox that a peer has disconnected
++    pub fn peer_disconnected(&mut self, peer_id: &str) {
++        self.peer_connections.insert(peer_id.to_string(), false);
++    }
++
++    /// Check if a peer is connected
++    pub fn is_peer_connected(&self, peer_id: &str) -> bool {
++        self.peer_connections.get(peer_id).copied().unwrap_or(false)
++    }
++
++    /// Flush all queued messages for a specific peer
++    /// Returns number of successfully sent messages
++    pub fn flush_peer_messages(&mut self, peer_id: &str) -> Result<usize, String> {
++        let mut sent_count = 0;
++        let now = web_time::SystemTime::now()
++            .duration_since(web_time::UNIX_EPOCH)
++            .unwrap_or_default()
++            .as_millis() as u64;
++
++        // Get messages that are ready for retry (next_retry_at <= now or never set)
++        let pending_msgs = match &self.backend {
++            OutboxBackend::Memory { queues, .. } => {
++                if let Some(queue) = queues.get(peer_id) {
++                    queue
++                        .iter()
++                        .filter(|m| {
++                            m.next_retry_at.is_none() || m.next_retry_at.unwrap() <= now
++                        })
++                        .cloned()
++                        .collect()
++                } else {
++                    Vec::new()
++                }
++            }
++            OutboxBackend::Persistent(db) => {
++                let prefix_str = format!(
++                    "{}{}_",
++                    String::from_utf8_lossy(QUEUE_PREFIX),
++                    peer_id
++                );
++                if let Ok(results) = db.scan_prefix(prefix_str.as_bytes()) {
++                    results
++                        .into_iter()
++                        .filter_map(|(_, value)| bincode::deserialize::<QueuedMessage>(&value).ok())
++                        .filter(|m| {
++                            m.next_retry_at.is_none() || m.next_retry_at.unwrap() <= now
++                        })
++                        .collect()
++                } else {
++                    Vec::new()
++                }
++            }
++        };
++
++        if pending_msgs.is_empty() {
++            return Ok(0);
++        }
++
++        let send_fn = self.send_callback.clone().ok_or("No send callback configured")?;
++
++        for msg in pending_msgs {
++            // Check max attempts
++            if msg.attempts >= MAX_DELIVERY_ATTEMPTS {
++                tracing::warn!(
++                    event = "outbox_max_attempts",
++                    message_id = %msg.message_id,
++                    recipient_id = %msg.recipient_id,
++                    attempts = msg.attempts,
++                    action = "removing_from_queue"
++                );
++                let _ = self.remove(&msg.message_id);
++                continue;
++            }
++
++            // Attempt to send
++            match send_fn(&msg.recipient_id, msg.envelope_data.clone()) {
++                Ok(_) => {
++                    tracing::info!(
++                        event = "outbox_send_success",
++                        message_id = %msg.message_id,
++                        recipient_id = %msg.recipient_id,
++                        attempts = msg.attempts + 1
++                    );
++                    let _ = self.remove(&msg.message_id);
++                    sent_count += 1;
++                }
++                Err(e) => {
++                    tracing::warn!(
++                        event = "outbox_send_failure",
++                        message_id = %msg.message_id,
++                        recipient_id = %msg.recipient_id,
++                        error = %e,
++                        attempts = msg.attempts + 1
++                    );
++                    // Increment attempt and schedule retry with exponential backoff
++                    let backoff_ms = std::cmp::min(
++                        INITIAL_BACKOFF_MS * 2u64.pow(msg.attempts.min(10)),
++                        MAX_BACKOFF_MS,
++                    );
++                    let next_retry = now.saturating_add(backoff_ms);
++                    
++                    let mut updated_msg = msg.clone();
++                    updated_msg.attempts = updated_msg.attempts.saturating_add(1);
++                    updated_msg.last_attempt_at = Some(now);
++                    updated_msg.next_retry_at = Some(next_retry);
++                    
++                    // Update message in outbox
++                    self.update_message(updated_msg)?;
++                }
++            }
++        }
++
++        Ok(sent_count)
++    }
++
++    /// Update a message in the outbox (used for retry scheduling)
++    fn update_message(&mut self, msg: QueuedMessage) -> Result<(), String> {
++        // Remove old entry first
++        let _ = self.remove(&msg.message_id);
++        // Re-enqueue with updated fields
++        self.enqueue(msg)
++    }
++
++    /// Flush all pending messages for all connected peers
++    pub fn flush_all_pending(&mut self) -> Result<usize, String> {
++        let mut total_sent = 0;
++        
++        // Get list of connected peers
++        let connected_peers: Vec<String> = self.peer_connections
++            .iter()
++            .filter(|(_, &connected)| connected)
++            .map(|(peer_id, _)| peer_id.clone())
++            .collect();
++        
++        for peer_id in connected_peers {
++            match self.flush_peer_messages(&peer_id) {
++                Ok(count) => total_sent += count,
++                Err(e) => {
++                    tracing::error!(
++                        event = "outbox_flush_error",
++                        peer_id = %peer_id,
++                        error = %e
++                    );
++                }
++            }
++        }
++        
++        Ok(total_sent)
++    }
++
+     /// Queue a message for delivery
+     pub fn enqueue(&mut self, msg: QueuedMessage) -> std::result::Result<(), String> {
+         // Structured tracing: packet lifecycle span for message correlation
+@@ -401,6 +586,8 @@ mod tests {
+                 .unwrap_or_default()
+                 .as_secs(),
+             attempts: 0,
++            last_attempt_at: None,
++            next_retry_at: None,
+         }
+     }
+ 
+@@ -605,4 +792,59 @@ mod tests {
+         assert_eq!(msgs[0].attempts, u32::MAX);
+         assert_eq!(outbox.total_count(), 1);
+     }
++
++    #[test]
++    fn test_flush_peer_messages() {
++        let mut outbox = Outbox::new();
++        
++        // Set up a mock send callback
++        let sent_messages = Arc::new(std::sync::Mutex::new(Vec::new()));
++        let sent_clone = sent_messages.clone();
++        
++        outbox.set_send_callback(move |recipient: &str, data: Vec<u8>| {
++            let mut guard = sent_clone.lock().unwrap();
++            guard.push((recipient.to_string(), data));
++            Ok(())
++        });
++        
++        // Enqueue messages
++        outbox.enqueue(make_msg("msg1", "peer_a")).unwrap();
++        outbox.enqueue(make_msg("msg2", "peer_a")).unwrap();
++        outbox.enqueue(make_msg("msg3", "peer_b")).unwrap();
++        
++        // Mark peer_a as connected
++        outbox.peer_connected("peer_a");
++        
++        // Flush should send peer_a's messages
++        let sent = outbox.flush_peer_messages("peer_a").unwrap();
++        assert_eq!(sent, 2);
++        assert_eq!(outbox.total_count(), 1); // Only peer_b's message remains
++    }
++
++    #[test]
++    fn test_flush_with_retry_backoff() {
++        let mut outbox = Outbox::new();
++        let attempt_count = Arc::new(std::sync::atomic::AtomicU32::new(0));
++        let attempt_clone = attempt_count.clone();
++        
++        // Set up a failing send callback
++        outbox.set_send_callback(move |_recipient: &str, _data: Vec<u8>| {
++            attempt_clone.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
++            Err("Simulated network failure".to_string())
++        });
++        
++        // Enqueue message
++        outbox.enqueue(make_msg("msg1", "peer_a")).unwrap();
++        
++        // Mark peer as connected and flush
++        outbox.peer_connected("peer_a");
++        let _ = outbox.flush_peer_messages("peer_a");
++        
++        // Message should remain with incremented attempt count
++        let msgs = outbox.peek_for_peer("peer_a");
++        assert_eq!(msgs.len(), 1);
++        assert_eq!(msgs[0].attempts, 1);
++        assert!(msgs[0].next_retry_at.is_some());
++        assert_eq!(attempt_count.load(std::sync::atomic::Ordering::SeqCst), 1);
++    }
+ }
