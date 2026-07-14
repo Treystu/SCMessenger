@@ -10,6 +10,26 @@ ready but not a current priority. Delegation protocol: docs/ORCHESTRATION.md.
 
 ## EXECUTION ORDER -- next dispatches (pull top-down)
 
+### F0 Unification (prerequisites for delivery-truth fixes)
+
+0a. **U1 Outbox::open_default() helper** [HAIKU] — single source of truth for
+   outbox init (CLI has 3 independent sites). Blocks A1 landing cleanly.
+   (UNIFICATION U1.)
+
+0b. **U4 Receipt encoding unified** [SONNET] — `encode_receipt()` / `decode_receipt()`
+   in core, JSON format canonical. Blocks A2 (CRITICAL delivery bug fix).
+   (UNIFICATION U4.)
+
+0c. **U2 Topic constants** [HAIKU] — define `TOPIC_LOBBY`, `TOPIC_MESH` once
+   in core/lib.rs, import everywhere (today hardcoded in 3+ places).
+   (UNIFICATION U2.)
+
+0d. **U3 Retry policy in core** [SONNET] — `RetryPolicy` struct + helpers,
+   replace hand-rolled CLI backoff. Used by A1 outbox-flush.
+   (UNIFICATION U3.)
+
+### F0 Delivery truth (after unifications land)
+
 1. **F1 `integration_ledger_convergence.rs`** -- file exists on disk
    UNCOMMITTED, compiles clean, FAILS at runtime: `swarm2.dial(node1_addr)`
    -> "no addresses for peer" (likely missing /p2p/<peer_id> suffix on the
@@ -205,12 +225,28 @@ NOT-orphaned per B3) -- it re-ranks what happens next:
 ~~ESC_ANDROID_DNS_RESOLVER_FIX~~ DONE (Custom DNS fallback on Android target)
 ~~NEXT_ITER_04_Live_Device_Retest_Pairing~~ DONE (E2E pairing verification PASS)
 
+### F1/F2 Platform unification (after C-lane iOS building)
+
+5. **U5 Android receipt unification** [SONNET, Kotlin] — use core's unified
+   `encodeReceipt()`/`decodeReceipt()` via UniFFI bindings. Farm gate: FD-10
+   (delivery-truth audit). (UNIFICATION U5.)
+
+6. **U6 iOS receipt unification** [SONNET, Swift] — same as Android but
+   Swift side. Mirrors U5. (UNIFICATION U6.)
+
+### F2/F3 Backlog unification
+
+7. **U7 Schema drift audit** [OPUS+ investigation, then SONNET impl] — verify
+   ledger/history/message persistence formats are NOT drifting between
+   CLI/Android/iOS, or add explicit versioning if they are. Farm-relevant
+   for long-lived deployments. (UNIFICATION U7.)
+
 ## Phase 1 filler lane (independent, idle capacity only)
 
 Both filler items CLOSED 2026-07-11: FABLE_5 discovery report moved to
 docs/historical/; the [VALIDATED]_* sweep was completed in a prior session.
 todo/ now contains only live tasks (verified: 16 files + REJECTED/ + this
-queue).
+queue + 7 new unification tasks as of 2026-07-14).
 
 ## NOW -- Active Phase 2 items (ordered by dependency)
 
