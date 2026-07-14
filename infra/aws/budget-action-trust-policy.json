@@ -1,0 +1,13 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "AllowBudgetsServiceToAssume",
+      "Effect": "Allow",
+      "Principal": {
+        "Service": "budgets.amazonaws.com"
+      },
+      "Action": "sts:AssumeRole"
+    }
+  ]
+}

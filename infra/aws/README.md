@@ -89,6 +89,62 @@ free-tier hour/storage exhaustion if you leave instances running past the
    equivalent should be reviewed before it executes against the real account,
    even though the IAM policy itself is the hard backstop.
 
+## Optional but recommended: automatic kill-switch (Budget Actions)
+
+Step 4's $1 budget only emails you - it does not stop anything by itself. AWS
+Budgets can also take an automatic ACTION when a threshold is crossed:
+attaching a hard-deny IAM policy to the relay user, and/or stopping the relay
+EC2 instance. This closes the gap between "you get an email" and "spend
+actually stops."
+
+**Note on scope: this does NOT require adding any permission to the
+orchestrator's own `SCMessengerRelayFreeTierOnly` policy.** That policy
+deliberately denies `iam:*` so a delegated agent can never touch IAM,
+including its own permissions - Budget Actions need to CREATE an IAM role and
+policy, which is exactly the kind of action that policy is designed to
+prevent. This is a one-time, operator-only, few-minutes console step using
+the three files below - not something to hand to the orchestrator.
+
+1. **Create the quarantine policy** (the thing that gets attached when the
+   kill-switch fires): IAM console -> Policies -> Create policy -> JSON ->
+   paste `quarantine-policy.json` -> name it `SCMessengerBudgetQuarantine` ->
+   Create. It's a single explicit `Deny: * on *` - explicit Deny always wins
+   over any Allow in IAM evaluation, so attaching this to the relay user
+   neutralizes it regardless of what `SCMessengerRelayFreeTierOnly` still
+   allows.
+
+2. **Create the Budget Actions execution role** (the identity AWS Budgets
+   itself assumes to perform the action - separate from your relay user):
+   IAM console -> Roles -> Create role -> Custom trust policy -> paste
+   `budget-action-trust-policy.json` -> name it
+   `SCMessengerBudgetActionExecutionRole` -> attach a new policy pasted from
+   `budget-action-execution-policy.json` (name it
+   `SCMessengerBudgetActionExecution`) -> Create role.
+
+3. **Wire the action into your budget**: Billing -> Budgets -> open the $1
+   budget from step 4 -> Add action:
+   - Action type: **IAM policy**.
+   - Policy: `SCMessengerBudgetQuarantine` (from step 1 above).
+   - Target: the `scmessenger-relay-orchestrator` user.
+   - Execution role: `SCMessengerBudgetActionExecutionRole` (from step 2).
+   - Trigger threshold: actual spend >= $2 (above the $1 email alert, so you
+     get the warning first and the hard stop second if you don't act).
+   - Approval: choose "Automatic" for a true kill-switch, or "Manual (via
+     email/SNS)" if you'd rather approve the action yourself first - both are
+     reasonable; automatic is the closer match to "kill-switch."
+
+4. **Optional second action, same budget**: repeat with Action type
+   **EC2 instance stop** targeting instances tagged `Name=scmessenger-farm-relay`
+   (the tag `provision-relay.sh` already applies) - belt-and-suspenders so
+   even if the IAM quarantine is somehow bypassed, the actual running
+   instance stops too. Uses the same execution role (its policy already
+   includes `ec2:StopInstances` scoped to that tag).
+
+To undo the quarantine after you've fixed whatever caused the spend: IAM
+console -> the `scmessenger-relay-orchestrator` user -> detach
+`SCMessengerBudgetQuarantine`. Nothing else needs to change - the original
+`SCMessengerRelayFreeTierOnly` policy is untouched throughout.
+
 ## If you'd rather not hand over any AWS key at all
 
 The orchestrator can still write and validate the Terraform/compose
