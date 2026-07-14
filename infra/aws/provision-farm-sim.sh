@@ -101,10 +101,19 @@ else
 fi
 echo
 
-# 3. Latest Amazon Linux 2023 AMI
+# 3. Latest Amazon Linux 2023 AMI.
+# Resolve via describe-images (allowed by the scoped IAM ReadOnlyDescribe
+# statement) rather than the resolve:ssm: alias, which would require
+# ssm:GetParameters - a permission the scoped relay policy deliberately omits.
 echo "--- Step 3: Resolve AMI ---"
-AMI_ID="resolve:ssm:/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64"
-echo "[INFO] Using SSM parameter alias for latest Amazon Linux 2023: $AMI_ID"
+AMI_ID="$(aws ec2 describe-images --owners amazon --region "$REGION" \
+    --filters "Name=name,Values=al2023-ami-2*-x86_64" "Name=state,Values=available" \
+    --query 'sort_by(Images,&CreationDate)[-1].ImageId' --output text)"
+if [ -z "$AMI_ID" ] || [ "$AMI_ID" = "None" ]; then
+    echo "[ERROR] Could not resolve an Amazon Linux 2023 AMI via describe-images."
+    exit 1
+fi
+echo "[INFO] Resolved latest Amazon Linux 2023 AMI: $AMI_ID"
 echo
 
 # 4. user_data: install Docker, git, clone SCMessenger public repo, run simulation
@@ -145,18 +154,26 @@ echo
 # 5. Launch the instance
 echo "--- Step 5: Launch instance ($INSTANCE_TYPE) ---"
 if $APPLY; then
-    LAUNCH_OUT=$(aws ec2 run-instances \
+    # Block-device mapping via a relative JSON file. Passing the /dev/xvda
+    # device name inline as an argv value causes Git-Bash/MSYS to rewrite it
+    # into a Windows path (e.g. C:/Program Files/Git/dev/xvda). A file:// with
+    # a RELATIVE path (no leading slash) is not path-converted, and the device
+    # name inside the file is never touched. InstanceId is read via --query so
+    # jq is not required.
+    cat > bdm.json <<'BDM'
+[{"DeviceName":"/dev/xvda","Ebs":{"VolumeSize":30,"VolumeType":"gp3"}}]
+BDM
+    INSTANCE_ID=$(aws ec2 run-instances \
         --image-id "$AMI_ID" \
         --instance-type "$INSTANCE_TYPE" \
         --key-name "$KEY_NAME" \
         --security-groups "$SG_NAME" \
         --region "$REGION" \
-        --block-device-mappings 'DeviceName=/dev/xvda,Ebs={VolumeSize=30,VolumeType=gp3}' \
+        --block-device-mappings file://bdm.json \
         --tag-specifications "ResourceType=instance,Tags=[{Key=Name,Value=$TAG_NAME}]" \
         --user-data "$USER_DATA" \
-        --output json)
-
-    INSTANCE_ID=$(echo "$LAUNCH_OUT" | jq -r '.Instances[0].InstanceId')
+        --query 'Instances[0].InstanceId' --output text)
+    rm -f bdm.json
     echo "[INFO] Instance launched successfully."
     echo "[INFO] Instance ID: $INSTANCE_ID"
     echo "Waiting for instance to obtain public IP address..."
