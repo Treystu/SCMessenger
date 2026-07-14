@@ -729,16 +729,20 @@ impl IronCore {
             self.drift_store.write().insert(stored_env);
             tracing::info!("StoreAndCarry route resolved for {}. Handoff to Drift custody and bypassed active outbox.", message_id);
         } else {
-            let _ = self.outbox.write().enqueue(QueuedMessage {
-                message_id: message_id.clone(),
-                recipient_id: recipient_id.to_string(),
-                envelope_data: envelope_data.clone(),
-                queued_at: web_time::SystemTime::now()
-                    .duration_since(web_time::UNIX_EPOCH)
-                    .unwrap_or_default()
-                    .as_millis() as u64,
-                attempts: 0,
-            });
+            let connected = self.transport_manager.read().is_peer_connected(recipient_pk);
+            if !connected {
+                let _ = self.outbox.write().enqueue(QueuedMessage {
+                    message_id: message_id.clone(),
+                    recipient_id: recipient_id.to_string(),
+                    envelope_data: envelope_data.clone(),
+                    queued_at: web_time::SystemTime::now()
+                        .duration_since(web_time::UNIX_EPOCH)
+                        .unwrap_or_default()
+                        .as_millis() as u64,
+                    attempts: 0,
+                    next_retry_at: None,
+                });
+            }
         }
 
         self.audit_log.write().append(
@@ -2537,6 +2541,46 @@ impl IronCore {
             None => vec![vec![target_peer_id]],
         }
     }
+
+    /// Handle peer connection event: on connect, flush outbox messages for that peer and send them.
+    pub fn handle_peer_connection_event(&self, peer_id: &str, connected: bool) {
+        if connected {
+            let messages = self.outbox.write().flush_peer_messages(peer_id);
+            if !messages.is_empty() {
+                if let Ok(recipient_bytes) = hex::decode(peer_id) {
+                    if let Ok(recipient_pk) = recipient_bytes.try_into() {
+                        for mut msg in messages {
+                            if self
+                                .transport_manager
+                                .read()
+                                .send_to_peer(recipient_pk, msg.envelope_data.clone(), 1)
+                                .is_err()
+                            {
+                                // Delivery failed after the message was already drained from
+                                // the outbox - re-enqueue with backoff instead of dropping it,
+                                // otherwise a transient send failure loses the message forever.
+                                msg.attempts = msg.attempts.saturating_add(1);
+                                let backoff_secs = 2u64.saturating_pow(msg.attempts.min(12)).min(3600);
+                                let now_secs = web_time::SystemTime::now()
+                                    .duration_since(web_time::UNIX_EPOCH)
+                                    .unwrap_or_default()
+                                    .as_secs();
+                                msg.next_retry_at = Some(now_secs + backoff_secs);
+                                let _ = self.outbox.write().enqueue(msg);
+                            }
+                        }
+                    } else {
+                        tracing::warn!(
+                            "Failed to convert decoded peer_id bytes to public key: {}",
+                            peer_id
+                        );
+                    }
+                } else {
+                    tracing::warn!("Failed to hex decode peer_id: {}", peer_id);
+                }
+            }
+        }
+    }
 }
 
 // Non-FFI-safe methods moved to plain impl block to avoid uniffi::export compilation errors.
@@ -2702,6 +2746,27 @@ impl IronCore {
             .read()
             .is_blocked(&message.sender_id, sender_device_id.as_deref())
             .unwrap_or(false);
+
+        // Handle receipt classification AFTER blocked-peer check to prevent metadata leaks/spam bypass
+        if message.message_type == crate::MessageType::Receipt {
+            if let Ok(receipt) = serde_json::from_slice::<crate::Receipt>(&message.payload) {
+                if let Some(delegate) = self.delegate.read().as_ref() {
+                    let status_str = match receipt.status {
+                        crate::DeliveryStatus::Sent => "Sent".to_string(),
+                        crate::DeliveryStatus::Delivered => "Delivered".to_string(),
+                        _ => "Delivered".to_string(),
+                    };
+                    delegate.on_receipt_received(receipt.message_id, status_str);
+                }
+            } else {
+                tracing::warn!(
+                    "Failed to parse receipt payload from sender {}: malformed JSON",
+                    message.sender_id
+                );
+            }
+            // Fall through to generic pipeline steps (dedup, metrics, persistence)
+            // instead of early-returning, so receipts are tracked consistently.
+        }
 
         // Record in inbox and history (single lock acquisition prevents TOCTOU)
         let now = web_time::SystemTime::now()

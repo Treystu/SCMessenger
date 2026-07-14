@@ -1,6 +1,17 @@
 # TASK [CRITICAL]: Android reports message delivery failure despite successful delivery (missing receipt/ack)
 
-Status: TODO. Found 2026-07-12 verifying the user's live manual test (sent "Hi"
+Status: PARTIAL - steps 1-2 (core receipt classification + CLI serde_json fix)
+LANDED 2026-07-13. Receipt round-trip now works core-side: incoming Receipt
+messages are classified (after the blocked-peer check, with a fall-through to
+the normal pipeline and explicit parse-failure logging - fixed after triangulated
+review found the first attempt skipped the blocked check and silently swallowed
+parse errors), and the CLI's bincode/serde_json mismatch is fixed to serde_json
+consistently at construction (message/types.rs) and both consumption sites.
+Step 3 (Android Kotlin-side retry suppression - never escalate transport-success
+to failed/corrupted, widen receipt window, regression test) is STILL OPEN - this
+is the FARM WS-A3 remainder. Do not close this ticket until step 3 lands.
+
+Found 2026-07-12 verifying the user's live manual test (sent "Hi"
 from the Android emulator, contact nickname "Emmy", to the Windows CLI).
 
 ## What was proven (live device evidence, not speculation)

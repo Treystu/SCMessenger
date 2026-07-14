@@ -71,6 +71,7 @@ fn test_e2e_message_flow_two_peers() {
             .unwrap()
             .as_secs(),
         attempts: 0,
+        next_retry_at: None,
     };
 
     alice_outbox
@@ -134,7 +135,7 @@ fn test_e2e_message_flow_two_peers() {
     assert!(!bob_inbox.receive(duplicate_msg), "Deduplication failed");
     assert_eq!(bob_inbox.total_count(), 1); // Still only 1 message
 
-    println!("✅ E2E test passed: Complete message flow verified");
+    println!("[OK] E2E test passed: Complete message flow verified");
 }
 
 #[test]
@@ -193,6 +194,7 @@ fn test_e2e_persistent_message_flow() {
             envelope_data,
             queued_at: 0,
             attempts: 0,
+            next_retry_at: None,
         };
 
         outbox.enqueue(queued_msg).expect("Failed to enqueue");
@@ -272,7 +274,7 @@ fn test_e2e_persistent_message_flow() {
         assert_eq!(all_messages[0].message_id, message_id);
     }
 
-    println!("✅ Persistent E2E test passed: Messages survive restarts");
+    println!("[OK] Persistent E2E test passed: Messages survive restarts");
 }
 
 #[test]
@@ -320,6 +322,7 @@ fn test_e2e_multi_peer_scenario() {
             envelope_data: bincode::serialize(&bob_envelope).unwrap(),
             queued_at: 0,
             attempts: 0,
+            next_retry_at: None,
         })
         .unwrap();
 
@@ -330,6 +333,7 @@ fn test_e2e_multi_peer_scenario() {
             envelope_data: bincode::serialize(&carol_envelope).unwrap(),
             queued_at: 0,
             attempts: 0,
+            next_retry_at: None,
         })
         .unwrap();
 
@@ -356,7 +360,7 @@ fn test_e2e_multi_peer_scenario() {
 
     assert_eq!(carol_msg.text_content().unwrap(), "Hi Carol!");
 
-    println!("✅ Multi-peer E2E test passed: Message fanout works correctly");
+    println!("[OK] Multi-peer E2E test passed: Message fanout works correctly");
 }
 
 #[test]
@@ -397,7 +401,7 @@ fn test_e2e_sender_spoofing_prevention() {
         "AAD binding should prevent sender spoofing"
     );
 
-    println!("✅ Security test passed: Sender spoofing prevented by AAD binding");
+    println!("[OK] Security test passed: Sender spoofing prevented by AAD binding");
 }
 
 #[test]
@@ -458,5 +462,5 @@ fn test_e2e_relay_verification() {
         "Forged signature should fail verification"
     );
 
-    println!("✅ Relay security test passed: Envelope signatures prevent tampering");
+    println!("[OK] Relay security test passed: Envelope signatures prevent tampering");
 }

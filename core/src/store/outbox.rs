@@ -34,6 +34,8 @@ pub struct QueuedMessage {
     pub queued_at: u64,
     /// Number of delivery attempts
     pub attempts: u32,
+    /// Next retry time (unix timestamp)
+    pub next_retry_at: Option<u64>,
 }
 
 /// Storage backend for outbox
@@ -93,7 +95,8 @@ impl Outbox {
     }
 
     /// Queue a message for delivery
-    pub fn enqueue(&mut self, msg: QueuedMessage) -> std::result::Result<(), String> {
+    pub fn enqueue(&mut self, mut msg: QueuedMessage) -> std::result::Result<(), String> {
+        msg.next_retry_at = None;
         // Structured tracing: packet lifecycle span for message correlation
         let _span = tracing::info_span!(
             "packet_lifecycle",
@@ -272,6 +275,93 @@ impl Outbox {
         }
     }
 
+    /// Flush peer messages that are due for delivery
+    pub fn flush_peer_messages(&mut self, recipient_id: &str) -> Vec<QueuedMessage> {
+        match &mut self.backend {
+            OutboxBackend::Memory { queues, total } => {
+                let now_ms = web_time::SystemTime::now()
+                    .duration_since(web_time::UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_millis() as u64;
+                let now_secs = now_ms / 1000;
+                let is_due = |next_retry: Option<u64>| -> bool {
+                    match next_retry {
+                        None => true,
+                        Some(val) => {
+                            if val > 10_000_000_000 {
+                                val <= now_ms
+                            } else {
+                                val <= now_secs
+                            }
+                        }
+                    }
+                };
+
+                if let Some(queue) = queues.get_mut(recipient_id) {
+                    let mut drained = Vec::new();
+                    let mut remaining = VecDeque::new();
+                    for msg in queue.drain(..) {
+                        if is_due(msg.next_retry_at) {
+                            drained.push(msg);
+                        } else {
+                            remaining.push_back(msg);
+                        }
+                    }
+                    *total -= drained.len();
+                    *queue = remaining;
+                    if queue.is_empty() {
+                        queues.remove(recipient_id);
+                    }
+                    drained
+                } else {
+                    Vec::new()
+                }
+            }
+            OutboxBackend::Persistent(db) => {
+                let now_ms = web_time::SystemTime::now()
+                    .duration_since(web_time::UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_millis() as u64;
+                let now_secs = now_ms / 1000;
+                let is_due = |next_retry: Option<u64>| -> bool {
+                    match next_retry {
+                        None => true,
+                        Some(val) => {
+                            if val > 10_000_000_000 {
+                                val <= now_ms
+                            } else {
+                                val <= now_secs
+                            }
+                        }
+                    }
+                };
+
+                let prefix_str =
+                    format!("{}{}_", String::from_utf8_lossy(QUEUE_PREFIX), recipient_id);
+                let mut messages = Vec::new();
+                let mut keys_to_remove = Vec::new();
+
+                if let Ok(results) = db.scan_prefix(prefix_str.as_bytes()) {
+                    for (key, value) in results {
+                        if let Ok(msg) = bincode::deserialize::<QueuedMessage>(&value) {
+                            if is_due(msg.next_retry_at) {
+                                messages.push(msg);
+                                keys_to_remove.push(key);
+                            }
+                        }
+                    }
+                }
+
+                for key in keys_to_remove {
+                    let _ = db.remove(&key);
+                }
+                let _ = db.flush();
+
+                messages
+            }
+        }
+    }
+
     /// Increment attempt count for a message.
     /// Returns true if the message should be removed (max attempts exceeded).
     pub fn record_attempt(&mut self, message_id: &str) -> bool {
@@ -401,7 +491,21 @@ mod tests {
                 .unwrap_or_default()
                 .as_secs(),
             attempts: 0,
+            next_retry_at: None,
         }
+    }
+
+    #[test]
+    fn test_flush_peer_messages() {
+        let mut outbox = Outbox::new();
+        outbox.enqueue(make_msg("msg1", "peer_a")).unwrap();
+        outbox.enqueue(make_msg("msg2", "peer_a")).unwrap();
+        outbox.enqueue(make_msg("msg3", "peer_b")).unwrap();
+
+        let flushed = outbox.flush_peer_messages("peer_a");
+        assert_eq!(flushed.len(), 2);
+        assert_eq!(outbox.total_count(), 1);
+        assert_eq!(outbox.peek_for_peer("peer_a").len(), 0);
     }
 
     #[test]

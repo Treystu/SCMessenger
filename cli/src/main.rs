@@ -1912,7 +1912,7 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
                                         }
                                         MessageType::Receipt => {
                                             // Received a delivery receipt — the remote peer confirmed delivery.
-                                            if let Ok(receipt) = bincode::deserialize::<scmessenger_core::Receipt>(&msg.payload) {
+                                            if let Ok(receipt) = serde_json::from_slice::<scmessenger_core::Receipt>(&msg.payload) {
                                                 let short_id = receipt.message_id.get(..8).unwrap_or(&receipt.message_id);
                                                 println!("\n{} Delivered: {}", "[OK][OK]".green(), short_id);
                                                 print!("> ");
@@ -2940,6 +2940,7 @@ async fn queue_message_for_later_delivery(
                 envelope_data: envelope_bytes,
                 queued_at: now,
                 attempts: 0,
+                next_retry_at: None,
             };
             match outbox.enqueue(queued_msg) {
                 Ok(()) => {

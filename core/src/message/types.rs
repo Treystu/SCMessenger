@@ -178,7 +178,7 @@ impl Message {
             sender_id,
             recipient_id,
             message_type: MessageType::Receipt,
-            payload: bincode::serialize(receipt).unwrap_or_default(),
+            payload: serde_json::to_vec(receipt).unwrap_or_default(),
             timestamp: web_time::SystemTime::now()
                 .duration_since(web_time::UNIX_EPOCH)
                 .unwrap_or_default()

@@ -43,6 +43,7 @@ fn make_msg(id: &str, recipient: &str, attempts: u32) -> QueuedMessage {
             .unwrap_or_default()
             .as_secs(),
         attempts,
+        next_retry_at: None,
     }
 }
 

@@ -21,6 +21,7 @@ fn queued_message(message_id: &str, recipient_id: &str) -> QueuedMessage {
         envelope_data: vec![7, 1, 7, 1],
         queued_at: now_secs(),
         attempts: 0,
+        next_retry_at: None,
     }
 }
 

@@ -154,6 +154,7 @@ fn outbox_drift_single_ownership() {
         envelope_data: vec![1, 2, 3],
         queued_at: 1000,
         attempts: 0,
+        next_retry_at: None,
     };
     outbox.enqueue(msg).unwrap();
 
