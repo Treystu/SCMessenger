@@ -138,7 +138,10 @@ def send_request(args, prompt, resolved_model, display_model, round_num=None):
             sys.exit(1)
         headers = {
             "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json"
+            "Content-Type": "application/json",
+            # Groq sits behind Cloudflare, which 403s the default
+            # `Python-urllib/*` User-Agent with error 1010. Send a normal UA.
+            "User-Agent": "curl/8.5.0"
         }
 
     req = urllib.request.Request(req_url, headers=headers, data=json.dumps(payload).encode("utf-8"))
