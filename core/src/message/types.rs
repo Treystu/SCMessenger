@@ -1,127 +1,277 @@
-use serde::{Deserialize, Serialize};
-use serde_cbor;
+// Message types — the literal point of this app
 
+use serde::{Deserialize, Serialize};
+
+/// What kind of message this is
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum MessageType {
+    /// Plain text message
+    Text,
+    /// Delivery/read receipt
+    Receipt,
+    /// Onion relay packet (internal use for forwarding)
+    OnionRelay,
+}
+
+/// Delivery status of a message
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum DeliveryStatus {
+    /// Message sent (left this device)
+    Sent,
+    /// Message delivered to recipient's device
+    Delivered,
+    /// Deprecated: retained for backward-compatible deserialization of receipts
+    /// from older peers. Treated as no-op (mapped to `Delivered` in processing).
+    #[deprecated(
+        note = "Zero-Status Architecture: Read receipts are no longer emitted or displayed"
+    )]
+    Read,
+    /// Delivery failed
+    Failed(String),
+}
+
+/// A plaintext message before encryption.
+///
+/// This is what the application layer creates. It gets encrypted into
+/// an `Envelope` before hitting the wire.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Message {
+    /// Unique message ID (UUID v4)
+    pub id: String,
+    /// Sender's identity ID (Blake3 hash of Ed25519 public key)
+    pub sender_id: String,
+    /// Recipient's identity ID
+    pub recipient_id: String,
+    /// Message type
+    pub message_type: MessageType,
+    /// Payload bytes (UTF-8 text for Text messages, serialized Receipt for receipts)
+    pub payload: Vec<u8>,
+    /// Unix timestamp (seconds)
+    pub timestamp: u64,
+}
+
+/// A delivery receipt
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Receipt {
+    /// ID of the message this receipt is for
+    pub message_id: String,
+    /// New delivery status
+    pub status: DeliveryStatus,
+    /// Unix timestamp of the status change
+    pub timestamp: u64,
+}
+
+/// An encrypted message envelope — what actually goes on the wire.
+///
+/// Contains everything a recipient needs to decrypt the message,
+/// assuming they have their own private key.
+///
+/// When `ratchet_dh_public` is present, the envelope was encrypted using
+/// the Double Ratchet protocol (forward secrecy). The `ephemeral_public_key`
+/// field carries the ratchet DH public key instead of a per-message ECDH key,
+/// and `ratchet_message_number` identifies the chain position.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Envelope {
-    pub version: u8,
+    /// Sender's Ed25519 public key (32 bytes) — so recipient knows who sent it
     pub sender_public_key: Vec<u8>,
+    /// Ephemeral X25519 public key (32 bytes) — for ECDH key agreement.
+    /// In ratcheted mode, this carries the DH ratchet public key.
     pub ephemeral_public_key: Vec<u8>,
+    /// XChaCha20-Poly1305 nonce (24 bytes)
     pub nonce: Vec<u8>,
-    pub ratchet_dh_public: Vec<u8>,
+    /// Encrypted + authenticated ciphertext
     pub ciphertext: Vec<u8>,
-    pub ratchet_message_number: Option<u64>,
-    pub pq_kem_ciphertext: Option<Vec<u8>>,
-    pub pq_encaps_key: Option<Vec<u8>>,
-    pub transcript_hash: Option<Vec<u8>>,
+    /// Double Ratchet: sender's current DH ratchet public key (32 bytes).
+    /// `None` for legacy per-message ECDH envelopes (backward compatible).
+    #[serde(default)]
+    pub ratchet_dh_public: Option<Vec<u8>>,
+    /// Double Ratchet: message number in the current sending chain.
+    /// `None` for legacy per-message ECDH envelopes.
+    #[serde(default)]
+    pub ratchet_message_number: Option<u32>,
 }
 
+/// A signed envelope — adds Ed25519 signature for relay verification.
+///
+/// This allows relays to verify that the envelope was genuinely created by
+/// the sender without decrypting the ciphertext. Relays can reject forged
+/// or tampered envelopes before forwarding them.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SignedEnvelope {
+    /// The encrypted envelope
     pub envelope: Envelope,
+    /// Ed25519 signature over the canonical serialization of the envelope
+    /// (64 bytes)
     pub signature: Vec<u8>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct WireEnvelope {
-    pub version: u8,
+pub const WIRE_TAG_V2: u8 = 0x02;
+
+/// Next-generation encrypted envelope supporting hybrid post-quantum cryptography.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct EnvelopeV2 {
+    /// Suite identifier (from PQC-00 suite registry)
+    pub suite: u8,
+    /// Sender's Ed25519 public key (32 bytes)
     pub sender_public_key: Vec<u8>,
+    /// Ephemeral X25519 public key (32 bytes)
     pub ephemeral_public_key: Vec<u8>,
+    /// XChaCha20-Poly1305 nonce (24 bytes)
     pub nonce: Vec<u8>,
-    pub ratchet_dh_public: Vec<u8>,
+    /// Encrypted + authenticated ciphertext
     pub ciphertext: Vec<u8>,
-    pub ratchet_message_number: Option<u64>,
+    /// Double Ratchet: sender's current DH ratchet public key (32 bytes)
+    pub ratchet_dh_public: Option<Vec<u8>>,
+    /// Double Ratchet: message number in the current sending chain
+    pub ratchet_message_number: Option<u32>,
+    /// ML-KEM-768 ciphertext (1088 bytes)
     pub pq_kem_ciphertext: Option<Vec<u8>>,
+    /// Sender's next ML-KEM encapsulation key (1184 bytes)
     pub pq_encaps_key: Option<Vec<u8>>,
+    /// Suite negotiation binding hash (32 bytes)
     pub transcript_hash: Option<Vec<u8>>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct WireSignedEnvelope {
-    pub envelope: WireEnvelope,
+/// A signed v2 envelope.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct SignedEnvelopeV2 {
+    /// The encrypted v2 envelope
+    pub envelope: EnvelopeV2,
+    /// Ed25519 signature over the wire format of the envelope
     pub signature: Vec<u8>,
 }
 
-// core/src/message/codec.rs
-use crate::message::types::{Envelope, SignedEnvelope, WireEnvelope, WireSignedEnvelope};
-use serde_cbor;
-use std::io;
-
-#[derive(Debug, thiserror::Error)]
-pub enum CodecError {
-    #[error("serialization error: {0}")]
-    Serialization(#[from] serde_cbor::Error),
-    #[error("io error: {0}")]
-    Io(#[from] io::Error),
+/// Polymorphic envelope wrapper for transport.
+#[derive(Debug, Clone)]
+pub enum WireEnvelope {
+    V1(Envelope),
+    V2(EnvelopeV2),
 }
 
-pub fn encode(envelope: &Envelope) -> Result<Vec<u8>, CodecError> {
-    let wire = WireEnvelope {
-        version: envelope.version,
-        sender_public_key: envelope.sender_public_key.clone(),
-        ephemeral_public_key: envelope.ephemeral_public_key.clone(),
-        nonce: envelope.nonce.clone(),
-        ratchet_dh_public: envelope.ratchet_dh_public.clone(),
-        ciphertext: envelope.ciphertext.clone(),
-        ratchet_message_number: envelope.ratchet_message_number,
-        pq_kem_ciphertext: envelope.pq_kem_ciphertext.clone(),
-        pq_encaps_key: envelope.pq_encaps_key.clone(),
-        transcript_hash: envelope.transcript_hash.clone(),
-    };
-    let bytes = serde_cbor::to_vec(&wire)?;
-    Ok(bytes)
+/// Polymorphic signed envelope wrapper for transport.
+#[derive(Debug, Clone)]
+pub enum WireSignedEnvelope {
+    V1(SignedEnvelope),
+    V2(SignedEnvelopeV2),
 }
 
-pub fn decode(bytes: &[u8]) -> Result<Envelope, CodecError> {
-    let wire: WireEnvelope = serde_cbor::from_slice(bytes)?;
-    Ok(Envelope {
-        version: wire.version,
-        sender_public_key: wire.sender_public_key,
-        ephemeral_public_key: wire.ephemeral_public_key,
-        nonce: wire.nonce,
-        ratchet_dh_public: wire.ratchet_dh_public,
-        ciphertext: wire.ciphertext,
-        ratchet_message_number: wire.ratchet_message_number,
-        pq_kem_ciphertext: wire.pq_kem_ciphertext,
-        pq_encaps_key: wire.pq_encaps_key,
-        transcript_hash: wire.transcript_hash,
-    })
+impl Message {
+    /// Create a new text message
+    pub fn text(sender_id: String, recipient_id: String, text: &str) -> Self {
+        Self {
+            id: uuid::Uuid::new_v4().to_string(),
+            sender_id,
+            recipient_id,
+            message_type: MessageType::Text,
+            payload: text.as_bytes().to_vec(),
+            timestamp: web_time::SystemTime::now()
+                .duration_since(web_time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs(),
+        }
+    }
+
+    /// Create a receipt message
+    pub fn receipt(sender_id: String, recipient_id: String, receipt: &Receipt) -> Self {
+        Self {
+            id: uuid::Uuid::new_v4().to_string(),
+            sender_id,
+            recipient_id,
+            message_type: MessageType::Receipt,
+            payload: serde_json::to_vec(receipt).unwrap_or_default(),
+            timestamp: web_time::SystemTime::now()
+                .duration_since(web_time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs(),
+        }
+    }
+
+    /// Get text content (only valid for Text messages)
+    pub fn text_content(&self) -> Option<String> {
+        if self.message_type == MessageType::Text {
+            String::from_utf8(self.payload.clone()).ok()
+        } else {
+            None
+        }
+    }
+
+    /// Check if message is recent (within threshold_secs)
+    pub fn is_recent(&self, threshold_secs: u64) -> bool {
+        let now = web_time::SystemTime::now()
+            .duration_since(web_time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+        now.saturating_sub(self.timestamp) < threshold_secs
+    }
 }
 
-pub fn encode_signed(envelope: &SignedEnvelope) -> Result<Vec<u8>, CodecError> {
-    let wire = WireSignedEnvelope {
-        envelope: WireEnvelope {
-            version: envelope.envelope.version,
-            sender_public_key: envelope.envelope.sender_public_key.clone(),
-            ephemeral_public_key: envelope.envelope.ephemeral_public_key.clone(),
-            nonce: envelope.envelope.nonce.clone(),
-            ratchet_dh_public: envelope.envelope.ratchet_dh_public.clone(),
-            ciphertext: envelope.envelope.ciphertext.clone(),
-            ratchet_message_number: envelope.envelope.ratchet_message_number,
-            pq_kem_ciphertext: envelope.envelope.pq_kem_ciphertext.clone(),
-            pq_encaps_key: envelope.envelope.pq_encaps_key.clone(),
-            transcript_hash: envelope.envelope.transcript_hash.clone(),
-        },
-        signature: envelope.signature.clone(),
-    };
-    let bytes = serde_cbor::to_vec(&wire)?;
-    Ok(bytes)
+impl Receipt {
+    /// Create a delivery receipt
+    pub fn delivered(message_id: String) -> Self {
+        Self {
+            message_id,
+            status: DeliveryStatus::Delivered,
+            timestamp: web_time::SystemTime::now()
+                .duration_since(web_time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs(),
+        }
+    }
 }
 
-pub fn decode_signed(bytes: &[u8]) -> Result<SignedEnvelope, CodecError> {
-    let wire: WireSignedEnvelope = serde_cbor::from_slice(bytes)?;
-    Ok(SignedEnvelope {
-        envelope: Envelope {
-            version: wire.envelope.version,
-            sender_public_key: wire.envelope.sender_public_key,
-            ephemeral_public_key: wire.envelope.ephemeral_public_key,
-            nonce: wire.envelope.nonce,
-            ratchet_dh_public: wire.envelope.ratchet_dh_public,
-            ciphertext: wire.envelope.ciphertext,
-            ratchet_message_number: wire.envelope.ratchet_message_number,
-            pq_kem_ciphertext: wire.envelope.pq_kem_ciphertext,
-            pq_encaps_key: wire.envelope.pq_encaps_key,
-            transcript_hash: wire.envelope.transcript_hash,
-        },
-        signature: wire.signature,
-    })
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_create_text_message() {
+        let msg = Message::text(
+            "sender123".to_string(),
+            "recipient456".to_string(),
+            "hello world",
+        );
+
+        assert_eq!(msg.message_type, MessageType::Text);
+        assert_eq!(msg.text_content().unwrap(), "hello world");
+        assert_eq!(msg.sender_id, "sender123");
+        assert_eq!(msg.recipient_id, "recipient456");
+        assert!(!msg.id.is_empty());
+        assert!(msg.timestamp > 0);
+    }
+
+    #[test]
+    fn test_create_receipt() {
+        let receipt = Receipt::delivered("msg-id-123".to_string());
+        assert_eq!(receipt.message_id, "msg-id-123");
+        assert!(matches!(receipt.status, DeliveryStatus::Delivered));
+    }
+
+    #[test]
+    fn test_receipt_message() {
+        let receipt = Receipt::delivered("msg-123".to_string());
+        let msg = Message::receipt("sender".to_string(), "recipient".to_string(), &receipt);
+
+        assert_eq!(msg.message_type, MessageType::Receipt);
+        assert!(msg.text_content().is_none());
+    }
+
+    #[test]
+    fn test_message_recency() {
+        let msg = Message::text("a".into(), "b".into(), "test");
+        assert!(msg.is_recent(60)); // Should be recent within 60 seconds
+
+        let mut old_msg = Message::text("a".into(), "b".into(), "test");
+        old_msg.timestamp = 0; // epoch
+        assert!(!old_msg.is_recent(60));
+    }
+
+    #[test]
+    fn test_message_serialization() {
+        let msg = Message::text("sender".into(), "recipient".into(), "hello");
+        let bytes = bincode::serialize(&msg).unwrap();
+        let restored: Message = bincode::deserialize(&bytes).unwrap();
+
+        assert_eq!(msg.id, restored.id);
+        assert_eq!(msg.text_content(), restored.text_content());
+    }
 }
