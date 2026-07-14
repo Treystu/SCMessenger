@@ -57,7 +57,7 @@ wait_for_service() {
     local elapsed=0
 
     log "Waiting for $host:$port to be ready..."
-    while ! nc -z "$host" "$port" 2>/dev/null; do
+    while ! timeout 1 bash -c "echo > /dev/tcp/$host/$port" 2>/dev/null; do
         sleep 1
         elapsed=$((elapsed + 1))
         if [ $elapsed -ge $timeout ]; then
@@ -129,7 +129,7 @@ log_pass "All nodes initialized"
 
 # Test 1: Verify relay nodes are operational
 log_test "Test 1: Verify relay nodes are operational"
-if wait_for_service "relay1" "4001" && wait_for_service "relay2" "4002"; then
+if wait_for_service "relay1" "8080" && wait_for_service "relay2" "8080"; then
     log_pass "Test 1: Both relay nodes are operational"
 else
     log_fail "Test 1: One or more relay nodes failed to start"
@@ -249,7 +249,7 @@ fi
 log_test "Test 7: DHT peer discovery (check peer tables)"
 PEER_TABLE_SIZE=0
 for node in alice bob carol david eve; do
-    peer_count=$(curl -sf "http://$node:8080/api/peers" | jq '. | length' 2>/dev/null || echo "0")
+    peer_count=$(curl -sf "http://$node:8080/api/peers" | jq '.peers | length' 2>/dev/null || echo "0")
     log "  $node knows $peer_count peers"
     PEER_TABLE_SIZE=$((PEER_TABLE_SIZE + peer_count))
 done
