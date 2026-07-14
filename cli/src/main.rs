@@ -7,6 +7,7 @@
 mod api;
 mod ble_daemon;
 mod ble_mesh;
+mod bootstrap;
 mod config;
 mod ledger;
 mod server;
@@ -1419,11 +1420,14 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
         transport_bridge::TransportBridge::new(),
     ));
 
+    // Merge config bootstrap nodes with environment / default bootstrap nodes
+    let merged_bootstrap = bootstrap::merge_bootstrap_nodes(config.bootstrap_nodes.clone());
+
     // Build web context for landing page + public APIs
     let web_ctx = Arc::new(server::WebContext {
         node_peer_id: local_peer_id.to_string(),
         node_public_key: info.public_key_hex.clone().unwrap_or_default(),
-        bootstrap_nodes: config.bootstrap_nodes.clone(),
+        bootstrap_nodes: merged_bootstrap.clone(),
         ledger: ledger.clone(),
         peers: peers.clone(),
         start_time: std::time::Instant::now(),
@@ -1446,9 +1450,8 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
             scmessenger_core::transport::DiscoveryMode::Manual
         });
 
-    // Parse bootstrap node multiaddrs from config (relay also uses bootstrap nodes)
-    let relay_bootstrap: Vec<libp2p::Multiaddr> = config
-        .bootstrap_nodes
+    // Parse bootstrap node multiaddrs from merged list (relay also uses bootstrap nodes)
+    let relay_bootstrap: Vec<libp2p::Multiaddr> = merged_bootstrap
         .iter()
         .filter_map(|addr| addr.parse().ok())
         .collect();
@@ -2398,7 +2401,7 @@ async fn cmd_relay(listen_addr: String, http_port: u16, node_name: Option<String
 
     // Load config for bootstrap nodes
     let config = config::Config::load()?;
-    let all_bootstrap = config.bootstrap_nodes.clone();
+    let all_bootstrap = bootstrap::merge_bootstrap_nodes(config.bootstrap_nodes.clone());
     println!(
         "  Bootstrap:    {} node(s)",
         all_bootstrap.len().to_string().bright_cyan()
