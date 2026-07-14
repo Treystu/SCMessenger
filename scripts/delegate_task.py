@@ -10,6 +10,7 @@ import subprocess
 QWEN_URL = "https://ws-2vzz894jwsk3t27r.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1/chat/completions"
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 OLLAMA_URL = "http://localhost:11434/api/chat"
+GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
 
 QWEN_TIER_MAP = {
     "thinking": "qwen3-vl-235b-a22b-thinking",  # Architecture, security review, adversarial audit
@@ -44,6 +45,10 @@ def get_api_key(provider):
         return (os.environ.get("OPENROUTER_API_KEY")
                 or _key_from_env_file("~/.config/scmorc/openrouter.env",
                                       ("OPENROUTER_API_KEY",)))
+    elif provider == "groq":
+        return (os.environ.get("GROQ_API_KEY")
+                or _key_from_env_file("~/.config/scmorc/groq.env",
+                                      ("GROQ_API_KEY",)))
     return None
 
 def extract_file_blocks(content):
@@ -126,7 +131,7 @@ def send_request(args, prompt, resolved_model, display_model, round_num=None):
             {"role": "system", "content": system_message},
             {"role": "user", "content": prompt}
         ]
-        req_url = QWEN_URL if args.provider == "qwen" else OPENROUTER_URL
+        req_url = {"qwen": QWEN_URL, "openrouter": OPENROUTER_URL, "groq": GROQ_URL}[args.provider]
         api_key = get_api_key(args.provider)
         if not api_key:
             print(f"Error: API key for {args.provider} is not set.")
@@ -261,7 +266,7 @@ def apply_diff_blocks(diff_blocks, task_base_name, round_num, allowed_files):
 def main():
     parser = argparse.ArgumentParser(description="Universal Swarm Delegate Script")
     parser.add_argument("--task", required=True, help="Task markdown file path (e.g., HANDOFF/todo/PQC_07_PQ_RATCHET.md)")
-    parser.add_argument("--provider", choices=["qwen", "openrouter", "ollama"], required=True, help="API provider to use")
+    parser.add_argument("--provider", choices=["qwen", "openrouter", "ollama", "groq"], required=True, help="API provider to use")
     parser.add_argument("--model", help="Model name override (e.g., qwen-max, anthropic/claude-3.5-sonnet, llama3)")
     parser.add_argument("--tier", choices=["thinking", "max", "standard", "plus", "flash"],
                         help="Qwen tier for auto model selection: thinking > max > standard > plus > flash")
