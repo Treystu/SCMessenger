@@ -11,12 +11,11 @@ ready but not a current priority. Delegation protocol: docs/ORCHESTRATION.md.
 ## EXECUTION ORDER -- next dispatches (pull top-down)
 
 1. **F1 `integration_ledger_convergence.rs`** -- file exists on disk
-   UNCOMMITTED, compiles clean, a real run was launched but its result was
-   not confirmed before the session ended. Re-run
-   `cargo test -p scmessenger-core --test integration_ledger_convergence --
-   --include-ignored --nocapture`; commit if it passes, debug the event-loop
-   wiring if not (the harness pattern itself, borrowed from
-   `integration_nat_reflection.rs`, is proven correct). (FARM WS-F1.)
+   UNCOMMITTED, compiles clean, FAILS at runtime: `swarm2.dial(node1_addr)`
+   -> "no addresses for peer" (likely missing /p2p/<peer_id> suffix on the
+   dialed Multiaddr - see full diagnosis in
+   HANDOFF/SESSION_HANDOFF_2026-07-13_farm_v1_backlog.md). Fix and re-run
+   before committing. (FARM WS-F1.)
 2. **A3 Android Kotlin retry suppression** -- closes
    `CRITICAL_ANDROID_FALSE_DELIVERY_FAILURE_NO_RECEIPT_ACK.md` step 3 (steps
    1-2 DONE 2026-07-13): transport-success must never escalate to

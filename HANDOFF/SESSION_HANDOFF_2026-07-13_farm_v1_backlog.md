@@ -47,20 +47,40 @@ supersedes nothing, refines the Farm Use Case directive). Live pick list:
 ## In-flight, NOT yet committed — check this first
 
 **`core/tests/integration_ledger_convergence.rs` (WS-FARM-F1)** exists on
-disk, uncommitted. It compiles clean (`cargo check -p scmessenger-core --test
-integration_ledger_convergence` passed). A real run
-(`cargo test -p scmessenger-core --test integration_ledger_convergence --
---include-ignored --nocapture`) was launched but its result was not confirmed
-before this session ended (still compiling/running when the session wrapped
-up — real networking tests take longer). **First action in the new session:
-re-run that test, and if it passes, commit it** (it proves two in-process
-nodes converge their peer ledgers via the real `ledger_exchange` protocol —
-seeds node 1's ledger with an entry, connects the nodes, asserts node 2's
-ledger converges to include it). If it fails, the bug is almost certainly in
-the event-loop wiring (see the file's comments) — the test harness pattern
-itself (borrowed from `core/tests/integration_nat_reflection.rs`) is proven
-correct, this is the first time it's been used for `ledger_exchange`
-specifically.
+disk, uncommitted. It compiles clean but the real run FAILED (confirmed after
+this doc was first drafted — the run just finished):
+```
+thread 'test_ledger_convergence_between_nodes' panicked at
+core\tests\integration_ledger_convergence.rs:93:10:
+Failed to dial: Dial error: no addresses for peer.
+```
+This is at `swarm2.dial(node1_addr.clone())`, where `node1_addr` is the
+`Multiaddr` captured from node 1's `SwarmEvent2::ListeningOn` event. The
+reference test (`integration_nat_reflection.rs`) uses the EXACT same
+`event_rx1.recv()` -> `ListeningOn(addr)` -> `swarm2.dial(addr)` pattern and
+presumably works (it's the codebase's one proven multi-swarm test), so the
+likely culprits, in order of suspicion:
+1. **Missing `/p2p/<peer_id>` suffix.** "no addresses for peer" is the
+   characteristic libp2p error when `dial()` receives a bare transport
+   multiaddr with no peer ID component, so it can't associate the dial with
+   a `PeerId` in `get_peers()`/connection-tracking. Check whether
+   `ListeningOn`'s `Multiaddr` needs the peer ID appended manually before
+   dialing (`node1_addr.with(Protocol::P2p(keypair1.public().to_peer_id()))`
+   or similar) - this may be something `request_address_reflection`'s test
+   path handles differently than a bare `dial()`.
+2. Confirm the reference test actually still passes as of today (it may
+   have bit-rotted, or relies on being run in a specific way) - run
+   `cargo test -p scmessenger-core --test integration_nat_reflection --
+   --include-ignored` as a sanity check before assuming the pattern is solid.
+3. Possible timing issue if `ListeningOn` fires for a `0.0.0.0`/wildcard bind
+   address rather than a concrete dialable one - check what `start_swarm`
+   actually listens on by default.
+**Do not blindly re-dispatch this** - read `swarm.rs`'s `dial()` implementation
+and `ListeningOn` emission site directly first (same discipline used
+throughout this session: verify against real source before guessing), then
+fix and re-run. The harness pattern (event channels, start_swarm calls,
+LedgerManager/SharedPeerEntry usage) is otherwise solid - this looks like one
+specific address-format bug, not a structural rewrite.
 
 ## PQC-07 E1: two blocked attempts, this is the hardest remaining item
 
