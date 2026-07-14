@@ -4,6 +4,7 @@
 /// conflict-free merging in mesh networks where any two nodes
 /// can meet and synchronize their message stores.
 use std::collections::HashMap;
+use std::sync::Arc;
 
 /// Maximum messages in the store
 const MAX_MESSAGES: usize = 10_000;
@@ -81,6 +82,8 @@ pub struct MeshStore {
     messages: HashMap<MessageId, StoredEnvelope>,
     /// Maximum capacity
     max_messages: usize,
+    /// Persistent storage backend
+    backend: Option<Arc<dyn crate::store::backend::StorageBackend>>,
 }
 
 impl MeshStore {
@@ -89,6 +92,7 @@ impl MeshStore {
         Self {
             messages: HashMap::new(),
             max_messages: MAX_MESSAGES,
+            backend: None,
         }
     }
 
@@ -97,7 +101,21 @@ impl MeshStore {
         Self {
             messages: HashMap::new(),
             max_messages: max,
+            backend: None,
         }
+    }
+
+    /// Create a persistent mesh store with default capacity
+    pub fn persistent(backend: Arc<dyn crate::store::backend::StorageBackend>) -> Self {
+        let mut store = Self {
+            messages: HashMap::new(),
+            max_messages: MAX_MESSAGES,
+            backend: Some(backend.clone()),
+        };
+        if let Err(e) = store.load(backend.as_ref()) {
+            tracing::error!("Failed to load persistent drift state: {}", e);
+        }
+        store
     }
 
     /// Insert a message. Returns true if new, false if duplicate.
@@ -107,6 +125,19 @@ impl MeshStore {
     pub fn insert(&mut self, envelope: StoredEnvelope) -> bool {
         if self.messages.contains_key(&envelope.message_id) {
             return false; // Duplicate — CRDT idempotent
+        }
+        if let Some(backend) = &self.backend {
+            let key = [b"drift:", envelope.message_id.as_slice()].concat();
+            match bincode::serialize(&envelope) {
+                Ok(value) => {
+                    if let Err(e) = backend.put(&key, &value) {
+                        tracing::error!("Failed to write-through insert in MeshStore: {}", e);
+                    }
+                }
+                Err(e) => {
+                    tracing::error!("Failed to serialize envelope in MeshStore insert: {}", e);
+                }
+            }
         }
         self.messages.insert(envelope.message_id, envelope);
         self.evict_if_over_budget();
@@ -128,10 +159,9 @@ impl MeshStore {
     pub fn merge(&mut self, other: &MeshStore) {
         for (id, envelope) in &other.messages {
             if !self.messages.contains_key(id) {
-                self.messages.insert(*id, envelope.clone());
+                self.insert(envelope.clone());
             }
         }
-        self.evict_if_over_budget();
     }
 
     /// Get a message by ID
@@ -180,7 +210,16 @@ impl MeshStore {
 
     /// Remove a message by ID. Returns true if it was present.
     pub fn remove(&mut self, id: &MessageId) -> bool {
-        self.messages.remove(id).is_some()
+        let removed = self.messages.remove(id).is_some();
+        if removed {
+            if let Some(backend) = &self.backend {
+                let key = [b"drift:", id.as_slice()].concat();
+                if let Err(e) = backend.remove(&key) {
+                    tracing::error!("Failed to write-through remove in MeshStore: {}", e);
+                }
+            }
+        }
+        removed
     }
 
     /// Remove expired messages
@@ -191,10 +230,18 @@ impl MeshStore {
             .duration_since(web_time::UNIX_EPOCH)
             .unwrap_or_default()
             .as_secs() as u32;
-        let before = self.messages.len();
-        self.messages
-            .retain(|_, e| e.ttl_expiry == 0 || e.ttl_expiry > now);
-        before - self.messages.len()
+        let expired_ids: Vec<MessageId> = self.messages
+            .iter()
+            .filter(|(_, e)| e.ttl_expiry != 0 && e.ttl_expiry <= now)
+            .map(|(id, _)| *id)
+            .collect();
+        let mut removed = 0;
+        for id in expired_ids {
+            if self.remove(&id) {
+                removed += 1;
+            }
+        }
+        removed
     }
 
     /// Generate a cryptographic proof of the current mesh state.
@@ -236,7 +283,7 @@ impl MeshStore {
                 })
                 .map(|(id, _)| *id);
             if let Some(id) = lowest_id {
-                self.messages.remove(&id);
+                self.remove(&id);
             } else {
                 break;
             }
@@ -266,7 +313,8 @@ impl MeshStore {
         for (_key, value) in entries {
             match bincode::deserialize::<StoredEnvelope>(&value) {
                 Ok(envelope) => {
-                    if self.insert(envelope) {
+                    if !self.messages.contains_key(&envelope.message_id) {
+                        self.messages.insert(envelope.message_id, envelope);
                         loaded += 1;
                     }
                 }
@@ -276,6 +324,7 @@ impl MeshStore {
                 }
             }
         }
+        self.evict_if_over_budget();
         if failed > 0 {
             tracing::warn!("MeshStore load: {} entries failed deserialization", failed);
         }
@@ -441,6 +490,7 @@ mod tests {
         let store_copy = MeshStore {
             messages: store.messages.clone(),
             max_messages: store.max_messages,
+            backend: store.backend.clone(),
         };
 
         store.merge(&store_copy);
@@ -817,5 +867,31 @@ mod tests {
 
         ids1.iter().all(|id| test_store_2.contains(id));
         ids2.iter().all(|id| test_store_1.contains(id));
+    }
+
+    #[test]
+    fn test_persistent_store() {
+        let backend = Arc::new(crate::store::backend::MemoryStorage::new());
+        let mut store = MeshStore::persistent(backend.clone());
+        let msg_id = [7u8; 16];
+        let envelope = make_envelope(msg_id, 100, 0, 1000, 0);
+
+        // Insert should write-through
+        assert!(store.insert(envelope));
+        assert!(store.contains(&msg_id));
+
+        // Create a new store instance with the same backend; it should load on startup
+        let store2 = MeshStore::persistent(backend.clone());
+        assert!(store2.contains(&msg_id));
+        assert_eq!(store2.len(), 1);
+
+        // Remove should write-through delete
+        let mut store3 = store2;
+        assert!(store3.remove(&msg_id));
+        assert!(!store3.contains(&msg_id));
+
+        // Re-load should find it empty
+        let store4 = MeshStore::persistent(backend);
+        assert!(store4.is_empty());
     }
 }
