@@ -192,7 +192,11 @@ git clone https://github.com/Sovereign-Communication/SCMessenger.git /opt/SCMess
 chown -R ec2-user:ec2-user /opt/SCMessenger
 
 # 9. Build and launch the simulation (docker-compose-extended.yml)
+# Hold the keepawake sentinel during the build, and ALWAYS release it on exit
+# (success OR failure) via a trap - otherwise a failed build under `set -e`
+# leaves the sentinel held and the instance never idle-stops (money leak).
 touch /var/run/farm-keepawake
+trap 'rm -f /var/run/farm-keepawake' EXIT
 cd /opt/SCMessenger/docker
 docker compose -f docker-compose-extended.yml build --parallel
 docker compose -f docker-compose-extended.yml --profile test up -d

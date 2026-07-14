@@ -9,22 +9,28 @@ ENV SCMESSENGER_BOOTSTRAP_NODES=${SCMESSENGER_BOOTSTRAP_NODES}
 
 WORKDIR /usr/src/scmessenger
 
-# Copy manifests
+# Copy manifests (must include every workspace member from the root
+# Cargo.toml: core, cli, wasm, mobile, desktop_bridge - a missing member's
+# Cargo.toml makes the workspace build fail with "failed to read
+# <member>/Cargo.toml").
 COPY Cargo.toml Cargo.lock ./
 COPY core/Cargo.toml core/
 COPY cli/Cargo.toml cli/
 COPY mobile/Cargo.toml mobile/
 COPY wasm/Cargo.toml wasm/
+COPY desktop_bridge/Cargo.toml desktop_bridge/
 
 # Copy source code
 COPY core/src core/src
 COPY cli/src cli/src
 COPY mobile/src mobile/src
 COPY wasm/src wasm/src
+COPY desktop_bridge/src desktop_bridge/src
 
 # Copy build scripts
 COPY core/build.rs core/
 COPY mobile/build.rs mobile/
+COPY desktop_bridge/build.rs desktop_bridge/
 
 # Build the CLI
 RUN cargo build --release --bin scmessenger-cli
