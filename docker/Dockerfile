@@ -9,6 +9,15 @@ ENV SCMESSENGER_BOOTSTRAP_NODES=${SCMESSENGER_BOOTSTRAP_NODES}
 
 WORKDIR /usr/src/scmessenger
 
+# System build dependencies for the workspace's -sys crates: libdbus-sys needs
+# libdbus-1-dev, openssl-sys needs libssl-dev, and both need pkg-config to
+# locate them. Without these, `cargo build` panics in libdbus-sys/build.rs.
+RUN apt-get update && apt-get install -y \
+    pkg-config \
+    libdbus-1-dev \
+    libssl-dev \
+    && rm -rf /var/lib/apt/lists/*
+
 # Copy manifests (must include every workspace member from the root
 # Cargo.toml: core, cli, wasm, mobile, desktop_bridge - a missing member's
 # Cargo.toml makes the workspace build fail with "failed to read
