@@ -9,6 +9,7 @@ RUN apt-get update && apt-get install -y \
     build-essential \
     pkg-config \
     libssl-dev \
+    libdbus-1-dev \
     git \
     curl \
     && rm -rf /var/lib/apt/lists/*
