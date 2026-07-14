@@ -205,3 +205,91 @@ that piece per `.claude/rules/security.md`. Verification: repeat the live
 Android-to-CLI send, confirm the Android UI's own message status reflects
 successful delivery (not silently drops it) within the app's own history/UI,
 not just the recipient's raw store.
+
+## Step 3 implementation spec (2026-07-14, ready to dispatch)
+
+Steps 1-2 (core receipt classification + CLI serde_json fix) are DONE. This
+is the concrete spec for the remaining Kotlin-side retry-suppression work in
+`android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt`.
+
+Confirmed by direct code read: the queue item type is
+`internal data class PendingOutboundEnvelope` (line 470-484: `queueId,
+historyRecordId, peerId, routePeerId, listeners, envelopeBase64,
+createdAtEpochSec, attemptCount, nextAttemptAtEpochSec, strictBleOnlyMode,
+recipientIdentityId, intendedDeviceId, terminalFailureCode` - NOT
+"PendingOutboxItem", that name does not exist in this file, do not search
+for it). `flushPendingOutbox()` (~line 6526) is the retry loop. On
+`delivery.acked == true` (transport genuinely succeeded, ~line 6651), it
+currently still increments the SAME `item.attemptCount` used by the
+max-attempts check at ~line 6558 (`item.attemptCount >=
+pendingOutboxMaxAttempts` where `pendingOutboxMaxAttempts = 12`, ~line 379)
+that drops the message and calls `markMessageCorrupted()` (~line 6560). This
+is the exact bug: a message that transport-delivers successfully every
+single retry, but never sees a receipt (the original root cause, now fixed
+at the core level, but this loop has no defense-in-depth against a slow/lost
+receipt), still gets dropped and flagged corrupted once `attemptCount`
+crosses 12 - regardless of how many of those attempts were confirmed sends.
+
+ALSO NOTE a pre-existing inconsistency, flagged for awareness (not
+necessarily in scope to resolve): `pendingOutboxExpiryReason()` (~line 6922,
+called at ~line 6543) is documented "PHILOSOPHY: Messages NEVER expire.
+Every message retries until successfully delivered. No attempt limit, no age
+limit." and its body always returns `null` - directly contradicting the very
+real `attemptCount >= pendingOutboxMaxAttempts` hard-drop 20 lines later at
+~line 6558. Whoever wrote that comment believed there was no attempt
+ceiling; there is one, and it is the bug this ticket is about. Do not "fix"
+this by making `pendingOutboxExpiryReason` consistent with the drop logic
+(that would remove ALL retry limits including for genuine failures) -
+the fix is to stop confirmed-successful sends from counting toward that
+ceiling at all, per the fields below.
+
+CONFIRMED (traced both call graphs, not guessing): there is a second,
+independent tracking system, `MessageTracking` (lines 555-626, its own
+`attemptCount`/`corruptionDetected`/`MAX_RETRY_ATTEMPTS=12`), incremented
+only via `incrementAttemptCount()` (line 728) -> `recordFailure(null)`
+(line 731). `incrementAttemptCount` is called from `flushPendingOutbox`
+ONLY in the genuine-transport-failure branch (~line 6680, after the
+`delivery.acked` block already `continue`s away at line 6677) - it is
+NEVER called when `delivery.acked == true`, so this second system does
+NOT double-penalize confirmed sends and does NOT need the same fix.
+`MessageTracking.recordSuccess()` (line 584, resets attemptCount to 0) has
+ZERO call sites anywhere in the file - dead code, leave it alone, not in
+scope here. The two systems connect at exactly ONE point:
+`markMessageCorrupted()` (line 676) is called from `flushPendingOutbox`'s
+max-attempts branch (line 6560) and sets `MessageTracking.corruptionDetected
+= true` directly via `tracking.markCorrupted()` - this is what produces the
+ticket's observed "Corrupted message tracking detected... recovering" log,
+sourced entirely from the `PendingOutboxItem` ceiling, not from
+`MessageTracking`'s own counter. Fixing the `PendingOutboxItem`/
+`pendingOutboxMaxAttempts` bug below (and not calling `markMessageCorrupted`
+for an acked-without-receipt drop) is sufficient to fix both observed
+symptoms. Do not touch `MessageTracking`/`incrementAttemptCount`/
+`shouldRetryMessage` - they are out of scope and already correct.
+
+**Required fix:**
+1. Add a field to `PendingOutboundEnvelope` (e.g. `ackedWithoutReceiptCount:
+   Int = 0`) that counts retries which occurred AFTER a confirmed transport ack,
+   separate from `attemptCount` (which should track only genuine
+   transport-level send failures/non-acks).
+2. In the `delivery.acked == true` branch (~line 6651-6677): increment
+   `ackedWithoutReceiptCount` instead of `attemptCount`; keep using it (not
+   `attemptCount`) for the adaptive receipt-wait backoff tiers. Do NOT let
+   this counter feed the `pendingOutboxMaxAttempts` check at ~line 6558.
+3. Give the acked-without-receipt path its own, much more patient ceiling
+   (e.g. a wall-clock-based give-up, not a small attempt count) and, on
+   exceeding it, do NOT call `markMessageCorrupted()` - log a distinct
+   lower-severity state (e.g. `state=delivered_unconfirmed`) and stop
+   retrying without flagging the message-tracking UI's corruption-recovery
+   path. Transport-confirmed-success must never look like corruption to the
+   user.
+4. Leave the existing `attemptCount`/`pendingOutboxMaxAttempts`/
+   `markMessageCorrupted()` behavior UNCHANGED for the genuine
+   transport-failure branch (~line 6679+) - that escalation is legitimate.
+5. Add a Kotlin unit test exercising `flushPendingOutbox` (or the smallest
+   testable unit around it) that mocks a transport send returning
+   `acked=true` repeatedly with no receipt ever recorded, and asserts the
+   message is NOT dropped or marked corrupted even after many such cycles.
+
+Verify with: `cd android && ./gradlew assembleDebug -x lint --quiet`, then
+(once the new test's class/method name is known) the specific
+`./gradlew :app:testDebugUnitTest --tests "<new test>"` target.

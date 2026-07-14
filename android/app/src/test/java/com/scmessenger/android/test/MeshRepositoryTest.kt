@@ -240,4 +240,51 @@ class MeshRepositoryTest {
         assertFalse(result.bleAcked)
         assertFalse(result.acked)
     }
+
+    // FARM WS-A3: a message that transport-delivers successfully every retry
+    // but never sees a receipt must not escalate toward the same
+    // corruption/drop ceiling as a genuine transport failure.
+    @Test
+    fun `acked-without-receipt message is not stopped before max age`() {
+        val createdAt = 1_000_000L
+        assertFalse(
+            MeshRepository.shouldStopAckedWithoutReceiptRetries(
+                ackedWithoutReceiptCount = 50,
+                createdAtEpochSec = createdAt,
+                nowEpochSec = createdAt + 60,
+                maxAgeSeconds = 7L * 24L * 60L * 60L
+            )
+        )
+    }
+
+    @Test
+    fun `acked-without-receipt message stops after max age reached`() {
+        val createdAt = 1_000_000L
+        val maxAge = 7L * 24L * 60L * 60L
+        assertTrue(
+            MeshRepository.shouldStopAckedWithoutReceiptRetries(
+                ackedWithoutReceiptCount = 1,
+                createdAtEpochSec = createdAt,
+                nowEpochSec = createdAt + maxAge,
+                maxAgeSeconds = maxAge
+            )
+        )
+    }
+
+    @Test
+    fun `message never acked is never stopped by the age ceiling`() {
+        // ackedWithoutReceiptCount == 0 means every attempt so far was a genuine
+        // transport failure, not a confirmed send - that path is governed by
+        // pendingOutboxMaxAttempts instead, not this age ceiling.
+        val createdAt = 1_000_000L
+        val maxAge = 7L * 24L * 60L * 60L
+        assertFalse(
+            MeshRepository.shouldStopAckedWithoutReceiptRetries(
+                ackedWithoutReceiptCount = 0,
+                createdAtEpochSec = createdAt,
+                nowEpochSec = createdAt + maxAge + 1,
+                maxAgeSeconds = maxAge
+            )
+        )
+    }
 }

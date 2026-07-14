@@ -105,6 +105,22 @@ open class MeshRepository(
         }
 
         /**
+         * A message that has been repeatedly transport-acked but never received a
+         * receipt is NOT a delivery failure - the send genuinely succeeded every
+         * time. It should stop retrying eventually (battery/network), but only
+         * on a patient, age-based ceiling, and never via the same
+         * markMessageCorrupted() path used for genuine transport failures.
+         */
+        internal fun shouldStopAckedWithoutReceiptRetries(
+            ackedWithoutReceiptCount: Int,
+            createdAtEpochSec: Long,
+            nowEpochSec: Long,
+            maxAgeSeconds: Long
+        ): Boolean {
+            return ackedWithoutReceiptCount > 0 && (nowEpochSec - createdAtEpochSec) >= maxAgeSeconds
+        }
+
+        /**
          * Map service TransportType to SmartTransportRouter TransportType for message deduplication.
          */
         internal fun mapToSmartTransportType(transport: TransportType): SmartTransportRouter.TransportType {
@@ -480,7 +496,8 @@ open class MeshRepository(
         val strictBleOnlyMode: Boolean? = null,
         val recipientIdentityId: String? = null,
         val intendedDeviceId: String? = null,
-        val terminalFailureCode: String? = null
+        val terminalFailureCode: String? = null,
+        val ackedWithoutReceiptCount: Int = 0
     )
 
     private data class MessageIdentityHints(
@@ -6554,6 +6571,28 @@ open class MeshRepository(
                 if (item.terminalFailureCode != null) {
                     continue
                 }
+                // A message that keeps getting acked by transport but never sees a
+                // receipt is not a failure - stop retrying on a patient age-based
+                // ceiling instead of the attempt-count ceiling below, and never
+                // flag it as corrupted (transport-confirmed-success must never
+                // look like corruption to the user).
+                if (Companion.shouldStopAckedWithoutReceiptRetries(
+                        ackedWithoutReceiptCount = item.ackedWithoutReceiptCount,
+                        createdAtEpochSec = item.createdAtEpochSec,
+                        nowEpochSec = now,
+                        maxAgeSeconds = pendingOutboxMaxAgeSeconds
+                    )
+                ) {
+                    Timber.w("Stopping retries for message ${item.historyRecordId} after ${item.ackedWithoutReceiptCount} acked-without-receipt attempts (max age reached)")
+                    logDeliveryState(
+                        messageId = item.historyRecordId,
+                        state = "delivered_unconfirmed",
+                        detail = "stopped_pending_outbox reason=max_age_exceeded_acked_without_receipt acked_without_receipt=${item.ackedWithoutReceiptCount}"
+                    )
+                    iterator.remove()
+                    updated = true
+                    continue
+                }
                 // AND-DELIVERY-001: Enforce maximum retry limit to prevent infinite retries
                 if (item.attemptCount >= pendingOutboxMaxAttempts) {
                     Timber.w("Dropping message ${item.historyRecordId} after ${item.attemptCount} attempts (max=$pendingOutboxMaxAttempts)")
@@ -6651,18 +6690,21 @@ open class MeshRepository(
                 if (delivery.acked) {
                     // AND-NO-ROUTE-001: Persist last-known-good route in contact notes for future fallback
                     storeLastKnownRoutePeerId(item.peerId, selectedRoutePeerId)
-                    // AND-DELIVERY-001: Adaptive post-ACK receipt wait scales with attempt count.
-                    // With max 12 attempts, use exponential backoff capped at 2 min.
+                    // AND-DELIVERY-001 / FARM WS-A3: transport genuinely succeeded, so
+                    // track this on the separate ackedWithoutReceiptCount counter, NOT
+                    // attemptCount - a confirmed send must never count toward the
+                    // genuine-failure ceiling below (pendingOutboxMaxAttempts).
+                    val nextAckedWithoutReceiptCount = item.ackedWithoutReceiptCount + 1
                     val adaptiveReceiptWait = when {
-                        item.attemptCount <= 3 -> receiptAwaitSeconds        // 8s for first few
-                        item.attemptCount <= 8 -> 30L                       // 30s for moderate retries
-                        else -> 120L                                         // 2 min for final attempts
+                        nextAckedWithoutReceiptCount <= 3 -> receiptAwaitSeconds  // 8s for first few
+                        nextAckedWithoutReceiptCount <= 8 -> 30L                 // 30s for moderate retries
+                        else -> 120L                                             // 2 min for later ones
                     }
                     iterator.set(
                         item.copy(
                             routePeerId = selectedRoutePeerId,
                             listeners = resolvedListeners,
-                            attemptCount = item.attemptCount + 1,
+                            ackedWithoutReceiptCount = nextAckedWithoutReceiptCount,
                             nextAttemptAtEpochSec = now + adaptiveReceiptWait,
                             strictBleOnlyMode = item.strictBleOnlyMode
                         )
@@ -6670,7 +6712,7 @@ open class MeshRepository(
                     logDeliveryState(
                         messageId = item.historyRecordId,
                         state = "stored",
-                        detail = "awaiting_receipt_delay_sec=$adaptiveReceiptWait"
+                        detail = "awaiting_receipt_delay_sec=$adaptiveReceiptWait acked_without_receipt=$nextAckedWithoutReceiptCount"
                     )
                     updated = true
                     continue
