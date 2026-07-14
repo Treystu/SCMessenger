@@ -2780,6 +2780,23 @@ pub struct LedgerEntry {
     pub topics: Vec<String>,
 }
 
+fn is_dns_multiaddr(addr_str: &str) -> bool {
+    addr_str.contains("/dns/") || addr_str.contains("/dns4/") || addr_str.contains("/dns6/") || addr_str.contains("/dnsaddr/")
+}
+
+fn get_multiaddr_port(addr_str: &str) -> Option<u16> {
+    if let Ok(addr) = addr_str.parse::<Multiaddr>() {
+        for proto in addr.iter() {
+            match proto {
+                libp2p::multiaddr::Protocol::Tcp(port) => return Some(port),
+                libp2p::multiaddr::Protocol::Udp(port) => return Some(port),
+                _ => {}
+            }
+        }
+    }
+    None
+}
+
 #[derive(uniffi::Object)]
 pub struct LedgerManager {
     storage_path: std::path::PathBuf,
@@ -2827,7 +2844,22 @@ impl LedgerManager {
 
     pub fn record_connection(&self, multiaddr: String, peer_id: String) {
         let mut entries = self.entries.lock();
-        if let Some(entry) = entries.iter_mut().find(|e| e.multiaddr == multiaddr) {
+        let target_port = get_multiaddr_port(&multiaddr);
+        let mut found_dns_idx = None;
+        for (idx, entry) in entries.iter().enumerate() {
+            if entry.peer_id.as_deref() == Some(&peer_id) && is_dns_multiaddr(&entry.multiaddr) {
+                if target_port.is_none() || get_multiaddr_port(&entry.multiaddr) == target_port {
+                    found_dns_idx = Some(idx);
+                    break;
+                }
+            }
+        }
+
+        if let Some(idx) = found_dns_idx {
+            let entry = &mut entries[idx];
+            entry.success_count += 1;
+            entry.last_seen = Some(current_timestamp());
+        } else if let Some(entry) = entries.iter_mut().find(|e| e.multiaddr == multiaddr) {
             entry.success_count += 1;
             entry.peer_id = Some(peer_id);
             entry.last_seen = Some(current_timestamp());
@@ -2879,7 +2911,28 @@ impl LedgerManager {
         });
 
         let mut entries = self.entries.lock();
-        let is_new = if let Some(entry) = entries.iter_mut().find(|e| e.multiaddr == multiaddr) {
+        let target_port = get_multiaddr_port(&multiaddr);
+        let mut found_dns_idx = None;
+        for (idx, entry) in entries.iter().enumerate() {
+            if entry.peer_id.as_deref() == Some(&peer_id) && is_dns_multiaddr(&entry.multiaddr) {
+                if target_port.is_none() || get_multiaddr_port(&entry.multiaddr) == target_port {
+                    found_dns_idx = Some(idx);
+                    break;
+                }
+            }
+        }
+
+        let is_new = if let Some(idx) = found_dns_idx {
+            let entry = &mut entries[idx];
+            if normalized_public_key.is_some() {
+                entry.public_key = normalized_public_key;
+            }
+            if normalized_nickname.is_some() {
+                entry.nickname = normalized_nickname;
+            }
+            entry.last_seen = Some(current_timestamp());
+            false
+        } else if let Some(entry) = entries.iter_mut().find(|e| e.multiaddr == multiaddr) {
             entry.peer_id = Some(peer_id);
             if normalized_public_key.is_some() {
                 entry.public_key = normalized_public_key;

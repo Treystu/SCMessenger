@@ -267,6 +267,12 @@ impl BootstrapBackoffEntry {
         self.next_dial = web_time::Instant::now() + Duration::from_secs(self.backoff_secs);
     }
 
+    /// Gentle backoff on failure for hostnames, capped at 120s.
+    fn on_failure_gentle(&mut self) {
+        self.backoff_secs = (self.backoff_secs * 2).min(120);
+        self.next_dial = web_time::Instant::now() + Duration::from_secs(self.backoff_secs);
+    }
+
     /// Reset to the initial interval on success.
     fn on_success(&mut self) {
         self.backoff_secs = BOOTSTRAP_BACKOFF_INITIAL_SECS;
@@ -1310,6 +1316,15 @@ pub enum SwarmCommand {
         addr: Multiaddr,
         reply: mpsc::Sender<Result<(), String>>,
     },
+    /// Dial resolved IP addresses for a DNS multiaddr
+    DialResolved {
+        original_dns: Multiaddr,
+        resolved_addrs: Vec<Multiaddr>,
+    },
+    /// DNS resolution failed for a bootstrap node
+    ResolutionFailed {
+        original_dns: Multiaddr,
+    },
     /// Get list of connected peers
     GetPeers { reply: mpsc::Sender<Vec<PeerId>> },
     /// Get bound addresses
@@ -2305,6 +2320,9 @@ pub async fn start_swarm_with_config(
             let mut bootstrap_reconnect_interval = tokio::time::interval(Duration::from_secs(60));
             let bootstrap_addrs_clone = bootstrap_addrs;
             let mut bootstrap_backoff: HashMap<Multiaddr, BootstrapBackoffEntry> = HashMap::new();
+            let mut resolved_to_dns: HashMap<Multiaddr, Multiaddr> = HashMap::new();
+            let mut resolved_keys_fifo: std::collections::VecDeque<Multiaddr> = std::collections::VecDeque::new();
+            let mut in_flight_dns: HashSet<Multiaddr> = HashSet::new();
 
             // Cover traffic — 1 dummy message/min to mask real traffic patterns
             let mut cover_traffic_interval = tokio::time::interval(Duration::from_secs(60));
@@ -2522,6 +2540,10 @@ pub async fn start_swarm_with_config(
                     // Exponential backoff per addr avoids spamming logs for persistently
                     // unreachable nodes (Connection refused, timeout, etc.).
                     _ = bootstrap_reconnect_interval.tick() => {
+                        // Prune resolved_to_dns entries for hostnames no longer in bootstrap config
+                        resolved_to_dns.retain(|_, original_dns| {
+                            bootstrap_addrs_clone.contains(original_dns)
+                        });
                         tracing::info!("Relay custody audit log count: {}", relay_custody_store.audit_count());
                         if !bootstrap_addrs_clone.is_empty() {
                             let connected_peers: HashSet<PeerId> = swarm.connected_peers().cloned().collect();
@@ -2565,13 +2587,34 @@ pub async fn start_swarm_with_config(
 
                                 if !already_connected {
                                     let stripped_addr: Multiaddr = addr.iter().filter(|p| !matches!(p, libp2p::multiaddr::Protocol::P2p(_))).collect();
-                                    match swarm.dial(stripped_addr.clone()) {
-                                        Ok(_) => tracing::debug!("Re-dialing bootstrap: {}", stripped_addr),
-                                        Err(e) => {
-                                            // Dial was rejected internally (e.g. already dialing).
-                                            // Treat as a failure and apply backoff to avoid retry spam.
-                                            tracing::trace!("Bootstrap re-dial {} skipped: {}", stripped_addr, e);
-                                            bootstrap_backoff.entry(addr.clone()).or_insert_with(BootstrapBackoffEntry::new).on_failure();
+                                    if is_dns_multiaddr(&stripped_addr) {
+                                        if !in_flight_dns.contains(addr) {
+                                            in_flight_dns.insert(addr.clone());
+                                            let addr_clone = addr.clone();
+                                            let command_tx_clone = command_tx.clone();
+                                            tokio::spawn(async move {
+                                                let resolved = resolve_dns_multiaddr(&addr_clone).await;
+                                                if resolved.is_empty() {
+                                                    let _ = command_tx_clone.send(SwarmCommand::ResolutionFailed {
+                                                        original_dns: addr_clone,
+                                                    }).await;
+                                                } else {
+                                                    let _ = command_tx_clone.send(SwarmCommand::DialResolved {
+                                                        original_dns: addr_clone,
+                                                        resolved_addrs: resolved,
+                                                    }).await;
+                                                }
+                                            });
+                                        }
+                                    } else {
+                                        match swarm.dial(stripped_addr.clone()) {
+                                            Ok(_) => tracing::debug!("Re-dialing bootstrap: {}", stripped_addr),
+                                            Err(e) => {
+                                                // Dial was rejected internally (e.g. already dialing).
+                                                // Treat as a failure and apply backoff to avoid retry spam.
+                                                tracing::trace!("Bootstrap re-dial {} skipped: {}", stripped_addr, e);
+                                                bootstrap_backoff.entry(addr.clone()).or_insert_with(BootstrapBackoffEntry::new).on_failure();
+                                            }
                                         }
                                     }
                                 }
@@ -3839,6 +3882,19 @@ pub async fn start_swarm_with_config(
 
                             SwarmEvent::ConnectionEstablished { peer_id, endpoint, connection_id, .. } => {
                                 let remote_addr = endpoint.get_remote_address().clone();
+                                
+                                // Prune resolved_to_dns mappings for this peer / hostname
+                                let stripped_remote: Multiaddr = remote_addr.iter().filter(|p| !matches!(p, libp2p::multiaddr::Protocol::P2p(_))).collect();
+                                let mut dns_to_prune = None;
+                                if let Some(dns) = resolved_to_dns.remove(&remote_addr) {
+                                    dns_to_prune = Some(dns);
+                                } else if let Some(dns) = resolved_to_dns.remove(&stripped_remote) {
+                                    dns_to_prune = Some(dns);
+                                }
+                                if let Some(dns) = dns_to_prune {
+                                    resolved_to_dns.retain(|_, v| v != &dns);
+                                }
+
                                 tracing::info!(
                                     "Connected to {} via {} (promiscuous mode — any PeerID accepted)",
                                     peer_id,
@@ -4075,36 +4131,68 @@ pub async fn start_swarm_with_config(
                                 // so we don't keep hammering a node that refuses connections.
                                 tracing::trace!("Bootstrap backoff check: {} addrs, peer_id={:?}", bootstrap_addrs_clone.len(), peer_id);
                                 for ba in &bootstrap_addrs_clone {
-                                    let matches = if let Some(pid) = peer_id {
-                                        // Known peer: match by p2p component
-                                        ba.iter().any(|proto| {
-                                            if let libp2p::multiaddr::Protocol::P2p(p) = proto { p == pid } else { false }
-                                        })
-                                    } else {
-                                        // Unknown peer (connection refused before handshake):
-                                        // Extract IP + TCP port from the bootstrap multiaddr and
-                                        // check that both appear in the error string. This is
-                                        // more robust than matching the full formatted multiaddr.
-                                        let mut ip_str = None;
-                                        let mut port_str = None;
-                                        for proto in ba.iter() {
-                                            match proto {
-                                                libp2p::multiaddr::Protocol::Ip4(ip) => ip_str = Some(format!("{}", ip)),
-                                                libp2p::multiaddr::Protocol::Tcp(p) => port_str = Some(format!("{}", p)),
-                                                _ => {}
+                                    let mut matches = false;
+                                    let mut resolved_match = false;
+
+                                    // 1. Check if ba or one of its resolved IPs matches the failed addresses
+                                    if let libp2p::swarm::DialError::Transport(ref errors) = error {
+                                        for (failed_addr, _) in errors {
+                                            if let Some(dns_addr) = resolved_to_dns.get(failed_addr) {
+                                                if dns_addr == ba {
+                                                    matches = true;
+                                                    resolved_match = true;
+                                                    // Apply aggressive backoff to the resolved IP
+                                                    bootstrap_backoff.entry(failed_addr.clone()).or_insert_with(BootstrapBackoffEntry::new).on_failure();
+                                                    tracing::debug!("Applied backoff to resolved IP {}", failed_addr);
+                                                }
+                                            }
+                                            let stripped_failed: Multiaddr = failed_addr.iter().filter(|p| !matches!(p, libp2p::multiaddr::Protocol::P2p(_))).collect();
+                                            if let Some(dns_addr) = resolved_to_dns.get(&stripped_failed) {
+                                                if dns_addr == ba {
+                                                    matches = true;
+                                                    resolved_match = true;
+                                                    bootstrap_backoff.entry(failed_addr.clone()).or_insert_with(BootstrapBackoffEntry::new).on_failure();
+                                                    tracing::debug!("Applied backoff to resolved IP {}", failed_addr);
+                                                }
                                             }
                                         }
-                                        let err_str = format!("{} {:?}", error, error);
-                                        let matched = ip_str.as_ref().is_some_and(|ip| err_str.contains(ip.as_str()))
-                                            && port_str.as_ref().is_some_and(|p| err_str.contains(p.as_str()));
-                                        if matched {
-                                            tracing::debug!("Bootstrap backoff match: addr {} in error", ba);
-                                        }
-                                        matched
-                                    };
+                                    }
+
+                                    // 2. Fallback to standard matching if no resolved match
+                                    if !matches {
+                                        matches = if let Some(pid) = peer_id {
+                                            // Known peer: match by p2p component
+                                            ba.iter().any(|proto| {
+                                                if let libp2p::multiaddr::Protocol::P2p(p) = proto { p == pid } else { false }
+                                            })
+                                        } else {
+                                            // Unknown peer (connection refused before handshake):
+                                            // Extract IP + TCP port from the bootstrap multiaddr and
+                                            // check that both appear in the error string. This is
+                                            // more robust than matching the full formatted multiaddr.
+                                            let mut ip_str = None;
+                                            let mut port_str = None;
+                                            for proto in ba.iter() {
+                                                match proto {
+                                                    libp2p::multiaddr::Protocol::Ip4(ip) => ip_str = Some(format!("{}", ip)),
+                                                    libp2p::multiaddr::Protocol::Tcp(p) => port_str = Some(format!("{}", p)),
+                                                    _ => {}
+                                                }
+                                            }
+                                            let err_str = format!("{} {:?}", error, error);
+                                            ip_str.as_ref().is_some_and(|ip| err_str.contains(ip.as_str()))
+                                                && port_str.as_ref().is_some_and(|p| err_str.contains(p.as_str()))
+                                        };
+                                    }
+
                                     if matches {
-                                        bootstrap_backoff.entry(ba.clone()).or_insert_with(BootstrapBackoffEntry::new).on_failure();
-                                        tracing::debug!("Applied backoff to bootstrap addr {}", ba);
+                                        if is_dns_multiaddr(ba) {
+                                            bootstrap_backoff.entry(ba.clone()).or_insert_with(BootstrapBackoffEntry::new).on_failure_gentle();
+                                            tracing::debug!("Applied gentle backoff to DNS hostname {}", ba);
+                                        } else if !resolved_match {
+                                            bootstrap_backoff.entry(ba.clone()).or_insert_with(BootstrapBackoffEntry::new).on_failure();
+                                            tracing::debug!("Applied backoff to bootstrap addr {}", ba);
+                                        }
                                         break;
                                     }
                                 }
@@ -4431,6 +4519,44 @@ pub async fn start_swarm_with_config(
                                         let _ = reply.send(Err(err_msg)).await;
                                     }
                                 }
+                            }
+
+                            SwarmCommand::DialResolved { original_dns, resolved_addrs } => {
+                                in_flight_dns.remove(&original_dns);
+                                // Prune old entries for this original_dns to prevent stale mappings
+                                resolved_to_dns.retain(|_, v| v != &original_dns);
+
+                                for resolved_addr in resolved_addrs {
+                                    if bootstrap_backoff.get(&resolved_addr).is_none_or(|e| e.is_eligible()) {
+                                        tracing::debug!("Dialing resolved address {} for DNS bootstrap {}", resolved_addr, original_dns);
+                                        resolved_to_dns.insert(resolved_addr.clone(), original_dns.clone());
+                                        resolved_keys_fifo.push_back(resolved_addr.clone());
+                                        // Also insert stripped versions without /p2p/ to be robust
+                                        let stripped_res: Multiaddr = resolved_addr.iter().filter(|p| !matches!(p, libp2p::multiaddr::Protocol::P2p(_))).collect();
+                                        let stripped_dns: Multiaddr = original_dns.iter().filter(|p| !matches!(p, libp2p::multiaddr::Protocol::P2p(_))).collect();
+                                        resolved_to_dns.insert(stripped_res.clone(), stripped_dns);
+                                        resolved_keys_fifo.push_back(stripped_res);
+
+                                        let _ = swarm.dial(resolved_addr);
+                                    } else {
+                                        tracing::debug!("Skipping dial of resolved IP {} (backed off)", resolved_addr);
+                                    }
+                                }
+
+                                // Evict oldest when over a sane cap (e.g. 200)
+                                while resolved_to_dns.len() > 200 {
+                                    if let Some(oldest) = resolved_keys_fifo.pop_front() {
+                                        resolved_to_dns.remove(&oldest);
+                                    } else {
+                                        break;
+                                    }
+                                }
+                            }
+
+                            SwarmCommand::ResolutionFailed { original_dns } => {
+                                in_flight_dns.remove(&original_dns);
+                                bootstrap_backoff.entry(original_dns.clone()).or_insert_with(BootstrapBackoffEntry::new).on_failure_gentle();
+                                tracing::debug!("DNS resolution failed for {}; applied gentle backoff", original_dns);
                             }
 
                             SwarmCommand::GetPeers { reply } => {
@@ -4848,6 +4974,8 @@ pub async fn start_swarm_with_config(
                                     }
                                 }
                             }
+                            SwarmCommand::DialResolved { .. } => {}
+                            SwarmCommand::ResolutionFailed { .. } => {}
                             SwarmCommand::GetPeers { reply } => {
                                 let peers: Vec<PeerId> = swarm.connected_peers().cloned().collect();
                                 let _ = reply.send(peers).await;
@@ -5592,8 +5720,13 @@ pub async fn start_swarm_with_config(
                                         matched
                                     };
                                     if matches {
-                                        bootstrap_backoff.entry(ba.clone()).or_insert_with(BootstrapBackoffEntry::new).on_failure();
-                                        tracing::debug!("Applied backoff to bootstrap addr {}", ba);
+                                        if is_dns_multiaddr(ba) {
+                                            bootstrap_backoff.entry(ba.clone()).or_insert_with(BootstrapBackoffEntry::new).on_failure_gentle();
+                                            tracing::debug!("Applied gentle backoff to DNS hostname {}", ba);
+                                        } else {
+                                            bootstrap_backoff.entry(ba.clone()).or_insert_with(BootstrapBackoffEntry::new).on_failure();
+                                            tracing::debug!("Applied backoff to bootstrap addr {}", ba);
+                                        }
                                         break;
                                     }
                                 }
@@ -6048,4 +6181,102 @@ pub fn detect_and_log_port_mismatch(config_port: u16, swarm: &libp2p::Swarm<Iron
             );
         }
     }
+}
+
+pub fn is_dns_multiaddr(addr: &libp2p::Multiaddr) -> bool {
+    addr.iter().any(|proto| matches!(proto,
+        libp2p::multiaddr::Protocol::Dns(_) |
+        libp2p::multiaddr::Protocol::Dns4(_) |
+        libp2p::multiaddr::Protocol::Dns6(_) |
+        libp2p::multiaddr::Protocol::Dnsaddr(_)
+    ))
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+async fn resolve_dns_multiaddr(multiaddr: &libp2p::Multiaddr) -> Vec<libp2p::Multiaddr> {
+    let mut host = None;
+    let mut port = None;
+    let mut peer_id = None;
+    let mut is_dns4 = false;
+    let mut is_dns6 = false;
+    let mut is_udp = false;
+
+    for proto in multiaddr.iter() {
+        match proto {
+            libp2p::multiaddr::Protocol::Dns(h) => {
+                host = Some(h.to_string());
+            }
+            libp2p::multiaddr::Protocol::Dns4(h) => {
+                host = Some(h.to_string());
+                is_dns4 = true;
+            }
+            libp2p::multiaddr::Protocol::Dns6(h) => {
+                host = Some(h.to_string());
+                is_dns6 = true;
+            }
+            libp2p::multiaddr::Protocol::Dnsaddr(h) => {
+                host = Some(h.to_string());
+            }
+            libp2p::multiaddr::Protocol::Tcp(p) => {
+                port = Some(p);
+            }
+            libp2p::multiaddr::Protocol::Udp(p) => {
+                port = Some(p);
+                is_udp = true;
+            }
+            libp2p::multiaddr::Protocol::P2p(pid) => {
+                peer_id = Some(pid);
+            }
+            _ => {}
+        }
+    }
+
+    let Some(host) = host else { return vec![]; };
+    let Some(port) = port else { return vec![]; };
+
+    let host_port = format!("{}:{}", host, port);
+    let lookup_res = tokio::time::timeout(
+        std::time::Duration::from_secs(10),
+        tokio::net::lookup_host(host_port),
+    )
+    .await;
+
+    let Ok(Ok(socket_addrs)) = lookup_res else {
+        return vec![];
+    };
+
+    let mut resolved = vec![];
+    for socket_addr in socket_addrs {
+        let ip = socket_addr.ip();
+        if is_dns4 && ip.is_ipv6() {
+            continue;
+        }
+        if is_dns6 && ip.is_ipv4() {
+            continue;
+        }
+
+        let mut new_addr = libp2p::Multiaddr::empty();
+        match ip {
+            std::net::IpAddr::V4(ipv4) => {
+                new_addr.push(libp2p::multiaddr::Protocol::Ip4(ipv4));
+            }
+            std::net::IpAddr::V6(ipv6) => {
+                new_addr.push(libp2p::multiaddr::Protocol::Ip6(ipv6));
+            }
+        }
+
+        if is_udp {
+            new_addr.push(libp2p::multiaddr::Protocol::Udp(port));
+        } else {
+            new_addr.push(libp2p::multiaddr::Protocol::Tcp(port));
+        }
+
+        if let Some(pid) = peer_id {
+            new_addr.push(libp2p::multiaddr::Protocol::P2p(pid));
+        }
+
+        resolved.push(new_addr);
+    }
+
+    resolved
 }
