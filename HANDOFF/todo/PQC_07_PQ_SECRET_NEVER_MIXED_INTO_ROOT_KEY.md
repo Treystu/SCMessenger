@@ -1,5 +1,39 @@
 # TASK [CRITICAL]: PQ ratchet cadence never mixes the shared secret into root_key
 
+## UPDATE 2026-07-14: THIRD attempt (DH-step-tied mix) reviewed -> BLOCKED
+
+Status: STILL OPEN, THREE attempts blocked. Attempt 3 followed this ticket's own
+synthesized guidance (tie the PQ mix to a DH ratchet step for self-sync via the
+public envelope header) and was adversarially reviewed on a free lane
+(qwen3.7-max, independent of the qwen-thinking drafter). VERDICT: BLOCK.
+Artifacts: `HANDOFF/review/PQC_07_ATTEMPT3_DRAFT.md` +
+`HANDOFF/review/PQC_07_ATTEMPT3_REVIEW_VERDICT.md`. Nothing was applied; core/
+tree clean throughout.
+
+**KEY NEW INSIGHT (invalidates part of the attempt-1/2 synthesis below):**
+`handle_dh_ratchet` in `ratchet.rs` is a strictly RECEIVER-SIDE operation -
+it fires on the DECRYPT path when the peer's DH public rotates. The sender
+does NOT execute `handle_dh_ratchet` for the same message; it rotates its own
+DH only on its next `encrypt`-triggered step. So tying the mix to
+`handle_dh_ratchet` is STILL asymmetric - Bob (receiver of M100) mixes ss_pq
+into root_key when he processes Alice's DH rotation, but Alice did not mix it
+when she sent M100, so her sending chain for M100 derived from the un-mixed
+root key -> Bob's receiving chain (mixed) can't authenticate M100 -> AEAD
+failure -> session bricked on the very message carrying the PQ material. This
+is attempt 1's failure class shifted by one round-trip, NOT a fix for it.
+Therefore the DH-STEP anchor is insufficient by itself: attempt 4 needs a
+trigger that BOTH the sender's `encrypt`/`perform_pq_ratchet_step` path AND the
+receiver's `decrypt`/`handle_dh_ratchet` path provably reach for the SAME
+message before deriving that message's chain key - likely mixing ss_pq at
+symmetric DH-crossing points on BOTH sides (sender mixes its own encapsulated
+_ss_pq at perform_pq_ratchet_step; receiver mixes the decapsulated ss_pq at the
+matching step), proven equal by construction, NOT just at the receiver's
+handle_dh_ratchet. The draft also had a compile error (stray `None };`) and
+still shipped no Kani/unit symmetry proof (the DoD item that would catch this
+whole class). Attempt 4 is real protocol design; do NOT single-shot it. This
+is NOT beta-blocking (PQC-11/13 stay frozen behind it, farm V1.0.0 ships on the
+bootstrap hybrid handshake without ongoing-cadence PQ security).
+
 ## UPDATE 2026-07-13: SECOND attempt (decoupled mix_pq_secret design) triangulated -> BLOCKED
 
 Status: STILL OPEN, two attempts blocked now - this is a genuinely hard protocol
