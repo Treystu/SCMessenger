@@ -173,6 +173,7 @@ impl RatchetSession {
         pq_prev_keypair: Option<crate::crypto::pq::MlKem768KeyPair>,
         pq_their_encaps_key: Option<Vec<u8>>,
         pq_pending_ct: Option<Vec<u8>>,
+        skipped_keys: HashMap<([u8; 32], u32), RatchetKey>,
     ) -> Self {
         Self {
             our_dh_secret,
@@ -182,7 +183,7 @@ impl RatchetSession {
             sending_chain,
             receiving_chain,
             dh_step_count,
-            skipped_keys: HashMap::new(),
+            skipped_keys,
             initialized,
             our_identity_secret,
             negotiated_suite,
@@ -232,6 +233,17 @@ impl RatchetSession {
 
     pub(crate) fn has_identity_secret(&self) -> bool {
         self.our_identity_secret.is_some()
+    }
+
+    /// Snapshot of currently-held skipped message keys, for persistence.
+    /// See `SerializableRatchetSession::skipped_keys` (session_manager.rs) -
+    /// without this, a skipped key held at session-save time is silently lost
+    /// on reload and a legitimately-delayed message becomes undecryptable.
+    pub(crate) fn skipped_keys_snapshot(&self) -> Vec<([u8; 32], u32, [u8; 32])> {
+        self.skipped_keys
+            .iter()
+            .map(|((dh, idx), key)| (*dh, *idx, *key.as_bytes()))
+            .collect()
     }
 
     pub(crate) fn identity_secret_bytes(&self) -> Option<[u8; 32]> {

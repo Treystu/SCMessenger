@@ -1,6 +1,24 @@
 # TASK [MEDIUM]: Skipped ratchet keys don't survive session persistence
 
-Status: TODO. Found 2026-07-12 during the PQC-05/06/07 adversarial review
+Status: DONE 2026-07-13. Added `skipped_keys` to `SerializableRatchetSession`
+(hex-encoded `Vec<(String, u32, String)>`, `#[serde(default)]` so pre-existing
+persisted sessions without it still deserialize), a `skipped_keys_snapshot()`
+accessor on `RatchetSession`, and threaded real values through
+`reconstruct()`/`into_session()` instead of the hardcoded `HashMap::new()`.
+Regression test `test_skipped_keys_survive_persistence_roundtrip` (in
+`session_manager.rs`) proves a skipped key survives the full
+from_session -> serialize -> into_session round trip. Full crypto:: suite
+(75 tests) + workspace check green.
+
+**Security tradeoff decision:** persisting message keys to disk is accepted
+as-is, not WONTFIX - the session store's own doc comment already states the
+caller must ensure storage is encrypted at rest, so this doesn't create a new
+exposure class beyond what the rest of the persisted session (DH secrets,
+root key) already accepts. Reversing this (losing skipped keys on every
+restart) would cause real, silent message loss for any legitimately-delayed
+message - worse than the marginal persistence-window extension.
+
+Found 2026-07-12 during the PQC-05/06/07 adversarial review
 checkpoint (`HANDOFF/review/PQC_05_06_07_ADVERSARIAL_REVIEW.md`), confirmed
 by direct source read (not just the reviewing model's claim).
 

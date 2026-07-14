@@ -302,6 +302,11 @@ pub struct SerializableRatchetSession {
     pub peer_confirmed: bool,
     pub bootstrap_hct_ephemeral_hex: Option<String>,
     pub bootstrap_hct_mlkem_hex: Option<String>,
+    /// Skipped ratchet message keys, as (their_dh_hex, message_index, key_hex).
+    /// `#[serde(default)]` so sessions persisted before this field existed
+    /// still deserialize (with no skipped keys, matching the old behavior).
+    #[serde(default)]
+    pub skipped_keys: Vec<(String, u32, String)>,
 }
 
 /// Serializable chain state.
@@ -346,6 +351,11 @@ impl SerializableRatchetSession {
                 .bootstrap_hct
                 .as_ref()
                 .map(|h| hex::encode(&h.mlkem_ciphertext)),
+            skipped_keys: session
+                .skipped_keys_snapshot()
+                .into_iter()
+                .map(|(dh, idx, key)| (hex::encode(dh), idx, hex::encode(key)))
+                .collect(),
         }
     }
 
@@ -463,6 +473,22 @@ impl SerializableRatchetSession {
             None
         };
 
+        let mut skipped_keys = HashMap::with_capacity(self.skipped_keys.len());
+        for (dh_hex, idx, key_hex) in &self.skipped_keys {
+            let dh_bytes = hex::decode(dh_hex)
+                .map_err(|e| anyhow::anyhow!("Invalid skipped_keys dh hex: {}", e))?;
+            let key_bytes = hex::decode(key_hex)
+                .map_err(|e| anyhow::anyhow!("Invalid skipped_keys key hex: {}", e))?;
+            if dh_bytes.len() != 32 || key_bytes.len() != 32 {
+                bail!("skipped_keys entries must be 32 bytes each");
+            }
+            let mut dh_arr = [0u8; 32];
+            dh_arr.copy_from_slice(&dh_bytes);
+            let mut key_arr = [0u8; 32];
+            key_arr.copy_from_slice(&key_bytes);
+            skipped_keys.insert((dh_arr, *idx), RatchetKey::from_bytes(key_arr));
+        }
+
         Ok(RatchetSession::reconstruct(
             our_dh_secret,
             our_dh_public,
@@ -481,6 +507,7 @@ impl SerializableRatchetSession {
             None, // pq_prev_keypair
             None, // pq_their_encaps_key
             None, // pq_pending_ct
+            skipped_keys,
         ))
     }
 }
@@ -524,6 +551,46 @@ mod tests {
         manager2.load().unwrap();
         assert_eq!(manager2.session_count(), 1);
         assert!(manager2.get_session(peer_id).is_some());
+    }
+
+    #[test]
+    fn test_skipped_keys_survive_persistence_roundtrip() {
+        // Regression test for PQC_RATCHET_SKIPPED_KEYS_NOT_PERSISTED: a skipped
+        // message key held at save time must still be present after reload,
+        // otherwise a legitimately-delayed message becomes undecryptable.
+        let our_key = generate_signing_key();
+        let their_pub = X25519PublicKey::from([2u8; 32]);
+        let mut manager = RatchetSessionManager::new();
+        manager
+            .get_or_create_session("peer-skip", &our_key, &their_pub)
+            .unwrap();
+        let session = manager.get_session("peer-skip").unwrap();
+        assert!(
+            session.skipped_keys_snapshot().is_empty(),
+            "freshly-created session should have no skipped keys yet"
+        );
+
+        let mut serializable = SerializableRatchetSession::from_session(session);
+        assert!(serializable.skipped_keys.is_empty());
+
+        // Inject a fake skipped key entry, simulating one held at save time.
+        let fake_dh = hex::encode([7u8; 32]);
+        let fake_key = hex::encode([9u8; 32]);
+        serializable
+            .skipped_keys
+            .push((fake_dh.clone(), 42, fake_key.clone()));
+
+        let reconstructed = serializable.into_session().unwrap();
+        let snapshot = reconstructed.skipped_keys_snapshot();
+        assert_eq!(
+            snapshot.len(),
+            1,
+            "the injected skipped key must survive into_session()"
+        );
+        let (dh, idx, key) = snapshot[0];
+        assert_eq!(hex::encode(dh), fake_dh);
+        assert_eq!(idx, 42);
+        assert_eq!(hex::encode(key), fake_key);
     }
 
     #[test]
