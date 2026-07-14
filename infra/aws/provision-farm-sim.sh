@@ -135,7 +135,10 @@ ln -s /usr/local/lib/docker/cli-plugins/docker-compose /usr/local/bin/docker-com
 # 3. Start Docker daemon
 systemctl enable --now docker
 
-# 4. Create idle check script
+# 4. Add ec2-user to docker group to allow docker commands without sudo
+usermod -aG docker ec2-user
+
+# 5. Create idle check script
 cat > /usr/local/bin/farm-idle-check.sh <<'EOF'
 #!/bin/bash
 # Idle checker for SCMessenger farm sim instances.
@@ -163,7 +166,8 @@ if [ "$(who | wc -l)" -gt 0 ]; then
 fi
 
 # Increment idle counter
-COUNT=$(cat "$COUNT_FILE")
+COUNT=$(tr -dc '0-9' < "$COUNT_FILE" 2>/dev/null)
+COUNT=${COUNT:-0}
 COUNT=$((COUNT + 1))
 echo "$COUNT" > "$COUNT_FILE"
 
@@ -174,24 +178,27 @@ fi
 EOF
 chmod +x /usr/local/bin/farm-idle-check.sh
 
-# 5. Install cron job for idle checking
+# 6. Install cron job for idle checking
 cat > /etc/cron.d/farm-idle <<'EOF'
 */5 * * * * root /usr/local/bin/farm-idle-check.sh
 EOF
 systemctl enable --now crond
 
-# 6. Clone the public SCMessenger repository
+# 7. Clone the public SCMessenger repository
 mkdir -p /opt
 git clone https://github.com/Sovereign-Communication/SCMessenger.git /opt/SCMessenger
 
-# 7. Build and launch the simulation (docker-compose-extended.yml)
+# 8. Change ownership of SCMessenger directory to ec2-user
+chown -R ec2-user:ec2-user /opt/SCMessenger
+
+# 9. Build and launch the simulation (docker-compose-extended.yml)
 touch /var/run/farm-keepawake
 cd /opt/SCMessenger/docker
 docker compose -f docker-compose-extended.yml build --parallel
 docker compose -f docker-compose-extended.yml --profile test up -d
 rm -f /var/run/farm-keepawake
 
-# 8. Stream simulation logs to /var/log/farm-sim.log
+# 10. Stream simulation logs to /var/log/farm-sim.log
 nohup docker compose -f docker-compose-extended.yml --profile test logs -f > /var/log/farm-sim.log 2>&1 &
 CLOUDINIT
 )
@@ -213,7 +220,7 @@ BDM
     
     # Write user data to a file since passing multi-line strings directly fails
     # due to shell argument parsing issues. Using file:// ensures proper base64 encoding.
-    echo "$USER_DATA" > userdata.txt
+    printf '%s\n' "$USER_DATA" | tr -d '\r' > userdata.txt
     
     INSTANCE_ID=$(aws ec2 run-instances \
         --image-id "$AMI_ID" \

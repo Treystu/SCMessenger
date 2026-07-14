@@ -233,6 +233,9 @@ case "${1:-}" in
         echo "Terminating instance $INSTANCE_ID..."
         aws ec2 terminate-instances --instance-ids "$INSTANCE_ID" --region "$REGION"
         
+        # Wait for instance termination to avoid DependencyViolation errors
+        aws ec2 wait instance-terminated --instance-ids "$INSTANCE_ID" --region "$REGION"
+        
         echo "Deleting security group..."
         aws ec2 delete-security-group --group-name "scmessenger-farm-sim-sg" --region "$REGION" || true
         
