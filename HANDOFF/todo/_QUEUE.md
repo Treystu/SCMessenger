@@ -26,8 +26,9 @@ drills; Section 7 records this re-rank).
    `PQC_07_PQ_REFRESH_WITHOUT_DH_CROSSING.md`,
    `PQC_RATCHET_SKIPPED_KEYS_NOT_PERSISTED.md`. PQC-11/13 stay frozen until
    these land (standing rule). (FARM WS-E.)
-4. `PQC_08_LEGACY_PATH_RETIREMENT.md` [QWEN max, --verify compile gate] --
-   IN PROGRESS; finish remaining scope.
+4. ~~`PQC_08_LEGACY_PATH_RETIREMENT.md`~~ DONE (verified 2026-07-13 - this
+   entry was stale, the ticket has been in HANDOFF/done/ with a complete
+   call-site inventory and "[x] File moved to done/" since 2026-07-11).
 5. FARM-B reach lane: B1 DNS-name-first hardening (IP-flip mandate)
    [SONNET high][AUDIT-GATE] + B2 bootstrap unification [SONNET]; then B3
    farm-anchor runbook/config [SONNET + HUMAN firewall/DDNS] and B4 cloud
@@ -252,8 +253,8 @@ queue).
    exact read-only Qwen thinking command; verdict lands at
    HANDOFF/review/PQC_05_06_07_ADVERSARIAL_REVIEW.md. Zero Anthropic cost.
 
-8. `PQC_08_LEGACY_PATH_RETIREMENT.md` [QWEN] IN PROGRESS -- encrypt.rs suite
-   gating + LegacyStaticEcdhSend audit event landed; remaining scope per task file.
+8. ~~`PQC_08_LEGACY_PATH_RETIREMENT.md`~~ DONE (see item 4 above - this
+   entry was also stale, same ticket, same verified-complete status).
 
 9. **Orchestration unification COMPLETE 2026-07-11** -- `docs/ORCHESTRATION.md`
    is now the master protocol (all modes); GEMINI.md + ORCHESTRATION_PLAYBOOK.md
