@@ -38,6 +38,7 @@ COPY desktop_bridge/src desktop_bridge/src
 
 # Copy build scripts
 COPY core/build.rs core/
+COPY cli/build.rs cli/
 COPY mobile/build.rs mobile/
 COPY desktop_bridge/build.rs desktop_bridge/
 
