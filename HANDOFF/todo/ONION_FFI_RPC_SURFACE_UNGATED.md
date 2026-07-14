@@ -1,5 +1,16 @@
 # TASK: Onion routing FFI/RPC surface bypasses the onion_routing_enabled gate
 
+Status: TODO, LOWERED PRIORITY - verify-first step done 2026-07-13. Grepped
+android/app/src/main, iOS/SCMessenger/SCMessenger (excluding Generated/), and
+log-visualizer/browser for any UI callers of prepare_onion_message/
+peel_onion_layer (or their camelCase FFI names): zero hits outside the
+auto-generated UniFFI bindings themselves (iOS Generated/api.swift, apiFFI.h -
+which every FFI method appears in regardless of whether anything calls it).
+No Android Kotlin, iOS Swift app code, or WASM/browser JS actually invokes these
+entry points today. This is exposed-but-unused surface, not a live exploit path -
+defensive gating (per the fix direction below) is still worth doing before any
+future UI wires it up, but this is not an active farm-blocking risk.
+
 Status: TODO. Found 2026-07-13 while writing the AD-8 seam-freeze test
 (`core/tests/seam_freeze_onion.rs`, FARM_FINAL_PLAN.md WS-FARM-H1).
 

@@ -153,7 +153,7 @@ struct Cli {
     /// Bind address for an optional HTTP health-check server (e.g. 0.0.0.0:8080).
     /// Intended for cloud relay deployments (AWS/Alibaba) that need external
     /// health monitoring; off by default.
-    #[arg(long, value_name = "ADDR")]
+    #[arg(long, value_name = "ADDR", global = true)]
     http_bind: Option<String>,
 
     #[command(subcommand)]
