@@ -1,5 +1,55 @@
 # TASK [CRITICAL]: PQ ratchet cadence never mixes the shared secret into root_key
 
+## UPDATE 2026-07-13: SECOND attempt (decoupled mix_pq_secret design) triangulated -> BLOCKED
+
+Status: STILL OPEN, two attempts blocked now - this is a genuinely hard protocol
+design problem, not a wiring gap. Attempt 2 introduced `mix_pq_secret(&mut self,
+ss_pq: &[u8])`, decoupling PQ mixing from any DH-crossing entirely: both sender
+(after encrypting the ciphertext-carrying message) and receiver (after decrypting
+it) call mix_pq_secret with their independently-derived-but-identical (by KEM
+construction) shared secret. This correctly fixed attempt 1's asymmetric-mixing
+bug (verified: the mixing call is now symmetric, same derivation on both sides).
+
+**Fusion Lite triangulated review (3-panel + judge, real spend ~$0.07 of the
+$0.50 capped key) found a NEW fatal flaw, not present in attempt 1's bug class
+but just as severe:** tying the mix trigger to a SPECIFIC message means if that
+message is lost in transit (dropped, network partition, exactly the farm's
+unreliable-connectivity reality this whole plan exists to serve), one side mixes
+while the other never does - root_key desyncs again, just via packet loss instead
+of reorder. 2 of 3 panelists plus the judge flagged this; judge's verdict: "the
+cryptographic key derivation is secure, but the state-machine architecture is
+fatally vulnerable to packet loss and requires structural revision before
+implementation." Also unresolved: whether `chain.index` should reset to 0 on
+chain-key replacement (standard Double Ratchet semantics, argued by 1 panelist)
+or be preserved (argued by 2) - a genuine open design question, not just a bug.
+
+**Per the verification protocol, this is torn down, not micro-patched** - the
+recommended fix (tie PQ mixing to DH ratchet steps for self-synchronization via
+public envelope headers, so the receiver only proceeds once it has processed the
+same header the sender committed to) is itself a return toward attempt 1's
+DH-tied approach, but done correctly this time - this needs real design work,
+not another single-shot dispatch. Attempt 2's design + wiring diffs + full
+triangulation verdict preserved at `HANDOFF/review/PQC_07_ATTEMPT2_*` for
+whoever designs attempt 3. Nothing was ever applied to the real files - the
+working tree was clean throughout this attempt.
+
+**What attempt 3 needs to get right (synthesizing both blocked attempts):**
+1. The mix must happen at a point BOTH sides are guaranteed to reach together,
+   surviving message loss/reorder - a DH ratchet step (which already has
+   built-in self-synchronization via the public key in the envelope header) is
+   the natural anchor, NOT an arbitrary message-count cadence.
+2. But attempt 1's bug was mixing asymmetrically AT that DH step (receiver
+   mixed, sender didn't) - so DH-tied is fine as the trigger, the fix is making
+   BOTH sides mix at that trigger, symmetrically, using attempt 2's sound KDF
+   mechanism (mix_pq_secret's blake3 derivation, which passed review cleanly).
+3. Resolve chain.index reset-vs-preserve explicitly as part of the design, not
+   left implicit.
+4. Add the Kani/unit proof of root-key-symmetry invariant that both attempts
+   have skipped - this is exactly the kind of thing that would have caught
+   both blocked attempts before they reached review.
+
+---
+
 ## UPDATE 2026-07-12 (LATER): attempted wiring fix ADVERSARIALLY REVIEWED -> BLOCKED -> REVERTED
 
 Status: STILL OPEN. The wiring fix described in the section below was submitted

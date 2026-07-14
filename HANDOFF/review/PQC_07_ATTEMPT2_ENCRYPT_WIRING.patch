@@ -1,0 +1,52 @@
+```diff
+--- a/core/src/crypto/encrypt.rs
++++ b/core/src/crypto/encrypt.rs
+@@ -306,6 +306,7 @@
+     // ratchet step from perform_pq_ratchet_step, not the initial bootstrap.
++    let mut pq_shared_secret = None;
+     if session.negotiated_suite == Some(0x02) && session.peer_confirmed {
+         // The anti-stripping check only applies at genuine cadence boundaries
+         // (mirrors encrypt_message_ratcheted's own `current_message_number % 100
+@@ -322,7 +323,7 @@
+         if let (Some(pq_kem_ciphertext), Some(pq_encaps_key)) =
+             (&envelope.pq_kem_ciphertext, &envelope.pq_encaps_key)
+         {
+-            session.handle_incoming_pq_fields(pq_kem_ciphertext, pq_encaps_key)?;
++            pq_shared_secret = Some(session.handle_incoming_pq_fields(pq_kem_ciphertext, pq_encaps_key)?);
+         }
+     }
+ 
+@@ -334,6 +335,10 @@
+         aad,
+     )?;
+ 
++    if let Some(ss) = pq_shared_secret {
++        session.mix_pq_secret(&ss)?;
++    }
++
+     session.peer_confirmed = true;
+     Ok(plaintext)
+ }
+@@ -375,11 +380,13 @@
+     let mut pq_kem_ciphertext = None;
+     let mut pq_encaps_key = None;
++    let mut pq_shared_secret = None;
+ 
+     if session.negotiated_suite == Some(0x02) && session.peer_confirmed && current_message_number % 100 == 0 {
+-        if let Ok((ct, encaps_key)) = session.perform_pq_ratchet_step() {
++        if let Ok((ct, encaps_key, ss)) = session.perform_pq_ratchet_step() {
+             pq_kem_ciphertext = Some(ct);
+             pq_encaps_key = Some(encaps_key);
++            pq_shared_secret = Some(ss);
+         } else {
+             bail!("Transcript hash mismatch");
+         }
+@@ -405,6 +412,10 @@
+     let (nonce, ciphertext) = session.encrypt(plaintext, aad)?;
+ 
++    if let Some(ss) = pq_shared_secret {
++        session.mix_pq_secret(&ss)?;
++    }
++
+     let envelope = RatchetEnvelope {
+```
