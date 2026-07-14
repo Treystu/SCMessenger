@@ -58,6 +58,7 @@ RUN apt-get update && apt-get install -y \
     iputils-ping \
     curl \
     jq \
+    libdbus-1-3 \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy binary from builder
