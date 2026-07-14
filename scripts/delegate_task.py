@@ -20,7 +20,7 @@ QWEN_TIER_MAP = {
     "flash":    "qwen-max",                       # Simple fixes, small scoped changes, fallback
 }
 
-VALID_EXTENSIONS = ('.rs', '.toml', '.md', '.py', '.sh', '.gradle', '.kts', '.yml', '.yaml', '.json', '.swift', '.kt')
+VALID_EXTENSIONS = ('.rs', '.toml', '.md', '.py', '.sh', '.gradle', '.kts', '.yml', '.yaml', '.json', '.swift', '.kt', 'Dockerfile')
 
 def _key_from_env_file(path, names):
     try:
