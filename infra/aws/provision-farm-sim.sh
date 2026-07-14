@@ -124,7 +124,7 @@ set -euo pipefail
 
 # 1. Update and install standard packages (docker, git)
 dnf update -y
-dnf install -y docker git
+dnf install -y docker git cronie
 
 # 2. Install Docker Compose V2 plugin manually for AL2023
 mkdir -p /usr/local/lib/docker/cli-plugins
@@ -135,16 +135,63 @@ ln -s /usr/local/lib/docker/cli-plugins/docker-compose /usr/local/bin/docker-com
 # 3. Start Docker daemon
 systemctl enable --now docker
 
-# 4. Clone the public SCMessenger repository
+# 4. Create idle check script
+cat > /usr/local/bin/farm-idle-check.sh <<'EOF'
+#!/bin/bash
+# Idle checker for SCMessenger farm sim instances.
+# If /var/run/farm-keepawake exists OR there are active SSH sessions, reset idle count.
+# Otherwise increment idle count. At 6 counts (30 min), shut down the instance.
+
+KEEPAWAKE_FILE="/var/run/farm-keepawake"
+COUNT_FILE="/var/run/farm-idle-count"
+
+# Initialize count file if missing
+if [ ! -f "$COUNT_FILE" ]; then
+    echo "0" > "$COUNT_FILE"
+fi
+
+# Check if keepawake flag exists
+if [ -f "$KEEPAWAKE_FILE" ]; then
+    echo "0" > "$COUNT_FILE"
+    exit 0
+fi
+
+# Check for active SSH sessions
+if [ "$(who | wc -l)" -gt 0 ]; then
+    echo "0" > "$COUNT_FILE"
+    exit 0
+fi
+
+# Increment idle counter
+COUNT=$(cat "$COUNT_FILE")
+COUNT=$((COUNT + 1))
+echo "$COUNT" > "$COUNT_FILE"
+
+# Shutdown after 6 intervals (30 minutes)
+if [ "$COUNT" -ge 6 ]; then
+    shutdown -h now
+fi
+EOF
+chmod +x /usr/local/bin/farm-idle-check.sh
+
+# 5. Install cron job for idle checking
+cat > /etc/cron.d/farm-idle <<'EOF'
+*/5 * * * * root /usr/local/bin/farm-idle-check.sh
+EOF
+systemctl enable --now crond
+
+# 6. Clone the public SCMessenger repository
 mkdir -p /opt
 git clone https://github.com/Sovereign-Communication/SCMessenger.git /opt/SCMessenger
 
-# 5. Build and launch the simulation (docker-compose-extended.yml)
+# 7. Build and launch the simulation (docker-compose-extended.yml)
+touch /var/run/farm-keepawake
 cd /opt/SCMessenger/docker
 docker compose -f docker-compose-extended.yml build --parallel
 docker compose -f docker-compose-extended.yml --profile test up -d
+rm -f /var/run/farm-keepawake
 
-# 6. Stream simulation logs to /var/log/farm-sim.log
+# 8. Stream simulation logs to /var/log/farm-sim.log
 nohup docker compose -f docker-compose-extended.yml --profile test logs -f > /var/log/farm-sim.log 2>&1 &
 CLOUDINIT
 )
@@ -163,6 +210,11 @@ if $APPLY; then
     cat > bdm.json <<'BDM'
 [{"DeviceName":"/dev/xvda","Ebs":{"VolumeSize":30,"VolumeType":"gp3"}}]
 BDM
+    
+    # Write user data to a file since passing multi-line strings directly fails
+    # due to shell argument parsing issues. Using file:// ensures proper base64 encoding.
+    echo "$USER_DATA" > userdata.txt
+    
     INSTANCE_ID=$(aws ec2 run-instances \
         --image-id "$AMI_ID" \
         --instance-type "$INSTANCE_TYPE" \
@@ -171,9 +223,10 @@ BDM
         --region "$REGION" \
         --block-device-mappings file://bdm.json \
         --tag-specifications "ResourceType=instance,Tags=[{Key=Name,Value=$TAG_NAME}]" \
-        --user-data "$USER_DATA" \
+        --user-data file://userdata.txt \
+        --instance-initiated-shutdown-behavior stop \
         --query 'Instances[0].InstanceId' --output text)
-    rm -f bdm.json
+    rm -f bdm.json userdata.txt
     echo "[INFO] Instance launched successfully."
     echo "[INFO] Instance ID: $INSTANCE_ID"
     echo "Waiting for instance to obtain public IP address..."
@@ -201,7 +254,8 @@ else
     echo "    --region \"$REGION\" \\"
     echo "    --block-device-mappings 'DeviceName=/dev/xvda,Ebs={VolumeSize=30,VolumeType=gp3}' \\"
     echo "    --tag-specifications \"ResourceType=instance,Tags=[{Key=Name,Value=$TAG_NAME}]\" \\"
-    echo "    --user-data <CLOUD_INIT_SCRIPT>"
+    echo "    --user-data <CLOUD_INIT_SCRIPT> \\"
+    echo "    --instance-initiated-shutdown-behavior stop"
     INSTANCE_ID="i-xxxxxxxxxxxxxxxxx"
     PUBLIC_IP="xx.xx.xx.xx"
 fi
