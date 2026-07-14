@@ -150,8 +150,41 @@ const VERSION_INFO: &str = concat!(
 #[command(about = "SCMessenger — Sovereign Encrypted Messaging", long_about = None)]
 #[command(version = VERSION_INFO)]
 struct Cli {
+    /// Bind address for an optional HTTP health-check server (e.g. 0.0.0.0:8080).
+    /// Intended for cloud relay deployments (AWS/Alibaba) that need external
+    /// health monitoring; off by default.
+    #[arg(long, value_name = "ADDR")]
+    http_bind: Option<String>,
+
     #[command(subcommand)]
     command: Commands,
+}
+
+async fn spawn_http_health_server(bind_addr: String) {
+    let addr: std::net::SocketAddr = match bind_addr.parse() {
+        Ok(a) => a,
+        Err(e) => {
+            tracing::warn!("Invalid --http-bind address '{}': {}", bind_addr, e);
+            return;
+        }
+    };
+    let app = axum::Router::new().route(
+        "/health",
+        axum::routing::get(|| async {
+            axum::Json(serde_json::json!({"status": "healthy"}))
+        }),
+    );
+    let listener = match tokio::net::TcpListener::bind(addr).await {
+        Ok(l) => l,
+        Err(e) => {
+            tracing::warn!("Failed to bind HTTP health server on {}: {}", addr, e);
+            return;
+        }
+    };
+    tracing::info!("HTTP health server listening on {}", addr);
+    if let Err(e) = axum::serve(listener, app).await {
+        tracing::warn!("HTTP health server error: {}", e);
+    }
 }
 
 #[derive(Subcommand)]
@@ -475,6 +508,10 @@ async fn main() -> Result<()> {
     }
 
     let cli = Cli::parse();
+
+    if let Some(bind_addr) = cli.http_bind.clone() {
+        tokio::spawn(spawn_http_health_server(bind_addr));
+    }
 
     match cli.command {
         Commands::Init { name } => cmd_init(name).await,
