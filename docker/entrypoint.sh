@@ -43,6 +43,9 @@ echo "[OK] Configuration ready (port: $FINAL_PORT)"
 
 # If no port argument is provided to scm start, add it
 if [ "$1" = "scm" ] && [ "$2" = "start" ]; then
+    # Ensure identity is initialized before starting (tolerate already-initialized)
+    scm init || true
+
     # Check if --port is already in arguments
     if ! echo "$@" | grep -q "\-\-port"; then
         set -- "$1" "$2" "--port" "$FINAL_PORT" "${@:3}"
