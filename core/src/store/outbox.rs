@@ -84,6 +84,20 @@ impl Outbox {
         }
     }
 
+    /// Open or create the default persistent outbox for the given data directory.
+    /// Returns Arc<tokio::sync::Mutex<Self>> matching CLI usage pattern.
+    pub fn open_default(data_dir: &std::path::Path) -> std::result::Result<Arc<tokio::sync::Mutex<Self>>, String> {
+        let outbox_path = data_dir.join("outbox");
+        let outbox_path_str = outbox_path.to_str().unwrap_or("outbox").to_string();
+        match crate::store::backend::SledStorage::new(&outbox_path_str) {
+            Ok(backend) => Ok(Arc::new(tokio::sync::Mutex::new(Self::persistent(Arc::new(backend))))),
+            Err(e) => {
+                tracing::warn!("Failed to open persistent outbox, falling back to in-memory: {}", e);
+                Ok(Arc::new(tokio::sync::Mutex::new(Self::new())))
+            }
+        }
+    }
+
     /// Trigger maintenance to enforce retention policies after outbox operations.
     /// This automatically prunes expired messages and enforces configured limits.
     /// If storage_manager is not available (None), this is a no-op.

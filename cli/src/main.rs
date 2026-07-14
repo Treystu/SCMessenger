@@ -1348,22 +1348,7 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
     let _ = history.enforce_retention(10000); // Limit history to 10k messages
 
     // ── Outbox — persistent store-and-forward queue ──────────────────────
-    // Messages sent to offline peers are queued here and flushed automatically
-    // when those peers come online (see PeerDiscovered handler below).
-    let outbox_path = data_dir.join("outbox");
-    let outbox_path_str = outbox_path.to_str().unwrap_or("outbox").to_string();
-    let outbox = match scmessenger_core::store::backend::SledStorage::new(&outbox_path_str) {
-        Ok(backend) => Arc::new(tokio::sync::Mutex::new(Outbox::persistent(Arc::new(
-            backend,
-        )))),
-        Err(e) => {
-            tracing::warn!(
-                "Failed to open persistent outbox, falling back to in-memory: {}",
-                e
-            );
-            Arc::new(tokio::sync::Mutex::new(Outbox::new()))
-        }
-    };
+    let outbox = Outbox::open_default(&data_dir).map_err(|e| anyhow::anyhow!(e))?;
 
     // ── Connection Ledger — persistent peer memory ──────────────────────
     let connection_ledger = ledger::ConnectionLedger::load(&data_dir)?;
@@ -2512,20 +2497,7 @@ async fn cmd_relay(listen_addr: String, http_port: u16, node_name: Option<String
     let _history = core.history_store_manager();
 
     // Outbox
-    let outbox_path = data_dir.join("outbox");
-    let outbox_path_str = outbox_path.to_str().unwrap_or("outbox").to_string();
-    let outbox = match scmessenger_core::store::backend::SledStorage::new(&outbox_path_str) {
-        Ok(backend) => Arc::new(tokio::sync::Mutex::new(Outbox::persistent(Arc::new(
-            backend,
-        )))),
-        Err(e) => {
-            tracing::warn!(
-                "Failed to open persistent outbox, falling back to in-memory: {}",
-                e
-            );
-            Arc::new(tokio::sync::Mutex::new(Outbox::new()))
-        }
-    };
+    let outbox = Outbox::open_default(&data_dir).map_err(|e| anyhow::anyhow!(e))?;
 
     // Control API — core is already Arc<IronCore>
     let core_arc = Arc::clone(&core);
@@ -2965,11 +2937,9 @@ async fn queue_message_for_later_delivery(
         )
         .map(|pm| pm.envelope_data)?;
 
-    let outbox_path = data_dir.join("outbox");
-    let outbox_path_str = outbox_path.to_str().unwrap_or("outbox").to_string();
-    match scmessenger_core::store::backend::SledStorage::new(&outbox_path_str) {
-        Ok(backend) => {
-            let mut outbox = Outbox::persistent(Arc::new(backend));
+    match Outbox::open_default(&data_dir) {
+        Ok(outbox_arc) => {
+            let mut outbox = outbox_arc.lock().await;
             let now = std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap_or_default()
