@@ -14,7 +14,7 @@
       "Resource": "arn:aws:ec2:*:*:instance/*",
       "Condition": {
         "StringEquals": {
-          "ec2:InstanceType": ["t2.micro", "t3.micro"]
+          "ec2:InstanceType": ["t2.micro", "t3.micro", "m7i-flex.large"]
         }
       }
     },
