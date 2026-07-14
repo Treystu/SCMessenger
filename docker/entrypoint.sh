@@ -39,13 +39,17 @@ if [ ! -z "$BOOTSTRAP_NODES" ]; then
     done
 fi
 
-echo "✓ Configuration ready (port: $FINAL_PORT)"
+echo "[OK] Configuration ready (port: $FINAL_PORT)"
 
 # If no port argument is provided to scm start, add it
 if [ "$1" = "scm" ] && [ "$2" = "start" ]; then
     # Check if --port is already in arguments
     if ! echo "$@" | grep -q "\-\-port"; then
         set -- "$1" "$2" "--port" "$FINAL_PORT" "${@:3}"
+    fi
+    # Check if --http-bind is already in arguments
+    if ! echo "$@" | grep -q "\-\-http-bind"; then
+        set -- "$1" "--http-bind" "0.0.0.0:8080" "$2" "${@:3}"
     fi
 fi
 
