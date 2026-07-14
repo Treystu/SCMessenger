@@ -8,9 +8,16 @@
 
 ## SECTION 1: GitHub Account & Enterprise Trial Status
 
-### 1.1 Current Billing Blocker (CRITICAL)
+### 1.1 Current Billing Blocker (CORRECTED 2026-07-14: RESOLVED)
 
-**Finding:** Personal GitHub account (`Treystu`) is locked due to billing issue; blocks ALL Actions execution.
+**CORRECTION (2026-07-14, verified via `git remote -v`):** the repo has ALREADY
+been transferred to the `Sovereign-Communication` org
+(`github.com/Sovereign-Communication/SCMessenger`). The personal-account
+billing lock below is STALE - it no longer gates Actions. Runners execute on
+the org; the remaining iOS blocker is purely the workflow defects in Section 3
+(now fixed), NOT account access. Original stale finding preserved below.
+
+**Finding (STALE):** Personal GitHub account (`Treystu`) is locked due to billing issue; blocks ALL Actions execution.
 - **Evidence:** _QUEUE.md "Open decision points" item 3: "account is locked due to a billing issue (personal account governs the public repo; the Enterprise trial does not cover it)"
 - **Impact:** Free macOS/Linux/Windows runners are available on public repo but cannot execute (account lock prevents it)
 - **Status:** Two paths forward documented: (a) fix personal account billing, OR (b) transfer repo to GitHub Enterprise trial org

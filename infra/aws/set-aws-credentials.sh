@@ -15,6 +15,13 @@
 
 set -euo pipefail
 
+# Ensure the Git-for-Windows coreutils (mkdir, chmod, cat, grep) are on PATH.
+# When this script is launched by calling usr/bin/bash.exe directly from
+# PowerShell (rather than the bin/bash.exe login wrapper), PATH does not
+# include /usr/bin, so `mkdir: command not found` etc. Prepend them here so
+# the script works regardless of how bash was invoked.
+export PATH="/usr/bin:/bin:$PATH"
+
 ENV_DIR="$HOME/.config/scmorc"
 ENV_FILE="$ENV_DIR/aws.env"
 REGION="us-east-1"
