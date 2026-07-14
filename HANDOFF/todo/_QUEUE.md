@@ -1,38 +1,45 @@
 # _QUEUE -- Dispatch Order for the Full v1.0.0 Backlog
 
 Status: Active
-Last updated: 2026-07-13 (EXECUTION ORDER re-ranked per
-`HANDOFF/plans/FARM_FINAL_PLAN.md` — the definitive farm deployment plan.
-Farm delivery-truth and crypto-soundness now outrank PQC depth work. iOS
-scope decision RESOLVED (in v1.0.0, farm-gating). Delegation protocol:
-docs/ORCHESTRATION.md.)
+Last updated: 2026-07-13 EOD (see
+`HANDOFF/SESSION_HANDOFF_2026-07-13_farm_v1_backlog.md` for the full session
+report). A1/A2/E2/E3 DONE this session; E1 BLOCKED twice (needs attempt 3,
+see below); F1 written, compiled clean, run result unconfirmed at session end
+- verify/commit first. AWS/B4 PAUSED per operator - infra is committed and
+ready but not a current priority. Delegation protocol: docs/ORCHESTRATION.md.
 
 ## EXECUTION ORDER -- next dispatches (pull top-down)
 
-Re-ranked 2026-07-13 per `HANDOFF/plans/FARM_FINAL_PLAN.md` (Section 4 has
-ticket-ready specs for all NEW items; Section 5 defines the FD readiness
-drills; Section 7 records this re-rank).
-
-1. `OUTBOX_FLUSH_ON_CONNECT_RETRY.md` [SONNET/CODER][P0 farm-critical] --
-   reuse the 296-line reference patch in `HANDOFF/review/`; the exact
-   failing-test fix is written in the ticket. (FARM WS-A1.)
-2. Receipt round-trip fix per
-   `CRITICAL_ANDROID_FALSE_DELIVERY_FAILURE_NO_RECEIPT_ACK.md` steps 1-2:
-   core incoming-receipt classification + CLI serde_json fix
-   [SONNET/CODER][AUDIT-GATE: touches transport/swarm.rs]; then step 3
-   Android retry suppression [SONNET, Kotlin-side]. (FARM WS-A2/A3.)
-3. `PQC_07_PQ_SECRET_NEVER_MIXED_INTO_ROOT_KEY.md` [SONNET][AUDIT-GATE,
-   CRITICAL] plus family: `PQC_07_FORCE_RATCHET_SAME_DEFECT.md`,
-   `PQC_07_PQ_REFRESH_WITHOUT_DH_CROSSING.md`,
-   `PQC_RATCHET_SKIPPED_KEYS_NOT_PERSISTED.md`. PQC-11/13 stay frozen until
-   these land (standing rule). (FARM WS-E.)
+1. **F1 `integration_ledger_convergence.rs`** -- file exists on disk
+   UNCOMMITTED, compiles clean, a real run was launched but its result was
+   not confirmed before the session ended. Re-run
+   `cargo test -p scmessenger-core --test integration_ledger_convergence --
+   --include-ignored --nocapture`; commit if it passes, debug the event-loop
+   wiring if not (the harness pattern itself, borrowed from
+   `integration_nat_reflection.rs`, is proven correct). (FARM WS-F1.)
+2. **A3 Android Kotlin retry suppression** -- closes
+   `CRITICAL_ANDROID_FALSE_DELIVERY_FAILURE_NO_RECEIPT_ACK.md` step 3 (steps
+   1-2 DONE 2026-07-13): transport-success must never escalate to
+   failed/corrupted, widen the receipt window, Kotlin regression test.
+   [SONNET, Kotlin-side]. (FARM WS-A3.)
+3. **E1 attempt 3** -- `PQC_07_PQ_SECRET_NEVER_MIXED_INTO_ROOT_KEY.md`
+   [OPUS+/THINK, CRITICAL][AUDIT-GATE]. Two prior attempts BLOCKED by
+   adversarial/triangulated review for two different desync failure modes
+   (reorder, then packet loss) - the ticket's "what attempt 3 needs to get
+   right" section synthesizes both. This needs real design work, not a
+   single-shot dispatch. `PQC_07_FORCE_RATCHET_SAME_DEFECT.md` and
+   `PQC_07_PQ_REFRESH_WITHOUT_DH_CROSSING.md` are the same defect family.
+   PQC-11/13 stay frozen until this lands (standing rule). (FARM WS-E1/E2.)
 4. ~~`PQC_08_LEGACY_PATH_RETIREMENT.md`~~ DONE (verified 2026-07-13 - this
    entry was stale, the ticket has been in HANDOFF/done/ with a complete
    call-site inventory and "[x] File moved to done/" since 2026-07-11).
-5. FARM-B reach lane: B1 DNS-name-first hardening (IP-flip mandate)
-   [SONNET high][AUDIT-GATE] + B2 bootstrap unification [SONNET]; then B3
-   farm-anchor runbook/config [SONNET + HUMAN firewall/DDNS] and B4 cloud
-   relays on AWS + Alibaba free tier [SONNET + HUMAN provisioning].
+5. ~~`PQC_RATCHET_SKIPPED_KEYS_NOT_PERSISTED.md`~~ DONE 2026-07-13 (E3) --
+   skipped keys now survive session persistence, regression test proves it.
+6. FARM-B reach lane: B1 DNS-name-first hardening (IP-flip mandate)
+   [SONNET high][AUDIT-GATE] + B2 bootstrap unification [SONNET]. B3/B4
+   (farm-anchor runbook + AWS/Alibaba cloud relays) infra is committed and
+   ready (`infra/aws/`) but PAUSED per operator directive 2026-07-13 - do
+   not resume without the operator re-opening it.
 6. iOS lane opener: GitHub billing unlock [HUMAN] then verify
    `HANDOFF/done/TASK_CI_IOS_MACOS_RUNNER_FIX.md` -- NOTE: file was moved to
    done/ but its own header still says TODO (premature-move pattern);

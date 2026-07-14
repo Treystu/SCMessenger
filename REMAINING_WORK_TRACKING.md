@@ -1,7 +1,44 @@
 # SCMessenger Remaining Work Tracking
 
 Status: Active
-Last updated: 2026-07-10 (PQC-03 Identity v2 Key Bundle complete, Phase 2 Wave 0 in progress)
+Last updated: 2026-07-13 (Farm delivery-truth fixes + PQC-07 E1 attempt 2 blocked)
+
+## 2026-07-13 FARM V1.0.0 BACKLOG SESSION — A1/A2/E2/E3 done, E1 blocked twice, F1 in-flight
+
+Full report: `HANDOFF/SESSION_HANDOFF_2026-07-13_farm_v1_backlog.md`. Governing
+plan: `HANDOFF/plans/FARM_FINAL_PLAN.md` (new this session, Fable-authored,
+re-ranked the whole backlog around farm delivery-truth and crypto-soundness
+ahead of PQC depth work; resolved iOS as farm-gating).
+
+- **A1 (outbox flush-on-connect) + A2 (receipt round-trip, steps 1-2): DONE.**
+  Both farm-critical delivery-truth bugs. Fusion Lite triangulation (first
+  real use this session) caught and got fixed a genuine message-loss-on-
+  send-failure bug in A1 and a blocked-peer-bypass + DoS gap in A2 before
+  commit. A3 (Android Kotlin retry suppression) is the one remaining piece
+  of the receipt work, still open.
+- **E2 (`force_ratchet` PQ mixing): closed no-change-needed** — sound
+  reasoning, force_ratchet is DH-only by design.
+- **E3 (`PQC_RATCHET_SKIPPED_KEYS_NOT_PERSISTED`): DONE**, with a regression
+  test proving skipped keys survive session persistence, not just "compiles."
+- **E1 (`PQC_07_PQ_SECRET_NEVER_MIXED_INTO_ROOT_KEY`): BLOCKED, second
+  attempt.** Two designed, triangulated redesigns both failed adversarial
+  review for two different root-key-desync failure modes (message reorder,
+  then message loss). Both preserved at `HANDOFF/review/PQC_07_*` with a
+  synthesized spec for what attempt 3 needs to get right. This is the
+  hardest open item in the backlog - genuine protocol design work.
+- **B3 (`--http-bind`/`/health`) + H1 (onion seam-freeze test): DONE.** H1's
+  test surfaced a real (non-blocking) finding, tracked as
+  `ONION_FFI_RPC_SURFACE_UNGATED.md`.
+- **F1 (ledger convergence integration test): written, compiles clean, real
+  run launched but result unconfirmed when the session ended.** File exists
+  uncommitted at `core/tests/integration_ledger_convergence.rs` - verify and
+  commit first in the next session.
+- **B4 (AWS cloud relay): infra fully written and committed
+  (`infra/aws/`) but PAUSED per operator directive** - the credential
+  script was never actually run, no real AWS resources exist. Resume only
+  if the operator re-opens it.
+- Stale `_QUEUE.md` entry corrected: PQC-08 had been done since 07-11 but
+  was still marked IN PROGRESS.
 
 ## 2026-07-10 QWEN/PQC SESSION — PQC-03 Complete, Phase 2 Wave 0 Active
 
