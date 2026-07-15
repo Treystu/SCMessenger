@@ -31,6 +31,7 @@ pub use message::types::{Receipt, encode_receipt, decode_receipt};
 pub use message::MessageType;
 pub use message::codec::decode_envelope;
 pub use store::outbox::RetryPolicy;
+pub use settings::MeshSettings;
 
 // Build provenance information
 pub fn get_build_provenance() -> String {
