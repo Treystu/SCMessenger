@@ -32,6 +32,7 @@ pub use message::MessageType;
 pub use message::codec::decode_envelope;
 pub use store::outbox::RetryPolicy;
 pub use settings::MeshSettings;
+pub use transport::swarm::{SwarmHandle, start_swarm, start_swarm_with_config, SwarmCommand, SwarmEvent2};
 
 // Build provenance information
 pub fn get_build_provenance() -> String {
