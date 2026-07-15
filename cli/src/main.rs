@@ -2878,11 +2878,11 @@ async fn cmd_send_offline(recipient: String, message: String) -> Result<()> {
         recipient_peer_id
     );
 
-    let max_retries = 3;
+    let retry_policy = scmessenger_core::RetryPolicy::default();
     let mut attempts = 0;
     let mut last_error: Option<String> = None;
 
-    while attempts < max_retries {
+    loop {
         attempts += 1;
         match swarm_handle
             .send_message(recipient_peer_id, envelope_bytes.clone(), None, None)
@@ -2894,17 +2894,23 @@ async fn cmd_send_offline(recipient: String, message: String) -> Result<()> {
                     "[OK]".green(),
                     recipient_peer_id,
                     attempts,
-                    max_retries
+                    retry_policy.max_retries
                 );
                 return Ok(());
             }
             Err(e) => {
                 last_error = Some(format!("{}", e));
-                tracing::warn!("Send attempt {}/{} failed: {}", attempts, max_retries, e);
+                tracing::warn!("Send attempt {}/{} failed: {}", attempts, retry_policy.max_retries, e);
 
-                // Exponential backoff: 100ms, 200ms, 400ms
-                let delay_ms = 100u64 << (attempts - 1);
-                tokio::time::sleep(tokio::time::Duration::from_millis(delay_ms)).await;
+                if !retry_policy.can_retry(attempts) {
+                    break;
+                }
+
+                if let Some(delay) = retry_policy.delay_for_attempt(attempts + 1) {
+                    if delay > tokio::time::Duration::ZERO {
+                        tokio::time::sleep(delay).await;
+                    }
+                }
             }
         }
     }

@@ -9,6 +9,7 @@ use crate::store::storage::StorageManager;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
+use std::time::Duration;
 
 /// Maximum messages queued per peer
 const MAX_QUEUE_PER_PEER: usize = 1000;
@@ -488,6 +489,81 @@ impl Outbox {
 impl Default for Outbox {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+/// Retry configuration for message delivery.
+/// 
+/// This is the ONLY place retry policy is defined. All platforms
+/// (CLI, Android, iOS, WASM) use this struct. Changes to backoff
+/// strategy apply everywhere automatically.
+#[derive(Debug, Clone)]
+pub struct RetryPolicy {
+    /// Maximum number of retry attempts (including initial attempt).
+    pub max_retries: u32,
+    /// Initial delay in milliseconds before first retry.
+    pub initial_delay_ms: u64,
+    /// Backoff multiplier (2 = exponential, 1 = fixed).
+    pub backoff_factor: u32,
+}
+
+impl Default for RetryPolicy {
+    fn default() -> Self {
+        Self {
+            max_retries: 3,           // CLI baseline
+            initial_delay_ms: 100,    // CLI baseline
+            backoff_factor: 2,        // exponential: 100ms, 200ms, 400ms
+        }
+    }
+}
+
+impl RetryPolicy {
+    /// Compute the delay before the given attempt (1-indexed).
+    /// 
+    /// Returns None if attempt exceeds max_retries (delivery should be abandoned).
+    pub fn delay_for_attempt(&self, attempt: u32) -> Option<Duration> {
+        if attempt > self.max_retries {
+            return None;
+        }
+        if attempt == 1 {
+            // No delay for initial attempt
+            return Some(Duration::from_millis(0));
+        }
+        // exponential: delay = initial * (backoff ^ (attempt - 2))
+        // attempt 2: delay = initial * 1 = 100ms
+        // attempt 3: delay = initial * 2 = 200ms
+        // attempt 4: delay = initial * 4 = 400ms
+        let power = (attempt - 2) as u32;
+        let multiplier = (self.backoff_factor as u64).saturating_pow(power);
+        let delay_ms = self.initial_delay_ms.saturating_mul(multiplier);
+        Some(Duration::from_millis(delay_ms))
+    }
+
+    /// Whether another retry is possible.
+    pub fn can_retry(&self, attempt: u32) -> bool {
+        attempt < self.max_retries
+    }
+}
+
+#[cfg(test)]
+mod retry_tests {
+    use super::*;
+
+    #[test]
+    fn test_default_retry_delays() {
+        let policy = RetryPolicy::default();
+        assert_eq!(policy.delay_for_attempt(1), Some(Duration::from_millis(0)));
+        assert_eq!(policy.delay_for_attempt(2), Some(Duration::from_millis(100)));
+        assert_eq!(policy.delay_for_attempt(3), Some(Duration::from_millis(200)));
+        assert!(policy.delay_for_attempt(4).is_none()); // exceeds max_retries
+    }
+
+    #[test]
+    fn test_can_retry() {
+        let policy = RetryPolicy::default();
+        assert!(policy.can_retry(1));
+        assert!(policy.can_retry(2));
+        assert!(!policy.can_retry(3)); // 3 is the max
     }
 }
 
