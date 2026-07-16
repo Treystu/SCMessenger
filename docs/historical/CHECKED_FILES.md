@@ -1,368 +1,368 @@
-#  
+# Checked Files
 
- --
+Generated: 2026-02-23
 
-   ****
+Total checked files: **357**
 
- 
--       
--    / -
--  -     
+Status legend:
+- `validated`: reviewed and aligned with canonical docs
+- `followup`: reviewed; needs implementation/docs follow-up
+- `deprecated`: component-level deprecation identified in reviewed content
 
-- . — 
-- . — 
-- . — 
-- . — 
-- . — 
-- . — 
-- . — 
-- . — 
-- . — 
-- . — 
-- . — 
-- . — 
-- . — 
-- . — 
-- . — 
-- . — 
-- . — 
-- . — 
-- . — 
-- . — 
-- . — 
-- . — 
-- . — 
-- . — 
--  — 
-- . — 
-- . — 
-- . — 
-- . — 
-- . — 
-- . — 
-- ./. — 
-- ./-/ — 
-- . — 
-- . — 
-- . — 
-- . — 
-- /. — 
-- /. — 
-- //. — 
-- //-. — 
-- ////. — 
-- ////////. — 
-- /////////. — 
-- /////////. — 
-- /////////. — 
-- /////////. — 
-- /////////. — 
-- /////////. — 
-- /////////. — 
-- /////////. — 
-- /////////. — 
-- /////////. — 
-- /////////. — 
-- /////////. — 
-- /////////. — 
-- //////////. — 
-- //////////. — 
-- //////////. — 
-- //////////. — 
-- //////////. — 
-- /////////. — 
-- /////////. — 
-- //////////. — 
-- //////////. — 
-- //////////. — 
-- //////////. — 
-- //////////. — 
-- //////////. — 
-- //////////. — 
-- //////////. — 
-- //////////. — 
-- //////////. — 
-- //////////. — 
-- //////////. — 
-- //////////. — 
-- //////////. — 
-- //////////. — 
-- //////////. — 
-- //////////. — 
-- //////////. — 
-- //////////. — 
-- //////////. — 
-- //////////. — 
-- //////////. — 
-- //////////. — 
-- //////////. — 
-- //////////. — 
-- //////////. — 
-- //////////. — 
-- //////////. — 
-- //////////. — 
-- //////////. — 
-- //////////. — 
-- /////////. — 
-- /////////. — 
-- /////////. — 
-- /////////. — 
-- /////////. — 
-- //////. — 
-- //////. — 
-- //////. — 
-- //////. — 
-- /////--/. — 
-- /////--/. — 
-- //////. — 
-- //////. — 
-- //////. — 
-- //////. — 
-- ////. — 
-- /////////. — 
-- /////////. — 
-- /////////. — 
-- /////////. — 
-- /////////. — 
-- /////////. — 
-- /////////. — 
-- //////////. — 
-- //////////. — 
-- /. — 
-- /. — 
-- ///-. — 
-- ///-. — 
-- / — 
-- /. — 
-- /--. — 
-- /. — 
-- /. — 
-- //. — 
-- //. — 
-- //. — 
-- //. — 
-- //. — 
-- //. — 
-- //. — 
-- //. — 
-- //. — 
-- . — 
-- /. — 
-- /. — 
-- /. — 
-- //. — 
-- //. — 
-- ///. — 
-- ///. — 
-- //. — 
-- ///. — 
-- ///. — 
-- ///. — 
-- ///. — 
-- ///. — 
-- ///. — 
-- ///. — 
-- ///. — 
-- ///. — 
-- ///. — 
-- ///. — 
-- ///. — 
-- ///. — 
-- ///. — 
-- //. — 
-- ///. — 
-- ///. — 
-- ///. — 
-- ///. — 
-- ///. — 
-- ///. — 
-- ///. — 
-- //. — 
-- ///. — 
-- ///. — 
-- ///. — 
-- ///. — 
-- ///. — 
-- ///. — 
-- ///. — 
-- ///. — 
-- ///. — 
-- ///. — 
-- ///. — 
-- ///. — 
-- ///. — 
-- ///. — 
-- ///. — 
-- ///. — 
-- ///. — 
-- ///. — 
-- ///. — 
-- ///. — 
-- ///. — 
-- ///. — 
-- ///. — 
-- ///. — 
-- ///. — 
-- ///. — 
-- ///. — 
-- ////. — 
-- ////. — 
-- ////. — 
-- ////. — 
-- ////. — 
-- ///. — 
-- ///. — 
-- ///. — 
-- ///. — 
-- ///. — 
-- ///. — 
-- ///. — 
-- ///. — 
-- ///. — 
-- ///. — 
-- ///. — 
-- ///. — 
-- ///. — 
-- ///. — 
-- ///. — 
-- ///. — 
-- //. — 
-- //. — 
-- //. — 
-- //. — 
-- //. — 
-- //. — 
-- //. — 
-- //. — 
-- /. — 
-- -. — 
-- / — 
-- /.- — 
-- /.- — 
-- /.- — 
-- /. — 
-- /. — 
-- /. — 
-- /. — 
-- /--. — 
-- /-.-. — 
-- /-.. — 
-- /-. — 
-- /. — 
-- /--. — 
-- /. — 
-- /--. — 
-- /-. — 
-- /---. — 
-- /-/. — 
-- /-/. — 
-- /-/--. — 
-- /. — 
-- /. — 
-- /. — 
-- /. — 
-- /. — 
-- /. — 
-- /. — 
-- /. — 
-- /. — 
-- /. — 
-- /. — 
-- /. — 
-- /. — 
-- /. — 
-- /. — 
-- /. — 
-- /. — 
-- /. — 
-- /. — 
-- /. — 
-- /. — 
-- /. — 
-- /. — 
-- /. — 
-- /. — 
-- /. — 
-- /. — 
-- /. — 
-- /-. — 
-- /. — 
-- /. — 
-- //./. — 
-- //././. — 
-- //.//.//. — 
-- ///././. — 
-- ///././. — 
-- ///./. — 
-- ///-. — 
-- ///. — 
-- ////. — 
-- ////. — 
-- ////. — 
-- ////. — 
-- ////. — 
-- ///. — 
-- ////. — 
-- ///. — 
-- ////. — 
-- ////. — 
-- ////. — 
-- ////. — 
-- ////. — 
-- ////. — 
-- ////. — 
-- ////. — 
-- ////. — 
-- ////. — 
-- ////. — 
-- ////. — 
-- ////. — 
-- ////. — 
-- ////. — 
-- /////. — 
-- /////. — 
-- /////. — 
-- /////. — 
-- /////. — 
-- /////. — 
-- /./. — 
-- /./-/ — 
-- /. — 
-- /-. — 
-- /-. — 
-- /-. — 
-- /-. — 
-- /. — 
-- /--. — 
-- /-. — 
-- /. — 
-- /. — 
-- /. — 
-- //. — 
-- /. — 
-- /-. — 
-- /. — 
-- /. — 
-- /. — 
-- /. — 
-- /. — 
-- . — 
-- /. — 
-- /. — 
-- /--. — 
-- /. — 
-- /. — 
-- /. — 
-- /. — 
-- . — 
-- /. — 
-- . — 
-- . — 
-- /. — 
-- /. — 
-- //. — 
-- //. — 
-- //. — 
-- //. — 
-- //. — 
-- //. — 
+- `ANDROID_BUILD_RESOLUTION.md — validated`
+- `ANDROID_DISCOVERY_ISSUES.md — validated`
+- `AUDIT_QUICK_REFERENCE.md — validated`
+- `AUDIT_RESOLUTIONS.md — validated`
+- `BOOTSTRAP.md — validated`
+- `BRANCH_AUDIT_REPORT.md — validated`
+- `CLAUDE.md — validated`
+- `CODE_OF_CONDUCT.md — validated`
+- `CONTRIBUTING.md — validated`
+- `Cargo.lock — validated`
+- `Cargo.toml — validated`
+- `DOCKER_QUICKSTART.md — validated`
+- `DOCKER_TEST_QUICKREF.md — validated`
+- `DOCKER_TEST_SETUP_COMPLETE.md — validated`
+- `DOCUMENTATION.md — validated`
+- `DRIFTNET_MESH_BLUEPRINT.md — validated`
+- `FEATURE_PARITY.md — validated`
+- `FEATURE_WORKFLOW.md — validated`
+- `GCP_DEPLOY_GUIDE.md — validated`
+- `GEMINI_UI_GUIDE.md — validated`
+- `HANDOFF_NEARBY_PEERS.md — validated`
+- `INSTALL.md — validated`
+- `INTEGRATION_COMPLETE.md — validated`
+- `INTEGRATION_VERIFICATION.md — validated`
+- `LICENSE — validated`
+- `NAT_REFACTOR_PLAN.md — validated`
+- `NETWORK_TESTING.md — validated`
+- `PRODUCTION_READY.md — validated`
+- `QUICKCONNECT.md — validated`
+- `README.md — validated`
+- `REMAINING_WORK_TRACKING.md — validated`
+- `SCMessengerCore.xcframework/Info.plist — followup`
+- `SCMessengerCore.xcframework/ios-arm64/Headers — followup`
+- `SCMessengerSKILL.md — validated`
+- `SECURITY.md — validated`
+- `SECURITY_AUDIT_NOTES.md — validated`
+- `SOVEREIGN_MESH_PLAN.md — validated`
+- `android/IMPLEMENTATION_STATUS.md — validated`
+- `android/README.md — validated`
+- `android/app/build.gradle — followup`
+- `android/app/proguard-rules.pro — followup`
+- `android/app/src/main/AndroidManifest.xml — followup`
+- `android/app/src/main/java/com/scmessenger/android/MeshApplication.kt — followup`
+- `android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt — followup`
+- `android/app/src/main/java/com/scmessenger/android/data/PreferencesRepository.kt — followup`
+- `android/app/src/main/java/com/scmessenger/android/data/TopicManager.kt — followup`
+- `android/app/src/main/java/com/scmessenger/android/di/AppModule.kt — followup`
+- `android/app/src/main/java/com/scmessenger/android/service/AndroidPlatformBridge.kt — followup`
+- `android/app/src/main/java/com/scmessenger/android/service/BootReceiver.kt — followup`
+- `android/app/src/main/java/com/scmessenger/android/service/MeshEventBus.kt — followup`
+- `android/app/src/main/java/com/scmessenger/android/service/MeshForegroundService.kt — followup`
+- `android/app/src/main/java/com/scmessenger/android/service/MeshVpnService.kt — followup`
+- `android/app/src/main/java/com/scmessenger/android/transport/TransportManager.kt — followup`
+- `android/app/src/main/java/com/scmessenger/android/transport/WifiAwareTransport.kt — followup`
+- `android/app/src/main/java/com/scmessenger/android/transport/WifiDirectTransport.kt — followup`
+- `android/app/src/main/java/com/scmessenger/android/transport/WifiTransportManager.kt — followup`
+- `android/app/src/main/java/com/scmessenger/android/transport/ble/BleAdvertiser.kt — followup`
+- `android/app/src/main/java/com/scmessenger/android/transport/ble/BleGattClient.kt — followup`
+- `android/app/src/main/java/com/scmessenger/android/transport/ble/BleGattServer.kt — followup`
+- `android/app/src/main/java/com/scmessenger/android/transport/ble/BleL2capManager.kt — followup`
+- `android/app/src/main/java/com/scmessenger/android/transport/ble/BleScanner.kt — followup`
+- `android/app/src/main/java/com/scmessenger/android/ui/MainActivity.kt — followup`
+- `android/app/src/main/java/com/scmessenger/android/ui/MeshApp.kt — followup`
+- `android/app/src/main/java/com/scmessenger/android/ui/chat/MessageBubble.kt — followup`
+- `android/app/src/main/java/com/scmessenger/android/ui/chat/MessageInput.kt — followup`
+- `android/app/src/main/java/com/scmessenger/android/ui/components/CopyableText.kt — followup`
+- `android/app/src/main/java/com/scmessenger/android/ui/components/ErrorBanner.kt — followup`
+- `android/app/src/main/java/com/scmessenger/android/ui/components/Identicon.kt — followup`
+- `android/app/src/main/java/com/scmessenger/android/ui/components/StatusIndicator.kt — followup`
+- `android/app/src/main/java/com/scmessenger/android/ui/contacts/AddContactScreen.kt — followup`
+- `android/app/src/main/java/com/scmessenger/android/ui/contacts/ContactDetailScreen.kt — followup`
+- `android/app/src/main/java/com/scmessenger/android/ui/dashboard/PeerListScreen.kt — followup`
+- `android/app/src/main/java/com/scmessenger/android/ui/dashboard/TopologyScreen.kt — followup`
+- `android/app/src/main/java/com/scmessenger/android/ui/identity/IdentityScreen.kt — followup`
+- `android/app/src/main/java/com/scmessenger/android/ui/join/JoinMeshScreen.kt — followup`
+- `android/app/src/main/java/com/scmessenger/android/ui/screens/ChatScreen.kt — followup`
+- `android/app/src/main/java/com/scmessenger/android/ui/screens/ContactsScreen.kt — followup`
+- `android/app/src/main/java/com/scmessenger/android/ui/screens/ConversationsScreen.kt — followup`
+- `android/app/src/main/java/com/scmessenger/android/ui/screens/DashboardScreen.kt — followup`
+- `android/app/src/main/java/com/scmessenger/android/ui/screens/OnboardingScreen.kt — followup`
+- `android/app/src/main/java/com/scmessenger/android/ui/screens/SettingsScreen.kt — followup`
+- `android/app/src/main/java/com/scmessenger/android/ui/settings/MeshSettingsScreen.kt — followup`
+- `android/app/src/main/java/com/scmessenger/android/ui/settings/PowerSettingsScreen.kt — followup`
+- `android/app/src/main/java/com/scmessenger/android/ui/theme/Color.kt — followup`
+- `android/app/src/main/java/com/scmessenger/android/ui/theme/Theme.kt — followup`
+- `android/app/src/main/java/com/scmessenger/android/ui/theme/Type.kt — followup`
+- `android/app/src/main/java/com/scmessenger/android/ui/viewmodels/ChatViewModel.kt — followup`
+- `android/app/src/main/java/com/scmessenger/android/ui/viewmodels/ContactsViewModel.kt — followup`
+- `android/app/src/main/java/com/scmessenger/android/ui/viewmodels/ConversationsViewModel.kt — followup`
+- `android/app/src/main/java/com/scmessenger/android/ui/viewmodels/DashboardViewModel.kt — followup`
+- `android/app/src/main/java/com/scmessenger/android/ui/viewmodels/IdentityViewModel.kt — followup`
+- `android/app/src/main/java/com/scmessenger/android/ui/viewmodels/MainViewModel.kt — followup`
+- `android/app/src/main/java/com/scmessenger/android/ui/viewmodels/MeshServiceViewModel.kt — followup`
+- `android/app/src/main/java/com/scmessenger/android/ui/viewmodels/SettingsViewModel.kt — followup`
+- `android/app/src/main/java/com/scmessenger/android/utils/ContactImportParser.kt — followup`
+- `android/app/src/main/java/com/scmessenger/android/utils/NotificationHelper.kt — followup`
+- `android/app/src/main/java/com/scmessenger/android/utils/Permissions.kt — followup`
+- `android/app/src/main/java/com/scmessenger/android/utils/ShareReceiver.kt — followup`
+- `android/app/src/main/java/com/scmessenger/android/utils/TimestampUtils.kt — followup`
+- `android/app/src/main/res/drawable/ic_launcher_background.xml — followup`
+- `android/app/src/main/res/drawable/ic_launcher_foreground.xml — followup`
+- `android/app/src/main/res/drawable/ic_mesh_node.xml — followup`
+- `android/app/src/main/res/drawable/ic_notification.xml — followup`
+- `android/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml — followup`
+- `android/app/src/main/res/mipmap-anydpi-v26/ic_launcher_round.xml — followup`
+- `android/app/src/main/res/values/strings.xml — followup`
+- `android/app/src/main/res/values/themes.xml — followup`
+- `android/app/src/main/res/xml/backup_rules.xml — followup`
+- `android/app/src/main/res/xml/data_extraction_rules.xml — followup`
+- `android/app/src/test/README.md — validated`
+- `android/app/src/test/java/com/scmessenger/android/test/ChatViewModelTest.kt — followup`
+- `android/app/src/test/java/com/scmessenger/android/test/ContactsViewModelTest.kt — followup`
+- `android/app/src/test/java/com/scmessenger/android/test/MeshForegroundServiceTest.kt — followup`
+- `android/app/src/test/java/com/scmessenger/android/test/MeshRepositoryTest.kt — followup`
+- `android/app/src/test/java/com/scmessenger/android/test/MockTestHelper.kt — followup`
+- `android/app/src/test/java/com/scmessenger/android/test/SettingsViewModelTest.kt — followup`
+- `android/app/src/test/java/com/scmessenger/android/test/UniffiIntegrationTest.kt — followup`
+- `android/app/src/test/java/com/scmessenger/android/ui/viewmodels/ConversationsViewModelTest.kt — followup`
+- `android/app/src/test/java/com/scmessenger/android/ui/viewmodels/MeshServiceViewModelTest.kt — followup`
+- `android/build.gradle — followup`
+- `android/gradle.properties — followup`
+- `android/gradle/wrapper/gradle-wrapper.jar — followup`
+- `android/gradle/wrapper/gradle-wrapper.properties — followup`
+- `android/gradlew — followup`
+- `android/settings.gradle — followup`
+- `android/verify-build-setup.sh — followup`
+- `cli/Cargo.toml — followup`
+- `cli/README.md — validated`
+- `cli/src/api.rs — followup`
+- `cli/src/bootstrap.rs — followup`
+- `cli/src/config.rs — followup`
+- `cli/src/contacts.rs — followup`
+- `cli/src/history.rs — followup`
+- `cli/src/landing.html — followup`
+- `cli/src/ledger.rs — followup`
+- `cli/src/main.rs — followup`
+- `cli/src/server.rs — followup`
+- `cloudbuild.yaml — followup`
+- `core/Cargo.toml — followup`
+- `core/README.md — validated`
+- `core/build.rs — followup`
+- `core/examples/nat_reflection_demo.rs — followup`
+- `core/src/api.udl — followup`
+- `core/src/bin/gen_kotlin.rs — followup`
+- `core/src/bin/gen_swift.rs — followup`
+- `core/src/contacts_bridge.rs — followup`
+- `core/src/crypto/encrypt.rs — followup`
+- `core/src/crypto/mod.rs — followup`
+- `core/src/drift/compress.rs — followup`
+- `core/src/drift/envelope.rs — followup`
+- `core/src/drift/frame.rs — followup`
+- `core/src/drift/mod.rs — followup`
+- `core/src/drift/policy.rs — followup`
+- `core/src/drift/relay.rs — followup`
+- `core/src/drift/sketch.rs — followup`
+- `core/src/drift/store.rs — followup`
+- `core/src/drift/sync.rs — followup`
+- `core/src/identity/keys.rs — followup`
+- `core/src/identity/mod.rs — followup`
+- `core/src/identity/store.rs — followup`
+- `core/src/lib.rs — followup`
+- `core/src/message/codec.rs — followup`
+- `core/src/message/mod.rs — followup`
+- `core/src/message/types.rs — followup`
+- `core/src/mobile/auto_adjust.rs — followup`
+- `core/src/mobile/ios_strategy.rs — followup`
+- `core/src/mobile/mod.rs — followup`
+- `core/src/mobile/service.rs — followup`
+- `core/src/mobile_bridge.rs — followup`
+- `core/src/platform/auto_adjust.rs — followup`
+- `core/src/platform/mod.rs — followup`
+- `core/src/platform/service.rs — followup`
+- `core/src/privacy/circuit.rs — followup`
+- `core/src/privacy/cover.rs — followup`
+- `core/src/privacy/mod.rs — followup`
+- `core/src/privacy/onion.rs — followup`
+- `core/src/privacy/padding.rs — followup`
+- `core/src/privacy/timing.rs — followup`
+- `core/src/relay/bootstrap.rs — followup`
+- `core/src/relay/client.rs — followup`
+- `core/src/relay/findmy.rs — followup`
+- `core/src/relay/invite.rs — followup`
+- `core/src/relay/mod.rs — followup`
+- `core/src/relay/peer_exchange.rs — followup`
+- `core/src/relay/protocol.rs — followup`
+- `core/src/relay/server.rs — followup`
+- `core/src/routing/engine.rs — followup`
+- `core/src/routing/global.rs — followup`
+- `core/src/routing/local.rs — followup`
+- `core/src/routing/mod.rs — followup`
+- `core/src/routing/neighborhood.rs — followup`
+- `core/src/store/inbox.rs — followup`
+- `core/src/store/mod.rs — followup`
+- `core/src/store/outbox.rs — followup`
+- `core/src/transport/abstraction.rs — followup`
+- `core/src/transport/behaviour.rs — followup`
+- `core/src/transport/ble/beacon.rs — followup`
+- `core/src/transport/ble/gatt.rs — followup`
+- `core/src/transport/ble/l2cap.rs — followup`
+- `core/src/transport/ble/mod.rs — followup`
+- `core/src/transport/ble/scanner.rs — followup`
+- `core/src/transport/discovery.rs — followup`
+- `core/src/transport/escalation.rs — followup`
+- `core/src/transport/internet.rs — followup`
+- `core/src/transport/manager.rs — followup`
+- `core/src/transport/mesh_routing.rs — followup`
+- `core/src/transport/mod.rs — followup`
+- `core/src/transport/multiport.rs — followup`
+- `core/src/transport/nat.rs — followup`
+- `core/src/transport/observation.rs — followup`
+- `core/src/transport/reflection.rs — followup`
+- `core/src/transport/swarm.rs — followup`
+- `core/src/transport/wifi_aware.rs — followup`
+- `core/src/wasm_support/mesh.rs — followup`
+- `core/src/wasm_support/mod.rs — followup`
+- `core/src/wasm_support/storage.rs — followup`
+- `core/src/wasm_support/transport.rs — followup`
+- `core/tests/integration_all_phases.rs — followup`
+- `core/tests/integration_e2e.rs — followup`
+- `core/tests/integration_ironcore_roundtrip.rs — followup`
+- `core/tests/integration_nat_reflection.rs — followup`
+- `core/tests/test_address_observation.rs — followup`
+- `core/tests/test_mesh_routing.rs — followup`
+- `core/tests/test_multiport.rs — followup`
+- `core/tests/test_persistence_restart.rs — followup`
+- `core/uniffi.toml — followup`
+- `docker-compose.yml — followup`
+- `docker/Dockerfile — followup`
+- `docker/Dockerfile.android-test — followup`
+- `docker/Dockerfile.rust-test — followup`
+- `docker/Dockerfile.wasm-test — followup`
+- `docker/IMPLEMENTATION_SUMMARY.md — validated`
+- `docker/QUICKSTART.md — validated`
+- `docker/README.md — validated`
+- `docker/TESTING_GUIDE.md — validated`
+- `docker/docker-compose-extended.yml — followup`
+- `docker/docker-compose.network-test.yml — followup`
+- `docker/docker-compose.test.yml — followup`
+- `docker/docker-compose.yml — followup`
+- `docker/entrypoint.sh — followup`
+- `docker/example-custom-test.sh — followup`
+- `docker/manage.sh — followup`
+- `docker/run-all-tests.sh — followup`
+- `docker/run-tests.sh — followup`
+- `docker/setup-android-test-mocks.sh — followup`
+- `docker/test-results/.gitignore — followup`
+- `docker/test-results/README.md — validated`
+- `docker/test-scripts/run-integration-tests.sh — followup`
+- `docs/ARCHITECTURE.md — validated`
+- `docs/CHECKED_FILES.md — validated`
+- `docs/CLI_LINUX.md — validated`
+- `docs/CLI_MACOS.md — validated`
+- `docs/CLI_WINDOWS.md — validated`
+- `docs/CURRENT_STATE.md — validated`
+- `docs/DOC_PASS_TRACKER.md — validated`
+- `docs/GLOBAL_ROLLOUT_PLAN.md — validated`
+- `docs/HIGH_IMPACT_SECTION_ACTIONS.md — validated`
+- `docs/IMPLEMENTATION_PATH_BUCKETS.md — validated`
+- `docs/NAT_TRAVERSAL_GUIDE.md — validated`
+- `docs/NAT_TRAVERSAL_PLAN.md — validated`
+- `docs/NON_MD_FOLLOWUP_CLASSIFICATION.md — validated`
+- `docs/PROTOCOL.md — validated`
+- `docs/REMEDIATION_PLAN.md — validated`
+- `docs/REPO_CONTEXT.md — validated`
+- `docs/STUBS_AND_UNIMPLEMENTED.md — followup`
+- `docs/SWARMBRIDGE_INTEGRATION.md — validated`
+- `docs/TESTING_GUIDE.md — validated`
+- `docs/TRANSPORT_ARCHITECTURE.md — validated`
+- `docs/TRIPLE_CHECK_REPORT.md — validated`
+- `docs/UNCHECKED_FILES.md — validated`
+- `docs/UNIFIED_GLOBAL_APP_PLAN.md — validated`
+- `iOS/COMPLETE_STATUS.md — validated`
+- `iOS/FINAL_STATUS.md — validated`
+- `iOS/IMPLEMENTATION_STATUS.md — validated`
+- `iOS/IMPLEMENTATION_SUMMARY.md — validated`
+- `iOS/PHASE4_IMPLEMENTATION.md — validated`
+- `iOS/PHASES_4-15_GUIDE.md — validated`
+- `iOS/PLAN_REVIEW.md — validated`
+- `iOS/README.md — validated`
+- `iOS/SCMessenger/SCMessenger.xcodeproj/project.pbxproj — followup`
+- `iOS/SCMessenger/SCMessenger.xcodeproj/project.xcworkspace/contents.xcworkspacedata — followup`
+- `iOS/SCMessenger/SCMessenger.xcodeproj/xcuserdata/christymaxwell.xcuserdatad/xcschemes/xcschememanagement.plist — followup`
+- `iOS/SCMessenger/SCMessenger/Assets.xcassets/AccentColor.colorset/Contents.json — followup`
+- `iOS/SCMessenger/SCMessenger/Assets.xcassets/AppIcon.appiconset/Contents.json — followup`
+- `iOS/SCMessenger/SCMessenger/Assets.xcassets/Contents.json — followup`
+- `iOS/SCMessenger/SCMessenger/Bridging-Header.h — followup`
+- `iOS/SCMessenger/SCMessenger/ContentView.swift — followup`
+- `iOS/SCMessenger/SCMessenger/Data/MeshRepository.swift — followup`
+- `iOS/SCMessenger/SCMessenger/Data/TopicManager.swift — followup`
+- `iOS/SCMessenger/SCMessenger/Generated/api.swift — followup`
+- `iOS/SCMessenger/SCMessenger/Generated/apiFFI.h — followup`
+- `iOS/SCMessenger/SCMessenger/Generated/apiFFI.modulemap — followup`
+- `iOS/SCMessenger/SCMessenger/Info.plist — followup`
+- `iOS/SCMessenger/SCMessenger/Models/Models.swift — followup`
+- `iOS/SCMessenger/SCMessenger/SCMessengerApp.swift — followup`
+- `iOS/SCMessenger/SCMessenger/Services/CoreDelegateImpl.swift — followup`
+- `iOS/SCMessenger/SCMessenger/Services/IosPlatformBridge.swift — followup`
+- `iOS/SCMessenger/SCMessenger/Services/MeshBackgroundService.swift — followup`
+- `iOS/SCMessenger/SCMessenger/Services/MeshEventBus.swift — followup`
+- `iOS/SCMessenger/SCMessenger/Services/NotificationManager.swift — followup`
+- `iOS/SCMessenger/SCMessenger/Transport/BLECentralManager.swift — followup`
+- `iOS/SCMessenger/SCMessenger/Transport/BLEL2CAPManager.swift — followup`
+- `iOS/SCMessenger/SCMessenger/Transport/BLEPeripheralManager.swift — followup`
+- `iOS/SCMessenger/SCMessenger/Transport/MeshBLEConstants.swift — followup`
+- `iOS/SCMessenger/SCMessenger/Transport/MultipeerTransport.swift — followup`
+- `iOS/SCMessenger/SCMessenger/Utils/Theme.swift — followup`
+- `iOS/SCMessenger/SCMessenger/ViewModels/ChatViewModel.swift — followup`
+- `iOS/SCMessenger/SCMessenger/ViewModels/ContactsViewModel.swift — followup`
+- `iOS/SCMessenger/SCMessenger/ViewModels/OnboardingViewModel.swift — followup`
+- `iOS/SCMessenger/SCMessenger/ViewModels/SettingsViewModel.swift — followup`
+- `iOS/SCMessenger/SCMessenger/Views/Contacts/ContactsListView.swift — followup`
+- `iOS/SCMessenger/SCMessenger/Views/Dashboard/MeshDashboardView.swift — followup`
+- `iOS/SCMessenger/SCMessenger/Views/Navigation/MainTabView.swift — followup`
+- `iOS/SCMessenger/SCMessenger/Views/Onboarding/OnboardingFlow.swift — followup`
+- `iOS/SCMessenger/SCMessenger/Views/Settings/SettingsView.swift — followup`
+- `iOS/SCMessenger/SCMessenger/Views/Topics/JoinMeshView.swift — followup`
+- `iOS/SCMessengerCore.xcframework/Info.plist — followup`
+- `iOS/SCMessengerCore.xcframework/ios-arm64/Headers — followup`
+- `iOS/XCODE_SETUP.md — validated`
+- `iOS/build-device.sh — followup`
+- `iOS/build-rust.sh — followup`
+- `iOS/copy-bindings.sh — followup`
+- `iOS/install-device.sh — followup`
+- `iOS/iosdesign.md — validated`
+- `iOS/verify-build-setup.sh — followup`
+- `iOS/verify-test.sh — followup`
+- `mobile/Cargo.toml — followup`
+- `mobile/README.md — validated`
+- `mobile/build.rs — followup`
+- `mobile/src/lib.rs — followup`
+- `reference/README.md — validated`
+- `reference/double-ratchet.ts — followup`
+- `reference/envelope.ts — followup`
+- `reference/primitives.ts — followup`
+- `reference/shamir.ts — followup`
+- `reference/storage.ts — followup`
+- `reference/x3dh.ts — followup`
+- `run_comprehensive_network_tests.sh — followup`
+- `scripts/delete_merged_branches.sh — followup`
+- `scripts/deploy_gcp_node.sh — followup`
+- `scripts/get-node-info.sh — followup`
+- `scripts/repo_audit.sh — followup`
+- `scripts/scm.sh — followup`
+- `scripts/test_gcp_node.sh — followup`
+- `scripts/verify_branch_merges.sh — followup`
+- `test_network_scenarios.sh — followup`
+- `ui/index.html — followup`
+- `verify_integration.sh — followup`
+- `verify_simulation.sh — followup`
+- `wasm/Cargo.toml — followup`
+- `wasm/README.md — validated`
+- `wasm/src/connection_state.rs — followup`
+- `wasm/src/lib.rs — followup`
+- `wasm/src/mesh.rs — followup`
+- `wasm/src/storage.rs — followup`
+- `wasm/src/transport.rs — followup`
+- `wasm/src/worker.rs — followup`

@@ -12,8 +12,14 @@ pub mod error;
 pub mod identity;
 pub mod iron_core;
 pub mod message;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod blocked_bridge;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod contacts_bridge;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod mobile_bridge;
 pub mod notification;
+pub mod notification_defaults;
 pub mod observability;
 pub mod privacy;
 pub mod relay;
@@ -24,15 +30,106 @@ pub mod transport;
 pub mod wasm_support;
 
 // Re-export critical types from core modules
-pub use iron_core::IronCore;
+pub use iron_core::{IronCore, CoreDelegate};
 pub use error::MeshError;
-pub type IronCoreError = MeshError;
+
+// IronCoreError — defined in Rust rather than generated from UDL
+// because the UDL-based scaffolding requires interface types to have
+// matching Rust implementations (which are wired in Phase 1B).
+#[derive(Debug, thiserror::Error, serde::Serialize, serde::Deserialize)]
+pub enum IronCoreError {
+    #[error("Identity not initialized")]
+    NotInitialized,
+    #[error("Service already running")]
+    AlreadyRunning,
+    #[error("Storage error")]
+    StorageError,
+    #[error("Cryptographic error")]
+    CryptoError,
+    #[error("Network error")]
+    NetworkError,
+    #[error("Invalid input")]
+    InvalidInput,
+    #[error("Peer is blocked")]
+    Blocked,
+    #[error("Consent required")]
+    ConsentRequired,
+    #[error("Internal error")]
+    Internal,
+    #[error("Data corruption detected")]
+    CorruptionDetected,
+}
+
+pub use crypto::{decrypt_message, encrypt_message};
+pub use error::{
+    MeshResult, SerializationError, SerializationResult, TransportError, TransportResult,
+};
+pub use identity::IdentityManager;
+pub use message::{DeliveryStatus, Envelope, Message, TtlConfig};
 pub use message::types::{Receipt, encode_receipt, decode_receipt};
 pub use message::MessageType;
 pub use message::codec::decode_envelope;
 pub use store::outbox::RetryPolicy;
-pub use settings::MeshSettings;
-pub use transport::swarm::{SwarmHandle, start_swarm, start_swarm_with_config, SwarmCommand, SwarmEvent2};
+pub use settings::{DiscoveryMode, MeshSettings};
+pub use transport::{SwarmHandle, start_swarm, start_swarm_with_config, SwarmCommand, SwarmEvent};
+pub use observability::{AuditEvent, AuditEventType};
+pub use notification::{
+    classify_notification as classify_notification_policy, NotificationDecision,
+    NotificationEndpoint, NotificationEndpointCapabilities, NotificationEndpointError,
+    NotificationEndpointRegistry, NotificationKind, NotificationMessageContext,
+    NotificationPlatform, NotificationUiState,
+};
+
+// Mobile bridge exports for UniFFI
+#[cfg(not(target_arch = "wasm32"))]
+pub use blocked_bridge::{
+    blocked_identity_new, blocked_identity_with_device_id, blocked_identity_with_notes,
+    blocked_identity_with_reason, BlockedIdentity, BlockedManager,
+};
+#[cfg(not(target_arch = "wasm32"))]
+pub use contacts_bridge::{Contact, ContactManager};
+#[cfg(not(target_arch = "wasm32"))]
+pub use mobile_bridge::*;
+
+#[derive(Default)]
+pub struct IdentityInfo {
+    pub identity_id: Option<String>,
+    pub public_key_hex: Option<String>,
+    pub device_id: Option<String>,
+    pub seniority_timestamp: Option<u64>,
+    pub initialized: bool,
+    pub nickname: Option<String>,
+    pub libp2p_peer_id: Option<String>,
+}
+
+pub struct SignatureResult {
+    pub signature: Vec<u8>,
+    pub public_key_hex: String,
+}
+
+pub struct PreparedMessage {
+    pub message_id: String,
+    pub envelope_data: Vec<u8>,
+}
+
+pub struct PeelResult {
+    pub next_hop: Option<Vec<u8>>,
+    pub remaining_data: Vec<u8>,
+}
+
+pub struct MessageRequest {
+    pub peer_id: String,
+    pub nickname: Option<String>,
+    pub message_preview: String,
+    pub message_timestamp: u64,
+    pub message_count: u32,
+}
+
+pub struct RegistrationStateInfo {
+    pub state: String,
+    pub device_id: Option<String>,
+    pub seniority_timestamp: Option<u64>,
+}
 
 // Build provenance information
 pub fn get_build_provenance() -> String {
@@ -129,12 +226,9 @@ pub mod retry_policy {
     }
 }
 
-// UniFFI support - ensure UniFfiTag is available for all UniFFI macros
-pub struct UniFfiTag;
-
 // Re-export for convenience in modules using UniFFI
 pub use uniffi::deps::anyhow;
 
-// Include UniFFI scaffolding if the gen-bindings feature is enabled
-#[cfg(feature = "gen-bindings")]
-uniffi::include_scaffolding!("scmessenger");
+// Include UniFFI scaffolding
+#[cfg(not(target_arch = "wasm32"))]
+uniffi::include_scaffolding!("api");
