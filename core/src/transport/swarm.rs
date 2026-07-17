@@ -2647,58 +2647,32 @@ pub async fn start_swarm_with_config(
                             )) => {
                                 match message {
                                     request_response::Message::Request { request, channel, .. } => {
-                                        // RELAY PEER DISCOVERY: Check if this is a peer discovery message
-                                        if let Ok(relay_msg) = crate::relay::protocol::RelayMessage::from_bytes(&request.envelope_data) {
-                                            match relay_msg {
-                                                crate::relay::protocol::RelayMessage::PeerJoined { peer_info } => {
-                                                    tracing::info!("Received PeerJoined: {} with {} addresses", peer_info.peer_id, peer_info.addresses.len());
-                                                    for addr_str in &peer_info.addresses {
-                                                        if let Ok(addr) = addr_str.parse::<Multiaddr>() {
-                                                            if is_discoverable_multiaddr(&addr) {
-                                                                tracing::debug!("  Dialing announced peer at {}", addr);
-                                                                let _ = swarm.dial(addr);
-                                                            }
-                                                        }
-                                                    }
-                                                    let _ = swarm.behaviour_mut().messaging.send_response(
-                                                        channel,
-                                                        Libp2pMessageResponse { accepted: true, error: None },
-                                                    );
-                                                    continue;
-                                                }
-                                                crate::relay::protocol::RelayMessage::PeerListResponse { peers } => {
-                                                    tracing::info!("Received peer list: {} peers", peers.len());
-                                                    for peer_info in peers {
-                                                        tracing::debug!("  Peer: {} ({} addresses)", peer_info.peer_id, peer_info.addresses.len());
-                                                        for addr_str in &peer_info.addresses {
-                                                            if let Ok(addr) = addr_str.parse::<Multiaddr>() {
-                                                                if is_discoverable_multiaddr(&addr) {
-                                                                    let _ = swarm.dial(addr);
-                                                                }
-                                                            }
-                                                        }
-                                                    }
-                                                    let _ = swarm.behaviour_mut().messaging.send_response(
-                                                        channel,
-                                                        Libp2pMessageResponse { accepted: true, error: None },
-                                                    );
-                                                    continue;
-                                                }
-                                                crate::relay::protocol::RelayMessage::PeerLeft { peer_id } => {
-                                                    tracing::info!("Peer left: {}", peer_id);
-                                                    let _ = swarm.behaviour_mut().messaging.send_response(
-                                                        channel,
-                                                        Libp2pMessageResponse { accepted: true, error: None },
-                                                    );
-                                                    continue;
-                                                }
-                                                _ => {
-                                                    // Other relay messages, fall through to normal handling
-                                                }
-                                            }
+                                        // Block enforcement FIRST (before any parse or dial): a blocked
+                                        // peer must not be able to drive relay-discovery dialing. This
+                                        // check previously ran after the relay-discovery branch; keeping
+                                        // it here closes that bypass (adversarial review 2026-07-17 F3).
+                                        let sender_blocked = if let Some(core_handle) = core_handle.as_ref().and_then(|w| w.upgrade()) {
+                                            // Libp2pMessageRequest doesn't have device_id, only RelayRequest does.
+                                            // For direct messaging, we check the peer-level block.
+                                            core_handle.is_peer_blocked(peer.to_string(), None).unwrap_or(false)
+                                        } else {
+                                            false
+                                        };
+                                        if sender_blocked {
+                                            tracing::warn!("Blocked peer {} attempted to send message", peer);
+                                            let _ = swarm.behaviour_mut().messaging.send_response(
+                                                channel,
+                                                Libp2pMessageResponse { accepted: false, error: Some("blocked".to_string()) },
+                                            );
+                                            continue;
                                         }
 
-                                        // Check if this is a DriftFrame and unwrap the payload
+                                        // Unwrap DriftFrame FIRST: relay peer-discovery messages
+                                        // (PeerJoined/PeerListResponse/PeerLeft) arrive DriftFrame-wrapped
+                                        // like all /sc/message traffic. Probing RelayMessage on the raw
+                                        // wrapped bytes never matches, so they fell through to envelope
+                                        // decode and failed with "unexpected end of file" (farm-sim
+                                        // root cause, HERMES_FARM_AUDIT 2026-07-16).
                                         let envelope_payload = match DriftFrame::from_bytes(&request.envelope_data) {
                                             Ok(frame) => {
                                                 tracing::debug!(
@@ -2722,22 +2696,75 @@ pub async fn start_swarm_with_config(
                                             }
                                         };
 
-                                        // Check if sender is blocked before processing message
-                                        let sender_blocked = if let Some(core_handle) = core_handle.as_ref().and_then(|w| w.upgrade()) {
-                                            // Libp2pMessageRequest doesn't have device_id, only RelayRequest does.
-                                            // For direct messaging, we check the peer-level block.
-                                            core_handle.is_peer_blocked(peer.to_string(), None).unwrap_or(false)
-                                        } else {
-                                            false
-                                        };
-
-                                        if sender_blocked {
-                                            tracing::warn!("Blocked peer {} attempted to send message", peer);
-                                            let _ = swarm.behaviour_mut().messaging.send_response(
-                                                channel,
-                                                Libp2pMessageResponse { accepted: false, error: Some("blocked".to_string()) },
-                                            );
-                                            continue;
+                                        // RELAY PEER DISCOVERY: relay control messages are small. Only
+                                        // probe payloads under RELAY_CONTROL_MAX_BYTES so a 4 MiB raw
+                                        // payload can't drive a giant bincode alloc + dial storm on the
+                                        // shared event loop (adversarial review 2026-07-17 F1/F2/F4).
+                                        const RELAY_CONTROL_MAX_BYTES: usize = 64 * 1024;
+                                        const MAX_DISCOVERY_DIALS: usize = 32;
+                                        if envelope_payload.len() <= RELAY_CONTROL_MAX_BYTES {
+                                        if let Ok(relay_msg) = crate::relay::protocol::RelayMessage::from_bytes(&envelope_payload) {
+                                            match relay_msg {
+                                                crate::relay::protocol::RelayMessage::PeerJoined { peer_info } => {
+                                                    tracing::info!("Received PeerJoined: {} with {} addresses", peer_info.peer_id, peer_info.addresses.len());
+                                                    let mut dialed = 0usize;
+                                                    for addr_str in peer_info.addresses.iter().take(MAX_DISCOVERY_DIALS) {
+                                                        if let Ok(addr) = addr_str.parse::<Multiaddr>() {
+                                                            if is_discoverable_multiaddr(&addr) {
+                                                                tracing::debug!("  Dialing announced peer at {}", addr);
+                                                                let _ = swarm.dial(addr);
+                                                                dialed += 1;
+                                                            }
+                                                        }
+                                                    }
+                                                    if peer_info.addresses.len() > MAX_DISCOVERY_DIALS {
+                                                        tracing::debug!("  Capped PeerJoined dials at {} (had {})", dialed, peer_info.addresses.len());
+                                                    }
+                                                    let _ = swarm.behaviour_mut().messaging.send_response(
+                                                        channel,
+                                                        Libp2pMessageResponse { accepted: true, error: None },
+                                                    );
+                                                    continue;
+                                                }
+                                                crate::relay::protocol::RelayMessage::PeerListResponse { peers } => {
+                                                    tracing::info!("Received peer list: {} peers", peers.len());
+                                                    // Cap TOTAL dials across all peers, not per-peer, so a
+                                                    // large peer list cannot amplify into thousands of dials.
+                                                    let mut dialed = 0usize;
+                                                    'outer: for peer_info in peers {
+                                                        tracing::debug!("  Peer: {} ({} addresses)", peer_info.peer_id, peer_info.addresses.len());
+                                                        for addr_str in &peer_info.addresses {
+                                                            if dialed >= MAX_DISCOVERY_DIALS {
+                                                                tracing::debug!("  Capped PeerListResponse dials at {}", MAX_DISCOVERY_DIALS);
+                                                                break 'outer;
+                                                            }
+                                                            if let Ok(addr) = addr_str.parse::<Multiaddr>() {
+                                                                if is_discoverable_multiaddr(&addr) {
+                                                                    let _ = swarm.dial(addr);
+                                                                    dialed += 1;
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                    let _ = swarm.behaviour_mut().messaging.send_response(
+                                                        channel,
+                                                        Libp2pMessageResponse { accepted: true, error: None },
+                                                    );
+                                                    continue;
+                                                }
+                                                crate::relay::protocol::RelayMessage::PeerLeft { peer_id } => {
+                                                    tracing::info!("Peer left: {}", peer_id);
+                                                    let _ = swarm.behaviour_mut().messaging.send_response(
+                                                        channel,
+                                                        Libp2pMessageResponse { accepted: true, error: None },
+                                                    );
+                                                    continue;
+                                                }
+                                                _ => {
+                                                    // Other relay messages, fall through to normal handling
+                                                }
+                                            }
+                                        }
                                         }
 
                                         // Received a message from a peer

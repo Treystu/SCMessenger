@@ -394,8 +394,23 @@ impl IronCoreBehaviour {
                 .with_timeout(Duration::from_secs(20)),
         );
 
+        // In libp2p 0.56 the request/response size ceiling lives on the cbor
+        // Codec (default 1 MiB request / 10 MiB response), not on Config.
+        // DriftFrame-wrapped envelopes plus custody batches can exceed the
+        // request default, which surfaces as truncated frames and
+        // "Failed to decode envelope: unexpected end of file" on the receiver
+        // (farm-sim root cause family, HERMES_FARM_AUDIT 2026-07-16).
+        const MAX_REQUEST_SIZE: u64 = 4 * 1024 * 1024; // 4 MiB
+        const MAX_RESPONSE_SIZE: u64 = 16 * 1024 * 1024; // 16 MiB
+        fn sized_codec<Req, Resp>() -> request_response::cbor::codec::Codec<Req, Resp> {
+            request_response::cbor::codec::Codec::default()
+                .set_request_size_maximum(MAX_REQUEST_SIZE)
+                .set_response_size_maximum(MAX_RESPONSE_SIZE)
+        }
+
         // Request-response for direct messaging
-        let messaging = request_response::cbor::Behaviour::new(
+        let messaging = request_response::Behaviour::with_codec(
+            sized_codec(),
             [(
                 StreamProtocol::new("/sc/message/1.0.0"),
                 ProtocolSupport::Full,
@@ -403,7 +418,10 @@ impl IronCoreBehaviour {
             request_response::Config::default().with_request_timeout(Duration::from_secs(30)),
         );
 
-        // Request-response for address reflection (sovereign NAT discovery)
+        // Request-response for address reflection (sovereign NAT discovery).
+        // Payloads are tiny fixed structs; keep the codec at library defaults
+        // (1 MiB/10 MiB) rather than raising attack surface (adversarial
+        // review 2026-07-17 F5).
         let address_reflection = request_response::cbor::Behaviour::new(
             [(
                 StreamProtocol::new("/sc/address-reflection/1.0.0"),
@@ -414,7 +432,8 @@ impl IronCoreBehaviour {
 
         // Request-response for relay (mesh routing - Phase 3)
         // All nodes are mandatory relays - always Full support
-        let relay = request_response::cbor::Behaviour::new(
+        let relay = request_response::Behaviour::with_codec(
+            sized_codec(),
             [(
                 StreamProtocol::new("/sc/relay/1.0.0"),
                 ProtocolSupport::Full,
@@ -422,6 +441,7 @@ impl IronCoreBehaviour {
             request_response::Config::default().with_request_timeout(Duration::from_secs(60)), // Generous timeout for relay
         );
 
+        // Registration payloads are small fixed structs; keep library defaults.
         let registration = request_response::cbor::Behaviour::new(
             [(
                 StreamProtocol::new("/sc/registration/1.0.0"),
@@ -433,7 +453,8 @@ impl IronCoreBehaviour {
         // Ledger exchange — automatic peer list sharing
         // When two peers connect, they exchange their known peer lists.
         // This dramatically accelerates mesh discovery.
-        let ledger_exchange = request_response::cbor::Behaviour::new(
+        let ledger_exchange = request_response::Behaviour::with_codec(
+            sized_codec(),
             [(
                 StreamProtocol::new("/sc/ledger-exchange/1.0.0"),
                 ProtocolSupport::Full,

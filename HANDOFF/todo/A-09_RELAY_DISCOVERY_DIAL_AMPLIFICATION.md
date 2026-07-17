@@ -1,0 +1,53 @@
+# A-09: Relay-discovery dial amplification + unauthenticated peer injection
+
+Status: OPEN -- HIGH (DoS) -- pre-existing, partially mitigated 2026-07-17
+Tier: THINK (design) -> CODER (impl)
+Review: crypto-security-auditor MANDATORY (touches core/src/transport/, routing)
+Source: adversarial review of the Hermes transport port (2026-07-17), findings 1, 2, 4, 7
+
+## Problem
+
+The `/sc/message` request handler acts on unauthenticated `RelayMessage`
+peer-discovery payloads (`PeerJoined`/`PeerListResponse`) by dialing every
+attacker-supplied address. `is_discoverable_multiaddr` accepts any public IP.
+DriftFrame's CRC32 is not authentication -- any peer can forge a frame whose
+payload deserializes as a relay-discovery message. Two DoS vectors:
+
+1. **Dial amplification / address poisoning** (HIGH): one request induces our
+   node to dial arbitrary third-party hosts -- reflected connection flood plus
+   exhaustion of our own pending-connection / FD budget. No
+   `libp2p::connection_limits::Behaviour` is installed anywhere in
+   `IronCoreBehaviour`.
+2. **Synchronous event-loop stall** (HIGH): the parse+dial loop runs inline in
+   the single swarm `tokio::select!` loop that serves all peers/protocols; a
+   large list head-of-line-blocks everything.
+
+## Mitigation already applied (2026-07-17, commit porting Hermes fixes)
+
+- Relay probe only runs on payloads <= 64 KiB (`RELAY_CONTROL_MAX_BYTES`).
+- Total dials per message capped at 32 (`MAX_DISCOVERY_DIALS`), counted across
+  the whole peer list, not per-peer.
+- Blocked-sender check moved to the top of the Request arm (a blocked peer can
+  no longer drive discovery dialing).
+
+These bound the blast radius but do not close the class.
+
+## Remaining work (this ticket)
+
+1. Install `libp2p::connection_limits::Behaviour` with a max-pending-outbound
+   ceiling in `IronCoreBehaviour` (`core/src/transport/behaviour.rs`).
+2. Authenticate relay-discovery: only act on `PeerJoined`/`PeerListResponse`
+   from peers that completed the relay handshake / carry a verifiable signature,
+   rather than any peer on `/sc/message`.
+3. Dedup dial targets against already-known/already-dialed peers before dialing.
+4. Add an explicit input-size guard inside `RelayMessage::from_bytes`
+   (`core/src/relay/protocol.rs`) independent of the transport ceiling.
+5. Consider moving discovery dialing off the hot event-loop into a bounded
+   queue drained across iterations.
+
+## Acceptance
+
+- Hostile `PeerListResponse` with 10k addresses results in <= cap dials, no
+  event-loop stall (add an integration/property test in
+  `core/tests/`), and unauthenticated relay-discovery is rejected.
+- crypto-security-auditor PASS.
