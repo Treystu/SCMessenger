@@ -1,5 +1,12 @@
-# 🌊 SCMessenger Unified Lake Orchestrator 
-> **LAKE CONTRACT ACTIVATED:** See `docs/ORCHESTRATION.md` for the single source of truth on the delegation loop, model fleet, and commands. This applies uniformly to Claude, Gemini, Qwen, and Codex agents in rotation.
+---
+name: scmqwen
+description: >-
+  SCMessenger Qwen Orchestrator -- DashScope/Alibaba Qwen models, zero Anthropic
+  cost
+metadata:
+  user-invocable: true
+  disable-model-invocation: true
+---
 
 SCMessenger Qwen Orchestrator -- DashScope/Alibaba Qwen models, zero Anthropic cost
 

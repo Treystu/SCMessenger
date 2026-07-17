@@ -87,14 +87,31 @@ impl Outbox {
 
     /// Open or create the default persistent outbox for the given data directory.
     /// Returns Arc<tokio::sync::Mutex<Self>> matching CLI usage pattern.
+    /// 
+    /// This is the single source of truth for outbox initialization across the CLI.
+    /// It creates a persistent outbox using Sled storage, falling back to in-memory
+    /// if the persistent storage fails to initialize.
+    /// 
+    /// # Arguments
+    /// * `data_dir` - Path to the application's data directory
+    /// 
+    /// # Returns
+    /// * `Ok(Arc<tokio::sync::Mutex<Self>>)` on success
+    /// * `Err(String)` on failure to initialize either storage option
     pub fn open_default(data_dir: &std::path::Path) -> std::result::Result<Arc<tokio::sync::Mutex<Self>>, String> {
         let outbox_path = data_dir.join("outbox");
-        let outbox_path_str = outbox_path.to_str().unwrap_or("outbox").to_string();
-        match crate::store::backend::SledStorage::new(&outbox_path_str) {
-            Ok(backend) => Ok(Arc::new(tokio::sync::Mutex::new(Self::persistent(Arc::new(backend))))),
+        
+        // Try to create persistent outbox first
+        match crate::store::backend::SledStorage::new(outbox_path.to_str().ok_or_else(|| "Invalid UTF-8 path".to_string())?) {
+            Ok(backend) => {
+                let outbox = Self::persistent(Arc::new(backend));
+                Ok(Arc::new(tokio::sync::Mutex::new(outbox)))
+            }
             Err(e) => {
-                tracing::warn!("Failed to open persistent outbox, falling back to in-memory: {}", e);
-                Ok(Arc::new(tokio::sync::Mutex::new(Self::new())))
+                tracing::warn!("Failed to open persistent outbox: {}", e);
+                tracing::info!("Falling back to in-memory outbox");
+                let outbox = Self::new();
+                Ok(Arc::new(tokio::sync::Mutex::new(outbox)))
             }
         }
     }

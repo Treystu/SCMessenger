@@ -1,5 +1,12 @@
-# 🌊 SCMessenger Unified Lake Orchestrator 
-> **LAKE CONTRACT ACTIVATED:** See `docs/ORCHESTRATION.md` for the single source of truth on the delegation loop, model fleet, and commands. This applies uniformly to Claude, Gemini, Qwen, and Codex agents in rotation.
+---
+name: gemini-orchestrator
+description: >-
+  # Gemini 3.5 Flash Orchestrator — Foreign-worker coordination for backlog
+  continuity
+metadata:
+  user-invocable: true
+  disable-model-invocation: true
+---
 
 # Gemini 3.5 Flash Orchestrator — Foreign-worker coordination for backlog continuity
 

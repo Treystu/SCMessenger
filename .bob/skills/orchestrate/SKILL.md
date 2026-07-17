@@ -1,5 +1,12 @@
-# 🌊 SCMessenger Unified Lake Orchestrator 
-> **LAKE CONTRACT ACTIVATED:** See `docs/ORCHESTRATION.md` for the single source of truth on the delegation loop, model fleet, and commands. This applies uniformly to Claude, Gemini, Qwen, and Codex agents in rotation.
+---
+name: orchestrate
+description: >-
+  SCMessenger Swarm Orchestrator — delegate work to the agent pool via ollama
+  cloud models
+metadata:
+  user-invocable: true
+  disable-model-invocation: true
+---
 
 SCMessenger Swarm Orchestrator — delegate work to the agent pool via ollama cloud models
 

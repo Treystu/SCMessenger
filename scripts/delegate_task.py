@@ -11,6 +11,14 @@ QWEN_URL = "https://ws-2vzz894jwsk3t27r.ap-southeast-1.maas.aliyuncs.com/compati
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 OLLAMA_URL = "http://localhost:11434/api/chat"
 GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
+GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"
+
+# Groq per-minute token limit (free tier). Prompts near this are micro-chunked
+# by the orchestrator before dispatch; this constant is used by lake_route.py.
+# Groq free-tier per-minute token limit (confirmed 2026-07-17 probe: 6000 TPM)
+GROQ_TPM_LIMIT = 6000
+# Safe per-dispatch ceiling for Groq (leaves ~100 token headroom for output)
+GROQ_PROMPT_TOKEN_CEILING = 5900
 
 
 
@@ -140,6 +148,11 @@ def get_api_key(provider):
         return (os.environ.get("GROQ_API_KEY")
                 or _key_from_env_file("~/.config/scmorc/groq.env",
                                       ("GROQ_API_KEY",)))
+    elif provider == "gemini":
+        return (os.environ.get("GEMINI_API_KEY")
+                or os.environ.get("GOOGLE_API_KEY")
+                or _key_from_env_file("~/.config/scmorc/gemini.env",
+                                      ("GEMINI_API_KEY", "GOOGLE_API_KEY")))
     return None
 
 def extract_file_blocks(content, allowed_files=None):
@@ -232,7 +245,16 @@ def send_request(args, prompt, resolved_model, display_model, round_num=None):
             {"role": "system", "content": system_message},
             {"role": "user", "content": prompt}
         ]
-        req_url = {"qwen": QWEN_URL, "openrouter": OPENROUTER_URL, "groq": GROQ_URL}[args.provider]
+        _url_map = {
+            "qwen": QWEN_URL,
+            "openrouter": OPENROUTER_URL,
+            "groq": GROQ_URL,
+            "gemini": GEMINI_URL,
+        }
+        if args.provider not in _url_map:
+            print(f"Error: unknown provider '{args.provider}'.")
+            sys.exit(1)
+        req_url = _url_map[args.provider]
         api_key = get_api_key(args.provider)
         if not api_key:
             print(f"Error: API key for {args.provider} is not set.")
@@ -373,7 +395,7 @@ def apply_diff_blocks(diff_blocks, task_base_name, round_num, allowed_files):
 def main():
     parser = argparse.ArgumentParser(description="Universal Swarm Delegate Script")
     parser.add_argument("--task", required=True, help="Task markdown file path (e.g., HANDOFF/todo/PQC_07_PQ_RATCHET.md)")
-    parser.add_argument("--provider", choices=["qwen", "openrouter", "ollama", "groq"], required=True, help="API provider to use")
+    parser.add_argument("--provider", choices=["qwen", "openrouter", "ollama", "groq", "gemini"], required=True, help="API provider to use")
     parser.add_argument("--model", help="Model name override (e.g., qwen-max, anthropic/claude-3.5-sonnet, llama3)")
     parser.add_argument("--tier", choices=["thinking", "max", "standard", "plus", "flash"],
                         help="Qwen tier for auto model selection: thinking > max > standard > plus > flash")
@@ -383,13 +405,17 @@ def main():
     parser.add_argument("--verify", type=str, help='Verification command to run after applying changes (e.g., "cargo check -p scmessenger-core")')
     parser.add_argument("--max-rounds", type=int, default=3, help="Maximum number of model calls including the first one (default: 3)")
     parser.add_argument("--mode", choices=["full", "diff"], default="full", help="Output mode: full files or unified diffs (default: full)")
+    parser.add_argument("--max-chunk-tokens", type=int, default=None, help="If prompt exceeds this, split source files across multiple requests. Default: 5900 for Groq, else None.")
 
     args = parser.parse_args()
 
-    # Default model fallback for Groq if none specified
+    # Default model fallbacks
     if args.provider == "groq" and not args.model:
         args.model = "llama-3.3-70b-versatile"  # 128k context, 32k output
         print(f"[INFO] No model specified for Groq, defaulting to {args.model}")
+    elif args.provider == "gemini" and not args.model:
+        args.model = "gemini-2.5-flash"  # large context, balanced cost
+        print(f"[INFO] No model specified for Gemini, defaulting to {args.model}")
 
     if args.verify and not args.apply:
         print("Warning: --verify is only meaningful with --apply; ignoring --verify.")
@@ -402,7 +428,7 @@ def main():
         task_content = f.read()
 
     if args.mode == "full":
-        prompt = f"""
+        base_prompt = f"""
 You are a senior Rust systems engineer and cryptographer. Your task is to implement the following:
 
 ### Requirements:
@@ -413,7 +439,7 @@ The exact filename must be the first line inside the code block (e.g., `// core/
 DO NOT output partial files, snippets, or diffs. Output the ENTIRE file content. Preserve all existing logic unless it contradicts the requirements.
 """
     else:  # diff mode
-        prompt = f"""
+        base_prompt = f"""
 You are a senior Rust systems engineer and cryptographer. Your task is to implement the following:
 
 ### Requirements:
@@ -422,42 +448,75 @@ You are a senior Rust systems engineer and cryptographer. Your task is to implem
 Return your changes as unified diffs, one fenced ```diff block per file, using standard `--- a/<path>` and `+++ b/<path>` headers with 3 lines of context. Do NOT return full files. For a NEW file, use `--- /dev/null` and `+++ b/<path>`.
 """
 
-    if args.files:
-        prompt += "\n\n### Current Relevant File Contents:\n"
+    def estimate_tokens(text):
+        return int(len(text.split()) * 1.5) + 50
+
+    if args.max_chunk_tokens is None and args.provider == "groq":
+        args.max_chunk_tokens = GROQ_PROMPT_TOKEN_CEILING
+
+    file_chunks = []
+    if args.max_chunk_tokens and args.files:
+        current_chunk = []
+        current_tokens = estimate_tokens(base_prompt)
         for filepath in args.files:
             try:
                 with open(filepath, "r", encoding="utf-8") as f:
-                    prompt += f"\n--- {filepath} ---\n```rust\n{f.read()}\n```\n"
+                    file_text = f"\n--- {filepath} ---\n```rust\n{f.read()}\n```\n"
+                    file_tokens = estimate_tokens(file_text)
+                    if current_tokens + file_tokens > args.max_chunk_tokens and current_chunk:
+                        file_chunks.append(current_chunk)
+                        current_chunk = [filepath]
+                        current_tokens = estimate_tokens(base_prompt) + file_tokens
+                    else:
+                        current_chunk.append(filepath)
+                        current_tokens += file_tokens
             except Exception as e:
-                print(f"Warning: Could not read {filepath}: {e}")
+                pass
+        if current_chunk:
+            file_chunks.append(current_chunk)
+    else:
+        file_chunks = [args.files]
 
     # Resolve model
     if args.provider == "qwen" and not args.tier and not args.model:
         resolved_model = get_next_qwen_model()
     elif args.provider == "qwen":
         if args.tier:
-            # Simple placeholder for tier mapping
             resolved_model = f"qwen-{args.tier}"
         else:
             resolved_model = args.model
     else:
         if not args.model:
-            # Groq already has default set above; other providers need explicit
             print(f"Error: --model is required for provider '{args.provider}'.")
             sys.exit(1)
         resolved_model = args.model
 
     display_model = resolved_model
-    print(f"Dispatching task {os.path.basename(args.task)} to {args.provider} ({display_model})...")
+    print(f"Dispatching task {os.path.basename(args.task)} to {args.provider} ({display_model}) in {len(file_chunks)} chunk(s)...")
 
-    content, response_file = send_request(args, prompt, resolved_model, display_model)
-    # Handle rotation on 429
-    if content is None:
-        resolved_model = get_next_qwen_model()
-        print(f"Retrying with rotated model {resolved_model}...")
-        content, response_file = send_request(args, prompt, resolved_model, resolved_model)
+    all_content = ""
+    for idx, chunk_files in enumerate(file_chunks):
+        prompt = base_prompt
+        if chunk_files:
+            prompt += "\n\n### Current Relevant File Contents:\n"
+            for filepath in chunk_files:
+                try:
+                    with open(filepath, "r", encoding="utf-8") as f:
+                        prompt += f"\n--- {filepath} ---\n```rust\n{f.read()}\n```\n"
+                except Exception as e:
+                    print(f"Warning: Could not read {filepath}: {e}")
+        
+        chunk_content, response_file = send_request(args, prompt, resolved_model, display_model)
+        if chunk_content is None:
+            resolved_model = get_next_qwen_model()
+            print(f"Retrying with rotated model {resolved_model}...")
+            chunk_content, response_file = send_request(args, prompt, resolved_model, resolved_model)
+        
+        if chunk_content:
+            all_content += chunk_content + "\n\n"
+        print(f"Chunk {idx+1} response received and saved to {response_file}!")
 
-    print(f"Response received and saved to {response_file}!")
+    content = all_content
 
     task_base_name = os.path.basename(args.task).split('.')[0]
     current_mode = args.mode

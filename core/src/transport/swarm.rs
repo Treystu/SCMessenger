@@ -3850,6 +3850,14 @@ pub async fn start_swarm_with_config(
                                     reported_peer_info.insert(peer_id, (info.agent_version.clone(), info.listen_addrs.clone()));
                                     // Emit event for application layer
                                     let public_key_hex = info.public_key.clone().try_into_ed25519().map(|pk| hex::encode(pk.to_bytes())).ok();
+                                    // Site-3: flush outbox now that peer identity is confirmed.
+                                    if let Some(pk_hex) = &public_key_hex {
+                                        if let Some(c) = &core_handle {
+                                            if let Some(c_arc) = c.upgrade() {
+                                                c_arc.handle_peer_connection_event(pk_hex, true);
+                                            }
+                                        }
+                                    }
                                     let _ = event_tx.send(SwarmEvent2::PeerIdentified {
                                         peer_id,
                                         public_key: public_key_hex,
