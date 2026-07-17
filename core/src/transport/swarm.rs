@@ -1238,7 +1238,7 @@ fn dispatch_pending_custody_for_peer(
         let request_id = swarm.behaviour_mut().messaging.send_request(
             &destination_peer,
             Libp2pMessageRequest {
-                envelope_data: custody.envelope_data.clone(),
+                envelope_data: wrap_in_drift_frame(&custody.envelope_data),
             },
         );
         tracing::info!(
@@ -2709,7 +2709,15 @@ pub async fn start_swarm_with_config(
                                                 frame.payload
                                             }
                                             Err(_) => {
-                                                // Not a DriftFrame — legacy format, use as-is
+                                                // Not a DriftFrame: either a legacy message or a
+                                                // corrupted frame. Log at debug so truncation events
+                                                // are visible without being noisy in normal operation.
+                                                // The envelope decoder below will reject invalid data.
+                                                tracing::debug!(
+                                                    "No DriftFrame header from {} (len={}); treating as legacy envelope",
+                                                    peer,
+                                                    request.envelope_data.len()
+                                                );
                                                 request.envelope_data.clone()
                                             }
                                         };

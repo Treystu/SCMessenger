@@ -27,6 +27,7 @@ async fn test_ledger_convergence_between_nodes() {
         .ok();
 
     let keypair1 = Keypair::generate_ed25519();
+    let peer_id1 = libp2p::PeerId::from(keypair1.public());
     let keypair2 = Keypair::generate_ed25519();
     let peer_id2 = libp2p::PeerId::from(keypair2.public());
 
@@ -120,8 +121,14 @@ async fn test_ledger_convergence_between_nodes() {
         }
     });
 
+    // Append /p2p/<peer_id1> so libp2p can associate the dial with a known PeerId.
+    // Without this suffix, dial() succeeds but libp2p reports "no addresses for peer"
+    // because it cannot track the connection against a specific PeerId.
+    let node1_addr_with_peer = node1_addr
+        .clone()
+        .with(libp2p::multiaddr::Protocol::P2p(peer_id1));
     swarm2
-        .dial(node1_addr.clone())
+        .dial(node1_addr_with_peer)
         .await
         .expect("Failed to dial");
 
