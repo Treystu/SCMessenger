@@ -87,6 +87,8 @@ pub trait WifiDirectPlatformBridge: Send + Sync {
 type PeersChangedCallback = Box<dyn Fn(Vec<WifiDirectPeer>) + Send + Sync>;
 #[cfg(not(target_arch = "wasm32"))]
 type ConnectionInfoCallback = Box<dyn Fn(GroupInfo) + Send + Sync>;
+#[cfg(not(target_arch = "wasm32"))]
+type MessageReceivedCallback = Box<dyn Fn(String, Vec<u8>) + Send + Sync>;
 
 #[cfg(not(target_arch = "wasm32"))]
 pub struct PlatformWifiDirectBridge {
@@ -95,6 +97,7 @@ pub struct PlatformWifiDirectBridge {
     group_info: Arc<parking_lot::Mutex<Option<GroupInfo>>>,
     on_peers_changed: Arc<parking_lot::Mutex<Option<PeersChangedCallback>>>,
     on_connection_info: Arc<parking_lot::Mutex<Option<ConnectionInfoCallback>>>,
+    on_message_received: Arc<parking_lot::Mutex<Option<MessageReceivedCallback>>>,
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -108,6 +111,7 @@ impl PlatformWifiDirectBridge {
             group_info: Arc::new(parking_lot::Mutex::new(None)),
             on_peers_changed: Arc::new(parking_lot::Mutex::new(None)),
             on_connection_info: Arc::new(parking_lot::Mutex::new(None)),
+            on_message_received: Arc::new(parking_lot::Mutex::new(None)),
         }
     }
 
@@ -206,10 +210,14 @@ impl WifiDirectPlatformBridge for PlatformWifiDirectBridge {
     fn set_on_peers_changed(&self, callback: Box<dyn Fn(Vec<WifiDirectPeer>) + Send + Sync>) {
         *self.on_peers_changed.lock() = Some(callback);
     }
+    
     fn set_on_connection_info(&self, callback: Box<dyn Fn(GroupInfo) + Send + Sync>) {
         *self.on_connection_info.lock() = Some(callback);
     }
-    fn set_on_message_received(&self, _callback: Box<dyn Fn(String, Vec<u8>) + Send + Sync>) {}
+    
+    fn set_on_message_received(&self, callback: Box<dyn Fn(String, Vec<u8>) + Send + Sync>) {
+        *self.on_message_received.lock() = Some(callback);
+    }
 }
 
 pub struct WifiDirectTransport {

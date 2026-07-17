@@ -179,6 +179,11 @@ android {
         unitTests {
             includeAndroidResources = true
             returnDefaultValues = true
+            // Enable Robolectric for unit tests
+            all {
+                // Set test runner to Robolectric
+                testRunner = 'org.robolectric.runner.RobolectricTestRunner'
+            }
         }
     }
 }
@@ -241,6 +246,9 @@ dependencies {
     androidTestImplementation 'androidx.test.espresso:espresso-core:3.5.1'
     androidTestImplementation platform('androidx.compose:compose-bom:2024.12.01')
     androidTestImplementation 'androidx.compose.ui:ui-test-junit4'
+
+    // Robolectric for unit tests
+    testImplementation 'org.robolectric:robolectric:4.10'
 
     // Debug
     debugImplementation 'androidx.compose.ui:ui-tooling'

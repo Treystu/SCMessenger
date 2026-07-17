@@ -563,6 +563,13 @@ class WifiDirectTransport(
         }
     }
 
+    /**
+     * Check if WiFi Direct is available on this device.
+     */
+    fun isAvailable(): Boolean {
+        return wifiP2pManager != null
+    }
+
     companion object {
         private const val SERVICE_NAME = "scmessenger"
         private const val SERVICE_TYPE = "_scmessenger._tcp"

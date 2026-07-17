@@ -13,6 +13,7 @@ The exact filename must be the FIRST LINE inside the code block:
 followed immediately by the full file content.
 
 ## Target Files
-- core/src/store/outbox.rs
-- cli/src/main.rs
-(Orchestrator will supply exact files via --files args)
+- core/src/relay/mod.rs
+- core/src/transport/relay_health.rs
+- core/src/routing/global.rs
+- core/src/store/relay_custody.rs

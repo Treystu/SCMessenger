@@ -225,6 +225,10 @@ def send_request(args, prompt, resolved_model, display_model, round_num=None):
         "temperature": 0.1,
         "max_tokens": max_tokens
     }
+    if args.provider == "qwen":
+        # DashScope rejects non-streaming calls to Qwen3 hybrid-thinking models
+        # (e.g. qwen3-14b) unless thinking is explicitly disabled.
+        payload["enable_thinking"] = False
 
     system_message = ""
     if args.mode == "full":
@@ -507,10 +511,12 @@ Return your changes as unified diffs, one fenced ```diff block per file, using s
                     print(f"Warning: Could not read {filepath}: {e}")
         
         chunk_content, response_file = send_request(args, prompt, resolved_model, display_model)
-        if chunk_content is None:
+        retry_count = 0
+        while chunk_content is None and retry_count < 10:
             resolved_model = get_next_qwen_model()
             print(f"Retrying with rotated model {resolved_model}...")
             chunk_content, response_file = send_request(args, prompt, resolved_model, resolved_model)
+            retry_count += 1
         
         if chunk_content:
             all_content += chunk_content + "\n\n"

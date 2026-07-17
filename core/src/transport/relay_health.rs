@@ -40,6 +40,10 @@ pub struct RelayMetrics {
     pub region: Option<String>,
     /// Relay stability score (0.0-1.0)
     pub stability_score: f64,
+    /// WAN relay live proof timestamp
+    pub live_proof_timestamp: Option<u64>,
+    /// Custody chain participation count
+    pub custody_chain_participation: u32,
 }
 
 impl RelayMetrics {
@@ -52,10 +56,25 @@ impl RelayMetrics {
         // Boost score for headless nodes (dedicated resources)
         let headless_bonus = if self.is_headless { 0.1 } else { 0.0 };
 
+        // Bonus for recent live proof
+        let live_proof_bonus = if let Some(timestamp) = self.live_proof_timestamp {
+            let now_ms = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_millis() as u64;
+            let age_hours = (now_ms - timestamp) / (1000 * 60 * 60);
+            if age_hours < 1 { 0.1 } else if age_hours < 6 { 0.05 } else { 0.0 }
+        } else {
+            0.0
+        };
+
+        // Bonus for custody chain participation
+        let custody_bonus = (self.custody_chain_participation as f64 / 100.0).min(0.1);
+
         // Penalty for recent failures
         let failure_penalty = (self.recent_failures as f64 / 100.0).min(0.2);
 
-        (base_score + headless_bonus - failure_penalty).clamp(0.0, 1.0)
+        (base_score + headless_bonus + live_proof_bonus + custody_bonus - failure_penalty).clamp(0.0, 1.0)
     }
 
     /// Check if relay is considered healthy
@@ -67,10 +86,18 @@ impl RelayMetrics {
 
         let age_hours = (now_ms - self.last_seen) / (1000 * 60 * 60);
 
+        // Check for recent live proof (within 24 hours)
+        let has_recent_live_proof = if let Some(timestamp) = self.live_proof_timestamp {
+            (now_ms - timestamp) / (1000 * 60 * 60) < 24
+        } else {
+            false
+        };
+
         self.uptime_ratio >= 0.8
             && self.stability_score >= 0.7
             && age_hours < 24
             && self.recent_failures < self.recent_connections
+            && has_recent_live_proof
     }
 }
 
@@ -131,6 +158,25 @@ impl RelayDiscovery {
 
             // Degrade stability score on failure
             metrics.stability_score = (metrics.stability_score - 0.1).max(0.0);
+        }
+        self.invalidate_cache();
+    }
+
+    /// Record custody chain participation
+    pub fn record_custody_participation(&mut self, peer_id: &PeerId) {
+        if let Some(metrics) = self.relay_metrics.get_mut(peer_id) {
+            metrics.custody_chain_participation += 1;
+        }
+        self.invalidate_cache();
+    }
+
+    /// Record WAN relay live proof
+    pub fn record_live_proof(&mut self, peer_id: &PeerId) {
+        if let Some(metrics) = self.relay_metrics.get_mut(peer_id) {
+            metrics.live_proof_timestamp = Some(SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_millis() as u64);
         }
         self.invalidate_cache();
     }
@@ -310,6 +356,11 @@ mod tests {
                 .as_millis() as u64,
             region: Some("us-east".to_string()),
             stability_score: 0.9,
+            live_proof_timestamp: Some(SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_millis() as u64),
+            custody_chain_participation: 10,
         };
 
         let score = metrics.priority_score();
@@ -340,6 +391,11 @@ mod tests {
                 .as_millis() as u64,
             region: Some("us-west".to_string()),
             stability_score: 0.95,
+            live_proof_timestamp: Some(SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_millis() as u64),
+            custody_chain_participation: 15,
         };
 
         let low_quality = RelayMetrics {
@@ -357,6 +413,11 @@ mod tests {
                 .as_millis() as u64,
             region: Some("eu-central".to_string()),
             stability_score: 0.75, // Increased from 0.6 to pass health check (>= 0.7)
+            live_proof_timestamp: Some(SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_millis() as u64),
+            custody_chain_participation: 2,
         };
 
         discovery.update_relay_metrics(low_quality.clone());

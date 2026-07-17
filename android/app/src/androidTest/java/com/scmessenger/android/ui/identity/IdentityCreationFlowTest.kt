@@ -35,6 +35,7 @@ import kotlin.test.assertNotNull
  * - Generate button enabled state
  * - Loading state with spinner
  */
+@RunWith(AndroidJUnit4::class)
 class IdentityCreationFlowTest {
 
     @get:Rule

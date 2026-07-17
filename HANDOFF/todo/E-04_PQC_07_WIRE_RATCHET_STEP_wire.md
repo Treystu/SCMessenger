@@ -13,6 +13,6 @@ The exact filename must be the FIRST LINE inside the code block:
 followed immediately by the full file content.
 
 ## Target Files
-- core/src/store/outbox.rs
-- cli/src/main.rs
-(Orchestrator will supply exact files via --files args)
+- core/src/crypto/ratchet.rs
+- core/src/crypto/session_manager.rs
+- core/tests/integration_pq_session.rs

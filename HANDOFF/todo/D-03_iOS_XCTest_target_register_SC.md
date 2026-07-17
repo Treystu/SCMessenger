@@ -13,6 +13,7 @@ The exact filename must be the FIRST LINE inside the code block:
 followed immediately by the full file content.
 
 ## Target Files
-- core/src/store/outbox.rs
-- cli/src/main.rs
-(Orchestrator will supply exact files via --files args)
+- iOS/SCMessenger/SCMessenger.xcodeproj/project.pbxproj
+- iOS/SCMessenger/SCMessengerTests/BackupPassphraseValidatorTests.swift
+- iOS/SCMessenger/SCMessengerTests/MeshBackgroundServiceTests.swift
+- iOS/SCMessenger/SCMessengerTests/NotificationVerificationTests.swift

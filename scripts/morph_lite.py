@@ -29,7 +29,7 @@ from pathlib import Path
 from typing import NamedTuple, Optional
 
 # --- Constants ---
-OPENROUTER_API_URL = "https://api.openrouter.ai/api/v1/chat/completions"
+OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions"
 MORPH_MODEL = "morph/morph-v3-fast"
 MAX_FILE_LINES = 500
 MAX_COST_PER_CALL = 0.001  # $0.001 hard ceiling
@@ -266,7 +266,20 @@ EXIT CODES:
 
     api_key = os.environ.get("OPENROUTER_API_KEY")
     if not api_key:
-        print("[ERROR] OPENROUTER_API_KEY not set", file=sys.stderr)
+        # Fall back to the standard scmorc key-file convention used by
+        # delegate_task.py and fusion_lite.py (keys live in files, not env vars).
+        key_file = os.path.expanduser("~/.config/scmorc/openrouter.env")
+        try:
+            with open(key_file, "r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if line.startswith("OPENROUTER_API_KEY=") and "=" in line:
+                        api_key = line.split("=", 1)[1].strip().strip('"').strip("'")
+                        break
+        except OSError:
+            pass
+    if not api_key:
+        print("[ERROR] OPENROUTER_API_KEY not set (env or ~/.config/scmorc/openrouter.env)", file=sys.stderr)
         sys.exit(2)
 
     cfg = MorphConfig(
@@ -298,7 +311,7 @@ EXIT CODES:
         print(f"[ERROR] {result.error_msg}", file=sys.stderr)
         sys.exit(1)
 
-    if not result.apply_code:
+    if not result.applied_code:
         print("[ERROR] No code returned from Morph", file=sys.stderr)
         sys.exit(2)
 

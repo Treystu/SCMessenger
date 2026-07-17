@@ -13,6 +13,6 @@ The exact filename must be the FIRST LINE inside the code block:
 followed immediately by the full file content.
 
 ## Target Files
-- core/src/store/outbox.rs
-- cli/src/main.rs
-(Orchestrator will supply exact files via --files args)
+- .android/app/src/androidTest/java/com/scmessenger/android/data/MeshRepositoryHistoryTest.kt
+- android/app/src/main/java/com/scmessenger/android/transport/WifiAwareTransport.kt
+- core/src/transport/wifi_aware.rs

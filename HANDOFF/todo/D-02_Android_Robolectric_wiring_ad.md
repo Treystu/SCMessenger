@@ -13,6 +13,7 @@ The exact filename must be the FIRST LINE inside the code block:
 followed immediately by the full file content.
 
 ## Target Files
-- core/src/store/outbox.rs
-- cli/src/main.rs
-(Orchestrator will supply exact files via --files args)
+- android/app/build.gradle
+- android/app/src/androidTest/java/com/scmessenger/android/data/MeshRepositoryHistoryTest.kt
+- android/app/src/androidTest/java/com/scmessenger/android/ui/identity/IdentityCreationFlowTest.kt
+- android/app/src/androidTest/java/com/scmessenger/android/util/AppRestartHelper.kt
