@@ -264,23 +264,33 @@ EXIT CODES:
 
     args = parser.parse_args()
 
+    # Key policy (operator, 2026-07-17): Morph runs on the PAID budget lane.
+    # The paid key is shared with Fusion Lite at openrouter_fusion.env
+    # ($0.50 cap -- combined spend across both tools). The general
+    # openrouter.env key is FREE-MODELS-ONLY and must never be used here:
+    # morph/morph-v3-fast is a paid model and would silently spend on the
+    # no-paid-usage key.
     api_key = os.environ.get("OPENROUTER_API_KEY")
+    key_source = "env OPENROUTER_API_KEY" if api_key else None
     if not api_key:
-        # Fall back to the standard scmorc key-file convention used by
-        # delegate_task.py and fusion_lite.py (keys live in files, not env vars).
-        key_file = os.path.expanduser("~/.config/scmorc/openrouter.env")
+        key_file = os.path.expanduser("~/.config/scmorc/openrouter_fusion.env")
         try:
             with open(key_file, "r", encoding="utf-8") as f:
                 for line in f:
                     line = line.strip()
                     if line.startswith("OPENROUTER_API_KEY=") and "=" in line:
                         api_key = line.split("=", 1)[1].strip().strip('"').strip("'")
+                        key_source = key_file
                         break
         except OSError:
             pass
     if not api_key:
-        print("[ERROR] OPENROUTER_API_KEY not set (env or ~/.config/scmorc/openrouter.env)", file=sys.stderr)
+        print("[ERROR] No PAID OpenRouter key found. Morph Lite requires the paid lane:", file=sys.stderr)
+        print("  set OPENROUTER_API_KEY, or create ~/.config/scmorc/openrouter_fusion.env", file=sys.stderr)
+        print("  (shared Fusion+Morph paid budget, $0.50 cap). The free-only openrouter.env", file=sys.stderr)
+        print("  key is refused for paid morph calls.", file=sys.stderr)
         sys.exit(2)
+    print(f"[INFO] Morph key source: {key_source} (shared Fusion+Morph paid budget)", file=sys.stderr)
 
     cfg = MorphConfig(
         file_path=args.file,

@@ -264,6 +264,15 @@ def send_request(args, prompt, resolved_model, display_model, round_num=None):
         if not api_key:
             print(f"Error: API key for {args.provider} is not set.")
             sys.exit(1)
+        if args.provider == "openrouter" and not (args.model or "").endswith(":free"):
+            # Key policy (operator, 2026-07-17): this lane resolves to
+            # ~/.config/scmorc/openrouter.env, which is FREE-MODELS-ONLY
+            # (no paid usage). Paid OpenRouter spend goes through the shared
+            # Fusion+Morph key (fusion_lite.py / morph_lite.py), never here.
+            print(f"Error: openrouter lane is FREE-MODELS-ONLY; model "
+                  f"'{args.model}' lacks the ':free' suffix. Pick a :free model "
+                  f"or use morph_lite.py/fusion_lite.py for paid endpoints.")
+            sys.exit(1)
         headers = {
             "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json",
