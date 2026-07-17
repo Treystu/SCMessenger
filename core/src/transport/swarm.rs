@@ -1238,7 +1238,7 @@ fn dispatch_pending_custody_for_peer(
         let request_id = swarm.behaviour_mut().messaging.send_request(
             &destination_peer,
             Libp2pMessageRequest {
-                envelope_data: wrap_in_drift_frame(&custody.envelope_data),
+                envelope_data: custody.envelope_data.clone(),
             },
         );
         tracing::info!(

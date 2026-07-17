@@ -899,9 +899,29 @@ async fn handle_shutdown() -> impl IntoResponse {
     (StatusCode::OK, "Stopping...")
 }
 
-pub async fn start_api_server(ctx: ApiContext) -> Result<()> {
+async fn handle_get_identity(
+    State(ctx): State<Arc<ApiContext>>,
+) -> Result<AxumJson<serde_json::Value>, (StatusCode, String)> {
+    let info = ctx.core.get_identity_info();
+    Ok(AxumJson(serde_json::json!({
+        "peer_id": info.libp2p_peer_id.unwrap_or_default(),
+        "public_key": info.public_key_hex.unwrap_or_default(),
+    })))
+}
+
+pub async fn start_api_server(ctx: ApiContext, bind_addr: Option<String>) -> Result<()> {
     let ctx = Arc::new(ctx);
-    let addr = SocketAddr::from(([127, 0, 0, 1], API_PORT));
+    let addr = if let Some(bind_str) = bind_addr {
+        match bind_str.parse::<SocketAddr>() {
+            Ok(a) => a,
+            Err(e) => {
+                tracing::warn!("Invalid http-bind address '{}', falling back to localhost: {}: {}", bind_str, API_PORT, e);
+                SocketAddr::from(([127, 0, 0, 1], API_PORT))
+            }
+        }
+    } else {
+        SocketAddr::from(([127, 0, 0, 1], API_PORT))
+    };
 
     // Create CORS layer
     let cors = CorsLayer::new()
@@ -911,6 +931,10 @@ pub async fn start_api_server(ctx: ApiContext) -> Result<()> {
 
     // Build router with all routes
     let app = Router::new()
+        .route("/health", get(|| async {
+            axum::Json(serde_json::json!({"status": "healthy"}))
+        }))
+        .route("/api/identity", get(handle_get_identity))
         .route("/api/send", post(handle_send_message))
         .route("/api/contacts", post(handle_add_contact))
         .route("/api/peers", get(handle_get_peers))

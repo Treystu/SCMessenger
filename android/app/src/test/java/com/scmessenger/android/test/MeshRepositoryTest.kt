@@ -28,7 +28,8 @@ class MeshRepositoryTest {
             notifyDmInForeground = true,
             notifyDmRequestInForeground = true,
             soundEnabled = true,
-            badgeEnabled = true
+            badgeEnabled = true,
+            requirePq = false
         )
     }
 

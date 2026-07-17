@@ -106,35 +106,6 @@ async fn test_ledger_convergence_between_nodes() {
         "QmFakePeerXYZ".to_string(),
     );
 
-    // Node 1's event loop: on discovering node 2 specifically, share our
-    // ledger with it. `PeerDiscovered` fires for ANY newly connected peer,
-    // including unrelated ones found via mDNS on a real LAN (observed live:
-    // an actual local-network peer got discovered during this test) - a
-    // first-peer-wins latch would share with the wrong peer and then ignore
-    // node 2 when it actually connects, so this must filter on node 2's PeerId.
-    let ledger1_for_task = ledger1.clone();
-    let swarm1_for_task = swarm1.clone();
-    tokio::spawn(async move {
-        while let Some(event) = event_rx1.recv().await {
-            if let SwarmEvent2::PeerDiscovered(peer_id) = event {
-                if peer_id == peer_id2 {
-                    let entries = ledger1_for_task.dialable_addresses();
-                    let shared_entries: Vec<SharedPeerEntry> = entries
-                        .into_iter()
-                        .map(|entry| SharedPeerEntry {
-                            multiaddr: entry.multiaddr,
-                            last_peer_id: entry.peer_id,
-                            last_seen: entry.last_seen.unwrap_or(0),
-                            known_topics: entry.topics,
-                        })
-                        .collect();
-                    let _ = swarm1_for_task.share_ledger(peer_id, shared_entries).await;
-                    break;
-                }
-            }
-        }
-    });
-
     // Node 2's event loop: record whatever ledger entries it receives.
     let ledger2_for_task = ledger2.clone();
     tokio::spawn(async move {
@@ -154,7 +125,24 @@ async fn test_ledger_convergence_between_nodes() {
         .await
         .expect("Failed to dial");
 
-    tokio::time::sleep(Duration::from_secs(5)).await;
+    // Wait for connection handshake and protocols to negotiate
+    tokio::time::sleep(Duration::from_millis(500)).await;
+
+    // Trigger the ledger share directly from Node 1 to Node 2 now that they are connected
+    let entries = ledger1.dialable_addresses();
+    let shared_entries: Vec<SharedPeerEntry> = entries
+        .into_iter()
+        .map(|entry| SharedPeerEntry {
+            multiaddr: entry.multiaddr,
+            last_peer_id: entry.peer_id,
+            last_seen: entry.last_seen.unwrap_or(0),
+            known_topics: entry.topics,
+        })
+        .collect();
+    swarm1.share_ledger(peer_id2, shared_entries).await.expect("Failed to share ledger");
+
+    // Let the test wait for 3 seconds so the ledger is received on Node 2
+    tokio::time::sleep(Duration::from_secs(3)).await;
 
     let dialable_addresses = ledger2.dialable_addresses();
     let has_converged_entry = dialable_addresses

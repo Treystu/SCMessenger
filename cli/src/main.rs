@@ -510,10 +510,6 @@ async fn main() -> Result<()> {
 
     let cli = Cli::parse();
 
-    if let Some(bind_addr) = cli.http_bind.clone() {
-        tokio::spawn(spawn_http_health_server(bind_addr));
-    }
-
     match cli.command {
         Commands::Init { name } => cmd_init(name).await,
         Commands::Identity { action } => cmd_identity(action).await,
@@ -524,12 +520,12 @@ async fn main() -> Result<()> {
             search,
             limit,
         } => cmd_history(peer, search, limit).await,
-        Commands::Start { port } => cmd_start(port).await,
+        Commands::Start { port } => cmd_start(port, cli.http_bind).await,
         Commands::Relay {
             listen,
             http_port,
             name,
-        } => cmd_relay(listen, http_port, name).await,
+        } => cmd_relay(listen, http_port, name, cli.http_bind).await,
         Commands::Stop => cmd_stop().await,
         Commands::Send { recipient, message } => cmd_send_offline(recipient, message).await,
         Commands::Status => cmd_status().await,
@@ -1267,7 +1263,7 @@ fn find_free_port_pair(start: u16) -> Option<u16> {
         })
 }
 
-async fn cmd_start(port: Option<u16>) -> Result<()> {
+async fn cmd_start(port: Option<u16>, http_bind: Option<String>) -> Result<()> {
     let config = config::Config::load()?;
     let ws_port = port.unwrap_or({
         if config.listen_port == 0 {
@@ -1624,8 +1620,9 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
         swarm_handle: Arc::new(swarm_handle.clone()),
     };
 
+    let http_bind_api = http_bind.clone();
     tokio::spawn(async move {
-        if let Err(e) = api::start_api_server(api_ctx).await {
+        if let Err(e) = api::start_api_server(api_ctx, http_bind_api).await {
             tracing::error!("API server error: {}", e);
         }
     });
@@ -2331,7 +2328,7 @@ async fn cmd_start(port: Option<u16>) -> Result<()> {
 /// - Serves HTTP landing page and REST API for status
 /// - Periodically re-dials bootstrap peers for mesh continuity
 /// - Runs forever (no stdin, no quit command)
-async fn cmd_relay(listen_addr: String, http_port: u16, node_name: Option<String>) -> Result<()> {
+async fn cmd_relay(listen_addr: String, http_port: u16, node_name: Option<String>, http_bind: Option<String>) -> Result<()> {
     let data_dir = config::Config::data_dir()?;
     let storage_path = data_dir.join("storage");
     let core = Arc::new(IronCore::with_storage(path_to_string(&storage_path)?));
@@ -2505,8 +2502,9 @@ async fn cmd_relay(listen_addr: String, http_port: u16, node_name: Option<String
         core: core_arc.clone(),
         swarm_handle: Arc::new(swarm_handle.clone()),
     };
+    let http_bind_api = http_bind.clone();
     tokio::spawn(async move {
-        if let Err(e) = api::start_api_server(api_ctx).await {
+        if let Err(e) = api::start_api_server(api_ctx, http_bind_api).await {
             tracing::error!("API server error: {}", e);
         }
     });

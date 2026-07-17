@@ -51,7 +51,8 @@ class SettingsViewModelTest {
         notifyDmInForeground = true,
         notifyDmRequestInForeground = true,
         soundEnabled = true,
-        badgeEnabled = true
+        badgeEnabled = true,
+        requirePq = false
     )
 
     @Before

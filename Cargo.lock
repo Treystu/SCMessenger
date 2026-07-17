@@ -4593,12 +4593,15 @@ dependencies = [
 name = "scmessenger-desktop-bridge"
 version = "0.3.5"
 dependencies = [
+ "camino",
  "dirs",
  "scmessenger-core",
  "serde",
+ "thiserror 1.0.69",
  "tokio",
  "tracing",
  "uniffi",
+ "uniffi_bindgen",
  "web-time",
  "zbus",
 ]

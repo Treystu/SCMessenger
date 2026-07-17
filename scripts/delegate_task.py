@@ -12,15 +12,106 @@ OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 OLLAMA_URL = "http://localhost:11434/api/chat"
 GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
 
-QWEN_TIER_MAP = {
-    "thinking": "qwen3-vl-235b-a22b-thinking",  # Architecture, security review, adversarial audit
-    "max":      "qwen3-max",                      # Complex Rust impl, crypto, multi-file changes
-    "standard": "qwen3.5-122b-a10b",              # Compile fixes, mechanical refactors, moderate tasks
-    "plus":     "qwen-plus-2025-07-28",           # Docs, task file generation, planning
-    "flash":    "qwen-max",                       # Simple fixes, small scoped changes, fallback
-}
+
 
 VALID_EXTENSIONS = ('.rs', '.toml', '.md', '.py', '.sh', '.gradle', '.kts', '.yml', '.yaml', '.json', '.swift', '.kt', 'Dockerfile')
+
+# Dynamic token limits per model: maps model name -> max_tokens the model supports
+# for output generation. Context windows are larger but we cap output to stay safe.
+MODEL_TOKEN_LIMITS = {
+    # Qwen models (DashScope) -- output cap per model
+    "qwen-max": 8192,
+    "qwen-plus": 8192,
+    "qwen-turbo": 8192,
+    "qwen-long": 8192,
+    "qwen3-235b-a22b": 8192,
+    "qwen3-32b": 8192,
+    "qwen3-30b-a3b": 8192,
+    "qwen3-14b": 8192,
+    "qwen3-8b": 8192,
+    "qwen3-4b": 8192,
+    "qwen3-1.7b": 4096,
+    "qwen3-0.6b": 2048,
+    "qwen2.5-max": 8192,
+    "qwen2.5-plus": 8192,
+    "qwen2.5-72b-instruct": 8192,
+    "qwen2.5-32b-instruct": 8192,
+    "qwen2.5-14b-instruct": 8192,
+    "qwen2.5-7b-instruct": 8192,
+    "qwen2.5-coder-32b-instruct": 8192,
+    "qwen2.5-coder-14b-instruct": 8192,
+    "qwen2.5-coder-7b-instruct": 8192,
+    "qwen2-72b-instruct": 6144,
+    "qwen2-57b-a14b-instruct": 6144,
+    "qwen2-7b-instruct": 6144,
+    "qwen1.5-110b-chat": 8192,
+    "qwen1.5-72b-chat": 8192,
+    "qwen1.5-32b-chat": 8192,
+    "qwen1.5-14b-chat": 8192,
+    "qwen1.5-7b-chat": 8192,
+    # Groq models -- actual max_tokens from API docs
+    "llama-3.3-70b-versatile": 32768,
+    "llama-3.1-70b-versatile": 32768,
+    "llama-3.1-8b-instant": 8192,
+    "llama3-70b-8192": 8192,
+    "llama3-8b-8192": 8192,
+    "mixtral-8x7b-32768": 32768,
+    "gemma2-9b-it": 8192,
+    # OpenRouter models
+    "anthropic/claude-3.5-sonnet": 8192,
+    "google/gemini-pro-1.5": 8192,
+    "meta-llama/llama-3.1-405b-instruct": 4096,
+    # Ollama local
+    "llama3": 4096,
+    "codellama": 4096,
+    "mistral": 4096,
+}
+
+# Default output token cap when model is not in MODEL_TOKEN_LIMITS
+DEFAULT_MAX_TOKENS = 8192
+
+# Qwen model rotation pool (approx 1M token limit each, rotate on 403 quota)
+# Source: docs/QWEN_QUOTA_LEDGER.md -- only verified code-capable text models
+# Excludes: VL/vision, MT/translation, unsupported, video, OCR models
+# Priority: coder-specific > large reasoning > general-purpose > small
+QWEN_MODEL_POOL = [
+    # Tier 1: Coder-specific (best for Rust implementation tasks)
+    "qwen3-coder-480b-a35b-instruct",   # 991k remaining
+    "qwen3-coder-next",                  # 1M remaining
+    "qwen3-coder-plus",                  # 1M remaining
+    "qwen3-coder-plus-2025-09-23",       # 1M remaining
+    "qwen3-coder-plus-2025-07-22",       # 1M remaining
+    "qwen3-coder-30b-a3b-instruct",      # 1M remaining
+    "qwen3-coder-flash",                 # ~1M remaining
+    "qwen3-coder-flash-2025-07-28",      # 1M remaining
+    # Tier 2: Large reasoning models
+    "qwen3-max",                         # 1M remaining
+    "qwen3-max-preview",                 # 1M remaining
+    "qwen3-max-2025-09-23",              # 1M remaining
+    "qwen3.5-397b-a17b",                 # 1M remaining
+    "qwen3.5-122b-a10b",                 # 1M remaining
+    "qwen3-235b-a22b",                   # 1M remaining
+    "qwen3-next-80b-a3b-instruct",       # 1M remaining
+    # Tier 3: General-purpose (still strong for code)
+    "qwen-max",                          # 995k remaining
+    "qwen-plus-2025-07-28",              # 1M remaining
+    "qwen3-32b",                         # 1M remaining
+    "qwen3-30b-a3b",                     # 1M remaining
+    "qwen3-14b",                         # 1M remaining
+]
+
+def get_next_qwen_model():
+    """Return next model from rotation pool, persisting index in tmp/qwen_model_index.txt."""
+    index_path = os.path.join(os.path.dirname(__file__), "tmp", "qwen_model_index.txt")
+    try:
+        with open(index_path, "r", encoding="utf-8") as f:
+            idx = int(f.read().strip())
+    except Exception:
+        idx = 0
+    model = QWEN_MODEL_POOL[idx % len(QWEN_MODEL_POOL)]
+    with open(index_path, "w", encoding="utf-8") as f:
+        f.write(str((idx + 1) % len(QWEN_MODEL_POOL)))
+    return model
 
 def _key_from_env_file(path, names):
     try:
@@ -105,11 +196,25 @@ def extract_diff_blocks(content):
         diff_blocks.append(match.group(1))
     return diff_blocks
 
+def _resolve_max_tokens(model_name):
+    """Dynamically resolve max_tokens based on model capabilities."""
+    # Exact match first
+    if model_name in MODEL_TOKEN_LIMITS:
+        return MODEL_TOKEN_LIMITS[model_name]
+    # Prefix match for versioned models (e.g. qwen-max-0428)
+    for key, limit in MODEL_TOKEN_LIMITS.items():
+        if model_name.startswith(key):
+            return limit
+    return DEFAULT_MAX_TOKENS
+
 def send_request(args, prompt, resolved_model, display_model, round_num=None):
+    # Dynamically resolve max_tokens based on the model being used
+    max_tokens = _resolve_max_tokens(resolved_model)
+    print(f"[INFO] Using max_tokens={max_tokens} for model {resolved_model}")
     payload = {
         "model": resolved_model,
         "temperature": 0.1,
-        "max_tokens": 16000
+        "max_tokens": max_tokens
     }
 
     system_message = ""
@@ -178,6 +283,10 @@ def send_request(args, prompt, resolved_model, display_model, round_num=None):
             return content, response_file
 
     except urllib.error.HTTPError as e:
+        # Check for 429 quota errors
+        if e.code == 429 and args.provider == "qwen":
+            print("[WARN] Rate limit hit. Rotating model...")
+            return None, None
         print(f"HTTP error: {e.code} - {e.read().decode('utf-8')}")
         sys.exit(1)
     except urllib.error.URLError as e:
@@ -282,6 +391,11 @@ def main():
 
     args = parser.parse_args()
 
+    # Default model fallback for Groq if none specified
+    if args.provider == "groq" and not args.model:
+        args.model = "llama-3.3-70b-versatile"  # 128k context, 32k output
+        print(f"[INFO] No model specified for Groq, defaulting to {args.model}")
+
     if args.verify and not args.apply:
         print("Warning: --verify is only meaningful with --apply; ignoring --verify.")
 
@@ -323,27 +437,31 @@ Return your changes as unified diffs, one fenced ```diff block per file, using s
                 print(f"Warning: Could not read {filepath}: {e}")
 
     # Resolve model
-    if args.provider == "qwen":
+    if args.provider == "qwen" and not args.tier and not args.model:
+        resolved_model = get_next_qwen_model()
+    elif args.provider == "qwen":
         if args.tier:
-            resolved_model = QWEN_TIER_MAP[args.tier]
-        elif args.model:
-            resolved_model = args.model
+            # Simple placeholder for tier mapping
+            resolved_model = f"qwen-{args.tier}"
         else:
-            resolved_model = QWEN_TIER_MAP["max"]
+            resolved_model = args.model
     else:
         if not args.model:
+            # Groq already has default set above; other providers need explicit
             print(f"Error: --model is required for provider '{args.provider}'.")
             sys.exit(1)
         resolved_model = args.model
 
-    if args.provider == "qwen" and args.tier:
-        display_model = f"{resolved_model} [tier: {args.tier}]"
-    else:
-        display_model = resolved_model
-
+    display_model = resolved_model
     print(f"Dispatching task {os.path.basename(args.task)} to {args.provider} ({display_model})...")
 
     content, response_file = send_request(args, prompt, resolved_model, display_model)
+    # Handle rotation on 429
+    if content is None:
+        resolved_model = get_next_qwen_model()
+        print(f"Retrying with rotated model {resolved_model}...")
+        content, response_file = send_request(args, prompt, resolved_model, resolved_model)
+
     print(f"Response received and saved to {response_file}!")
 
     task_base_name = os.path.basename(args.task).split('.')[0]
