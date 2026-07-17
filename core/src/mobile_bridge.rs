@@ -3230,7 +3230,22 @@ impl SwarmBridge {
         handle
             .dial(addr)
             .await
-            .map_err(|_| crate::IronCoreError::NetworkError)
+            .map_err(|e| {
+                let err_str = e.to_string().to_lowercase();
+                if err_str.contains("dialing self") || err_str.contains("dialself") {
+                    crate::IronCoreError::DialSelf
+                } else if err_str.contains("no addresses") || err_str.contains("noaddresses") {
+                    crate::IronCoreError::NoAddresses
+                } else if err_str.contains("connection limit") || err_str.contains("connectionlimit") {
+                    crate::IronCoreError::ConnectionLimit
+                } else if err_str.contains("not supported") || err_str.contains("multiaddrnotsupported") {
+                    crate::IronCoreError::MultiaddrNotSupported
+                } else if err_str.contains("io") {
+                    crate::IronCoreError::IoError
+                } else {
+                    crate::IronCoreError::NetworkError
+                }
+            })
     }
 
     pub async fn get_peers(&self) -> Vec<String> {

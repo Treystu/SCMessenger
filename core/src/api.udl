@@ -1,4 +1,3 @@
-// core/src/api.udl
 namespace api {
     string get_build_provenance();
 };
@@ -124,6 +123,11 @@ enum IronCoreError {
     "ConsentRequired",
     "Internal",
     "CorruptionDetected",
+    "DialSelf",
+    "NoAddresses",
+    "ConnectionLimit",
+    "MultiaddrNotSupported",
+    "IoError",
 };
 
 // ============================================================================

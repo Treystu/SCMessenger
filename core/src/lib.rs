@@ -58,6 +58,16 @@ pub enum IronCoreError {
     Internal,
     #[error("Data corruption detected")]
     CorruptionDetected,
+    #[error("Dial self")]
+    DialSelf,
+    #[error("No addresses")]
+    NoAddresses,
+    #[error("Connection limit reached")]
+    ConnectionLimit,
+    #[error("Multiaddress not supported")]
+    MultiaddrNotSupported,
+    #[error("IO error")]
+    IoError,
 }
 
 pub use crypto::{decrypt_message, encrypt_message};

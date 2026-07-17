@@ -14,7 +14,7 @@ GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
 
 
 
-VALID_EXTENSIONS = ('.rs', '.toml', '.md', '.py', '.sh', '.gradle', '.kts', '.yml', '.yaml', '.json', '.swift', '.kt', 'Dockerfile')
+VALID_EXTENSIONS = ('.rs', '.toml', '.md', '.py', '.sh', '.gradle', '.kts', '.yml', '.yaml', '.json', '.swift', '.kt', 'Dockerfile', '.udl')
 
 # Dynamic token limits per model: maps model name -> max_tokens the model supports
 # for output generation. Context windows are larger but we cap output to stay safe.
@@ -283,9 +283,8 @@ def send_request(args, prompt, resolved_model, display_model, round_num=None):
             return content, response_file
 
     except urllib.error.HTTPError as e:
-        # Check for 429 quota errors
-        if e.code == 429 and args.provider == "qwen":
-            print("[WARN] Rate limit hit. Rotating model...")
+        if (e.code == 429 or e.code == 403) and args.provider == "qwen":
+            print("[WARN] Rate limit or Quota hit. Rotating model...")
             return None, None
         print(f"HTTP error: {e.code} - {e.read().decode('utf-8')}")
         sys.exit(1)
