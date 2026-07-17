@@ -66,6 +66,20 @@ def eprint(*a, **kw):
 
 
 def get_api_key():
+    # Prefer the dedicated, spend-limited fusion key over the general
+    # openrouter key: the limit gate below refuses keys with no configured
+    # spend limit, and the general key intentionally has none.
+    fusion_path = os.path.expanduser("~/.config/scmorc/openrouter_fusion.env")
+    try:
+        with open(fusion_path, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if "=" in line and not line.startswith("#"):
+                    k, v = line.split("=", 1)
+                    if k.strip() == "OPENROUTER_API_KEY" and v.strip():
+                        return v.strip().strip('"').strip("'")
+    except OSError:
+        pass
     env_key = os.environ.get("OPENROUTER_API_KEY")
     if env_key:
         return env_key

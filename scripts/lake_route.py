@@ -14,6 +14,15 @@ USAGE:
   python scripts/lake_route.py --tier MORPH
   python scripts/lake_route.py --probe-groq   # print Groq rate-limit headroom
 
+  # Record a dispatch outcome in the shared quota ledger (REQUIRED after every
+  # worker dispatch -- this is how the farm self-calibrates):
+  python scripts/lake_route.py --record --lake groq --model llama-3.1-8b-instant \
+      --task A-01 --result ok --in-tokens 6120 --out-tokens 1480
+  python scripts/lake_route.py --record --lake openrouter --model "qwen/qwen3-coder:free" \
+      --task A-03 --result 429            # sets a cooldown automatically
+  # --cooldown-hours N overrides the default cooldown (429 default: 1h; for
+  # daily-window lakes groq/gemini: until next UTC midnight).
+
 The "probe-groq" mode makes a real tiny API call to Groq and prints the
 x-ratelimit-remaining-tokens header so the orchestrator knows whether a
 full-size prompt or a micro-chunk is needed.
@@ -100,6 +109,62 @@ def _save_rr(rr_state):
     with open(RR_STATE_PATH, "w", encoding="utf-8") as f:
         json.dump(rr_state, f)
 
+def _lake_has_key(lake, lake_cfg):
+    """Registry rule: 'A lake with no key file is skipped silently by the
+    router.' ollama (and any lake with an empty key_env list) needs no key."""
+    key_envs = lake_cfg.get("key_env", [])
+    if not key_envs:
+        return True
+    for name in key_envs:
+        if os.environ.get(name):
+            return True
+    key_file = lake_cfg.get("key_file")
+    if key_file:
+        path = os.path.expanduser(key_file)
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if "=" in line and not line.startswith("#"):
+                        k, v = line.split("=", 1)
+                        if k.strip() in key_envs and v.strip():
+                            return True
+        except OSError:
+            pass
+    return False
+
+def record_dispatch(lake, model, task, result, in_tokens=None, out_tokens=None,
+                    cooldown_hours=None):
+    """Append one outcome row to the shared ledger; set cooldown on 429/quota."""
+    from datetime import timedelta
+    now = datetime.now(timezone.utc)
+    entry = {
+        "ts": now.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "lake": lake,
+        "model": model,
+        "task": task,
+        "result": result,
+    }
+    if in_tokens is not None:
+        entry["in_tokens"] = in_tokens
+    if out_tokens is not None:
+        entry["out_tokens"] = out_tokens
+    if result != "ok":
+        if cooldown_hours is not None:
+            until = now + timedelta(hours=cooldown_hours)
+        elif lake in ("groq", "gemini"):
+            # Daily-window lakes: cool down until next UTC midnight.
+            until = (now + timedelta(days=1)).replace(hour=0, minute=0, second=0,
+                                                      microsecond=0)
+        else:
+            until = now + timedelta(hours=1)
+        entry["cooldown_until"] = until.strftime("%Y-%m-%dT%H:%M:%SZ")
+    os.makedirs(os.path.dirname(LEDGER_PATH), exist_ok=True)
+    with open(LEDGER_PATH, "a", encoding="utf-8") as f:
+        f.write(json.dumps(entry) + "\n")
+    print(f"[ledger] recorded {lake}/{model} {result}"
+          + (f" cooldown_until={entry['cooldown_until']}" if "cooldown_until" in entry else ""))
+
 def route(tier):
     """Return (lake, model) for the given tier, or (None, None) if nothing available."""
     ladder = TIER_LADDERS.get(tier.upper())
@@ -115,6 +180,10 @@ def route(tier):
         lake_cfg = registry.get("lakes", {}).get(lake)
         if not lake_cfg:
             # Not in registry; fall through
+            continue
+
+        if not _lake_has_key(lake, lake_cfg):
+            # Spec rule: a lake with no key is skipped silently.
             continue
 
         tiers_cfg = lake_cfg.get("tiers", {})
@@ -205,10 +274,27 @@ def main():
     ap.add_argument("--tier", help="Dispatch tier: FLASH|CODER|THINK|MAX|MORPH")
     ap.add_argument("--probe-groq", action="store_true",
                     help="Make a minimal Groq API call and print rate-limit headers.")
+    ap.add_argument("--record", action="store_true",
+                    help="Append a dispatch outcome to the ledger instead of routing.")
+    ap.add_argument("--lake")
+    ap.add_argument("--model")
+    ap.add_argument("--task", default="-")
+    ap.add_argument("--result", choices=["ok", "429", "403", "413", "error", "timeout", "vacuous"])
+    ap.add_argument("--in-tokens", type=int)
+    ap.add_argument("--out-tokens", type=int)
+    ap.add_argument("--cooldown-hours", type=float)
     args = ap.parse_args()
 
     if args.probe_groq:
         probe_groq()
+        return
+
+    if args.record:
+        if not (args.lake and args.model and args.result):
+            print("[ERROR] --record requires --lake, --model, --result", file=sys.stderr)
+            sys.exit(1)
+        record_dispatch(args.lake, args.model, args.task, args.result,
+                        args.in_tokens, args.out_tokens, args.cooldown_hours)
         return
 
     if not args.tier:

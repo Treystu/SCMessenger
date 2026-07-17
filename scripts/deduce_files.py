@@ -43,9 +43,16 @@ def main():
     # Extract task description up to Target Files
     task_desc = task_content.split("## Target Files")[0].strip()
 
-    # Get list of source files
+    # Get list of source files. Cover ALL dispatchable target types --
+    # docs/scripts/CI/config tickets exist too (delegate_task.py's own
+    # VALID_EXTENSIONS is the reference set).
     try:
-        result = subprocess.run(["git", "ls-files", "*.rs", "*.kt", "*.swift", "*.java", "*.toml", "*.gradle", "*.kts"], capture_output=True, text=True, check=True)
+        result = subprocess.run(["git", "ls-files",
+                                 "*.rs", "*.kt", "*.swift", "*.java", "*.toml",
+                                 "*.gradle", "*.kts", "*.py", "*.md", "*.sh",
+                                 "*.yml", "*.yaml", "*.json", "*.udl", "*.ps1",
+                                 "*.pbxproj", "Dockerfile*", "*.xml"],
+                                capture_output=True, text=True, check=True)
         files = result.stdout.strip().split("\n")
     except subprocess.CalledProcessError:
         print("Error running git ls-files", file=sys.stderr)
@@ -88,8 +95,22 @@ Return ONLY a space-separated list of the file paths that need to be edited. Do 
             content = resp["choices"][0]["message"]["content"].strip()
             # Clean up potential markdown formatting just in case
             content = content.replace("```text", "").replace("```", "").strip()
-            # Print to stdout so the shell script can capture it
-            print(content)
+            # Anti-hallucination gate: only emit paths that actually exist in
+            # the repo file list we gave the model. A fabricated path would
+            # otherwise become delegate_task.py's --files allowlist and let a
+            # worker write a brand-new wrong file. (Observed live 2026-07-17:
+            # D-03 got three nonexistent SCMessengerTests/*.swift paths.)
+            real = set(files)
+            kept, dropped = [], []
+            for p in content.split():
+                (kept if p in real else dropped).append(p)
+            if dropped:
+                print(f"Warning: dropped {len(dropped)} hallucinated path(s): {' '.join(dropped)}",
+                      file=sys.stderr)
+            if not kept:
+                print("Error: model returned no real paths", file=sys.stderr)
+                sys.exit(2)
+            print(" ".join(kept))
     except Exception as e:
         print(f"Error querying Qwen: {e}", file=sys.stderr)
         sys.exit(1)
