@@ -105,6 +105,25 @@ pub enum ConsentState {
     Granted,
 }
 
+/// Kill switch for the E-00 ratchet-aware send/receive wiring.
+///
+/// When `SCM_RATCHET_DISABLE` is set to any non-empty, non-zero, non-"false"
+/// value, IronCore takes the exact legacy code path for both
+/// `prepare_message_internal` and `receive_message`.  This preserves the
+/// pre-ratchet behavior byte-for-byte and guarantees zero behavior change for
+/// mixed-fleet peers that cannot consume the new wire format.
+fn ratchet_disabled() -> bool {
+    static FLAG: std::sync::OnceLock<std::sync::atomic::AtomicBool> = std::sync::OnceLock::new();
+    let f = FLAG.get_or_init(|| {
+        std::sync::atomic::AtomicBool::new(
+            std::env::var("SCM_RATCHET_DISABLE")
+                .map(|v| !v.is_empty() && v != "0" && v.to_lowercase() != "false")
+                .unwrap_or(false),
+        )
+    });
+    f.load(std::sync::atomic::Ordering::Relaxed)
+}
+
 /// The main entry point for the SCMessenger core.
 ///
 /// Wraps all subsystems behind `Arc<RwLock<…>>` for safe concurrent access.
@@ -664,19 +683,70 @@ impl IronCore {
         let message_bytes =
             crate::message::encode_message(&message).map_err(|_| IronCoreError::Internal)?;
 
-        let envelope = encrypt_message(&keys.signing_key, &recipient_pk, &message_bytes)
+        let (mut envelope_data, drift_env) = if ratchet_disabled() {
+            // LEGACY PATH (kill switch) -- verbatim current behavior
+            let envelope = encrypt_message(&keys.signing_key, &recipient_pk, &message_bytes)
+                .map_err(|_| IronCoreError::CryptoError)?;
+            let drift_env = crate::drift::DriftEnvelope::from_legacy_envelope(
+                envelope,
+                message_id.clone(),
+                recipient_pk,
+                &keys.signing_key,
+            )
+            .map_err(|_| IronCoreError::Internal)?;
+            let envelope_data = drift_env.to_bytes().map_err(|_| IronCoreError::Internal)?;
+            (envelope_data, drift_env)
+        } else {
+            // RATCHET PATH -- identity.read() already held; take
+            // ratchet_sessions.write() AFTER (identity-first, proven-safe).
+            // TODO cache our_bundle per identity_id (per-send Ed25519+ML-DSA
+            // signing is wasteful) -- E-00 ships correct-first.
+            let our_bundle = crate::identity::sign_bundle(keys).ok();
+            let recipient_bundle = self
+                .contact_manager
+                .read()
+                .get_contact_bundle(recipient_id)
+                .ok()
+                .flatten();
+            let peer_id = recipient_id.to_string();
+            let signing_key = keys.signing_key.clone();
+            let mut sessions = self.ratchet_sessions.write();
+            let mut audit = self.audit_log.write();
+            let wire = crate::crypto::encrypt::encrypt_with_ratchet_fallback(
+                &signing_key,
+                recipient_bundle.as_ref(),
+                &recipient_pk,
+                &message_bytes,
+                Some(&mut *sessions),
+                &peer_id,
+                our_bundle.as_ref(),
+                false,
+                Some(&mut *audit),
+            )
             .map_err(|_| IronCoreError::CryptoError)?;
-
-        // Convert legacy Envelope to DriftEnvelope with proper signing,
-        // recipient hint, and LZ4 compression for payloads above threshold.
-        let drift_env = crate::drift::DriftEnvelope::from_legacy_envelope(
-            envelope,
-            message_id.clone(),
-            recipient_pk,
-            &keys.signing_key,
-        )
-        .map_err(|_| IronCoreError::Internal)?;
-        let mut envelope_data = drift_env.to_bytes().map_err(|_| IronCoreError::Internal)?;
+            let drift_env = match wire {
+                crate::message::WireEnvelope::V1(env) => {
+                    crate::drift::DriftEnvelope::from_legacy_envelope(
+                        env,
+                        message_id.clone(),
+                        recipient_pk,
+                        &signing_key,
+                    )
+                    .map_err(|_| IronCoreError::Internal)?
+                }
+                crate::message::WireEnvelope::V2(env2) => {
+                    crate::drift::DriftEnvelope::from_v2_envelope(
+                        env2,
+                        message_id.clone(),
+                        recipient_pk,
+                        &signing_key,
+                    )
+                    .map_err(|_| IronCoreError::Internal)?
+                }
+            };
+            let envelope_data = drift_env.to_bytes().map_err(|_| IronCoreError::Internal)?;
+            (envelope_data, drift_env)
+        };
 
         if self.privacy_config().onion_routing_enabled {
             let relays = self.swarm_get_best_relays(3);
@@ -729,7 +799,10 @@ impl IronCore {
             self.drift_store.write().insert(stored_env);
             tracing::info!("StoreAndCarry route resolved for {}. Handoff to Drift custody and bypassed active outbox.", message_id);
         } else {
-            let connected = self.transport_manager.read().is_peer_connected(recipient_pk);
+            let connected = self
+                .transport_manager
+                .read()
+                .is_peer_connected(recipient_pk);
             if !connected {
                 let _ = self.outbox.write().enqueue(QueuedMessage {
                     message_id: message_id.clone(),
@@ -2568,7 +2641,8 @@ impl IronCore {
                                 // the outbox - re-enqueue with backoff instead of dropping it,
                                 // otherwise a transient send failure loses the message forever.
                                 msg.attempts = msg.attempts.saturating_add(1);
-                                let backoff_secs = 2u64.saturating_pow(msg.attempts.min(12)).min(3600);
+                                let backoff_secs =
+                                    2u64.saturating_pow(msg.attempts.min(12)).min(3600);
                                 let now_secs = web_time::SystemTime::now()
                                     .duration_since(web_time::UNIX_EPOCH)
                                     .unwrap_or_default()
@@ -2712,18 +2786,67 @@ impl IronCore {
             .map_err(|_| IronCoreError::CryptoError)
     }
     pub fn receive_message(&self, envelope_data: Vec<u8>) -> Result<Message, IronCoreError> {
-        let envelope = decode_envelope(&envelope_data).map_err(|e| {
-            tracing::warn!("Failed to decode envelope: {:?}", e);
-            IronCoreError::CryptoError
-        })?;
+        // Hoist sender public key and local identity id out of the legacy /
+        // ratchet branches so they remain in scope for downstream inbox / audit
+        // handling.
+        let sender_pubkey: Vec<u8>;
+        let local_identity_id: Option<String>;
 
-        let identity = self.identity.read();
-        let keys = identity.keys().ok_or(IronCoreError::NotInitialized)?;
-
-        let plaintext = decrypt_message(&keys.signing_key, &envelope).map_err(|e| {
-            tracing::warn!("Failed to decrypt message: {:?}", e);
-            IronCoreError::CryptoError
-        })?;
+        let plaintext = if ratchet_disabled() {
+            // LEGACY PATH (kill switch)
+            let envelope = decode_envelope(&envelope_data).map_err(|e| {
+                tracing::warn!("Failed to decode envelope: {:?}", e);
+                IronCoreError::CryptoError
+            })?;
+            let identity = self.identity.read();
+            let keys = identity.keys().ok_or(IronCoreError::NotInitialized)?;
+            local_identity_id = identity.identity_id();
+            sender_pubkey = envelope.sender_public_key.clone();
+            let signing_key = keys.signing_key.clone();
+            decrypt_message(&signing_key, &envelope).map_err(|e| {
+                tracing::warn!("Failed to decrypt message: {:?}", e);
+                IronCoreError::CryptoError
+            })?
+        } else {
+            // RATCHET PATH -- identity.read() then ratchet_sessions.write().
+            // identity and ratchet_sessions are disjoint fields of self, so
+            // both guards can be held simultaneously while preserving the
+            // identity-first lock order.
+            let wire =
+                crate::message::codec::decode_wire_envelope(&envelope_data).map_err(|e| {
+                    tracing::warn!("Failed to decode wire envelope: {:?}", e);
+                    IronCoreError::CryptoError
+                })?;
+            let identity = self.identity.read();
+            let keys = identity.keys().ok_or(IronCoreError::NotInitialized)?;
+            local_identity_id = identity.identity_id();
+            sender_pubkey = match &wire {
+                crate::message::WireEnvelope::V1(e) => e.sender_public_key.clone(),
+                crate::message::WireEnvelope::V2(e2) => e2.sender_public_key.clone(),
+            };
+            let sender_bundle = self
+                .contact_manager
+                .read()
+                .get_contact_bundle(&hex::encode(&sender_pubkey))
+                .ok()
+                .flatten();
+            let our_bundle = crate::identity::sign_bundle(keys).ok();
+            let signing_key = keys.signing_key.clone();
+            let mut sessions = self.ratchet_sessions.write();
+            crate::crypto::encrypt::decrypt_with_ratchet_fallback(
+                &signing_key,
+                Some(&keys.x25519_encryption_secret),
+                &wire,
+                Some(&mut *sessions),
+                Some(&keys.mlkem_keypair),
+                our_bundle.as_ref(),
+                sender_bundle.as_ref(),
+            )
+            .map_err(|e| {
+                tracing::warn!("Failed to decrypt ratchet message: {:?}", e);
+                IronCoreError::CryptoError
+            })?
+        };
 
         let message = decode_message(&plaintext).map_err(|e| {
             tracing::warn!("Failed to decode message: {:?}", e);
@@ -2789,7 +2912,7 @@ impl IronCore {
                     sender_id: message.sender_id.clone(),
                     payload: message.payload.clone(),
                     received_at: now,
-                    sender_public_key_hex: Some(hex::encode(&envelope.sender_public_key)),
+                    sender_public_key_hex: Some(hex::encode(&sender_pubkey)),
                 });
             }
         }
@@ -2808,7 +2931,7 @@ impl IronCore {
 
         self.audit_log.write().append(
             AuditEventType::MessageReceived,
-            identity.identity_id(),
+            local_identity_id,
             Some(message.sender_id.clone()),
             None,
         );

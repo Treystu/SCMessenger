@@ -1,6 +1,6 @@
 # CRITICAL: Ratchet + PQ subsystem is unreachable from IronCore's production message path
 
-Status: APPROVED 2026-07-17 (operator) -- ANALYSIS DONE -- ready for Fusion judgement, then CODER implementation
+Status: DONE 2026-07-17 -- implemented (dispatch A: DriftEnvelope PQ ext + decode order; dispatch B: IronCore send/receive wiring + kill switch), build-verified (cargo check + 1140 unit tests + 17 integration tests across 4 suites), Fusion adversarial review UNANIMOUS PASS (round 2, tmp/fusion-e00-adversarial-verdict-r2.md). Kill switch = env SCM_RATCHET_DISABLE. Pre-existing from_bytes offset+=4 bug fixed (exposed by PQ ext). Audit logging enabled on legacy fallback.
 Filed: 2026-07-17 (native audit session, code-truth verification pass)
 Tier: MAX design review, then CODER implementation waves
 Review: crypto-security-auditor MANDATORY = Fusion adversarial panel, unanimous (docs/ORCHESTRATION.md Section 10)

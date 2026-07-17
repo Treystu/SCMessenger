@@ -77,6 +77,16 @@ pub struct DriftEnvelope {
     pub ratchet_dh_public: Option<[u8; 32]>,
     /// Message number in the current sending chain — None for legacy ECDH
     pub ratchet_message_number: Option<u32>,
+
+    // Post-quantum extension fields
+    /// Suite identifier for post-quantum cryptography
+    pub suite: Option<u8>,
+    /// Post-quantum KEM ciphertext
+    pub pq_kem_ciphertext: Option<Vec<u8>>,
+    /// Post-quantum encapsulated key
+    pub pq_encaps_key: Option<Vec<u8>>,
+    /// Transcript hash for post-quantum verification
+    pub transcript_hash: Option<Vec<u8>>,
 }
 
 /// Message type enumeration for Drift Envelopes
@@ -186,6 +196,26 @@ impl DriftEnvelope {
             buf.extend_from_slice(&msg_num.to_le_bytes());
         } else {
             buf.push(0x00); // no ratchet
+        }
+
+        // PQ extension (optional, backward compatible)
+        // Flag byte: 0x00 = no PQ extension, 0x01 = PQ extension present
+        if self.suite.is_some()
+            || self.pq_kem_ciphertext.is_some()
+            || self.pq_encaps_key.is_some()
+            || self.transcript_hash.is_some()
+        {
+            buf.push(0x01); // pq_flag = present
+            buf.push(self.suite.unwrap_or(0x02));
+            // append each blob as u32 LE len + bytes (empty if None)
+            let append_blob = |buf: &mut Vec<u8>, v: &Option<Vec<u8>>| {
+                let d = v.as_deref().unwrap_or(&[]);
+                buf.extend_from_slice(&(d.len() as u32).to_le_bytes());
+                buf.extend_from_slice(d);
+            };
+            append_blob(&mut buf, &self.pq_kem_ciphertext);
+            append_blob(&mut buf, &self.pq_encaps_key);
+            append_blob(&mut buf, &self.transcript_hash);
         }
 
         Ok(buf)
@@ -302,6 +332,7 @@ impl DriftEnvelope {
                         data[offset + 2],
                         data[offset + 3],
                     ]);
+                    offset += 4;
                     (Some(dh_key), Some(msg_num))
                 } else {
                     return Err(DriftError::BufferTooShort {
@@ -314,6 +345,65 @@ impl DriftEnvelope {
             }
         } else {
             (None, None)
+        };
+
+        // PQ extension (backward compatible — older envelopes don't have this)
+        let (suite, pq_kem_ciphertext, pq_encaps_key, transcript_hash) = if offset < data.len() {
+            let pq_flag = data[offset];
+            offset += 1;
+            if pq_flag == 0x01 {
+                let suite = data[offset];
+                offset += 1;
+
+                // Helper function to read a blob (length + data)
+                let read_blob =
+                    |data: &[u8], offset: &mut usize| -> Result<Option<Vec<u8>>, DriftError> {
+                        if *offset + 4 > data.len() {
+                            return Err(DriftError::BufferTooShort {
+                                need: *offset + 4,
+                                got: data.len(),
+                            });
+                        }
+
+                        let len = u32::from_le_bytes([
+                            data[*offset],
+                            data[*offset + 1],
+                            data[*offset + 2],
+                            data[*offset + 3],
+                        ]) as usize;
+                        *offset += 4;
+
+                        if len == 0 {
+                            Ok(None)
+                        } else {
+                            if *offset + len > data.len() {
+                                return Err(DriftError::BufferTooShort {
+                                    need: *offset + len,
+                                    got: data.len(),
+                                });
+                            }
+
+                            let blob = data[*offset..*offset + len].to_vec();
+                            *offset += len;
+                            Ok(Some(blob))
+                        }
+                    };
+
+                let pq_kem_ciphertext = read_blob(data, &mut offset)?;
+                let pq_encaps_key = read_blob(data, &mut offset)?;
+                let transcript_hash = read_blob(data, &mut offset)?;
+
+                (
+                    Some(suite),
+                    pq_kem_ciphertext,
+                    pq_encaps_key,
+                    transcript_hash,
+                )
+            } else {
+                (None, None, None, None)
+            }
+        } else {
+            (None, None, None, None)
         };
 
         Ok(DriftEnvelope {
@@ -333,6 +423,10 @@ impl DriftEnvelope {
             ciphertext,
             ratchet_dh_public,
             ratchet_message_number,
+            suite,
+            pq_kem_ciphertext,
+            pq_encaps_key,
+            transcript_hash,
         })
     }
 
@@ -450,6 +544,10 @@ impl DriftEnvelope {
             ciphertext: legacy.ciphertext,
             ratchet_dh_public,
             ratchet_message_number: legacy.ratchet_message_number,
+            suite: None,
+            pq_kem_ciphertext: None,
+            pq_encaps_key: None,
+            transcript_hash: None,
         };
 
         // Sign the envelope
@@ -457,6 +555,110 @@ impl DriftEnvelope {
         drift_env.signature = signature;
 
         Ok(drift_env)
+    }
+
+    /// Convert from a V2 envelope to DriftEnvelope
+    pub fn from_v2_envelope(
+        v2: crate::message::EnvelopeV2,
+        message_id: String,
+        recipient_public_key: [u8; 32],
+        signing_key: &ed25519_dalek::SigningKey,
+    ) -> Result<Self, DriftError> {
+        // Parse message ID as UUID bytes
+        let uuid = Uuid::parse_str(&message_id)
+            .map_err(|e| DriftError::IoError(format!("Invalid message ID: {}", e)))?;
+        let message_id_bytes = *uuid.as_bytes();
+
+        // Calculate recipient hint for routing
+        let recipient_hint = Self::hint_from_public_key(&recipient_public_key);
+
+        // Get current timestamp
+        let created_at = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map_err(|e| DriftError::IoError(format!("Time error: {}", e)))?
+            .as_secs() as u32;
+
+        // TTL: 7 days by default (604800 seconds)
+        let ttl_expiry = created_at + 604800;
+
+        // Convert Vec<u8> fields to fixed-size arrays
+        let sender_public_key: [u8; 32] = v2
+            .sender_public_key
+            .try_into()
+            .map_err(|_| DriftError::IoError("Invalid sender public key length".into()))?;
+
+        let ephemeral_public_key: [u8; 32] = v2
+            .ephemeral_public_key
+            .try_into()
+            .map_err(|_| DriftError::IoError("Invalid ephemeral public key length".into()))?;
+
+        let nonce: [u8; 24] = v2
+            .nonce
+            .try_into()
+            .map_err(|_| DriftError::IoError("Invalid nonce length".into()))?;
+
+        // Validate ratchet_dh_public if present
+        let ratchet_dh_public = v2
+            .ratchet_dh_public
+            .map(|v| -> Result<[u8; 32], DriftError> {
+                v.try_into()
+                    .map_err(|_| DriftError::IoError("Invalid ratchet_dh_public length".into()))
+            })
+            .transpose()?;
+
+        // Create the envelope without signature first
+        let mut drift_env = DriftEnvelope {
+            version: DRIFT_VERSION,
+            envelope_type: EnvelopeType::EncryptedMessage,
+            compressed: v2.ciphertext.len() > COMPRESSION_THRESHOLD,
+            message_id: message_id_bytes,
+            recipient_hint,
+            created_at,
+            ttl_expiry,
+            hop_count: 0,  // Initial hop count
+            priority: 128, // Medium priority
+            sender_public_key,
+            ephemeral_public_key,
+            nonce,
+            signature: [0u8; 64], // Placeholder, will be filled
+            ciphertext: v2.ciphertext,
+            ratchet_dh_public,
+            ratchet_message_number: v2.ratchet_message_number,
+            suite: Some(v2.suite),
+            pq_kem_ciphertext: v2.pq_kem_ciphertext,
+            pq_encaps_key: v2.pq_encaps_key,
+            transcript_hash: v2.transcript_hash,
+        };
+
+        // Sign the envelope
+        let signature = drift_env.sign(signing_key);
+        drift_env.signature = signature;
+
+        Ok(drift_env)
+    }
+
+    /// Convert to a wire envelope based on presence of PQ fields
+    pub fn to_wire_envelope(&self) -> crate::message::WireEnvelope {
+        if self.suite.is_some()
+            || self.pq_kem_ciphertext.is_some()
+            || self.pq_encaps_key.is_some()
+            || self.transcript_hash.is_some()
+        {
+            crate::message::WireEnvelope::V2(crate::message::EnvelopeV2 {
+                suite: self.suite.unwrap_or(0x02),
+                sender_public_key: self.sender_public_key.to_vec(),
+                ephemeral_public_key: self.ephemeral_public_key.to_vec(),
+                nonce: self.nonce.to_vec(),
+                ciphertext: self.ciphertext.clone(),
+                ratchet_dh_public: self.ratchet_dh_public.map(|k| k.to_vec()),
+                ratchet_message_number: self.ratchet_message_number,
+                pq_kem_ciphertext: self.pq_kem_ciphertext.clone(),
+                pq_encaps_key: self.pq_encaps_key.clone(),
+                transcript_hash: self.transcript_hash.clone(),
+            })
+        } else {
+            crate::message::WireEnvelope::V1(self.to_legacy_envelope())
+        }
     }
 
     /// Sign the envelope contents with the sender's signing key
@@ -494,6 +696,24 @@ impl DriftEnvelope {
             hasher.update(&[0x00]); // no ratchet
         }
 
+        // PQ extension (if present)
+        if self.suite.is_some()
+            || self.pq_kem_ciphertext.is_some()
+            || self.pq_encaps_key.is_some()
+            || self.transcript_hash.is_some()
+        {
+            hasher.update(&[0x01]);
+            hasher.update(&[self.suite.unwrap_or(0x02)]);
+            let hash_blob = |h: &mut blake3::Hasher, v: &Option<Vec<u8>>| {
+                let d = v.as_deref().unwrap_or(&[]);
+                h.update(&(d.len() as u32).to_le_bytes());
+                h.update(d);
+            };
+            hash_blob(&mut hasher, &self.pq_kem_ciphertext);
+            hash_blob(&mut hasher, &self.pq_encaps_key);
+            hash_blob(&mut hasher, &self.transcript_hash);
+        }
+
         let hash = hasher.finalize();
 
         // Sign the hash
@@ -524,6 +744,10 @@ mod tests {
             ciphertext: b"test payload".to_vec(),
             ratchet_dh_public: None,
             ratchet_message_number: None,
+            suite: None,
+            pq_kem_ciphertext: None,
+            pq_encaps_key: None,
+            transcript_hash: None,
         }
     }
 

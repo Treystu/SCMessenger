@@ -181,6 +181,10 @@ fn encode_drift_envelope(envelope: &Envelope) -> Result<Vec<u8>> {
         ciphertext: envelope.ciphertext.clone(),
         ratchet_dh_public,
         ratchet_message_number: envelope.ratchet_message_number,
+        suite: None,
+        pq_kem_ciphertext: None,
+        pq_encaps_key: None,
+        transcript_hash: None,
     };
 
     Ok(drift_env.to_bytes()?)
@@ -216,6 +220,14 @@ pub fn decode_wire_envelope(buf: &[u8]) -> Result<WireEnvelope> {
     }
     if buf.len() > MAX_MESSAGE_SIZE {
         bail!("Envelope buffer too large");
+    }
+
+    // Check for Drift binary format first
+    if !buf.is_empty() && buf[0] == crate::drift::DRIFT_VERSION {
+        if let Ok(drift_env) = crate::drift::DriftEnvelope::from_bytes(buf) {
+            return Ok(drift_env.to_wire_envelope());
+        }
+        // fall through on Drift parse failure
     }
 
     if buf[0] == WIRE_TAG_V2 {
@@ -468,6 +480,10 @@ mod tests {
             ciphertext: ciphertext.clone(),
             ratchet_dh_public: None,
             ratchet_message_number: None,
+            suite: None,
+            pq_kem_ciphertext: None,
+            pq_encaps_key: None,
+            transcript_hash: None,
         };
 
         // Test roundtrip
@@ -518,6 +534,10 @@ mod tests {
             ciphertext: vec![4u8; 100],
             ratchet_dh_public: None,
             ratchet_message_number: None,
+            suite: None,
+            pq_kem_ciphertext: None,
+            pq_encaps_key: None,
+            transcript_hash: None,
         };
 
         let bytes = drift_env.to_bytes().unwrap();

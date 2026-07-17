@@ -207,7 +207,19 @@ def extract_diff_blocks(content):
     return diff_blocks
 
 def _resolve_max_tokens(model_name):
-    """Dynamically resolve max_tokens based on model capabilities."""
+    """Dynamically resolve max_tokens based on model capabilities.
+
+    An operator/orchestrator may raise the cap for a complex multi-file task
+    via the SCM_DELEGATE_MAX_TOKENS env var (opt-in; default unchanged). This
+    is necessary for large refactors that exceed the conservative 8192 default
+    (e.g. qwen3-coder-plus supports far larger output than the dict cap).
+    """
+    env_override = os.environ.get("SCM_DELEGATE_MAX_TOKENS")
+    if env_override:
+        try:
+            return int(env_override)
+        except ValueError:
+            pass
     # Exact match first
     if model_name in MODEL_TOKEN_LIMITS:
         return MODEL_TOKEN_LIMITS[model_name]

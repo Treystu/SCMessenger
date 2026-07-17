@@ -500,6 +500,10 @@ mod tests {
             ciphertext: b"test".to_vec(),
             ratchet_dh_public: None,
             ratchet_message_number: None,
+            suite: None,
+            pq_kem_ciphertext: None,
+            pq_encaps_key: None,
+            transcript_hash: None,
         }
     }
 
