@@ -1,9 +1,48 @@
 # CRITICAL: Ratchet + PQ subsystem is unreachable from IronCore's production message path
 
-Status: OPEN -- CRITICAL -- OPERATOR ESCALATION REQUIRED (architecture decision)
+Status: APPROVED 2026-07-17 (operator) -- ANALYSIS DONE -- ready for Fusion judgement, then CODER implementation
 Filed: 2026-07-17 (native audit session, code-truth verification pass)
 Tier: MAX design review, then CODER implementation waves
-Review: crypto-security-auditor MANDATORY (this is the E-01 defect family's true root)
+Review: crypto-security-auditor MANDATORY = Fusion adversarial panel, unanimous (docs/ORCHESTRATION.md Section 10)
+
+## OPERATOR APPROVAL (2026-07-17)
+
+Operator approved wiring the production path through the session manager.
+Decisions taken: (1) wire send + receive through the fallback wrappers;
+(2) legacy fallback preserved for no-session/no-bundle peers (mixed fleet);
+(3) kill switch = env var `SCM_RATCHET_DISABLE` (all-platform, zero plumbing);
+(4) E-00 first, then E-01 family lands in a live path.
+
+## PRE-FLIGHT ANALYSIS FINDINGS (qwen THINK, tmp/e00_analysis_task_response.md -- pending Fusion unanimous judgement)
+
+1. Send: `DriftEnvelope::from_legacy_envelope` reads Envelope FIELDS (non-opaque;
+   encrypt.rs:172-235 region); NO V2 path exists. V1 arm -> from_legacy_envelope;
+   V2 arm -> NEW conversion fn (DriftEnvelope lacks pq_kem/pq_encaps/transcript/suite
+   fields -- must carry V2 as tagged opaque ciphertext bytes or extend the struct;
+   decide in implementation packet, judge via Fusion).
+2. Receive: decode order MUST be Drift-binary (first byte 0x01) -> bincode V1 ->
+   tagged V2 (0x02). WIRE_TAG_V2=0x02 (codec.rs:220), DRIFT_VERSION=0x01
+   (drift/envelope.rs:35), no collision. decode_wire_envelope alone CANNOT parse
+   Drift-binary V1 -- falling back to legacy decode_envelope is mandatory.
+3. Self bundle: `identity::sign_bundle(&keys)` (keys.rs:255-296). CACHE it --
+   per-send Ed25519+ML-DSA signing is wasteful.
+4. Peer bundle: `ContactStore::get_contact_bundle(recipient_id)` (contacts.rs:135-152);
+   recipient_id IS hex(ed25519 public); identity_id()==hex(blake3(ed25519_public))
+   matches receive-side derivation. Sessions auto-form on send (get_or_create) and
+   on receive (create_receiver_session*) -- no separate handshake dispatch needed.
+5. Locks: iron_core.rs:1315 takes identity.write BEFORE ratchet_sessions.read --
+   keep that order at the new call sites (identity.read -> ratchet_sessions.write)
+   to avoid inversion.
+
+## NEXT COMMANDS (orchestrator, in order)
+
+1. Fusion judgement of the analysis (Section 10):
+   `python scripts/fusion_lite.py --prompt-file tmp/fusion-e00-analysis-judge.md --panel "qwen/qwen3-235b-a22b-2507,deepseek/deepseek-chat-v3.1,meta-llama/llama-3.3-70b-instruct" --judge "qwen/qwen3-235b-a22b-2507" --max-tokens 1000 --max-cost 0.05 --out tmp/fusion-e00-analysis-verdict.md`
+   (judge prompt = analysis + "correct and sufficient to implement safely? unanimous PASS required")
+2. If unanimous: write implementation packet (V2-Drift decision from finding 1)
+   -> dispatch qwen CODER `--mode diff --apply --verify "cargo check --workspace"`.
+3. cargo test -p scmessenger-core --test integration_pq_session and integration_e2e.
+4. Fusion adversarial panel on the applied diff (unanimous) -> commit, move ticket.
 
 ## Finding
 

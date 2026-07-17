@@ -227,9 +227,10 @@ def send_request(args, prompt, resolved_model, display_model, round_num=None):
         "max_tokens": max_tokens
     }
     if args.provider == "qwen":
-        # DashScope rejects non-streaming calls to Qwen3 hybrid-thinking models
-        # (e.g. qwen3-14b) unless thinking is explicitly disabled.
-        payload["enable_thinking"] = False
+        # DashScope: hybrid NON-thinking models (qwen3-14b etc.) require
+        # enable_thinking=false for non-streaming calls, while thinking models
+        # (qwen3-235b-a22b-thinking-*) REQUIRE true. Set from the model name.
+        payload["enable_thinking"] = "thinking" in (args.model or "").lower()
 
     system_message = ""
     if args.mode == "full":

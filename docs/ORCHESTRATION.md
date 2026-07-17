@@ -68,10 +68,10 @@ For any task, try lanes in this order (first available with quota wins):
    adversarial review, hard design, failed-CODER escalation.
 8. **Gemini THINK** (`delegate_task.py --provider gemini --model gemini-2.5-pro`):
    large-context adversarial review. Same gemini.env key gate as lane 5.
-9. **Fusion Lite** (`scripts/fusion_lite.py --max-cost 0.001`): planning and
-   verification second opinions only. WS-A delivery-logic triangulation: 3
-   distinct Qwen verifier dispatches OR one Fusion Lite panel run. Never
-   implementation. Never raise --max-cost without operator approval.
+9. **Fusion Lite** (`scripts/fusion_lite.py --max-cost 0.01`): planning,
+   verification, and JUDGEMENT (Section 10). Caps: $0.01 default, $0.05 for
+   hard problems (operator-settled 2026-07-17). Never implementation. Never
+   raise caps without operator approval.
 10. **Claude native**: [AUDIT-GATE] adversarial verdicts (fable), structural
     deadlocks, 2+ free-lane failures. Burns Anthropic subscription window.
 
@@ -220,3 +220,48 @@ by 23960b35/8da8cc90 after audit; do not repeat their failure modes.
     fixed 2026-07-17; see HANDOFF/MORPH_LITE_HANDOFF.md). **Fusion Lite** is
     planning triangulation only, on the spend-capped key at
     `~/.config/scmorc/openrouter_fusion.env`.
+12. **`enable_thinking` must follow the model name.** DashScope non-thinking
+    hybrids require `enable_thinking=false` for non-streaming; thinking models
+    (qwen3-*-thinking-*) REQUIRE `true` (400 "restricted to True" otherwise).
+    delegate_task.py now sets it from the model name. Symptom history: THINK
+    dispatch 400'd and silently rotated down to a FLASH model -- a masked tier
+    downgrade. A rotation that DOWNGRADES tier on an analysis/judgement task
+    is a FAILED dispatch: fix the root cause, re-dispatch at the right tier.
+13. **FLASH tier cannot do analysis.** On the E-00 pre-flight, a flash model
+    ignored an explicit read-only instruction, emitted code blocks, and
+    guessed constants instead of citing file:line evidence. Analysis and
+    judgement dispatches: THINK tier minimum, never FLASH/CODER-flash.
+14. **OpenRouter budgets (operator 2026-07-17):** `openrouter.env` =
+    FREE-MODELS-ONLY (delegate_task.py refuses non-`:free` models);
+    `openrouter_fusion.env` = shared paid Fusion+Morph key ($0.50 cap).
+    Proven costs: Morph call $0.00086; Fusion 3-panel+judge $0.0013.
+15. **OpenCode native agent map** (`.opencode/`): GLM-5.2 `orchestrator`
+    (primary), kimi-k2.7-code `implementer`, deepseek-v4-flash explore +
+    small_model, glm-5.1 general. Config loads at startup only -- RESTART
+    opencode to activate; verify model IDs resolve (`opencode-go/<id>`).
+
+---
+
+## 10. Fusion Judgement Protocol (operator-settled 2026-07-17)
+
+Judgement is DELEGATED, not done natively by the orchestrator. Acceptance of
+any analysis, design, or non-trivial implementation diff requires a Fusion
+Lite panel verdict of UNANIMOUS PASS. Anything less: re-iterate -- fix or
+re-dispatch with the panel's dissent inlined, then re-judge.
+
+1. **Panel:** 3 models, 70B+ class, different vendors. Proven set:
+   `qwen/qwen3-235b-a22b-2507,deepseek/deepseek-chat-v3.1,meta-llama/llama-3.3-70b-instruct`,
+   judge `qwen/qwen3-235b-a22b-2507`. Never 8B-class for design judgement.
+2. **Command:**
+   `python scripts/fusion_lite.py --prompt-file tmp/<item>.md --panel "<3>" --judge "<j>" --max-tokens 1000 --max-cost 0.05 --out tmp/<item>-verdict.md`
+   (--max-tokens >=800 for design questions; 500 truncates 70B panelists).
+3. **Unanimity rule:** every panelist must independently endorse AND the
+   judge synthesis must record no unresolved dissent. One dissent = re-iterate.
+4. **What gets judged:** pre-implementation analysis (PASS before writing the
+   implementation packet), implementation diffs on gated paths (this is the
+   adversarial-review gate for core/src/{crypto,transport,routing,privacy}/
+   when the panel is given an adversarial prompt: probe for races, desync,
+   downgrade, framing-compat, DoS), and any acceptance the orchestrator is
+   unsure about. Compile-only verify is still NOT completion (Section 9.1).
+5. **Record** every judgement in the ledger (`--record --lake openrouter
+   --model fusion-panel-3x70b`) and cite the verdict file in the commit.

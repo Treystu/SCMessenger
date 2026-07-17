@@ -28,6 +28,20 @@ stale body). Batch-dispatch rules: `docs/ORCHESTRATION.md` Section 9
   (429), ollama qwen3.5:397b-cloud (403), gemini (no key file).
 - **Duplicate tickets retired** to `HANDOFF/retired/dupes_2026-07-17/`;
   canonical files remain in todo/.
+- **E-00 APPROVED by operator 2026-07-17** (kill switch = env
+  SCM_RATCHET_DISABLE). THINK-tier pre-flight analysis DONE (5/5 findings,
+  file:line evidence; see ticket). Next: Fusion unanimous judgement ->
+  CODER implementation -> Fusion adversarial panel -> commit.
+- **Judgement policy (operator):** Fusion Lite panel is the judgement layer;
+  UNANIMOUS PASS required, else re-iterate (docs/ORCHESTRATION.md Section 10).
+  Caps $0.01 default / $0.05 hard. Proven costs: Fusion run $0.0013, Morph
+  call $0.00086. Panel = 3x70B+ diverse vendors; FLASH cannot do analysis.
+- **OpenRouter budgets enforced in code:** free-only key (delegate_task
+  refuses non-:free), shared paid Fusion+Morph key ($0.50 cap).
+- **OpenCode agent map added** (`.opencode/`): GLM-5.2 orchestrator primary,
+  kimi-k2.7-code implementer, deepseek-v4-flash explore -- RESTART REQUIRED.
+- **Lane bug fixed:** enable_thinking now follows model name (thinking models
+  require true); silent tier-downgrade rotation on 400 is a failed dispatch.
 
 ## 2026-07-13 FARM V1.0.0 BACKLOG SESSION — A1/A2/E2/E3 done, E1 blocked twice, F1 in-flight
 
