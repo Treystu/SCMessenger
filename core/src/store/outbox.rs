@@ -130,21 +130,6 @@ impl Outbox {
         }
     }
 
-    /// Close the outbox and perform any necessary cleanup
-    /// This ensures that persistent storage is properly flushed and closed
-    pub fn close(&mut self) -> Result<(), String> {
-        match &mut self.backend {
-            OutboxBackend::Persistent(db) => {
-                // Attempt to flush any pending writes
-                db.flush().map_err(|e| format!("Failed to flush outbox storage: {}", e))?;
-            }
-            OutboxBackend::Memory { .. } => {
-                // Memory backend doesn't require special cleanup
-            }
-        }
-        Ok(())
-    }
-
     /// Trigger maintenance to enforce retention policies after outbox operations.
     /// This automatically prunes expired messages and enforces configured limits.
     /// If storage_manager is not available (None), this is a no-op.

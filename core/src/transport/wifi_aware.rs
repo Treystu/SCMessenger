@@ -237,7 +237,7 @@ impl WifiAwarePlatformBridge for MockWifiAwareBridge {
         _pmk: &[u8; 32],
     ) -> Result<SocketAddr, WifiAwareError> {
         let _ = peer_id;
-        Ok("127.0.0.1:5000".parse().unwrap())
+        Ok("192.168.100.1:5000".parse().unwrap())
     }
 
     async fn close_data_path(&self, peer_id: &str) -> Result<(), WifiAwareError> {
@@ -499,60 +499,6 @@ impl WifiAwareTransport {
                 );
             },
         ));
-    }
-
-    /// Wire the platform bridge data path confirmation callback.
-    /// This handles the confirmation of data path establishment.
-    pub fn wire_data_path_callback(&self) {
-        let data_paths = self.data_paths.clone();
-        self.bridge.set_on_data_path_confirmed(Box::new(
-            move |peer_id_str: String, socket_addr: SocketAddr| {
-                info!(
-                    "WiFi Aware data path confirmed for peer {}: {}",
-                    peer_id_str, socket_addr
-                );
-                // In a real implementation, we would update the data path info here
-                // For now, we just log the confirmation
-            },
-        ));
-    }
-
-    /// Wire the platform bridge message received callback.
-    /// This handles incoming messages from peers.
-    pub fn wire_message_callback<F>(&self, handler: F)
-    where
-        F: Fn(PeerId, Vec<u8>) + Send + Sync + 'static,
-    {
-        self.bridge.set_on_message_received(Box::new(
-            move |peer_id_str: String, data: Vec<u8>| {
-                match peer_id_str.parse::<PeerId>() {
-                    Ok(peer_id) => handler(peer_id, data),
-                    Err(_) => {
-                        warn!("Failed to parse peer ID from message: {}", peer_id_str);
-                    }
-                }
-            },
-        ));
-    }
-
-    /// Send data to a peer via WiFi Aware
-    pub async fn send_data(&self, peer_id: PeerId, data: Vec<u8>) -> Result<(), WifiAwareError> {
-        // In the Android implementation, once the loopback proxy is active,
-        // data delivery happens through libp2p dialing the loopback address
-        // rather than through direct sendData calls.
-        //
-        // For the Rust implementation, we should integrate with the libp2p
-        // swarm and let it handle the connection through the loopback proxy.
-        //
-        // This method is kept for API compatibility but should not be used
-        // once the data path is established.
-        warn!(
-            "WiFi Aware send_data() is a no-op once the loopback proxy is active for peer {}",
-            peer_id
-        );
-        Err(WifiAwareError::InvalidStateTransition(
-            "Direct send_data not supported once data path is established".to_string(),
-        ))
     }
 
     /// Shutdown WiFi Aware transport

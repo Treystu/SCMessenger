@@ -305,7 +305,7 @@ final class SmartTransportRouter {
             if let success = preferredResult, success {
                 let latencyMs = UInt64(Date().timeIntervalSince(startTime) * 1000)
                 recordSuccess(peerId: peerId, transport: preferred, latencyMs: latencyMs)
-                logger.info("✓ Preferred transport \(preferred.rawValue) succeeded in \(latencyMs)ms")
+                logger.info("[OK] Preferred transport \(preferred.rawValue) succeeded in \(latencyMs)ms")
                 return TransportDeliveryResult(
                     transport: preferred,
                     success: true,
@@ -348,7 +348,7 @@ final class SmartTransportRouter {
         
         if let result = result {
             recordSuccess(peerId: peerId, transport: result.transport, latencyMs: result.latencyMs)
-            logger.info("✓ Transport \(result.transport.rawValue) succeeded in \(result.latencyMs)ms")
+            logger.info("[OK] Transport \(result.transport.rawValue) succeeded in \(result.latencyMs)ms")
             return TransportDeliveryResult(
                 transport: result.transport,
                 success: true,
@@ -362,7 +362,7 @@ final class SmartTransportRouter {
             for transportAttempt in availableTransports {
                 recordFailure(peerId: peerId, transport: transportAttempt.type, error: "all_transports_failed")
             }
-            logger.error("✗ All transports failed for peer \(peerId.prefix(8))")
+            logger.error("[FAIL] All transports failed for peer \(peerId.prefix(8))")
             return TransportDeliveryResult(
                 transport: .internet,
                 success: false,

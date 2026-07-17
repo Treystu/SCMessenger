@@ -6,6 +6,7 @@ import os
 import re
 import sys
 import subprocess
+import time
 
 QWEN_URL = "https://ws-2vzz894jwsk3t27r.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1/chat/completions"
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
@@ -271,11 +272,23 @@ def send_request(args, prompt, resolved_model, display_model, round_num=None):
             "User-Agent": "curl/8.5.0"
         }
 
+    if args.provider == "groq":
+        # Groq counts max_tokens toward the free-tier TPM budget (6000), so a
+        # large completion ceiling 413s even a tiny prompt. Cap so that
+        # est_prompt + max_tokens stays under the limit.
+        est_prompt_tokens = (len(system_message) + len(prompt)) // 4 + 50
+        groq_cap = max(256, GROQ_TPM_LIMIT - est_prompt_tokens - 200)
+        if payload["max_tokens"] > groq_cap:
+            print(f"[INFO] Capping max_tokens {payload['max_tokens']} -> {groq_cap} for groq TPM budget")
+            payload["max_tokens"] = groq_cap
+
     req = urllib.request.Request(req_url, headers=headers, data=json.dumps(payload).encode("utf-8"))
 
-    try:
-        with urllib.request.urlopen(req, timeout=600) as r:
-            resp = json.loads(r.read().decode("utf-8"))
+    transient_attempts = 0
+    while True:
+        try:
+            with urllib.request.urlopen(req, timeout=600) as r:
+                resp = json.loads(r.read().decode("utf-8"))
 
             if args.provider == "ollama":
                 content = resp.get("message", {}).get("content", "")
@@ -304,18 +317,36 @@ def send_request(args, prompt, resolved_model, display_model, round_num=None):
 
             return content, response_file
 
-    except urllib.error.HTTPError as e:
-        if (e.code == 429 or e.code == 403) and args.provider == "qwen":
-            print("[WARN] Rate limit or Quota hit. Rotating model...")
+        except urllib.error.HTTPError as e:
+            if (e.code == 429 or e.code == 403) and args.provider == "qwen":
+                print("[WARN] Rate limit or Quota hit. Rotating model...")
+                return None, None
+            body = ""
+            try:
+                body = e.read().decode("utf-8")
+            except Exception:
+                pass
+            # Transient errors on non-qwen lanes: honor Retry-After and retry
+            # in place (bounded), instead of crashing the whole dispatch.
+            if e.code in (429, 413, 500, 502, 503) and transient_attempts < 2:
+                retry_after = e.headers.get("Retry-After") if e.headers else None
+                try:
+                    delay = min(float(retry_after), 65.0) if retry_after else 20.0
+                except (TypeError, ValueError):
+                    delay = 20.0
+                transient_attempts += 1
+                print(f"[WARN] HTTP {e.code} from {args.provider}; retrying in {int(delay)}s "
+                      f"(attempt {transient_attempts}/2)")
+                time.sleep(delay)
+                continue
+            print(f"HTTP error: {e.code} - {body}")
             return None, None
-        print(f"HTTP error: {e.code} - {e.read().decode('utf-8')}")
-        sys.exit(1)
-    except urllib.error.URLError as e:
-        print(f"Network error: {e}")
-        sys.exit(1)
-    except Exception as e:
-        print(f"Error processing request: {e}")
-        sys.exit(1)
+        except urllib.error.URLError as e:
+            print(f"Network error: {e}")
+            return None, None
+        except Exception as e:
+            print(f"Error processing request: {e}")
+            return None, None
 
 def _filter_allowed(paths, allowed_files):
     """Return (allowed, rejected) subsets of paths against the allowlist.
@@ -512,12 +543,19 @@ Return your changes as unified diffs, one fenced ```diff block per file, using s
         
         chunk_content, response_file = send_request(args, prompt, resolved_model, display_model)
         retry_count = 0
-        while chunk_content is None and retry_count < 10:
+        while chunk_content is None and retry_count < 10 and args.provider == "qwen":
+            # Qwen-only: rotate through the DashScope model pool. Other lanes
+            # have no in-provider pool here; cross-lake failover is the
+            # orchestrator's job (lake_route.py), not this transport script's.
             resolved_model = get_next_qwen_model()
             print(f"Retrying with rotated model {resolved_model}...")
             chunk_content, response_file = send_request(args, prompt, resolved_model, resolved_model)
             retry_count += 1
-        
+
+        if chunk_content is None:
+            print(f"[FAIL] dispatch to {args.provider} failed after retries; no content received")
+            sys.exit(1)
+
         if chunk_content:
             all_content += chunk_content + "\n\n"
         print(f"Chunk {idx+1} response received and saved to {response_file}!")

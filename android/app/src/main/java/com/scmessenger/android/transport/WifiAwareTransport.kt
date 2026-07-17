@@ -12,7 +12,6 @@ import java.net.InetAddress
 import java.net.InetSocketAddress
 import java.net.ServerSocket
 import java.net.Socket
-import java.nio.ByteBuffer
 import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.*
 
@@ -153,7 +152,7 @@ class WifiAwareTransport(
 
             Timber.i("WiFi Aware attached successfully")
 
-            // Start publishing our service with port info in service info
+            // Start publishing our service
             startPublishing()
 
             // Start subscribing to discover peers
@@ -168,18 +167,14 @@ class WifiAwareTransport(
     }
 
     private fun startPublishing() {
-        // Include our preferred port in service info for negotiation
-        val serviceInfo = ByteBuffer.allocate(4).putInt(AWARE_PORT).array()
-        
         val config = PublishConfig.Builder()
             .setServiceName(SERVICE_NAME)
-            .setServiceSpecificInfo(serviceInfo)
             .setPublishType(PublishConfig.PUBLISH_TYPE_UNSOLICITED)
             .build()
 
         try {
             awareSession?.publish(config, publishDiscoveryCallback, null)
-            Timber.d("Publishing WiFi Aware service: $SERVICE_NAME with port info")
+            Timber.d("Publishing WiFi Aware service: $SERVICE_NAME")
         } catch (e: SecurityException) {
             Timber.e(e, "Security exception publishing WiFi Aware service")
         } catch (e: Exception) {
@@ -215,18 +210,7 @@ class WifiAwareTransport(
 
             Timber.d("Peer discovered via WiFi Aware: $peerId")
 
-            // Extract peer's preferred port from service info
-            var peerPort = AWARE_PORT
-            if (serviceSpecificInfo != null && serviceSpecificInfo.size >= 4) {
-                try {
-                    peerPort = ByteBuffer.wrap(serviceSpecificInfo).int
-                    Timber.d("Extracted peer port: $peerPort from service info")
-                } catch (e: Exception) {
-                    Timber.w(e, "Failed to parse peer port from service info, using default")
-                }
-            }
-
-            // Notify discovery with peer's port info
+            // Notify discovery
             val peerIdString = peerId.toString()
             onPeerDiscovered(peerIdString, serviceSpecificInfo, 0)
 
@@ -234,7 +218,7 @@ class WifiAwareTransport(
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 val session = publishSession
                 if (session != null) {
-                    initiateDataPath(session, peerId, peerIdString, isPublisher = true, peerPort = peerPort)
+                    initiateDataPath(session, peerId, peerIdString, isPublisher = true)
                 } else {
                     Timber.w("Publish session unavailable for WiFi Aware data path to $peerIdString")
                 }
@@ -254,18 +238,7 @@ class WifiAwareTransport(
 
             Timber.d("Service discovered via WiFi Aware: $peerId")
 
-            // Extract peer's preferred port from service info
-            var peerPort = AWARE_PORT
-            if (serviceSpecificInfo != null && serviceSpecificInfo.size >= 4) {
-                try {
-                    peerPort = ByteBuffer.wrap(serviceSpecificInfo).int
-                    Timber.d("Extracted peer port: $peerPort from service info")
-                } catch (e: Exception) {
-                    Timber.w(e, "Failed to parse peer port from service info, using default")
-                }
-            }
-
-            // Notify discovery with peer's port info
+            // Notify discovery
             val peerIdString = peerId.toString()
             onPeerDiscovered(peerIdString, serviceSpecificInfo, 0)
 
@@ -273,7 +246,7 @@ class WifiAwareTransport(
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 val session = subscribeSession
                 if (session != null) {
-                    initiateDataPath(session, peerId, peerIdString, isPublisher = false, peerPort = peerPort)
+                    initiateDataPath(session, peerId, peerIdString, isPublisher = false)
                 } else {
                     Timber.w("Subscribe session unavailable for WiFi Aware data path to $peerIdString")
                 }
@@ -286,8 +259,7 @@ class WifiAwareTransport(
         session: DiscoverySession,
         peerHandle: PeerHandle,
         peerIdString: String,
-        isPublisher: Boolean,
-        peerPort: Int = AWARE_PORT
+        isPublisher: Boolean
     ) {
         val config = WifiAwareNetworkSpecifier.Builder(session, peerHandle)
             .build()
@@ -305,7 +277,7 @@ class WifiAwareTransport(
                 if (isPublisher) {
                     // Publisher is RESPONDER: open a ServerSocket and wait for the initiator
                     scope.launch {
-                        createResponderSocket(peerIdString, peerPort)
+                        createResponderSocket(peerIdString)
                     }
                 }
                 // Initiator path is deferred to onCapabilitiesChanged where peer IPv6 is available
@@ -323,7 +295,7 @@ class WifiAwareTransport(
                         if (peerIpv6 != null && !activeConnections.containsKey(peerIdString)) {
                             Timber.d("WiFi Aware initiator: peer IPv6=$peerIpv6 for $peerIdString")
                             scope.launch {
-                                createInitiatorSocket(network, peerIdString, peerIpv6.hostAddress ?: return@launch, peerPort)
+                                createInitiatorSocket(network, peerIdString, peerIpv6.hostAddress ?: return@launch)
                             }
                         }
                     }
@@ -372,16 +344,16 @@ class WifiAwareTransport(
         Thread(r, "wifiaware-socket").apply { isDaemon = true }
     }.asCoroutineDispatcher()
 
-    private suspend fun createResponderSocket(peerId: String, peerPort: Int) {
+    private suspend fun createResponderSocket(peerId: String) {
         withContext(blockingSocketDispatcher) {
             var serverSocket: ServerSocket? = null
             try {
                 // Network.bindSocket only accepts Socket/DatagramSocket/FileDescriptor.
                 // For the responder path we listen on a plain ServerSocket and accept
                 // the peer connection established over the Aware data path.
-                serverSocket = ServerSocket(peerPort)
+                serverSocket = ServerSocket(AWARE_PORT)
 
-                Timber.d("WiFi Aware responder waiting for connection from $peerId on port $peerPort")
+                Timber.d("WiFi Aware responder waiting for connection from $peerId on port $AWARE_PORT")
 
                 val socket = serverSocket.accept()
                 serverSocket.close()
@@ -390,7 +362,7 @@ class WifiAwareTransport(
                 startLoopbackProxy(peerId, socket)
             } catch (e: Exception) {
                 serverSocket?.close()
-                Timber.e(e, "Failed to create WiFi Aware responder socket for $peerId on port $peerPort")
+                Timber.e(e, "Failed to create WiFi Aware responder socket for $peerId")
             }
         }
     }
@@ -400,16 +372,16 @@ class WifiAwareTransport(
      * well-known port using the peer's link-local IPv6 address obtained from
      * WifiAwareNetworkInfo in onCapabilitiesChanged.
      */
-    private suspend fun createInitiatorSocket(network: Network, peerId: String, peerIpv6: String, peerPort: Int) {
+    private suspend fun createInitiatorSocket(network: Network, peerId: String, peerIpv6: String) {
         withContext(Dispatchers.IO) {
             try {
                 val socket = network.socketFactory.createSocket()
-                socket.connect(InetSocketAddress(peerIpv6, peerPort), CONNECT_TIMEOUT_MS)
+                socket.connect(InetSocketAddress(peerIpv6, AWARE_PORT), CONNECT_TIMEOUT_MS)
 
-                Timber.i("WiFi Aware initiator connected to $peerId at [$peerIpv6]:$peerPort")
+                Timber.i("WiFi Aware initiator connected to $peerId at [$peerIpv6]:$AWARE_PORT")
                 startLoopbackProxy(peerId, socket)
             } catch (e: Exception) {
-                Timber.e(e, "Failed to create WiFi Aware initiator socket for $peerId at [$peerIpv6]:$peerPort")
+                Timber.e(e, "Failed to create WiFi Aware initiator socket for $peerId at [$peerIpv6]")
             }
         }
     }

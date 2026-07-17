@@ -17,7 +17,7 @@ use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use thiserror::Error;
-use tracing::{debug, info, warn};
+use tracing::{debug, info};
 use web_time::{SystemTime, UNIX_EPOCH};
 
 // ============================================================================
@@ -286,62 +286,6 @@ pub struct RelayCircuit {
 }
 
 // ============================================================================
-// LOSSY NETWORK SIMULATION
-// ============================================================================
-
-/// Lossy network simulation for testing NAT traversal under adverse conditions
-#[derive(Debug, Clone)]
-pub struct LossyNetworkSimulator {
-    /// Packet loss percentage (0.0 to 1.0)
-    pub packet_loss_rate: f64,
-    /// NAT mapping timeout in seconds
-    pub nat_mapping_timeout: u64,
-    /// Whether to simulate symmetric NAT behavior
-    pub symmetric_behavior: bool,
-    /// Whether to simulate port restrictions
-    pub port_restricted: bool,
-}
-
-impl Default for LossyNetworkSimulator {
-    fn default() -> Self {
-        Self {
-            packet_loss_rate: 0.0,
-            nat_mapping_timeout: 30,
-            symmetric_behavior: false,
-            port_restricted: false,
-        }
-    }
-}
-
-impl LossyNetworkSimulator {
-    /// Simulate packet loss during hole punching
-    pub fn should_drop_packet(&self) -> bool {
-        if self.packet_loss_rate <= 0.0 {
-            return false;
-        }
-        
-        let random_value: f64 = rand::random();
-        random_value < self.packet_loss_rate
-    }
-
-    /// Simulate NAT mapping timeout
-    pub fn is_mapping_expired(&self, created_at: u64) -> bool {
-        let now = current_unix_timestamp();
-        now - created_at > self.nat_mapping_timeout
-    }
-
-    /// Simulate symmetric NAT behavior where mappings change
-    pub fn simulate_symmetric_mapping(&self, original_port: u16) -> u16 {
-        if self.symmetric_behavior {
-            // Simulate port changing on each new connection
-            original_port + 1000 + (current_unix_timestamp() % 1000) as u16
-        } else {
-            original_port
-        }
-    }
-}
-
-// ============================================================================
 // NAT CONFIGURATION
 // ============================================================================
 
@@ -361,8 +305,6 @@ pub struct NatConfig {
     pub enable_hole_punch: bool,
     /// Enable relay fallback
     pub enable_relay_fallback: bool,
-    /// Lossy network simulator for testing
-    pub lossy_simulator: LossyNetworkSimulator,
 }
 
 impl Default for NatConfig {
@@ -376,7 +318,6 @@ impl Default for NatConfig {
             attempt_timeout: 10,
             enable_hole_punch: true,
             enable_relay_fallback: true,
-            lossy_simulator: LossyNetworkSimulator::default(),
         }
     }
 }
@@ -392,7 +333,6 @@ pub struct NatTraversal {
     hole_punch_attempts: Arc<RwLock<HashMap<String, HolePunchAttempt>>>,
     relay_circuits: Arc<RwLock<HashMap<String, RelayCircuit>>>,
     external_address: Arc<RwLock<Option<SocketAddr>>>,
-    lossy_simulator: Arc<RwLock<LossyNetworkSimulator>>,
 }
 
 impl NatTraversal {
@@ -410,13 +350,7 @@ impl NatTraversal {
             hole_punch_attempts: Arc::new(RwLock::new(HashMap::new())),
             relay_circuits: Arc::new(RwLock::new(HashMap::new())),
             external_address: Arc::new(RwLock::new(None)),
-            lossy_simulator: Arc::new(RwLock::new(LossyNetworkSimulator::default())),
         })
-    }
-
-    /// Configure lossy network simulation for testing
-    pub fn configure_lossy_simulation(&self, simulator: LossyNetworkSimulator) {
-        *self.lossy_simulator.write() = simulator;
     }
 
     /// Detect NAT type and external address using peer-assisted discovery
@@ -514,16 +448,6 @@ impl NatTraversal {
                 "Sending hole-punch probes to {}",
                 attempt.remote_external_addr
             );
-
-            // Apply lossy network simulation
-            let lossy_sim = self.lossy_simulator.read();
-            if lossy_sim.should_drop_packet() {
-                warn!("Simulating packet loss during hole-punch attempt");
-                attempt.status = HolePunchStatus::Failed;
-                return Err(NatTraversalError::HolePunchFailed(
-                    "Simulated packet loss".to_string(),
-                ));
-            }
 
             // Implement UDP hole-punching sequence
             // Real hole-punching protocol:
@@ -928,59 +852,5 @@ mod tests {
         assert!(config.peer_reflectors.is_empty());
         assert!(config.enable_hole_punch);
         assert!(config.enable_relay_fallback);
-    }
-
-    #[test]
-    fn test_lossy_network_simulator() {
-        let mut simulator = LossyNetworkSimulator::default();
-        simulator.packet_loss_rate = 0.5; // 50% packet loss
-        
-        let mut dropped_packets = 0;
-        for _ in 0..1000 {
-            if simulator.should_drop_packet() {
-                dropped_packets += 1;
-            }
-        }
-        
-        // Should be roughly 50% of 1000
-        assert!(dropped_packets > 400 && dropped_packets < 600);
-    }
-
-    #[test]
-    fn test_lossy_network_mapping_timeout() {
-        let simulator = LossyNetworkSimulator {
-            nat_mapping_timeout: 10,
-            ..Default::default()
-        };
-        
-        let now = current_unix_timestamp();
-        let old_time = now - 15; // 15 seconds ago
-        
-        assert!(simulator.is_mapping_expired(old_time));
-        
-        let recent_time = now - 5; // 5 seconds ago
-        assert!(!simulator.is_mapping_expired(recent_time));
-    }
-
-    #[test]
-    fn test_lossy_network_symmetric_mapping() {
-        let simulator = LossyNetworkSimulator {
-            symmetric_behavior: true,
-            ..Default::default()
-        };
-        
-        let original_port = 12345;
-        let mapped_port = simulator.simulate_symmetric_mapping(original_port);
-        
-        // With symmetric behavior, the port should change
-        assert_ne!(original_port, mapped_port);
-        
-        let simulator_normal = LossyNetworkSimulator {
-            symmetric_behavior: false,
-            ..Default::default()
-        };
-        
-        let normal_mapped_port = simulator_normal.simulate_symmetric_mapping(original_port);
-        assert_eq!(original_port, normal_mapped_port);
     }
 }
