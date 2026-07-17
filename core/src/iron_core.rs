@@ -2129,6 +2129,9 @@ impl IronCore {
         envelope_data: Vec<u8>,
         relay_public_keys_json: String,
     ) -> Result<Vec<u8>, IronCoreError> {
+        if !self.privacy_config().onion_routing_enabled {
+            return Err(IronCoreError::OnionRoutingDisabled);
+        }
         let relay_keys: Vec<String> = serde_json::from_str(&relay_public_keys_json)
             .map_err(|_| IronCoreError::InvalidInput)?;
         if relay_keys.is_empty() {
@@ -2157,6 +2160,9 @@ impl IronCore {
         onion_data: Vec<u8>,
         relay_secret_key: Vec<u8>,
     ) -> Result<crate::PeelResult, IronCoreError> {
+        if !self.privacy_config().onion_routing_enabled {
+            return Err(IronCoreError::OnionRoutingDisabled);
+        }
         let secret: [u8; 32] = relay_secret_key
             .try_into()
             .map_err(|_| IronCoreError::InvalidInput)?;

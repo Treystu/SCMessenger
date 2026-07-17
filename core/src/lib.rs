@@ -68,6 +68,8 @@ pub enum IronCoreError {
     MultiaddrNotSupported,
     #[error("IO error")]
     IoError,
+    #[error("Onion routing disabled")]
+    OnionRoutingDisabled,
 }
 
 pub use crypto::{decrypt_message, encrypt_message};

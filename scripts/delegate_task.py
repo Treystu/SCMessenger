@@ -142,27 +142,16 @@ def get_api_key(provider):
                                       ("GROQ_API_KEY",)))
     return None
 
-def extract_file_blocks(content):
+def extract_file_blocks(content, allowed_files=None):
     """
     Extract (filename, file_content) pairs from model output.
-    Handles two patterns:
-      Pattern A: filename comment INSIDE code block as first line
-        ```rust
-        // path/to/file.rs
-        ... code ...
-        ```
-      Pattern B: filename comment BEFORE code block (Qwen default)
-        // path/to/file.rs
-        ```python
-        ... code ...
-        ```
     """
     results = []
 
     # Pattern A: filename inside block (any language tag)
     for block in re.finditer(r"```[a-zA-Z]*\n(.*?)\n```", content, re.DOTALL):
         lines = block.group(1).split("\n")
-        first = lines[0].strip()
+        first = lines[0].strip() if lines else ""
         if first.startswith("// ") or first.startswith("# "):
             filename = first.replace("// ", "").replace("# ", "").replace("filename: ", "").strip()
             if filename.endswith(VALID_EXTENSIONS):
@@ -183,6 +172,13 @@ def extract_file_blocks(content):
             filename = first.replace("// ", "").replace("# ", "").strip()
             if filename.endswith(VALID_EXTENSIONS):
                 results.append((filename, "\n".join(lines[1:])))
+
+    # Fallback Pattern: if results is empty, allowed_files has exactly 1 file,
+    # and there is exactly one code block, use it.
+    if not results and allowed_files and len(allowed_files) == 1:
+        blocks = re.findall(r"```[a-zA-Z]*\n(.*?)\n```", content, re.DOTALL)
+        if len(blocks) == 1:
+            results.append((allowed_files[0], blocks[0]))
 
     return results
 
@@ -475,7 +471,7 @@ Return your changes as unified diffs, one fenced ```diff block per file, using s
             if not diff_blocks:
                 print("[WARN] No diff blocks found in response; falling back to full-file mode for this task")
                 current_mode = "full"
-                file_blocks = extract_file_blocks(content)
+                file_blocks = extract_file_blocks(content, allowed_files)
                 if file_blocks:
                     applied_successfully = apply_file_blocks(file_blocks, allowed_files)
                     touched_files = [f for f, _ in file_blocks]
@@ -490,14 +486,14 @@ Return your changes as unified diffs, one fenced ```diff block per file, using s
                 else:
                     print("[WARN] diff apply failed; falling back to full-file mode for this task")
                     current_mode = "full"
-                    file_blocks = extract_file_blocks(content)
+                    file_blocks = extract_file_blocks(content, allowed_files)
                     if file_blocks:
                         applied_successfully = apply_file_blocks(file_blocks, allowed_files)
                         touched_files = [f for f, _ in file_blocks]
                     else:
                         print("Warning: No properly formatted code blocks found to apply.")
         else:  # full mode
-            file_blocks = extract_file_blocks(content)
+            file_blocks = extract_file_blocks(content, allowed_files)
             if not file_blocks:
                 print("Warning: No properly formatted code blocks found to apply.")
             else:
@@ -583,7 +579,7 @@ Return your changes as unified diffs, one fenced ```diff block per file, using s
                             if not diff_blocks:
                                 print("[WARN] round response had no diff blocks; falling back to full-file mode")
                                 current_mode = "full"
-                                file_blocks = extract_file_blocks(content)
+                                file_blocks = extract_file_blocks(content, allowed_files)
                                 if file_blocks:
                                     apply_file_blocks(file_blocks, allowed_files)
                                 else:
@@ -595,13 +591,13 @@ Return your changes as unified diffs, one fenced ```diff block per file, using s
                                 else:
                                     print("[WARN] diff apply failed; falling back to full-file mode for subsequent rounds")
                                     current_mode = "full"
-                                    file_blocks = extract_file_blocks(content)
+                                    file_blocks = extract_file_blocks(content, allowed_files)
                                     if file_blocks:
                                         applied_successfully = apply_file_blocks(file_blocks, allowed_files) or applied_successfully
                                     else:
                                         print("[WARN] round response had no applicable file blocks; counting as a failed round")
                         else:  # full mode
-                            file_blocks = extract_file_blocks(content)
+                            file_blocks = extract_file_blocks(content, allowed_files)
                             if not file_blocks:
                                 print("[WARN] round response had no applicable file blocks; counting as a failed round")
                             else:
