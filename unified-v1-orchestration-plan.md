@@ -30,6 +30,58 @@ Claude implementation.
 
 ---
 
+## 2026-07-17 AUDIT AMENDMENT (authoritative over sub-task status boxes)
+
+Post-facto audit of this plan + the 07-16/17 swarm runs. Machine truth:
+`scm_v1_farm_queue.jsonl`; human dispatch order: `HANDOFF/todo/_QUEUE.md`
+(status-correction header); operational lessons: `docs/ORCHESTRATION.md`
+Section 9. The `[ ] pending` boxes below were never maintained -- trust this
+table.
+
+| Sub-Task | True status 2026-07-17 | Evidence |
+|----------|------------------------|----------|
+| 1. Custody DriftFrame wrap | DONE | 82adf735; hardened + adversarial PASS-WITH-NOTES in 30b78eea |
+| 2. A7/A8 commit + close | DONE | a31dcdbf, edac65ea |
+| 3. F1 convergence test | DONE | 908e4b13; A-02 closed via 4274593f |
+| 4. Site-3 outbox flush | DONE | 6d884f97 + ecafd504; CRITICAL_OUTBOX ticket closed to done/ |
+| 5. A3 Android retry suppression | DONE | A-01 closed via 4274593f/4567ece0 |
+| 6. E-01a constraints analysis | SUPERSEDED | E-00 (below) reframes the whole E-01 family; ratchet is unreachable from the production path |
+| 7. Wave D batch | PARTIAL | D-01 done (908e4b13). D-02/D-04/D-05 OPEN (Qwen output reverted: wrong-dir gradle verify, vacuous success, nonexistent testRunner property). D-03 BLOCKED-PLATFORM (iOS on Windows) |
+| 8. Wave T residuals | OPEN | C-06/T-04 moved back to todo/ (8da8cc90): C-06 was 212 lines of simulated/mock code behind a compile-only gate. C-05 OPEN (xcodebuild on Windows). T-02/T-03 OPEN |
+| 9. Wave Z infra | PARTIAL | Z-01 done; docs/ORCHESTRATION.md + Section 9 lessons landed 07-17; Z-02/Z-03 OPEN |
+| 10. C-01 root-cause + H-03 | OPEN | H-03 is a HUMAN sign-off gate |
+| 11. Wave B freeze docs | OPEN | WAVE_B_FREEZE_STATUS.md still in todo/ |
+
+Corrections to the Context Summary above:
+
+- **with_codec claim was wrong.** "libp2p 0.56 does not expose with_codec()"
+  is false -- 0.56 puts the ceiling on the Codec via `with_codec`, not on
+  the Config. Hermes's size-limit intent was therefore ported after all:
+  4 MiB req / 16 MiB resp on /sc/message, /sc/relay, /sc/ledger-exchange
+  (30b78eea); address-reflection and registration deliberately left at
+  defaults (review F5 -- pure attack surface).
+- **"All lanes active" is not true as of 07-17.** Live: groq flash, qwen
+  flash, ollama gpt-oss:20b-cloud, openrouter morph (paid). Down: openrouter
+  `:free` (429 pool saturation), ollama qwen3.5:397b-cloud (403), gemini
+  (no key file -- agy CLI auth does not cover delegate_task.py). Router
+  skips keyless/cooling lanes automatically IF every dispatch is recorded
+  (`lake_route.py --record`).
+- **NEW CRITICAL -- E-00:** the ratchet/PQ subsystem is dead code on the
+  production path (`prepare_message_internal`/`receive_message` call bare
+  legacy encrypt/decrypt; every real message today has zero forward secrecy
+  and zero PQ protection). Ticket:
+  `HANDOFF/todo/CRITICAL_RATCHET_SUBSYSTEM_NOT_WIRED_INTO_IRONCORE.md`.
+  OPERATOR GATE: architecture decision required before dispatch; it blocks
+  E-01b/c, E-02, E-03, E-04, B-01. This is the true root of the E-01 defect
+  family and contradicts PQC_08's "verified" inventory.
+- **Swarm quality gate (new, mandatory):** compile-only verify is not
+  completion. Commits 71d02d4d/e298e9bf were reverted (23960b35/8da8cc90).
+  Rules: `--mode diff` always; exit 3 = vacuous = failed; grep diffs for
+  simulate/mock/placeholder; batch runners never commit or move tickets;
+  one build at a time on Windows. Full list: docs/ORCHESTRATION.md Section 9.
+
+---
+
 ## Sub-Tasks
 
 ---

@@ -224,3 +224,14 @@ test (Windows CLI <-> Android emulator via adb forward + bootstrap config)
 and confirm a sent message is actually received (bytesTransferred > 0 on the
 recipient, message visible in the recipient's history) within a reasonable
 time, not just accepted by the API.
+
+## CLOSURE 2026-07-17 (native audit session)
+
+Site 2 fixed+live-verified via commit ecafd504 (route-bypass for already-
+connected peers). Site 3 fixed via commit 6d884f97: swarm.rs PeerIdentified
+handler calls handle_peer_connection_event -> Outbox::flush_peer_messages with
+exponential backoff re-enqueue (iron_core.rs:2553-2591). Site 1 judged pure
+durability queuing once 2/3 landed. Counterpart evidence:
+HANDOFF/done/OUTBOX_FLUSH_ON_CONNECT_RETRY.md and
+done/[VALIDATED]_P1_PLATFORM_001_Outbox_Flush_PeerDiscovered.md.
+[x] File moved to done/

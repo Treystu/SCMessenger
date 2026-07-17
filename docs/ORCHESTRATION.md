@@ -59,13 +59,15 @@ For any task, try lanes in this order (first available with quota wins):
 4. **Qwen CODER** (`delegate_task.py --provider qwen --model qwen3-coder-plus`):
    Rust/Kotlin implementation, 128K context, no size limit. Primary CODER lane.
 5. **Gemini CODER** (`delegate_task.py --provider gemini --model gemini-2.5-flash`):
-   large-context review, whole-file diffs. Secondary CODER lane.
+   large-context review, whole-file diffs. Secondary CODER lane. KEY-GATED:
+   needs `~/.config/scmorc/gemini.env` (absent 2026-07-17; router skips it
+   automatically -- the agy CLI sign-in does not cover this lane).
 6. **OpenRouter CODER** (`delegate_task.py --provider openrouter --model deepseek/deepseek-chat-v3:free`):
    spillover when Qwen tiers saturate.
 7. **Qwen THINK** (`delegate_task.py --provider qwen --model qwen3-235b-a22b-thinking-2507`):
    adversarial review, hard design, failed-CODER escalation.
 8. **Gemini THINK** (`delegate_task.py --provider gemini --model gemini-2.5-pro`):
-   large-context adversarial review.
+   large-context adversarial review. Same gemini.env key gate as lane 5.
 9. **Fusion Lite** (`scripts/fusion_lite.py --max-cost 0.001`): planning and
    verification second opinions only. WS-A delivery-logic triangulation: 3
    distinct Qwen verifier dispatches OR one Fusion Lite panel run. Never
@@ -157,3 +159,64 @@ Zero-diff worker responses are re-queued, not marked done.
 State is file-backed; resumption requires only: this document, the JSONL
 queue, the ledger, and the HANDOFF tree. No model memory is required.
 Follow `API_LIMIT_MANAGEMENT_PLAN.md` for per-lake exhaustion handling.
+
+---
+
+## 9. Lessons: 2026-07-17 Swarm Post-Mortem (READ before any batch dispatch)
+
+Each rule below was paid for in a bad commit or a burned quota window.
+Commits 71d02d4d/e298e9bf ("swarm: completed remaining queue") were reverted
+by 23960b35/8da8cc90 after audit; do not repeat their failure modes.
+
+1. **Compile-only verify is NOT a completion gate.** The reverted run's
+   "passing" C-06 diff was 212 lines of simulated/mock dead code that
+   compiled cleanly. After ANY exit-0 verify, grep the applied diff for
+   `simulate|mock|placeholder|in a real implementation` before accepting,
+   and give it an orchestrator quality pass.
+2. **Know the delegate_task.py exit codes:** 0 = verified (still needs
+   rule-1 quality pass), 2 = verify failed after all fix rounds, 3 =
+   VACUOUS success (model returned no applicable file blocks -- treat as
+   FAILED, never as done).
+3. **Always dispatch with `--mode diff`.** Without it, flash-tier models
+   emit prose summaries instead of applicable file blocks, producing
+   vacuous successes (observed on E-02/E-04/D-05/D-01 in the reverted run).
+4. **Platform-correct verify commands.** gradlew lives in `android\`, not
+   the repo root (`gradlew.bat assembleDebug` from root fails with
+   "Task 'assembleDebug' not found"). iOS targets CANNOT be verified on
+   Windows -- xcodebuild does not exist here. Mark iOS packets
+   BLOCKED-PLATFORM and route them to a macOS runner (H-01); never let a
+   batch runner "fail" them against a nonexistent toolchain.
+5. **One build at a time on Windows.** Never run two concurrent
+   `delegate_task.py --verify` jobs (2 concurrent cargo/gradle builds risk
+   rlib lock corruption; see .claude/rules/build.md). `run_tasks.ps1` v2 is
+   strictly sequential for this reason.
+6. **Batch runners NEVER auto-commit and NEVER move tickets.** Workers
+   implement; the orchestrator reviews (adversarial gate for
+   `core/src/{crypto,transport,routing,privacy}/`), moves tickets, and
+   commits. `run_tasks.ps1` v2 writes `tmp/swarm_report.md` only.
+7. **Hallucinated Target Files are real.** On D-03 the file-deducer emitted
+   three nonexistent `SCMessengerTests/*.swift` paths, which would have
+   become the worker's write allowlist. `scripts/deduce_files.py` now drops
+   any emitted path not present in `git ls-files`. If a packet has no
+   Target Files, re-run `scripts/fix_targets.py` before dispatch.
+8. **Qwen non-stream 400** (`parameter.enable_thinking must be set to false
+   for non-streaming calls`): fixed in delegate_task.py (all non-streaming
+   DashScope calls send `enable_thinking=false`). If you see this error you
+   are running an old script -- pull.
+9. **Feed the ledger or the router goes blind.** After EVERY dispatch:
+   `python scripts/lake_route.py --record --lake <lake> --model <model>
+   --task <id> --result ok|429|403|413|error|timeout|vacuous`. The router
+   skips lakes with no key file and honors cooldowns automatically -- but
+   only knows what you record.
+10. **Lane smoke results, 2026-07-17** (re-probe at sprint start):
+    - LIVE: groq `llama-3.1-8b-instant`; qwen `qwen3-coder-flash`;
+      ollama `gpt-oss:20b-cloud`; openrouter `morph/morph-v3-fast` (paid,
+      routes fine).
+    - DOWN: openrouter `:free` tiers (429 shared-pool saturation -- retry
+      off-peak); ollama `qwen3.5:397b-cloud` (403 auth); gemini lane needs
+      `GEMINI_API_KEY`/`GOOGLE_API_KEY` in `~/.config/scmorc/gemini.env`
+      (the agy CLI's own sign-in does NOT cover delegate_task.py).
+11. **Morph Lite** is for single-file surgical edits only (three lane bugs
+    fixed 2026-07-17; see HANDOFF/MORPH_LITE_HANDOFF.md). **Fusion Lite** is
+    planning triangulation only, on the spend-capped key at
+    `~/.config/scmorc/openrouter_fusion.env`.

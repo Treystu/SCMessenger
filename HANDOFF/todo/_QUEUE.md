@@ -1,7 +1,30 @@
 # _QUEUE -- Dispatch Order for the Full v1.0.0 Backlog
 
 Status: Active
-Last updated: 2026-07-13 EOD (see
+Last updated: 2026-07-17 (status-correction header; body below retains the
+2026-07-13 narrative -- trust `scm_v1_farm_queue.jsonl` + this header over
+stale body lines)
+
+## 2026-07-17 STATUS CORRECTIONS (authoritative over the body below)
+
+- MACHINE QUEUE: `scm_v1_farm_queue.jsonl` (repo root) is the dispatch source
+  of truth; sprint plan: `unified-v1-orchestration-plan.md` (repo root).
+- DONE since the 07-13 body was written: U1-U4 (07-14), A-01 (A3 Android retry
+  suppression), A-02 (F1 confirm run), A-07 (dial-error observability), A-08
+  (onion gating), Site-2/Site-3 outbox flush (CRITICAL_OUTBOX ticket closed to
+  done/ 07-17), custody DriftFrame wrap (82adf735), FARM_TESTRUNNER_REST_API_GAP.
+- NEW CRITICAL (2026-07-17): the ratchet/PQ subsystem is NOT wired into
+  IronCore's production send/receive path -- see
+  `HANDOFF/todo/CRITICAL_RATCHET_SUBSYSTEM_NOT_WIRED_INTO_IRONCORE.md` (E-00,
+  operator gate). E-01 body items below are still real but E-00 reframes them.
+- Duplicate ticket stubs (A-04/A-05/E-02/E-04/D-01/U2/U3/U4 short-forms)
+  retired to `HANDOFF/retired/dupes_2026-07-17/`; canonical files remain in
+  todo/ (U5/U6/U7, PQC_07_*).
+- 2026-07-17 swarm run lesson: compile-only verify is NOT a completion gate.
+  Commits 71d02d4d/e298e9bf were reverted (23960b35/8da8cc90) after Qwen
+  output contained simulated/mock code. See docs/ORCHESTRATION.md lessons
+  section before dispatching another batch runner.
+(see
 `HANDOFF/SESSION_HANDOFF_2026-07-13_farm_v1_backlog.md` for the full session
 report). A1/A2/E2/E3 DONE this session; E1 BLOCKED twice (needs attempt 3,
 see below); F1 written, compiled clean, run result unconfirmed at session end

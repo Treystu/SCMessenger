@@ -1,7 +1,33 @@
 # SCMessenger Remaining Work Tracking
 
 Status: Active
-Last updated: 2026-07-13 (Farm delivery-truth fixes + PQC-07 E1 attempt 2 blocked)
+Last updated: 2026-07-17 (72h audit + orchestration unification sprint-prep)
+
+## 2026-07-17 72-HOUR AUDIT + ORCHESTRATION UNIFICATION — E-00 CRITICAL filed, queue corrected, lanes smoke-tested
+
+Sprint plan: `unified-v1-orchestration-plan.md` (with 2026-07-17 audit
+amendment table). Machine queue: `scm_v1_farm_queue.jsonl`. Dispatch order:
+`HANDOFF/todo/_QUEUE.md` (status-correction header is authoritative over its
+stale body). Batch-dispatch rules: `docs/ORCHESTRATION.md` Section 9
+(post-mortem of the reverted 71d02d4d/e298e9bf swarm run).
+
+- **NEW CRITICAL — E-00 (OPERATOR GATE):** ratchet/PQ subsystem is
+  unreachable from the production path; every real message has zero forward
+  secrecy and zero PQ protection today. Ticket:
+  `HANDOFF/todo/CRITICAL_RATCHET_SUBSYSTEM_NOT_WIRED_INTO_IRONCORE.md`.
+  Blocks E-01b/c, E-02, E-03, E-04, B-01. Architecture decision required.
+- **Done since 07-13:** U1-U4, A-01 (A3), A-02 (F1), A-07, A-08, outbox
+  flush Sites 2+3 (CRITICAL_OUTBOX closed), custody DriftFrame wrap
+  (82adf735), Hermes farm-sim transport ports + hardening (30b78eea,
+  adversarial PASS-WITH-NOTES on file), D-01.
+- **Reverted:** 71d02d4d/e298e9bf "swarm completed" claims — Qwen output
+  was simulated/mock code behind compile-only gates. C-05/C-06/T-02/T-03/
+  T-04/D-02/D-04/D-05 remain OPEN; D-03 BLOCKED-PLATFORM (iOS on Windows).
+- **Lane smokes 2026-07-17:** LIVE — groq flash, qwen flash, ollama
+  gpt-oss:20b-cloud, openrouter morph (paid). DOWN — openrouter :free
+  (429), ollama qwen3.5:397b-cloud (403), gemini (no key file).
+- **Duplicate tickets retired** to `HANDOFF/retired/dupes_2026-07-17/`;
+  canonical files remain in todo/.
 
 ## 2026-07-13 FARM V1.0.0 BACKLOG SESSION — A1/A2/E2/E3 done, E1 blocked twice, F1 in-flight
 
