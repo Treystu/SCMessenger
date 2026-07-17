@@ -8,7 +8,7 @@ This document serves as the **Single Source of Truth** for all development opera
 
 ---
 
-## 🚫 1. Banned & Forbidden Behaviors (P0 - Non-Negotiable)
+##  1. Banned & Forbidden Behaviors (P0 - Non-Negotiable)
 
 *   **Only Lines of Code (LOC) Estimates**: Never use time-based estimates, durations, or any other estimation format. Use LOC magnitudes instead (e.g., *“~50 LOC change”*).
 *   **No Shell Commands for File Editing**: Never use shell/terminal commands (such as `echo`, `cat`, `sed`, `awk`, etc.) to write or edit file contents. Always use native file edit APIs/tools.
@@ -20,7 +20,7 @@ This document serves as the **Single Source of Truth** for all development opera
 
 ---
 
-## 🏗️ 2. Agent State-Machine & Swarm Operations
+##  2. Agent State-Machine & Swarm Operations
 
 *Ignore unless the user invokes the /Orchestrate skill.*
 When the user invokes the /Orchestrate skill, all agent work must follow the exact lifecycle defined below to preserve swarm consistency and automated accounting. **If the user does not explicitly request to run the orchestrate function, this section is completely irrelevant. You must ignore it, move down the list, and proceed directly with task execution.**
@@ -36,9 +36,13 @@ When the user invokes the /Orchestrate skill, all agent work must follow the exa
 *   **Orchestrator Fire-and-Forget Protocol**: Once the Orchestrator has formulated `task.json`, launched workers (filling the 2 slots), and validated pool status, it **MUST** exit the active session immediately. It must never use `sleep` or poll for completion; let the system cron wake it up later.
 *   **Productivity Tracking**: Track swarm progress via `HANDOFF/` file state changes, not via agent run logs. Always check `pool status` before launching new tasks.
 
+### Lead Orchestrator Backlog Pipeline (Gemini/Claude)
+*   **Sequential Dispatch**: When grinding through a backlog (e.g. `HANDOFF/todo/`), the Lead Orchestrator should use a sequential shell loop that parses the `## Target Files` block from each task markdown and dynamically pipes them into `scripts/delegate_task.py --apply`. Do not run `delegate_task.py --apply` in parallel within the same workspace due to `cargo` compile locks.
+*   **Swarm Escalation**: The shell loop must be configured to `break` upon any `delegate_task.py` failure (which happens after 3 failed LLM rounds). When the loop breaks, the Lead Orchestrator must wake up, act as the CI gatekeeper, surgically fix the compilation failure natively, checkpoint the task, and resume the sequential loop.
+
 ---
 
-## 🔒 3. Architecture & Cryptography Rules
+##  3. Architecture & Cryptography Rules
 
 *   **Rust-First Sovereignty**: Cryptographic authority and core system state live solely in the Rust core (`core/src/`). Platform adapters (Kotlin, Swift, WASM) are strictly dumb byte pipes and MUST NOT redefine or duplicate cryptographic behavior.
 *   **Strict Cryptography Stack**: Never substitute core algorithms under any circumstances:
@@ -53,7 +57,7 @@ When the user invokes the /Orchestrate skill, all agent work must follow the exa
 
 ---
 
-## 🚦 4. Verification, Gatekeeping & Builds
+##  4. Verification, Gatekeeping & Builds
 
 Before finalizing any run or task completion, the following gates must pass:
 
@@ -66,7 +70,7 @@ Before finalizing any run or task completion, the following gates must pass:
 
 ---
 
-## 💻 5. Windows-Specific Development & Compilation Rules
+##  5. Windows-Specific Development & Compilation Rules
 
 *   **Git Bash Pathing**: On Windows, all shell scripts (`scripts/*.sh`) must be invoked using the full path to Git Bash (`"C:\Program Files\Git\bin\bash.exe" <script>`) or executed from inside the Git Bash emulator.
 *   **Incremental Compilation Prevention**:
@@ -81,7 +85,7 @@ Before finalizing any run or task completion, the following gates must pass:
 
 ---
 
-## 📜 6. Script Hygiene, Logging & Automation Rules
+##  6. Script Hygiene, Logging & Automation Rules
 
 *   **Required Script Headers**:
     *   **Shell Scripts**: Must start with `#!/usr/bin/env bash`, followed by `set -euo pipefail`, and a comprehensive usage and parameter block comment.
@@ -97,7 +101,7 @@ Before finalizing any run or task completion, the following gates must pass:
 
 ---
 
-## 📁 7. Path & Directory Conventions
+##  7. Path & Directory Conventions
 
 *   **iOS Path Casing**: Always refer to the iOS directory using an uppercase-I: `iOS/`. Lowercase `ios/` will fail path-governance checks during CI.
 *   **XCFramework Location**: Pre-compiled frameworks must reside at `iOS/SCMessengerCore.xcframework/`. Never place them in the root of the workspace.
@@ -106,7 +110,7 @@ Before finalizing any run or task completion, the following gates must pass:
 
 ---
 
-## 🧠 8. Escalation Policy
+##  8. Escalation Policy
 
 AI agents must escalate decisions to the human operator for the following scenarios:
 1.  Architectural direction changes that alter the project's core design philosophy.
