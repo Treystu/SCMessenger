@@ -1,4 +1,4 @@
-# 🌊 SCMessenger Unified Lake Orchestrator 
+#  SCMessenger Unified Lake Orchestrator 
 > **LAKE CONTRACT ACTIVATED:** See `docs/ORCHESTRATION.md` for the single source of truth on the delegation loop, model fleet, and commands. This applies uniformly to Claude, Gemini, Qwen, and Codex agents in rotation.
 
 SCMessenger Swarm Orchestrator — delegate work to the agent pool via ollama cloud models
@@ -120,7 +120,7 @@ bash .claude/orchestrator_manager.sh pool launch rust-coder HANDOFF/todo/task_an
 ## Parallel Strategy
 
 - Launch up to 2 ollama cloud agents via `pool launch`
-- **⚠️ Native `<Agent>` tool economics:** The native Agent tool spawns a clone of your current model (e.g., `glm-5.1:cloud`), NOT a cheap local model. It burns quota at the same rate as your own session. Only use `<Agent>` in TIER 1 (Vanguard Mode). In TIER 2–4, use the bash script exclusively.
+- **[WARNING] Native `<Agent>` tool economics:** The native Agent tool spawns a clone of your current model (e.g., `glm-5.1:cloud`), NOT a cheap local model. It burns quota at the same rate as your own session. Only use `<Agent>` in TIER 1 (Vanguard Mode). In TIER 2–4, use the bash script exclusively.
 - Verify after each agent completes: `cargo check --workspace`, `cargo clippy`, `cargo fmt`
 
 ## Operational Hygiene

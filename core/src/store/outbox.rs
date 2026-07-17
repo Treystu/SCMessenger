@@ -37,6 +37,20 @@ pub struct QueuedMessage {
     pub attempts: u32,
     /// Next retry time (unix timestamp)
     pub next_retry_at: Option<u64>,
+    /// Whether this message is currently in relay custody
+    #[serde(default = "default_false")]
+    pub in_custody: bool,
+    /// Timestamp when custody was established
+    #[serde(default = "default_zero")]
+    pub custody_established_at: u64,
+}
+
+fn default_false() -> bool {
+    false
+}
+
+fn default_zero() -> u64 {
+    0
 }
 
 /// Storage backend for outbox
@@ -274,13 +288,22 @@ impl Outbox {
     pub fn drain_for_peer(&mut self, recipient_id: &str) -> Vec<QueuedMessage> {
         match &mut self.backend {
             OutboxBackend::Memory { queues, total } => {
+                let now = web_time::SystemTime::now()
+                    .duration_since(web_time::UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_secs();
+                let mut drained = Vec::new();
                 if let Some(queue) = queues.remove(recipient_id) {
                     let count = queue.len();
                     *total -= count;
-                    queue.into()
-                } else {
-                    Vec::new()
+                    // Filter out messages that are in custody and should not be delivered locally
+                    for msg in queue.into_iter() {
+                        if !msg.in_custody {
+                            drained.push(msg);
+                        }
+                    }
                 }
+                drained
             }
             OutboxBackend::Persistent(db) => {
                 let prefix_str =
@@ -291,8 +314,10 @@ impl Outbox {
                 if let Ok(results) = db.scan_prefix(prefix_str.as_bytes()) {
                     for (key, value) in results {
                         if let Ok(msg) = bincode::deserialize::<QueuedMessage>(&value) {
-                            messages.push(msg);
-                            keys_to_remove.push(key);
+                            if !msg.in_custody {
+                                messages.push(msg);
+                                keys_to_remove.push(key);
+                            }
                         }
                     }
                 }
@@ -333,6 +358,11 @@ impl Outbox {
                     let mut drained = Vec::new();
                     let mut remaining = VecDeque::new();
                     for msg in queue.drain(..) {
+                        // Skip messages that are in custody - they should not be delivered locally
+                        if msg.in_custody {
+                            remaining.push_back(msg);
+                            continue;
+                        }
                         if is_due(msg.next_retry_at) {
                             drained.push(msg);
                         } else {
@@ -376,6 +406,10 @@ impl Outbox {
                 if let Ok(results) = db.scan_prefix(prefix_str.as_bytes()) {
                     for (key, value) in results {
                         if let Ok(msg) = bincode::deserialize::<QueuedMessage>(&value) {
+                            // Skip messages that are in custody - they should not be delivered locally
+                            if msg.in_custody {
+                                continue;
+                            }
                             if is_due(msg.next_retry_at) {
                                 messages.push(msg);
                                 keys_to_remove.push(key);
@@ -396,11 +430,16 @@ impl Outbox {
 
     /// Increment attempt count for a message.
     /// Returns true if the message should be removed (max attempts exceeded).
+    /// Returns false if the message is in custody and should not be removed.
     pub fn record_attempt(&mut self, message_id: &str) -> bool {
         match &mut self.backend {
             OutboxBackend::Memory { queues, .. } => {
                 for queue in queues.values_mut() {
                     if let Some(msg) = queue.iter_mut().find(|m| m.message_id == message_id) {
+                        // If message is in custody, suppress local retries
+                        if msg.in_custody {
+                            return false;
+                        }
                         msg.attempts = msg.attempts.saturating_add(1);
                         return msg.attempts >= MAX_DELIVERY_ATTEMPTS;
                     }
@@ -411,6 +450,10 @@ impl Outbox {
                     for (key, value) in results {
                         if let Ok(mut msg) = bincode::deserialize::<QueuedMessage>(&value) {
                             if msg.message_id == message_id {
+                                // If message is in custody, suppress local retries
+                                if msg.in_custody {
+                                    return false;
+                                }
                                 msg.attempts = msg.attempts.saturating_add(1);
                                 let exceeded = msg.attempts >= MAX_DELIVERY_ATTEMPTS;
                                 if let Ok(bytes) = bincode::serialize(&msg) {
@@ -425,6 +468,98 @@ impl Outbox {
             }
         }
         false
+    }
+
+    /// Mark a message as being in relay custody
+    pub fn mark_in_custody(&mut self, message_id: &str, custody_established_at: u64) -> bool {
+        match &mut self.backend {
+            OutboxBackend::Memory { queues, .. } => {
+                for queue in queues.values_mut() {
+                    if let Some(msg) = queue.iter_mut().find(|m| m.message_id == message_id) {
+                        msg.in_custody = true;
+                        msg.custody_established_at = custody_established_at;
+                        return true;
+                    }
+                }
+            }
+            OutboxBackend::Persistent(db) => {
+                if let Ok(results) = db.scan_prefix(QUEUE_PREFIX) {
+                    for (key, value) in results {
+                        if let Ok(mut msg) = bincode::deserialize::<QueuedMessage>(&value) {
+                            if msg.message_id == message_id {
+                                msg.in_custody = true;
+                                msg.custody_established_at = custody_established_at;
+                                if let Ok(bytes) = bincode::serialize(&msg) {
+                                    let _ = db.put(&key, &bytes);
+                                    let _ = db.flush();
+                                }
+                                return true;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        false
+    }
+
+    /// Mark a message as no longer in relay custody
+    pub fn mark_not_in_custody(&mut self, message_id: &str) -> bool {
+        match &mut self.backend {
+            OutboxBackend::Memory { queues, .. } => {
+                for queue in queues.values_mut() {
+                    if let Some(msg) = queue.iter_mut().find(|m| m.message_id == message_id) {
+                        msg.in_custody = false;
+                        msg.custody_established_at = 0;
+                        return true;
+                    }
+                }
+            }
+            OutboxBackend::Persistent(db) => {
+                if let Ok(results) = db.scan_prefix(QUEUE_PREFIX) {
+                    for (key, value) in results {
+                        if let Ok(mut msg) = bincode::deserialize::<QueuedMessage>(&value) {
+                            if msg.message_id == message_id {
+                                msg.in_custody = false;
+                                msg.custody_established_at = 0;
+                                if let Ok(bytes) = bincode::serialize(&msg) {
+                                    let _ = db.put(&key, &bytes);
+                                    let _ = db.flush();
+                                }
+                                return true;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        false
+    }
+
+    /// Check if a message is in relay custody
+    pub fn is_in_custody(&self, message_id: &str) -> bool {
+        match &self.backend {
+            OutboxBackend::Memory { queues, .. } => {
+                for queue in queues.values() {
+                    if let Some(msg) = queue.iter().find(|m| m.message_id == message_id) {
+                        return msg.in_custody;
+                    }
+                }
+                false
+            }
+            OutboxBackend::Persistent(db) => {
+                if let Ok(results) = db.scan_prefix(QUEUE_PREFIX) {
+                    for (_, value) in results {
+                        if let Ok(msg) = bincode::deserialize::<QueuedMessage>(&value) {
+                            if msg.message_id == message_id {
+                                return msg.in_custody;
+                            }
+                        }
+                    }
+                }
+                false
+            }
+        }
     }
 
     /// Total queued messages
@@ -514,7 +649,7 @@ impl Default for Outbox {
 /// This is the ONLY place retry policy is defined. All platforms
 /// (CLI, Android, iOS, WASM) use this struct. Changes to backoff
 /// strategy apply everywhere automatically.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct RetryPolicy {
     /// Maximum number of retry attempts (including initial attempt).
     pub max_retries: u32,
@@ -522,6 +657,13 @@ pub struct RetryPolicy {
     pub initial_delay_ms: u64,
     /// Backoff multiplier (2 = exponential, 1 = fixed).
     pub backoff_factor: u32,
+    /// Whether to suppress retries when message is in relay custody
+    #[serde(default = "default_true")]
+    pub suppress_on_custody: bool,
+}
+
+fn default_true() -> bool {
+    true
 }
 
 impl Default for RetryPolicy {
@@ -530,6 +672,7 @@ impl Default for RetryPolicy {
             max_retries: 3,           // CLI baseline
             initial_delay_ms: 100,    // CLI baseline
             backoff_factor: 2,        // exponential: 100ms, 200ms, 400ms
+            suppress_on_custody: true,
         }
     }
 }
@@ -559,6 +702,11 @@ impl RetryPolicy {
     /// Whether another retry is possible.
     pub fn can_retry(&self, attempt: u32) -> bool {
         attempt < self.max_retries
+    }
+
+    /// Whether to suppress retries when message is in relay custody
+    pub fn suppress_on_custody(&self) -> bool {
+        self.suppress_on_custody
     }
 }
 
@@ -599,6 +747,8 @@ mod tests {
                 .as_secs(),
             attempts: 0,
             next_retry_at: None,
+            in_custody: false,
+            custody_established_at: 0,
         }
     }
 
@@ -815,5 +965,34 @@ mod tests {
         assert_eq!(msgs.len(), 1);
         assert_eq!(msgs[0].attempts, u32::MAX);
         assert_eq!(outbox.total_count(), 1);
+    }
+
+    #[test]
+    fn test_custody_suppression() {
+        let mut outbox = Outbox::new();
+        let mut msg = make_msg("msg1", "peer_a");
+        msg.in_custody = true;
+        outbox.enqueue(msg).unwrap();
+
+        // Should not increment attempts when in custody
+        assert!(!outbox.record_attempt("msg1"));
+        let msgs = outbox.peek_for_peer("peer_a");
+        assert_eq!(msgs[0].attempts, 0);
+        assert!(msgs[0].in_custody);
+    }
+
+    #[test]
+    fn test_drain_excludes_custody() {
+        let mut outbox = Outbox::new();
+        let mut msg1 = make_msg("msg1", "peer_a");
+        msg1.in_custody = true;
+        let msg2 = make_msg("msg2", "peer_a");
+        
+        outbox.enqueue(msg1).unwrap();
+        outbox.enqueue(msg2).unwrap();
+
+        let drained = outbox.drain_for_peer("peer_a");
+        assert_eq!(drained.len(), 1);
+        assert_eq!(drained[0].message_id, "msg2");
     }
 }

@@ -1,4 +1,4 @@
-# 🌊 SCMessenger Unified Lake Orchestrator 
+#  SCMessenger Unified Lake Orchestrator 
 > **LAKE CONTRACT ACTIVATED:** See `docs/ORCHESTRATION.md` for the single source of truth on the delegation loop, model fleet, and commands. This applies uniformly to Claude, Gemini, Qwen, and Codex agents in rotation.
 
 SCMessenger Native Cowork Orchestrator — drive the backlog using native Claude Code subagents (no ollama swarm)

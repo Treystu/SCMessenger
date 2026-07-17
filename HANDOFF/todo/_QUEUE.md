@@ -12,9 +12,9 @@ ready but not a current priority. Delegation protocol: docs/ORCHESTRATION.md.
 
 ### F0 Unification (prerequisites for delivery-truth fixes)
 
-0a. **U1 Outbox::open_default() helper** [HAIKU] — single source of truth for
+0a. **U1 Outbox::open_default() helper** [HAIKU] — single source of truth for DONE
    outbox init (CLI has 3 independent sites). Blocks A1 landing cleanly.
-   (UNIFICATION U1.)
+   (UNIFICATION U1.) DONE
 
 0b. **U4 Receipt encoding unified** [SONNET] — `encode_receipt()` / `decode_receipt()`
    in core, JSON format canonical. Blocks A2 (CRITICAL delivery bug fix).

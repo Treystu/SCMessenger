@@ -741,6 +741,8 @@ impl IronCore {
                         .as_millis() as u64,
                     attempts: 0,
                     next_retry_at: None,
+                    in_custody: false,
+                    custody_established_at: 0,
                 });
             }
         }

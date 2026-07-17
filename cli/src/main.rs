@@ -2955,6 +2955,8 @@ async fn queue_message_for_later_delivery(
                 queued_at: now,
                 attempts: 0,
                 next_retry_at: None,
+                in_custody: false,
+                custody_established_at: 0,
             };
             match outbox.enqueue(queued_msg) {
                 Ok(()) => {
