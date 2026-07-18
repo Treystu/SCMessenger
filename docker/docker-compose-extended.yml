@@ -48,7 +48,7 @@ services:
     environment:
       - RUST_LOG=info,scmessenger=debug
       - LISTEN_PORT=4002
-      - BOOTSTRAP_NODES=/dns/relay1/tcp/4001
+      - SC_BOOTSTRAP_NODES=/ip4/relay1/tcp/4001
       - NODE_NAME=relay2
     ports:
       - "4002:4002"
@@ -73,7 +73,7 @@ services:
     environment:
       - RUST_LOG=info,scmessenger=debug
       - LISTEN_PORT=0
-      - BOOTSTRAP_NODES=/dns/relay1/tcp/4001
+      - SC_BOOTSTRAP_NODES=/ip4/relay1/tcp/4001
       - NODE_NAME=alice
     depends_on:
       relay1:
@@ -91,7 +91,7 @@ services:
     environment:
       - RUST_LOG=info,scmessenger=debug
       - LISTEN_PORT=0
-      - BOOTSTRAP_NODES=/dns/relay1/tcp/4001
+      - SC_BOOTSTRAP_NODES=/ip4/relay1/tcp/4001
       - NODE_NAME=bob
     depends_on:
       relay1:
@@ -109,7 +109,7 @@ services:
     environment:
       - RUST_LOG=info,scmessenger=debug
       - LISTEN_PORT=0
-      - BOOTSTRAP_NODES=/dns/relay1/tcp/4001
+      - SC_BOOTSTRAP_NODES=/ip4/relay1/tcp/4001
       - NODE_NAME=carol
     depends_on:
       relay1:
@@ -127,7 +127,7 @@ services:
     environment:
       - RUST_LOG=info,scmessenger=debug
       - LISTEN_PORT=0
-      - BOOTSTRAP_NODES=/dns/relay1/tcp/4001
+      - SC_BOOTSTRAP_NODES=/ip4/relay1/tcp/4001
       - NODE_NAME=david
     depends_on:
       relay1:
@@ -145,7 +145,7 @@ services:
     environment:
       - RUST_LOG=info,scmessenger=debug
       - LISTEN_PORT=0
-      - BOOTSTRAP_NODES=/dns/relay2/tcp/4002
+      - SC_BOOTSTRAP_NODES=/ip4/relay2/tcp/4002
       - NODE_NAME=eve
     depends_on:
       relay2:
