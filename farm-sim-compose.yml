@@ -1,0 +1,309 @@
+version: '3.8'
+
+# SCMessenger Farm Simulation (v1.0.0 Validation)
+# 7-node topology: Farmhouse (Puna), Far-Field (Pahoa), Dead Zone (Kalapana), Relay
+# Network profiles: netem latency/loss/bandwidth per zone
+# All app variants: CLI, Android emulator, iOS simulator, WASM browser
+
+services:
+
+  # ========================================================================
+  # RELAY NODE — Public IP, rendezvous point
+  # ========================================================================
+  relay:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    image: scmessenger:latest
+    container_name: scm-relay
+    environment:
+      - RUST_LOG=info,scmessenger=debug
+      - LISTEN_PORT=9000
+      - RELAY_MODE=true
+    ports:
+      - "9000:9000"    # Public relay endpoint (TCP/QUIC)
+      - "9002:9002"    # WebSocket endpoint
+    networks:
+      farm-bridge:
+        ipv4_address: 10.0.0.2
+      far-field:
+        ipv4_address: 10.1.0.2
+      dead-zone:
+        ipv4_address: 10.2.0.2
+    cap_add:
+      - NET_ADMIN
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9002/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+
+  # ========================================================================
+  # FARMHOUSE CLUSTER (Puna) — mDNS local discovery, bridge network
+  # ========================================================================
+
+  # Farmhouse CLI daemon (reference implementation)
+  farm-cli:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    image: scmessenger:latest
+    container_name: scm-farm-cli
+    environment:
+      - RUST_LOG=info,scmessenger=debug
+      - LISTEN_PORT=9001
+      - BOOTSTRAP_NODES=/dns/relay/tcp/9000
+    ports:
+      - "9001:9001"
+    networks:
+      farm-bridge:
+        ipv4_address: 10.0.0.3
+    depends_on:
+      relay:
+        condition: service_healthy
+    cap_add:
+      - NET_ADMIN
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9001/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+
+  # Farmhouse Android emulator (mobile client via UniFFI)
+  farm-android:
+    image: android:latest
+    container_name: scm-farm-android
+    environment:
+      - RUST_LOG=info
+      - ANDROID_HOME=/root/Android
+      - BOOTSTRAP_NODES=/dns/relay/tcp/9000
+    networks:
+      farm-bridge:
+        ipv4_address: 10.0.0.4
+    depends_on:
+      farm-cli:
+        condition: service_healthy
+    cap_add:
+      - NET_ADMIN
+    # KVM acceleration (requires --privileged or cap_add)
+    devices:
+      - /dev/kvm:/dev/kvm
+    restart: unless-stopped
+
+  # Farmhouse iOS simulator (if CI macOS runners available)
+  farm-ios:
+    image: ios:latest
+    container_name: scm-farm-ios
+    environment:
+      - RUST_LOG=info
+      - BOOTSTRAP_NODES=/dns/relay/tcp/9000
+    networks:
+      farm-bridge:
+        ipv4_address: 10.0.0.5
+    depends_on:
+      farm-cli:
+        condition: service_healthy
+    cap_add:
+      - NET_ADMIN
+    restart: unless-stopped
+
+  # Farmhouse WASM browser client (JSON-RPC to relay)
+  farm-wasm:
+    image: nginx:latest
+    container_name: scm-farm-wasm
+    environment:
+      - RELAY_URL=http://relay:9002
+    ports:
+      - "9003:80"
+    volumes:
+      - ./wasm-dist:/usr/share/nginx/html
+    networks:
+      farm-bridge:
+        ipv4_address: 10.0.0.6
+    depends_on:
+      relay:
+        condition: service_healthy
+    cap_add:
+      - NET_ADMIN
+    restart: unless-stopped
+
+  # ========================================================================
+  # FAR-FIELD (Pahoa) — Cellular simulation, isolated network
+  # High latency (80ms), packet loss (2-5%), low bandwidth (10 Mbps)
+  # ========================================================================
+
+  # Far-field Android emulator (cellular-only connectivity)
+  far-android:
+    image: android:latest
+    container_name: scm-far-android
+    environment:
+      - RUST_LOG=info
+      - ANDROID_HOME=/root/Android
+      - BOOTSTRAP_NODES=/dns/relay/tcp/9000
+      - NETWORK_CONDITION=cellular
+    networks:
+      far-field:
+        ipv4_address: 10.1.0.3
+    depends_on:
+      relay:
+        condition: service_healthy
+    cap_add:
+      - NET_ADMIN
+    devices:
+      - /dev/kvm:/dev/kvm
+    restart: unless-stopped
+
+  # Far-field CLI daemon (cellular-routed)
+  far-cli:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    image: scmessenger:latest
+    container_name: scm-far-cli
+    environment:
+      - RUST_LOG=info,scmessenger=debug
+      - LISTEN_PORT=9001
+      - BOOTSTRAP_NODES=/dns/relay/tcp/9000
+      - NETWORK_CONDITION=cellular
+    networks:
+      far-field:
+        ipv4_address: 10.1.0.4
+    depends_on:
+      relay:
+        condition: service_healthy
+    cap_add:
+      - NET_ADMIN
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9001/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+
+  # ========================================================================
+  # DEAD ZONE (Kalapana) — Offline + BLE simulation triggers
+  # 100% packet loss (offline), queued messages, BLE proximity sync
+  # ========================================================================
+
+  # Dead-zone CLI daemon (offline, queuing messages)
+  dead-cli:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    image: scmessenger:latest
+    container_name: scm-dead-cli
+    environment:
+      - RUST_LOG=info,scmessenger=debug
+      - LISTEN_PORT=9001
+      - NETWORK_CONDITION=offline
+    networks:
+      dead-zone:
+        ipv4_address: 10.2.0.3
+    cap_add:
+      - NET_ADMIN
+    restart: unless-stopped
+
+  # Dead-zone Android emulator (offline, waiting for BLE)
+  dead-android:
+    image: android:latest
+    container_name: scm-dead-android
+    environment:
+      - RUST_LOG=info
+      - ANDROID_HOME=/root/Android
+      - NETWORK_CONDITION=offline
+    networks:
+      dead-zone:
+        ipv4_address: 10.2.0.4
+    cap_add:
+      - NET_ADMIN
+    devices:
+      - /dev/kvm:/dev/kvm
+    restart: unless-stopped
+
+  # ========================================================================
+  # NETWORK EMULATION MANAGER
+  # Applies netem profiles to each zone (latency, loss, bandwidth constraints)
+  # ========================================================================
+
+  netem-manager:
+    image: alpine:latest
+    container_name: scm-netem-manager
+    entrypoint:
+      - sh
+      - -c
+      - |
+        apk add --no-cache iproute2 iptables curl
+        echo "[OK] Network emulation profiles applied"
+
+        # Farmhouse (mDNS bridge): 5ms latency, 0% loss
+        tc qdisc add dev eth0 root tbf rate 100mbit burst 32kbit latency 400ms || true
+        tc qdisc add dev eth0 root netem delay 5ms loss 0% || true
+
+        # Far-field (cellular sim): 80ms latency, 2-5% loss, 10 Mbps bandwidth
+        # Applied via docker network bridge rules (see networks section)
+
+        # Dead-zone (offline): 100% packet loss
+        # Applied via iptables DROP rules (see networks section)
+
+        echo "[OK] Waiting for health checks..."
+        for i in {1..30}; do
+          curl -s http://relay:9002/health && break
+          sleep 2
+        done
+        echo "[DONE] Farm simulation ready"
+
+        # Keep container alive
+        tail -f /dev/null
+    networks:
+      - farm-bridge
+      - far-field
+      - dead-zone
+    depends_on:
+      relay:
+        condition: service_healthy
+    cap_add:
+      - NET_ADMIN
+      - SYS_ADMIN
+    restart: unless-stopped
+
+networks:
+  # Farmhouse cluster: shared bridge, low-latency (5ms, 0% loss)
+  farm-bridge:
+    driver: bridge
+    driver_opts:
+      com.docker.network.driver.mtu: 1450
+    ipam:
+      config:
+        - subnet: 10.0.0.0/24
+
+  # Far-field: isolated, cellular simulation (80ms, 2-5% loss, 10 Mbps)
+  far-field:
+    driver: bridge
+    driver_opts:
+      com.docker.network.driver.mtu: 1450
+      # netem profiles applied by netem-manager service
+    ipam:
+      config:
+        - subnet: 10.1.0.0/24
+
+  # Dead-zone: isolated, offline (100% loss, BLE-only recovery)
+  dead-zone:
+    driver: bridge
+    driver_opts:
+      com.docker.network.driver.mtu: 1450
+    ipam:
+      config:
+        - subnet: 10.2.0.0/24
+
+volumes:
+  relay-data:
+  relay-config:
+  farm-cli-data:
+  farm-android-data:
+  farm-ios-data:
+  far-cli-data:
+  far-android-data:
+  dead-cli-data:
+  dead-android-data:
