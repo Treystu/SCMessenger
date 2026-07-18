@@ -44,6 +44,8 @@ fn make_msg(id: &str, recipient: &str, attempts: u32) -> QueuedMessage {
             .as_secs(),
         attempts,
         next_retry_at: None,
+        in_custody: false,
+        custody_established_at: 0,
     }
 }
 

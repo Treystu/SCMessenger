@@ -72,6 +72,8 @@ fn test_e2e_message_flow_two_peers() {
             .as_secs(),
         attempts: 0,
         next_retry_at: None,
+        in_custody: false,
+        custody_established_at: 0,
     };
 
     alice_outbox
@@ -195,6 +197,8 @@ fn test_e2e_persistent_message_flow() {
             queued_at: 0,
             attempts: 0,
             next_retry_at: None,
+            in_custody: false,
+            custody_established_at: 0,
         };
 
         outbox.enqueue(queued_msg).expect("Failed to enqueue");
@@ -323,6 +327,8 @@ fn test_e2e_multi_peer_scenario() {
             queued_at: 0,
             attempts: 0,
             next_retry_at: None,
+            in_custody: false,
+            custody_established_at: 0,
         })
         .unwrap();
 
@@ -334,6 +340,8 @@ fn test_e2e_multi_peer_scenario() {
             queued_at: 0,
             attempts: 0,
             next_retry_at: None,
+            in_custody: false,
+            custody_established_at: 0,
         })
         .unwrap();
 

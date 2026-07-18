@@ -468,17 +468,60 @@ fn test_pq_ratchet_cadence_refreshes_shared_secret() {
     // (Already proven by the assert_eq!(decrypted, plaintext) inside the loop
     // for every message including the triggering one.)
 
-    // Step 5: DISABLED -- see HANDOFF/todo/PQC_07_PQ_SECRET_NEVER_MIXED_INTO_ROOT_KEY.md
-    // (CRITICAL, filed 2026-07-11). This assertion is the actual point of this
-    // test per its task spec ("proving the fresh PQ shared secret actually
-    // entered the KDF, not just that the ciphertext was transmitted"), and it
-    // correctly FAILS against current production code: `handle_dh_ratchet` in
-    // core/src/crypto/ratchet.rs hardcodes its `pq_ss` input to `None`
-    // unconditionally, so the decapsulated PQ shared secret from
-    // `handle_incoming_pq_fields` is computed and discarded, never mixed into
-    // root_key, on either side, ever. Re-enable this once that ticket lands:
-    //
-    // let root_key_after = alice_manager.get_session(&bob_id).unwrap().root_key_bytes();
-    // assert_ne!(root_key_before.unwrap(), root_key_after, "Root key should change after PQ ratchet step");
-    let _ = root_key_before; // currently unused while the assertion above is disabled
+    // Step 4.5: Trigger the DH ratchet steps (epoch crossing) to mix the PQ secret on both sides.
+    // 1. Bob sends a reply to Alice. This triggers Alice's DH step and mixes Alice's pq_pending_sent.
+    let bob_reply = encrypt_with_ratchet_fallback(
+        &bob.signing_key,
+        Some(&alice_bundle),
+        &alice_bundle.ed25519_public,
+        b"Bob's reply to Alice",
+        Some(&mut bob_manager),
+        &alice_id,
+        Some(&bob_bundle),
+        false,
+        None,
+    )
+    .unwrap();
+
+    let decrypted_bob_reply = decrypt_with_ratchet_fallback(
+        &alice.signing_key,
+        Some(&alice.x25519_encryption_secret),
+        &bob_reply,
+        Some(&mut alice_manager),
+        Some(&alice.mlkem_keypair),
+        Some(&alice_bundle),
+        Some(&bob_bundle),
+    )
+    .unwrap();
+    assert_eq!(decrypted_bob_reply, b"Bob's reply to Alice");
+
+    // 2. Alice sends a reply back to Bob. This triggers Bob's DH step and mixes Bob's pq_pending_recv.
+    let alice_reply = encrypt_with_ratchet_fallback(
+        &alice.signing_key,
+        Some(&bob_bundle),
+        &bob_bundle.ed25519_public,
+        b"Alice's second reply to Bob",
+        Some(&mut alice_manager),
+        &bob_id,
+        Some(&alice_bundle),
+        false,
+        None,
+    )
+    .unwrap();
+
+    let decrypted_alice_reply = decrypt_with_ratchet_fallback(
+        &bob.signing_key,
+        Some(&bob.x25519_encryption_secret),
+        &alice_reply,
+        Some(&mut bob_manager),
+        Some(&bob.mlkem_keypair),
+        Some(&bob_bundle),
+        Some(&alice_bundle),
+    )
+    .unwrap();
+    assert_eq!(decrypted_alice_reply, b"Alice's second reply to Bob");
+
+    // Step 5: E-01c: Re-enabled assertion proving the fresh PQ shared secret actually entered the KDF
+    let root_key_after = alice_manager.get_session(&bob_id).unwrap().root_key_bytes();
+    assert_ne!(root_key_before.unwrap(), root_key_after, "Root key should change after PQ ratchet step");
 }

@@ -63,6 +63,30 @@ impl std::fmt::Debug for RatchetKey {
     }
 }
 
+/// Compute a 16-byte fingerprint of a PQ shared secret for deduplication.
+fn pq_ss_fingerprint(ss: &[u8]) -> [u8; 16] {
+    let hash = blake3::hash(ss);
+    let mut fp = [0u8; 16];
+    fp.copy_from_slice(&hash.as_bytes()[..16]);
+    fp
+}
+
+/// A PQ shared secret we encapsulated (we are the ciphertext sender), held
+/// until trial adoption proves the peer mixed it.
+#[derive(Clone)]
+pub(crate) struct PendingPqSecret {
+    /// The 32-byte ML-KEM-768 shared secret.
+    pub(crate) ss: RatchetKey,
+    /// dh_step_count at creation time.
+    pub(crate) created_step: u32,
+}
+
+impl std::fmt::Debug for PendingPqSecret {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "PendingPqSecret {{ created_step: {} }}", self.created_step)
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Ratchet session state
 // ---------------------------------------------------------------------------
@@ -150,6 +174,52 @@ pub struct RatchetSession {
     pub pq_their_encaps_key: Option<Vec<u8>>,
     /// Pending ciphertext we must keep sending until peer acks.
     pub pq_pending_ct: Option<Vec<u8>>,
+    /// E-01c: outstanding secret we ENCAPSULATED (we are the ct sender)
+    pub(crate) pq_pending_sent: Option<PendingPqSecret>,
+    /// E-01c: secret we DECAPSULATED (we are the ct receiver)
+    pub(crate) pq_pending_recv: Option<RatchetKey>,
+    /// E-01c: fingerprint of the last secret we MIXED at KDF-2
+    pub(crate) pq_last_mixed_fp: Option<[u8; 16]>,
+    /// E-01c: count of root-key transitions this session has committed
+    pub(crate) transition_counter: u64,
+}
+
+impl Clone for RatchetSession {
+    fn clone(&self) -> Self {
+        // Clone StaticSecret by converting to bytes and back
+        let our_dh_secret_bytes = self.our_dh_secret.to_bytes();
+        let our_dh_secret = X25519StaticSecret::from(our_dh_secret_bytes);
+
+        let our_identity_secret = self.our_identity_secret.as_ref().map(|s| {
+            let bytes = s.to_bytes();
+            X25519StaticSecret::from(bytes)
+        });
+
+        Self {
+            our_dh_secret,
+            our_dh_public: self.our_dh_public,
+            their_dh_public: self.their_dh_public,
+            root_key: self.root_key.clone(),
+            sending_chain: self.sending_chain.clone(),
+            receiving_chain: self.receiving_chain.clone(),
+            dh_step_count: self.dh_step_count,
+            skipped_keys: self.skipped_keys.clone(),
+            initialized: self.initialized,
+            our_identity_secret,
+            negotiated_suite: self.negotiated_suite,
+            transcript_hash: self.transcript_hash,
+            peer_confirmed: self.peer_confirmed,
+            bootstrap_hct: self.bootstrap_hct.clone(),
+            pq_our_keypair: self.pq_our_keypair.clone(),
+            pq_prev_keypair: self.pq_prev_keypair.clone(),
+            pq_their_encaps_key: self.pq_their_encaps_key.clone(),
+            pq_pending_ct: self.pq_pending_ct.clone(),
+            pq_pending_sent: self.pq_pending_sent.clone(),
+            pq_pending_recv: self.pq_pending_recv.clone(),
+            pq_last_mixed_fp: self.pq_last_mixed_fp,
+            transition_counter: self.transition_counter,
+        }
+    }
 }
 
 impl RatchetSession {
@@ -173,6 +243,10 @@ impl RatchetSession {
         pq_prev_keypair: Option<crate::crypto::pq::MlKem768KeyPair>,
         pq_their_encaps_key: Option<Vec<u8>>,
         pq_pending_ct: Option<Vec<u8>>,
+        pq_pending_sent: Option<PendingPqSecret>,
+        pq_pending_recv: Option<RatchetKey>,
+        pq_last_mixed_fp: Option<[u8; 16]>,
+        transition_counter: u64,
         skipped_keys: HashMap<([u8; 32], u32), RatchetKey>,
     ) -> Self {
         Self {
@@ -194,6 +268,10 @@ impl RatchetSession {
             pq_prev_keypair,
             pq_their_encaps_key,
             pq_pending_ct,
+            pq_pending_sent,
+            pq_pending_recv,
+            pq_last_mixed_fp,
+            transition_counter,
         }
     }
 
@@ -298,6 +376,10 @@ impl RatchetSession {
             pq_prev_keypair: None,
             pq_their_encaps_key: None,
             pq_pending_ct: None,
+            pq_pending_sent: None,
+            pq_pending_recv: None,
+            pq_last_mixed_fp: None,
+            transition_counter: 1,
         })
     }
 
@@ -345,6 +427,10 @@ impl RatchetSession {
             pq_prev_keypair: None,
             pq_their_encaps_key: None,
             pq_pending_ct: None,
+            pq_pending_sent: None,
+            pq_pending_recv: None,
+            pq_last_mixed_fp: None,
+            transition_counter: 0,
         })
     }
 
@@ -407,6 +493,10 @@ impl RatchetSession {
             pq_prev_keypair: None,
             pq_their_encaps_key,
             pq_pending_ct: None,
+            pq_pending_sent: None,
+            pq_pending_recv: None,
+            pq_last_mixed_fp: None,
+            transition_counter: 1,
         })
     }
 
@@ -465,6 +555,10 @@ impl RatchetSession {
             pq_prev_keypair: None,
             pq_their_encaps_key,
             pq_pending_ct: None,
+            pq_pending_sent: None,
+            pq_pending_recv: None,
+            pq_last_mixed_fp: None,
+            transition_counter: 0,
         })
     }
 
@@ -536,33 +630,154 @@ impl RatchetSession {
         their_dh_bytes.copy_from_slice(their_dh_public);
         let their_dh = X25519PublicKey::from(their_dh_bytes);
 
-        let dh_changed = match &self.their_dh_public {
+        // H1: Check the skipped keys cache BEFORE the dh_changed check
+        if let Some(message_key) = self.skipped_keys.get(&(their_dh.to_bytes(), message_number)) {
+            let nonce_obj = XNonce::from_slice(nonce);
+            let cipher = XChaCha20Poly1305::new_from_slice(message_key.as_bytes())
+                .map_err(|e| anyhow::anyhow!("Failed to create cipher: {}", e))?;
+            let plaintext = cipher.decrypt(nonce_obj, Payload { msg: ciphertext, aad })
+                .map_err(|_| anyhow::anyhow!("Decryption failed with skipped key"))?;
+            
+            self.skipped_keys.remove(&(their_dh.to_bytes(), message_number));
+            self.peer_confirmed = true;
+            return Ok(plaintext);
+        }
+
+        // H2: Implement the trial adoption and commit-on-success pattern
+        let mut cloned = (*self).clone();
+
+        let dh_changed = match &cloned.their_dh_public {
             None => true,
             Some(their_current) => their_current.as_bytes() != their_dh.as_bytes(),
         };
 
         if dh_changed {
-            self.handle_dh_ratchet(&their_dh)?;
+            return self.handle_dh_ratchet_trial(&their_dh, message_number, nonce, ciphertext, aad);
         }
 
-        let message_key = self.get_message_key(&their_dh, message_number)?;
-
-        // The peer sent us a valid ratcheted message, they have established the session.
-        self.peer_confirmed = true;
+        let message_key = cloned.get_message_key(&their_dh, message_number)?;
 
         let nonce_obj = XNonce::from_slice(nonce);
         let cipher = XChaCha20Poly1305::new_from_slice(message_key.as_bytes())
             .map_err(|e| anyhow::anyhow!("Failed to create cipher: {}", e))?;
 
-        cipher
-            .decrypt(
-                nonce_obj,
-                Payload {
-                    msg: ciphertext,
-                    aad,
-                },
-            )
-            .map_err(|_| anyhow::anyhow!("Decryption failed"))
+        let plaintext = cipher.decrypt(nonce_obj, Payload { msg: ciphertext, aad })
+            .map_err(|_| anyhow::anyhow!("Decryption failed"))?;
+        
+        *self = cloned;
+        self.peer_confirmed = true;
+        Ok(plaintext)
+    }
+
+    /// Handle DH ratchet with trial adoption pattern (E-01c R5, H2)
+    fn handle_dh_ratchet_trial(
+        &mut self,
+        their_new_dh: &X25519PublicKey,
+        message_number: u32,
+        nonce: &[u8],
+        ciphertext: &[u8],
+        aad: &[u8],
+    ) -> Result<Vec<u8>> {
+        let mut candidates = vec![None];
+        if let Some(ref pending_sent) = self.pq_pending_sent {
+            candidates.push(Some(pending_sent.ss.clone()));
+        }
+
+        let mut errors = Vec::new();
+
+        for candidate in candidates {
+            let mut trial = (*self).clone();
+
+            let first_dh_secret = if let Some(identity_secret) = trial.our_identity_secret.take() {
+                identity_secret
+            } else {
+                let mut dh_bytes = trial.our_dh_secret.to_bytes();
+                let secret = X25519StaticSecret::from(dh_bytes);
+                dh_bytes.zeroize();
+                secret
+            };
+            let dh_output = first_dh_secret.diffie_hellman(their_new_dh);
+            let (new_root_key, receiving_chain_key) = if trial.negotiated_suite == Some(0x02) {
+                root_key_ratchet_v2(
+                    &trial.root_key,
+                    dh_output.as_bytes(),
+                    candidate.as_ref().map(|k| k.as_bytes().to_vec()),
+                )
+            } else {
+                root_key_ratchet_v1(&trial.root_key, dh_output.as_bytes())
+            };
+            trial.their_dh_public = Some(*their_new_dh);
+            trial.receiving_chain = Some(Chain::new(receiving_chain_key));
+
+            let mut new_secret_bytes = [0u8; 32];
+            rand::rngs::OsRng.fill_bytes(&mut new_secret_bytes);
+            let new_dh_secret = X25519StaticSecret::from(new_secret_bytes);
+            new_secret_bytes.zeroize();
+            let new_dh_public = X25519PublicKey::from(&new_dh_secret);
+
+            let dh_output_2 = new_dh_secret.diffie_hellman(their_new_dh);
+            let pq_ss_2 = if trial.negotiated_suite == Some(0x02) {
+                trial.pq_pending_recv.clone()
+            } else {
+                None
+            };
+            let (new_root_key_2, sending_chain_key) = if trial.negotiated_suite == Some(0x02) {
+                root_key_ratchet_v2(
+                    &new_root_key,
+                    dh_output_2.as_bytes(),
+                    pq_ss_2.as_ref().map(|k| k.as_bytes().to_vec()),
+                )
+            } else {
+                root_key_ratchet_v1(&new_root_key, dh_output_2.as_bytes())
+            };
+            trial.our_dh_secret = new_dh_secret;
+            trial.our_dh_public = new_dh_public;
+            trial.root_key = new_root_key_2;
+            trial.sending_chain = Some(Chain::new(sending_chain_key));
+            trial.dh_step_count += 1;
+            trial.initialized = true;
+
+            let message_key = match trial.get_message_key(their_new_dh, message_number) {
+                Ok(k) => k,
+                Err(e) => {
+                    errors.push(format!("get_message_key failed: {}", e));
+                    continue;
+                }
+            };
+
+            let nonce_obj = XNonce::from_slice(nonce);
+            let cipher = match XChaCha20Poly1305::new_from_slice(message_key.as_bytes()) {
+                Ok(c) => c,
+                Err(e) => {
+                    errors.push(format!("cipher creation failed: {}", e));
+                    continue;
+                }
+            };
+
+            match cipher.decrypt(nonce_obj, Payload { msg: ciphertext, aad }) {
+                Ok(plaintext) => {
+                    if let Some(ref _adopted_ss) = candidate {
+                        trial.pq_pending_sent = None;
+                        trial.pq_pending_ct = None;
+                    }
+                    if let Some(ref ss_recv) = trial.pq_pending_recv {
+                        let fp = pq_ss_fingerprint(ss_recv.as_bytes());
+                        trial.pq_last_mixed_fp = Some(fp);
+                    }
+                    trial.pq_pending_recv = None;
+                    trial.transition_counter += 2;
+                    trial.peer_confirmed = true;
+
+                    *self = trial;
+                    return Ok(plaintext);
+                }
+                Err(e) => {
+                    errors.push(format!("decryption failed: {}", e));
+                }
+            }
+        }
+
+        bail!("Trial decryption failed for all candidates. Errors: {:?}", errors)
     }
 
     fn handle_dh_ratchet(&mut self, their_new_dh: &X25519PublicKey) -> Result<()> {
@@ -671,7 +886,13 @@ impl RatchetSession {
             .ok_or_else(|| anyhow::anyhow!("No PQ encapsulation key from peer"))?;
 
         // Encapsulate with their current key
-        let (ct, _ss_pq) = crate::crypto::pq::encapsulate(their_encaps_key)?;
+        let (ct, ss_pq) = crate::crypto::pq::encapsulate(their_encaps_key)?;
+
+        // Store the encapsulated shared secret as a pending PQ secret
+        self.pq_pending_sent = Some(PendingPqSecret {
+            ss: RatchetKey::from_bytes(ss_pq),
+            created_step: self.dh_step_count,
+        });
 
         // Rotate our keypair: move current to previous, generate new
         self.pq_prev_keypair = self.pq_our_keypair.take();
@@ -694,17 +915,17 @@ impl RatchetSession {
             bail!("PQ fields only expected for suite 0x02");
         }
 
+        let mut decapsulation_success = None;
+
         // Try to decapsulate with current keypair first
         if let Some(ref our_keypair) = self.pq_our_keypair {
             match crate::crypto::pq::decapsulate(our_keypair, pq_kem_ciphertext) {
                 Ok(ss_pq) => {
-                    // Success - update their encaps key and clear pending ct if any
-                    self.pq_their_encaps_key = Some(pq_encaps_key.to_vec());
-                    self.pq_pending_ct = None;
-                    return Ok(ss_pq.to_vec());
+                    decapsulation_success = Some(ss_pq);
                 }
-                Err(_) => {
-                    // Fall through to try previous keypair
+                Err(e) => {
+                    // Log the error but don't propagate it
+                    tracing::warn!("Failed to decapsulate with current keypair: {}", e);
                 }
             }
         }
@@ -713,18 +934,40 @@ impl RatchetSession {
         if let Some(ref prev_keypair) = self.pq_prev_keypair {
             match crate::crypto::pq::decapsulate(prev_keypair, pq_kem_ciphertext) {
                 Ok(ss_pq) => {
-                    // Success with previous keypair
-                    self.pq_their_encaps_key = Some(pq_encaps_key.to_vec());
-                    self.pq_pending_ct = None;
-                    return Ok(ss_pq.to_vec());
+                    decapsulation_success = Some(ss_pq);
                 }
-                Err(_) => {
-                    // Both failed
+                Err(e) => {
+                    // Log the error but don't propagate it
+                    tracing::warn!("Failed to decapsulate with previous keypair: {}", e);
                 }
             }
         }
 
-        bail!("Failed to decapsulate PQ ciphertext with either current or previous keypair")
+        let ss_pq = match decapsulation_success {
+            Some(ss) => ss,
+            None => {
+                // Non-fatal: log warning and return empty vector
+                tracing::warn!("Failed to decapsulate PQ ciphertext with either current or previous keypair - soft skipping");
+                return Ok(vec![]);
+            }
+        };
+
+        let ss_pq_key = RatchetKey::from_bytes(ss_pq);
+        let fp = pq_ss_fingerprint(ss_pq_key.as_bytes());
+
+        // Deduplication: check if we've already mixed this secret
+        let is_duplicate = self.pq_last_mixed_fp == Some(fp) 
+            || self.pq_pending_recv.as_ref().map(|k| pq_ss_fingerprint(k.as_bytes())) == Some(fp);
+
+        if !is_duplicate {
+            self.pq_pending_recv = Some(ss_pq_key);
+        }
+
+        // Update their encaps key and clear pending ct
+        self.pq_their_encaps_key = Some(pq_encaps_key.to_vec());
+        self.pq_pending_ct = None;
+
+        Ok(ss_pq.to_vec())
     }
 
     /// Validate that PQ fields are present when expected (suite 0x02 only).

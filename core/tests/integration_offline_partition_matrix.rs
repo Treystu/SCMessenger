@@ -22,6 +22,8 @@ fn queued_message(message_id: &str, recipient_id: &str) -> QueuedMessage {
         queued_at: now_secs(),
         attempts: 0,
         next_retry_at: None,
+        in_custody: false,
+        custody_established_at: 0,
     }
 }
 

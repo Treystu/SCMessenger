@@ -507,6 +507,10 @@ impl SerializableRatchetSession {
             None, // pq_prev_keypair
             None, // pq_their_encaps_key
             None, // pq_pending_ct
+            None, // pq_pending_sent
+            None, // pq_pending_recv
+            None, // pq_last_mixed_fp
+            0,    // transition_counter
             skipped_keys,
         ))
     }

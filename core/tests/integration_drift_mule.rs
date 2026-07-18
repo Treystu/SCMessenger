@@ -155,6 +155,8 @@ fn outbox_drift_single_ownership() {
         queued_at: 1000,
         attempts: 0,
         next_retry_at: None,
+        in_custody: false,
+        custody_established_at: 0,
     };
     outbox.enqueue(msg).unwrap();
 
