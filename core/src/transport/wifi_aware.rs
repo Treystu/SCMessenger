@@ -32,6 +32,38 @@ pub enum WifiAwareError {
 }
 
 // ============================================================================
+// SERVICE INFO TLV ENCODING/DECODING
+// ============================================================================
+
+pub const TLV_TYPE_PORT: u8 = 0x01;
+
+pub fn encode_port_tlv(port: u16) -> Vec<u8> {
+    vec![TLV_TYPE_PORT, 2, (port >> 8) as u8, (port & 0xff) as u8]
+}
+
+pub fn decode_port_tlv(service_info: &[u8]) -> Option<u16> {
+    let mut i = 0;
+    let mut found_port: Option<u16> = None;
+    while i + 1 < service_info.len() {
+        let tlv_type = service_info[i];
+        let tlv_len = service_info[i + 1] as usize;
+        let value_end = i.checked_add(2)?.checked_add(tlv_len)?;
+        if value_end > service_info.len() {
+            break;
+        }
+        if tlv_type == TLV_TYPE_PORT && tlv_len == 2 {
+            let port = ((service_info[i + 2] as u16) << 8) | (service_info[i + 3] as u16);
+            if found_port.is_some() {
+                return None;
+            }
+            found_port = Some(port);
+        }
+        i = value_end;
+    }
+    found_port
+}
+
+// ============================================================================
 // CONFIGURATION
 // ============================================================================
 
@@ -50,6 +82,8 @@ pub struct WifiAwareConfig {
     pub subscribe_enabled: bool,
     /// Maximum simultaneous data paths
     pub max_data_paths: usize,
+    /// Port to advertise in service_info TLV for per-peer negotiation
+    pub listen_port: Option<u16>,
 }
 
 impl Default for WifiAwareConfig {
@@ -61,6 +95,7 @@ impl Default for WifiAwareConfig {
             publish_enabled: true,
             subscribe_enabled: true,
             max_data_paths: 10,
+            listen_port: None,
         }
     }
 }
@@ -325,8 +360,12 @@ impl WifiAwareTransport {
             return Err(WifiAwareError::Unavailable);
         }
 
+        let mut info = self.config.service_info.clone();
+        if let Some(port) = self.config.listen_port {
+            info.extend_from_slice(&encode_port_tlv(port));
+        }
         self.bridge
-            .publish_service(&self.config.service_name, &self.config.service_info)
+            .publish_service(&self.config.service_name, &info)
             .await?;
 
         *self.state.write() = WifiAwareState::Publishing;
@@ -433,6 +472,13 @@ impl WifiAwareTransport {
     /// Get information about an active data path
     pub fn get_data_path(&self, peer_id: &PeerId) -> Option<DataPathInfo> {
         self.data_paths.read().get(&peer_id.to_string()).cloned()
+    }
+
+    /// Extract the advertised listen port from a discovered peer's service_info.
+    pub fn get_peer_listen_port(&self, peer_id: &PeerId) -> Option<u16> {
+        let discovered = self.discovered_peers.read();
+        let peer = discovered.get(&peer_id.to_string())?;
+        decode_port_tlv(&peer.service_info)
     }
 
     /// Get all active data paths
@@ -550,6 +596,43 @@ fn estimate_bandwidth_from_rssi(rssi: i32) -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_encode_decode_port_tlv_roundtrip() {
+        let port = 5000u16;
+        let encoded = encode_port_tlv(port);
+        assert_eq!(encoded.len(), 4);
+        assert_eq!(encoded[0], TLV_TYPE_PORT);
+        assert_eq!(encoded[1], 2);
+        assert_eq!(decode_port_tlv(&encoded), Some(port));
+    }
+
+    #[test]
+    fn test_decode_port_tlv_none_when_absent() {
+        let info = vec![0x02, 0x01, 0x42];
+        assert_eq!(decode_port_tlv(&info), None);
+    }
+
+    #[test]
+    fn test_decode_port_tlv_with_multiple_tlvs() {
+        let port = 5000u16;
+        let mut info = encode_port_tlv(port);
+        info.extend_from_slice(&[0x02, 0x01, 0x42]);
+        assert_eq!(decode_port_tlv(&info), Some(port));
+    }
+
+    #[test]
+    fn test_decode_port_tlv_truncated() {
+        let info = vec![TLV_TYPE_PORT, 0x02, 0x12];
+        assert_eq!(decode_port_tlv(&info), None);
+    }
+
+    #[test]
+    fn test_decode_port_tlv_rejects_duplicates() {
+        let mut info = encode_port_tlv(5000);
+        info.extend_from_slice(&encode_port_tlv(6000));
+        assert_eq!(decode_port_tlv(&info), None);
+    }
 
     #[tokio::test]
     async fn test_wifi_aware_initialization() {

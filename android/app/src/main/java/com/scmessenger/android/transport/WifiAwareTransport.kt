@@ -37,6 +37,28 @@ class WifiAwareTransport(
     private val onDataPathConfirmed: ((peerId: String, ipAddress: String, port: Int) -> Unit)? = null
 ) {
 
+    companion object {
+        const val TLV_TYPE_PORT: Byte = 0x01
+
+        fun encodePortTlv(port: Int): ByteArray {
+            return byteArrayOf(TLV_TYPE_PORT, 2, ((port shr 8) and 0xff).toByte(), (port and 0xff).toByte())
+        }
+
+        fun decodePortTlv(serviceInfo: ByteArray): Int? {
+            var i = 0
+            while (i + 1 < serviceInfo.size) {
+                val tlvType = serviceInfo[i]
+                val tlvLen = serviceInfo[i + 1].toInt() and 0xff
+                if (i + 2 + tlvLen > serviceInfo.size) break
+                if (tlvType == TLV_TYPE_PORT && tlvLen == 2) {
+                    return ((serviceInfo[i + 2].toInt() and 0xff) shl 8) or (serviceInfo[i + 3].toInt() and 0xff)
+                }
+                i += 2 + tlvLen
+            }
+            return null
+        }
+    }
+
     private val wifiAwareManager: WifiAwareManager? =
         context.getSystemService(Context.WIFI_AWARE_SERVICE) as? WifiAwareManager
 
