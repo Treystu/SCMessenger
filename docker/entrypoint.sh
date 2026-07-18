@@ -46,14 +46,42 @@ if [ "$1" = "scm" ] && [ "$2" = "start" ]; then
     # Ensure identity is initialized before starting (tolerate already-initialized)
     scm init || true
 
-    # Check if --port is already in arguments
-    if ! echo "$@" | grep -q "\-\-port"; then
-        set -- "$1" "$2" "--port" "$FINAL_PORT" "${@:3}"
+    # Export identity to a file for contact provisioning
+    if [ ! -z "$NODE_NAME" ]; then
+        IDENTITY_FILE="/tmp/scm_identity_${NODE_NAME}.json"
+        scm identity 2>/dev/null | awk '
+            BEGIN { id=""; peer_id=""; pub_key="" }
+            /^  ID:/ { id=$2; }
+            /Peer ID \(Network\):/ { peer_id=$NF; }
+            /Public Key:/ { pub_key=$3; }
+            END {
+                print "{\"node_name\":\"'$NODE_NAME'\",\"identity_id\":\"" id "\",\"peer_id\":\"" peer_id "\",\"public_key\":\"" pub_key "\"}"
+            }
+        ' > "$IDENTITY_FILE" 2>/dev/null || true
     fi
-    # Check if --http-bind is already in arguments
+
+    # Build scm start command with proper flags
+    # Order: scm [global flags] start [subcommand flags]
+    NEW_ARGS=("$1")  # scm
+
+    # Add global flags before subcommand
     if ! echo "$@" | grep -q "\-\-http-bind"; then
-        set -- "$1" "--http-bind" "0.0.0.0:8080" "$2" "${@:3}"
+        NEW_ARGS+=("--http-bind" "0.0.0.0:8080")
     fi
+
+    NEW_ARGS+=("$2")  # start
+
+    # Add start-specific flags
+    if ! echo "$@" | grep -q "\-\-port"; then
+        NEW_ARGS+=("--port" "$FINAL_PORT")
+    fi
+
+    # Add any remaining arguments
+    if [ ${#@} -gt 2 ]; then
+        NEW_ARGS+=("${@:3}")
+    fi
+
+    set -- "${NEW_ARGS[@]}"
 fi
 
 # Run the command
