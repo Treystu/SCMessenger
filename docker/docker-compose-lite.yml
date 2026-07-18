@@ -1,0 +1,96 @@
+version: '3.8'
+
+# Lightweight Farm-Sim Topology (3-node core configuration)
+#
+# Reduced from 7 nodes to minimize resource usage:
+# - relay1: Primary relay (bootstrap)
+# - alice: User node (bootstrap to relay1)
+# - bob: User node (bootstrap to relay1)
+#
+# This topology validates:
+# - Bootstrap mechanism
+# - Peer discovery (ledger exchange)
+# - Message delivery
+# - Failure scenarios
+#
+# Resource footprint: ~1.5GB RAM, ~10GB disk (vs 7-node: ~4GB RAM, ~20GB disk)
+
+services:
+  # Primary Relay Node (Bootstrap)
+  relay1:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    image: scmessenger:latest
+    container_name: scm-relay1
+    hostname: relay1
+    environment:
+      - RUST_LOG=info,scmessenger=debug
+      - LISTEN_PORT=4001
+      - NODE_NAME=relay1
+      - SC_BOOTSTRAP_NODES=
+    ports:
+      - "4001:4001"
+      - "8080:8080"
+    networks:
+      - network-core
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+    restart: unless-stopped
+
+  # Alice - Core User Node
+  alice:
+    image: scmessenger:latest
+    container_name: scm-alice
+    hostname: alice
+    environment:
+      - RUST_LOG=info,scmessenger=debug
+      - LISTEN_PORT=0
+      - SC_BOOTSTRAP_NODES=/ip4/relay1/tcp/4001
+      - NODE_NAME=alice
+    depends_on:
+      relay1:
+        condition: service_healthy
+    networks:
+      - network-core
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+
+  # Bob - Core User Node
+  bob:
+    image: scmessenger:latest
+    container_name: scm-bob
+    hostname: bob
+    environment:
+      - RUST_LOG=info,scmessenger=debug
+      - LISTEN_PORT=0
+      - SC_BOOTSTRAP_NODES=/ip4/relay1/tcp/4001
+      - NODE_NAME=bob
+    depends_on:
+      relay1:
+        condition: service_healthy
+    networks:
+      - network-core
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+
+networks:
+  network-core:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/24
