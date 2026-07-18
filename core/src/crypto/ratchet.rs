@@ -659,31 +659,6 @@ impl RatchetSession {
         Ok(chain.next_message_key())
     }
 
-    pub fn force_ratchet(&mut self) -> Result<[u8; 32]> {
-        let mut new_secret_bytes = [0u8; 32];
-        rand::rngs::OsRng.fill_bytes(&mut new_secret_bytes);
-        let new_dh_secret = X25519StaticSecret::from(new_secret_bytes);
-        new_secret_bytes.zeroize();
-        let new_dh_public = X25519PublicKey::from(&new_dh_secret);
-
-        self.our_dh_secret = new_dh_secret;
-        self.our_dh_public = new_dh_public;
-        self.dh_step_count += 1;
-
-        if let Some(their_dh) = self.their_dh_public {
-            let dh_output = self.our_dh_secret.diffie_hellman(&their_dh);
-            let (new_root_key, sending_chain_key) = if self.negotiated_suite == Some(0x02) {
-                root_key_ratchet_v2(&self.root_key, dh_output.as_bytes(), None)
-            } else {
-                root_key_ratchet_v1(&self.root_key, dh_output.as_bytes())
-            };
-            self.root_key = new_root_key;
-            self.sending_chain = Some(Chain::new(sending_chain_key));
-        }
-
-        Ok(self.our_dh_public.to_bytes())
-    }
-
     /// Perform a PQ ratchet step when initiating a DH step (suite 0x02 only).
     pub fn perform_pq_ratchet_step(&mut self) -> Result<(Vec<u8>, Vec<u8>)> {
         if self.negotiated_suite != Some(0x02) {

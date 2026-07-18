@@ -3470,21 +3470,8 @@ impl IronCore {
     }
 
     // -----------------------------------------------------------------------
-    // B3 wiring: Crypto — force ratchet, receiver session creation
+    // B3 wiring: Crypto — receiver session creation
     // -----------------------------------------------------------------------
-
-    /// Force a ratchet step for the given peer's encryption session.
-    /// Generates a new DH key pair and advances the ratchet chain, providing
-    /// forward secrecy even if no message is sent.
-    /// Returns the new message key bytes on success, or an error string on failure.
-    pub fn force_ratchet(&self, peer_id: &str) -> Result<[u8; 32], String> {
-        self.ratchet_sessions
-            .write()
-            .get_session_mut(peer_id)
-            .ok_or_else(|| "no_session".to_string())?
-            .force_ratchet()
-            .map_err(|e| format!("{:?}", e))
-    }
 
     /// Create a receiver session for a peer using the sender's identity key.
     /// Used when receiving the first message from a new peer to establish
