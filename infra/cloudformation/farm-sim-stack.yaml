@@ -1,0 +1,388 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Farm-Sim 7-Node Micro-Instance Topology for SCMessenger Testing'
+
+Parameters:
+  KeyName:
+    Type: AWS::EC2::KeyPair::KeyName
+    Default: scmessenger-farm-sim-key
+    Description: EC2 Key Pair for SSH access
+
+  InstanceType:
+    Type: String
+    Default: t3.micro
+    AllowedValues:
+      - t3.micro
+    Description: Instance type (free tier only)
+
+Mappings:
+  RegionAMI:
+    us-east-1:
+      AMI: ami-0c55b159cbfafe1f0  # Ubuntu 22.04 LTS
+    us-west-2:
+      AMI: ami-0a8e758f5e873d1c1  # Ubuntu 22.04 LTS
+
+Resources:
+  # VPC
+  FarmSimVPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.0.0.0/16
+      EnableDnsHostnames: true
+      EnableDnsSupport: true
+      Tags:
+        - Key: Name
+          Value: scmessenger-farm-sim-vpc
+
+  # Internet Gateway
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: scmessenger-farm-sim-igw
+
+  AttachGateway:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref FarmSimVPC
+      InternetGatewayId: !Ref InternetGateway
+
+  # Subnets
+  SubnetA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref FarmSimVPC
+      CidrBlock: 10.0.1.0/24
+      AvailabilityZone: !Select [0, !GetAZs '']
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: scmessenger-subnet-a
+
+  SubnetB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref FarmSimVPC
+      CidrBlock: 10.0.2.0/24
+      AvailabilityZone: !Select [0, !GetAZs '']
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: scmessenger-subnet-b
+
+  SubnetC:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref FarmSimVPC
+      CidrBlock: 10.0.3.0/24
+      AvailabilityZone: !Select [0, !GetAZs '']
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: scmessenger-subnet-c
+
+  # Route Table
+  RouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref FarmSimVPC
+      Tags:
+        - Key: Name
+          Value: scmessenger-farm-sim-rt
+
+  Route:
+    Type: AWS::EC2::Route
+    DependsOn: AttachGateway
+    Properties:
+      RouteTableId: !Ref RouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+
+  SubnetARouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref SubnetA
+      RouteTableId: !Ref RouteTable
+
+  SubnetBRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref SubnetB
+      RouteTableId: !Ref RouteTable
+
+  SubnetCRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref SubnetC
+      RouteTableId: !Ref RouteTable
+
+  # Security Group
+  FarmSimSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for farm-sim nodes
+      VpcId: !Ref FarmSimVPC
+      SecurityGroupIngress:
+        # SSH
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
+        # All traffic within VPC
+        - IpProtocol: -1
+          CidrIp: 10.0.0.0/16
+      SecurityGroupEgress:
+        # All outbound
+        - IpProtocol: -1
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: scmessenger-farm-sim-sg
+
+  # EC2 Instances
+  RelayNode1:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: !FindInMap [RegionAMI, !Ref 'AWS::Region', AMI]
+      InstanceType: !Ref InstanceType
+      KeyName: !Ref KeyName
+      SubnetId: !Ref SubnetA
+      SecurityGroupIds:
+        - !Ref FarmSimSecurityGroup
+      UserData: !Base64 |
+        #!/bin/bash
+        set -e
+        apt-get update
+        apt-get install -y docker.io git curl jq
+        systemctl start docker
+        systemctl enable docker
+        cd /opt
+        git clone https://github.com/Sovereign-Communication/SCMessenger.git
+        cd SCMessenger
+        docker compose -f docker/docker-compose-lite.yml up -d relay1
+      Tags:
+        - Key: Name
+          Value: scm-relay1
+        - Key: Node
+          Value: relay1
+
+  RelayNode2:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: !FindInMap [RegionAMI, !Ref 'AWS::Region', AMI]
+      InstanceType: !Ref InstanceType
+      KeyName: !Ref KeyName
+      SubnetId: !Ref SubnetB
+      SecurityGroupIds:
+        - !Ref FarmSimSecurityGroup
+      UserData: !Base64 |
+        #!/bin/bash
+        set -e
+        apt-get update
+        apt-get install -y docker.io git curl jq
+        systemctl start docker
+        systemctl enable docker
+        cd /opt
+        git clone https://github.com/Sovereign-Communication/SCMessenger.git
+        cd SCMessenger
+        docker compose -f docker/docker-compose-lite.yml up -d relay2
+      Tags:
+        - Key: Name
+          Value: scm-relay2
+        - Key: Node
+          Value: relay2
+
+  UserNodeAlice:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: !FindInMap [RegionAMI, !Ref 'AWS::Region', AMI]
+      InstanceType: !Ref InstanceType
+      KeyName: !Ref KeyName
+      SubnetId: !Ref SubnetA
+      SecurityGroupIds:
+        - !Ref FarmSimSecurityGroup
+      UserData: !Base64 |
+        #!/bin/bash
+        set -e
+        apt-get update
+        apt-get install -y docker.io git curl jq
+        systemctl start docker
+        systemctl enable docker
+        cd /opt
+        git clone https://github.com/Sovereign-Communication/SCMessenger.git
+        cd SCMessenger
+        docker compose -f docker/docker-compose-lite.yml up -d alice
+      Tags:
+        - Key: Name
+          Value: scm-alice
+        - Key: Node
+          Value: alice
+
+  UserNodeBob:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: !FindInMap [RegionAMI, !Ref 'AWS::Region', AMI]
+      InstanceType: !Ref InstanceType
+      KeyName: !Ref KeyName
+      SubnetId: !Ref SubnetB
+      SecurityGroupIds:
+        - !Ref FarmSimSecurityGroup
+      UserData: !Base64 |
+        #!/bin/bash
+        set -e
+        apt-get update
+        apt-get install -y docker.io git curl jq
+        systemctl start docker
+        systemctl enable docker
+        cd /opt
+        git clone https://github.com/Sovereign-Communication/SCMessenger.git
+        cd SCMessenger
+        docker compose -f docker/docker-compose-lite.yml up -d bob
+      Tags:
+        - Key: Name
+          Value: scm-bob
+        - Key: Node
+          Value: bob
+
+  UserNodeCarol:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: !FindInMap [RegionAMI, !Ref 'AWS::Region', AMI]
+      InstanceType: !Ref InstanceType
+      KeyName: !Ref KeyName
+      SubnetId: !Ref SubnetA
+      SecurityGroupIds:
+        - !Ref FarmSimSecurityGroup
+      UserData: !Base64 |
+        #!/bin/bash
+        set -e
+        apt-get update
+        apt-get install -y docker.io git curl jq
+        systemctl start docker
+        systemctl enable docker
+        cd /opt
+        git clone https://github.com/Sovereign-Communication/SCMessenger.git
+        cd SCMessenger
+        docker compose -f docker/docker-compose-lite.yml up -d carol
+      Tags:
+        - Key: Name
+          Value: scm-carol
+        - Key: Node
+          Value: carol
+
+  UserNodeDavid:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: !FindInMap [RegionAMI, !Ref 'AWS::Region', AMI]
+      InstanceType: !Ref InstanceType
+      KeyName: !Ref KeyName
+      SubnetId: !Ref SubnetB
+      SecurityGroupIds:
+        - !Ref FarmSimSecurityGroup
+      UserData: !Base64 |
+        #!/bin/bash
+        set -e
+        apt-get update
+        apt-get install -y docker.io git curl jq
+        systemctl start docker
+        systemctl enable docker
+        cd /opt
+        git clone https://github.com/Sovereign-Communication/SCMessenger.git
+        cd SCMessenger
+        docker compose -f docker/docker-compose-lite.yml up -d david
+      Tags:
+        - Key: Name
+          Value: scm-david
+        - Key: Node
+          Value: david
+
+  UserNodeEve:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: !FindInMap [RegionAMI, !Ref 'AWS::Region', AMI]
+      InstanceType: !Ref InstanceType
+      KeyName: !Ref KeyName
+      SubnetId: !Ref SubnetC
+      SecurityGroupIds:
+        - !Ref FarmSimSecurityGroup
+      UserData: !Base64 |
+        #!/bin/bash
+        set -e
+        apt-get update
+        apt-get install -y docker.io git curl jq
+        systemctl start docker
+        systemctl enable docker
+        cd /opt
+        git clone https://github.com/Sovereign-Communication/SCMessenger.git
+        cd SCMessenger
+        docker compose -f docker/docker-compose-lite.yml up -d eve
+      Tags:
+        - Key: Name
+          Value: scm-eve
+        - Key: Node
+          Value: eve
+
+Outputs:
+  VpcId:
+    Description: VPC ID
+    Value: !Ref FarmSimVPC
+    Export:
+      Name: FarmSimVpcId
+
+  SubnetAId:
+    Description: Subnet A ID
+    Value: !Ref SubnetA
+    Export:
+      Name: FarmSimSubnetA
+
+  SubnetBId:
+    Description: Subnet B ID
+    Value: !Ref SubnetB
+    Export:
+      Name: FarmSimSubnetB
+
+  SubnetCId:
+    Description: Subnet C ID
+    Value: !Ref SubnetC
+    Export:
+      Name: FarmSimSubnetC
+
+  Relay1IP:
+    Description: Relay1 Public IP
+    Value: !GetAtt RelayNode1.PublicIp
+
+  Relay2IP:
+    Description: Relay2 Public IP
+    Value: !GetAtt RelayNode2.PublicIp
+
+  AliceIP:
+    Description: Alice Public IP
+    Value: !GetAtt UserNodeAlice.PublicIp
+
+  BobIP:
+    Description: Bob Public IP
+    Value: !GetAtt UserNodeBob.PublicIp
+
+  CarolIP:
+    Description: Carol Public IP
+    Value: !GetAtt UserNodeCarol.PublicIp
+
+  DavidIP:
+    Description: David Public IP
+    Value: !GetAtt UserNodeDavid.PublicIp
+
+  EveIP:
+    Description: Eve Public IP
+    Value: !GetAtt UserNodeEve.PublicIp
+
+  AllInstanceIPs:
+    Description: All instance IPs (relay1, relay2, alice, bob, carol, david, eve)
+    Value: !Join
+      - ','
+      - - !GetAtt RelayNode1.PublicIp
+        - !GetAtt RelayNode2.PublicIp
+        - !GetAtt UserNodeAlice.PublicIp
+        - !GetAtt UserNodeBob.PublicIp
+        - !GetAtt UserNodeCarol.PublicIp
+        - !GetAtt UserNodeDavid.PublicIp
+        - !GetAtt UserNodeEve.PublicIp
