@@ -49,6 +49,17 @@ pub struct SubmitRunResponse {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct IdentityResponse {
+    pub identity_id: Option<String>,
+    pub public_key_hex: Option<String>,
+    pub device_id: Option<String>,
+    pub seniority_timestamp: Option<u64>,
+    pub initialized: bool,
+    pub nickname: Option<String>,
+    pub libp2p_peer_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PollStatusResponse {
     pub status: String,
     pub progress: String,
@@ -317,6 +328,21 @@ async fn handle_get_peers(
     Ok(AxumJson(GetPeersResponse { peers }))
 }
 
+async fn handle_get_identity(
+    State(ctx): State<Arc<ApiContext>>,
+) -> Result<AxumJson<IdentityResponse>, (StatusCode, String)> {
+    let info = ctx.core.get_identity_info();
+    Ok(AxumJson(IdentityResponse {
+        identity_id: info.identity_id,
+        public_key_hex: info.public_key_hex,
+        device_id: info.device_id,
+        seniority_timestamp: info.seniority_timestamp,
+        initialized: info.initialized,
+        nickname: info.nickname,
+        libp2p_peer_id: info.libp2p_peer_id,
+    }))
+}
+
 async fn handle_get_listeners(
     State(ctx): State<Arc<ApiContext>>,
 ) -> Result<AxumJson<GetListenersResponse>, (StatusCode, String)> {
@@ -574,6 +600,7 @@ pub async fn start_api_server(ctx: ApiContext) -> Result<()> {
     let app = Router::new()
         .route("/api/send", post(handle_send_message))
         .route("/api/contacts", post(handle_add_contact))
+        .route("/api/identity", get(handle_get_identity))
         .route("/api/peers", get(handle_get_peers))
         .route("/api/listeners", get(handle_get_listeners))
         .route("/api/history", post(handle_get_history))

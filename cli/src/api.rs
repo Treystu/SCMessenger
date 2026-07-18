@@ -965,8 +965,13 @@ async fn handle_get_identity(
 ) -> Result<AxumJson<serde_json::Value>, (StatusCode, String)> {
     let info = ctx.core.get_identity_info();
     Ok(AxumJson(serde_json::json!({
-        "peer_id": info.libp2p_peer_id.unwrap_or_default(),
-        "public_key": info.public_key_hex.unwrap_or_default(),
+        "identity_id": info.identity_id,
+        "public_key_hex": info.public_key_hex,
+        "device_id": info.device_id,
+        "seniority_timestamp": info.seniority_timestamp,
+        "initialized": info.initialized,
+        "nickname": info.nickname,
+        "libp2p_peer_id": info.libp2p_peer_id,
     })))
 }
 

@@ -1,0 +1,1805 @@
+{
+  "entries": {
+    "/ip4/172.20.0.3/tcp/1": {
+      "address": "172.20.0.3:1",
+      "multiaddr": "/ip4/172.20.0.3/tcp/1",
+      "last_peer_id": "12D3KooWCVX8bW8VWCJFrxkQCVvfjgyicnZHf2fR8M3y9FWmwgG7",
+      "observed_peer_ids": [
+        "12D3KooWCVX8bW8VWCJFrxkQCVvfjgyicnZHf2fR8M3y9FWmwgG7"
+      ],
+      "last_seen": 1784409772,
+      "first_seen": 1784409783,
+      "consecutive_failures": 0,
+      "backoff_seconds": 0,
+      "next_attempt_after": 0,
+      "is_bootstrap": false,
+      "known_topics": [],
+      "label": "Discovered via peer"
+    },
+    "/ip4/172.21.0.5/tcp/4003/ws": {
+      "address": "172.21.0.5:4003",
+      "multiaddr": "/ip4/172.21.0.5/tcp/4003/ws",
+      "last_peer_id": "12D3KooWM3Pz32Bt4W3Zsub3uiqKtTvhezhBZ45sSYgiKFg5JKFq",
+      "observed_peer_ids": [
+        "12D3KooWM3Pz32Bt4W3Zsub3uiqKtTvhezhBZ45sSYgiKFg5JKFq"
+      ],
+      "last_seen": 1784409783,
+      "first_seen": 1784409783,
+      "consecutive_failures": 0,
+      "backoff_seconds": 0,
+      "next_attempt_after": 0,
+      "is_bootstrap": false,
+      "known_topics": [],
+      "label": null
+    },
+    "/ip4/172.21.0.5/tcp/80": {
+      "address": "172.21.0.5:80",
+      "multiaddr": "/ip4/172.21.0.5/tcp/80",
+      "last_peer_id": "12D3KooWM3Pz32Bt4W3Zsub3uiqKtTvhezhBZ45sSYgiKFg5JKFq",
+      "observed_peer_ids": [
+        "12D3KooWM3Pz32Bt4W3Zsub3uiqKtTvhezhBZ45sSYgiKFg5JKFq"
+      ],
+      "last_seen": 1784409783,
+      "first_seen": 1784409783,
+      "consecutive_failures": 0,
+      "backoff_seconds": 0,
+      "next_attempt_after": 0,
+      "is_bootstrap": false,
+      "known_topics": [],
+      "label": null
+    },
+    "/ip4/127.0.0.1/tcp/36477": {
+      "address": "127.0.0.1:36477",
+      "multiaddr": "/ip4/127.0.0.1/tcp/36477",
+      "last_peer_id": "12D3KooWM3Pz32Bt4W3Zsub3uiqKtTvhezhBZ45sSYgiKFg5JKFq",
+      "observed_peer_ids": [
+        "12D3KooWM3Pz32Bt4W3Zsub3uiqKtTvhezhBZ45sSYgiKFg5JKFq"
+      ],
+      "last_seen": 1784409783,
+      "first_seen": 1784409783,
+      "consecutive_failures": 0,
+      "backoff_seconds": 0,
+      "next_attempt_after": 0,
+      "is_bootstrap": false,
+      "known_topics": [],
+      "label": null
+    },
+    "/ip4/172.20.0.3/tcp/9090": {
+      "address": "172.20.0.3:9090",
+      "multiaddr": "/ip4/172.20.0.3/tcp/9090",
+      "last_peer_id": "12D3KooWDQDC5oKqmEpQQbNqWARqAwdBQZsPVrrHfhduRo5VYBXt",
+      "observed_peer_ids": [
+        "12D3KooWDQDC5oKqmEpQQbNqWARqAwdBQZsPVrrHfhduRo5VYBXt"
+      ],
+      "last_seen": 1784409767,
+      "first_seen": 1784409783,
+      "consecutive_failures": 0,
+      "backoff_seconds": 0,
+      "next_attempt_after": 0,
+      "is_bootstrap": false,
+      "known_topics": [],
+      "label": "Discovered via peer"
+    },
+    "/ip4/172.21.0.4/tcp/443": {
+      "address": "172.21.0.4:443",
+      "multiaddr": "/ip4/172.21.0.4/tcp/443",
+      "last_peer_id": "12D3KooWRuLPSvac4nE4hTK8Ts3eW4UWibdWdNeMia8C8NoeJGhv",
+      "observed_peer_ids": [
+        "12D3KooWRuLPSvac4nE4hTK8Ts3eW4UWibdWdNeMia8C8NoeJGhv"
+      ],
+      "last_seen": 1784409772,
+      "first_seen": 1784409783,
+      "consecutive_failures": 0,
+      "backoff_seconds": 0,
+      "next_attempt_after": 0,
+      "is_bootstrap": false,
+      "known_topics": [],
+      "label": "Discovered via peer"
+    },
+    "/ip4/172.21.0.4/tcp/1/ws": {
+      "address": "172.21.0.4:1",
+      "multiaddr": "/ip4/172.21.0.4/tcp/1/ws",
+      "last_peer_id": "12D3KooWRuLPSvac4nE4hTK8Ts3eW4UWibdWdNeMia8C8NoeJGhv",
+      "observed_peer_ids": [
+        "12D3KooWRuLPSvac4nE4hTK8Ts3eW4UWibdWdNeMia8C8NoeJGhv"
+      ],
+      "last_seen": 1784409772,
+      "first_seen": 1784409783,
+      "consecutive_failures": 0,
+      "backoff_seconds": 0,
+      "next_attempt_after": 0,
+      "is_bootstrap": false,
+      "known_topics": [],
+      "label": "Discovered via peer"
+    },
+    "/ip4/172.21.0.3/tcp/9090/ws": {
+      "address": "172.21.0.3:9090",
+      "multiaddr": "/ip4/172.21.0.3/tcp/9090/ws",
+      "last_peer_id": "12D3KooWSDTKQNLQSMH7AFvbUku3FGBkZL3X4hdyTdnNs83h6KYv",
+      "observed_peer_ids": [
+        "12D3KooWSDTKQNLQSMH7AFvbUku3FGBkZL3X4hdyTdnNs83h6KYv"
+      ],
+      "last_seen": 1784409772,
+      "first_seen": 1784409783,
+      "consecutive_failures": 0,
+      "backoff_seconds": 0,
+      "next_attempt_after": 0,
+      "is_bootstrap": false,
+      "known_topics": [],
+      "label": "Discovered via peer"
+    },
+    "/ip4/172.22.0.2/tcp/9002/ws": {
+      "address": "172.22.0.2:9002",
+      "multiaddr": "/ip4/172.22.0.2/tcp/9002/ws",
+      "last_peer_id": "12D3KooWM3Pz32Bt4W3Zsub3uiqKtTvhezhBZ45sSYgiKFg5JKFq",
+      "observed_peer_ids": [
+        "12D3KooWM3Pz32Bt4W3Zsub3uiqKtTvhezhBZ45sSYgiKFg5JKFq"
+      ],
+      "last_seen": 1784409783,
+      "first_seen": 1784409783,
+      "consecutive_failures": 0,
+      "backoff_seconds": 0,
+      "next_attempt_after": 0,
+      "is_bootstrap": false,
+      "known_topics": [],
+      "label": null
+    },
+    "/ip4/172.21.0.4/tcp/9090/ws": {
+      "address": "172.21.0.4:9090",
+      "multiaddr": "/ip4/172.21.0.4/tcp/9090/ws",
+      "last_peer_id": "12D3KooWM3Pz32Bt4W3Zsub3uiqKtTvhezhBZ45sSYgiKFg5JKFq",
+      "observed_peer_ids": [
+        "12D3KooWM3Pz32Bt4W3Zsub3uiqKtTvhezhBZ45sSYgiKFg5JKFq"
+      ],
+      "last_seen": 1784409783,
+      "first_seen": 1784409783,
+      "consecutive_failures": 0,
+      "backoff_seconds": 0,
+      "next_attempt_after": 0,
+      "is_bootstrap": false,
+      "known_topics": [],
+      "label": null
+    },
+    "/ip4/127.0.0.1/tcp/9090/ws": {
+      "address": "127.0.0.1:9090",
+      "multiaddr": "/ip4/127.0.0.1/tcp/9090/ws",
+      "last_peer_id": "12D3KooWM3Pz32Bt4W3Zsub3uiqKtTvhezhBZ45sSYgiKFg5JKFq",
+      "observed_peer_ids": [
+        "12D3KooWM3Pz32Bt4W3Zsub3uiqKtTvhezhBZ45sSYgiKFg5JKFq"
+      ],
+      "last_seen": 1784409783,
+      "first_seen": 1784409783,
+      "consecutive_failures": 0,
+      "backoff_seconds": 0,
+      "next_attempt_after": 0,
+      "is_bootstrap": false,
+      "known_topics": [],
+      "label": null
+    },
+    "/ip4/172.20.0.4/tcp/9090": {
+      "address": "172.20.0.4:9090",
+      "multiaddr": "/ip4/172.20.0.4/tcp/9090",
+      "last_peer_id": "12D3KooWCVX8bW8VWCJFrxkQCVvfjgyicnZHf2fR8M3y9FWmwgG7",
+      "observed_peer_ids": [
+        "12D3KooWCVX8bW8VWCJFrxkQCVvfjgyicnZHf2fR8M3y9FWmwgG7"
+      ],
+      "last_seen": 1784409772,
+      "first_seen": 1784409783,
+      "consecutive_failures": 0,
+      "backoff_seconds": 0,
+      "next_attempt_after": 0,
+      "is_bootstrap": false,
+      "known_topics": [],
+      "label": "Discovered via peer"
+    },
+    "/ip4/127.0.0.1/tcp/80": {
+      "address": "127.0.0.1:80",
+      "multiaddr": "/ip4/127.0.0.1/tcp/80",
+      "last_peer_id": "12D3KooWM3Pz32Bt4W3Zsub3uiqKtTvhezhBZ45sSYgiKFg5JKFq",
+      "observed_peer_ids": [
+        "12D3KooWM3Pz32Bt4W3Zsub3uiqKtTvhezhBZ45sSYgiKFg5JKFq"
+      ],
+      "last_seen": 1784409783,
+      "first_seen": 1784409783,
+      "consecutive_failures": 0,
+      "backoff_seconds": 0,
+      "next_attempt_after": 0,
+      "is_bootstrap": false,
+      "known_topics": [],
+      "label": null
+    },
+    "/ip4/127.0.0.1/tcp/36875/ws": {
+      "address": "127.0.0.1:36875",
+      "multiaddr": "/ip4/127.0.0.1/tcp/36875/ws",
+      "last_peer_id": "12D3KooWSDTKQNLQSMH7AFvbUku3FGBkZL3X4hdyTdnNs83h6KYv",
+      "observed_peer_ids": [
+        "12D3KooWSDTKQNLQSMH7AFvbUku3FGBkZL3X4hdyTdnNs83h6KYv"
+      ],
+      "last_seen": 1784409772,
+      "first_seen": 1784409783,
+      "consecutive_failures": 0,
+      "backoff_seconds": 0,
+      "next_attempt_after": 0,
+      "is_bootstrap": false,
+      "known_topics": [
+        "sc-receipt-convergence"
+      ],
+      "label": "Discovered via peer"
+    },
+    "/ip4/172.21.0.2/tcp/80/ws": {
+      "address": "172.21.0.2:80",
+      "multiaddr": "/ip4/172.21.0.2/tcp/80/ws",
+      "last_peer_id": "12D3KooWCVX8bW8VWCJFrxkQCVvfjgyicnZHf2fR8M3y9FWmwgG7",
+      "observed_peer_ids": [
+        "12D3KooWCVX8bW8VWCJFrxkQCVvfjgyicnZHf2fR8M3y9FWmwgG7"
+      ],
+      "last_seen": 1784409772,
+      "first_seen": 1784409783,
+      "consecutive_failures": 0,
+      "backoff_seconds": 0,
+      "next_attempt_after": 0,
+      "is_bootstrap": false,
+      "known_topics": [],
+      "label": "Discovered via peer"
+    },
+    "/ip4/172.20.0.4/tcp/1/ws": {
+      "address": "172.20.0.4:1",
+      "multiaddr": "/ip4/172.20.0.4/tcp/1/ws",
+      "last_peer_id": "12D3KooWMcBee41QPSDyrsbWubjWCivaNqoHdm7HsgwZBNnB9GWJ",
+      "observed_peer_ids": [
+        "12D3KooWMcBee41QPSDyrsbWubjWCivaNqoHdm7HsgwZBNnB9GWJ"
+      ],
+      "last_seen": 1784409772,
+      "first_seen": 1784409783,
+      "consecutive_failures": 0,
+      "backoff_seconds": 0,
+      "next_attempt_after": 0,
+      "is_bootstrap": false,
+      "known_topics": [],
+      "label": "Discovered via peer"
+    },
+    "/ip4/172.22.0.2/tcp/36477": {
+      "address": "172.22.0.2:36477",
+      "multiaddr": "/ip4/172.22.0.2/tcp/36477",
+      "last_peer_id": "12D3KooWM3Pz32Bt4W3Zsub3uiqKtTvhezhBZ45sSYgiKFg5JKFq",
+      "observed_peer_ids": [
+        "12D3KooWM3Pz32Bt4W3Zsub3uiqKtTvhezhBZ45sSYgiKFg5JKFq"
+      ],
+      "last_seen": 1784409783,
+      "first_seen": 1784409783,
+      "consecutive_failures": 0,
+      "backoff_seconds": 0,
+      "next_attempt_after": 0,
+      "is_bootstrap": false,
+      "known_topics": [],
+      "label": null
+    },
+    "/ip4/172.20.0.3/tcp/443/ws": {
+      "address": "172.20.0.3:443",
+      "multiaddr": "/ip4/172.20.0.3/tcp/443/ws",
+      "last_peer_id": "12D3KooWDQDC5oKqmEpQQbNqWARqAwdBQZsPVrrHfhduRo5VYBXt",
+      "observed_peer_ids": [
+        "12D3KooWDQDC5oKqmEpQQbNqWARqAwdBQZsPVrrHfhduRo5VYBXt"
+      ],
+      "last_seen": 1784409767,
+      "first_seen": 1784409783,
+      "consecutive_failures": 0,
+      "backoff_seconds": 0,
+      "next_attempt_after": 0,
+      "is_bootstrap": false,
+      "known_topics": [],
+      "label": "Discovered via peer"
+    },
+    "/ip4/172.20.0.2/tcp/4002": {
+      "address": "172.20.0.2:4002",
+      "multiaddr": "/ip4/172.20.0.2/tcp/4002",
+      "last_peer_id": "12D3KooWCVX8bW8VWCJFrxkQCVvfjgyicnZHf2fR8M3y9FWmwgG7",
+      "observed_peer_ids": [
+        "12D3KooWCVX8bW8VWCJFrxkQCVvfjgyicnZHf2fR8M3y9FWmwgG7"
+      ],
+      "last_seen": 1784409772,
+      "first_seen": 1784409783,
+      "consecutive_failures": 0,
+      "backoff_seconds": 0,
+      "next_attempt_after": 0,
+      "is_bootstrap": false,
+      "known_topics": [],
+      "label": "Discovered via peer"
+    },
+    "/ip4/172.20.0.4/tcp/40717/ws": {
+      "address": "172.20.0.4:40717",
+      "multiaddr": "/ip4/172.20.0.4/tcp/40717/ws",
+      "last_peer_id": "12D3KooWMcBee41QPSDyrsbWubjWCivaNqoHdm7HsgwZBNnB9GWJ",
+      "observed_peer_ids": [
+        "12D3KooWMcBee41QPSDyrsbWubjWCivaNqoHdm7HsgwZBNnB9GWJ"
+      ],
+      "last_seen": 1784409772,
+      "first_seen": 1784409783,
+      "consecutive_failures": 0,
+      "backoff_seconds": 0,
+      "next_attempt_after": 0,
+      "is_bootstrap": false,
+      "known_topics": [],
+      "label": "Discovered via peer"
+    },
+    "/ip4/172.21.0.3/tcp/1": {
+      "address": "172.21.0.3:1",
+      "multiaddr": "/ip4/172.21.0.3/tcp/1",
+      "last_peer_id": "12D3KooWSDTKQNLQSMH7AFvbUku3FGBkZL3X4hdyTdnNs83h6KYv",
+      "observed_peer_ids": [
+        "12D3KooWSDTKQNLQSMH7AFvbUku3FGBkZL3X4hdyTdnNs83h6KYv"
+      ],
+      "last_seen": 1784409772,
+      "first_seen": 1784409783,
+      "consecutive_failures": 0,
+      "backoff_seconds": 0,
+      "next_attempt_after": 0,
+      "is_bootstrap": false,
+      "known_topics": [],
+      "label": "Discovered via peer"
+    },
+    "/ip4/172.22.0.2/tcp/443": {
+      "address": "172.22.0.2:443",
+      "multiaddr": "/ip4/172.22.0.2/tcp/443",
+      "last_peer_id": "12D3KooWM3Pz32Bt4W3Zsub3uiqKtTvhezhBZ45sSYgiKFg5JKFq",
+      "observed_peer_ids": [
+        "12D3KooWM3Pz32Bt4W3Zsub3uiqKtTvhezhBZ45sSYgiKFg5JKFq"
+      ],
+      "last_seen": 1784409783,
+      "first_seen": 1784409783,
+      "consecutive_failures": 0,
+      "backoff_seconds": 0,
+      "next_attempt_after": 0,
+      "is_bootstrap": false,
+      "known_topics": [],
+      "label": null
+    },
+    "/ip4/127.0.0.1/tcp/34191/ws": {
+      "address": "127.0.0.1:34191",
+      "multiaddr": "/ip4/127.0.0.1/tcp/34191/ws",
+      "last_peer_id": "12D3KooWM3Pz32Bt4W3Zsub3uiqKtTvhezhBZ45sSYgiKFg5JKFq",
+      "observed_peer_ids": [
+        "12D3KooWM3Pz32Bt4W3Zsub3uiqKtTvhezhBZ45sSYgiKFg5JKFq"
+      ],
+      "last_seen": 1784409783,
+      "first_seen": 1784409783,
+      "consecutive_failures": 0,
+      "backoff_seconds": 0,
+      "next_attempt_after": 0,
+      "is_bootstrap": false,
+      "known_topics": [],
+      "label": null
+    },
+    "/ip4/172.21.0.4/tcp/9090": {
+      "address": "172.21.0.4:9090",
+      "multiaddr": "/ip4/172.21.0.4/tcp/9090",
+      "last_peer_id": "12D3KooWRuLPSvac4nE4hTK8Ts3eW4UWibdWdNeMia8C8NoeJGhv",
+      "observed_peer_ids": [
+        "12D3KooWRuLPSvac4nE4hTK8Ts3eW4UWibdWdNeMia8C8NoeJGhv"
+      ],
+      "last_seen": 1784409772,
+      "first_seen": 1784409783,
+      "consecutive_failures": 0,
+      "backoff_seconds": 0,
+      "next_attempt_after": 0,
+      "is_bootstrap": false,
+      "known_topics": [],
+      "label": "Discovered via peer"
+    },
+    "/ip4/172.21.0.4/tcp/80/ws": {
+      "address": "172.21.0.4:80",
+      "multiaddr": "/ip4/172.21.0.4/tcp/80/ws",
+      "last_peer_id": "12D3KooWRuLPSvac4nE4hTK8Ts3eW4UWibdWdNeMia8C8NoeJGhv",
+      "observed_peer_ids": [
+        "12D3KooWRuLPSvac4nE4hTK8Ts3eW4UWibdWdNeMia8C8NoeJGhv"
+      ],
+      "last_seen": 1784409772,
+      "first_seen": 1784409783,
+      "consecutive_failures": 0,
+      "backoff_seconds": 0,
+      "next_attempt_after": 0,
+      "is_bootstrap": false,
+      "known_topics": [],
+      "label": "Discovered via peer"
+    },
+    "/ip4/127.0.0.1/tcp/443": {
+      "address": "127.0.0.1:443",
+      "multiaddr": "/ip4/127.0.0.1/tcp/443",
+      "last_peer_id": "12D3KooWM3Pz32Bt4W3Zsub3uiqKtTvhezhBZ45sSYgiKFg5JKFq",
+      "observed_peer_ids": [
+        "12D3KooWM3Pz32Bt4W3Zsub3uiqKtTvhezhBZ45sSYgiKFg5JKFq"
+      ],
+      "last_seen": 1784409783,
+      "first_seen": 1784409783,
+      "consecutive_failures": 0,
+      "backoff_seconds": 0,
+      "next_attempt_after": 0,
+      "is_bootstrap": false,
+      "known_topics": [],
+      "label": null
+    },
+    "/ip4/172.21.0.3/tcp/80/ws": {
+      "address": "172.21.0.3:80",
+      "multiaddr": "/ip4/172.21.0.3/tcp/80/ws",
+      "last_peer_id": "12D3KooWM3Pz32Bt4W3Zsub3uiqKtTvhezhBZ45sSYgiKFg5JKFq",
+      "observed_peer_ids": [
+        "12D3KooWM3Pz32Bt4W3Zsub3uiqKtTvhezhBZ45sSYgiKFg5JKFq"
+      ],
+      "last_seen": 1784409783,
+      "first_seen": 1784409783,
+      "consecutive_failures": 0,
+      "backoff_seconds": 0,
+      "next_attempt_after": 0,
+      "is_bootstrap": false,
+      "known_topics": [],
+      "label": null
+    },
+    "/ip4/172.21.0.5/tcp/9002/ws": {
+      "address": "172.21.0.5:9002",
+      "multiaddr": "/ip4/172.21.0.5/tcp/9002/ws",
+      "last_peer_id": "12D3KooWM3Pz32Bt4W3Zsub3uiqKtTvhezhBZ45sSYgiKFg5JKFq",
+      "observed_peer_ids": [
+        "12D3KooWM3Pz32Bt4W3Zsub3uiqKtTvhezhBZ45sSYgiKFg5JKFq"
+      ],
+      "last_seen": 1784409783,
+      "first_seen": 1784409783,
+      "consecutive_failures": 0,
+      "backoff_seconds": 0,
+      "next_attempt_after": 0,
+      "is_bootstrap": false,
+      "known_topics": [],
+      "label": null
+    },
+    "/ip4/127.0.0.1/tcp/4002": {
+      "address": "127.0.0.1:4002",
+      "multiaddr": "/ip4/127.0.0.1/tcp/4002",
+      "last_peer_id": "12D3KooWCVX8bW8VWCJFrxkQCVvfjgyicnZHf2fR8M3y9FWmwgG7",
+      "observed_peer_ids": [
+        "12D3KooWCVX8bW8VWCJFrxkQCVvfjgyicnZHf2fR8M3y9FWmwgG7"
+      ],
+      "last_seen": 1784409772,
+      "first_seen": 1784409783,
+      "consecutive_failures": 0,
+      "backoff_seconds": 0,
+      "next_attempt_after": 0,
+      "is_bootstrap": false,
+      "known_topics": [],
+      "label": "Discovered via peer"
+    },
+    "/ip4/172.21.0.5/tcp/9090/ws": {
+      "address": "172.21.0.5:9090",
+      "multiaddr": "/ip4/172.21.0.5/tcp/9090/ws",
+      "last_peer_id": "12D3KooWM3Pz32Bt4W3Zsub3uiqKtTvhezhBZ45sSYgiKFg5JKFq",
+      "observed_peer_ids": [
+        "12D3KooWM3Pz32Bt4W3Zsub3uiqKtTvhezhBZ45sSYgiKFg5JKFq"
+      ],
+      "last_seen": 1784409783,
+      "first_seen": 1784409783,
+      "consecutive_failures": 0,
+      "backoff_seconds": 0,
+      "next_attempt_after": 0,
+      "is_bootstrap": false,
+      "known_topics": [],
+      "label": null
+    },
+    "/ip4/172.20.0.3/tcp/80/ws": {
+      "address": "172.20.0.3:80",
+      "multiaddr": "/ip4/172.20.0.3/tcp/80/ws",
+      "last_peer_id": "12D3KooWDQDC5oKqmEpQQbNqWARqAwdBQZsPVrrHfhduRo5VYBXt",
+      "observed_peer_ids": [
+        "12D3KooWDQDC5oKqmEpQQbNqWARqAwdBQZsPVrrHfhduRo5VYBXt"
+      ],
+      "last_seen": 1784409767,
+      "first_seen": 1784409783,
+      "consecutive_failures": 0,
+      "backoff_seconds": 0,
+      "next_attempt_after": 0,
+      "is_bootstrap": false,
+      "known_topics": [
+        "sc-lobby",
+        "sc-mesh",
+        "sc-receipt-convergence"
+      ],
+      "label": "Discovered via peer"
+    },
+    "/ip4/172.21.0.2/tcp/9002/ws": {
+      "address": "172.21.0.2:9002",
+      "multiaddr": "/ip4/172.21.0.2/tcp/9002/ws",
+      "last_peer_id": "12D3KooWCVX8bW8VWCJFrxkQCVvfjgyicnZHf2fR8M3y9FWmwgG7",
+      "observed_peer_ids": [
+        "12D3KooWCVX8bW8VWCJFrxkQCVvfjgyicnZHf2fR8M3y9FWmwgG7"
+      ],
+      "last_seen": 1784409772,
+      "first_seen": 1784409783,
+      "consecutive_failures": 0,
+      "backoff_seconds": 0,
+      "next_attempt_after": 0,
+      "is_bootstrap": false,
+      "known_topics": [],
+      "label": "Discovered via peer"
+    },
+    "/ip4/172.20.0.3/tcp/1/ws": {
+      "address": "172.20.0.3:1",
+      "multiaddr": "/ip4/172.20.0.3/tcp/1/ws",
+      "last_peer_id": "12D3KooWDQDC5oKqmEpQQbNqWARqAwdBQZsPVrrHfhduRo5VYBXt",
+      "observed_peer_ids": [
+        "12D3KooWDQDC5oKqmEpQQbNqWARqAwdBQZsPVrrHfhduRo5VYBXt"
+      ],
+      "last_seen": 1784409767,
+      "first_seen": 1784409783,
+      "consecutive_failures": 0,
+      "backoff_seconds": 0,
+      "next_attempt_after": 0,
+      "is_bootstrap": false,
+      "known_topics": [],
+      "label": "Discovered via peer"
+    },
+    "/ip4/172.20.0.2/tcp/44079": {
+      "address": "172.20.0.2:44079",
+      "multiaddr": "/ip4/172.20.0.2/tcp/44079",
+      "last_peer_id": "12D3KooWCVX8bW8VWCJFrxkQCVvfjgyicnZHf2fR8M3y9FWmwgG7",
+      "observed_peer_ids": [
+        "12D3KooWCVX8bW8VWCJFrxkQCVvfjgyicnZHf2fR8M3y9FWmwgG7"
+      ],
+      "last_seen": 1784409772,
+      "first_seen": 1784409783,
+      "consecutive_failures": 0,
+      "backoff_seconds": 0,
+      "next_attempt_after": 0,
+      "is_bootstrap": false,
+      "known_topics": [],
+      "label": "Discovered via peer"
+    },
+    "/ip4/172.20.0.2/tcp/9090": {
+      "address": "172.20.0.2:9090",
+      "multiaddr": "/ip4/172.20.0.2/tcp/9090",
+      "last_peer_id": "12D3KooWCVX8bW8VWCJFrxkQCVvfjgyicnZHf2fR8M3y9FWmwgG7",
+      "observed_peer_ids": [
+        "12D3KooWCVX8bW8VWCJFrxkQCVvfjgyicnZHf2fR8M3y9FWmwgG7"
+      ],
+      "last_seen": 1784409772,
+      "first_seen": 1784409783,
+      "consecutive_failures": 0,
+      "backoff_seconds": 0,
+      "next_attempt_after": 0,
+      "is_bootstrap": false,
+      "known_topics": [],
+      "label": "Discovered via peer"
+    },
+    "/ip4/172.20.0.2/tcp/4002/ws": {
+      "address": "172.20.0.2:4002",
+      "multiaddr": "/ip4/172.20.0.2/tcp/4002/ws",
+      "last_peer_id": "12D3KooWCVX8bW8VWCJFrxkQCVvfjgyicnZHf2fR8M3y9FWmwgG7",
+      "observed_peer_ids": [
+        "12D3KooWCVX8bW8VWCJFrxkQCVvfjgyicnZHf2fR8M3y9FWmwgG7"
+      ],
+      "last_seen": 1784409772,
+      "first_seen": 1784409783,
+      "consecutive_failures": 0,
+      "backoff_seconds": 0,
+      "next_attempt_after": 0,
+      "is_bootstrap": false,
+      "known_topics": [],
+      "label": "Discovered via peer"
+    },
+    "/ip4/127.0.0.1/tcp/4002/ws": {
+      "address": "127.0.0.1:4002",
+      "multiaddr": "/ip4/127.0.0.1/tcp/4002/ws",
+      "last_peer_id": "12D3KooWCVX8bW8VWCJFrxkQCVvfjgyicnZHf2fR8M3y9FWmwgG7",
+      "observed_peer_ids": [
+        "12D3KooWCVX8bW8VWCJFrxkQCVvfjgyicnZHf2fR8M3y9FWmwgG7"
+      ],
+      "last_seen": 1784409772,
+      "first_seen": 1784409783,
+      "consecutive_failures": 0,
+      "backoff_seconds": 0,
+      "next_attempt_after": 0,
+      "is_bootstrap": false,
+      "known_topics": [],
+      "label": "Discovered via peer"
+    },
+    "/ip4/172.22.0.2/tcp/80": {
+      "address": "172.22.0.2:80",
+      "multiaddr": "/ip4/172.22.0.2/tcp/80",
+      "last_peer_id": "12D3KooWM3Pz32Bt4W3Zsub3uiqKtTvhezhBZ45sSYgiKFg5JKFq",
+      "observed_peer_ids": [
+        "12D3KooWM3Pz32Bt4W3Zsub3uiqKtTvhezhBZ45sSYgiKFg5JKFq"
+      ],
+      "last_seen": 1784409783,
+      "first_seen": 1784409783,
+      "consecutive_failures": 0,
+      "backoff_seconds": 0,
+      "next_attempt_after": 0,
+      "is_bootstrap": false,
+      "known_topics": [],
+      "label": null
+    },
+    "/ip4/172.22.0.2/tcp/9090/ws": {
+      "address": "172.22.0.2:9090",
+      "multiaddr": "/ip4/172.22.0.2/tcp/9090/ws",
+      "last_peer_id": "12D3KooWM3Pz32Bt4W3Zsub3uiqKtTvhezhBZ45sSYgiKFg5JKFq",
+      "observed_peer_ids": [
+        "12D3KooWM3Pz32Bt4W3Zsub3uiqKtTvhezhBZ45sSYgiKFg5JKFq"
+      ],
+      "last_seen": 1784409783,
+      "first_seen": 1784409783,
+      "consecutive_failures": 0,
+      "backoff_seconds": 0,
+      "next_attempt_after": 0,
+      "is_bootstrap": false,
+      "known_topics": [],
+      "label": null
+    },
+    "/ip4/172.21.0.2/tcp/80": {
+      "address": "172.21.0.2:80",
+      "multiaddr": "/ip4/172.21.0.2/tcp/80",
+      "last_peer_id": "12D3KooWCVX8bW8VWCJFrxkQCVvfjgyicnZHf2fR8M3y9FWmwgG7",
+      "observed_peer_ids": [
+        "12D3KooWCVX8bW8VWCJFrxkQCVvfjgyicnZHf2fR8M3y9FWmwgG7"
+      ],
+      "last_seen": 1784409772,
+      "first_seen": 1784409783,
+      "consecutive_failures": 0,
+      "backoff_seconds": 0,
+      "next_attempt_after": 0,
+      "is_bootstrap": false,
+      "known_topics": [
+        "sc-receipt-convergence",
+        "sc-lobby",
+        "sc-mesh"
+      ],
+      "label": "Discovered via peer"
+    },
+    "/ip4/172.21.0.3/tcp/9002/ws": {
+      "address": "172.21.0.3:9002",
+      "multiaddr": "/ip4/172.21.0.3/tcp/9002/ws",
+      "last_peer_id": "12D3KooWSDTKQNLQSMH7AFvbUku3FGBkZL3X4hdyTdnNs83h6KYv",
+      "observed_peer_ids": [
+        "12D3KooWSDTKQNLQSMH7AFvbUku3FGBkZL3X4hdyTdnNs83h6KYv"
+      ],
+      "last_seen": 1784409772,
+      "first_seen": 1784409783,
+      "consecutive_failures": 0,
+      "backoff_seconds": 0,
+      "next_attempt_after": 0,
+      "is_bootstrap": false,
+      "known_topics": [],
+      "label": "Discovered via peer"
+    },
+    "/ip4/172.20.0.3/tcp/41715": {
+      "address": "172.20.0.3:41715",
+      "multiaddr": "/ip4/172.20.0.3/tcp/41715",
+      "last_peer_id": "12D3KooWM3Pz32Bt4W3Zsub3uiqKtTvhezhBZ45sSYgiKFg5JKFq",
+      "observed_peer_ids": [
+        "12D3KooWM3Pz32Bt4W3Zsub3uiqKtTvhezhBZ45sSYgiKFg5JKFq"
+      ],
+      "last_seen": 1784409783,
+      "first_seen": 1784409783,
+      "consecutive_failures": 0,
+      "backoff_seconds": 0,
+      "next_attempt_after": 0,
+      "is_bootstrap": false,
+      "known_topics": [],
+      "label": null
+    },
+    "/ip4/127.0.0.1/tcp/9002/ws": {
+      "address": "127.0.0.1:9002",
+      "multiaddr": "/ip4/127.0.0.1/tcp/9002/ws",
+      "last_peer_id": "12D3KooWM3Pz32Bt4W3Zsub3uiqKtTvhezhBZ45sSYgiKFg5JKFq",
+      "observed_peer_ids": [
+        "12D3KooWM3Pz32Bt4W3Zsub3uiqKtTvhezhBZ45sSYgiKFg5JKFq"
+      ],
+      "last_seen": 1784409783,
+      "first_seen": 1784409783,
+      "consecutive_failures": 0,
+      "backoff_seconds": 0,
+      "next_attempt_after": 0,
+      "is_bootstrap": false,
+      "known_topics": [
+        "sc-lobby",
+        "sc-receipt-convergence",
+        "sc-mesh"
+      ],
+      "label": null
+    },
+    "/ip4/172.21.0.2/tcp/44079": {
+      "address": "172.21.0.2:44079",
+      "multiaddr": "/ip4/172.21.0.2/tcp/44079",
+      "last_peer_id": "12D3KooWCVX8bW8VWCJFrxkQCVvfjgyicnZHf2fR8M3y9FWmwgG7",
+      "observed_peer_ids": [
+        "12D3KooWCVX8bW8VWCJFrxkQCVvfjgyicnZHf2fR8M3y9FWmwgG7"
+      ],
+      "last_seen": 1784409772,
+      "first_seen": 1784409783,
+      "consecutive_failures": 0,
+      "backoff_seconds": 0,
+      "next_attempt_after": 0,
+      "is_bootstrap": false,
+      "known_topics": [
+        "sc-receipt-convergence",
+        "sc-lobby",
+        "sc-mesh"
+      ],
+      "label": "Discovered via peer"
+    },
+    "/ip4/172.22.0.2/tcp/443/ws": {
+      "address": "172.22.0.2:443",
+      "multiaddr": "/ip4/172.22.0.2/tcp/443/ws",
+      "last_peer_id": "12D3KooWM3Pz32Bt4W3Zsub3uiqKtTvhezhBZ45sSYgiKFg5JKFq",
+      "observed_peer_ids": [
+        "12D3KooWM3Pz32Bt4W3Zsub3uiqKtTvhezhBZ45sSYgiKFg5JKFq"
+      ],
+      "last_seen": 1784409783,
+      "first_seen": 1784409783,
+      "consecutive_failures": 0,
+      "backoff_seconds": 0,
+      "next_attempt_after": 0,
+      "is_bootstrap": false,
+      "known_topics": [],
+      "label": null
+    },
+    "/ip4/127.0.0.1/tcp/38497/ws": {
+      "address": "127.0.0.1:38497",
+      "multiaddr": "/ip4/127.0.0.1/tcp/38497/ws",
+      "last_peer_id": "12D3KooWRuLPSvac4nE4hTK8Ts3eW4UWibdWdNeMia8C8NoeJGhv",
+      "observed_peer_ids": [
+        "12D3KooWRuLPSvac4nE4hTK8Ts3eW4UWibdWdNeMia8C8NoeJGhv"
+      ],
+      "last_seen": 1784409772,
+      "first_seen": 1784409783,
+      "consecutive_failures": 0,
+      "backoff_seconds": 0,
+      "next_attempt_after": 0,
+      "is_bootstrap": false,
+      "known_topics": [
+        "sc-lobby",
+        "sc-mesh",
+        "sc-receipt-convergence"
+      ],
+      "label": "Discovered via peer"
+    },
+    "/ip4/127.0.0.1/tcp/34873/ws": {
+      "address": "127.0.0.1:34873",
+      "multiaddr": "/ip4/127.0.0.1/tcp/34873/ws",
+      "last_peer_id": "12D3KooWCVX8bW8VWCJFrxkQCVvfjgyicnZHf2fR8M3y9FWmwgG7",
+      "observed_peer_ids": [
+        "12D3KooWCVX8bW8VWCJFrxkQCVvfjgyicnZHf2fR8M3y9FWmwgG7"
+      ],
+      "last_seen": 1784409772,
+      "first_seen": 1784409783,
+      "consecutive_failures": 0,
+      "backoff_seconds": 0,
+      "next_attempt_after": 0,
+      "is_bootstrap": false,
+      "known_topics": [],
+      "label": "Discovered via peer"
+    },
+    "/ip4/172.21.0.4/tcp/1": {
+      "address": "172.21.0.4:1",
+      "multiaddr": "/ip4/172.21.0.4/tcp/1",
+      "last_peer_id": "12D3KooWRuLPSvac4nE4hTK8Ts3eW4UWibdWdNeMia8C8NoeJGhv",
+      "observed_peer_ids": [
+        "12D3KooWRuLPSvac4nE4hTK8Ts3eW4UWibdWdNeMia8C8NoeJGhv"
+      ],
+      "last_seen": 1784409772,
+      "first_seen": 1784409783,
+      "consecutive_failures": 0,
+      "backoff_seconds": 0,
+      "next_attempt_after": 0,
+      "is_bootstrap": false,
+      "known_topics": [],
+      "label": "Discovered via peer"
+    },
+    "/ip4/172.21.0.4/tcp/45825": {
+      "address": "172.21.0.4:45825",
+      "multiaddr": "/ip4/172.21.0.4/tcp/45825",
+      "last_peer_id": "12D3KooWM3Pz32Bt4W3Zsub3uiqKtTvhezhBZ45sSYgiKFg5JKFq",
+      "observed_peer_ids": [
+        "12D3KooWM3Pz32Bt4W3Zsub3uiqKtTvhezhBZ45sSYgiKFg5JKFq"
+      ],
+      "last_seen": 1784409783,
+      "first_seen": 1784409783,
+      "consecutive_failures": 0,
+      "backoff_seconds": 0,
+      "next_attempt_after": 0,
+      "is_bootstrap": false,
+      "known_topics": [],
+      "label": null
+    },
+    "/ip4/172.22.0.2/tcp/4003": {
+      "address": "172.22.0.2:4003",
+      "multiaddr": "/ip4/172.22.0.2/tcp/4003",
+      "last_peer_id": "12D3KooWM3Pz32Bt4W3Zsub3uiqKtTvhezhBZ45sSYgiKFg5JKFq",
+      "observed_peer_ids": [
+        "12D3KooWM3Pz32Bt4W3Zsub3uiqKtTvhezhBZ45sSYgiKFg5JKFq"
+      ],
+      "last_seen": 1784409783,
+      "first_seen": 1784409783,
+      "consecutive_failures": 0,
+      "backoff_seconds": 0,
+      "next_attempt_after": 0,
+      "is_bootstrap": false,
+      "known_topics": [],
+      "label": null
+    },
+    "/ip4/172.21.0.5/tcp/36477": {
+      "address": "172.21.0.5:36477",
+      "multiaddr": "/ip4/172.21.0.5/tcp/36477",
+      "last_peer_id": "12D3KooWM3Pz32Bt4W3Zsub3uiqKtTvhezhBZ45sSYgiKFg5JKFq",
+      "observed_peer_ids": [
+        "12D3KooWM3Pz32Bt4W3Zsub3uiqKtTvhezhBZ45sSYgiKFg5JKFq"
+      ],
+      "last_seen": 1784409783,
+      "first_seen": 1784409783,
+      "consecutive_failures": 0,
+      "backoff_seconds": 0,
+      "next_attempt_after": 0,
+      "is_bootstrap": false,
+      "known_topics": [],
+      "label": null
+    },
+    "/ip4/172.20.0.2/tcp/9002/ws": {
+      "address": "172.20.0.2:9002",
+      "multiaddr": "/ip4/172.20.0.2/tcp/9002/ws",
+      "last_peer_id": "12D3KooWCVX8bW8VWCJFrxkQCVvfjgyicnZHf2fR8M3y9FWmwgG7",
+      "observed_peer_ids": [
+        "12D3KooWCVX8bW8VWCJFrxkQCVvfjgyicnZHf2fR8M3y9FWmwgG7"
+      ],
+      "last_seen": 1784409772,
+      "first_seen": 1784409783,
+      "consecutive_failures": 0,
+      "backoff_seconds": 0,
+      "next_attempt_after": 0,
+      "is_bootstrap": false,
+      "known_topics": [],
+      "label": "Discovered via peer"
+    },
+    "/ip4/172.20.0.2/tcp/80/ws": {
+      "address": "172.20.0.2:80",
+      "multiaddr": "/ip4/172.20.0.2/tcp/80/ws",
+      "last_peer_id": "12D3KooWCVX8bW8VWCJFrxkQCVvfjgyicnZHf2fR8M3y9FWmwgG7",
+      "observed_peer_ids": [
+        "12D3KooWCVX8bW8VWCJFrxkQCVvfjgyicnZHf2fR8M3y9FWmwgG7"
+      ],
+      "last_seen": 1784409772,
+      "first_seen": 1784409783,
+      "consecutive_failures": 0,
+      "backoff_seconds": 0,
+      "next_attempt_after": 0,
+      "is_bootstrap": false,
+      "known_topics": [],
+      "label": "Discovered via peer"
+    },
+    "/ip4/127.0.0.1/tcp/4003/ws": {
+      "address": "127.0.0.1:4003",
+      "multiaddr": "/ip4/127.0.0.1/tcp/4003/ws",
+      "last_peer_id": "12D3KooWM3Pz32Bt4W3Zsub3uiqKtTvhezhBZ45sSYgiKFg5JKFq",
+      "observed_peer_ids": [
+        "12D3KooWM3Pz32Bt4W3Zsub3uiqKtTvhezhBZ45sSYgiKFg5JKFq"
+      ],
+      "last_seen": 1784409783,
+      "first_seen": 1784409783,
+      "consecutive_failures": 0,
+      "backoff_seconds": 0,
+      "next_attempt_after": 0,
+      "is_bootstrap": false,
+      "known_topics": [
+        "sc-mesh",
+        "sc-lobby",
+        "sc-receipt-convergence"
+      ],
+      "label": null
+    },
+    "/ip4/172.21.0.5/tcp/9090": {
+      "address": "172.21.0.5:9090",
+      "multiaddr": "/ip4/172.21.0.5/tcp/9090",
+      "last_peer_id": "12D3KooWM3Pz32Bt4W3Zsub3uiqKtTvhezhBZ45sSYgiKFg5JKFq",
+      "observed_peer_ids": [
+        "12D3KooWM3Pz32Bt4W3Zsub3uiqKtTvhezhBZ45sSYgiKFg5JKFq"
+      ],
+      "last_seen": 1784409783,
+      "first_seen": 1784409783,
+      "consecutive_failures": 0,
+      "backoff_seconds": 0,
+      "next_attempt_after": 0,
+      "is_bootstrap": false,
+      "known_topics": [],
+      "label": null
+    },
+    "/ip4/127.0.0.1/tcp/44457/ws": {
+      "address": "127.0.0.1:44457",
+      "multiaddr": "/ip4/127.0.0.1/tcp/44457/ws",
+      "last_peer_id": "12D3KooWDQDC5oKqmEpQQbNqWARqAwdBQZsPVrrHfhduRo5VYBXt",
+      "observed_peer_ids": [
+        "12D3KooWDQDC5oKqmEpQQbNqWARqAwdBQZsPVrrHfhduRo5VYBXt"
+      ],
+      "last_seen": 1784409767,
+      "first_seen": 1784409783,
+      "consecutive_failures": 0,
+      "backoff_seconds": 0,
+      "next_attempt_after": 0,
+      "is_bootstrap": false,
+      "known_topics": [],
+      "label": "Discovered via peer"
+    },
+    "/ip4/172.21.0.2/tcp/443": {
+      "address": "172.21.0.2:443",
+      "multiaddr": "/ip4/172.21.0.2/tcp/443",
+      "last_peer_id": "12D3KooWCVX8bW8VWCJFrxkQCVvfjgyicnZHf2fR8M3y9FWmwgG7",
+      "observed_peer_ids": [
+        "12D3KooWCVX8bW8VWCJFrxkQCVvfjgyicnZHf2fR8M3y9FWmwgG7"
+      ],
+      "last_seen": 1784409772,
+      "first_seen": 1784409783,
+      "consecutive_failures": 0,
+      "backoff_seconds": 0,
+      "next_attempt_after": 0,
+      "is_bootstrap": false,
+      "known_topics": [],
+      "label": "Discovered via peer"
+    },
+    "/ip4/172.22.0.2/tcp/80/ws": {
+      "address": "172.22.0.2:80",
+      "multiaddr": "/ip4/172.22.0.2/tcp/80/ws",
+      "last_peer_id": "12D3KooWM3Pz32Bt4W3Zsub3uiqKtTvhezhBZ45sSYgiKFg5JKFq",
+      "observed_peer_ids": [
+        "12D3KooWM3Pz32Bt4W3Zsub3uiqKtTvhezhBZ45sSYgiKFg5JKFq"
+      ],
+      "last_seen": 1784409783,
+      "first_seen": 1784409783,
+      "consecutive_failures": 0,
+      "backoff_seconds": 0,
+      "next_attempt_after": 0,
+      "is_bootstrap": false,
+      "known_topics": [],
+      "label": null
+    },
+    "/ip4/172.21.0.2/tcp/443/ws": {
+      "address": "172.21.0.2:443",
+      "multiaddr": "/ip4/172.21.0.2/tcp/443/ws",
+      "last_peer_id": "12D3KooWM3Pz32Bt4W3Zsub3uiqKtTvhezhBZ45sSYgiKFg5JKFq",
+      "observed_peer_ids": [
+        "12D3KooWM3Pz32Bt4W3Zsub3uiqKtTvhezhBZ45sSYgiKFg5JKFq"
+      ],
+      "last_seen": 1784409783,
+      "first_seen": 1784409783,
+      "consecutive_failures": 0,
+      "backoff_seconds": 0,
+      "next_attempt_after": 0,
+      "is_bootstrap": false,
+      "known_topics": [
+        "sc-lobby",
+        "sc-mesh"
+      ],
+      "label": null
+    },
+    "/ip4/127.0.0.1/tcp/45825": {
+      "address": "127.0.0.1:45825",
+      "multiaddr": "/ip4/127.0.0.1/tcp/45825",
+      "last_peer_id": "12D3KooWRuLPSvac4nE4hTK8Ts3eW4UWibdWdNeMia8C8NoeJGhv",
+      "observed_peer_ids": [
+        "12D3KooWRuLPSvac4nE4hTK8Ts3eW4UWibdWdNeMia8C8NoeJGhv"
+      ],
+      "last_seen": 1784409772,
+      "first_seen": 1784409783,
+      "consecutive_failures": 0,
+      "backoff_seconds": 0,
+      "next_attempt_after": 0,
+      "is_bootstrap": false,
+      "known_topics": [],
+      "label": "Discovered via peer"
+    },
+    "/ip4/172.20.0.2/tcp/443/ws": {
+      "address": "172.20.0.2:443",
+      "multiaddr": "/ip4/172.20.0.2/tcp/443/ws",
+      "last_peer_id": "12D3KooWM3Pz32Bt4W3Zsub3uiqKtTvhezhBZ45sSYgiKFg5JKFq",
+      "observed_peer_ids": [
+        "12D3KooWM3Pz32Bt4W3Zsub3uiqKtTvhezhBZ45sSYgiKFg5JKFq"
+      ],
+      "last_seen": 1784409783,
+      "first_seen": 1784409783,
+      "consecutive_failures": 0,
+      "backoff_seconds": 0,
+      "next_attempt_after": 0,
+      "is_bootstrap": false,
+      "known_topics": [],
+      "label": null
+    },
+    "/ip4/172.20.0.3/tcp/9002/ws": {
+      "address": "172.20.0.3:9002",
+      "multiaddr": "/ip4/172.20.0.3/tcp/9002/ws",
+      "last_peer_id": "12D3KooWDQDC5oKqmEpQQbNqWARqAwdBQZsPVrrHfhduRo5VYBXt",
+      "observed_peer_ids": [
+        "12D3KooWDQDC5oKqmEpQQbNqWARqAwdBQZsPVrrHfhduRo5VYBXt"
+      ],
+      "last_seen": 1784409767,
+      "first_seen": 1784409783,
+      "consecutive_failures": 0,
+      "backoff_seconds": 0,
+      "next_attempt_after": 0,
+      "is_bootstrap": false,
+      "known_topics": [],
+      "label": "Discovered via peer"
+    },
+    "/ip4/172.21.0.4/tcp/443/ws": {
+      "address": "172.21.0.4:443",
+      "multiaddr": "/ip4/172.21.0.4/tcp/443/ws",
+      "last_peer_id": "12D3KooWRuLPSvac4nE4hTK8Ts3eW4UWibdWdNeMia8C8NoeJGhv",
+      "observed_peer_ids": [
+        "12D3KooWRuLPSvac4nE4hTK8Ts3eW4UWibdWdNeMia8C8NoeJGhv"
+      ],
+      "last_seen": 1784409772,
+      "first_seen": 1784409783,
+      "consecutive_failures": 0,
+      "backoff_seconds": 0,
+      "next_attempt_after": 0,
+      "is_bootstrap": false,
+      "known_topics": [],
+      "label": "Discovered via peer"
+    },
+    "/ip4/172.21.0.2/tcp/34873/ws": {
+      "address": "172.21.0.2:34873",
+      "multiaddr": "/ip4/172.21.0.2/tcp/34873/ws",
+      "last_peer_id": "12D3KooWCVX8bW8VWCJFrxkQCVvfjgyicnZHf2fR8M3y9FWmwgG7",
+      "observed_peer_ids": [
+        "12D3KooWCVX8bW8VWCJFrxkQCVvfjgyicnZHf2fR8M3y9FWmwgG7"
+      ],
+      "last_seen": 1784409772,
+      "first_seen": 1784409783,
+      "consecutive_failures": 0,
+      "backoff_seconds": 0,
+      "next_attempt_after": 0,
+      "is_bootstrap": false,
+      "known_topics": [],
+      "label": "Discovered via peer"
+    },
+    "/ip4/172.20.0.3/tcp/9090/ws": {
+      "address": "172.20.0.3:9090",
+      "multiaddr": "/ip4/172.20.0.3/tcp/9090/ws",
+      "last_peer_id": "12D3KooWDQDC5oKqmEpQQbNqWARqAwdBQZsPVrrHfhduRo5VYBXt",
+      "observed_peer_ids": [
+        "12D3KooWDQDC5oKqmEpQQbNqWARqAwdBQZsPVrrHfhduRo5VYBXt"
+      ],
+      "last_seen": 1784409767,
+      "first_seen": 1784409783,
+      "consecutive_failures": 0,
+      "backoff_seconds": 0,
+      "next_attempt_after": 0,
+      "is_bootstrap": false,
+      "known_topics": [],
+      "label": "Discovered via peer"
+    },
+    "/ip4/172.21.0.5/tcp/443/ws": {
+      "address": "172.21.0.5:443",
+      "multiaddr": "/ip4/172.21.0.5/tcp/443/ws",
+      "last_peer_id": "12D3KooWM3Pz32Bt4W3Zsub3uiqKtTvhezhBZ45sSYgiKFg5JKFq",
+      "observed_peer_ids": [
+        "12D3KooWM3Pz32Bt4W3Zsub3uiqKtTvhezhBZ45sSYgiKFg5JKFq"
+      ],
+      "last_seen": 1784409783,
+      "first_seen": 1784409783,
+      "consecutive_failures": 0,
+      "backoff_seconds": 0,
+      "next_attempt_after": 0,
+      "is_bootstrap": false,
+      "known_topics": [],
+      "label": null
+    },
+    "/ip4/172.21.0.2/tcp/9090/ws": {
+      "address": "172.21.0.2:9090",
+      "multiaddr": "/ip4/172.21.0.2/tcp/9090/ws",
+      "last_peer_id": "12D3KooWCVX8bW8VWCJFrxkQCVvfjgyicnZHf2fR8M3y9FWmwgG7",
+      "observed_peer_ids": [
+        "12D3KooWCVX8bW8VWCJFrxkQCVvfjgyicnZHf2fR8M3y9FWmwgG7"
+      ],
+      "last_seen": 1784409772,
+      "first_seen": 1784409783,
+      "consecutive_failures": 0,
+      "backoff_seconds": 0,
+      "next_attempt_after": 0,
+      "is_bootstrap": false,
+      "known_topics": [],
+      "label": "Discovered via peer"
+    },
+    "/ip4/127.0.0.1/tcp/44079": {
+      "address": "127.0.0.1:44079",
+      "multiaddr": "/ip4/127.0.0.1/tcp/44079",
+      "last_peer_id": "12D3KooWCVX8bW8VWCJFrxkQCVvfjgyicnZHf2fR8M3y9FWmwgG7",
+      "observed_peer_ids": [
+        "12D3KooWCVX8bW8VWCJFrxkQCVvfjgyicnZHf2fR8M3y9FWmwgG7"
+      ],
+      "last_seen": 1784409772,
+      "first_seen": 1784409783,
+      "consecutive_failures": 0,
+      "backoff_seconds": 0,
+      "next_attempt_after": 0,
+      "is_bootstrap": false,
+      "known_topics": [],
+      "label": "Discovered via peer"
+    },
+    "/ip4/172.21.0.3/tcp/9090": {
+      "address": "172.21.0.3:9090",
+      "multiaddr": "/ip4/172.21.0.3/tcp/9090",
+      "last_peer_id": "12D3KooWM3Pz32Bt4W3Zsub3uiqKtTvhezhBZ45sSYgiKFg5JKFq",
+      "observed_peer_ids": [
+        "12D3KooWM3Pz32Bt4W3Zsub3uiqKtTvhezhBZ45sSYgiKFg5JKFq"
+      ],
+      "last_seen": 1784409783,
+      "first_seen": 1784409783,
+      "consecutive_failures": 0,
+      "backoff_seconds": 0,
+      "next_attempt_after": 0,
+      "is_bootstrap": false,
+      "known_topics": [
+        "sc-receipt-convergence"
+      ],
+      "label": null
+    },
+    "/ip4/172.21.0.5/tcp/4003": {
+      "address": "172.21.0.5:4003",
+      "multiaddr": "/ip4/172.21.0.5/tcp/4003",
+      "last_peer_id": "12D3KooWM3Pz32Bt4W3Zsub3uiqKtTvhezhBZ45sSYgiKFg5JKFq",
+      "observed_peer_ids": [
+        "12D3KooWM3Pz32Bt4W3Zsub3uiqKtTvhezhBZ45sSYgiKFg5JKFq"
+      ],
+      "last_seen": 1784409783,
+      "first_seen": 1784409783,
+      "consecutive_failures": 0,
+      "backoff_seconds": 0,
+      "next_attempt_after": 0,
+      "is_bootstrap": false,
+      "known_topics": [],
+      "label": null
+    },
+    "/ip4/172.21.0.2/tcp/9090": {
+      "address": "172.21.0.2:9090",
+      "multiaddr": "/ip4/172.21.0.2/tcp/9090",
+      "last_peer_id": "12D3KooWM3Pz32Bt4W3Zsub3uiqKtTvhezhBZ45sSYgiKFg5JKFq",
+      "observed_peer_ids": [
+        "12D3KooWM3Pz32Bt4W3Zsub3uiqKtTvhezhBZ45sSYgiKFg5JKFq"
+      ],
+      "last_seen": 1784409783,
+      "first_seen": 1784409783,
+      "consecutive_failures": 0,
+      "backoff_seconds": 0,
+      "next_attempt_after": 0,
+      "is_bootstrap": false,
+      "known_topics": [],
+      "label": null
+    },
+    "/ip4/172.21.0.5/tcp/443": {
+      "address": "172.21.0.5:443",
+      "multiaddr": "/ip4/172.21.0.5/tcp/443",
+      "last_peer_id": "12D3KooWM3Pz32Bt4W3Zsub3uiqKtTvhezhBZ45sSYgiKFg5JKFq",
+      "observed_peer_ids": [
+        "12D3KooWM3Pz32Bt4W3Zsub3uiqKtTvhezhBZ45sSYgiKFg5JKFq"
+      ],
+      "last_seen": 1784409783,
+      "first_seen": 1784409783,
+      "consecutive_failures": 0,
+      "backoff_seconds": 0,
+      "next_attempt_after": 0,
+      "is_bootstrap": false,
+      "known_topics": [],
+      "label": null
+    },
+    "/ip4/172.22.0.2/tcp/34191/ws": {
+      "address": "172.22.0.2:34191",
+      "multiaddr": "/ip4/172.22.0.2/tcp/34191/ws",
+      "last_peer_id": "12D3KooWM3Pz32Bt4W3Zsub3uiqKtTvhezhBZ45sSYgiKFg5JKFq",
+      "observed_peer_ids": [
+        "12D3KooWM3Pz32Bt4W3Zsub3uiqKtTvhezhBZ45sSYgiKFg5JKFq"
+      ],
+      "last_seen": 1784409783,
+      "first_seen": 1784409783,
+      "consecutive_failures": 0,
+      "backoff_seconds": 0,
+      "next_attempt_after": 0,
+      "is_bootstrap": false,
+      "known_topics": [],
+      "label": null
+    },
+    "/ip4/172.20.0.4/tcp/443/ws": {
+      "address": "172.20.0.4:443",
+      "multiaddr": "/ip4/172.20.0.4/tcp/443/ws",
+      "last_peer_id": "12D3KooWMcBee41QPSDyrsbWubjWCivaNqoHdm7HsgwZBNnB9GWJ",
+      "observed_peer_ids": [
+        "12D3KooWMcBee41QPSDyrsbWubjWCivaNqoHdm7HsgwZBNnB9GWJ"
+      ],
+      "last_seen": 1784409772,
+      "first_seen": 1784409783,
+      "consecutive_failures": 0,
+      "backoff_seconds": 0,
+      "next_attempt_after": 0,
+      "is_bootstrap": false,
+      "known_topics": [],
+      "label": "Discovered via peer"
+    },
+    "/ip4/127.0.0.1/tcp/1/ws": {
+      "address": "127.0.0.1:1",
+      "multiaddr": "/ip4/127.0.0.1/tcp/1/ws",
+      "last_peer_id": "12D3KooWSDTKQNLQSMH7AFvbUku3FGBkZL3X4hdyTdnNs83h6KYv",
+      "observed_peer_ids": [
+        "12D3KooWSDTKQNLQSMH7AFvbUku3FGBkZL3X4hdyTdnNs83h6KYv"
+      ],
+      "last_seen": 1784409772,
+      "first_seen": 1784409783,
+      "consecutive_failures": 0,
+      "backoff_seconds": 0,
+      "next_attempt_after": 0,
+      "is_bootstrap": false,
+      "known_topics": [
+        "sc-receipt-convergence",
+        "sc-lobby",
+        "sc-mesh"
+      ],
+      "label": "Discovered via peer"
+    },
+    "/ip4/172.20.0.2/tcp/9090/ws": {
+      "address": "172.20.0.2:9090",
+      "multiaddr": "/ip4/172.20.0.2/tcp/9090/ws",
+      "last_peer_id": "12D3KooWCVX8bW8VWCJFrxkQCVvfjgyicnZHf2fR8M3y9FWmwgG7",
+      "observed_peer_ids": [
+        "12D3KooWCVX8bW8VWCJFrxkQCVvfjgyicnZHf2fR8M3y9FWmwgG7"
+      ],
+      "last_seen": 1784409772,
+      "first_seen": 1784409783,
+      "consecutive_failures": 0,
+      "backoff_seconds": 0,
+      "next_attempt_after": 0,
+      "is_bootstrap": false,
+      "known_topics": [],
+      "label": "Discovered via peer"
+    },
+    "/ip4/127.0.0.1/tcp/80/ws": {
+      "address": "127.0.0.1:80",
+      "multiaddr": "/ip4/127.0.0.1/tcp/80/ws",
+      "last_peer_id": "12D3KooWM3Pz32Bt4W3Zsub3uiqKtTvhezhBZ45sSYgiKFg5JKFq",
+      "observed_peer_ids": [
+        "12D3KooWM3Pz32Bt4W3Zsub3uiqKtTvhezhBZ45sSYgiKFg5JKFq"
+      ],
+      "last_seen": 1784409783,
+      "first_seen": 1784409783,
+      "consecutive_failures": 0,
+      "backoff_seconds": 0,
+      "next_attempt_after": 0,
+      "is_bootstrap": false,
+      "known_topics": [],
+      "label": null
+    },
+    "/ip4/172.21.0.5/tcp/80/ws": {
+      "address": "172.21.0.5:80",
+      "multiaddr": "/ip4/172.21.0.5/tcp/80/ws",
+      "last_peer_id": "12D3KooWM3Pz32Bt4W3Zsub3uiqKtTvhezhBZ45sSYgiKFg5JKFq",
+      "observed_peer_ids": [
+        "12D3KooWM3Pz32Bt4W3Zsub3uiqKtTvhezhBZ45sSYgiKFg5JKFq"
+      ],
+      "last_seen": 1784409783,
+      "first_seen": 1784409783,
+      "consecutive_failures": 0,
+      "backoff_seconds": 0,
+      "next_attempt_after": 0,
+      "is_bootstrap": false,
+      "known_topics": [],
+      "label": null
+    },
+    "/ip4/172.21.0.4/tcp/38497/ws": {
+      "address": "172.21.0.4:38497",
+      "multiaddr": "/ip4/172.21.0.4/tcp/38497/ws",
+      "last_peer_id": "12D3KooWRuLPSvac4nE4hTK8Ts3eW4UWibdWdNeMia8C8NoeJGhv",
+      "observed_peer_ids": [
+        "12D3KooWRuLPSvac4nE4hTK8Ts3eW4UWibdWdNeMia8C8NoeJGhv"
+      ],
+      "last_seen": 1784409772,
+      "first_seen": 1784409783,
+      "consecutive_failures": 0,
+      "backoff_seconds": 0,
+      "next_attempt_after": 0,
+      "is_bootstrap": false,
+      "known_topics": [],
+      "label": "Discovered via peer"
+    },
+    "/ip4/172.21.0.3/tcp/443": {
+      "address": "172.21.0.3:443",
+      "multiaddr": "/ip4/172.21.0.3/tcp/443",
+      "last_peer_id": "12D3KooWSDTKQNLQSMH7AFvbUku3FGBkZL3X4hdyTdnNs83h6KYv",
+      "observed_peer_ids": [
+        "12D3KooWSDTKQNLQSMH7AFvbUku3FGBkZL3X4hdyTdnNs83h6KYv"
+      ],
+      "last_seen": 1784409772,
+      "first_seen": 1784409783,
+      "consecutive_failures": 0,
+      "backoff_seconds": 0,
+      "next_attempt_after": 0,
+      "is_bootstrap": false,
+      "known_topics": [],
+      "label": "Discovered via peer"
+    },
+    "/ip4/172.21.0.5/tcp/34191/ws": {
+      "address": "172.21.0.5:34191",
+      "multiaddr": "/ip4/172.21.0.5/tcp/34191/ws",
+      "last_peer_id": "12D3KooWM3Pz32Bt4W3Zsub3uiqKtTvhezhBZ45sSYgiKFg5JKFq",
+      "observed_peer_ids": [
+        "12D3KooWM3Pz32Bt4W3Zsub3uiqKtTvhezhBZ45sSYgiKFg5JKFq"
+      ],
+      "last_seen": 1784409783,
+      "first_seen": 1784409783,
+      "consecutive_failures": 0,
+      "backoff_seconds": 0,
+      "next_attempt_after": 0,
+      "is_bootstrap": false,
+      "known_topics": [],
+      "label": null
+    },
+    "/ip4/172.22.0.2/tcp/4003/ws": {
+      "address": "172.22.0.2:4003",
+      "multiaddr": "/ip4/172.22.0.2/tcp/4003/ws",
+      "last_peer_id": "12D3KooWM3Pz32Bt4W3Zsub3uiqKtTvhezhBZ45sSYgiKFg5JKFq",
+      "observed_peer_ids": [
+        "12D3KooWM3Pz32Bt4W3Zsub3uiqKtTvhezhBZ45sSYgiKFg5JKFq"
+      ],
+      "last_seen": 1784409783,
+      "first_seen": 1784409783,
+      "consecutive_failures": 0,
+      "backoff_seconds": 0,
+      "next_attempt_after": 0,
+      "is_bootstrap": false,
+      "known_topics": [],
+      "label": null
+    },
+    "/ip4/172.20.0.4/tcp/80/ws": {
+      "address": "172.20.0.4:80",
+      "multiaddr": "/ip4/172.20.0.4/tcp/80/ws",
+      "last_peer_id": "12D3KooWMcBee41QPSDyrsbWubjWCivaNqoHdm7HsgwZBNnB9GWJ",
+      "observed_peer_ids": [
+        "12D3KooWMcBee41QPSDyrsbWubjWCivaNqoHdm7HsgwZBNnB9GWJ"
+      ],
+      "last_seen": 1784409772,
+      "first_seen": 1784409783,
+      "consecutive_failures": 0,
+      "backoff_seconds": 0,
+      "next_attempt_after": 0,
+      "is_bootstrap": false,
+      "known_topics": [],
+      "label": "Discovered via peer"
+    },
+    "/ip4/172.20.0.4/tcp/9090/ws": {
+      "address": "172.20.0.4:9090",
+      "multiaddr": "/ip4/172.20.0.4/tcp/9090/ws",
+      "last_peer_id": "12D3KooWMcBee41QPSDyrsbWubjWCivaNqoHdm7HsgwZBNnB9GWJ",
+      "observed_peer_ids": [
+        "12D3KooWMcBee41QPSDyrsbWubjWCivaNqoHdm7HsgwZBNnB9GWJ"
+      ],
+      "last_seen": 1784409772,
+      "first_seen": 1784409783,
+      "consecutive_failures": 0,
+      "backoff_seconds": 0,
+      "next_attempt_after": 0,
+      "is_bootstrap": false,
+      "known_topics": [],
+      "label": "Discovered via peer"
+    },
+    "/ip4/172.20.0.3/tcp/80": {
+      "address": "172.20.0.3:80",
+      "multiaddr": "/ip4/172.20.0.3/tcp/80",
+      "last_peer_id": "12D3KooWDQDC5oKqmEpQQbNqWARqAwdBQZsPVrrHfhduRo5VYBXt",
+      "observed_peer_ids": [
+        "12D3KooWDQDC5oKqmEpQQbNqWARqAwdBQZsPVrrHfhduRo5VYBXt"
+      ],
+      "last_seen": 1784409767,
+      "first_seen": 1784409783,
+      "consecutive_failures": 0,
+      "backoff_seconds": 0,
+      "next_attempt_after": 0,
+      "is_bootstrap": false,
+      "known_topics": [],
+      "label": "Discovered via peer"
+    },
+    "/ip4/127.0.0.1/tcp/4003": {
+      "address": "127.0.0.1:4003",
+      "multiaddr": "/ip4/127.0.0.1/tcp/4003",
+      "last_peer_id": "12D3KooWM3Pz32Bt4W3Zsub3uiqKtTvhezhBZ45sSYgiKFg5JKFq",
+      "observed_peer_ids": [
+        "12D3KooWM3Pz32Bt4W3Zsub3uiqKtTvhezhBZ45sSYgiKFg5JKFq"
+      ],
+      "last_seen": 1784409783,
+      "first_seen": 1784409783,
+      "consecutive_failures": 0,
+      "backoff_seconds": 0,
+      "next_attempt_after": 0,
+      "is_bootstrap": false,
+      "known_topics": [],
+      "label": null
+    },
+    "/ip4/172.21.0.4/tcp/9002/ws": {
+      "address": "172.21.0.4:9002",
+      "multiaddr": "/ip4/172.21.0.4/tcp/9002/ws",
+      "last_peer_id": "12D3KooWRuLPSvac4nE4hTK8Ts3eW4UWibdWdNeMia8C8NoeJGhv",
+      "observed_peer_ids": [
+        "12D3KooWRuLPSvac4nE4hTK8Ts3eW4UWibdWdNeMia8C8NoeJGhv"
+      ],
+      "last_seen": 1784409772,
+      "first_seen": 1784409783,
+      "consecutive_failures": 0,
+      "backoff_seconds": 0,
+      "next_attempt_after": 0,
+      "is_bootstrap": false,
+      "known_topics": [],
+      "label": "Discovered via peer"
+    },
+    "/ip4/172.21.0.2/tcp/4002/ws": {
+      "address": "172.21.0.2:4002",
+      "multiaddr": "/ip4/172.21.0.2/tcp/4002/ws",
+      "last_peer_id": "12D3KooWM3Pz32Bt4W3Zsub3uiqKtTvhezhBZ45sSYgiKFg5JKFq",
+      "observed_peer_ids": [
+        "12D3KooWM3Pz32Bt4W3Zsub3uiqKtTvhezhBZ45sSYgiKFg5JKFq"
+      ],
+      "last_seen": 1784409783,
+      "first_seen": 1784409783,
+      "consecutive_failures": 0,
+      "backoff_seconds": 0,
+      "next_attempt_after": 0,
+      "is_bootstrap": false,
+      "known_topics": [],
+      "label": null
+    },
+    "/ip4/172.22.0.2/tcp/9090": {
+      "address": "172.22.0.2:9090",
+      "multiaddr": "/ip4/172.22.0.2/tcp/9090",
+      "last_peer_id": "12D3KooWM3Pz32Bt4W3Zsub3uiqKtTvhezhBZ45sSYgiKFg5JKFq",
+      "observed_peer_ids": [
+        "12D3KooWM3Pz32Bt4W3Zsub3uiqKtTvhezhBZ45sSYgiKFg5JKFq"
+      ],
+      "last_seen": 1784409783,
+      "first_seen": 1784409783,
+      "consecutive_failures": 0,
+      "backoff_seconds": 0,
+      "next_attempt_after": 0,
+      "is_bootstrap": false,
+      "known_topics": [],
+      "label": null
+    },
+    "/ip4/127.0.0.1/tcp/40717/ws": {
+      "address": "127.0.0.1:40717",
+      "multiaddr": "/ip4/127.0.0.1/tcp/40717/ws",
+      "last_peer_id": "12D3KooWMcBee41QPSDyrsbWubjWCivaNqoHdm7HsgwZBNnB9GWJ",
+      "observed_peer_ids": [
+        "12D3KooWMcBee41QPSDyrsbWubjWCivaNqoHdm7HsgwZBNnB9GWJ"
+      ],
+      "last_seen": 1784409772,
+      "first_seen": 1784409783,
+      "consecutive_failures": 0,
+      "backoff_seconds": 0,
+      "next_attempt_after": 0,
+      "is_bootstrap": false,
+      "known_topics": [],
+      "label": "Discovered via peer"
+    },
+    "/ip4/172.20.0.2/tcp/34873/ws": {
+      "address": "172.20.0.2:34873",
+      "multiaddr": "/ip4/172.20.0.2/tcp/34873/ws",
+      "last_peer_id": "12D3KooWCVX8bW8VWCJFrxkQCVvfjgyicnZHf2fR8M3y9FWmwgG7",
+      "observed_peer_ids": [
+        "12D3KooWCVX8bW8VWCJFrxkQCVvfjgyicnZHf2fR8M3y9FWmwgG7"
+      ],
+      "last_seen": 1784409772,
+      "first_seen": 1784409783,
+      "consecutive_failures": 0,
+      "backoff_seconds": 0,
+      "next_attempt_after": 0,
+      "is_bootstrap": false,
+      "known_topics": [],
+      "label": "Discovered via peer"
+    },
+    "/ip4/172.20.0.2/tcp/80": {
+      "address": "172.20.0.2:80",
+      "multiaddr": "/ip4/172.20.0.2/tcp/80",
+      "last_peer_id": "12D3KooWM3Pz32Bt4W3Zsub3uiqKtTvhezhBZ45sSYgiKFg5JKFq",
+      "observed_peer_ids": [
+        "12D3KooWM3Pz32Bt4W3Zsub3uiqKtTvhezhBZ45sSYgiKFg5JKFq"
+      ],
+      "last_seen": 1784409783,
+      "first_seen": 1784409783,
+      "consecutive_failures": 0,
+      "backoff_seconds": 0,
+      "next_attempt_after": 0,
+      "is_bootstrap": false,
+      "known_topics": [],
+      "label": null
+    },
+    "/ip4/172.21.0.3/tcp/33315": {
+      "address": "172.21.0.3:33315",
+      "multiaddr": "/ip4/172.21.0.3/tcp/33315",
+      "last_peer_id": "12D3KooWM3Pz32Bt4W3Zsub3uiqKtTvhezhBZ45sSYgiKFg5JKFq",
+      "observed_peer_ids": [
+        "12D3KooWM3Pz32Bt4W3Zsub3uiqKtTvhezhBZ45sSYgiKFg5JKFq"
+      ],
+      "last_seen": 1784409783,
+      "first_seen": 1784409783,
+      "consecutive_failures": 0,
+      "backoff_seconds": 0,
+      "next_attempt_after": 0,
+      "is_bootstrap": false,
+      "known_topics": [],
+      "label": null
+    },
+    "/ip4/172.21.0.2/tcp/4002": {
+      "address": "172.21.0.2:4002",
+      "multiaddr": "/ip4/172.21.0.2/tcp/4002",
+      "last_peer_id": "12D3KooWCVX8bW8VWCJFrxkQCVvfjgyicnZHf2fR8M3y9FWmwgG7",
+      "observed_peer_ids": [
+        "12D3KooWCVX8bW8VWCJFrxkQCVvfjgyicnZHf2fR8M3y9FWmwgG7"
+      ],
+      "last_seen": 1784409772,
+      "first_seen": 1784409783,
+      "consecutive_failures": 0,
+      "backoff_seconds": 0,
+      "next_attempt_after": 0,
+      "is_bootstrap": false,
+      "known_topics": [],
+      "label": "Discovered via peer"
+    },
+    "/ip4/127.0.0.1/tcp/33315": {
+      "address": "127.0.0.1:33315",
+      "multiaddr": "/ip4/127.0.0.1/tcp/33315",
+      "last_peer_id": "12D3KooWSDTKQNLQSMH7AFvbUku3FGBkZL3X4hdyTdnNs83h6KYv",
+      "observed_peer_ids": [
+        "12D3KooWSDTKQNLQSMH7AFvbUku3FGBkZL3X4hdyTdnNs83h6KYv"
+      ],
+      "last_seen": 1784409772,
+      "first_seen": 1784409783,
+      "consecutive_failures": 0,
+      "backoff_seconds": 0,
+      "next_attempt_after": 0,
+      "is_bootstrap": false,
+      "known_topics": [],
+      "label": "Discovered via peer"
+    },
+    "/ip4/172.21.0.5/tcp/9002": {
+      "address": "172.21.0.5:9002",
+      "multiaddr": "/ip4/172.21.0.5/tcp/9002",
+      "last_peer_id": "12D3KooWM3Pz32Bt4W3Zsub3uiqKtTvhezhBZ45sSYgiKFg5JKFq",
+      "observed_peer_ids": [
+        "12D3KooWM3Pz32Bt4W3Zsub3uiqKtTvhezhBZ45sSYgiKFg5JKFq"
+      ],
+      "last_seen": 1784409783,
+      "first_seen": 1784409783,
+      "consecutive_failures": 0,
+      "backoff_seconds": 0,
+      "next_attempt_after": 0,
+      "is_bootstrap": false,
+      "known_topics": [],
+      "label": null
+    },
+    "/ip4/127.0.0.1/tcp/41715": {
+      "address": "127.0.0.1:41715",
+      "multiaddr": "/ip4/127.0.0.1/tcp/41715",
+      "last_peer_id": "12D3KooWDQDC5oKqmEpQQbNqWARqAwdBQZsPVrrHfhduRo5VYBXt",
+      "observed_peer_ids": [
+        "12D3KooWDQDC5oKqmEpQQbNqWARqAwdBQZsPVrrHfhduRo5VYBXt"
+      ],
+      "last_seen": 1784409767,
+      "first_seen": 1784409783,
+      "consecutive_failures": 0,
+      "backoff_seconds": 0,
+      "next_attempt_after": 0,
+      "is_bootstrap": false,
+      "known_topics": [],
+      "label": "Discovered via peer"
+    },
+    "/ip4/172.20.0.3/tcp/44457/ws": {
+      "address": "172.20.0.3:44457",
+      "multiaddr": "/ip4/172.20.0.3/tcp/44457/ws",
+      "last_peer_id": "12D3KooWDQDC5oKqmEpQQbNqWARqAwdBQZsPVrrHfhduRo5VYBXt",
+      "observed_peer_ids": [
+        "12D3KooWDQDC5oKqmEpQQbNqWARqAwdBQZsPVrrHfhduRo5VYBXt"
+      ],
+      "last_seen": 1784409767,
+      "first_seen": 1784409783,
+      "consecutive_failures": 0,
+      "backoff_seconds": 0,
+      "next_attempt_after": 0,
+      "is_bootstrap": false,
+      "known_topics": [],
+      "label": "Discovered via peer"
+    },
+    "/ip4/172.21.0.3/tcp/443/ws": {
+      "address": "172.21.0.3:443",
+      "multiaddr": "/ip4/172.21.0.3/tcp/443/ws",
+      "last_peer_id": "12D3KooWSDTKQNLQSMH7AFvbUku3FGBkZL3X4hdyTdnNs83h6KYv",
+      "observed_peer_ids": [
+        "12D3KooWSDTKQNLQSMH7AFvbUku3FGBkZL3X4hdyTdnNs83h6KYv"
+      ],
+      "last_seen": 1784409772,
+      "first_seen": 1784409783,
+      "consecutive_failures": 0,
+      "backoff_seconds": 0,
+      "next_attempt_after": 0,
+      "is_bootstrap": false,
+      "known_topics": [],
+      "label": "Discovered via peer"
+    },
+    "/ip4/172.20.0.2/tcp/443": {
+      "address": "172.20.0.2:443",
+      "multiaddr": "/ip4/172.20.0.2/tcp/443",
+      "last_peer_id": "12D3KooWCVX8bW8VWCJFrxkQCVvfjgyicnZHf2fR8M3y9FWmwgG7",
+      "observed_peer_ids": [
+        "12D3KooWCVX8bW8VWCJFrxkQCVvfjgyicnZHf2fR8M3y9FWmwgG7"
+      ],
+      "last_seen": 1784409772,
+      "first_seen": 1784409783,
+      "consecutive_failures": 0,
+      "backoff_seconds": 0,
+      "next_attempt_after": 0,
+      "is_bootstrap": false,
+      "known_topics": [],
+      "label": "Discovered via peer"
+    },
+    "/ip4/172.21.0.3/tcp/36875/ws": {
+      "address": "172.21.0.3:36875",
+      "multiaddr": "/ip4/172.21.0.3/tcp/36875/ws",
+      "last_peer_id": "12D3KooWSDTKQNLQSMH7AFvbUku3FGBkZL3X4hdyTdnNs83h6KYv",
+      "observed_peer_ids": [
+        "12D3KooWSDTKQNLQSMH7AFvbUku3FGBkZL3X4hdyTdnNs83h6KYv"
+      ],
+      "last_seen": 1784409772,
+      "first_seen": 1784409783,
+      "consecutive_failures": 0,
+      "backoff_seconds": 0,
+      "next_attempt_after": 0,
+      "is_bootstrap": false,
+      "known_topics": [],
+      "label": "Discovered via peer"
+    },
+    "/ip4/172.21.0.3/tcp/80": {
+      "address": "172.21.0.3:80",
+      "multiaddr": "/ip4/172.21.0.3/tcp/80",
+      "last_peer_id": "12D3KooWSDTKQNLQSMH7AFvbUku3FGBkZL3X4hdyTdnNs83h6KYv",
+      "observed_peer_ids": [
+        "12D3KooWSDTKQNLQSMH7AFvbUku3FGBkZL3X4hdyTdnNs83h6KYv"
+      ],
+      "last_seen": 1784409772,
+      "first_seen": 1784409783,
+      "consecutive_failures": 0,
+      "backoff_seconds": 0,
+      "next_attempt_after": 0,
+      "is_bootstrap": false,
+      "known_topics": [],
+      "label": "Discovered via peer"
+    },
+    "/ip4/172.21.0.3/tcp/1/ws": {
+      "address": "172.21.0.3:1",
+      "multiaddr": "/ip4/172.21.0.3/tcp/1/ws",
+      "last_peer_id": "12D3KooWSDTKQNLQSMH7AFvbUku3FGBkZL3X4hdyTdnNs83h6KYv",
+      "observed_peer_ids": [
+        "12D3KooWSDTKQNLQSMH7AFvbUku3FGBkZL3X4hdyTdnNs83h6KYv"
+      ],
+      "last_seen": 1784409772,
+      "first_seen": 1784409783,
+      "consecutive_failures": 0,
+      "backoff_seconds": 0,
+      "next_attempt_after": 0,
+      "is_bootstrap": false,
+      "known_topics": [],
+      "label": "Discovered via peer"
+    },
+    "/ip4/127.0.0.1/tcp/443/ws": {
+      "address": "127.0.0.1:443",
+      "multiaddr": "/ip4/127.0.0.1/tcp/443/ws",
+      "last_peer_id": "12D3KooWM3Pz32Bt4W3Zsub3uiqKtTvhezhBZ45sSYgiKFg5JKFq",
+      "observed_peer_ids": [
+        "12D3KooWM3Pz32Bt4W3Zsub3uiqKtTvhezhBZ45sSYgiKFg5JKFq"
+      ],
+      "last_seen": 1784409783,
+      "first_seen": 1784409783,
+      "consecutive_failures": 0,
+      "backoff_seconds": 0,
+      "next_attempt_after": 0,
+      "is_bootstrap": false,
+      "known_topics": [],
+      "label": null
+    },
+    "/ip4/172.20.0.4/tcp/9002/ws": {
+      "address": "172.20.0.4:9002",
+      "multiaddr": "/ip4/172.20.0.4/tcp/9002/ws",
+      "last_peer_id": "12D3KooWM3Pz32Bt4W3Zsub3uiqKtTvhezhBZ45sSYgiKFg5JKFq",
+      "observed_peer_ids": [
+        "12D3KooWM3Pz32Bt4W3Zsub3uiqKtTvhezhBZ45sSYgiKFg5JKFq"
+      ],
+      "last_seen": 1784409783,
+      "first_seen": 1784409783,
+      "consecutive_failures": 0,
+      "backoff_seconds": 0,
+      "next_attempt_after": 0,
+      "is_bootstrap": false,
+      "known_topics": [],
+      "label": null
+    },
+    "/ip4/127.0.0.1/tcp/9090": {
+      "address": "127.0.0.1:9090",
+      "multiaddr": "/ip4/127.0.0.1/tcp/9090",
+      "last_peer_id": "12D3KooWM3Pz32Bt4W3Zsub3uiqKtTvhezhBZ45sSYgiKFg5JKFq",
+      "observed_peer_ids": [
+        "12D3KooWM3Pz32Bt4W3Zsub3uiqKtTvhezhBZ45sSYgiKFg5JKFq"
+      ],
+      "last_seen": 1784409783,
+      "first_seen": 1784409783,
+      "consecutive_failures": 0,
+      "backoff_seconds": 0,
+      "next_attempt_after": 0,
+      "is_bootstrap": false,
+      "known_topics": [
+        "sc-lobby",
+        "sc-mesh",
+        "sc-receipt-convergence"
+      ],
+      "label": null
+    },
+    "/ip4/172.20.0.3/tcp/443": {
+      "address": "172.20.0.3:443",
+      "multiaddr": "/ip4/172.20.0.3/tcp/443",
+      "last_peer_id": "12D3KooWDQDC5oKqmEpQQbNqWARqAwdBQZsPVrrHfhduRo5VYBXt",
+      "observed_peer_ids": [
+        "12D3KooWDQDC5oKqmEpQQbNqWARqAwdBQZsPVrrHfhduRo5VYBXt"
+      ],
+      "last_seen": 1784409767,
+      "first_seen": 1784409783,
+      "consecutive_failures": 0,
+      "backoff_seconds": 0,
+      "next_attempt_after": 0,
+      "is_bootstrap": false,
+      "known_topics": [],
+      "label": "Discovered via peer"
+    },
+    "/ip4/172.21.0.4/tcp/80": {
+      "address": "172.21.0.4:80",
+      "multiaddr": "/ip4/172.21.0.4/tcp/80",
+      "last_peer_id": "12D3KooWM3Pz32Bt4W3Zsub3uiqKtTvhezhBZ45sSYgiKFg5JKFq",
+      "observed_peer_ids": [
+        "12D3KooWM3Pz32Bt4W3Zsub3uiqKtTvhezhBZ45sSYgiKFg5JKFq"
+      ],
+      "last_seen": 1784409783,
+      "first_seen": 1784409783,
+      "consecutive_failures": 0,
+      "backoff_seconds": 0,
+      "next_attempt_after": 0,
+      "is_bootstrap": false,
+      "known_topics": [],
+      "label": null
+    },
+    "/ip4/127.0.0.1/tcp/1": {
+      "address": "127.0.0.1:1",
+      "multiaddr": "/ip4/127.0.0.1/tcp/1",
+      "last_peer_id": "12D3KooWSDTKQNLQSMH7AFvbUku3FGBkZL3X4hdyTdnNs83h6KYv",
+      "observed_peer_ids": [
+        "12D3KooWSDTKQNLQSMH7AFvbUku3FGBkZL3X4hdyTdnNs83h6KYv"
+      ],
+      "last_seen": 1784409772,
+      "first_seen": 1784409783,
+      "consecutive_failures": 0,
+      "backoff_seconds": 0,
+      "next_attempt_after": 0,
+      "is_bootstrap": false,
+      "known_topics": [],
+      "label": "Discovered via peer"
+    },
+    "/ip4/172.20.0.4/tcp/443": {
+      "address": "172.20.0.4:443",
+      "multiaddr": "/ip4/172.20.0.4/tcp/443",
+      "last_peer_id": "12D3KooWCVX8bW8VWCJFrxkQCVvfjgyicnZHf2fR8M3y9FWmwgG7",
+      "observed_peer_ids": [
+        "12D3KooWCVX8bW8VWCJFrxkQCVvfjgyicnZHf2fR8M3y9FWmwgG7"
+      ],
+      "last_seen": 1784409772,
+      "first_seen": 1784409783,
+      "consecutive_failures": 0,
+      "backoff_seconds": 0,
+      "next_attempt_after": 0,
+      "is_bootstrap": false,
+      "known_topics": [],
+      "label": "Discovered via peer"
+    }
+  },
+  "version": 1,
+  "last_saved": 1784409843
+}
