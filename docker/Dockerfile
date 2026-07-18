@@ -42,8 +42,8 @@ COPY cli/build.rs cli/
 COPY mobile/build.rs mobile/
 COPY desktop_bridge/build.rs desktop_bridge/
 
-# Build the CLI
-RUN cargo build --release --bin scmessenger-cli
+# Build the CLI and stress-test harness
+RUN cargo build --release --bin scmessenger-cli --bin stress-test
 
 # Runtime stage
 FROM debian:bookworm-slim
@@ -61,8 +61,9 @@ RUN apt-get update && apt-get install -y \
     libdbus-1-3 \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy binary from builder
+# Copy binaries from builder
 COPY --from=builder /usr/src/scmessenger/target/release/scmessenger-cli /usr/local/bin/scm
+COPY --from=builder /usr/src/scmessenger/target/release/stress-test /usr/local/bin/stress-test
 
 # Copy entrypoint script
 COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh
