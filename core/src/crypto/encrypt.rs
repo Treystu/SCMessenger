@@ -370,7 +370,10 @@ pub fn encrypt_message_ratcheted(
         if !session.peer_confirmed {
             if let Some(hct) = &session.bootstrap_hct {
                 pq_kem_ciphertext = Some(hct.mlkem_ciphertext.clone());
-                pq_encaps_key = None; // pq_encaps_key comes in later tasks (PQC-07)
+                // Include our current ML-KEM public key so peer can encapsulate with it
+                if let Some(ref kp) = session.pq_our_keypair {
+                    pq_encaps_key = Some(kp.public_key().to_vec());
+                }
             }
         } else if let Some((_, chain_index)) = session.sending_chain_state() {
             // chain_index is the next message number to be sent.
