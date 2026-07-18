@@ -18,11 +18,12 @@ pub fn negotiate_suite(
     let their_set: HashSet<u8> = their_suites.iter().cloned().collect();
     let intersection: Vec<u8> = our_set.intersection(&their_set).cloned().collect();
 
-    if intersection.is_empty() {
-        return Err(crate::IronCoreError::CryptoError);
-    }
-
-    let negotiated_suite = *intersection.iter().max().unwrap();
+    // An empty intersection means no mutually supported suite; surface it as a
+    // recoverable negotiation failure rather than panicking on `max()`.
+    let negotiated_suite = match intersection.iter().max() {
+        Some(&suite) => suite,
+        None => return Err(crate::IronCoreError::CryptoError),
+    };
 
     let mut material = Vec::new();
     material.extend_from_slice(our_suites);

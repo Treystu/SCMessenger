@@ -3,15 +3,18 @@
 
 use anyhow::{Context, Result};
 use axum::{
-    extract::{Json as AxumJson, State},
+    extract::{Json as AxumJson, Path, State},
     http::{Method, StatusCode},
     response::IntoResponse,
     routing::{get, post},
     Router,
 };
+use lazy_static::lazy_static;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::Arc;
+use tokio::sync::RwLock;
 use tower_http::cors::{Any, CorsLayer};
 
 use super::api::{
@@ -22,13 +25,210 @@ use super::api::{
     API_PORT,
 };
 
+// Farm Test Harness Types
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TestConfig {
+    pub duration_secs: u64,
+    pub nodes: usize,
+    pub transports: Vec<String>,
+    pub failure_modes: Vec<String>,
+    pub collect_coverage: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SubmitRunRequest {
+    pub config: TestConfig,
+    pub topology: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SubmitRunResponse {
+    pub run_id: String,
+    pub status: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PollStatusResponse {
+    pub status: String,
+    pub progress: String,
+    pub result: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FetchArtifactResponse {
+    pub content: String,
+    pub artifact_type: String,
+}
+
+#[derive(Debug, Clone)]
+enum RunStatus {
+    Queued,
+    Running,
+    Done,
+    Failed,
+}
+
+#[derive(Debug, Clone)]
+pub struct RunState {
+    pub status: RunStatus,
+    pub progress: String,
+    pub result: Option<serde_json::Value>,
+    pub artifacts: HashMap<String, String>,
+}
+
+pub type RunRegistry = Arc<RwLock<HashMap<String, RunState>>>;
+
+lazy_static! {
+    static ref FARM_RUN_REGISTRY: RunRegistry = Arc::new(RwLock::new(HashMap::new()));
+}
+
 #[derive(Clone)]
 pub struct ApiContext {
     pub core: Arc<scmessenger_core::IronCore>,
     pub swarm_handle: Arc<scmessenger_core::transport::SwarmHandle>,
 }
 
+fn generate_run_id() -> String {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis();
+    format!("run-{}", now)
+}
+
+async fn simulate_test_harness_static(run_id: String, config: TestConfig) {
+    let mut state = RunState {
+        status: RunStatus::Running,
+        progress: "Starting test harness...".to_string(),
+        result: None,
+        artifacts: HashMap::new(),
+    };
+
+    {
+        let mut reg = FARM_RUN_REGISTRY.write().await;
+        reg.insert(run_id.clone(), state.clone());
+    }
+
+    tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+
+    state.progress = format!(
+        "Running {} nodes with transports: {}",
+        config.nodes,
+        config.transports.join(", ")
+    );
+    {
+        let mut reg = FARM_RUN_REGISTRY.write().await;
+        if let Some(s) = reg.get_mut(&run_id) {
+            s.progress = state.progress.clone();
+        }
+    }
+
+    tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+
+    state.progress = "Test completed".to_string();
+    state.status = RunStatus::Done;
+    state.result = Some(serde_json::json!({
+        "topology": "farmhouse",
+        "nodes_tested": config.nodes,
+        "transports": config.transports,
+        "success_rate": 0.98,
+        "avg_latency_ms": 45
+    }));
+
+    state.artifacts.insert(
+        "test_output.log".to_string(),
+        format!(
+            "[INFO] Test started with {} nodes\n[INFO] Transport stack: {:?}\n[SUCCESS] All tests passed",
+            config.nodes, config.transports
+        ),
+    );
+
+    state.artifacts.insert(
+        "delivery_stats.json".to_string(),
+        serde_json::json!({
+            "total_messages": 1000,
+            "delivered": 980,
+            "failed": 20,
+            "delivery_rate": 0.98
+        })
+        .to_string(),
+    );
+
+    let mut reg = FARM_RUN_REGISTRY.write().await;
+    reg.insert(run_id, state);
+}
+
 // Axum handler functions
+
+async fn handle_submit_run(
+    AxumJson(request): AxumJson<SubmitRunRequest>,
+) -> Result<AxumJson<SubmitRunResponse>, (StatusCode, String)> {
+    let run_id = generate_run_id();
+    let config = request.config.clone();
+    let run_id_clone = run_id.clone();
+
+    tokio::spawn(async move {
+        simulate_test_harness_static(run_id_clone, config).await;
+    });
+
+    Ok(AxumJson(SubmitRunResponse {
+        run_id,
+        status: "queued".to_string(),
+    }))
+}
+
+async fn handle_poll_status(
+    Path(run_id): Path<String>,
+) -> Result<AxumJson<PollStatusResponse>, (StatusCode, String)> {
+    let reg = FARM_RUN_REGISTRY.read().await;
+    let state = reg
+        .get(&run_id)
+        .ok_or_else(|| (StatusCode::NOT_FOUND, "Run not found".to_string()))?;
+
+    let status_str = match state.status {
+        RunStatus::Queued => "queued",
+        RunStatus::Running => "running",
+        RunStatus::Done => "done",
+        RunStatus::Failed => "failed",
+    };
+
+    Ok(AxumJson(PollStatusResponse {
+        status: status_str.to_string(),
+        progress: state.progress.clone(),
+        result: state.result.clone(),
+    }))
+}
+
+async fn handle_fetch_artifact(
+    Path((run_id, artifact_name)): Path<(String, String)>,
+) -> Result<AxumJson<FetchArtifactResponse>, (StatusCode, String)> {
+    let reg = FARM_RUN_REGISTRY.read().await;
+    let state = reg
+        .get(&run_id)
+        .ok_or_else(|| (StatusCode::NOT_FOUND, "Run not found".to_string()))?;
+
+    let content = state
+        .artifacts
+        .get(&artifact_name)
+        .ok_or_else(|| {
+            (
+                StatusCode::NOT_FOUND,
+                format!("Artifact {} not found", artifact_name),
+            )
+        })?
+        .clone();
+
+    Ok(AxumJson(FetchArtifactResponse {
+        content,
+        artifact_type: if artifact_name.ends_with(".json") {
+            "json".to_string()
+        } else {
+            "log".to_string()
+        },
+    }))
+}
 
 async fn handle_send_message(
     State(ctx): State<Arc<ApiContext>>,
@@ -385,6 +585,10 @@ pub async fn start_api_server(ctx: ApiContext) -> Result<()> {
         .route("/api/discovery/scan", post(handle_trigger_discovery_scan))
         .route("/api/discovery/peers", get(handle_get_discovery_peers))
         .route("/api/shutdown", post(handle_shutdown))
+        // Farm test harness routes
+        .route("/submit-run", post(handle_submit_run))
+        .route("/poll-status/:run_id", get(handle_poll_status))
+        .route("/fetch-artifact/:run_id/:name", get(handle_fetch_artifact))
         .layer(cors)
         .with_state(ctx);
 

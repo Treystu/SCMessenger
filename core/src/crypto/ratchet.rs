@@ -894,10 +894,13 @@ impl RatchetSession {
             created_step: self.dh_step_count,
         });
 
-        // Rotate our keypair: move current to previous, generate new
+        // Rotate our keypair: move current to previous, generate new.
+        // Derive the encapsulation key from the freshly generated keypair before
+        // storing it, which avoids re-borrowing `pq_our_keypair` right after assignment.
+        let new_keypair = crate::crypto::pq::generate();
+        let new_encaps_key = new_keypair.public_key().to_vec();
         self.pq_prev_keypair = self.pq_our_keypair.take();
-        self.pq_our_keypair = Some(crate::crypto::pq::generate());
-        let new_encaps_key = self.pq_our_keypair.as_ref().unwrap().public_key().to_vec();
+        self.pq_our_keypair = Some(new_keypair);
 
         // Store pending ciphertext until acked
         self.pq_pending_ct = Some(ct.clone());

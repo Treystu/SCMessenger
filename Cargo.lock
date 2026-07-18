@@ -4516,6 +4516,7 @@ dependencies = [
  "http-body-util",
  "hyper",
  "hyper-util",
+ "lazy_static",
  "libp2p",
  "scmessenger-core",
  "serde",

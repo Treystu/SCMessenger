@@ -40,24 +40,23 @@ impl StorageBackend for MemoryStorage {
     fn put(&self, key: &[u8], value: &[u8]) -> Result<(), String> {
         self.data
             .write()
-            .expect("parking_lot RwLock never poisons")
+            .map_err(|e| format!("storage lock poisoned: {}", e))?
             .insert(key.to_vec(), value.to_vec());
         Ok(())
     }
 
     fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>, String> {
-        Ok(self
+        let guard = self
             .data
             .read()
-            .expect("parking_lot RwLock never poisons")
-            .get(key)
-            .cloned())
+            .map_err(|e| format!("storage lock poisoned: {}", e))?;
+        Ok(guard.get(key).cloned())
     }
 
     fn remove(&self, key: &[u8]) -> Result<(), String> {
         self.data
             .write()
-            .expect("parking_lot RwLock never poisons")
+            .map_err(|e| format!("storage lock poisoned: {}", e))?
             .remove(key);
         Ok(())
     }
@@ -67,7 +66,7 @@ impl StorageBackend for MemoryStorage {
         for (key, value) in self
             .data
             .read()
-            .expect("parking_lot RwLock never poisons")
+            .map_err(|e| format!("storage lock poisoned: {}", e))?
             .iter()
         {
             if key.starts_with(prefix) {
@@ -81,7 +80,7 @@ impl StorageBackend for MemoryStorage {
         let count = self
             .data
             .read()
-            .expect("parking_lot RwLock never poisons")
+            .map_err(|e| format!("storage lock poisoned: {}", e))?
             .keys()
             .filter(|k| k.starts_with(prefix))
             .count();
@@ -93,7 +92,10 @@ impl StorageBackend for MemoryStorage {
     }
 
     fn approximate_size(&self) -> Result<u64, String> {
-        let data = self.data.read().expect("parking_lot RwLock never poisons");
+        let data = self
+            .data
+            .read()
+            .map_err(|e| format!("storage lock poisoned: {}", e))?;
         let size: u64 = data.iter().map(|(k, v)| (k.len() + v.len()) as u64).sum();
         Ok(size)
     }
@@ -201,7 +203,9 @@ impl IndexedDbStorage {
                 }
             }
         }
-        let mut map = data.write().expect("parking_lot RwLock never poisons");
+        let mut map = data
+            .write()
+            .map_err(|e| format!("storage lock poisoned: {}", e))?;
         for (key, value) in entries {
             map.insert(key, value);
         }
@@ -230,7 +234,7 @@ impl IndexedDbStorage {
                 }
             }
         });
-        block_on(receiver).expect("new_sync: oneshot channel should not be dropped")
+        block_on(receiver).map_err(|e| format!("new_sync: oneshot channel dropped: {}", e))?
     }
 
     fn persist_put(&self, key: Vec<u8>, value: Vec<u8>) {
@@ -277,25 +281,24 @@ impl StorageBackend for IndexedDbStorage {
     fn put(&self, key: &[u8], value: &[u8]) -> Result<(), String> {
         self.data
             .write()
-            .expect("parking_lot RwLock never poisons")
+            .map_err(|e| format!("storage lock poisoned: {}", e))?
             .insert(key.to_vec(), value.to_vec());
         self.persist_put(key.to_vec(), value.to_vec());
         Ok(())
     }
 
     fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>, String> {
-        Ok(self
+        let guard = self
             .data
             .read()
-            .expect("parking_lot RwLock never poisons")
-            .get(key)
-            .cloned())
+            .map_err(|e| format!("storage lock poisoned: {}", e))?;
+        Ok(guard.get(key).cloned())
     }
 
     fn remove(&self, key: &[u8]) -> Result<(), String> {
         self.data
             .write()
-            .expect("parking_lot RwLock never poisons")
+            .map_err(|e| format!("storage lock poisoned: {}", e))?
             .remove(key);
         self.persist_remove(key.to_vec());
         Ok(())
@@ -306,7 +309,7 @@ impl StorageBackend for IndexedDbStorage {
         for (k, v) in self
             .data
             .read()
-            .expect("parking_lot RwLock never poisons")
+            .map_err(|e| format!("storage lock poisoned: {}", e))?
             .iter()
         {
             if k.starts_with(prefix) {
@@ -320,7 +323,7 @@ impl StorageBackend for IndexedDbStorage {
         let count = self
             .data
             .read()
-            .expect("parking_lot RwLock never poisons")
+            .map_err(|e| format!("storage lock poisoned: {}", e))?
             .keys()
             .filter(|k| k.starts_with(prefix))
             .count();
@@ -332,7 +335,10 @@ impl StorageBackend for IndexedDbStorage {
     }
 
     fn approximate_size(&self) -> Result<u64, String> {
-        let data = self.data.read().expect("parking_lot RwLock never poisons");
+        let data = self
+            .data
+            .read()
+            .map_err(|e| format!("storage lock poisoned: {}", e))?;
         let size: u64 = data.iter().map(|(k, v)| (k.len() + v.len()) as u64).sum();
         Ok(size)
     }

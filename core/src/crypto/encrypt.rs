@@ -609,7 +609,8 @@ pub fn decrypt_with_ratchet_fallback(
                             &sender_x25519,
                         )?
                     } else {
-                        manager.get_session_mut(&peer_id).unwrap()
+                        manager.get_session_mut(&peer_id)
+                            .ok_or_else(|| anyhow::anyhow!("Session exists but cannot be retrieved for peer {}", peer_id))?
                     };
 
                     return decrypt_message_ratcheted(session, envelope);
@@ -644,7 +645,7 @@ pub fn decrypt_with_ratchet_fallback(
                             &peer_id,
                             recipient_signing_key,
                             recipient_x25519_secret
-                                .expect("V2 session requires recipient x25519 secret"),
+                                .ok_or_else(|| anyhow::anyhow!("V2 session requires recipient x25519 secret"))?,
                             our_k,
                             our_b,
                             their_b,
@@ -654,7 +655,8 @@ pub fn decrypt_with_ratchet_fallback(
                         bail!("V2 ratcheted envelope received, but missing keys/bundles for hybrid init");
                     }
                 } else {
-                    manager.get_session_mut(&peer_id).unwrap()
+                    manager.get_session_mut(&peer_id)
+                        .ok_or_else(|| anyhow::anyhow!("Session exists but cannot be retrieved for peer {}", peer_id))?
                 };
 
                 return decrypt_message_ratcheted_v2(session, envelope_v2);

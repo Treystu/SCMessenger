@@ -3056,6 +3056,9 @@ fn get_global_runtime() -> tokio::runtime::Handle {
                 "Failed to create multi-thread Tokio runtime: {}, falling back to current-thread",
                 e
             );
+            // SAFETY: Tokio runtime initialization is critical infrastructure. If both multi-thread and
+            // current-thread runtimes fail to initialize, the application cannot function and must panic.
+            // This fallback path should be extremely rare and indicates a system-level resource exhaustion.
             tokio::runtime::Builder::new_current_thread()
                 .enable_all()
                 .build()
@@ -3064,10 +3067,15 @@ fn get_global_runtime() -> tokio::runtime::Handle {
     };
 
     #[cfg(target_arch = "wasm32")]
-    let rt = tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()
-        .expect("Failed to create Tokio runtime on WASM");
+    let rt = {
+        // SAFETY: Tokio runtime initialization is critical infrastructure. On WASM, only a current-thread
+        // runtime is available. If this fails, the application cannot function and must panic.
+        // This should be extremely rare and indicates a system-level initialization failure.
+        tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("Failed to create Tokio runtime on WASM")
+    };
     let handle = rt.handle().clone();
     *rt_write = Some(rt);
     handle

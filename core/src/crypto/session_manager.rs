@@ -72,16 +72,14 @@ impl RatchetSessionManager {
         our_signing_key: &ed25519_dalek::SigningKey,
         their_identity_public_x25519: &X25519PublicKey,
     ) -> Result<&mut RatchetSession> {
-        if !self.sessions.contains_key(peer_id) {
-            let session =
-                RatchetSession::init_as_sender(our_signing_key, their_identity_public_x25519)?;
-            self.sessions.insert(peer_id.to_string(), session);
+        match self.sessions.entry(peer_id.to_string()) {
+            std::collections::hash_map::Entry::Occupied(e) => Ok(e.into_mut()),
+            std::collections::hash_map::Entry::Vacant(e) => {
+                let session =
+                    RatchetSession::init_as_sender(our_signing_key, their_identity_public_x25519)?;
+                Ok(e.insert(session))
+            }
         }
-        // SAFETY: We just inserted the session above if it didn't exist
-        Ok(self
-            .sessions
-            .get_mut(peer_id)
-            .expect("session just inserted"))
     }
 
     /// Create a receiver session with the sender's identity key.
@@ -93,12 +91,13 @@ impl RatchetSessionManager {
     ) -> Result<&mut RatchetSession> {
         let session =
             RatchetSession::init_as_receiver(our_signing_key, sender_identity_public_x25519)?;
-        self.sessions.insert(peer_id.to_string(), session);
-        // SAFETY: We just inserted the session above
-        Ok(self
-            .sessions
-            .get_mut(peer_id)
-            .expect("session just inserted"))
+        match self.sessions.entry(peer_id.to_string()) {
+            std::collections::hash_map::Entry::Occupied(mut e) => {
+                e.insert(session);
+                Ok(e.into_mut())
+            }
+            std::collections::hash_map::Entry::Vacant(e) => Ok(e.insert(session)),
+        }
     }
 
     /// Get or create a hybrid ratchet session for a peer (as sender).
@@ -109,31 +108,31 @@ impl RatchetSessionManager {
         our_bundle: &crate::identity::PublicKeyBundle,
         their_bundle: &crate::identity::PublicKeyBundle,
     ) -> Result<&mut RatchetSession> {
-        if !self.sessions.contains_key(peer_id) {
-            let (suite, hash) = crate::crypto::negotiation::negotiate_suite(
-                &our_bundle.supported_suites,
-                &their_bundle.supported_suites,
-                &our_bundle.ed25519_public,
-                &their_bundle.ed25519_public,
-            )?;
+        match self.sessions.entry(peer_id.to_string()) {
+            std::collections::hash_map::Entry::Occupied(e) => Ok(e.into_mut()),
+            std::collections::hash_map::Entry::Vacant(e) => {
+                let (suite, hash) = crate::crypto::negotiation::negotiate_suite(
+                    &our_bundle.supported_suites,
+                    &their_bundle.supported_suites,
+                    &our_bundle.ed25519_public,
+                    &their_bundle.ed25519_public,
+                )?;
 
-            let session = if suite == 0x02 {
-                RatchetSession::init_as_sender_hybrid(our_signing_key, their_bundle, hash)?
-            } else {
-                let their_x25519 =
-                    crate::crypto::encrypt::ed25519_public_to_x25519(&their_bundle.ed25519_public)?;
-                let mut s = RatchetSession::init_as_sender(our_signing_key, &their_x25519)?;
-                s.negotiated_suite = Some(suite);
-                s.transcript_hash = Some(hash);
-                s
-            };
+                let session = if suite == 0x02 {
+                    RatchetSession::init_as_sender_hybrid(our_signing_key, their_bundle, hash)?
+                } else {
+                    let their_x25519 = crate::crypto::encrypt::ed25519_public_to_x25519(
+                        &their_bundle.ed25519_public,
+                    )?;
+                    let mut s = RatchetSession::init_as_sender(our_signing_key, &their_x25519)?;
+                    s.negotiated_suite = Some(suite);
+                    s.transcript_hash = Some(hash);
+                    s
+                };
 
-            self.sessions.insert(peer_id.to_string(), session);
+                Ok(e.insert(session))
+            }
         }
-        Ok(self
-            .sessions
-            .get_mut(peer_id)
-            .expect("session just inserted"))
     }
 
     /// Create a receiver hybrid session.
@@ -175,11 +174,13 @@ impl RatchetSessionManager {
             s
         };
 
-        self.sessions.insert(peer_id.to_string(), session);
-        Ok(self
-            .sessions
-            .get_mut(peer_id)
-            .expect("session just inserted"))
+        match self.sessions.entry(peer_id.to_string()) {
+            std::collections::hash_map::Entry::Occupied(mut e) => {
+                e.insert(session);
+                Ok(e.into_mut())
+            }
+            std::collections::hash_map::Entry::Vacant(e) => Ok(e.insert(session)),
+        }
     }
 
     /// Get an existing session for a peer (returns None if no session exists).
