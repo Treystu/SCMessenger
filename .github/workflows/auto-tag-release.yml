@@ -1,0 +1,60 @@
+name: Auto Tag Release
+
+# Closes the gap where Cargo.toml's version gets bumped as part of normal
+# feature work but nobody remembers to separately cut a release -- v0.2.1
+# (2026-03-18) sat as the latest tag through four subsequent version bumps
+# (0.3.0, 0.3.4 x2, 0.3.5) with zero corresponding releases. Tagging is now
+# automatic: any push to main that changes Cargo.toml's
+# [workspace.package] version creates and pushes the matching v* tag,
+# which in turn triggers release.yml (already tag-triggered) with no
+# manual step required.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'Cargo.toml'
+
+permissions:
+  contents: write
+
+jobs:
+  auto-tag:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Extract workspace version
+        id: version
+        run: |
+          VERSION=$(grep -m1 '^version' Cargo.toml | sed -E 's/version = "(.*)"/\1/')
+          if [ -z "$VERSION" ]; then
+            echo "::error::Could not extract version from Cargo.toml"
+            exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Check if tag already exists
+        id: check_tag
+        run: |
+          if git rev-parse "v${{ steps.version.outputs.version }}" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Create and push release tag
+        if: steps.check_tag.outputs.exists == 'false'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -a "v${{ steps.version.outputs.version }}" -m "Release v${{ steps.version.outputs.version }}"
+          git push origin "v${{ steps.version.outputs.version }}"
+          echo "Tagged and pushed v${{ steps.version.outputs.version }} -- release.yml will pick this up automatically."
+
+      - name: Skip (tag already exists)
+        if: steps.check_tag.outputs.exists == 'true'
+        run: |
+          echo "v${{ steps.version.outputs.version }} already exists -- this Cargo.toml change didn't bump the version (e.g. a dependency update), nothing to do."
