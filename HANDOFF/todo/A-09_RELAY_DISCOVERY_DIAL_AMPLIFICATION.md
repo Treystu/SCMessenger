@@ -1,6 +1,16 @@
 # A-09: Relay-discovery dial amplification + unauthenticated peer injection
 
-Status: OPEN -- HIGH (DoS) -- pre-existing, partially mitigated 2026-07-17
+Status: OPEN -- HIGH (DoS) -- pre-existing, partially mitigated 2026-07-17.
+Additional partial mitigation 2026-07-19 (commit 36635cb0, mislabeled "(A-09) [OK]"
+in its commit message -- it is NOT closed): added `is_dialable_multiaddr` filter to
+`cli/src/ledger.rs` rejecting loopback/link-local/site-local addresses in the CLI's
+own ledger dial loop. This fixed a real, separate bug (the relay was dialing
+non-routable addresses peers advertised via ledger-sharing, storming its own
+request_response handler and blocking legitimate peers) but does NOT touch
+`core/src/transport/behaviour.rs` connection_limits, relay-discovery
+authentication, dial dedup, or the `RelayMessage::from_bytes` input-size guard
+listed below. Ticket remains OPEN pending the actual "Remaining work" items and
+the mandatory crypto-security-auditor pass.
 Tier: THINK (design) -> CODER (impl)
 Review: crypto-security-auditor MANDATORY (touches core/src/transport/, routing)
 Source: adversarial review of the Hermes transport port (2026-07-17), findings 1, 2, 4, 7

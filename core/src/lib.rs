@@ -247,6 +247,14 @@ pub mod retry_policy {
 // Re-export for convenience in modules using UniFFI
 pub use uniffi::deps::anyhow;
 
+/// Canonical gossipsub topic names, shared across CLI/Android/iOS so no
+/// platform can drift from a hand-copied string literal. Values match the
+/// wire-format strings already live in core/src/transport/swarm.rs and
+/// cli/src/bootstrap.rs -- do not change these without a coordinated
+/// migration, mismatched values silently partition the mesh.
+pub const TOPIC_LOBBY: &str = "sc-lobby";
+pub const TOPIC_MESH: &str = "sc-mesh";
+
 // Include UniFFI scaffolding
 #[cfg(not(target_arch = "wasm32"))]
 uniffi::include_scaffolding!("api");

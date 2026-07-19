@@ -47,8 +47,13 @@ lazy_quota_refresh() {
     # Convert ISO-8601 to epoch seconds.
     # macOS BSD date does NOT support -d and rejects .NET-style fractional+TZ format.
     # Use python3 (always available via the venv) which handles ISO-8601 correctly.
+    local py_bin
+    py_bin=$(command -v python3 || command -v python || echo "")
     local ts_epoch
-    ts_epoch=$(python3 -c "
+    if [ -z "$py_bin" ]; then
+        ts_epoch=0
+    else
+    ts_epoch=$("$py_bin" -c "
 import sys
 from datetime import datetime
 try:
@@ -56,6 +61,7 @@ try:
 except Exception:
     print(0)
 " "$ts_value" 2>/dev/null)
+    fi
     ts_epoch="${ts_epoch:-0}"
 
     if [ "$ts_epoch" = "0" ] || [ -z "$ts_epoch" ]; then

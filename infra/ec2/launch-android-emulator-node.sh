@@ -62,6 +62,18 @@ ensure_security_group() {
   # adb over SSH tunnel only (5037 forwarded locally), no need to expose
   # emulator console/adb ports (5554-5585) to the internet directly.
 
+  # P2P port for the SCMessenger app itself (matches the Android app's static
+  # listen port, MeshRepository.kt "P0_TRANSPORT_001", and the alpha-relay's
+  # own SG convention). Without this, the emulator can only make OUTBOUND
+  # P2P connections (e.g. to the relay) and can never receive a direct
+  # inbound dial -- silently blocking any test that removes the relay to
+  # check direct peer-to-peer connectivity. Added 2026-07-19 after this gap
+  # was found live on an already-running instance.
+  aws ec2 authorize-security-group-ingress --region "$REGION" \
+    --group-id "$SG_ID" --protocol tcp --port 9001 --cidr 0.0.0.0/0 >/dev/null
+  aws ec2 authorize-security-group-ingress --region "$REGION" \
+    --group-id "$SG_ID" --protocol udp --port 9001 --cidr 0.0.0.0/0 >/dev/null
+
   ok "Created SG: $SG_ID"
 }
 
