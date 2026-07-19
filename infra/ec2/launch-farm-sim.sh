@@ -21,7 +21,14 @@ export PATH="$PATH:/c/Users/SCM/AppData/Roaming/Python/Python314/Scripts"
 ACTION=${1:-launch}
 REGION=${2:-us-east-1}
 INSTANCE_TYPE="t3.micro"
-KEY_NAME="scmessenger-farm-sim-key"
+# scmessenger-farm-sim-key (the original) has a registered AWS fingerprint
+# that does not match any local .pem file we have -- that mismatch is why
+# every SSH attempt against the old single instance failed with "Permission
+# denied (publickey...)" this session, not resource exhaustion as first
+# suspected. scmessenger-farm-sim-key-v2 was generated fresh via
+# `aws ec2 create-key-pair` on 2026-07-18 specifically so the private key
+# we hold locally is guaranteed to match what AWS has on file.
+KEY_NAME="scmessenger-farm-sim-key-v2"
 GIT_REPO="https://github.com/Sovereign-Communication/SCMessenger.git"
 GIT_REF="main"
 SG_NAME="scmessenger-farm-sim-sg"
