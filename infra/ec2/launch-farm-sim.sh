@@ -20,22 +20,28 @@ export PATH="$PATH:/c/Users/SCM/AppData/Roaming/Python/Python314/Scripts"
 
 ACTION=${1:-launch}
 REGION=${2:-us-east-1}
-# t3.micro (1GiB RAM) was tried first as the free-tier-eligible default, but
-# a live deploy on 2026-07-18 showed genuine (not theoretical) swap
-# thrashing: 2.4GB of a 4GB swapfile in active use ~30-40 min into the
-# cargo build, load average 2.3 on the single vCPU, multiple concurrent
-# rustc processes. Bumped to t3.small (2GiB RAM, 2 vCPU) per this
-# deployment's standing instruction ("if we need 2Gb instances, can
-# override for those, still free tier"). Cost note: unlike t3.micro,
-# t3.small is generally NOT covered by AWS's classic free tier (only
-# t2.micro/t3.micro qualify under the standard 750-hrs/month offer) --
-# on-demand rate is roughly $0.0208/hr in us-east-1, so 7 instances for a
-# 2-3 hour test window is on the order of $0.30-0.45 total, not free, but
-# small. CARGO_JOBS below is capped to match vCPU count so cargo doesn't
-# oversubscribe the (now 2, still not many) cores.
-INSTANCE_TYPE="t3.small"
-CARGO_JOBS=2
-SWAP_SIZE="4G"
+# t3.micro is not just the preferred instance type -- it's the ONLY one
+# this IAM user can actually launch. Confirmed via --dry-run probes on
+# 2026-07-18: t3.micro and t2.micro both return DryRunOperation (allowed),
+# t3a.micro and t3.small both return UnauthorizedOperation (denied). The
+# policy hard-enforces micro-only at the AWS level, so escalating instance
+# size isn't available here regardless of preference -- the fix has to work
+# within 1GiB RAM.
+#
+# A live deploy on 2026-07-18 showed genuine (not theoretical) swap
+# thrashing on t3.micro: 2.4GB of a 4GB swapfile in active use ~30-40 min
+# into the cargo build, load average 2.3 on the single vCPU, TWO concurrent
+# rustc processes (~270MB + ~254MB RSS) competing for the same scarce RAM.
+# CARGO_JOBS=1 forces fully serial compilation -- never more than one
+# compilation unit active at a time -- which directly targets that specific
+# observed cause (concurrent processes), rather than trying to buy more
+# headroom via an instance size that isn't actually available. Swap bumped
+# to 6G (EBS storage isn't IAM-restricted, so this costs a few cents of
+# disk, not a permission fight) for additional margin on top of the
+# parallelism fix, not instead of it.
+INSTANCE_TYPE="t3.micro"
+CARGO_JOBS=1
+SWAP_SIZE="6G"
 # scmessenger-farm-sim-key (the original) has a registered AWS fingerprint
 # that does not match any local .pem file we have -- that mismatch is why
 # every SSH attempt against the old single instance failed with "Permission
