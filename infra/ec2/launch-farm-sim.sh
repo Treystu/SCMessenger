@@ -20,7 +20,22 @@ export PATH="$PATH:/c/Users/SCM/AppData/Roaming/Python/Python314/Scripts"
 
 ACTION=${1:-launch}
 REGION=${2:-us-east-1}
-INSTANCE_TYPE="t3.micro"
+# t3.micro (1GiB RAM) was tried first as the free-tier-eligible default, but
+# a live deploy on 2026-07-18 showed genuine (not theoretical) swap
+# thrashing: 2.4GB of a 4GB swapfile in active use ~30-40 min into the
+# cargo build, load average 2.3 on the single vCPU, multiple concurrent
+# rustc processes. Bumped to t3.small (2GiB RAM, 2 vCPU) per this
+# deployment's standing instruction ("if we need 2Gb instances, can
+# override for those, still free tier"). Cost note: unlike t3.micro,
+# t3.small is generally NOT covered by AWS's classic free tier (only
+# t2.micro/t3.micro qualify under the standard 750-hrs/month offer) --
+# on-demand rate is roughly $0.0208/hr in us-east-1, so 7 instances for a
+# 2-3 hour test window is on the order of $0.30-0.45 total, not free, but
+# small. CARGO_JOBS below is capped to match vCPU count so cargo doesn't
+# oversubscribe the (now 2, still not many) cores.
+INSTANCE_TYPE="t3.small"
+CARGO_JOBS=2
+SWAP_SIZE="4G"
 # scmessenger-farm-sim-key (the original) has a registered AWS fingerprint
 # that does not match any local .pem file we have -- that mismatch is why
 # every SSH attempt against the old single instance failed with "Permission
@@ -57,6 +72,8 @@ render_userdata() {
     -e "s|___BOOTSTRAP___|${bootstrap}|g" \
     -e "s|___GIT_REPO___|${GIT_REPO}|g" \
     -e "s|___GIT_REF___|${GIT_REF}|g" \
+    -e "s|___CARGO_JOBS___|${CARGO_JOBS}|g" \
+    -e "s|___SWAP_SIZE___|${SWAP_SIZE}|g" \
     "$USERDATA_TEMPLATE"
 }
 

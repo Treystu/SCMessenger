@@ -4,19 +4,20 @@
 # ___GIT_REF___) are substituted by launch-farm-sim.sh before being passed to
 # ec2 run-instances --user-data.
 #
-# Runs on Ubuntu 22.04. Adds swap before building: t3.micro has only 1GiB RAM,
-# and `cargo build --release` on this workspace (libp2p, tokio, rustls, etc.)
-# can exceed that during linking. Without swap the OOM killer silently kills
-# rustc/the linker mid-build. The Dockerfile itself now overrides
-# CARGO_PROFILE_RELEASE_LTO/CODEGEN_UNITS to avoid fat-LTO's much larger
-# memory footprint (the actual root-cause fix per build-fit audit), but this
-# swap is kept as defense-in-depth headroom rather than relying on that
-# alone -- 4G leaves margin even if some other step (git clone, docker
-# builder cache) adds memory pressure the LTO change doesn't touch.
+# Adds swap before building, and caps cargo's build parallelism via
+# --build-arg (see docker/Dockerfile). Confirmed via live SSH into a
+# building node on 2026-07-18: even with the Dockerfile's
+# CARGO_PROFILE_RELEASE_LTO=false override, cargo runs multiple rustc
+# processes concurrently by default, and on the original 1GiB t3.micro this
+# pushed the instance into 2.4GB+ of active swap usage within ~30-40 minutes
+# (load average 2.3 on a single vCPU) -- real, observed swap-thrashing, not
+# a theoretical risk. CARGO_BUILD_JOBS=___CARGO_JOBS___ bounds peak
+# concurrent memory directly; the swapfile size below is sized as
+# defense-in-depth headroom on top of that, not as the primary fix.
 set -ex
 exec > /var/log/user-data.log 2>&1
 
-fallocate -l 4G /swapfile
+fallocate -l ___SWAP_SIZE___ /swapfile
 chmod 600 /swapfile
 mkswap /swapfile
 swapon /swapfile
@@ -31,7 +32,7 @@ cd /opt
 git clone --depth 1 --branch ___GIT_REF___ ___GIT_REPO___ SCMessenger
 cd SCMessenger
 
-docker build -t scmessenger:latest -f docker/Dockerfile .
+docker build --build-arg CARGO_BUILD_JOBS=___CARGO_JOBS___ -t scmessenger:latest -f docker/Dockerfile .
 docker builder prune -af || true
 
 # --network host: libp2p binds directly to the instance's real interface

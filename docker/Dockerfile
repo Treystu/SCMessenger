@@ -57,6 +57,17 @@ COPY desktop_bridge/build.rs desktop_bridge/
 # gen_swift/wasm-pack invocations outside this Dockerfile.
 ENV CARGO_PROFILE_RELEASE_LTO=false
 ENV CARGO_PROFILE_RELEASE_CODEGEN_UNITS=16
+# Confirmed via live SSH into a building farm-sim node (2026-07-18): even with
+# the LTO override above, multiple rustc processes run concurrently by
+# default (observed 2 simultaneous ~270MB-RSS `rustc` processes compiling
+# uniffi_bindgen, one of them still showing -C codegen-units=1 -- build-time
+# host artifacts like proc-macros/uniffi_bindgen appear to fall outside the
+# profile override), and on a 1GiB instance that pushed the box into 2.4GB+
+# of active swap usage (load average 2.3 on a single vCPU). Capping the
+# number of concurrent compilation units directly bounds peak concurrent
+# memory instead of hoping the profile override alone is enough.
+ARG CARGO_BUILD_JOBS=1
+ENV CARGO_BUILD_JOBS=${CARGO_BUILD_JOBS}
 RUN cargo build --release --bin scmessenger-cli --bin stress-test
 
 # Runtime stage
