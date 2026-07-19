@@ -20,23 +20,23 @@ import Foundation
 /// - Service status changes
 /// - Network and battery changes
 final class MeshEventBus {
-    static let shared = MeshEventBus()
+    static let shared: MeshEventBus = MeshEventBus()
 
     private init() {}
 
     // MARK: - Event Streams
 
     /// Peer lifecycle events
-    let peerEvents = PassthroughSubject<PeerEvent, Never>()
+    let peerEvents: PassthroughSubject<MeshEventBus.PeerEvent, Never> = PassthroughSubject<PeerEvent, Never>()
 
     /// Message lifecycle events
-    let messageEvents = PassthroughSubject<MessageEvent, Never>()
+    let messageEvents: PassthroughSubject<MeshEventBus.MessageEvent, Never> = PassthroughSubject<MessageEvent, Never>()
 
     /// Service status events
-    let statusEvents = PassthroughSubject<StatusEvent, Never>()
+    let statusEvents: PassthroughSubject<MeshEventBus.StatusEvent, Never> = PassthroughSubject<StatusEvent, Never>()
 
     /// Network and transport events
-    let networkEvents = PassthroughSubject<NetworkEvent, Never>()
+    let networkEvents: PassthroughSubject<MeshEventBus.NetworkEvent, Never> = PassthroughSubject<NetworkEvent, Never>()
 
     // MARK: - Event Types
 

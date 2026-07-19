@@ -21,9 +21,9 @@ import os
 /// - Forward BLE data between iOS and Rust
 /// - Report app lifecycle events to Rust
 final class IosPlatformBridge: PlatformBridge {
-    private let logger = Logger(subsystem: "com.scmessenger", category: "Platform")
-    private let motionManager = CMMotionActivityManager()
-    private let pathMonitor = NWPathMonitor()
+    private let logger: Logger = Logger(subsystem: "com.scmessenger", category: "Platform")
+    private let motionManager: CMMotionActivityManager = CMMotionActivityManager()
+    private let pathMonitor: NWPathMonitor = NWPathMonitor()
     private weak var meshRepository: MeshRepository?
 
     private var batteryObserver: NSObjectProtocol?
@@ -42,7 +42,7 @@ final class IosPlatformBridge: PlatformBridge {
     /// High battery → long delay (stable, no rush).
     /// Low battery → shorter delay (user needs accurate info, drain matters).
     private var adaptiveIntervalSeconds: TimeInterval {
-        let pct = lastReportedBatteryPct
+        let pct: UInt8 = lastReportedBatteryPct
         if pct == 255 { return 5 } // first report, use short interval
 
         // Adaptive report intervals based on battery health
@@ -54,7 +54,7 @@ final class IosPlatformBridge: PlatformBridge {
     }
 
     private func withMeshRepositoryOnMain(_ body: @escaping @MainActor (MeshRepository) -> Void) {
-        let meshRepository = self.meshRepository
+        let meshRepository: MeshRepository? = self.meshRepository
         Task { @MainActor in
             guard let meshRepository else { return }
             // PlatformBridge callbacks are one-way notifications into MeshRepository.
@@ -210,13 +210,13 @@ final class IosPlatformBridge: PlatformBridge {
     }
 
     private func reportBatteryState() {
-        let level = UIDevice.current.batteryLevel
-        let pct = UInt8(max(0, min(100, level * 100)))
-        let charging = UIDevice.current.batteryState == .charging
+        let level: Float = UIDevice.current.batteryLevel
+        let pct: UInt8 = UInt8(max(0, min(100, level * 100)))
+        let charging: Bool = UIDevice.current.batteryState == .charging
                     || UIDevice.current.batteryState == .full
 
         // Skip if nothing changed AND we're within the adaptive throttle window
-        let elapsed = Date().timeIntervalSince(lastBatteryReportTime)
+        let elapsed: TimeInterval = Date().timeIntervalSince(lastBatteryReportTime)
         if pct == lastReportedBatteryPct && charging == lastReportedCharging && elapsed < adaptiveIntervalSeconds {
             return
         }
@@ -232,10 +232,10 @@ final class IosPlatformBridge: PlatformBridge {
         pathMonitor.pathUpdateHandler = { [weak self] path in
             guard let self = self else { return }
 
-            let hasWifi = path.usesInterfaceType(.wifi)
-            let hasCellular = path.usesInterfaceType(.cellular)
-            let isExpensive = path.isExpensive
-            let isConstrained = path.isConstrained
+            let hasWifi: Bool = path.usesInterfaceType(.wifi)
+            let hasCellular: Bool = path.usesInterfaceType(.cellular)
+            let isExpensive: Bool = path.isExpensive
+            let isConstrained: Bool = path.isConstrained
 
             self.logger.debug("Network path updated: wifi=\(hasWifi) cellular=\(hasCellular) expensive=\(isExpensive) constrained=\(isConstrained)")
 
@@ -275,7 +275,7 @@ final class IosPlatformBridge: PlatformBridge {
     /// If the state genuinely changes (e.g. still → walking), report immediately.
     /// If the state toggles rapidly (e.g. still ↔ unknown), debounce via timer.
     private func coalesceMotionReport(_ state: MotionState) {
-        let elapsed = Date().timeIntervalSince(lastMotionReportTime)
+        let elapsed: TimeInterval = Date().timeIntervalSince(lastMotionReportTime)
 
         // Significant motion change (e.g. still → walking, or walking → automotive)
         // gets reported immediately regardless of throttle.
@@ -301,7 +301,7 @@ final class IosPlatformBridge: PlatformBridge {
             // Store the latest state; a timer will deliver it later
             pendingMotionState = state
             if motionCoalesceTimer == nil {
-                let remaining = adaptiveIntervalSeconds - elapsed
+                let remaining: TimeInterval = adaptiveIntervalSeconds - elapsed
                 motionCoalesceTimer = Timer.scheduledTimer(withTimeInterval: remaining, repeats: false) { [weak self] _ in
                     guard let self, let pending = self.pendingMotionState else { return }
                     self.deliverMotionReport(pending)

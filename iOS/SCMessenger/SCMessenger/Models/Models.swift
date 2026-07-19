@@ -16,7 +16,13 @@ struct Conversation: Identifiable, Hashable {
     let lastMessageTime: Date?
     let unreadCount: Int
 
-    init(peerId: String, peerNickname: String, lastMessage: String? = nil, lastMessageTime: Date? = nil, unreadCount: Int = 0) {
+    init(
+        peerId: String, 
+        peerNickname: String, 
+        lastMessage: String? = nil, 
+        lastMessageTime: Date? = nil, 
+        unreadCount: Int = 0
+    ) {
         self.id = peerId
         self.peerId = peerId
         self.peerNickname = peerNickname
@@ -34,7 +40,13 @@ struct MessageRequestThread: Identifiable, Hashable {
     let lastMessageTime: Date?
     let unreadCount: Int
 
-    init(peerId: String, displayName: String, previewText: String? = nil, lastMessageTime: Date? = nil, unreadCount: Int = 0) {
+    init(
+        peerId: String, 
+        displayName: String, 
+        previewText: String? = nil, 
+        lastMessageTime: Date? = nil, 
+        unreadCount: Int = 0
+    ) {
         self.id = peerId
         self.peerId = peerId
         self.displayName = displayName

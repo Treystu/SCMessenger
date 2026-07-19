@@ -51,7 +51,7 @@ enum LocalTransportFallback {
             return value
         }()
         if let normalizedBle {
-            let bleAcked = tryBle(normalizedBle)
+            let bleAcked: Bool = tryBle(normalizedBle)
             return LocalTransportFallbackResult(
                 multipeerAttempted: normalizedMultipeer != nil,
                 multipeerAcked: false,

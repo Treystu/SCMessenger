@@ -1,5 +1,12 @@
 import Foundation
 
+// This is a standalone `@main` CLI script (see LocalTransportFallbackTestRunner
+// below), not an XCTest target -- the `test*` functions are called directly by
+// runAllTests(), not discovered via XCTest reflection, so `private` is correct
+// here despite the name; swiftlint's private_unit_test rule assumes XCTest
+// convention and false-positives on this file's naming pattern.
+// swiftlint:disable private_unit_test
+
 @inline(__always)
 private func expect(_ condition: @autoclosure () -> Bool, _ message: String) {
     if !condition() {
@@ -11,7 +18,7 @@ private func expect(_ condition: @autoclosure () -> Bool, _ message: String) {
 private func testMultipeerPathSuccess() {
     var attempted: [String] = []
 
-    let result = LocalTransportFallback.attemptMultipeerThenBle(
+    let result: LocalTransportFallback.FallbackResult = LocalTransportFallback.attemptMultipeerThenBle(
         multipeerPeerId: "deadbeef",
         blePeerId: "f4d0b0b4-512f-465f-a5e4-39ee7bf7b1cb",
         tryMultipeer: { _ in
@@ -35,7 +42,7 @@ private func testMultipeerPathSuccess() {
 private func testFallbackWhenMultipeerUnavailable() {
     var attempted: [String] = []
 
-    let result = LocalTransportFallback.attemptMultipeerThenBle(
+    let result: LocalTransportFallback.FallbackResult = LocalTransportFallback.attemptMultipeerThenBle(
         multipeerPeerId: "facefeed",
         blePeerId: "2e8e2a58-40e2-4c49-b0c7-8f3706e2ad90",
         tryMultipeer: { _ in
@@ -57,10 +64,10 @@ private func testFallbackWhenMultipeerUnavailable() {
 }
 
 private func testReconnectContinuationAndThroughputStability() {
-    var multipeerOnline = false
+    var multipeerOnline: Bool = false
 
     // Reconnect continuation: first fallback to BLE, then resume Multipeer once online.
-    let beforeReconnect = LocalTransportFallback.attemptMultipeerThenBle(
+    let beforeReconnect: LocalTransportFallback.FallbackResult = LocalTransportFallback.attemptMultipeerThenBle(
         multipeerPeerId: "cafebabe",
         blePeerId: "a8cd0a14-00a2-4b53-af4c-a12de228ec7c",
         tryMultipeer: { _ in multipeerOnline },
@@ -69,7 +76,7 @@ private func testReconnectContinuationAndThroughputStability() {
     expect(beforeReconnect.bleAttempted && beforeReconnect.bleAcked, "BLE fallback should carry delivery while multipeer is offline")
 
     multipeerOnline = true
-    let afterReconnect = LocalTransportFallback.attemptMultipeerThenBle(
+    let afterReconnect: LocalTransportFallback.FallbackResult = LocalTransportFallback.attemptMultipeerThenBle(
         multipeerPeerId: "cafebabe",
         blePeerId: "a8cd0a14-00a2-4b53-af4c-a12de228ec7c",
         tryMultipeer: { _ in multipeerOnline },
@@ -79,14 +86,14 @@ private func testReconnectContinuationAndThroughputStability() {
     expect(!afterReconnect.bleAttempted, "BLE should not be used after multipeer reconnect")
 
     // Throughput stability: deterministic behavior under sustained mixed availability.
-    var multipeerCalls = 0
-    var bleCalls = 0
-    var multipeerSuccesses = 0
-    var bleFallbackSuccesses = 0
+    var multipeerCalls: Int = 0
+    var bleCalls: Int = 0
+    var multipeerSuccesses: Int = 0
+    var bleFallbackSuccesses: Int = 0
 
     for index in 0..<1500 {
-        let isMultipeerAvailable = index % 3 != 0
-        let result = LocalTransportFallback.attemptMultipeerThenBle(
+        let isMultipeerAvailable: Bool = index % 3 != 0
+        let result: LocalTransportFallback.FallbackResult = LocalTransportFallback.attemptMultipeerThenBle(
             multipeerPeerId: "a11ce123",
             blePeerId: "90bb12c3-f84f-48dc-a306-3d77df6964ab",
             tryMultipeer: { _ in
@@ -120,10 +127,10 @@ private func testReconnectContinuationAndThroughputStability() {
 }
 
 private func testBleOnlyTerminalFailureSignal() {
-    var multipeerCalled = false
-    var bleCalled = false
+    var multipeerCalled: Bool = false
+    var bleCalled: Bool = false
 
-    let result = LocalTransportFallback.attemptMultipeerThenBle(
+    let result: LocalTransportFallback.FallbackResult = LocalTransportFallback.attemptMultipeerThenBle(
         multipeerPeerId: nil,
         blePeerId: "2cc7db8f-3142-4b8c-9157-2be2d7502e7f",
         tryMultipeer: { _ in

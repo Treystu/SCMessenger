@@ -17,8 +17,8 @@ import os
 ///
 /// Flow: Rust Core → CoreDelegate → MeshEventBus → SwiftUI Views
 final class CoreDelegateImpl: CoreDelegate {
-    private let logger = Logger(subsystem: "com.scmessenger", category: "CoreDelegate")
-    private let eventBus = MeshEventBus.shared
+    private let logger: Logger = Logger(subsystem: "com.scmessenger", category: "CoreDelegate")
+    private let eventBus: MeshEventBus = MeshEventBus.shared
     private weak var meshRepository: MeshRepository?
 
     // P1: Dedup disconnect events — Rust fires one per substream (254+ in 1s).
@@ -38,8 +38,8 @@ final class CoreDelegateImpl: CoreDelegate {
     private let discoveryDedupInterval: TimeInterval = 1.0
 
     func onPeerDiscovered(peerId: String) {
-        let trimmed = PeerIdValidator.normalize(peerId)
-        let now = Date()
+        let trimmed: String = PeerIdValidator.normalize(peerId)
+        let now: Date = Date()
         if let lastDiscovery = discoveryDedupCache[trimmed],
            now.timeIntervalSince(lastDiscovery) < discoveryDedupInterval {
             return // Already processed this discovery within the window
@@ -47,7 +47,7 @@ final class CoreDelegateImpl: CoreDelegate {
         discoveryDedupCache[trimmed] = now
 
         logger.info("Peer discovered: \(peerId)")
-        let repo = meshRepository
+        let repo: MeshRepository? = meshRepository
         DispatchQueue.main.async {
             if let repo {
                 repo.handleTransportPeerDiscovered(peerId: peerId)
@@ -62,8 +62,8 @@ final class CoreDelegateImpl: CoreDelegate {
     private let connectDedupInterval: TimeInterval = 2.0
 
     func onPeerConnected(peerId: String) {
-        let trimmed = PeerIdValidator.normalize(peerId)
-        let now = Date()
+        let trimmed: String = PeerIdValidator.normalize(peerId)
+        let now: Date = Date()
         if let last = connectDedupCache[trimmed],
            now.timeIntervalSince(last) < connectDedupInterval {
             return
@@ -78,8 +78,8 @@ final class CoreDelegateImpl: CoreDelegate {
 
     func onPeerDisconnected(peerId: String) {
         // P1: Deduplicate disconnect events at callback layer
-        let trimmed = PeerIdValidator.normalize(peerId)
-        let now = Date()
+        let trimmed: String = PeerIdValidator.normalize(peerId)
+        let now: Date = Date()
         if let lastDisconnect = disconnectDedupCache[trimmed],
            now.timeIntervalSince(lastDisconnect) < disconnectDedupInterval {
             return // Already processed this disconnect within the window
@@ -87,7 +87,7 @@ final class CoreDelegateImpl: CoreDelegate {
         disconnectDedupCache[trimmed] = now
 
         logger.info("Peer disconnected: \(peerId)")
-        let repo = meshRepository
+        let repo: MeshRepository? = meshRepository
         DispatchQueue.main.async {
             repo?.handleTransportPeerDisconnected(peerId: peerId)
             self.eventBus.peerEvents.send(.disconnected(peerId: peerId))
@@ -99,13 +99,13 @@ final class CoreDelegateImpl: CoreDelegate {
     private let identifyDedupInterval: TimeInterval = 2.0
 
     func onPeerIdentified(peerId: String, agentVersion: String, listenAddrs: [String]) {
-        let trimmed = PeerIdValidator.normalize(peerId)
-        let identifySignature = ([agentVersion.trimmingCharacters(in: .whitespacesAndNewlines)] +
+        let trimmed: String = PeerIdValidator.normalize(peerId)
+        let identifySignature: String = ([agentVersion.trimmingCharacters(in: .whitespacesAndNewlines)] +
             listenAddrs
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
             .sorted()).joined(separator: "|")
-        let now = Date()
+        let now: Date = Date()
         if let last = identifyDedupCache[trimmed],
            last.signature == identifySignature,
            now.timeIntervalSince(last.observedAt) < identifyDedupInterval {
@@ -114,7 +114,7 @@ final class CoreDelegateImpl: CoreDelegate {
         identifyDedupCache[trimmed] = (identifySignature, now)
 
         logger.info("Peer identified: \(peerId) (agent: \(agentVersion)) with \(listenAddrs.count) addresses")
-        let repo = meshRepository
+        let repo: MeshRepository? = meshRepository
         DispatchQueue.main.async {
             repo?.handleTransportPeerIdentified(peerId: peerId, agentVersion: agentVersion, listenAddrs: listenAddrs)
         }
@@ -131,7 +131,7 @@ final class CoreDelegateImpl: CoreDelegate {
 
         // UniFFI callbacks arrive on a Rust thread; MeshRepository is @MainActor.
         // Capture values before the dispatch to avoid capturing self or mutable state.
-        let repo = meshRepository
+        let repo: MeshRepository? = meshRepository
         DispatchQueue.main.async {
             repo?.onMessageReceived(
                 senderId: senderId,
@@ -177,7 +177,7 @@ final class CoreDelegateImpl: CoreDelegate {
         logger.info("Receipt received: \(messageId) status=\(status)")
 
         // Keep repository delivery state aligned with receipt callbacks.
-        let repo = meshRepository
+        let repo: MeshRepository? = meshRepository
         DispatchQueue.main.async {
             repo?.onDeliveryReceipt(messageId: messageId, status: status)
         }

@@ -11,8 +11,9 @@ import SwiftUI
 struct NotificationGuidanceView: View {
     @Environment(\.presentationMode) private var presentationMode
 
-    private let titleText = "Notifications Disabled"
-    private let messageText = "Please enable notifications in Settings to receive messages, alerts, and updates from SCMessenger."
+    private let titleText: String = "Notifications Disabled"
+    private let messageText: String =
+        "Please enable notifications in Settings to receive messages, alerts, and updates from SCMessenger."
 
     var body: some View {
         VStack(spacing: 24) {

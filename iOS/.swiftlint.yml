@@ -5,6 +5,12 @@ disabled_rules:
   - trailing_whitespace  # Handled by editor config
 
 # Opt-in rules - additional rules to enable
+# Note: force_unwrapping (AST-based) is the correct way to catch real force
+# unwraps; it replaced a custom regex rule (force_unwrap_production) that
+# matched any bare "!" -- including boolean negation ("!isEmpty") and even
+# string literals ("Hello, world!") -- producing ~460 false positives across
+# the source tree with zero true positives caught that this rule doesn't
+# already catch correctly.
 opt_in_rules:
   - empty_count
   - explicit_init
@@ -85,22 +91,19 @@ type_name:
     error: 60
 
 # Excluded paths - don't lint these directories
+# Note: "Generated" alone doesn't match the nested
+# SCMessenger/SCMessenger/Generated/ path (confirmed: api.swift, a
+# 10634-line UniFFI-generated file, was still being linted) -- swiftlint's
+# excluded-path matching needs the fuller relative path to catch it.
 excluded:
   - Pods
   - Build
   - DerivedData
   - Generated
+  - SCMessenger/SCMessenger/Generated
   - .build
   - vendor
+  - SCMessengerCore.xcframework
 
 # Reporter type - how to output results
 reporter: "xcode"
-
-# Custom rules
-custom_rules:
-  # Discourage force unwrapping in production code
-  force_unwrap_production:
-    name: "Force Unwrap in Production"
-    regex: '!\s*(?!\/\/)'
-    message: "Avoid force unwrapping in production code. Use optional binding or guard statements."
-    severity: warning

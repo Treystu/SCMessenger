@@ -9,15 +9,15 @@ import SwiftUI
 
 @main
 struct SCMessengerApp: App {
-    private let installChoiceKey = "hasCompletedInstallModeChoice"
+    private let installChoiceKey: String = "hasCompletedInstallModeChoice"
 
     // Repository - single source of truth
-    @State private var meshRepository = MeshRepository()
+    @State private var meshRepository: MeshRepository = MeshRepository()
 
     // Background service
     @State private var backgroundService: MeshBackgroundService?
-    @State private var didRunSetup = false
-    @State private var showOnboarding = false
+    @State private var didRunSetup: Bool = false
+    @State private var showOnboarding: Bool = false
 
     init() {
         // Initialize background service after repository
@@ -83,8 +83,8 @@ struct SCMessengerApp: App {
     }
 
     private func refreshOnboardingGate() {
-        var installChoiceCompleted = UserDefaults.standard.bool(forKey: installChoiceKey)
-        let hasIdentity = meshRepository.isIdentityInitialized()
+        var installChoiceCompleted: Bool = UserDefaults.standard.bool(forKey: installChoiceKey)
+        let hasIdentity: Bool = meshRepository.isIdentityInitialized()
         if hasIdentity && !installChoiceCompleted {
             UserDefaults.standard.set(true, forKey: installChoiceKey)
             UserDefaults.standard.set(true, forKey: "hasCompletedOnboarding")

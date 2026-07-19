@@ -17,29 +17,29 @@ struct MeshBLEConstants {
 
     /// SCMesh GATT Service UUID
     /// Matches: BleScanner.SERVICE_UUID / BleGattServer.SERVICE_UUID
-    static let serviceUUID = CBUUID(string: "0000DF01-0000-1000-8000-00805F9B34FB")
+    static let serviceUUID: CBUUID = CBUUID(string: "0000DF01-0000-1000-8000-00805F9B34FB")
 
     /// Identity Characteristic UUID (Read - peer identity beacon)
     /// Matches: BleGattServer.IDENTITY_CHAR_UUID
     /// Contains truncated identity for quick peer recognition
-    static let identityCharUUID = CBUUID(string: "0000DF02-0000-1000-8000-00805F9B34FB")
+    static let identityCharUUID: CBUUID = CBUUID(string: "0000DF02-0000-1000-8000-00805F9B34FB")
 
     /// Message Characteristic UUID (Write - central writes messages to peripheral)
     /// Matches: BleGattServer.MESSAGE_CHAR_UUID
-    static let messageCharUUID = CBUUID(string: "0000DF03-0000-1000-8000-00805F9B34FB")
+    static let messageCharUUID: CBUUID = CBUUID(string: "0000DF03-0000-1000-8000-00805F9B34FB")
 
     /// Sync Characteristic UUID (Notify - peripheral notifies central of incoming data)
     /// Matches: BleGattServer.SYNC_CHAR_UUID
-    static let syncCharUUID = CBUUID(string: "0000DF04-0000-1000-8000-00805F9B34FB")
+    static let syncCharUUID: CBUUID = CBUUID(string: "0000DF04-0000-1000-8000-00805F9B34FB")
 
     /// Client Configuration Descriptor UUID (standard BLE descriptor for notify/indicate)
     /// Matches: BleGattServer.CLIENT_CONFIG_DESCRIPTOR_UUID
-    static let clientConfigDescriptorUUID = CBUUID(string: "00002902-0000-1000-8000-00805F9B34FB")
+    static let clientConfigDescriptorUUID: CBUUID = CBUUID(string: "00002902-0000-1000-8000-00805F9B34FB")
 
     // Legacy aliases for backward compatibility during migration
-    static let txCharUUID = messageCharUUID
-    static let rxCharUUID = syncCharUUID
-    static let idCharUUID = identityCharUUID
+    static let txCharUUID: CBUUID = messageCharUUID
+    static let rxCharUUID: CBUUID = syncCharUUID
+    static let idCharUUID: CBUUID = identityCharUUID
 
     // MARK: - L2CAP
 
@@ -52,16 +52,16 @@ struct MeshBLEConstants {
     /// Maximum identity data size for advertising (iOS background limit)
     /// iOS allows only 28 bytes total in background advertising
     /// After overhead, identity data must be ≤24 bytes
-    static let maxIdentityDataSize = 24
+    static let maxIdentityDataSize: Int = 24
 
     /// Maximum MTU for GATT writes
     /// iOS negotiates MTU automatically (up to 512 bytes on modern devices)
     /// Use conservative value for compatibility
-    static let maxMTU = 512
+    static let maxMTU: Int = 512
 
     /// Maximum chunk size for fragmented writes
     /// Keep below MTU with safety margin
-    static let maxChunkSize = 400
+    static let maxChunkSize: Int = 400
 
     // MARK: - Timing
 
@@ -88,11 +88,11 @@ struct MeshBLEConstants {
 
 extension MeshBLEConstants {
     /// Advertised local name (visible during scanning)
-    static let advertisedName = "SCMesh"
+    static let advertisedName: String = "SCMesh"
 
     /// State restoration identifiers
-    static let centralRestoreId = "com.scmessenger.central"
-    static let peripheralRestoreId = "com.scmessenger.peripheral"
+    static let centralRestoreId: String = "com.scmessenger.central"
+    static let peripheralRestoreId: String = "com.scmessenger.peripheral"
 }
 
 // MARK: - Helper Extensions

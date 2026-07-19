@@ -19,21 +19,21 @@ import Combine
 ///
 /// Service type: _scmessenger._tcp (matches Android's WifiDirectTransport.SERVICE_TYPE)
 final class mDNSServiceDiscovery: NSObject {
-    private let logger = Logger(subsystem: "com.scmessenger", category: "mDNS")
+    private let logger: Logger = Logger(subsystem: "com.scmessenger", category: "mDNS")
     private weak var meshRepository: MeshRepository?
 
     // Service discovery
     private var netServiceBrowser: NetServiceBrowser?
     private var discoveredServices: [String: NetService] = [:]
-    private var isBrowsing = false
+    private var isBrowsing: Bool = false
 
     // Service advertisement
     private var localService: NetService?
-    private var isAdvertising = false
+    private var isAdvertising: Bool = false
 
     // Service type (must match Android's WifiDirectTransport.SERVICE_TYPE)
-    private let serviceType = "_scmessenger._tcp"
-    private let serviceName = "SCMessenger"
+    private let serviceType: String = "_scmessenger._tcp"
+    private let serviceName: String = "SCMessenger"
 
     /// Callback when a LAN peer is resolved (`peerId`, `host`, `port`).
     /// The caller can construct a peer-specific multiaddr and dial via SwarmBridge.
@@ -100,7 +100,7 @@ final class mDNSServiceDiscovery: NSObject {
                 "version": Data("1.0".utf8),
                 "transport": Data("tcp".utf8)
             ]
-            let txtData = NetService.data(fromTXTRecord: txtRecord)
+            let txtData: Data = NetService.data(fromTXTRecord: txtRecord)
             self.localService?.setTXTRecord(txtData)
             self.localService?.publish()
             self.isAdvertising = true
@@ -126,7 +126,7 @@ final class mDNSServiceDiscovery: NSObject {
 
 extension mDNSServiceDiscovery: NetServiceBrowserDelegate {
     func netServiceBrowser(_ browser: NetServiceBrowser, didFind service: NetService, moreComing: Bool) {
-        let serviceKey = "\(service.name):\(service.type)"
+        let serviceKey: String = "\(service.name):\(service.type)"
         logger.info("mDNS service found: \(service.name) type: \(service.type)")
 
         // Resolve the service to get the address
@@ -136,7 +136,7 @@ extension mDNSServiceDiscovery: NetServiceBrowserDelegate {
     }
 
     func netServiceBrowser(_ browser: NetServiceBrowser, didRemove service: NetService, moreComing: Bool) {
-        let serviceKey = "\(service.name):\(service.type)"
+        let serviceKey: String = "\(service.name):\(service.type)"
         logger.info("mDNS service removed: \(service.name)")
         discoveredServices.removeValue(forKey: serviceKey)
     }
@@ -162,22 +162,22 @@ extension mDNSServiceDiscovery: NetServiceDelegate {
         }
 
         // Use the first address and convert to string
-        let address = addresses[0]
-        var host = "unknown"
-        var port = Int32(0)
+        let address: Data = addresses[0]
+        var host: String = "unknown"
+        var port: Int32 = Int32(0)
         
         // Convert sockaddr to string representation
         address.withUnsafeBytes { ptr in
-            let sockaddrPtr = ptr.bindMemory(to: sockaddr.self)
+            let sockaddrPtr: UnsafePointer<sockaddr> = ptr.bindMemory(to: sockaddr.self)
             guard let firstSockaddr = sockaddrPtr.first else { return }
-            var buffer = [CChar](repeating: 0, count: Int(INET6_ADDRSTRLEN))
+            var buffer: [CChar] = [CChar](repeating: 0, count: Int(INET6_ADDRSTRLEN))
             if firstSockaddr.sa_family == sa_family_t(AF_INET) {
-                var sin = address.withUnsafeBytes { $0.load(as: sockaddr_in.self) }
+                var sin: sockaddr_in = address.withUnsafeBytes { $0.load(as: sockaddr_in.self) }
                 inet_ntop(AF_INET, &sin.sin_addr, &buffer, socklen_t(INET_ADDRSTRLEN))
                 host = String(cString: buffer)
                 port = Int32(UInt16(bigEndian: sin.sin_port))
             } else if firstSockaddr.sa_family == sa_family_t(AF_INET6) {
-                var sin6 = address.withUnsafeBytes { $0.load(as: sockaddr_in6.self) }
+                var sin6: sockaddr_in6 = address.withUnsafeBytes { $0.load(as: sockaddr_in6.self) }
                 inet_ntop(AF_INET6, &sin6.sin6_addr, &buffer, socklen_t(INET6_ADDRSTRLEN))
                 host = String(cString: buffer)
                 port = Int32(UInt16(bigEndian: sin6.sin6_port))
@@ -187,10 +187,10 @@ extension mDNSServiceDiscovery: NetServiceDelegate {
         logger.info("mDNS service resolved: \(sender.name) at \(host):\(port)")
 
         // Create a peer ID from the service name (matches Android's device.deviceAddress pattern)
-        let peerId = "mdns-\(sender.name)"
+        let peerId: String = "mdns-\(sender.name)"
 
         // Notify discovery
-        let repo = meshRepository
+        let repo: MeshRepository? = meshRepository
         DispatchQueue.main.async {
             repo?.handleTransportPeerDiscovered(peerId: peerId)
             // Also send to event bus for UI

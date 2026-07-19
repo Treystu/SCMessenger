@@ -11,9 +11,9 @@ import OSLog
 
 /// Processes and verifies background notification functionality
 final class NotificationBackgroundProcessor {
-    private let logger = Logger(subsystem: "com.scmessenger", category: "BackgroundNotifications")
-    private let notificationLogger = NotificationLogger.shared
-    private let center = UNUserNotificationCenter.current()
+    private let logger: Logger = Logger(subsystem: "com.scmessenger", category: "BackgroundNotifications")
+    private let notificationLogger: NotificationLogger = NotificationLogger.shared
+    private let center: UNUserNotificationCenter = UNUserNotificationCenter.current()
 
     /// Background processing test results
     struct BackgroundTestResults {
@@ -27,25 +27,29 @@ final class NotificationBackgroundProcessor {
     /// Verifies background fetch functionality
     /// - Parameter fetchInterval: The background fetch interval to test
     func testBackgroundFetch(fetchInterval: TimeInterval = 300) async -> BackgroundTestResults {
-        var results = BackgroundTestResults()
+        var results: BackgroundTestResults = BackgroundTestResults()
 
         logger.info("Testing background fetch with interval: \(fetchInterval)s")
 
         do {
-            let startTime = CFAbsoluteTimeGetCurrent()
+            let startTime: CFAbsoluteTime = CFAbsoluteTimeGetCurrent()
 
             // Simulate background fetch
             try await withCheckedThrowingContinuation { continuation in
                 // Background fetch simulation - in real app this would be triggered by system
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                    let elapsed = CFAbsoluteTimeGetCurrent() - startTime
+                    let elapsed: CFAbsoluteTime = CFAbsoluteTimeGetCurrent() - startTime
                     results.processingTime = elapsed
                     continuation.resume(returning: ())
                 }
             }
 
             results.backgroundFetch = true
-            notificationLogger.logTestResult("Background Fetch", passed: true, details: "Processed in \(String(format: "%.2f", results.processingTime))s")
+            notificationLogger.logTestResult(
+                "Background Fetch",
+                passed: true,
+                details: "Processed in \(String(format: "%.2f", results.processingTime))s"
+            )
         } catch {
             results.errors.append("Background fetch failed: \(error.localizedDescription)")
             notificationLogger.logTestResult("Background Fetch", passed: false, details: error.localizedDescription)
@@ -56,25 +60,29 @@ final class NotificationBackgroundProcessor {
 
     /// Tests silent notification handling
     func testSilentNotifications() async -> BackgroundTestResults {
-        var results = BackgroundTestResults()
+        var results: BackgroundTestResults = BackgroundTestResults()
 
         logger.info("Testing silent notifications")
 
         do {
-            let startTime = CFAbsoluteTimeGetCurrent()
+            let startTime: CFAbsoluteTime = CFAbsoluteTimeGetCurrent()
 
             // Verify silent notification setup
-            let settings = await center.notificationSettings()
+            let settings: UNNotificationSettings = await center.notificationSettings()
             results.silentNotification = settings.badge != nil
 
-            let elapsed = CFAbsoluteTimeGetCurrent() - startTime
+            let elapsed: CFAbsoluteTime = CFAbsoluteTimeGetCurrent() - startTime
             results.processingTime = elapsed
 
             if settings.sounds.isEmpty {
                 results.constraintHandling = true
             }
 
-            notificationLogger.logTestResult("Silent Notification", passed: results.silentNotification, details: "Configure sounds: \(settings.sounds.count)")
+            notificationLogger.logTestResult(
+                "Silent Notification",
+                passed: results.silentNotification,
+                details: "Configure sounds: \(settings.sounds.count)"
+            )
         } catch {
             results.errors.append("Silent notification test failed: \(error.localizedDescription)")
             notificationLogger.logTestResult("Silent Notification", passed: false)
@@ -85,32 +93,32 @@ final class NotificationBackgroundProcessor {
 
     /// Measures notification processing time under constraints
     func measureProcessingTime() async -> BackgroundTestResults {
-        var results = BackgroundTestResults()
+        var results: BackgroundTestResults = BackgroundTestResults()
 
         logger.info("Measuring notification processing time under constraints")
 
         // Test processing with multiple notifications
-        let notificationCount = 10
+        let notificationCount: Int = 10
 
         do {
-            let startTime = CFAbsoluteTimeGetCurrent()
+            let startTime: CFAbsoluteTime = CFAbsoluteTimeGetCurrent()
 
-            for i in 0..<notificationCount {
-                let content = UNMutableNotificationContent()
-                content.title = "Background Test \(i + 1)"
-                content.body = "Processing test notification \(i + 1)/\(notificationCount)"
+            for index in 0..<notificationCount {
+                let content: UNMutableNotificationContent = UNMutableNotificationContent()
+                content.title = "Background Test \(index + 1)"
+                content.body = "Processing test notification \(index + 1)/\(notificationCount)"
                 content.sound = .default
                 content.categoryIdentifier = "BACKGROUND_TEST"
 
-                let request = UNNotificationRequest(
-                    identifier: "bg_test_\(i)",
+                let request: UNNotificationRequest = UNNotificationRequest(
+                    identifier: "bg_test_\(index)",
                     content: content,
                     trigger: nil
                 )
 
                 center.add(request) { error in
                     if let error = error {
-                        results.errors.append("Failed to add notification \(i): \(error.localizedDescription)")
+                        results.errors.append("Failed to add notification \(index): \(error.localizedDescription)")
                     }
                 }
             }
@@ -118,11 +126,11 @@ final class NotificationBackgroundProcessor {
             // Wait for processing
             try await Task.sleep(nanoseconds: UInt64(0.5 * 1_000_000_000)) // 0.5 seconds
 
-            let elapsed = CFAbsoluteTimeGetCurrent() - startTime
+            let elapsed: CFAbsoluteTime = CFAbsoluteTimeGetCurrent() - startTime
             results.processingTime = elapsed
             results.constraintHandling = elapsed < 2.0 // Should complete within 2 seconds
 
-            let avgTime = elapsed / Double(notificationCount)
+            let avgTime: Double = elapsed / Double(notificationCount)
             notificationLogger.logTestResult(
                 "Processing Time",
                 passed: results.constraintHandling,
@@ -138,16 +146,16 @@ final class NotificationBackgroundProcessor {
 
     /// Tests constraint handling (network, power, etc.)
     func testConstraintHandling() async -> BackgroundTestResults {
-        var results = BackgroundTestResults()
+        var results: BackgroundTestResults = BackgroundTestResults()
 
         logger.info("Testing constraint handling")
 
         // Check network conditions
-        let networkStatus = checkNetworkConditions()
+        let networkStatus: NetworkStatus = checkNetworkConditions()
         results.constraintHandling = networkStatus.isUsable
 
         // Check power state
-        let powerStatus = checkPowerState()
+        let powerStatus: PowerStatus = checkPowerState()
         results.constraintHandling = results.constraintHandling && powerStatus.isAcceptable
 
         notificationLogger.logTestResult(

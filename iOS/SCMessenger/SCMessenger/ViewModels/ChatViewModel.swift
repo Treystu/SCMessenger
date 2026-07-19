@@ -12,11 +12,11 @@ import Combine
 @Observable
 final class ChatViewModel {
     private weak var repository: MeshRepository?
-    private var cancellables = Set<AnyCancellable>()
+    private var cancellables: Set<AnyCancellable> = Set<AnyCancellable>()
 
     let conversation: Conversation
     var messages: [MessageRecord] = []
-    var messageText = ""
+    var messageText: String = ""
     var error: String?
 
     init(conversation: Conversation, repository: MeshRepository) {
@@ -28,11 +28,11 @@ final class ChatViewModel {
 
     func loadMessages() {
         do {
-            let fetched = try repository?.getConversation(peerId: conversation.peerId) ?? []
-            messages = fetched.sorted(by: { a, b in
-                let t1 = a.senderTimestamp > 0 ? a.senderTimestamp : a.timestamp
-                let t2 = b.senderTimestamp > 0 ? b.senderTimestamp : b.timestamp
-                if t1 == t2 { return a.timestamp < b.timestamp }
+            let fetched: [MessageRecord] = try repository?.getConversation(peerId: conversation.peerId) ?? []
+            messages = fetched.sorted(by: { lhs, rhs in
+                let t1: UInt64 = lhs.senderTimestamp > 0 ? lhs.senderTimestamp : lhs.timestamp
+                let t2: UInt64 = rhs.senderTimestamp > 0 ? rhs.senderTimestamp : rhs.timestamp
+                if t1 == t2 { return lhs.timestamp < rhs.timestamp }
                 return t1 < t2
             })
         } catch {
@@ -41,14 +41,14 @@ final class ChatViewModel {
     }
 
     func sendMessage() {
-        let content = messageText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let content: String = messageText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !content.isEmpty else { return }
 
         messageText = ""
         error = nil
 
-        let now = UInt64(Date().timeIntervalSince1970)
-        let optimisticMessage = MessageRecord(
+        let now: UInt64 = UInt64(Date().timeIntervalSince1970)
+        let optimisticMessage: MessageRecord = MessageRecord(
             id: UUID().uuidString,
             direction: .sent,
             peerId: conversation.peerId,
@@ -60,10 +60,10 @@ final class ChatViewModel {
             hidden: false
         )
         messages.append(optimisticMessage)
-        messages.sort { a, b in
-            let t1 = a.senderTimestamp > 0 ? a.senderTimestamp : a.timestamp
-            let t2 = b.senderTimestamp > 0 ? b.senderTimestamp : b.timestamp
-            if t1 == t2 { return a.timestamp < b.timestamp }
+        messages.sort { lhs, rhs in
+            let t1: UInt64 = lhs.senderTimestamp > 0 ? lhs.senderTimestamp : lhs.timestamp
+            let t2: UInt64 = rhs.senderTimestamp > 0 ? rhs.senderTimestamp : rhs.timestamp
+            if t1 == t2 { return lhs.timestamp < rhs.timestamp }
             return t1 < t2
         }
 
@@ -83,7 +83,7 @@ final class ChatViewModel {
                     self.error = "Storage Error: \(message)"
                 case .NotInitialized(let message):
                     self.error = "Not Initialized: \(message)"
-                case .InvalidInput(_):
+                case .InvalidInput:
                     self.error = "Could not encrypt message — this contact may have an invalid public key. Try re-adding them using their identity export."
                 case .Internal(let message):
                     self.error = "Internal Error: \(message)"

@@ -9,13 +9,13 @@ import Foundation
 
 @Observable
 final class OnboardingViewModel {
-    private let onboardingKey = "hasCompletedOnboarding"
-    private let installChoiceKey = "hasCompletedInstallModeChoice"
+    private let onboardingKey: String = "hasCompletedOnboarding"
+    private let installChoiceKey: String = "hasCompletedInstallModeChoice"
 
-    var currentStep = 0
-    var hasCompletedOnboarding = false
+    var currentStep: Int = 0
+    var hasCompletedOnboarding: Bool = false
 
-    let totalSteps = 4
+    let totalSteps: Int = 4
 
     func advance() {
         if currentStep < totalSteps - 1 {

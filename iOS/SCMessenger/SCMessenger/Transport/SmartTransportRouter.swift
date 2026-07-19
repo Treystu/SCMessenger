@@ -29,7 +29,7 @@ struct TransportHealth: Codable {
     
     /// Success rate (0.0 to 1.0)
     var successRate: Double {
-        let total = successCount + failureCount
+        let total: UInt64 = successCount + failureCount
         guard total > 0 else { return 0.5 } // Unknown = neutral
         return Double(successCount) / Double(total)
     }
@@ -48,7 +48,7 @@ struct TransportHealth: Codable {
     /// Score for transport selection (higher = better)
     var score: Double {
         // Weight: 70% success rate, 30% latency (inverted, lower latency = higher score)
-        let latencyScore = averageLatencyMs > 0 ? min(1.0, 500.0 / averageLatencyMs) : 0.5
+        let latencyScore: Double = averageLatencyMs > 0 ? min(1.0, 500.0 / averageLatencyMs) : 0.5
         return (successRate * 0.7) + (latencyScore * 0.3)
     }
 }
@@ -66,7 +66,7 @@ struct MessageDedupEntry {
 /// Smart transport router with health tracking and parallel racing
 @MainActor
 final class SmartTransportRouter {
-    private let logger = Logger(subsystem: "com.scmessenger", category: "TransportRouter")
+    private let logger: Logger = Logger(subsystem: "com.scmessenger", category: "TransportRouter")
     
     // Transport health tracking per peer
     private var transportHealth: [String: [TransportType: TransportHealth]] = [:]
@@ -85,13 +85,13 @@ final class SmartTransportRouter {
     
     /// Record a successful delivery
     func recordSuccess(peerId: String, transport: TransportType, latencyMs: UInt64) {
-        var health = getHealth(peerId: peerId, transport: transport)
+        var health: TransportHealth = getHealth(peerId: peerId, transport: transport)
         health.lastSuccessAt = Date()
         health.successCount += 1
         health.lastLatencyMs = latencyMs
         
         // Update rolling average latency
-        let totalDeliveries = health.successCount + health.failureCount
+        let totalDeliveries: UInt64 = health.successCount + health.failureCount
         if totalDeliveries > 1 {
             health.averageLatencyMs = ((health.averageLatencyMs * Double(totalDeliveries - 1)) + Double(latencyMs)) / Double(totalDeliveries)
         } else {
@@ -106,7 +106,7 @@ final class SmartTransportRouter {
     
     /// Record a failed delivery
     func recordFailure(peerId: String, transport: TransportType, error: String?) {
-        var health = getHealth(peerId: peerId, transport: transport)
+        var health: TransportHealth = getHealth(peerId: peerId, transport: transport)
         health.lastFailureAt = Date()
         health.failureCount += 1
         
@@ -134,19 +134,19 @@ final class SmartTransportRouter {
     func getPreferredTransport(peerId: String) -> TransportType? {
         // First check if we have a last successful transport
         if let lastSuccess = lastSuccessfulTransport[peerId] {
-            let health = getHealth(peerId: peerId, transport: lastSuccess)
+            let health: TransportHealth = getHealth(peerId: peerId, transport: lastSuccess)
             if health.isHealthy {
                 return lastSuccess
             }
         }
         
         // Otherwise, find the transport with the highest score
-        let allTransports = TransportType.allCases
+        let allTransports: [TransportType] = TransportType.allCases
         var bestTransport: TransportType?
         var bestScore: Double = -1
         
         for transport in allTransports {
-            let health = getHealth(peerId: peerId, transport: transport)
+            let health: TransportHealth = getHealth(peerId: peerId, transport: transport)
             if health.score > bestScore {
                 bestScore = health.score
                 bestTransport = transport
@@ -159,8 +159,8 @@ final class SmartTransportRouter {
     /// Get all available transports sorted by score (best first)
     func getAvailableTransportsSorted(peerId: String) -> [TransportType] {
         return TransportType.allCases.sorted { transport1, transport2 in
-            let health1 = getHealth(peerId: peerId, transport: transport1)
-            let health2 = getHealth(peerId: peerId, transport: transport2)
+            let health1: TransportHealth = getHealth(peerId: peerId, transport: transport1)
+            let health2: TransportHealth = getHealth(peerId: peerId, transport: transport2)
             return health1.score > health2.score
         }
     }
@@ -173,16 +173,16 @@ final class SmartTransportRouter {
         messageId: String,
         transport: TransportType
     ) -> (isDuplicate: Bool, timeVarianceMs: UInt64?, firstTransport: TransportType?) {
-        let now = Date()
+        let now: Date = Date()
         
         // Clean up old entries
         cleanupDedupCache()
         
         if let existing = messageDedupCache[messageId] {
             // This is a duplicate
-            let timeVarianceMs = UInt64(now.timeIntervalSince(existing.firstReceivedAt) * 1000)
+            let timeVarianceMs: UInt64 = UInt64(now.timeIntervalSince(existing.firstReceivedAt) * 1000)
             
-            var updated = existing
+            var updated: MessageDedupEntry = existing
             updated.duplicateCount += 1
             updated.duplicateTimestamps.append(now)
             updated.duplicateTransports.append(transport)
@@ -193,7 +193,7 @@ final class SmartTransportRouter {
             return (isDuplicate: true, timeVarianceMs: timeVarianceMs, firstTransport: existing.firstTransport)
         } else {
             // First receipt of this message
-            let entry = MessageDedupEntry(
+            let entry: MessageDedupEntry = MessageDedupEntry(
                 messageId: messageId,
                 firstReceivedAt: now,
                 firstTransport: transport,
@@ -216,7 +216,7 @@ final class SmartTransportRouter {
     
     /// Clean up old dedup cache entries
     private func cleanupDedupCache() {
-        let cutoff = Date().addingTimeInterval(-dedupCacheTtl)
+        let cutoff: Date = Date().addingTimeInterval(-dedupCacheTtl)
         messageDedupCache = messageDedupCache.filter { _, entry in
             entry.firstReceivedAt > cutoff
         }
@@ -243,7 +243,7 @@ final class SmartTransportRouter {
         tryTcpMdns: @escaping (String) async -> Bool,
         tryCore: @escaping (String) async -> Bool
     ) async -> TransportDeliveryResult {
-        let startTime = Date()
+        let startTime: Date = Date()
         
         // Determine available transports
         var availableTransports: [(type: TransportType, target: String, attempt: () async -> Bool)] = []
@@ -276,7 +276,7 @@ final class SmartTransportRouter {
         }
         
         // Get preferred transport
-        let preferredTransport = getPreferredTransport(peerId: peerId)
+        let preferredTransport: TransportType? = getPreferredTransport(peerId: peerId)
         
         // If we have a preferred transport, try it first with timeout
         if let preferred = preferredTransport,
@@ -284,7 +284,7 @@ final class SmartTransportRouter {
             logger.info("Trying preferred transport \(preferred.rawValue) for peer \(peerId.prefix(8))")
             
             // Race preferred transport against timeout
-            let preferredResult = await withTaskGroup(of: Bool?.self, returning: Bool?.self) { group in
+            let preferredResult: Bool?? = await withTaskGroup(of: Bool?.self, returning: Bool?.self) { group in
                 // Preferred transport attempt
                 group.addTask {
                     await preferredAttempt.attempt()
@@ -297,13 +297,13 @@ final class SmartTransportRouter {
                 }
                 
                 // Wait for first result
-                let result = await group.next()
+                let result: Bool? = await group.next()
                 group.cancelAll()
-                return result ?? nil
+                return result
             }
             
             if let success = preferredResult, success {
-                let latencyMs = UInt64(Date().timeIntervalSince(startTime) * 1000)
+                let latencyMs: UInt64 = UInt64(Date().timeIntervalSince(startTime) * 1000)
                 recordSuccess(peerId: peerId, transport: preferred, latencyMs: latencyMs)
                 logger.info("[OK] Preferred transport \(preferred.rawValue) succeeded in \(latencyMs)ms")
                 return TransportDeliveryResult(
@@ -322,15 +322,15 @@ final class SmartTransportRouter {
         // Race all available transports in parallel
         logger.info("Racing \(availableTransports.count) transports for peer \(peerId.prefix(8))")
         
-        let result = await withTaskGroup(
+        let result: (transport: TransportType, success: Bool, latencyMs: UInt64)? = await withTaskGroup(
             of: (transport: TransportType, success: Bool, latencyMs: UInt64)?.self,
             returning: (transport: TransportType, success: Bool, latencyMs: UInt64)?.self
         ) { group in
             for transportAttempt in availableTransports {
                 group.addTask {
-                    let transportStart = Date()
-                    let success = await transportAttempt.attempt()
-                    let latencyMs = UInt64(Date().timeIntervalSince(transportStart) * 1000)
+                    let transportStart: Date = Date()
+                    let success: Bool = await transportAttempt.attempt()
+                    let latencyMs: UInt64 = UInt64(Date().timeIntervalSince(transportStart) * 1000)
                     return (transport: transportAttempt.type, success: success, latencyMs: latencyMs)
                 }
             }
@@ -358,7 +358,7 @@ final class SmartTransportRouter {
             )
         } else {
             // All transports failed
-            let latencyMs = UInt64(Date().timeIntervalSince(startTime) * 1000)
+            let latencyMs: UInt64 = UInt64(Date().timeIntervalSince(startTime) * 1000)
             for transportAttempt in availableTransports {
                 recordFailure(peerId: peerId, transport: transportAttempt.type, error: "all_transports_failed")
             }

@@ -115,9 +115,9 @@ struct VerifySafetyNumberSheet: View {
     }
 
     private func displayName(for contact: Contact) -> String {
-        let local = contact.localNickname?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let local: String = contact.localNickname?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         if !local.isEmpty { return local }
-        let federated = contact.nickname?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let federated: String = contact.nickname?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         if !federated.isEmpty { return federated }
         return String(contact.peerId.prefix(16))
     }
@@ -139,8 +139,8 @@ struct VerifySafetyNumberSheet: View {
     }
 
     private func formattedDate(_ timestamp: UInt64) -> String {
-        let date = Date(timeIntervalSince1970: TimeInterval(timestamp))
-        let formatter = DateFormatter()
+        let date: Date = Date(timeIntervalSince1970: TimeInterval(timestamp))
+        let formatter: DateFormatter = DateFormatter()
         formatter.dateStyle = .medium
         formatter.timeStyle = .short
         return formatter.string(from: date)

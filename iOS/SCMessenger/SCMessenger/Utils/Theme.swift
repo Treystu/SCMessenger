@@ -11,48 +11,48 @@ struct Theme {
     // MARK: - Colors (Material Design equivalents)
 
     /// Error container color (for relay toggle and critical warnings)
-    static let errorContainer = Color.red.opacity(0.12)
-    static let onErrorContainer = Color.red
+    static let errorContainer: Color = Color.red.opacity(0.12)
+    static let onErrorContainer: Color = Color.red
 
     /// Primary container color
-    static let primaryContainer = Color.blue.opacity(0.12)
-    static let onPrimaryContainer = Color.blue
+    static let primaryContainer: Color = Color.blue.opacity(0.12)
+    static let onPrimaryContainer: Color = Color.blue
 
     /// Success color
-    static let successContainer = Color.green.opacity(0.12)
-    static let onSuccessContainer = Color.green
+    static let successContainer: Color = Color.green.opacity(0.12)
+    static let onSuccessContainer: Color = Color.green
 
     /// Warning color
-    static let warningContainer = Color.orange.opacity(0.12)
-    static let onWarningContainer = Color.orange
+    static let warningContainer: Color = Color.orange.opacity(0.12)
+    static let onWarningContainer: Color = Color.orange
 
     /// Surface colors
-    static let surface = Color(uiColor: .systemBackground)
-    static let surfaceVariant = Color(uiColor: .secondarySystemBackground)
-    static let onSurface = Color(uiColor: .label)
-    static let onSurfaceVariant = Color(uiColor: .secondaryLabel)
+    static let surface: Color = Color(uiColor: .systemBackground)
+    static let surfaceVariant: Color = Color(uiColor: .secondarySystemBackground)
+    static let onSurface: Color = Color(uiColor: .label)
+    static let onSurfaceVariant: Color = Color(uiColor: .secondaryLabel)
 
     // MARK: - Typography
 
-    static let displayLarge = Font.system(size: 57, weight: .regular)
-    static let displayMedium = Font.system(size: 45, weight: .regular)
-    static let displaySmall = Font.system(size: 36, weight: .regular)
+    static let displayLarge: Font = Font.system(size: 57, weight: .regular)
+    static let displayMedium: Font = Font.system(size: 45, weight: .regular)
+    static let displaySmall: Font = Font.system(size: 36, weight: .regular)
 
-    static let headlineLarge = Font.system(size: 32, weight: .regular)
-    static let headlineMedium = Font.system(size: 28, weight: .regular)
-    static let headlineSmall = Font.system(size: 24, weight: .regular)
+    static let headlineLarge: Font = Font.system(size: 32, weight: .regular)
+    static let headlineMedium: Font = Font.system(size: 28, weight: .regular)
+    static let headlineSmall: Font = Font.system(size: 24, weight: .regular)
 
-    static let titleLarge = Font.system(size: 22, weight: .regular)
-    static let titleMedium = Font.system(size: 16, weight: .medium)
-    static let titleSmall = Font.system(size: 14, weight: .medium)
+    static let titleLarge: Font = Font.system(size: 22, weight: .regular)
+    static let titleMedium: Font = Font.system(size: 16, weight: .medium)
+    static let titleSmall: Font = Font.system(size: 14, weight: .medium)
 
-    static let bodyLarge = Font.system(size: 16, weight: .regular)
-    static let bodyMedium = Font.system(size: 14, weight: .regular)
-    static let bodySmall = Font.system(size: 12, weight: .regular)
+    static let bodyLarge: Font = Font.system(size: 16, weight: .regular)
+    static let bodyMedium: Font = Font.system(size: 14, weight: .regular)
+    static let bodySmall: Font = Font.system(size: 12, weight: .regular)
 
-    static let labelLarge = Font.system(size: 14, weight: .medium)
-    static let labelMedium = Font.system(size: 12, weight: .medium)
-    static let labelSmall = Font.system(size: 11, weight: .medium)
+    static let labelLarge: Font = Font.system(size: 14, weight: .medium)
+    static let labelMedium: Font = Font.system(size: 12, weight: .medium)
+    static let labelSmall: Font = Font.system(size: 11, weight: .medium)
 
     // MARK: - Spacing
 
@@ -71,9 +71,9 @@ struct Theme {
 
     // MARK: - Elevation (Shadow)
 
-    static let elevation1 = Shadow(radius: 1, y: 1)
-    static let elevation2 = Shadow(radius: 3, y: 2)
-    static let elevation3 = Shadow(radius: 6, y: 4)
+    static let elevation1: Shadow = Shadow(radius: 1, y: 1)
+    static let elevation2: Shadow = Shadow(radius: 3, y: 2)
+    static let elevation3: Shadow = Shadow(radius: 6, y: 4)
 
     struct Shadow {
         let radius: CGFloat

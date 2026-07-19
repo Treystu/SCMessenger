@@ -156,6 +156,18 @@ def get_api_key(provider):
                                       ("GEMINI_API_KEY", "GOOGLE_API_KEY")))
     return None
 
+def _looks_like_diff(text):
+    """
+    True if a code block's content is unified-diff-shaped rather than real
+    file content. Guards the single-block fallback below: when diff-mode
+    apply fails and we re-scan the SAME response for a "full file", the only
+    fenced block present is often the original ```diff``` block itself --
+    without this check it gets written to disk verbatim (hunk headers,
+    +/- prefixes and all), silently corrupting the target file.
+    """
+    head = "\n".join(text.strip().split("\n")[:5])
+    return bool(re.search(r"^(---|\+\+\+) [ab]/|^@@ -\d+", head, re.MULTILINE))
+
 def extract_file_blocks(content, allowed_files=None):
     """
     Extract (filename, file_content) pairs from model output.
@@ -188,10 +200,12 @@ def extract_file_blocks(content, allowed_files=None):
                 results.append((filename, "\n".join(lines[1:])))
 
     # Fallback Pattern: if results is empty, allowed_files has exactly 1 file,
-    # and there is exactly one code block, use it.
+    # and there is exactly one code block, use it -- unless that block is
+    # actually a unified diff (see _looks_like_diff), which must never be
+    # written to disk as if it were full file content.
     if not results and allowed_files and len(allowed_files) == 1:
         blocks = re.findall(r"```[a-zA-Z]*\n(.*?)\n```", content, re.DOTALL)
-        if len(blocks) == 1:
+        if len(blocks) == 1 and not _looks_like_diff(blocks[0]):
             results.append((allowed_files[0], blocks[0]))
 
     return results

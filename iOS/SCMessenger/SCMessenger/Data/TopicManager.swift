@@ -12,7 +12,7 @@ import os
 @MainActor
 @Observable
 final class TopicManager {
-    private let logger = Logger(subsystem: "com.scmessenger", category: "Topics")
+    private let logger: Logger = Logger(subsystem: "com.scmessenger", category: "Topics")
     private weak var meshRepository: MeshRepository?
 
     private(set) var subscribedTopics: Set<String> = []

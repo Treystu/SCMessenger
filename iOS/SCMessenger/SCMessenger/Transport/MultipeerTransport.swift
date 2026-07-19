@@ -24,7 +24,7 @@ final class MultipeerTransport: NSObject {
         let effectiveMediumEstimate: String
     }
 
-    private let logger = Logger(subsystem: "com.scmessenger", category: "Multipeer")
+    private let logger: Logger = Logger(subsystem: "com.scmessenger", category: "Multipeer")
     private weak var meshRepository: MeshRepository?
 
     // Multipeer components
@@ -34,29 +34,29 @@ final class MultipeerTransport: NSObject {
     private var browser: MCNearbyServiceBrowser?
 
     // Service type (must be ≤15 chars, lowercase, no special chars)
-    private let serviceType = "scmesh"
+    private let serviceType: String = "scmesh"
 
     // Connection state
     private var connectedPeers: Set<MCPeerID> = []
     private var connectingPeerNames: Set<String> = []
-    private var isAdvertising = false
-    private var isBrowsing = false
+    private var isAdvertising: Bool = false
+    private var isBrowsing: Bool = false
 
     // Reconnection state: maps peer display name → retry count
     private var reconnectAttempts: [String: Int] = [:]
     // Maximum reconnect attempts before giving up
-    private let maxReconnectAttempts = 5
+    private let maxReconnectAttempts: Int = 5
     // Base delay in seconds for exponential backoff
     private let reconnectBaseDelay: TimeInterval = 2.0
     // Invite storm guardrails for reconnect/discovery churn
     private var inviteInFlight: Set<String> = []
     private var lastInviteAttemptAt: [String: Date] = [:]
     private var inviteTimeoutWorkItems: [String: DispatchWorkItem] = [:]
-    private var inviteTimeoutCount = 0
-    private var inviteDeclineCount = 0
+    private var inviteTimeoutCount: Int = 0
+    private var inviteDeclineCount: Int = 0
     private let inviteDebounceSeconds: TimeInterval = 4.0
     private let inviteTimeoutSeconds: TimeInterval = 12.0
-    private let maxConcurrentInvites = 4
+    private let maxConcurrentInvites: Int = 4
 
     init(meshRepository: MeshRepository) {
         self.meshRepository = meshRepository
@@ -86,7 +86,7 @@ final class MultipeerTransport: NSObject {
 
     private func setupPeerID() {
         // Use identity snippet as display name
-        let displayName = identitySnippetForDisplayName()
+        let displayName: String = identitySnippetForDisplayName()
         peerID = MCPeerID(displayName: displayName)
         logger.info("Multipeer peer ID: \(displayName)")
     }
@@ -110,8 +110,8 @@ final class MultipeerTransport: NSObject {
     /// Gives up after `maxReconnectAttempts` tries and removes the peer
     /// from the retry table so it can be re-discovered organically.
     private func scheduleReconnect(for peer: MCPeerID) {
-        let name = peer.displayName
-        let attempt = reconnectAttempts[name, default: 0]
+        let name: String = peer.displayName
+        let attempt: Int = reconnectAttempts[name, default: 0]
 
         guard attempt < maxReconnectAttempts else {
             logger.warning("Reconnect: giving up on \(name) after \(attempt) attempts")
@@ -119,11 +119,14 @@ final class MultipeerTransport: NSObject {
             return
         }
 
-        let delay = reconnectBaseDelay * pow(2.0, Double(attempt))
-        let cappedDelay = min(delay, 60.0)
+        let delay: Double = reconnectBaseDelay * pow(2.0, Double(attempt))
+        let cappedDelay: Double = min(delay, 60.0)
         reconnectAttempts[name] = attempt + 1
 
-        logger.info("Reconnect: scheduling attempt \(attempt + 1)/\(self.maxReconnectAttempts) for \(name) in \(Int(cappedDelay))s")
+        logger.info(
+            "Reconnect: scheduling attempt \(attempt + 1)/\(self.maxReconnectAttempts) " +
+            "for \(name) in \(Int(cappedDelay))s"
+        )
 
         DispatchQueue.main.asyncAfter(deadline: .now() + cappedDelay) { [weak self] in
             guard let self else { return }
@@ -143,43 +146,58 @@ final class MultipeerTransport: NSObject {
     }
 
     private func invitePeerIfAllowed(_ peer: MCPeerID, source: String) {
-        let name = peer.displayName
-        let now = Date()
+        let name: String = peer.displayName
+        let now: Date = Date()
 
         guard browser != nil else { return }
         guard !connectedPeers.contains(peer) else {
-            appendRepositoryDiagnostic("multipeer_invite_skipped id=\(name) source=\(source) reason=already_connected")
+            appendRepositoryDiagnostic(
+                "multipeer_invite_skipped id=\(name) source=\(source) reason=already_connected"
+            )
             return
         }
         guard !connectingPeerNames.contains(name) else {
-            appendRepositoryDiagnostic("multipeer_invite_skipped id=\(name) source=\(source) reason=already_connecting")
+            appendRepositoryDiagnostic(
+                "multipeer_invite_skipped id=\(name) source=\(source) reason=already_connecting"
+            )
             return
         }
         guard !inviteInFlight.contains(name) else {
-            appendRepositoryDiagnostic("multipeer_invite_skipped id=\(name) source=\(source) reason=in_flight")
+            appendRepositoryDiagnostic(
+                "multipeer_invite_skipped id=\(name) source=\(source) reason=in_flight"
+            )
             return
         }
         guard inviteInFlight.count < maxConcurrentInvites else {
-            appendRepositoryDiagnostic("multipeer_invite_skipped id=\(name) source=\(source) reason=concurrency_limit in_flight=\(inviteInFlight.count)")
+            appendRepositoryDiagnostic(
+                "multipeer_invite_skipped id=\(name) source=\(source) " +
+                "reason=concurrency_limit in_flight=\(inviteInFlight.count)"
+            )
             return
         }
         if let last = lastInviteAttemptAt[name], now.timeIntervalSince(last) < inviteDebounceSeconds {
-            appendRepositoryDiagnostic("multipeer_invite_debounced id=\(name) source=\(source)")
+            appendRepositoryDiagnostic(
+                "multipeer_invite_debounced id=\(name) source=\(source)"
+            )
             return
         }
 
         lastInviteAttemptAt[name] = now
         inviteInFlight.insert(name)
         browser?.invitePeer(peer, to: session, withContext: nil, timeout: 10)
-        appendRepositoryDiagnostic("multipeer_invite_sent id=\(name) source=\(source) in_flight=\(inviteInFlight.count)")
+        appendRepositoryDiagnostic(
+            "multipeer_invite_sent id=\(name) source=\(source) in_flight=\(inviteInFlight.count)"
+        )
 
         inviteTimeoutWorkItems[name]?.cancel()
-        let timeoutWork = DispatchWorkItem { [weak self] in
+        let timeoutWork: DispatchWorkItem = DispatchWorkItem { [weak self] in
             guard let self else { return }
             guard self.inviteInFlight.contains(name) else { return }
             self.inviteTimeoutCount += 1
             self.clearInviteTracking(for: name)
-            self.appendRepositoryDiagnostic("multipeer_invite_timeout id=\(name) source=\(source) timeouts=\(self.inviteTimeoutCount)")
+            self.appendRepositoryDiagnostic(
+                "multipeer_invite_timeout id=\(name) source=\(source) timeouts=\(self.inviteTimeoutCount)"
+            )
         }
         inviteTimeoutWorkItems[name] = timeoutWork
         DispatchQueue.main.asyncAfter(deadline: .now() + inviteTimeoutSeconds, execute: timeoutWork)
@@ -250,7 +268,7 @@ final class MultipeerTransport: NSObject {
     }
 
     func sendDataToAll(_ data: Data) {
-        let peers = Array(connectedPeers)
+        let peers: [MCPeerID] = Array(connectedPeers)
         guard !peers.isEmpty else {
             logger.warning("No connected peers")
             return
@@ -284,7 +302,7 @@ final class MultipeerTransport: NSObject {
     }
 
     func diagnosticsSnapshot() -> DiagnosticsSnapshot {
-        let mediumEstimate = connectedPeers.isEmpty ? "none" : "unknown"
+        let mediumEstimate: String = connectedPeers.isEmpty ? "none" : "unknown"
         return DiagnosticsSnapshot(
             connectedPeers: connectedPeers.count,
             connectingPeers: connectingPeerNames.count,
@@ -299,9 +317,40 @@ final class MultipeerTransport: NSObject {
 // MARK: - MCSessionDelegate
 
 extension MultipeerTransport: MCSessionDelegate {
+    func session(
+        _ session: MCSession,
+        didReceive stream: InputStream,
+        withName streamName: String,
+        fromPeer peerID: MCPeerID
+    ) {
+        logger.debug("Received stream from \(peerID.displayName)")
+        // Handle stream if needed
+    }
+
+    func session(
+        _ session: MCSession,
+        didStartReceivingResourceWithName resourceName: String,
+        fromPeer peerID: MCPeerID,
+        with progress: Progress
+    ) {
+        logger.debug("Receiving resource from \(peerID.displayName)")
+    }
+
+    func session(
+        _ session: MCSession,
+        didFinishReceivingResourceWithName resourceName: String,
+        fromPeer peerID: MCPeerID,
+        at localURL: URL?,
+        withError error: Error?
+    ) {
+        if let error = error {
+            logger.error("Resource receive error: \(error.localizedDescription)")
+        }
+    }
+
     func session(_ session: MCSession, peer peerID: MCPeerID, didChange state: MCSessionState) {
         logger.info("Peer \(peerID.displayName) state changed: \(state.rawValue)")
-        let peerName = peerID.displayName
+        let peerName: String = peerID.displayName
 
         switch state {
         case .connected:
@@ -325,7 +374,9 @@ extension MultipeerTransport: MCSessionDelegate {
             connectingPeerNames.remove(peerName)
             if inviteInFlight.contains(peerName) {
                 inviteDeclineCount += 1
-                appendRepositoryDiagnostic("multipeer_invite_not_connected id=\(peerName) declines=\(inviteDeclineCount)")
+                appendRepositoryDiagnostic(
+                    "multipeer_invite_not_connected id=\(peerName) declines=\(inviteDeclineCount)"
+                )
             }
             clearInviteTracking(for: peerName)
             appendRepositoryDiagnostic("multipeer_disconnected id=\(peerID.displayName)")
@@ -346,34 +397,27 @@ extension MultipeerTransport: MCSessionDelegate {
             self?.meshRepository?.onMultipeerDataReceived(peerId: peerID.displayName, data: data)
         }
     }
-
-    func session(_ session: MCSession, didReceive stream: InputStream, withName streamName: String, fromPeer peerID: MCPeerID) {
-        logger.debug("Received stream from \(peerID.displayName)")
-        // Handle stream if needed
-    }
-
-    func session(_ session: MCSession, didStartReceivingResourceWithName resourceName: String, fromPeer peerID: MCPeerID, with progress: Progress) {
-        logger.debug("Receiving resource from \(peerID.displayName)")
-    }
-
-    func session(_ session: MCSession, didFinishReceivingResourceWithName resourceName: String, fromPeer peerID: MCPeerID, at localURL: URL?, withError error: Error?) {
-        if let error = error {
-            logger.error("Resource receive error: \(error.localizedDescription)")
-        }
-    }
 }
 
 // MARK: - MCNearbyServiceAdvertiserDelegate
 
 extension MultipeerTransport: MCNearbyServiceAdvertiserDelegate {
-    func advertiser(_ advertiser: MCNearbyServiceAdvertiser, didReceiveInvitationFromPeer peerID: MCPeerID, withContext context: Data?, invitationHandler: @escaping (Bool, MCSession?) -> Void) {
+    func advertiser(
+        _ advertiser: MCNearbyServiceAdvertiser,
+        didReceiveInvitationFromPeer peerID: MCPeerID,
+        withContext context: Data?,
+        invitationHandler: @escaping (Bool, MCSession?) -> Void
+    ) {
         logger.info("Received invitation from \(peerID.displayName)")
 
         // Auto-accept invitations (mesh network)
         invitationHandler(true, session)
     }
 
-    func advertiser(_ advertiser: MCNearbyServiceAdvertiser, didNotStartAdvertisingPeer error: Error) {
+    func advertiser(
+        _ advertiser: MCNearbyServiceAdvertiser,
+        didNotStartAdvertisingPeer error: Error
+    ) {
         logger.error("Failed to start advertising: \(error.localizedDescription)")
         isAdvertising = false
     }
@@ -382,7 +426,11 @@ extension MultipeerTransport: MCNearbyServiceAdvertiserDelegate {
 // MARK: - MCNearbyServiceBrowserDelegate
 
 extension MultipeerTransport: MCNearbyServiceBrowserDelegate {
-    func browser(_ browser: MCNearbyServiceBrowser, foundPeer peerID: MCPeerID, withDiscoveryInfo info: [String: String]?) {
+    func browser(
+        _ browser: MCNearbyServiceBrowser,
+        foundPeer peerID: MCPeerID,
+        withDiscoveryInfo info: [String: String]?
+    ) {
         logger.info("Found peer: \(peerID.displayName)")
 
         // Auto-invite with debounce/in-flight guardrails to prevent invitation storms.
@@ -398,7 +446,10 @@ extension MultipeerTransport: MCNearbyServiceBrowserDelegate {
         logger.info("Lost peer: \(peerID.displayName)")
     }
 
-    func browser(_ browser: MCNearbyServiceBrowser, didNotStartBrowsingForPeers error: Error) {
+    func browser(
+        _ browser: MCNearbyServiceBrowser,
+        didNotStartBrowsingForPeers error: Error
+    ) {
         logger.error("Failed to start browsing: \(error.localizedDescription)")
         isBrowsing = false
     }

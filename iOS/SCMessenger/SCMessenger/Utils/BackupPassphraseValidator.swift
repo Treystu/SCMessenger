@@ -14,7 +14,7 @@ enum BackupPassphraseValidation: Equatable {
     case mismatch
 }
 
-private let minBackupPassphraseLength = 8
+private let minBackupPassphraseLength: Int = 8
 
 /// Validate a passphrase entered twice (entry + confirmation) before it's
 /// used to encrypt an identity backup export. A typo here means an

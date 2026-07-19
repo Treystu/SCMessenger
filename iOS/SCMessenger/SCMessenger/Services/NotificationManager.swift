@@ -10,30 +10,30 @@ import UserNotifications
 import os
 
 extension Notification.Name {
-    static let notificationRouteRequested = Notification.Name("com.scmessenger.notification-route-requested")
+    static let notificationRouteRequested: Notification.Name = Notification.Name("com.scmessenger.notification-route-requested")
 }
 
 /// Manages local notifications for incoming messages
 final class NotificationManager: NSObject {
-    static let shared = NotificationManager()
+    static let shared: NotificationManager = NotificationManager()
 
-    private let logger = Logger(subsystem: "com.scmessenger", category: "Notifications")
-    private let center = UNUserNotificationCenter.current()
+    private let logger: Logger = Logger(subsystem: "com.scmessenger", category: "Notifications")
+    private let center: UNUserNotificationCenter = UNUserNotificationCenter.current()
     private weak var repository: MeshRepository?
     private var notificationConversationMap: [String: String] = [:]
-    private var unreadMessageIds = Set<String>()
+    private var unreadMessageIds: Set<String> = Set<String>()
 
     private enum Category {
-        static let directMessage = "DIRECT_MESSAGE"
-        static let directMessageRequest = "DIRECT_MESSAGE_REQUEST"
+        static let directMessage: String = "DIRECT_MESSAGE"
+        static let directMessageRequest: String = "DIRECT_MESSAGE_REQUEST"
     }
 
     private enum UserInfoKey {
-        static let messageId = "messageId"
-        static let senderPeerId = "senderPeerId"
-        static let senderDisplayName = "senderDisplayName"
-        static let conversationId = "conversationId"
-        static let routeTarget = "routeTarget"
+        static let messageId: String = "messageId"
+        static let senderPeerId: String = "senderPeerId"
+        static let senderDisplayName: String = "senderDisplayName"
+        static let conversationId: String = "conversationId"
+        static let routeTarget: String = "routeTarget"
     }
 
     private override init() {
@@ -49,7 +49,7 @@ final class NotificationManager: NSObject {
     // MARK: - Permission
 
     func requestPermissionIfNeeded() async -> Bool {
-        let settings = await center.notificationSettings()
+        let settings: UNNotificationSettings = await center.notificationSettings()
         switch settings.authorizationStatus {
         case .authorized, .provisional, .ephemeral:
             return true
@@ -65,7 +65,7 @@ final class NotificationManager: NSObject {
 
     private func requestPermission() async -> Bool {
         do {
-            let granted = try await center.requestAuthorization(options: [.alert, .sound, .badge])
+            let granted: Bool = try await center.requestAuthorization(options: [.alert, .sound, .badge])
             logger.info("Notification permission: \(granted)")
             return granted
         } catch {
@@ -86,7 +86,7 @@ final class NotificationManager: NSObject {
     ) {
         guard decision.shouldAlert else { return }
 
-        let notificationContent = UNMutableNotificationContent()
+        let notificationContent: UNMutableNotificationContent = UNMutableNotificationContent()
         notificationContent.title = title(for: decision.kind, senderDisplayName: senderDisplayName)
         notificationContent.body = body(for: decision.kind, senderDisplayName: senderDisplayName, content: content)
         if soundEnabled {
@@ -102,11 +102,11 @@ final class NotificationManager: NSObject {
             UserInfoKey.senderPeerId: decision.senderPeerId,
             UserInfoKey.senderDisplayName: senderDisplayName,
             UserInfoKey.conversationId: decision.conversationId,
-            UserInfoKey.routeTarget: routesToRequestsInbox ? "requests" : "chat",
+            UserInfoKey.routeTarget: routesToRequestsInbox ? "requests" : "chat"
         ]
         notificationConversationMap[decision.messageId] = decision.conversationId
 
-        let request = UNNotificationRequest(
+        let request: UNNotificationRequest = UNNotificationRequest(
             identifier: decision.messageId,
             content: notificationContent,
             trigger: nil
@@ -148,7 +148,7 @@ final class NotificationManager: NSObject {
     }
 
     func markConversationRead(conversationId: String) {
-        let matching = notificationConversationMap
+        let matching: [String] = notificationConversationMap
             .filter { $0.value == conversationId }
             .map(\.key)
         for messageId in matching {
@@ -197,7 +197,7 @@ final class NotificationManager: NSObject {
     // MARK: - Notification Actions
 
     func setupNotificationCategories() {
-        let replyAction = UNTextInputNotificationAction(
+        let replyAction: UNTextInputNotificationAction = UNTextInputNotificationAction(
             identifier: "REPLY_ACTION",
             title: "Reply",
             options: [],
@@ -205,20 +205,20 @@ final class NotificationManager: NSObject {
             textInputPlaceholder: "Message"
         )
 
-        let markReadAction = UNNotificationAction(
+        let markReadAction: UNNotificationAction = UNNotificationAction(
             identifier: "MARK_READ_ACTION",
             title: "Mark as Read",
             options: []
         )
 
-        let messageCategory = UNNotificationCategory(
+        let messageCategory: UNNotificationCategory = UNNotificationCategory(
             identifier: Category.directMessage,
             actions: [replyAction, markReadAction],
             intentIdentifiers: [],
             options: []
         )
 
-        let requestCategory = UNNotificationCategory(
+        let requestCategory: UNNotificationCategory = UNNotificationCategory(
             identifier: Category.directMessageRequest,
             actions: [markReadAction],
             intentIdentifiers: [],
@@ -243,7 +243,7 @@ extension NotificationManager: UNUserNotificationCenterDelegate {
         _ center: UNUserNotificationCenter,
         didReceive response: UNNotificationResponse
     ) async {
-        let userInfo = response.notification.request.content.userInfo
+        let userInfo: [AnyHashable: Any] = response.notification.request.content.userInfo
 
         switch response.actionIdentifier {
         case "REPLY_ACTION":
@@ -264,7 +264,7 @@ extension NotificationManager: UNUserNotificationCenterDelegate {
 
     private func handleReply(text: String, userInfo: [AnyHashable: Any]) {
         guard let peerId = userInfo[UserInfoKey.senderPeerId] as? String else { return }
-        let messageId = userInfo[UserInfoKey.messageId] as? String
+        let messageId: String? = userInfo[UserInfoKey.messageId] as? String
         logger.info("Quick reply to \(peerId): \(text)")
         Task { @MainActor [weak self] in
             do {
@@ -277,7 +277,7 @@ extension NotificationManager: UNUserNotificationCenterDelegate {
     }
 
     private func handleMarkAsRead(userInfo: [AnyHashable: Any]) {
-        let messageId = userInfo[UserInfoKey.messageId] as? String
+        let messageId: String? = userInfo[UserInfoKey.messageId] as? String
         if let messageId {
             logger.info("Mark as read: \(messageId)")
         }
@@ -285,7 +285,7 @@ extension NotificationManager: UNUserNotificationCenterDelegate {
     }
 
     private func handleNotificationTap(userInfo: [AnyHashable: Any]) {
-        let messageId = userInfo[UserInfoKey.messageId] as? String
+        let messageId: String? = userInfo[UserInfoKey.messageId] as? String
         if let messageId {
             markMessageRead(messageId: messageId)
         }
@@ -303,12 +303,12 @@ extension NotificationManager: UNUserNotificationCenterDelegate {
 
     /// Verifies notification permission flow with comprehensive status reporting
     func verifyPermissionFlow() async -> PermissionVerificationResult {
-        let settings = await center.notificationSettings()
+        let settings: UNNotificationSettings = await center.notificationSettings()
 
         switch settings.authorizationStatus {
         case .notDetermined:
             logger.info("Permission: not determined, requesting...")
-            let granted = await requestPermission()
+            let granted: Bool = await requestPermission()
             return PermissionVerificationResult(
                 status: granted ? .authorized : .denied,
                 requiredAction: .requested,
@@ -343,7 +343,7 @@ extension NotificationManager: UNUserNotificationCenterDelegate {
 
     /// Returns current notification permission status as a string
     func currentPermissionStatus() async -> String {
-        let settings = await center.notificationSettings()
+        let settings: UNNotificationSettings = await center.notificationSettings()
         switch settings.authorizationStatus {
         case .notDetermined:
             return "not_determined"
@@ -362,7 +362,7 @@ extension NotificationManager: UNUserNotificationCenterDelegate {
 
     /// Returns whether notifications are currently enabled
     func areNotificationsEnabled() async -> Bool {
-        let settings = await center.notificationSettings()
+        let settings: UNNotificationSettings = await center.notificationSettings()
         return settings.authorizationStatus == .authorized ||
                settings.authorizationStatus == .provisional ||
                settings.authorizationStatus == .ephemeral

@@ -1,11 +1,3 @@
-//
-//  MeshBackgroundService.swift
-//  SCMessenger
-//
-//  Manages all iOS background execution strategies
-//  iOS equivalent of Android's MeshForegroundService
-//
-
 import BackgroundTasks
 import os
 
@@ -19,16 +11,16 @@ import os
 @Observable
 @MainActor
 final class MeshBackgroundService {
-    private let logger = Logger(subsystem: "com.scmessenger", category: "Background")
+    private let logger: Logger = Logger(subsystem: "com.scmessenger", category: "Background")
     private let meshRepository: MeshRepository
 
     // BGTask identifiers - must match Info.plist BGTaskSchedulerPermittedIdentifiers
-    static let refreshTaskId = "com.scmessenger.mesh.refresh"
-    static let processingTaskId = "com.scmessenger.mesh.processing"
+    static let refreshTaskId: String = "com.scmessenger.mesh.refresh"
+    static let processingTaskId: String = "com.scmessenger.mesh.processing"
 
     // Background task state
-    private var refreshTaskScheduled = false
-    private var processingTaskScheduled = false
+    private var refreshTaskScheduled: Bool = false
+    private var processingTaskScheduled: Bool = false
 
     init(meshRepository: MeshRepository) {
         self.meshRepository = meshRepository
@@ -97,7 +89,7 @@ final class MeshBackgroundService {
     private func scheduleBackgroundRefresh() {
         guard !refreshTaskScheduled else { return }
 
-        let request = BGAppRefreshTaskRequest(identifier: Self.refreshTaskId)
+        let request: BGAppRefreshTaskRequest = BGAppRefreshTaskRequest(identifier: Self.refreshTaskId)
         request.earliestBeginDate = Date(timeIntervalSinceNow: 15 * 60) // 15 min
 
         do {
@@ -113,7 +105,7 @@ final class MeshBackgroundService {
     private func scheduleBackgroundProcessing() {
         guard !processingTaskScheduled else { return }
 
-        let request = BGProcessingTaskRequest(identifier: Self.processingTaskId)
+        let request: BGProcessingTaskRequest = BGProcessingTaskRequest(identifier: Self.processingTaskId)
         request.requiresNetworkConnectivity = false // mesh works offline
         request.requiresExternalPower = false
         request.earliestBeginDate = Date(timeIntervalSinceNow: 60 * 60) // 1 hour
@@ -197,7 +189,7 @@ final class MeshBackgroundService {
                 try await self.meshRepository.updatePeerLedger()
 
                 // Run Rust core maintenance cycle (25s budget)
-                let report = self.meshRepository.ironCore?.runMaintenanceCycle(budgetMs: 25000) ?? "no core"
+                let report: String = self.meshRepository.ironCore?.runMaintenanceCycle(budgetMs: 25000) ?? "no core"
                 self.logger.info("Maintenance cycle: \(report)")
 
                 task.setTaskCompleted(success: true)

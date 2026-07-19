@@ -19,12 +19,12 @@ final class ReceiptUnificationTests: XCTestCase {
     /// - Parses it back via core's decodeReceiptToComponents()
     /// - Verifies no data loss in round-trip
     func testRoundTripReceiptEncoding() throws {
-        let messageId = "test-message-123"
-        let status = "Delivered"
+        let messageId: String = "test-message-123"
+        let status: String = "Delivered"
         let timestamp: UInt64 = 1234567890
 
         // Encode via core function (unified across all platforms)
-        let encodedData = try encodeReceiptFromComponents(
+        let encodedData: Data = try encodeReceiptFromComponents(
             messageId: messageId,
             status: status,
             timestamp: timestamp
@@ -38,7 +38,7 @@ final class ReceiptUnificationTests: XCTestCase {
         )
 
         // Decode back via core function (unified across all platforms)
-        let decodedReceipt = try decodeReceiptToComponents(data: encodedData)
+        let decodedReceipt: ReceiptComponents = try decodeReceiptToComponents(data: encodedData)
 
         // Verify round-trip integrity
         XCTAssertEqual(
@@ -60,19 +60,19 @@ final class ReceiptUnificationTests: XCTestCase {
 
     /// Test encoding different delivery statuses
     func testEncodeReceiptWithDifferentStatuses() throws {
-        let messageId = "msg-456"
+        let messageId: String = "msg-456"
         let timestamp: UInt64 = 9876543210
 
         for status in ["Sent", "Delivered"] {
             // Encode components
-            let encodedData = try encodeReceiptFromComponents(
+            let encodedData: Data = try encodeReceiptFromComponents(
                 messageId: messageId,
                 status: status,
                 timestamp: timestamp
             )
 
             // Decode and verify
-            let decodedReceipt = try decodeReceiptToComponents(data: encodedData)
+            let decodedReceipt: ReceiptComponents = try decodeReceiptToComponents(data: encodedData)
 
             XCTAssertEqual(
                 decodedReceipt.status,
@@ -84,7 +84,7 @@ final class ReceiptUnificationTests: XCTestCase {
 
     /// Test decoding invalid data raises error
     func testDecodingInvalidDataThrows() throws {
-        let invalidData = Data([0xFF, 0xFE, 0xFD])
+        let invalidData: Data = Data([0xFF, 0xFE, 0xFD])
 
         XCTAssertThrowsError(
             try decodeReceiptToComponents(data: invalidData),

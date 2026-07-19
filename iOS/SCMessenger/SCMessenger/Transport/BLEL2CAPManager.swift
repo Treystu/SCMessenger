@@ -14,7 +14,7 @@ import os
 /// L2CAP provides connection-oriented channels over BLE for efficient bulk transfer
 /// Used when GATT characteristics are too small/slow for large messages
 final class BLEL2CAPManager: NSObject {
-    private let logger = Logger(subsystem: "com.scmessenger", category: "BLE-L2CAP")
+    private let logger: Logger = Logger(subsystem: "com.scmessenger", category: "BLE-L2CAP")
     private weak var meshRepository: MeshRepository?
 
     // Channel tracking
@@ -55,8 +55,8 @@ final class BLEL2CAPManager: NSObject {
 
         data.withUnsafeBytes { (bytes: UnsafeRawBufferPointer) in
             guard let baseAddress = bytes.baseAddress else { return }
-            let buffer = baseAddress.assumingMemoryBound(to: UInt8.self)
-            let bytesWritten = outputStream.write(buffer, maxLength: data.count)
+            let buffer: UnsafePointer<UInt8> = baseAddress.assumingMemoryBound(to: UInt8.self)
+            let bytesWritten: Int = outputStream.write(buffer, maxLength: data.count)
 
             if bytesWritten < 0 {
                 logger.error("Write error: \(outputStream.streamError?.localizedDescription ?? "unknown")")
@@ -130,13 +130,13 @@ extension BLEL2CAPManager: StreamDelegate {
     }
 
     private func readData(from inputStream: InputStream) {
-        let bufferSize = 1024
-        var buffer = [UInt8](repeating: 0, count: bufferSize)
+        let bufferSize: Int = 1024
+        var buffer: [UInt8] = [UInt8](repeating: 0, count: bufferSize)
 
-        let bytesRead = inputStream.read(&buffer, maxLength: bufferSize)
+        let bytesRead: Int = inputStream.read(&buffer, maxLength: bufferSize)
 
         if bytesRead > 0 {
-            let data = Data(buffer.prefix(bytesRead))
+            let data: Data = Data(buffer.prefix(bytesRead))
             logger.debug("Received \(bytesRead) bytes over L2CAP")
 
             // Find peer ID for this stream
