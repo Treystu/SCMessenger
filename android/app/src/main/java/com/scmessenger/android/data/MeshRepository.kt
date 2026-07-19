@@ -84,7 +84,7 @@ open class MeshRepository(
          * ANR FIX: Get bootstrap nodes synchronously without network I/O.
          * Used by Settings screen to avoid UI thread blocking.
          */
-        fun getBootstrapNodesForSettings(): List<String> = emptyList()
+        fun getBootstrapNodesForSettings(): List<String> = listOf("/ip4/100.56.248.69/tcp/9001")
 
         interface BootstrapSource {
             val name: String
@@ -8489,7 +8489,7 @@ open class MeshRepository(
         }
 
         // Build prioritized address list based on network type
-        val prioritizedAddresses = emptyList<String>()
+        val prioritizedAddresses = listOf("/ip4/100.56.248.69/tcp/9001")
 
         // Proactively probe known relay ports to deprioritize blocked addresses
         val probeTargets = emptyList<Pair<String, Int>>()

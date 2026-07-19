@@ -39,6 +39,10 @@ class WifiAwareTransport(
 
     companion object {
         const val TLV_TYPE_PORT: Byte = 0x01
+        private const val SERVICE_NAME = "scmessenger"
+        private const val AWARE_PORT = 8765
+        private const val CONNECT_TIMEOUT_MS = 5000
+        private const val LOOPBACK_ADDRESS = "127.0.0.1"
 
         fun encodePortTlv(port: Int): ByteArray {
             return byteArrayOf(TLV_TYPE_PORT, 2, ((port shr 8) and 0xff).toByte(), (port and 0xff).toByte())
@@ -561,10 +565,4 @@ class WifiAwareTransport(
         scope.cancel()
     }
 
-    companion object {
-        private const val SERVICE_NAME = "scmessenger"
-        private const val AWARE_PORT = 8765
-        private const val CONNECT_TIMEOUT_MS = 5000
-        private const val LOOPBACK_ADDRESS = "127.0.0.1"
-    }
 }

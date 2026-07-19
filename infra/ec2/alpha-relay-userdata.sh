@@ -7,14 +7,19 @@
 # Runs `scm relay` (the purpose-built headless relay command: no stdin,
 # runs forever, listed in cli/src/main.rs) rather than `scm start`.
 #
-# Same memory-safety fixes as the farm-sim fleet (confirmed necessary via
-# live testing on 2026-07-18): CARGO_BUILD_JOBS=1 + swap, since this is
-# still a single t3.micro (1GiB RAM) -- the only instance type this IAM
-# user's policy allows.
+# Escalated from t3.micro to m7i-flex.large (2026-07-18) after a live
+# t3.micro build genuinely stalled: confirmed via direct SSH inspection that
+# CARGO_BUILD_JOBS=1 does not stop cargo from running one host-context and
+# one target-context compile of uniffi_bindgen CONCURRENTLY (two ~230MB
+# rustc processes competing for a 913MB box -- CARGO_BUILD_JOBS bounds jobs
+# within each unit graph separately, not across host vs target). m7i-flex
+# .large's 8GB comfortably fits both without swapping, so CARGO_BUILD_JOBS
+# is set to 2 (matching vCPU count, not 1) and swap is a much smaller
+# defense-in-depth margin rather than the primary fix.
 set -ex
 exec > /var/log/user-data.log 2>&1
 
-fallocate -l 6G /swapfile
+fallocate -l 2G /swapfile
 chmod 600 /swapfile
 mkswap /swapfile
 swapon /swapfile
@@ -29,7 +34,7 @@ cd /opt
 git clone --depth 1 --branch main https://github.com/Sovereign-Communication/SCMessenger.git SCMessenger
 cd SCMessenger
 
-docker build --build-arg CARGO_BUILD_JOBS=1 -t scmessenger:latest -f docker/Dockerfile .
+docker build --build-arg CARGO_BUILD_JOBS=2 -t scmessenger:latest -f docker/Dockerfile .
 docker builder prune -af || true
 
 # --network host + explicit `scm relay ...` command: bypasses

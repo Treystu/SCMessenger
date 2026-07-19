@@ -14,10 +14,18 @@
 #   instance ID, not just "yes", because real people are relying on this
 #   staying up.
 #
-# Same IAM-boundary reality as farm-sim: t3.micro is the only instance type
-# this IAM user can actually launch (confirmed via --dry-run probes,
-# 2026-07-18) -- ec2:CreateVpc/CreateSubnet are denied too, so this reuses
-# the account's existing default VPC, same as farm-sim does.
+# Instance type: originally t3.micro (the only type IAM allowed at first),
+# escalated to m7i-flex.large after a live t3.micro build genuinely stalled
+# -- confirmed via direct SSH inspection (2026-07-18) that CARGO_BUILD_JOBS=1
+# does not prevent cargo from running one host-context and one target-context
+# compile of uniffi_bindgen CONCURRENTLY (two ~230MB rustc processes, same
+# PIDs, same start times, near-zero CPU-time growth across repeated checks
+# over 3+ hours -- genuine thrashing stall, not OOM, not just slow).
+# CARGO_BUILD_JOBS bounds jobs within cargo's own host/target unit graphs
+# separately, not across them, so t3.micro's 913MB can't safely fit both
+# concurrent copies regardless of that setting. m7i-flex.large's 8GB
+# absorbs this without any swapping. ec2:CreateVpc/CreateSubnet remain
+# denied -- this still reuses the account's existing default VPC.
 #
 # Usage:
 #   ./launch-alpha-relay.sh launch   [region]
@@ -29,7 +37,7 @@ export PATH="$PATH:/c/Users/SCM/AppData/Roaming/Python/Python314/Scripts"
 
 ACTION=${1:-launch}
 REGION=${2:-us-east-1}
-INSTANCE_TYPE="t3.micro"
+INSTANCE_TYPE="m7i-flex.large"
 KEY_NAME="scmessenger-farm-sim-key-v2"
 GIT_REPO="https://github.com/Sovereign-Communication/SCMessenger.git"
 SG_NAME="scmessenger-alpha-relay-sg"
