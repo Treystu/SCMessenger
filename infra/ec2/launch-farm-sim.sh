@@ -6,9 +6,9 @@
 # and ec2:CreateSubnet all explicitly denied (verified via dry-run/no-op
 # probes on 2026-07-18). It DOES have ec2:RunInstances, ec2:TerminateInstances,
 # ec2:CreateSecurityGroup, ec2:AuthorizeSecurityGroupIngress, ec2:CreateTags,
-# ec2:DescribeImages/Vpcs/Subnets. So: no custom VPC (use the account's
-# existing default VPC/subnets, which already span every AZ), no
-# CloudFormation (call the EC2 API directly).
+# ec2:DeleteSecurityGroup, ec2:DescribeImages/Vpcs/Subnets. So: no custom VPC
+# (use the account's existing default VPC/subnets, which already span every
+# AZ), no CloudFormation (call the EC2 API directly).
 #
 # Usage:
 #   ./launch-farm-sim.sh launch   [region]   # create SG + 7 instances
@@ -33,10 +33,19 @@ GIT_REPO="https://github.com/Sovereign-Communication/SCMessenger.git"
 GIT_REF="main"
 SG_NAME="scmessenger-farm-sim-sg"
 STATE_FILE="$(dirname "$0")/farm-sim-state.json"
+RECOVERY_FILE="$(dirname "$0")/farm-sim-recovery.txt"
 USERDATA_TEMPLATE="$(dirname "$0")/node-userdata-template.sh"
 
-log() { echo "[INFO] $*"; }
-ok()  { echo "[OK] $*"; }
+# log()/ok() MUST write to stderr, not stdout: launch_node()'s return value
+# is its final `echo "$instance_id:$private_ip"` on stdout, captured by the
+# caller via `result=$(launch_node ...)`. If these write to stdout too, the
+# command substitution captures ALL of it -- multiple lines -- and the
+# caller's `read -r X_ID X_IP <<< "$result"` (which only consumes the FIRST
+# line of a here-string) ends up with the log message as the "ID" and an
+# empty IP. Confirmed via direct repro during audit on 2026-07-18: this
+# silently corrupted every node's bootstrap multiaddr before being caught.
+log() { echo "[INFO] $*" >&2; }
+ok()  { echo "[OK] $*" >&2; }
 err() { echo "[ERROR] $*" >&2; }
 
 render_userdata() {
@@ -109,6 +118,11 @@ ensure_security_group() {
     --vpc-id "$VPC_ID" \
     --query 'GroupId' --output text)
 
+  if [[ ! "$SG_ID" =~ ^sg-[0-9a-f]+$ ]]; then
+    err "create-security-group did not return a valid SG ID: '$SG_ID'"
+    exit 1
+  fi
+
   aws ec2 authorize-security-group-ingress --region "$REGION" \
     --group-id "$SG_ID" --protocol tcp --port 22 --cidr 0.0.0.0/0 >/dev/null
 
@@ -133,6 +147,19 @@ launch_node() {
   userdata_file=$(mktemp)
   render_userdata "$node_name" "$listen_port" "$bootstrap" > "$userdata_file"
 
+  # NOTE: deliberately NOT using --user-data "file://$userdata_file". In
+  # this Windows/Git-Bash environment, `mktemp` produces a POSIX-style path
+  # (/tmp/tmp.XXXXXXXXXX) that Git Bash itself resolves fine, but the AWS
+  # CLI's paramfile loader (invoked as aws.cmd, a native Windows Python
+  # entry point) fails to resolve that same path -- confirmed via a live
+  # deploy attempt on 2026-07-18: "Error parsing parameter '--user-data':
+  # Unable to load paramfile file:///tmp/tmp.XXXXXXXXXX: No such file or
+  # directory". Passing the rendered content inline sidesteps any path
+  # translation between the two environments entirely.
+  local userdata_content
+  userdata_content=$(cat "$userdata_file")
+  rm -f "$userdata_file"
+
   local instance_id
   instance_id=$(aws ec2 run-instances --region "$REGION" \
     --image-id "$AMI_ID" \
@@ -140,12 +167,10 @@ launch_node() {
     --key-name "$KEY_NAME" \
     --subnet-id "$subnet_id" \
     --security-group-ids "$SG_ID" \
-    --block-device-mappings "[{\"DeviceName\":\"/dev/sda1\",\"Ebs\":{\"VolumeSize\":16,\"VolumeType\":\"gp3\",\"DeleteOnTermination\":true}}]" \
-    --user-data "file://$userdata_file" \
+    --block-device-mappings "[{\"DeviceName\":\"/dev/sda1\",\"Ebs\":{\"VolumeSize\":20,\"VolumeType\":\"gp3\",\"DeleteOnTermination\":true}}]" \
+    --user-data "$userdata_content" \
     --tag-specifications "ResourceType=instance,Tags=[{Key=Name,Value=scm-${node_name}},{Key=FarmSim,Value=true},{Key=Node,Value=${node_name}}]" \
     --query 'Instances[0].InstanceId' --output text)
-
-  rm -f "$userdata_file"
 
   # set -e does not reliably propagate out of a failure inside `$(...)`
   # when the substitution feeds `read <<<` (a known bash gotcha) -- so
@@ -166,11 +191,21 @@ launch_node() {
     exit 1
   fi
 
+  # Record to the recovery file THE MOMENT this instance exists, not at the
+  # end of do_launch. If a later node's launch_node call fails (or the
+  # final instance-running wait fails/times out), this is the only trace of
+  # already-billing instances -- STATE_FILE proper is only assembled once
+  # at the end, and do_status/do_teardown both currently no-op cleanly
+  # (misleadingly "successfully") when STATE_FILE is absent.
+  echo "${node_name}:${instance_id}:${private_ip}" >> "$RECOVERY_FILE"
+
   ok "$node_name -> $instance_id (private $private_ip)"
   echo "$instance_id:$private_ip"
 }
 
 do_launch() {
+  : > "$RECOVERY_FILE"
+
   discover_vpc_and_subnets
   discover_ami
   ensure_security_group
@@ -185,28 +220,34 @@ do_launch() {
   local result
 
   log "Launching relay1 (bootstrap root, no upstream)..."
-  result=$(launch_node relay1 "$SUBNET_A" 4001 "") || { err "launch_node failed for relay1"; exit 1; }
+  result=$(launch_node relay1 "$SUBNET_A" 4001 "") || {
+    err "launch_node failed for relay1 -- check $RECOVERY_FILE for any instances that DID launch before this"
+    exit 1
+  }
   IFS=':' read -r RELAY1_ID RELAY1_IP <<< "$result"
 
   log "Launching relay2 (bootstraps off relay1)..."
-  result=$(launch_node relay2 "$SUBNET_B" 4002 "/ip4/${RELAY1_IP}/tcp/4001") || { err "launch_node failed for relay2"; exit 1; }
+  result=$(launch_node relay2 "$SUBNET_B" 4002 "/ip4/${RELAY1_IP}/tcp/4001") || {
+    err "launch_node failed for relay2 -- check $RECOVERY_FILE for any instances that DID launch before this"
+    exit 1
+  }
   IFS=':' read -r RELAY2_ID RELAY2_IP <<< "$result"
 
   log "Launching user nodes alice/bob/carol/david (bootstrap off relay1)..."
-  result=$(launch_node alice "$SUBNET_A" 0 "/ip4/${RELAY1_IP}/tcp/4001") || { err "launch_node failed for alice"; exit 1; }
+  result=$(launch_node alice "$SUBNET_A" 0 "/ip4/${RELAY1_IP}/tcp/4001") || { err "launch_node failed for alice -- see $RECOVERY_FILE"; exit 1; }
   IFS=':' read -r ALICE_ID ALICE_IP <<< "$result"
 
-  result=$(launch_node bob "$SUBNET_B" 0 "/ip4/${RELAY1_IP}/tcp/4001") || { err "launch_node failed for bob"; exit 1; }
+  result=$(launch_node bob "$SUBNET_B" 0 "/ip4/${RELAY1_IP}/tcp/4001") || { err "launch_node failed for bob -- see $RECOVERY_FILE"; exit 1; }
   IFS=':' read -r BOB_ID BOB_IP <<< "$result"
 
-  result=$(launch_node carol "$SUBNET_A" 0 "/ip4/${RELAY1_IP}/tcp/4001") || { err "launch_node failed for carol"; exit 1; }
+  result=$(launch_node carol "$SUBNET_A" 0 "/ip4/${RELAY1_IP}/tcp/4001") || { err "launch_node failed for carol -- see $RECOVERY_FILE"; exit 1; }
   IFS=':' read -r CAROL_ID CAROL_IP <<< "$result"
 
-  result=$(launch_node david "$SUBNET_B" 0 "/ip4/${RELAY1_IP}/tcp/4001") || { err "launch_node failed for david"; exit 1; }
+  result=$(launch_node david "$SUBNET_B" 0 "/ip4/${RELAY1_IP}/tcp/4001") || { err "launch_node failed for david -- see $RECOVERY_FILE"; exit 1; }
   IFS=':' read -r DAVID_ID DAVID_IP <<< "$result"
 
   log "Launching eve (bootstraps off relay2 -- forces a 2-hop relay path)..."
-  result=$(launch_node eve "$SUBNET_C" 0 "/ip4/${RELAY2_IP}/tcp/4002") || { err "launch_node failed for eve"; exit 1; }
+  result=$(launch_node eve "$SUBNET_C" 0 "/ip4/${RELAY2_IP}/tcp/4002") || { err "launch_node failed for eve -- see $RECOVERY_FILE"; exit 1; }
   IFS=':' read -r EVE_ID EVE_IP <<< "$result"
 
   log "Waiting for all 7 instances to reach 'running' state..."
@@ -219,16 +260,23 @@ do_launch() {
     --query 'Reservations[*].Instances[0].[Tags[?Key==`Node`].Value|[0],InstanceId,PublicIpAddress,PrivateIpAddress]' \
     --output json)
 
+  NODES_JSON=$(echo "$PUBLIC_IPS_JSON" | python -c "
+import json, sys
+rows = json.load(sys.stdin)
+print(json.dumps({r[0]: {'instance_id': r[1], 'public_ip': r[2], 'private_ip': r[3]} for r in rows}, indent=2))
+")
+
+  if [ -z "$NODES_JSON" ] || [ "$NODES_JSON" = "null" ]; then
+    err "Failed to build node JSON from describe-instances output -- STATE_FILE NOT written. Raw recovery data is in $RECOVERY_FILE (node:instance_id:private_ip per line); the public IPs above and the security group ($SG_ID) still need manual teardown if you abandon this run."
+    exit 1
+  fi
+
   cat > "$STATE_FILE" <<EOF
 {
   "region": "$REGION",
   "vpc_id": "$VPC_ID",
   "security_group_id": "$SG_ID",
-  "nodes": $(echo "$PUBLIC_IPS_JSON" | python -c "
-import json, sys
-rows = json.load(sys.stdin)
-print(json.dumps({r[0]: {'instance_id': r[1], 'public_ip': r[2], 'private_ip': r[3]} for r in rows}, indent=2))
-")
+  "nodes": $NODES_JSON
 }
 EOF
 
@@ -245,7 +293,13 @@ EOF
 
 do_status() {
   if [ ! -f "$STATE_FILE" ]; then
-    err "No state file at $STATE_FILE -- run '$0 launch' first"
+    err "No state file at $STATE_FILE"
+    if [ -f "$RECOVERY_FILE" ] && [ -s "$RECOVERY_FILE" ]; then
+      err "But $RECOVERY_FILE has entries from a partial launch -- inspect it manually:"
+      cat "$RECOVERY_FILE" >&2
+    else
+      err "Nothing to show -- run '$0 launch' first"
+    fi
     exit 1
   fi
   local ids
@@ -256,19 +310,40 @@ do_status() {
 }
 
 do_teardown() {
+  local force=${3:-}
+
   if [ ! -f "$STATE_FILE" ]; then
-    err "No state file at $STATE_FILE -- nothing to tear down"
+    if [ -f "$RECOVERY_FILE" ] && [ -s "$RECOVERY_FILE" ]; then
+      err "No STATE_FILE, but $RECOVERY_FILE has entries from a partial/crashed launch:"
+      cat "$RECOVERY_FILE" >&2
+      err "These may still be running and billing. Terminate manually, e.g.:"
+      err "  aws ec2 terminate-instances --region $REGION --instance-ids \$(awk -F: '{print \$2}' $RECOVERY_FILE | tr '\n' ' ')"
+      exit 1
+    fi
+    err "No state file at $STATE_FILE and no recovery entries -- nothing to tear down"
     exit 0
   fi
+
   local ids sg_id
   ids=$(python -c "import json; d=json.load(open('$STATE_FILE')); print(' '.join(n['instance_id'] for n in d['nodes'].values()))")
   sg_id=$(python -c "import json; print(json.load(open('$STATE_FILE'))['security_group_id'])")
 
   echo "[TEARDOWN] About to terminate: $ids"
-  read -p "Type 'yes' to confirm: " confirm
-  if [ "$confirm" != "yes" ]; then
-    echo "[CANCEL] Teardown cancelled"
-    exit 0
+  if [ "$force" != "--force" ]; then
+    # A plain `read -p` here would silently take the "cancelled" branch
+    # (exit 0 -- same code as a real successful teardown) if this script is
+    # ever invoked without a TTY (cron, an orchestrator wrapper, CI). Fail
+    # loudly instead so a non-interactive caller can't mistake "no-op'd"
+    # for "torn down".
+    if [ ! -t 0 ]; then
+      err "No TTY attached and --force not passed -- refusing to guess. Re-run as: $0 teardown $REGION --force"
+      exit 1
+    fi
+    read -p "Type 'yes' to confirm: " confirm
+    if [ "$confirm" != "yes" ]; then
+      echo "[CANCEL] Teardown cancelled"
+      exit 0
+    fi
   fi
 
   aws ec2 terminate-instances --region "$REGION" --instance-ids $ids
@@ -276,16 +351,19 @@ do_teardown() {
   aws ec2 wait instance-terminated --region "$REGION" --instance-ids $ids
 
   log "Deleting security group $sg_id..."
-  aws ec2 delete-security-group --region "$REGION" --group-id "$sg_id" || \
-    log "SG deletion failed (may still be referenced) -- retry manually later"
+  if aws ec2 delete-security-group --region "$REGION" --group-id "$sg_id"; then
+    ok "Security group deleted"
+  else
+    err "SG deletion failed (may still be referenced) -- $sg_id needs manual cleanup, it is NOT confirmed deleted despite this script otherwise reporting teardown complete"
+  fi
 
-  rm -f "$STATE_FILE"
+  rm -f "$STATE_FILE" "$RECOVERY_FILE"
   ok "Teardown complete"
 }
 
 case "$ACTION" in
   launch)   do_launch ;;
   status)   do_status ;;
-  teardown) do_teardown ;;
-  *) err "Usage: $0 [launch|status|teardown] [region]"; exit 1 ;;
+  teardown) do_teardown "$@" ;;
+  *) err "Usage: $0 [launch|status|teardown] [region] [--force]"; exit 1 ;;
 esac

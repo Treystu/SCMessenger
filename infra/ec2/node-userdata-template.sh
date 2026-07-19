@@ -7,11 +7,16 @@
 # Runs on Ubuntu 22.04. Adds swap before building: t3.micro has only 1GiB RAM,
 # and `cargo build --release` on this workspace (libp2p, tokio, rustls, etc.)
 # can exceed that during linking. Without swap the OOM killer silently kills
-# rustc/the linker mid-build.
+# rustc/the linker mid-build. The Dockerfile itself now overrides
+# CARGO_PROFILE_RELEASE_LTO/CODEGEN_UNITS to avoid fat-LTO's much larger
+# memory footprint (the actual root-cause fix per build-fit audit), but this
+# swap is kept as defense-in-depth headroom rather than relying on that
+# alone -- 4G leaves margin even if some other step (git clone, docker
+# builder cache) adds memory pressure the LTO change doesn't touch.
 set -ex
 exec > /var/log/user-data.log 2>&1
 
-fallocate -l 2G /swapfile
+fallocate -l 4G /swapfile
 chmod 600 /swapfile
 mkswap /swapfile
 swapon /swapfile

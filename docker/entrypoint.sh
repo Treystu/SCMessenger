@@ -26,10 +26,17 @@ if [ -f "$CONFIG_FILE" ]; then
     jq --arg port "$FINAL_PORT" '.listen_port = ($port | tonumber)' "$CONFIG_FILE" > "$tmp" && mv "$tmp" "$CONFIG_FILE"
 fi
 
-# Add additional bootstrap nodes from environment variable (merged with defaults)
-if [ ! -z "$BOOTSTRAP_NODES" ]; then
+# Add additional bootstrap nodes from environment variable (merged with defaults).
+# Must match SC_BOOTSTRAP_NODES exactly: that's the name cli/src/bootstrap.rs's
+# default_bootstrap_nodes() actually reads at runtime (independent of this
+# config.json merge). Before this fix the two disagreed (this block checked
+# plain BOOTSTRAP_NODES), so config.json's bootstrap_nodes array stayed
+# permanently empty -- a misleading diagnostic trap for anyone inspecting
+# config.json to debug topology issues, even though the running node still
+# picked up the right bootstrap peer via its own env-var read.
+if [ ! -z "$SC_BOOTSTRAP_NODES" ]; then
     echo "Adding environment bootstrap nodes to defaults..."
-    IFS=',' read -ra ADDR <<< "$BOOTSTRAP_NODES"
+    IFS=',' read -ra ADDR <<< "$SC_BOOTSTRAP_NODES"
     for i in "${ADDR[@]}"; do
         node=$(echo "$i" | xargs)  # Trim whitespace
         if [ ! -z "$node" ]; then

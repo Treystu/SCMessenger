@@ -42,7 +42,21 @@ COPY cli/build.rs cli/
 COPY mobile/build.rs mobile/
 COPY desktop_bridge/build.rs desktop_bridge/
 
-# Build the CLI and stress-test harness
+# Build the CLI and stress-test harness.
+#
+# Overrides the workspace's [profile.release] lto=true (fat)/codegen-units=1
+# via env var rather than editing Cargo.toml: fat LTO with a single codegen
+# unit is the most memory-hungry link configuration rustc/LLVM has, commonly
+# needing 4GB+ RAM at the final link step alone for a dependency graph this
+# size (659 locked packages, full libp2p feature set, two web stacks, the
+# crypto stack). That's fine on a normal dev machine or CI runner, but this
+# image also needs to build unattended on farm-sim test nodes as small as a
+# 1GiB-RAM t3.micro -- this override trades a slightly less-optimized binary
+# for a build that reliably fits in constrained memory. Does not affect the
+# UniFFI mobile/wasm build paths, which build via separate gen_kotlin/
+# gen_swift/wasm-pack invocations outside this Dockerfile.
+ENV CARGO_PROFILE_RELEASE_LTO=false
+ENV CARGO_PROFILE_RELEASE_CODEGEN_UNITS=16
 RUN cargo build --release --bin scmessenger-cli --bin stress-test
 
 # Runtime stage
