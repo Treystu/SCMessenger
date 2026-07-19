@@ -25,6 +25,9 @@ tokio = { workspace = true }
 anyhow = { workspace = true }
 # UniFFI with wasm single-threaded feature for wasm32 target
 uniffi = { workspace = true, features = ["wasm-unstable-single-threaded"] }
+# getrandom 0.4+ requires this feature explicitly for wasm32-unknown-unknown
+# (pulled in transitively; listed directly here just to set its feature flag)
+getrandom = { version = "0.4", features = ["wasm_js"] }
 
 # WASM-specific dependencies
 console_error_panic_hook = "0.1"
