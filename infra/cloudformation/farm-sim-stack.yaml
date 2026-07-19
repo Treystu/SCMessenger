@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: 'Farm-Sim 7-Node Micro-Instance Topology for SCMessenger Testing'
+Description: 'Farm-Sim 7-Node Micro-Instance Topology for SCMessenger Testing (one container per EC2 instance)'
 
 Parameters:
   KeyName:
@@ -12,17 +12,22 @@ Parameters:
     Default: t3.micro
     AllowedValues:
       - t3.micro
-    Description: Instance type (free tier only)
+    Description: Instance type (free-tier-eligible size only)
 
-Mappings:
-  RegionAMI:
-    us-east-1:
-      AMI: ami-0c55b159cbfafe1f0  # Ubuntu 22.04 LTS
-    us-west-2:
-      AMI: ami-0a8e758f5e873d1c1  # Ubuntu 22.04 LTS
+  GitRepoUrl:
+    Type: String
+    Default: https://github.com/Sovereign-Communication/SCMessenger.git
+    Description: Public repo URL each instance clones on boot
+
+  GitRef:
+    Type: String
+    Default: main
+    Description: Branch/tag/commit to check out on each instance
 
 Resources:
-  # VPC
+  # ----------------------------------------------------------------------
+  # Networking
+  # ----------------------------------------------------------------------
   FarmSimVPC:
     Type: AWS::EC2::VPC
     Properties:
@@ -33,7 +38,6 @@ Resources:
         - Key: Name
           Value: scmessenger-farm-sim-vpc
 
-  # Internet Gateway
   InternetGateway:
     Type: AWS::EC2::InternetGateway
     Properties:
@@ -47,7 +51,6 @@ Resources:
       VpcId: !Ref FarmSimVPC
       InternetGatewayId: !Ref InternetGateway
 
-  # Subnets
   SubnetA:
     Type: AWS::EC2::Subnet
     Properties:
@@ -81,7 +84,6 @@ Resources:
         - Key: Name
           Value: scmessenger-subnet-c
 
-  # Route Table
   RouteTable:
     Type: AWS::EC2::RouteTable
     Properties:
@@ -116,50 +118,103 @@ Resources:
       SubnetId: !Ref SubnetC
       RouteTableId: !Ref RouteTable
 
+  # ----------------------------------------------------------------------
   # Security Group
+  # NOTE: intra-VPC rule is deliberately broad (-1 all protocols) because
+  # Phase 3 failure-injection tests use `tc netem` on the *instances*
+  # themselves (not the SG) to simulate latency/loss/partition. Locking
+  # the SG down further would just make those tests fight the firewall
+  # instead of the thing we're actually trying to test.
+  # ----------------------------------------------------------------------
   FarmSimSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
       GroupDescription: Security group for farm-sim nodes
       VpcId: !Ref FarmSimVPC
       SecurityGroupIngress:
-        # SSH
         - IpProtocol: tcp
           FromPort: 22
           ToPort: 22
           CidrIp: 0.0.0.0/0
-        # All traffic within VPC
+          Description: SSH from anywhere (testing convenience)
         - IpProtocol: -1
           CidrIp: 10.0.0.0/16
+          Description: All protocols between farm-sim nodes (P2P + health checks)
       SecurityGroupEgress:
-        # All outbound
         - IpProtocol: -1
           CidrIp: 0.0.0.0/0
       Tags:
         - Key: Name
           Value: scmessenger-farm-sim-sg
 
-  # EC2 Instances
+  # ----------------------------------------------------------------------
+  # EC2 Instances — one container per instance, built independently.
+  #
+  # Each instance is self-contained: adds swap (t3.micro has only 1GiB RAM
+  # and `cargo build --release` on this workspace's dependency graph
+  # — libp2p, tokio, rustls, etc. — can exceed that during linking),
+  # builds its own image from source, then runs a single container with
+  # --network host (so libp2p binds directly to the instance's real
+  # interface instead of fighting Docker NAT — matches the "IP is the
+  # source of truth" ledger design in cli/src/ledger.rs).
+  #
+  # Bootstrap wiring: relay1 is the root (no bootstrap). relay2 and the
+  # four Subnet-A/B user nodes bootstrap off relay1's PRIVATE ip (cheaper/
+  # faster than going out over the public IP and back in). eve bootstraps
+  # off relay2, forcing a 2-hop relay path to validate multi-hop routing.
+  # ----------------------------------------------------------------------
+
   RelayNode1:
     Type: AWS::EC2::Instance
     Properties:
-      ImageId: !FindInMap [RegionAMI, !Ref 'AWS::Region', AMI]
+      ImageId: '{{resolve:ssm:/aws/service/canonical/ubuntu/server/22.04/stable/current/amd64/hvm/ebs-gp2/ami-id}}'
       InstanceType: !Ref InstanceType
       KeyName: !Ref KeyName
       SubnetId: !Ref SubnetA
       SecurityGroupIds:
         - !Ref FarmSimSecurityGroup
-      UserData: !Base64 |
-        #!/bin/bash
-        set -e
-        apt-get update
-        apt-get install -y docker.io git curl jq
-        systemctl start docker
-        systemctl enable docker
-        cd /opt
-        git clone https://github.com/Sovereign-Communication/SCMessenger.git
-        cd SCMessenger
-        docker compose -f docker/docker-compose-lite.yml up -d relay1
+      BlockDeviceMappings:
+        - DeviceName: /dev/sda1
+          Ebs:
+            VolumeSize: 16
+            VolumeType: gp3
+            DeleteOnTermination: true
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          set -ex
+          exec > /var/log/user-data.log 2>&1
+
+          # Swap: t3.micro has 1GiB RAM; cargo build --release on this
+          # workspace can exceed that during linking. Without swap the
+          # OOM killer takes rustc/the linker and the build silently dies.
+          fallocate -l 2G /swapfile
+          chmod 600 /swapfile
+          mkswap /swapfile
+          swapon /swapfile
+          echo '/swapfile none swap sw 0 0' >> /etc/fstab
+
+          apt-get update
+          apt-get install -y docker.io git curl jq
+          systemctl start docker
+          systemctl enable docker
+
+          cd /opt
+          git clone --depth 1 --branch ${GitRef} ${GitRepoUrl} SCMessenger
+          cd SCMessenger
+
+          docker build -t scmessenger:latest -f docker/Dockerfile .
+          docker builder prune -af || true
+
+          docker run -d \
+            --name scm-node \
+            --network host \
+            --restart unless-stopped \
+            -e RUST_LOG=info,scmessenger=debug \
+            -e NODE_NAME=relay1 \
+            -e LISTEN_PORT=4001 \
+            -e SC_BOOTSTRAP_NODES= \
+            scmessenger:latest
       Tags:
         - Key: Name
           Value: scm-relay1
@@ -168,24 +223,53 @@ Resources:
 
   RelayNode2:
     Type: AWS::EC2::Instance
+    DependsOn: RelayNode1
     Properties:
-      ImageId: !FindInMap [RegionAMI, !Ref 'AWS::Region', AMI]
+      ImageId: '{{resolve:ssm:/aws/service/canonical/ubuntu/server/22.04/stable/current/amd64/hvm/ebs-gp2/ami-id}}'
       InstanceType: !Ref InstanceType
       KeyName: !Ref KeyName
       SubnetId: !Ref SubnetB
       SecurityGroupIds:
         - !Ref FarmSimSecurityGroup
-      UserData: !Base64 |
-        #!/bin/bash
-        set -e
-        apt-get update
-        apt-get install -y docker.io git curl jq
-        systemctl start docker
-        systemctl enable docker
-        cd /opt
-        git clone https://github.com/Sovereign-Communication/SCMessenger.git
-        cd SCMessenger
-        docker compose -f docker/docker-compose-lite.yml up -d relay2
+      BlockDeviceMappings:
+        - DeviceName: /dev/sda1
+          Ebs:
+            VolumeSize: 16
+            VolumeType: gp3
+            DeleteOnTermination: true
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          set -ex
+          exec > /var/log/user-data.log 2>&1
+
+          fallocate -l 2G /swapfile
+          chmod 600 /swapfile
+          mkswap /swapfile
+          swapon /swapfile
+          echo '/swapfile none swap sw 0 0' >> /etc/fstab
+
+          apt-get update
+          apt-get install -y docker.io git curl jq
+          systemctl start docker
+          systemctl enable docker
+
+          cd /opt
+          git clone --depth 1 --branch ${GitRef} ${GitRepoUrl} SCMessenger
+          cd SCMessenger
+
+          docker build -t scmessenger:latest -f docker/Dockerfile .
+          docker builder prune -af || true
+
+          docker run -d \
+            --name scm-node \
+            --network host \
+            --restart unless-stopped \
+            -e RUST_LOG=info,scmessenger=debug \
+            -e NODE_NAME=relay2 \
+            -e LISTEN_PORT=4002 \
+            -e SC_BOOTSTRAP_NODES=/ip4/${RelayNode1.PrivateIp}/tcp/4001 \
+            scmessenger:latest
       Tags:
         - Key: Name
           Value: scm-relay2
@@ -194,24 +278,53 @@ Resources:
 
   UserNodeAlice:
     Type: AWS::EC2::Instance
+    DependsOn: RelayNode1
     Properties:
-      ImageId: !FindInMap [RegionAMI, !Ref 'AWS::Region', AMI]
+      ImageId: '{{resolve:ssm:/aws/service/canonical/ubuntu/server/22.04/stable/current/amd64/hvm/ebs-gp2/ami-id}}'
       InstanceType: !Ref InstanceType
       KeyName: !Ref KeyName
       SubnetId: !Ref SubnetA
       SecurityGroupIds:
         - !Ref FarmSimSecurityGroup
-      UserData: !Base64 |
-        #!/bin/bash
-        set -e
-        apt-get update
-        apt-get install -y docker.io git curl jq
-        systemctl start docker
-        systemctl enable docker
-        cd /opt
-        git clone https://github.com/Sovereign-Communication/SCMessenger.git
-        cd SCMessenger
-        docker compose -f docker/docker-compose-lite.yml up -d alice
+      BlockDeviceMappings:
+        - DeviceName: /dev/sda1
+          Ebs:
+            VolumeSize: 16
+            VolumeType: gp3
+            DeleteOnTermination: true
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          set -ex
+          exec > /var/log/user-data.log 2>&1
+
+          fallocate -l 2G /swapfile
+          chmod 600 /swapfile
+          mkswap /swapfile
+          swapon /swapfile
+          echo '/swapfile none swap sw 0 0' >> /etc/fstab
+
+          apt-get update
+          apt-get install -y docker.io git curl jq
+          systemctl start docker
+          systemctl enable docker
+
+          cd /opt
+          git clone --depth 1 --branch ${GitRef} ${GitRepoUrl} SCMessenger
+          cd SCMessenger
+
+          docker build -t scmessenger:latest -f docker/Dockerfile .
+          docker builder prune -af || true
+
+          docker run -d \
+            --name scm-node \
+            --network host \
+            --restart unless-stopped \
+            -e RUST_LOG=info,scmessenger=debug \
+            -e NODE_NAME=alice \
+            -e LISTEN_PORT=0 \
+            -e SC_BOOTSTRAP_NODES=/ip4/${RelayNode1.PrivateIp}/tcp/4001 \
+            scmessenger:latest
       Tags:
         - Key: Name
           Value: scm-alice
@@ -220,24 +333,53 @@ Resources:
 
   UserNodeBob:
     Type: AWS::EC2::Instance
+    DependsOn: RelayNode1
     Properties:
-      ImageId: !FindInMap [RegionAMI, !Ref 'AWS::Region', AMI]
+      ImageId: '{{resolve:ssm:/aws/service/canonical/ubuntu/server/22.04/stable/current/amd64/hvm/ebs-gp2/ami-id}}'
       InstanceType: !Ref InstanceType
       KeyName: !Ref KeyName
       SubnetId: !Ref SubnetB
       SecurityGroupIds:
         - !Ref FarmSimSecurityGroup
-      UserData: !Base64 |
-        #!/bin/bash
-        set -e
-        apt-get update
-        apt-get install -y docker.io git curl jq
-        systemctl start docker
-        systemctl enable docker
-        cd /opt
-        git clone https://github.com/Sovereign-Communication/SCMessenger.git
-        cd SCMessenger
-        docker compose -f docker/docker-compose-lite.yml up -d bob
+      BlockDeviceMappings:
+        - DeviceName: /dev/sda1
+          Ebs:
+            VolumeSize: 16
+            VolumeType: gp3
+            DeleteOnTermination: true
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          set -ex
+          exec > /var/log/user-data.log 2>&1
+
+          fallocate -l 2G /swapfile
+          chmod 600 /swapfile
+          mkswap /swapfile
+          swapon /swapfile
+          echo '/swapfile none swap sw 0 0' >> /etc/fstab
+
+          apt-get update
+          apt-get install -y docker.io git curl jq
+          systemctl start docker
+          systemctl enable docker
+
+          cd /opt
+          git clone --depth 1 --branch ${GitRef} ${GitRepoUrl} SCMessenger
+          cd SCMessenger
+
+          docker build -t scmessenger:latest -f docker/Dockerfile .
+          docker builder prune -af || true
+
+          docker run -d \
+            --name scm-node \
+            --network host \
+            --restart unless-stopped \
+            -e RUST_LOG=info,scmessenger=debug \
+            -e NODE_NAME=bob \
+            -e LISTEN_PORT=0 \
+            -e SC_BOOTSTRAP_NODES=/ip4/${RelayNode1.PrivateIp}/tcp/4001 \
+            scmessenger:latest
       Tags:
         - Key: Name
           Value: scm-bob
@@ -246,24 +388,53 @@ Resources:
 
   UserNodeCarol:
     Type: AWS::EC2::Instance
+    DependsOn: RelayNode1
     Properties:
-      ImageId: !FindInMap [RegionAMI, !Ref 'AWS::Region', AMI]
+      ImageId: '{{resolve:ssm:/aws/service/canonical/ubuntu/server/22.04/stable/current/amd64/hvm/ebs-gp2/ami-id}}'
       InstanceType: !Ref InstanceType
       KeyName: !Ref KeyName
       SubnetId: !Ref SubnetA
       SecurityGroupIds:
         - !Ref FarmSimSecurityGroup
-      UserData: !Base64 |
-        #!/bin/bash
-        set -e
-        apt-get update
-        apt-get install -y docker.io git curl jq
-        systemctl start docker
-        systemctl enable docker
-        cd /opt
-        git clone https://github.com/Sovereign-Communication/SCMessenger.git
-        cd SCMessenger
-        docker compose -f docker/docker-compose-lite.yml up -d carol
+      BlockDeviceMappings:
+        - DeviceName: /dev/sda1
+          Ebs:
+            VolumeSize: 16
+            VolumeType: gp3
+            DeleteOnTermination: true
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          set -ex
+          exec > /var/log/user-data.log 2>&1
+
+          fallocate -l 2G /swapfile
+          chmod 600 /swapfile
+          mkswap /swapfile
+          swapon /swapfile
+          echo '/swapfile none swap sw 0 0' >> /etc/fstab
+
+          apt-get update
+          apt-get install -y docker.io git curl jq
+          systemctl start docker
+          systemctl enable docker
+
+          cd /opt
+          git clone --depth 1 --branch ${GitRef} ${GitRepoUrl} SCMessenger
+          cd SCMessenger
+
+          docker build -t scmessenger:latest -f docker/Dockerfile .
+          docker builder prune -af || true
+
+          docker run -d \
+            --name scm-node \
+            --network host \
+            --restart unless-stopped \
+            -e RUST_LOG=info,scmessenger=debug \
+            -e NODE_NAME=carol \
+            -e LISTEN_PORT=0 \
+            -e SC_BOOTSTRAP_NODES=/ip4/${RelayNode1.PrivateIp}/tcp/4001 \
+            scmessenger:latest
       Tags:
         - Key: Name
           Value: scm-carol
@@ -272,24 +443,53 @@ Resources:
 
   UserNodeDavid:
     Type: AWS::EC2::Instance
+    DependsOn: RelayNode1
     Properties:
-      ImageId: !FindInMap [RegionAMI, !Ref 'AWS::Region', AMI]
+      ImageId: '{{resolve:ssm:/aws/service/canonical/ubuntu/server/22.04/stable/current/amd64/hvm/ebs-gp2/ami-id}}'
       InstanceType: !Ref InstanceType
       KeyName: !Ref KeyName
       SubnetId: !Ref SubnetB
       SecurityGroupIds:
         - !Ref FarmSimSecurityGroup
-      UserData: !Base64 |
-        #!/bin/bash
-        set -e
-        apt-get update
-        apt-get install -y docker.io git curl jq
-        systemctl start docker
-        systemctl enable docker
-        cd /opt
-        git clone https://github.com/Sovereign-Communication/SCMessenger.git
-        cd SCMessenger
-        docker compose -f docker/docker-compose-lite.yml up -d david
+      BlockDeviceMappings:
+        - DeviceName: /dev/sda1
+          Ebs:
+            VolumeSize: 16
+            VolumeType: gp3
+            DeleteOnTermination: true
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          set -ex
+          exec > /var/log/user-data.log 2>&1
+
+          fallocate -l 2G /swapfile
+          chmod 600 /swapfile
+          mkswap /swapfile
+          swapon /swapfile
+          echo '/swapfile none swap sw 0 0' >> /etc/fstab
+
+          apt-get update
+          apt-get install -y docker.io git curl jq
+          systemctl start docker
+          systemctl enable docker
+
+          cd /opt
+          git clone --depth 1 --branch ${GitRef} ${GitRepoUrl} SCMessenger
+          cd SCMessenger
+
+          docker build -t scmessenger:latest -f docker/Dockerfile .
+          docker builder prune -af || true
+
+          docker run -d \
+            --name scm-node \
+            --network host \
+            --restart unless-stopped \
+            -e RUST_LOG=info,scmessenger=debug \
+            -e NODE_NAME=david \
+            -e LISTEN_PORT=0 \
+            -e SC_BOOTSTRAP_NODES=/ip4/${RelayNode1.PrivateIp}/tcp/4001 \
+            scmessenger:latest
       Tags:
         - Key: Name
           Value: scm-david
@@ -298,24 +498,53 @@ Resources:
 
   UserNodeEve:
     Type: AWS::EC2::Instance
+    DependsOn: RelayNode2
     Properties:
-      ImageId: !FindInMap [RegionAMI, !Ref 'AWS::Region', AMI]
+      ImageId: '{{resolve:ssm:/aws/service/canonical/ubuntu/server/22.04/stable/current/amd64/hvm/ebs-gp2/ami-id}}'
       InstanceType: !Ref InstanceType
       KeyName: !Ref KeyName
       SubnetId: !Ref SubnetC
       SecurityGroupIds:
         - !Ref FarmSimSecurityGroup
-      UserData: !Base64 |
-        #!/bin/bash
-        set -e
-        apt-get update
-        apt-get install -y docker.io git curl jq
-        systemctl start docker
-        systemctl enable docker
-        cd /opt
-        git clone https://github.com/Sovereign-Communication/SCMessenger.git
-        cd SCMessenger
-        docker compose -f docker/docker-compose-lite.yml up -d eve
+      BlockDeviceMappings:
+        - DeviceName: /dev/sda1
+          Ebs:
+            VolumeSize: 16
+            VolumeType: gp3
+            DeleteOnTermination: true
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          set -ex
+          exec > /var/log/user-data.log 2>&1
+
+          fallocate -l 2G /swapfile
+          chmod 600 /swapfile
+          mkswap /swapfile
+          swapon /swapfile
+          echo '/swapfile none swap sw 0 0' >> /etc/fstab
+
+          apt-get update
+          apt-get install -y docker.io git curl jq
+          systemctl start docker
+          systemctl enable docker
+
+          cd /opt
+          git clone --depth 1 --branch ${GitRef} ${GitRepoUrl} SCMessenger
+          cd SCMessenger
+
+          docker build -t scmessenger:latest -f docker/Dockerfile .
+          docker builder prune -af || true
+
+          docker run -d \
+            --name scm-node \
+            --network host \
+            --restart unless-stopped \
+            -e RUST_LOG=info,scmessenger=debug \
+            -e NODE_NAME=eve \
+            -e LISTEN_PORT=0 \
+            -e SC_BOOTSTRAP_NODES=/ip4/${RelayNode2.PrivateIp}/tcp/4002 \
+            scmessenger:latest
       Tags:
         - Key: Name
           Value: scm-eve
@@ -326,57 +555,35 @@ Outputs:
   VpcId:
     Description: VPC ID
     Value: !Ref FarmSimVPC
-    Export:
-      Name: FarmSimVpcId
 
   SubnetAId:
-    Description: Subnet A ID
     Value: !Ref SubnetA
-    Export:
-      Name: FarmSimSubnetA
-
   SubnetBId:
-    Description: Subnet B ID
     Value: !Ref SubnetB
-    Export:
-      Name: FarmSimSubnetB
-
   SubnetCId:
-    Description: Subnet C ID
     Value: !Ref SubnetC
-    Export:
-      Name: FarmSimSubnetC
 
-  Relay1IP:
-    Description: Relay1 Public IP
+  Relay1PublicIP:
     Value: !GetAtt RelayNode1.PublicIp
-
-  Relay2IP:
-    Description: Relay2 Public IP
+  Relay1PrivateIP:
+    Value: !GetAtt RelayNode1.PrivateIp
+  Relay2PublicIP:
     Value: !GetAtt RelayNode2.PublicIp
-
-  AliceIP:
-    Description: Alice Public IP
+  Relay2PrivateIP:
+    Value: !GetAtt RelayNode2.PrivateIp
+  AlicePublicIP:
     Value: !GetAtt UserNodeAlice.PublicIp
-
-  BobIP:
-    Description: Bob Public IP
+  BobPublicIP:
     Value: !GetAtt UserNodeBob.PublicIp
-
-  CarolIP:
-    Description: Carol Public IP
+  CarolPublicIP:
     Value: !GetAtt UserNodeCarol.PublicIp
-
-  DavidIP:
-    Description: David Public IP
+  DavidPublicIP:
     Value: !GetAtt UserNodeDavid.PublicIp
-
-  EveIP:
-    Description: Eve Public IP
+  EvePublicIP:
     Value: !GetAtt UserNodeEve.PublicIp
 
   AllInstanceIPs:
-    Description: All instance IPs (relay1, relay2, alice, bob, carol, david, eve)
+    Description: relay1,relay2,alice,bob,carol,david,eve public IPs (CSV, same order)
     Value: !Join
       - ','
       - - !GetAtt RelayNode1.PublicIp
