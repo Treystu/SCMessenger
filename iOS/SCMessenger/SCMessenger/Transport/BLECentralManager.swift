@@ -18,7 +18,7 @@ import os
 /// - Write queue management (mirrors Android pattern)
 /// - State restoration for background operation
 final class BLECentralManager: NSObject {
-    private let logger = Logger(subsystem: "com.scmessenger", category: "BLE-Central")
+    private let logger: Logger = Logger(subsystem: "com.scmessenger", category: "BLE-Central")
     private var centralManager: CBCentralManager!
     private weak var meshRepository: MeshRepository?
 
@@ -30,10 +30,10 @@ final class BLECentralManager: NSObject {
     // Scanning parameters
     private var scanInterval: TimeInterval = MeshBLEConstants.defaultScanInterval
     private var scanWindow: TimeInterval = MeshBLEConstants.defaultScanWindow
-    private var isBackgroundMode = false
+    private var isBackgroundMode: Bool = false
     private var scanTimer: Timer?
-    private var isScanning = false
-    private var pendingScanOnReady = false  // P3: Defer scan until BLE is poweredOn
+    private var isScanning: Bool = false
+    private var pendingScanOnReady: Bool = false  // P3: Defer scan until BLE is poweredOn
 
     // Write queue (mirrors Android BleGattClient pattern - CRITICAL)
     private var writeInProgress: [UUID: Bool] = [:]
@@ -49,7 +49,7 @@ final class BLECentralManager: NSObject {
     // Connection state monitoring and auto-reconnection
     private var connectionRetries: [UUID: Int] = [:]
     private var reconnectionTimers: [UUID: Timer] = [:]
-    private let maxReconnectionAttempts = 3
+    private let maxReconnectionAttempts: Int = 3
     private let reconnectionDelay: TimeInterval = 2.0
 
     init(meshRepository: MeshRepository) {
@@ -619,8 +619,8 @@ extension BLECentralManager: CBPeripheralDelegate {
 
     private func readCharacteristic(_ peripheral: CBPeripheral, characteristic: CBCharacteristic) throws -> Bool {
         // Create a semaphore to wait for the read to complete
-        let semaphore = DispatchSemaphore(value: 0)
-        var readSuccess = false
+        let semaphore: DispatchSemaphore = DispatchSemaphore(value: 0)
+        var readSuccess: Bool = false
         var readError: Error? = nil
 
         // Set up a temporary callback
@@ -646,7 +646,7 @@ extension BLECentralManager: CBPeripheralDelegate {
     // MARK: - Enhanced Error Handling
     
     private func handleBleError(_ error: Error?, operation: String, peripheralId: UUID? = nil) {
-        var errorMessage = "BLE error in \\(operation)"
+        var errorMessage: String = "BLE error in \\(operation)"
         if let peripheralId = peripheralId {
             errorMessage += " for peripheral \\(peripheralId)"
         }
@@ -696,7 +696,7 @@ extension BLECentralManager: CBPeripheralDelegate {
     }
     
     private func logBleWarning(_ message: String, operation: String, peripheralId: UUID? = nil) {
-        var fullMessage = "BLE warning in \\(operation): \\(message)"
+        var fullMessage: String = "BLE warning in \\(operation): \\(message)"
         if let peripheralId = peripheralId {
             fullMessage += " (peripheral: \\(peripheralId))"
         }

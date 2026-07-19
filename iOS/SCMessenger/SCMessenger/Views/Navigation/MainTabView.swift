@@ -16,7 +16,7 @@ enum MessagesRoute: Hashable {
 
 struct MainTabView: View {
     @Environment(MeshRepository.self) private var repository
-    @State private var identityInitialized = false
+    @State private var identityInitialized: Bool = false
     @State private var selectedTab: MainTab = .mesh
     @State private var messagesPath: [MessagesRoute] = []
 
@@ -108,7 +108,7 @@ struct MainTabView: View {
         guard let peerId = userInfo["conversationId"] as? String ?? userInfo["senderPeerId"] as? String else {
             return
         }
-        let conversation = Conversation(
+        let conversation: Conversation = Conversation(
             peerId: peerId,
             peerNickname: repository.displayNameForPeer(peerId: peerId)
         )
@@ -129,10 +129,10 @@ struct MainTabView: View {
 struct ConversationListView: View {
     @Environment(MeshRepository.self) private var repository
     @State private var conversations: [Conversation] = []
-    @State private var requestCount = 0
+    @State private var requestCount: Int = 0
     @State private var conversationToDelete: Conversation?
-    @State private var showingDeleteConfirmation = false
-    private let logger = Logger(subsystem: "com.scmessenger", category: "ConversationList")
+    @State private var showingDeleteConfirmation: Bool = false
+    private let logger: Logger = Logger(subsystem: "com.scmessenger", category: "ConversationList")
     let onOpenRequestsInbox: () -> Void
 
     var body: some View {
@@ -408,7 +408,7 @@ struct ConversationRow: View {
     }
 
     private func formatMessageDate(_ date: Date) -> String {
-        let formatter = DateFormatter()
+        let formatter: DateFormatter = DateFormatter()
         formatter.dateStyle = Calendar.current.isDateInToday(date) ? .none : .short
         formatter.timeStyle = .short
         return formatter.string(from: date)
@@ -420,7 +420,7 @@ struct ChatView: View {
     let conversation: Conversation
     @State private var viewModel: ChatViewModel?
     @State private var scrollProxy: ScrollViewProxy?
-    @State private var isAtBottom = true
+    @State private var isAtBottom: Bool = true
     @State private var lastMessageId: String?
 
     var body: some View {
@@ -537,7 +537,7 @@ struct MessageBubble: View {
     }
 
     private func formatMessageDate(_ date: Date) -> String {
-        let formatter = DateFormatter()
+        let formatter: DateFormatter = DateFormatter()
         formatter.dateStyle = Calendar.current.isDateInToday(date) ? .none : .short
         formatter.timeStyle = .short
         return formatter.string(from: date)

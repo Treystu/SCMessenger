@@ -12,9 +12,9 @@ import Vision
 struct ContactsListView: View {
     @Environment(MeshRepository.self) private var repository
     @State private var viewModel: ContactsViewModel?
-    @State private var showingAddContact = false
+    @State private var showingAddContact: Bool = false
     @State private var pendingChatConversation: Conversation?
-    @State private var navigateToPendingChat = false
+    @State private var navigateToPendingChat: Bool = false
     @State private var nearbyPrefilledPeer: NearbyPeer? = nil
     @State private var quickConnectError: String? = nil
     @State private var pendingDeletePeerId: String? = nil
@@ -229,7 +229,7 @@ struct ContactsListView: View {
             notesParts.append("listeners:\(peer.listeners.joined(separator: ","))")
         }
 
-        let contact = Contact(
+        let contact: Contact = Contact(
             peerId: peer.peerId,
             nickname: peer.nickname,
             localNickname: nil,
@@ -365,14 +365,14 @@ struct AddContactView: View {
     /// Pre-fill from a nearby peer when launched from the Nearby section.
     var prefilledPeer: NearbyPeer? = nil
 
-    @State private var nickname = ""
-    @State private var publicKey = ""
-    @State private var peerId = ""
+    @State private var nickname: String = ""
+    @State private var publicKey: String = ""
+    @State private var peerId: String = ""
     @State private var listeners: [String] = []
     @State private var blePeerId: String = ""
     @State private var libp2pPeerId: String = ""
     @State private var error: String?
-    @State private var showingQrScanner = false
+    @State private var showingQrScanner: Bool = false
 
     private var canUseQrScanner: Bool {
         if #available(iOS 16.0, *) {
@@ -488,7 +488,7 @@ struct AddContactView: View {
             self.error = "Public key must be exactly 64 hex characters (got \(finalPublicKey.count))"
             return
         }
-        let hexCharacterSet = CharacterSet(charactersIn: "0123456789abcdefABCDEF")
+        let hexCharacterSet: CharacterSet = CharacterSet(charactersIn: "0123456789abcdefABCDEF")
         if !finalPublicKey.unicodeScalars.allSatisfy({ hexCharacterSet.contains($0) }) {
             self.error = "Public key contains invalid characters (must be hex: 0-9, a-f)"
             return
@@ -520,7 +520,7 @@ struct AddContactView: View {
             canonicalPeerId = finalPublicKey
         }
 
-        let contact = Contact(
+        let contact: Contact = Contact(
             peerId: canonicalPeerId,
             nickname: nickname,
             localNickname: nil,
@@ -649,7 +649,7 @@ private struct ContactQrScannerSheet: UIViewControllerRepresentable {
     var onFailure: (String) -> Void
 
     func makeUIViewController(context: Context) -> DataScannerViewController {
-        let controller = DataScannerViewController(
+        let controller: DataScannerViewController = DataScannerViewController(
             recognizedDataTypes: [.barcode(symbologies: [.qr])],
             qualityLevel: .balanced,
             recognizesMultipleItems: false,

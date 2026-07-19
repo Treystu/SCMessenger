@@ -8,11 +8,11 @@
 import SwiftUI
 import os
 
-private let logger = Logger(subsystem: "com.scmessenger", category: "Onboarding")
+private let logger: Logger = Logger(subsystem: "com.scmessenger", category: "Onboarding")
 
 struct OnboardingFlow: View {
     @Environment(MeshRepository.self) private var repository
-    @State private var viewModel = OnboardingViewModel()
+    @State private var viewModel: OnboardingViewModel = OnboardingViewModel()
     let onComplete: () -> Void
 
     init(onComplete: @escaping () -> Void = {}) {
@@ -80,9 +80,9 @@ struct WelcomeView: View {
 struct IdentityView: View {
     @Environment(MeshRepository.self) private var repository
     @Environment(OnboardingViewModel.self) private var viewModel
-    @State private var isGenerating = false
+    @State private var isGenerating: Bool = false
     @State private var identity: IdentityInfo?
-    @State private var nickname = ""
+    @State private var nickname: String = ""
     @State private var setupError: String?
 
     var body: some View {
@@ -286,7 +286,7 @@ struct RelayExplanationView: View {
 
 struct ConsentView: View {
     @Environment(OnboardingViewModel.self) private var viewModel
-    @State private var accepted = false
+    @State private var accepted: Bool = false
 
     var body: some View {
         VStack(spacing: Theme.spacingLarge) {

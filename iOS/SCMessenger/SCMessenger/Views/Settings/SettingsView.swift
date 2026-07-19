@@ -11,11 +11,11 @@ import SwiftUI
 struct SettingsView: View {
     @Environment(MeshRepository.self) private var repository
     @State private var viewModel: SettingsViewModel?
-    @State private var showingIdentityQr = false
-    @State private var showingResetConfirmation = false
+    @State private var showingIdentityQr: Bool = false
+    @State private var showingResetConfirmation: Bool = false
     @State private var identitySetupError: String?
-    @State private var showingExportBackup = false
-    @State private var showingImportBackup = false
+    @State private var showingExportBackup: Bool = false
+    @State private var showingImportBackup: Bool = false
     let onIdentityChanged: () -> Void
 
     init(onIdentityChanged: @escaping () -> Void = {}) {
@@ -513,7 +513,7 @@ struct MeshSettingsView: View {
 struct PrivacySettingsView: View {
     @Environment(MeshRepository.self) private var repository
     @State private var viewModel: SettingsViewModel?
-    @State private var isRotationEnabled = true
+    @State private var isRotationEnabled: Bool = true
 
     var body: some View {
         Form {

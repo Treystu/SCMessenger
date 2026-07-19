@@ -10,9 +10,9 @@ import os
 
 /// Logger for notification verification tests
 final class NotificationLogger {
-    static let shared = NotificationLogger()
+    static let shared: NotificationLogger = NotificationLogger()
 
-    private let logger = OSLog(subsystem: "com.scmessenger.notification", category: "Verification")
+    private let logger: OSLog = OSLog(subsystem: "com.scmessenger.notification", category: "Verification")
     private let logFileURL: URL
 
     private init() {
@@ -33,7 +33,7 @@ final class NotificationLogger {
     /// Log a verification event with timestamp
     func log(_ message: String) {
         let timestamp = Date().ISO8601DateFormatter.string(from: Date())
-        let entry = "[\(timestamp)] \(message)\n"
+        let entry: String = "[\(timestamp)] \(message)\n"
 
         // Log to OSLog
         os_log("%{public}s", log: logger, type: .info, message)
@@ -45,7 +45,7 @@ final class NotificationLogger {
     /// Log a test result
     func logTestResult(_ test: String, passed: Bool, details: String? = nil) {
         let status = passed ? "PASS" : "FAIL"
-        var message = "\(test): \(status)"
+        var message: String = "\(test): \(status)"
 
         if let details = details, !details.isEmpty {
             message += " - \(details)"
@@ -83,7 +83,7 @@ final class NotificationLogger {
 
     /// Log notification delivery test
     func logDeliveryTest(_ test: String, delivered: Bool, delay: TimeInterval? = nil) {
-        var message = "Delivery Test '\(test)': \(delivered ? "DELIVERED" : "NOT_DELIVERED")"
+        var message: String = "Delivery Test '\(test)': \(delivered ? "DELIVERED" : "NOT_DELIVERED")"
         if let delay = delay {
             message += " - Delay: \(String(format: "%.2f", delay))s"
         }
@@ -145,7 +145,7 @@ final class NotificationLogger {
 
 extension Date {
     private static let iso8601Formatter: ISO8601DateFormatter = {
-        let formatter = ISO8601DateFormatter()
+        let formatter: ISO8601DateFormatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         return formatter
     }()

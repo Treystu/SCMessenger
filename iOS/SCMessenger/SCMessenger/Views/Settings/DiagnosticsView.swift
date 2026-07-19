@@ -3,10 +3,10 @@ import SwiftUI
 struct DiagnosticsView: View {
     @Environment(MeshRepository.self) private var repository
     @State private var logText: String = ""
-    @State private var showingExportSheet = false
+    @State private var showingExportSheet: Bool = false
     @State private var exportItems: [Any] = []
     @State private var autoRefreshTimer: Timer?
-    @State private var isAutoRefreshing = false
+    @State private var isAutoRefreshing: Bool = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -149,7 +149,7 @@ struct DiagnosticsView: View {
             "Local Network (peer connectivity in local mesh)",
             "Notifications (optional delivery alerts)"
         ]
-        let bundleText = """
+        let bundleText: String = """
         === SCMessenger Diagnostics Bundle (v0.2.0 alpha) ===
         Generated: \(Date())
         Version: 0.2.0-alpha
@@ -199,7 +199,7 @@ struct DiagnosticsView: View {
         let path = repository.diagnosticsLogPath()
         guard let attrs = try? FileManager.default.attributesOfItem(atPath: path),
               let size = attrs[.size] as? Int64 else { return "0 B" }
-        let formatter = ByteCountFormatter()
+        let formatter: ByteCountFormatter = ByteCountFormatter()
         formatter.countStyle = .file
         return formatter.string(fromByteCount: size)
     }

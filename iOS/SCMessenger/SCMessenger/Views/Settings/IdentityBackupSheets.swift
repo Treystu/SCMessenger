@@ -14,8 +14,8 @@ struct ExportIdentityBackupSheet: View {
     let viewModel: SettingsViewModel
     @Environment(\.dismiss) private var dismiss
 
-    @State private var passphrase = ""
-    @State private var confirmation = ""
+    @State private var passphrase: String = ""
+    @State private var confirmation: String = ""
     @State private var validationError: String?
     @State private var copiedMessage: String?
 
@@ -95,8 +95,8 @@ struct ImportIdentityBackupSheet: View {
     let viewModel: SettingsViewModel
     @Environment(\.dismiss) private var dismiss
 
-    @State private var backupText = ""
-    @State private var passphrase = ""
+    @State private var backupText: String = ""
+    @State private var passphrase: String = ""
 
     var body: some View {
         NavigationStack {

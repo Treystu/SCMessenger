@@ -14,10 +14,10 @@ struct JoinMeshView: View {
     @Environment(MeshRepository.self) private var repository
 
     @State private var topicManager: TopicManager?
-    @State private var topicName = ""
-    @State private var autoSubscribe = true
+    @State private var topicName: String = ""
+    @State private var autoSubscribe: Bool = true
     @State private var error: String?
-    @State private var showingQrScanner = false
+    @State private var showingQrScanner: Bool = false
 
     private var canUseQrScanner: Bool {
         if #available(iOS 16.0, *) {
@@ -175,7 +175,7 @@ private struct QRCodeScannerSheetInline: UIViewControllerRepresentable {
     var onFailure: (String) -> Void
 
     func makeUIViewController(context: Context) -> DataScannerViewController {
-        let controller = DataScannerViewController(
+        let controller: DataScannerViewController = DataScannerViewController(
             recognizedDataTypes: [.barcode(symbologies: [.qr])],
             qualityLevel: .balanced,
             recognizesMultipleItems: false,
