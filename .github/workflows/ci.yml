@@ -71,6 +71,6 @@ jobs:
       # cdylib and re-running `cargo run --bin gen_kotlin` reproduces the
       # "cdylib not found" panic even though nothing else changed).
       - run: cargo build -p scmessenger-core --features gen-bindings
-      - run: cargo run --bin gen_kotlin --features gen-bindings
-      - run: cargo run --bin gen_swift --features gen-bindings
+      - run: cargo run -p scmessenger-core --bin gen_kotlin --features gen-bindings
+      - run: cargo run -p scmessenger-core --bin gen_swift --features gen-bindings
       - run: scripts/ffi_surface.sh

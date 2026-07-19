@@ -112,7 +112,7 @@ jobs:
       - name: Generate Kotlin bindings
         env:
           SCMESSENGER_CDYLIB_PATH: target/aarch64-linux-android/release/libscmessenger_core.a
-        run: cargo run --bin gen_kotlin --features gen-bindings
+        run: cargo run -p scmessenger-core --bin gen_kotlin --features gen-bindings
       - name: Upload Kotlin bindings
         uses: actions/upload-artifact@v4
         with:
@@ -140,7 +140,7 @@ jobs:
           # so the generated SCMessengerCore.swift compiles under Swift 6 strict
           # concurrency (MainActor isolation defaults).
           SCMESSENGER_CDYLIB_PATH: target/aarch64-apple-ios/release/libscmessenger_core.a
-        run: cargo run --bin gen_swift --features gen-bindings
+        run: cargo run -p scmessenger-core --bin gen_swift --features gen-bindings
       - name: Upload Swift bindings
         uses: actions/upload-artifact@v4
         with:

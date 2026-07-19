@@ -112,6 +112,12 @@ impl Outbox {
     /// # Returns
     /// * `Ok(Arc<tokio::sync::Mutex<Self>>)` on success
     /// * `Err(String)` on failure to initialize either storage option
+    ///
+    /// CLI/desktop-only: uses SledStorage (filesystem-path-backed), which is
+    /// itself gated to `cfg(not(target_arch = "wasm32"))` -- WASM has no
+    /// traditional filesystem path to open and uses rexie/IndexedDB instead.
+    /// Only called from cli/src/main.rs; nothing in wasm/ references this.
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn open_default(
         data_dir: &std::path::Path,
     ) -> std::result::Result<Arc<tokio::sync::Mutex<Self>>, String> {
