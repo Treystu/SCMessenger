@@ -172,7 +172,11 @@ impl Message {
     }
 
     /// Create a receipt message
-    pub fn receipt(sender_id: String, recipient_id: String, receipt: &Receipt) -> Result<Self, Box<dyn std::error::Error>> {
+    pub fn receipt(
+        sender_id: String,
+        recipient_id: String,
+        receipt: &Receipt,
+    ) -> Result<Self, Box<dyn std::error::Error>> {
         let payload = encode_receipt(receipt)?;
         Ok(Self {
             id: uuid::Uuid::new_v4().to_string(),
@@ -221,7 +225,7 @@ impl Receipt {
 }
 
 /// Serialize a Receipt to JSON bytes (the canonical wire format).
-/// 
+///
 /// This is the ONLY way receipts should be serialized anywhere in the codebase.
 /// All platforms (CLI, Android, iOS, WASM) use this function.
 pub fn encode_receipt(receipt: &Receipt) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
@@ -229,7 +233,7 @@ pub fn encode_receipt(receipt: &Receipt) -> Result<Vec<u8>, Box<dyn std::error::
 }
 
 /// Deserialize a Receipt from JSON bytes (the canonical wire format).
-/// 
+///
 /// This is the ONLY way receipts should be deserialized anywhere in the codebase.
 /// All platforms (CLI, Android, iOS, WASM) use this function.
 pub fn decode_receipt(buf: &[u8]) -> Result<Receipt, Box<dyn std::error::Error>> {
@@ -266,7 +270,8 @@ mod tests {
     #[test]
     fn test_receipt_message() {
         let receipt = Receipt::delivered("msg-123".to_string());
-        let msg = Message::receipt("sender".to_string(), "recipient".to_string(), &receipt).unwrap();
+        let msg =
+            Message::receipt("sender".to_string(), "recipient".to_string(), &receipt).unwrap();
 
         assert_eq!(msg.message_type, MessageType::Receipt);
         assert!(msg.text_content().is_none());

@@ -1,10 +1,13 @@
 // Stress test harness for farm-sim topology
 // Sends messages at controlled rate to test throughput and latency
 
-use std::time::{Duration, Instant};
-use std::sync::{Arc, atomic::{AtomicU64, Ordering}};
-use tokio::time::sleep;
 use clap::Parser;
+use std::sync::{
+    atomic::{AtomicU64, Ordering},
+    Arc,
+};
+use std::time::{Duration, Instant};
+use tokio::time::sleep;
 
 #[derive(Parser, Debug)]
 #[command(name = "stress-test")]
@@ -32,8 +35,10 @@ async fn main() {
     let args = Args::parse();
 
     println!("[INFO] Farm-Sim Stress Test Harness");
-    println!("[CONFIG] nodes={}, msg/sec={}, duration={}s, payload={}B",
-        args.nodes, args.msg_per_sec, args.duration, args.payload_bytes);
+    println!(
+        "[CONFIG] nodes={}, msg/sec={}, duration={}s, payload={}B",
+        args.nodes, args.msg_per_sec, args.duration, args.payload_bytes
+    );
 
     let sent = Arc::new(AtomicU64::new(0));
     let delivered = Arc::new(AtomicU64::new(0));
@@ -77,7 +82,10 @@ async fn main() {
             if message_count % 100 == 0 {
                 let elapsed = test_start.elapsed().as_secs_f64();
                 let actual_rate = message_count as f64 / elapsed;
-                print!("\r[PROGRESS] {} messages sent, {:.1} msg/sec actual", message_count, actual_rate);
+                print!(
+                    "\r[PROGRESS] {} messages sent, {:.1} msg/sec actual",
+                    message_count, actual_rate
+                );
                 std::io::Write::flush(&mut std::io::stdout()).ok();
             }
         }

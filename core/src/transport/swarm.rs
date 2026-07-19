@@ -1322,9 +1322,7 @@ pub enum SwarmCommand {
         resolved_addrs: Vec<Multiaddr>,
     },
     /// DNS resolution failed for a bootstrap node
-    ResolutionFailed {
-        original_dns: Multiaddr,
-    },
+    ResolutionFailed { original_dns: Multiaddr },
     /// Get list of connected peers
     GetPeers { reply: mpsc::Sender<Vec<PeerId>> },
     /// Get bound addresses
@@ -2321,7 +2319,8 @@ pub async fn start_swarm_with_config(
             let bootstrap_addrs_clone = bootstrap_addrs;
             let mut bootstrap_backoff: HashMap<Multiaddr, BootstrapBackoffEntry> = HashMap::new();
             let mut resolved_to_dns: HashMap<Multiaddr, Multiaddr> = HashMap::new();
-            let mut resolved_keys_fifo: std::collections::VecDeque<Multiaddr> = std::collections::VecDeque::new();
+            let mut resolved_keys_fifo: std::collections::VecDeque<Multiaddr> =
+                std::collections::VecDeque::new();
             let mut in_flight_dns: HashSet<Multiaddr> = HashSet::new();
 
             // Cover traffic — 1 dummy message/min to mask real traffic patterns
@@ -3925,7 +3924,7 @@ pub async fn start_swarm_with_config(
 
                             SwarmEvent::ConnectionEstablished { peer_id, endpoint, connection_id, .. } => {
                                 let remote_addr = endpoint.get_remote_address().clone();
-                                
+
                                 // Prune resolved_to_dns mappings for this peer / hostname
                                 let stripped_remote: Multiaddr = remote_addr.iter().filter(|p| !matches!(p, libp2p::multiaddr::Protocol::P2p(_))).collect();
                                 let mut dns_to_prune = None;
@@ -6227,12 +6226,15 @@ pub fn detect_and_log_port_mismatch(config_port: u16, swarm: &libp2p::Swarm<Iron
 }
 
 pub fn is_dns_multiaddr(addr: &libp2p::Multiaddr) -> bool {
-    addr.iter().any(|proto| matches!(proto,
-        libp2p::multiaddr::Protocol::Dns(_) |
-        libp2p::multiaddr::Protocol::Dns4(_) |
-        libp2p::multiaddr::Protocol::Dns6(_) |
-        libp2p::multiaddr::Protocol::Dnsaddr(_)
-    ))
+    addr.iter().any(|proto| {
+        matches!(
+            proto,
+            libp2p::multiaddr::Protocol::Dns(_)
+                | libp2p::multiaddr::Protocol::Dns4(_)
+                | libp2p::multiaddr::Protocol::Dns6(_)
+                | libp2p::multiaddr::Protocol::Dnsaddr(_)
+        )
+    })
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -6274,8 +6276,12 @@ async fn resolve_dns_multiaddr(multiaddr: &libp2p::Multiaddr) -> Vec<libp2p::Mul
         }
     }
 
-    let Some(host) = host else { return vec![]; };
-    let Some(port) = port else { return vec![]; };
+    let Some(host) = host else {
+        return vec![];
+    };
+    let Some(port) = port else {
+        return vec![];
+    };
 
     let host_port = format!("{}:{}", host, port);
     let lookup_res = tokio::time::timeout(

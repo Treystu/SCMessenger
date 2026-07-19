@@ -1,10 +1,14 @@
 //! SCMessenger Core Library
-//! 
+//!
 //! This crate provides the core functionality for the SCMessenger P2P messaging system.
 //! It includes identity management, encryption, transport layer, message handling,
 //! and persistent storage capabilities.
 
 pub mod abuse;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod blocked_bridge;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod contacts_bridge;
 pub mod crypto;
 pub mod drift;
 pub mod dspy;
@@ -12,10 +16,6 @@ pub mod error;
 pub mod identity;
 pub mod iron_core;
 pub mod message;
-#[cfg(not(target_arch = "wasm32"))]
-pub mod blocked_bridge;
-#[cfg(not(target_arch = "wasm32"))]
-pub mod contacts_bridge;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod mobile_bridge;
 pub mod notification;
@@ -30,8 +30,8 @@ pub mod transport;
 pub mod wasm_support;
 
 // Re-export critical types from core modules
-pub use iron_core::{IronCore, CoreDelegate};
 pub use error::MeshError;
+pub use iron_core::{CoreDelegate, IronCore};
 
 // IronCoreError — defined in Rust rather than generated from UDL
 // because the UDL-based scaffolding requires interface types to have
@@ -77,20 +77,20 @@ pub use error::{
     MeshResult, SerializationError, SerializationResult, TransportError, TransportResult,
 };
 pub use identity::IdentityManager;
-pub use message::{DeliveryStatus, Envelope, Message, TtlConfig};
-pub use message::types::{Receipt, encode_receipt, decode_receipt};
-pub use message::MessageType;
 pub use message::codec::decode_envelope;
-pub use store::outbox::RetryPolicy;
-pub use settings::{DiscoveryMode, MeshSettings};
-pub use transport::{SwarmHandle, start_swarm, start_swarm_with_config, SwarmCommand, SwarmEvent};
-pub use observability::{AuditEvent, AuditEventType};
+pub use message::types::{decode_receipt, encode_receipt, Receipt};
+pub use message::MessageType;
+pub use message::{DeliveryStatus, Envelope, Message, TtlConfig};
 pub use notification::{
     classify_notification as classify_notification_policy, NotificationDecision,
     NotificationEndpoint, NotificationEndpointCapabilities, NotificationEndpointError,
     NotificationEndpointRegistry, NotificationKind, NotificationMessageContext,
     NotificationPlatform, NotificationUiState,
 };
+pub use observability::{AuditEvent, AuditEventType};
+pub use settings::{DiscoveryMode, MeshSettings};
+pub use store::outbox::RetryPolicy;
+pub use transport::{start_swarm, start_swarm_with_config, SwarmCommand, SwarmEvent, SwarmHandle};
 
 // Mobile bridge exports for UniFFI
 #[cfg(not(target_arch = "wasm32"))]
@@ -163,7 +163,7 @@ pub mod retry_policy {
     use std::time::Duration;
 
     /// Retry configuration for message delivery.
-    /// 
+    ///
     /// This is the ONLY place retry policy is defined. All platforms
     /// (CLI, Android, iOS, WASM) use this struct. Changes to backoff
     /// strategy apply everywhere automatically.
@@ -180,16 +180,16 @@ pub mod retry_policy {
     impl Default for RetryPolicy {
         fn default() -> Self {
             Self {
-                max_retries: 3,           // CLI baseline
-                initial_delay_ms: 100,    // CLI baseline
-                backoff_factor: 2,        // exponential: 100ms, 200ms, 400ms
+                max_retries: 3,        // CLI baseline
+                initial_delay_ms: 100, // CLI baseline
+                backoff_factor: 2,     // exponential: 100ms, 200ms, 400ms
             }
         }
     }
 
     impl RetryPolicy {
         /// Compute the delay before the given attempt (1-indexed).
-        /// 
+        ///
         /// Returns None if attempt exceeds max_retries (delivery should be abandoned).
         pub fn delay_for_attempt(&self, attempt: u32) -> Option<Duration> {
             if attempt > self.max_retries {
@@ -223,8 +223,14 @@ pub mod retry_policy {
         fn test_default_retry_delays() {
             let policy = RetryPolicy::default();
             assert_eq!(policy.delay_for_attempt(1), Some(Duration::from_millis(0)));
-            assert_eq!(policy.delay_for_attempt(2), Some(Duration::from_millis(100)));
-            assert_eq!(policy.delay_for_attempt(3), Some(Duration::from_millis(200)));
+            assert_eq!(
+                policy.delay_for_attempt(2),
+                Some(Duration::from_millis(100))
+            );
+            assert_eq!(
+                policy.delay_for_attempt(3),
+                Some(Duration::from_millis(200))
+            );
             assert!(policy.delay_for_attempt(4).is_none()); // exceeds max_retries
         }
 

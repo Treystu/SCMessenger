@@ -523,5 +523,9 @@ fn test_pq_ratchet_cadence_refreshes_shared_secret() {
 
     // Step 5: E-01c: Re-enabled assertion proving the fresh PQ shared secret actually entered the KDF
     let root_key_after = alice_manager.get_session(&bob_id).unwrap().root_key_bytes();
-    assert_ne!(root_key_before.unwrap(), root_key_after, "Root key should change after PQ ratchet step");
+    assert_ne!(
+        root_key_before.unwrap(),
+        root_key_after,
+        "Root key should change after PQ ratchet step"
+    );
 }

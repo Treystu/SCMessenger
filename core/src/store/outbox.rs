@@ -101,22 +101,28 @@ impl Outbox {
 
     /// Open or create the default persistent outbox for the given data directory.
     /// Returns Arc<tokio::sync::Mutex<Self>> matching CLI usage pattern.
-    /// 
+    ///
     /// This is the single source of truth for outbox initialization across the CLI.
     /// It creates a persistent outbox using Sled storage, falling back to in-memory
     /// if the persistent storage fails to initialize.
-    /// 
+    ///
     /// # Arguments
     /// * `data_dir` - Path to the application's data directory
-    /// 
+    ///
     /// # Returns
     /// * `Ok(Arc<tokio::sync::Mutex<Self>>)` on success
     /// * `Err(String)` on failure to initialize either storage option
-    pub fn open_default(data_dir: &std::path::Path) -> std::result::Result<Arc<tokio::sync::Mutex<Self>>, String> {
+    pub fn open_default(
+        data_dir: &std::path::Path,
+    ) -> std::result::Result<Arc<tokio::sync::Mutex<Self>>, String> {
         let outbox_path = data_dir.join("outbox");
-        
+
         // Try to create persistent outbox first
-        match crate::store::backend::SledStorage::new(outbox_path.to_str().ok_or_else(|| "Invalid UTF-8 path".to_string())?) {
+        match crate::store::backend::SledStorage::new(
+            outbox_path
+                .to_str()
+                .ok_or_else(|| "Invalid UTF-8 path".to_string())?,
+        ) {
             Ok(backend) => {
                 let outbox = Self::persistent(Arc::new(backend));
                 Ok(Arc::new(tokio::sync::Mutex::new(outbox)))
@@ -645,7 +651,7 @@ impl Default for Outbox {
 }
 
 /// Retry configuration for message delivery.
-/// 
+///
 /// This is the ONLY place retry policy is defined. All platforms
 /// (CLI, Android, iOS, WASM) use this struct. Changes to backoff
 /// strategy apply everywhere automatically.
@@ -669,9 +675,9 @@ fn default_true() -> bool {
 impl Default for RetryPolicy {
     fn default() -> Self {
         Self {
-            max_retries: 3,           // CLI baseline
-            initial_delay_ms: 100,    // CLI baseline
-            backoff_factor: 2,        // exponential: 100ms, 200ms, 400ms
+            max_retries: 3,        // CLI baseline
+            initial_delay_ms: 100, // CLI baseline
+            backoff_factor: 2,     // exponential: 100ms, 200ms, 400ms
             suppress_on_custody: true,
         }
     }
@@ -679,7 +685,7 @@ impl Default for RetryPolicy {
 
 impl RetryPolicy {
     /// Compute the delay before the given attempt (1-indexed).
-    /// 
+    ///
     /// Returns None if attempt exceeds max_retries (delivery should be abandoned).
     pub fn delay_for_attempt(&self, attempt: u32) -> Option<Duration> {
         if attempt > self.max_retries {
@@ -718,8 +724,14 @@ mod retry_tests {
     fn test_default_retry_delays() {
         let policy = RetryPolicy::default();
         assert_eq!(policy.delay_for_attempt(1), Some(Duration::from_millis(0)));
-        assert_eq!(policy.delay_for_attempt(2), Some(Duration::from_millis(100)));
-        assert_eq!(policy.delay_for_attempt(3), Some(Duration::from_millis(200)));
+        assert_eq!(
+            policy.delay_for_attempt(2),
+            Some(Duration::from_millis(100))
+        );
+        assert_eq!(
+            policy.delay_for_attempt(3),
+            Some(Duration::from_millis(200))
+        );
         assert!(policy.delay_for_attempt(4).is_none()); // exceeds max_retries
     }
 
@@ -987,7 +999,7 @@ mod tests {
         let mut msg1 = make_msg("msg1", "peer_a");
         msg1.in_custody = true;
         let msg2 = make_msg("msg2", "peer_a");
-        
+
         outbox.enqueue(msg1).unwrap();
         outbox.enqueue(msg2).unwrap();
 

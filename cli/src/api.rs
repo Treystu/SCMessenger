@@ -1122,7 +1122,12 @@ pub async fn start_api_server(ctx: ApiContext, bind_addr: Option<String>) -> Res
         match bind_str.parse::<SocketAddr>() {
             Ok(a) => a,
             Err(e) => {
-                tracing::warn!("Invalid http-bind address '{}', falling back to localhost: {}: {}", bind_str, API_PORT, e);
+                tracing::warn!(
+                    "Invalid http-bind address '{}', falling back to localhost: {}: {}",
+                    bind_str,
+                    API_PORT,
+                    e
+                );
                 SocketAddr::from(([127, 0, 0, 1], API_PORT))
             }
         }
@@ -1138,9 +1143,10 @@ pub async fn start_api_server(ctx: ApiContext, bind_addr: Option<String>) -> Res
 
     // Build router with all routes
     let app = Router::new()
-        .route("/health", get(|| async {
-            axum::Json(serde_json::json!({"status": "healthy"}))
-        }))
+        .route(
+            "/health",
+            get(|| async { axum::Json(serde_json::json!({"status": "healthy"})) }),
+        )
         .route("/api/identity", get(handle_get_identity))
         .route("/api/send", post(handle_send_message))
         .route("/api/contacts", post(handle_add_contact))

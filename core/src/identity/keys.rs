@@ -131,7 +131,10 @@ impl IdentityKeys {
         if self.mldsa_keypair.is_some() {
             // V3 format with ML-DSA keys
             // SAFETY: We just checked is_some() above in the if condition, so as_ref() is guaranteed to return Some.
-            let mldsa_kp = self.mldsa_keypair.as_ref().expect("mldsa_keypair verified Some above");
+            let mldsa_kp = self
+                .mldsa_keypair
+                .as_ref()
+                .expect("mldsa_keypair verified Some above");
             let mut raw = IdentityKeysV3Raw {
                 signing_key_bytes: self.signing_key.to_bytes(),
                 x25519_secret_bytes: self.x25519_encryption_secret.to_bytes(),
@@ -379,8 +382,14 @@ pub fn verify_bundle(bundle: &PublicKeyBundle) -> Result<()> {
     if has_mldsa {
         // V3 format with ML-DSA signatures - both must verify
         // SAFETY: has_mldsa checked that both fields are Some, so as_ref() calls are guaranteed to return Some.
-        let mldsa_public = bundle.mldsa_public.as_ref().expect("mldsa_public verified Some by has_mldsa check");
-        let mldsa_signature = bundle.mldsa_signature.as_ref().expect("mldsa_signature verified Some by has_mldsa check");
+        let mldsa_public = bundle
+            .mldsa_public
+            .as_ref()
+            .expect("mldsa_public verified Some by has_mldsa check");
+        let mldsa_signature = bundle
+            .mldsa_signature
+            .as_ref()
+            .expect("mldsa_signature verified Some by has_mldsa check");
 
         // Signature input: b"iron-core keybundle v3" || ed25519_public || x25519_public || mlkem_encaps_key || mldsa_public || created_at.to_le_bytes() || supported_suites
         let mut sig_input = Vec::new();

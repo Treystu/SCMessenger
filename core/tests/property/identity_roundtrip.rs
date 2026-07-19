@@ -143,7 +143,9 @@ proptest! {
 #[test]
 fn test_export_format() {
     let mut manager1 = IdentityManager::new();
-    manager1.initialize().expect("initialization should succeed");
+    manager1
+        .initialize()
+        .expect("initialization should succeed");
 
     let exported1 = manager1.export_key_bytes().expect("export should succeed");
 
@@ -152,7 +154,9 @@ fn test_export_format() {
 
     // Create a second manager and import the exported bytes
     let mut manager2 = IdentityManager::new();
-    manager2.import_key_bytes(&exported1).expect("import should succeed");
+    manager2
+        .import_key_bytes(&exported1)
+        .expect("import should succeed");
 
     // Export again from the second manager
     let exported2 = manager2.export_key_bytes().expect("export should succeed");

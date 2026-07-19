@@ -60,7 +60,10 @@ async fn test_ledger_convergence_between_nodes() {
                 all_addrs.push(addr);
                 let has_loopback_tcp = all_addrs.iter().any(|a| {
                     let s = a.to_string();
-                    s.contains("/127.0.0.1/") && s.contains("/tcp/") && !s.contains("/ws") && !s.contains("/quic")
+                    s.contains("/127.0.0.1/")
+                        && s.contains("/tcp/")
+                        && !s.contains("/ws")
+                        && !s.contains("/quic")
                 });
                 if has_loopback_tcp {
                     break;
@@ -71,7 +74,10 @@ async fn test_ledger_convergence_between_nodes() {
     .await
     .ok();
 
-    assert!(!all_addrs.is_empty(), "Node 1 should have at least one listen address");
+    assert!(
+        !all_addrs.is_empty(),
+        "Node 1 should have at least one listen address"
+    );
 
     let node1_addr = select_dialable_tcp_loopback(&all_addrs)
         .expect("No suitable plain TCP loopback address found among node1 listeners");
@@ -146,7 +152,10 @@ async fn test_ledger_convergence_between_nodes() {
             known_topics: entry.topics,
         })
         .collect();
-    swarm1.share_ledger(peer_id2, shared_entries).await.expect("Failed to share ledger");
+    swarm1
+        .share_ledger(peer_id2, shared_entries)
+        .await
+        .expect("Failed to share ledger");
 
     // Let the test wait for 3 seconds so the ledger is received on Node 2
     tokio::time::sleep(Duration::from_secs(3)).await;
@@ -161,7 +170,6 @@ async fn test_ledger_convergence_between_nodes() {
         "Node 2's ledger should contain node 1's pre-existing entry via ledger_exchange"
     );
 }
-
 
 /// Select a plain TCP loopback address from a list of ListeningOn multiaddrs.
 ///
@@ -183,7 +191,9 @@ fn select_dialable_tcp_loopback(addrs: &[Multiaddr]) -> Option<Multiaddr> {
         let s = addr.to_string();
 
         // Reject non-plain-TCP transports.
-        if s.contains("/ws") || s.contains("/wss") || s.contains("/quic")
+        if s.contains("/ws")
+            || s.contains("/wss")
+            || s.contains("/quic")
             || s.contains("/p2p-circuit")
         {
             continue;
@@ -228,7 +238,5 @@ fn select_dialable_tcp_loopback(addrs: &[Multiaddr]) -> Option<Multiaddr> {
         }
     }
 
-    loopback_ephemeral
-        .or(loopback_any_tcp)
-        .or(any_plain_tcp)
+    loopback_ephemeral.or(loopback_any_tcp).or(any_plain_tcp)
 }

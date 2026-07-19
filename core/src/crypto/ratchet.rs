@@ -83,7 +83,11 @@ pub(crate) struct PendingPqSecret {
 
 impl std::fmt::Debug for PendingPqSecret {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "PendingPqSecret {{ created_step: {} }}", self.created_step)
+        write!(
+            f,
+            "PendingPqSecret {{ created_step: {} }}",
+            self.created_step
+        )
     }
 }
 
@@ -631,14 +635,25 @@ impl RatchetSession {
         let their_dh = X25519PublicKey::from(their_dh_bytes);
 
         // H1: Check the skipped keys cache BEFORE the dh_changed check
-        if let Some(message_key) = self.skipped_keys.get(&(their_dh.to_bytes(), message_number)) {
+        if let Some(message_key) = self
+            .skipped_keys
+            .get(&(their_dh.to_bytes(), message_number))
+        {
             let nonce_obj = XNonce::from_slice(nonce);
             let cipher = XChaCha20Poly1305::new_from_slice(message_key.as_bytes())
                 .map_err(|e| anyhow::anyhow!("Failed to create cipher: {}", e))?;
-            let plaintext = cipher.decrypt(nonce_obj, Payload { msg: ciphertext, aad })
+            let plaintext = cipher
+                .decrypt(
+                    nonce_obj,
+                    Payload {
+                        msg: ciphertext,
+                        aad,
+                    },
+                )
                 .map_err(|_| anyhow::anyhow!("Decryption failed with skipped key"))?;
-            
-            self.skipped_keys.remove(&(their_dh.to_bytes(), message_number));
+
+            self.skipped_keys
+                .remove(&(their_dh.to_bytes(), message_number));
             self.peer_confirmed = true;
             return Ok(plaintext);
         }
@@ -661,9 +676,16 @@ impl RatchetSession {
         let cipher = XChaCha20Poly1305::new_from_slice(message_key.as_bytes())
             .map_err(|e| anyhow::anyhow!("Failed to create cipher: {}", e))?;
 
-        let plaintext = cipher.decrypt(nonce_obj, Payload { msg: ciphertext, aad })
+        let plaintext = cipher
+            .decrypt(
+                nonce_obj,
+                Payload {
+                    msg: ciphertext,
+                    aad,
+                },
+            )
             .map_err(|_| anyhow::anyhow!("Decryption failed"))?;
-        
+
         *self = cloned;
         self.peer_confirmed = true;
         Ok(plaintext)
@@ -754,7 +776,13 @@ impl RatchetSession {
                 }
             };
 
-            match cipher.decrypt(nonce_obj, Payload { msg: ciphertext, aad }) {
+            match cipher.decrypt(
+                nonce_obj,
+                Payload {
+                    msg: ciphertext,
+                    aad,
+                },
+            ) {
                 Ok(plaintext) => {
                     if let Some(ref _adopted_ss) = candidate {
                         trial.pq_pending_sent = None;
@@ -777,7 +805,10 @@ impl RatchetSession {
             }
         }
 
-        bail!("Trial decryption failed for all candidates. Errors: {:?}", errors)
+        bail!(
+            "Trial decryption failed for all candidates. Errors: {:?}",
+            errors
+        )
     }
 
     fn handle_dh_ratchet(&mut self, their_new_dh: &X25519PublicKey) -> Result<()> {
@@ -959,8 +990,12 @@ impl RatchetSession {
         let fp = pq_ss_fingerprint(ss_pq_key.as_bytes());
 
         // Deduplication: check if we've already mixed this secret
-        let is_duplicate = self.pq_last_mixed_fp == Some(fp) 
-            || self.pq_pending_recv.as_ref().map(|k| pq_ss_fingerprint(k.as_bytes())) == Some(fp);
+        let is_duplicate = self.pq_last_mixed_fp == Some(fp)
+            || self
+                .pq_pending_recv
+                .as_ref()
+                .map(|k| pq_ss_fingerprint(k.as_bytes()))
+                == Some(fp);
 
         if !is_duplicate {
             self.pq_pending_recv = Some(ss_pq_key);

@@ -230,7 +230,8 @@ impl MeshStore {
             .duration_since(web_time::UNIX_EPOCH)
             .unwrap_or_default()
             .as_secs() as u32;
-        let expired_ids: Vec<MessageId> = self.messages
+        let expired_ids: Vec<MessageId> = self
+            .messages
             .iter()
             .filter(|(_, e)| e.ttl_expiry != 0 && e.ttl_expiry <= now)
             .map(|(id, _)| *id)

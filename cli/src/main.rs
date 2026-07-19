@@ -171,9 +171,7 @@ async fn spawn_http_health_server(bind_addr: String) {
     };
     let app = axum::Router::new().route(
         "/health",
-        axum::routing::get(|| async {
-            axum::Json(serde_json::json!({"status": "healthy"}))
-        }),
+        axum::routing::get(|| async { axum::Json(serde_json::json!({"status": "healthy"})) }),
     );
     let listener = match tokio::net::TcpListener::bind(addr).await {
         Ok(l) => l,
@@ -2328,7 +2326,12 @@ async fn cmd_start(port: Option<u16>, http_bind: Option<String>) -> Result<()> {
 /// - Serves HTTP landing page and REST API for status
 /// - Periodically re-dials bootstrap peers for mesh continuity
 /// - Runs forever (no stdin, no quit command)
-async fn cmd_relay(listen_addr: String, http_port: u16, node_name: Option<String>, http_bind: Option<String>) -> Result<()> {
+async fn cmd_relay(
+    listen_addr: String,
+    http_port: u16,
+    node_name: Option<String>,
+    http_bind: Option<String>,
+) -> Result<()> {
     let data_dir = config::Config::data_dir()?;
     let storage_path = data_dir.join("storage");
     let core = Arc::new(IronCore::with_storage(path_to_string(&storage_path)?));
@@ -2898,7 +2901,12 @@ async fn cmd_send_offline(recipient: String, message: String) -> Result<()> {
             }
             Err(e) => {
                 last_error = Some(format!("{}", e));
-                tracing::warn!("Send attempt {}/{} failed: {}", attempts, retry_policy.max_retries, e);
+                tracing::warn!(
+                    "Send attempt {}/{} failed: {}",
+                    attempts,
+                    retry_policy.max_retries,
+                    e
+                );
 
                 if !retry_policy.can_retry(attempts) {
                     break;
