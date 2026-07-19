@@ -31,11 +31,14 @@ from typing import NamedTuple, Optional
 # --- Constants ---
 OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions"
 MORPH_MODEL = "morph/morph-v3-fast"
-MAX_FILE_LINES = 500
+# Default per-file line ceiling. Overridable per-invocation via --max-lines
+# (fast-apply reliability/cost degrades on very large files, so keep the
+# default conservative and raise deliberately for a specific cohesive file).
+DEFAULT_MAX_FILE_LINES = 500
 DEFAULT_MAX_COST = 0.01  # $0.01 default ceiling
 HARD_MAX_COST = 0.05  # $0.05 hard ceiling, never raised past this via --max-cost
 INSTRUCTION_MAX_CHARS = 1000
-EDIT_SNIPPET_MAX_CHARS = 2000
+EDIT_SNIPPET_MAX_CHARS = 4000
 
 
 class MorphConfig(NamedTuple):
@@ -46,6 +49,7 @@ class MorphConfig(NamedTuple):
     verify_only: bool
     max_cost: float
     api_key: str
+    max_lines: int = DEFAULT_MAX_FILE_LINES
 
 
 class MorphResult(NamedTuple):
@@ -67,8 +71,8 @@ def validate_config(cfg: MorphConfig) -> Optional[str]:
         return f"File not found: {cfg.file_path}"
 
     file_lines = len(Path(cfg.file_path).read_text().splitlines())
-    if file_lines > MAX_FILE_LINES:
-        return f"File too large: {file_lines} lines (max {MAX_FILE_LINES})"
+    if file_lines > cfg.max_lines:
+        return f"File too large: {file_lines} lines (max {cfg.max_lines})"
 
     if len(cfg.instruction) > INSTRUCTION_MAX_CHARS:
         return f"Instruction too long: {len(cfg.instruction)} chars (max {INSTRUCTION_MAX_CHARS})"
@@ -124,6 +128,8 @@ def call_morph(cfg: MorphConfig) -> MorphResult:
             ],
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=30,
         )
 
@@ -262,6 +268,13 @@ EXIT CODES:
         default=DEFAULT_MAX_COST,
         help=f"Cost ceiling (default: ${DEFAULT_MAX_COST:.6f}, hard max ${HARD_MAX_COST:.6f})",
     )
+    parser.add_argument(
+        "--max-lines",
+        type=int,
+        default=DEFAULT_MAX_FILE_LINES,
+        help=f"Per-file line ceiling (default: {DEFAULT_MAX_FILE_LINES}). Raise deliberately "
+        "for a specific cohesive file; fast-apply reliability/cost degrades on large files.",
+    )
 
     args = parser.parse_args()
 
@@ -300,6 +313,7 @@ EXIT CODES:
         verify_only=args.verify_only,
         max_cost=args.max_cost,
         api_key=api_key,
+        max_lines=args.max_lines,
     )
 
     # Validate upfront

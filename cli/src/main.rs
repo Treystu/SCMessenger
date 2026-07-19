@@ -1822,6 +1822,16 @@ async fn cmd_start(port: Option<u16>, http_bind: Option<String>) -> Result<()> {
                                     drop(l); // release lock before dialing
 
                                     for addr_str in new_addrs {
+                                        // Skip non-routable addresses (loopback,
+                                        // link-local, site-local) a peer may
+                                        // advertise -- dialing them fails forever
+                                        // and storms the request_response handler.
+                                        if !ledger::is_dialable_multiaddr(
+                                            &addr_str,
+                                            ledger::NetworkMode::Local,
+                                        ) {
+                                            continue;
+                                        }
                                         if let Ok(addr) = addr_str.parse::<Multiaddr>() {
                                             let _ = swarm_handle.dial(addr).await;
                                         }
@@ -2718,6 +2728,12 @@ async fn cmd_relay(
                                 .collect();
                             drop(l);
                             for addr_str in new_addrs {
+                                // Skip non-routable addresses (loopback, link-local,
+                                // site-local) a peer may advertise -- dialing them
+                                // fails forever and storms the request_response handler.
+                                if !ledger::is_dialable_multiaddr(&addr_str, ledger::NetworkMode::Local) {
+                                    continue;
+                                }
                                 if let Ok(addr) = addr_str.parse::<Multiaddr>() {
                                     let _ = swarm_handle.dial(addr).await;
                                 }

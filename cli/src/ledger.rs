@@ -92,7 +92,7 @@ impl LedgerEntry {
         if let Some(ref old_id) = self.last_peer_id {
             if old_id != peer_id {
                 tracing::warn!(
-                    "⚡ PeerID changed at {}: {} → {} (accepting new identity)",
+                    "[WARNING] PeerID changed at {}: {} -> {} (accepting new identity)",
                     self.address,
                     old_id,
                     peer_id
@@ -183,12 +183,12 @@ impl ConnectionLedger {
             let ledger: ConnectionLedger =
                 serde_json::from_str(&contents).context("Failed to parse peers.json")?;
             tracing::info!(
-                "📒 Loaded connection ledger: {} known peers",
+                "[INFO] Loaded connection ledger: {} known peers",
                 ledger.entries.len()
             );
             Ok(ledger)
         } else {
-            tracing::info!("📒 No existing ledger found, starting fresh");
+            tracing::info!("[INFO] No existing ledger found, starting fresh");
             Ok(Self::default())
         }
     }
@@ -205,7 +205,7 @@ impl ConnectionLedger {
         let contents = serde_json::to_string_pretty(self).context("Failed to serialize ledger")?;
         std::fs::write(&ledger_path, contents).context("Failed to write peers.json")?;
 
-        tracing::debug!("📒 Saved ledger ({} entries)", self.entries.len());
+        tracing::debug!("[INFO] Saved ledger ({} entries)", self.entries.len());
         Ok(())
     }
 
@@ -234,6 +234,9 @@ impl ConnectionLedger {
     /// Add or update a peer after successful connection
     pub fn record_connection(&mut self, multiaddr: &str, peer_id: &str) {
         let stripped = strip_peer_id(multiaddr);
+        if !is_dialable_multiaddr(&stripped, NetworkMode::Local) {
+            return;
+        }
 
         self.entries
             .entry(stripped.clone())
@@ -261,7 +264,7 @@ impl ConnectionLedger {
         if let Some(entry) = self.entries.get_mut(&stripped) {
             entry.record_failure();
             tracing::warn!(
-                "📒 Connection failed to {} (attempt #{}, backoff {}s)",
+                "[WARNING] Connection failed to {} (attempt #{}, backoff {}s)",
                 stripped,
                 entry.consecutive_failures,
                 entry.backoff_seconds
@@ -274,6 +277,7 @@ impl ConnectionLedger {
         self.entries
             .values()
             .filter(|e| e.should_attempt())
+            .filter(|e| is_dialable_multiaddr(&e.multiaddr, NetworkMode::Local))
             .filter(|e| {
                 if let (Some(local), Some(last)) = (local_peer_id, &e.last_peer_id) {
                     local != last
@@ -342,6 +346,10 @@ impl ConnectionLedger {
         for entry in entries {
             let stripped = strip_peer_id(&entry.multiaddr);
 
+            if !is_dialable_multiaddr(&stripped, NetworkMode::Local) {
+                continue;
+            }
+
             if let Some(existing) = self.entries.get_mut(&stripped) {
                 // Update last_seen if the remote has fresher data
                 if entry.last_seen > existing.last_seen {
@@ -377,7 +385,7 @@ impl ConnectionLedger {
 
         if new_count > 0 {
             tracing::info!(
-                "📒 Merged {} new peers from ledger exchange (total: {})",
+                "[INFO] Merged {} new peers from ledger exchange (total: {})",
                 new_count,
                 self.entries.len()
             );
@@ -406,6 +414,60 @@ impl ConnectionLedger {
             total, bootstrap, reachable, backoff
         )
     }
+}
+
+/// Network context for address filtering. `Local` (WiFi/LAN) keeps private/LAN
+/// ranges dialable for local mesh discovery; `Public` (cellular / public-only)
+/// additionally drops private ranges since a public-only node cannot reach
+/// anyone's LAN. Defaults to the conservative `Local`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub enum NetworkMode {
+    #[default]
+    Local,
+    Public,
+}
+
+/// Returns true iff `multiaddr` is worth dialing. Always rejects non-routable
+/// addresses that a remote node can never reach: loopback, unspecified, IPv4
+/// link-local (169.254/16), IPv6 link-local (fe80::/10) and IPv6 site-local
+/// (fec0::/10). `/p2p-circuit` addresses are always allowed (the only way to
+/// reach a relayed peer). Private/LAN IPv4 ranges are rejected only when
+/// `mode == NetworkMode::Public`.
+pub fn is_dialable_multiaddr(multiaddr: &str, mode: NetworkMode) -> bool {
+    let parts: Vec<&str> = multiaddr.split('/').collect();
+    let mut i = 0;
+    while i + 1 < parts.len() {
+        match parts[i] {
+            "p2p-circuit" => return true,
+            "ip4" => {
+                if let Ok(ip) = parts[i + 1].parse::<std::net::Ipv4Addr>() {
+                    if ip.is_loopback() || ip.is_unspecified() || ip.is_link_local() {
+                        return false;
+                    }
+                    if mode == NetworkMode::Public && ip.is_private() {
+                        return false;
+                    }
+                }
+            }
+            "ip6" => {
+                if let Ok(ip) = parts[i + 1].parse::<std::net::Ipv6Addr>() {
+                    if ip.is_loopback() || ip.is_unspecified() {
+                        return false;
+                    }
+                    // fe80::/10 link-local and fec0::/10 site-local: check the
+                    // top 10 bits of the first 16-bit segment (std lacks stable
+                    // helpers for these on this toolchain).
+                    let top10 = ip.segments()[0] & 0xffc0;
+                    if top10 == 0xfe80 || top10 == 0xfec0 {
+                        return false;
+                    }
+                }
+            }
+            _ => {}
+        }
+        i += 1;
+    }
+    true
 }
 
 /// Strip the /p2p/PeerID suffix from a multiaddr string, leaving just the transport address.
@@ -546,5 +608,27 @@ mod tests {
         let topics = ledger.all_known_topics();
         assert!(topics.contains(&"sc-mesh".to_string()));
         assert!(topics.contains(&"sc-lobby".to_string()));
+    }
+
+    #[test]
+    fn test_is_dialable_multiaddr() {
+        use NetworkMode::{Local, Public};
+        // Non-routable: rejected regardless of mode.
+        assert!(!is_dialable_multiaddr("/ip4/127.0.0.1/tcp/9001", Local));
+        assert!(!is_dialable_multiaddr("/ip4/0.0.0.0/tcp/9001", Local));
+        assert!(!is_dialable_multiaddr("/ip4/169.254.1.2/tcp/9001", Local));
+        assert!(!is_dialable_multiaddr("/ip6/::1/tcp/9001", Local));
+        assert!(!is_dialable_multiaddr("/ip6/fe80::1897:a8ff:fec5:3d16/tcp/443", Local));
+        assert!(!is_dialable_multiaddr("/ip6/fec0::1/tcp/9001", Local));
+        // Globally routable: accepted.
+        assert!(is_dialable_multiaddr("/ip4/1.2.3.4/tcp/9001", Local));
+        assert!(is_dialable_multiaddr("/ip6/2606:4700:4700::1111/tcp/9001", Local));
+        // Private/LAN: kept in Local, dropped in Public.
+        assert!(is_dialable_multiaddr("/ip4/10.0.2.16/tcp/9001", Local));
+        assert!(is_dialable_multiaddr("/ip4/192.168.1.5/tcp/9001", Local));
+        assert!(!is_dialable_multiaddr("/ip4/10.0.2.16/tcp/9001", Public));
+        assert!(!is_dialable_multiaddr("/ip4/192.168.1.5/tcp/9001", Public));
+        // p2p-circuit always allowed (relay path).
+        assert!(is_dialable_multiaddr("/ip4/1.2.3.4/tcp/9001/p2p-circuit", Local));
     }
 }
