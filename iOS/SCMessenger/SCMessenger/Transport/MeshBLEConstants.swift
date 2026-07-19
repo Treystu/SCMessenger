@@ -12,7 +12,7 @@ import CoreBluetooth
 /// Shared between iOS and Android - MUST be identical
 struct MeshBLEConstants {
     // MARK: - Service and Characteristics
-    // ⚠️ CRITICAL: These UUIDs MUST match Android exactly for cross-platform BLE interop
+    // [WARNING] CRITICAL: These UUIDs MUST match Android exactly for cross-platform BLE interop
     // Android source: android/.../transport/ble/BleGattServer.kt + BleScanner.kt
 
     /// SCMesh GATT Service UUID

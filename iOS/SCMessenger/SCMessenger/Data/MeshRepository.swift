@@ -453,7 +453,7 @@ final class MeshRepository {
             try? ledgerManager?.load()
 
             logDiagnostic("repo_managers_init_success")
-            logVerbose("✓ All managers initialized successfully")
+            logVerbose("[OK] All managers initialized successfully")
 
             // One-time migration: clear stale routing hints inherited from
             // pre-fix builds that accumulated duplicate BLE MACs and stale
@@ -558,12 +558,12 @@ final class MeshRepository {
                     self?.logger.info("Settings reloaded asynchronously after service startup")
                 }
             }
-            logVerbose("✓ MeshService started lazily")
+            logVerbose("[OK] MeshService started lazily")
         }
 
         // Verify ironCore is available after initialization
         if ironCore == nil {
-            logger.error("⚠️ IronCore is nil despite service running - attempting refresh")
+            logger.error("[WARNING] IronCore is nil despite service running - attempting refresh")
             ironCore = meshService?.getCore()
             if ironCore == nil {
                 throw MeshError.notInitialized("Failed to obtain IronCore from running service")
@@ -699,7 +699,7 @@ final class MeshRepository {
 
             let info = getIdentityInfo()
             logger.info("SC_IDENTITY_OWN p2p_id=\(info?.libp2pPeerId ?? "unknown") pk=\(info?.publicKeyHex ?? "unknown")")
-            logVerbose("✓ Mesh service started successfully")
+            logVerbose("[OK] Mesh service started successfully")
             logDiagnostic("service_start success")
         } catch {
             serviceState = .stopped
@@ -750,7 +750,7 @@ final class MeshRepository {
         multipeerTransport?.disconnect()
         multipeerTransport = nil
 
-        logVerbose("✓ Mesh service stopped")
+        logVerbose("[OK] Mesh service stopped")
         logDiagnostic("service_stop success")
     }
 
@@ -764,7 +764,7 @@ final class MeshRepository {
         meshService?.pause()
         // Note: pause() is an internal operation that reduces activity
         // The external serviceState remains .running (no .paused state exists)
-        logVerbose("✓ Mesh service paused")
+        logVerbose("[OK] Mesh service paused")
     }
 
     /// Resume the mesh service (foreground mode)
@@ -775,7 +775,7 @@ final class MeshRepository {
             return
         }
         meshService?.resume()
-        logVerbose("✓ Mesh service resumed")
+        logVerbose("[OK] Mesh service resumed")
     }
 
     /// Get current service state
@@ -794,7 +794,7 @@ final class MeshRepository {
                 // P0_TRANSPORT_001: Use static port 9001 for LAN connectivity with CLI daemon.
                 try meshService?.startSwarm(listenAddr: "/ip4/0.0.0.0/tcp/9001", bootstrapAddrs: [])
                 broadcastIdentityBeacon()
-                logger.info("✓ Internet transport (Swarm) started manually")
+                logger.info("[OK] Internet transport (Swarm) started manually")
             } catch {
                 logger.error("Failed to start swarm: \(error.localizedDescription)")
             }
@@ -848,7 +848,7 @@ final class MeshRepository {
             logVerbose("Calling ironCore.initializeIdentity()...")
             try ironCore.initializeIdentity()
             try ensureLocalIdentityFederation()
-            logVerbose("✓ Identity created successfully")
+            logVerbose("[OK] Identity created successfully")
             initializeAndStartSwarm()
             broadcastIdentityBeacon()
         } catch {
@@ -1082,16 +1082,16 @@ final class MeshRepository {
         // Pre-validate public key format to provide descriptive errors
         let trimmedKey = recipientPublicKey.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmedKey.isEmpty {
-            logger.error("❌ Contact \(peerId) has an empty public key")
+            logger.error("[ERROR] Contact \(peerId) has an empty public key")
             throw MeshError.contactNotFound("Contact \(peerId) has no public key. Please re-add this contact with a valid public key.")
         }
         if trimmedKey.count != 64 {
-            logger.error("❌ Contact \(peerId) has invalid public key length: \(trimmedKey.count) chars (expected 64)")
+            logger.error("[ERROR] Contact \(peerId) has invalid public key length: \(trimmedKey.count) chars (expected 64)")
             throw MeshError.contactNotFound("Contact \(peerId) has an invalid public key (wrong length: \(trimmedKey.count), expected 64 hex characters). Please re-add this contact.")
         }
         let hexChars = CharacterSet(charactersIn: "0123456789abcdefABCDEF")
         if !trimmedKey.unicodeScalars.allSatisfy({ hexChars.contains($0) }) {
-            logger.error("❌ Contact \(peerId) has non-hex characters in public key")
+            logger.error("[ERROR] Contact \(peerId) has non-hex characters in public key")
             throw MeshError.contactNotFound("Contact \(peerId) has an invalid public key (non-hex characters found). Please re-add this contact.")
         }
 
@@ -2609,7 +2609,7 @@ final class MeshRepository {
         if !settings.notificationsEnabled {
             NotificationManager.shared.clearBadge()
         }
-        logger.info("✓ Settings saved (relay: \(settings.relayEnabled))")
+        logger.info("[OK] Settings saved (relay: \(settings.relayEnabled))")
     }
 
     func validateSettings(_ settings: MeshSettings) -> Bool {
@@ -2870,7 +2870,7 @@ final class MeshRepository {
             publicKey: finalContact.publicKey,
             nickname: finalContact.nickname
         )
-        logger.info("✓ Contact added: \(finalContact.peerId)")
+        logger.info("[OK] Contact added: \(finalContact.peerId)")
     }
 
     func removeContact(peerId: String) throws {
@@ -2879,7 +2879,7 @@ final class MeshRepository {
         }
         try contactManager.remove(peerId: peerId)
         try? historyManager?.removeConversation(peerId: peerId)
-        logger.info("✓ Contact removed: \(peerId) and their message history")
+        logger.info("[OK] Contact removed: \(peerId) and their message history")
     }
 
     func searchContacts(query: String) throws -> [Contact] {
@@ -2897,7 +2897,7 @@ final class MeshRepository {
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .nilIfEmpty
         try contactManager.setNickname(peerId: peerId, nickname: normalizedNickname)
-        logger.info("✓ Contact nickname updated: \(peerId)")
+        logger.info("[OK] Contact nickname updated: \(peerId)")
     }
 
     func setLocalNickname(peerId: String, nickname: String?) throws {
@@ -2908,7 +2908,7 @@ final class MeshRepository {
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .nilIfEmpty
         try contactManager.setLocalNickname(peerId: peerId, nickname: normalizedNickname)
-        logger.info("✓ Local nickname updated: \(peerId)")
+        logger.info("[OK] Local nickname updated: \(peerId)")
     }
 
     func getContactCount() throws -> UInt32 {
@@ -2924,7 +2924,7 @@ final class MeshRepository {
             throw MeshError.notInitialized("ContactManager not initialized")
         }
         try contactManager.markVerified(peerId: peerId)
-        logger.info("✓ Contact marked verified: \(peerId)")
+        logger.info("[OK] Contact marked verified: \(peerId)")
     }
 
     /// Clear a contact's verification status (e.g. after a key change).
@@ -2933,7 +2933,7 @@ final class MeshRepository {
             throw MeshError.notInitialized("ContactManager not initialized")
         }
         try contactManager.unverify(peerId: peerId)
-        logger.info("✓ Contact verification cleared: \(peerId)")
+        logger.info("[OK] Contact verification cleared: \(peerId)")
     }
 
     /// Compute the Signal-style safety number for comparing identities with
@@ -3014,7 +3014,7 @@ final class MeshRepository {
             throw MeshError.notInitialized("HistoryManager not initialized")
         }
         try historyManager.clear()
-        logger.info("✓ Message history cleared")
+        logger.info("[OK] Message history cleared")
     }
 
     func clearConversation(peerId: String) throws {
@@ -3022,7 +3022,7 @@ final class MeshRepository {
             throw MeshError.notInitialized("HistoryManager not initialized")
         }
         try historyManager.clearConversation(peerId: peerId)
-        logger.info("✓ Conversation cleared for peer: \(peerId)")
+        logger.info("[OK] Conversation cleared for peer: \(peerId)")
     }
 
     func acceptMessageRequest(peerId: String) throws {
@@ -3069,7 +3069,7 @@ final class MeshRepository {
             throw MeshError.notInitialized("IronCore not initialized")
         }
         try ironCore.blockPeer(peerId: peerId, deviceId: nil, reason: reason)
-        logger.info("✓ Blocked peer: \(peerId)")
+        logger.info("[OK] Blocked peer: \(peerId)")
     }
 
     /// Unblock a previously blocked peer.
@@ -3078,7 +3078,7 @@ final class MeshRepository {
             throw MeshError.notInitialized("IronCore not initialized")
         }
         try ironCore.unblockPeer(peerId: peerId, deviceId: nil)
-        logger.info("✓ Unblocked peer: \(peerId)")
+        logger.info("[OK] Unblocked peer: \(peerId)")
     }
 
     /// Block a peer AND delete all their stored messages (cascade purge).
@@ -3088,7 +3088,7 @@ final class MeshRepository {
             throw MeshError.notInitialized("IronCore not initialized")
         }
         try ironCore.blockAndDeletePeer(peerId: peerId, deviceId: nil, reason: reason)
-        logger.info("✓ Blocked and deleted peer: \(peerId)")
+        logger.info("[OK] Blocked and deleted peer: \(peerId)")
     }
 
     /// Check whether a peer is currently blocked.
@@ -3190,7 +3190,7 @@ final class MeshRepository {
             throw MeshError.notInitialized("HistoryManager not initialized")
         }
         try historyManager.delete(id: id)
-        logger.info("✓ Deleted message: \(id)")
+        logger.info("[OK] Deleted message: \(id)")
     }
 
     /// Enforce message retention by keeping only the newest N messages.
@@ -3200,7 +3200,7 @@ final class MeshRepository {
             throw MeshError.notInitialized("HistoryManager not initialized")
         }
         let pruned = try historyManager.enforceRetention(maxMessages: maxMessages)
-        logger.info("✓ Retention enforced: kept \(maxMessages), pruned \(pruned)")
+        logger.info("[OK] Retention enforced: kept \(maxMessages), pruned \(pruned)")
         return pruned
     }
 
@@ -3211,7 +3211,7 @@ final class MeshRepository {
             throw MeshError.notInitialized("HistoryManager not initialized")
         }
         let pruned = try historyManager.pruneBefore(beforeTimestamp: timestamp)
-        logger.info("✓ Pruned \(pruned) messages before timestamp \(timestamp)")
+        logger.info("[OK] Pruned \(pruned) messages before timestamp \(timestamp)")
         return pruned
     }
 
@@ -4265,7 +4265,7 @@ final class MeshRepository {
                     }
                     do {
                         try transport.sendData(toPeerId: multipeerAddr, data: envelopeData)
-                        logger.info("✓ Delivery via Multipeer (target=\(multipeerAddr))")
+                        logger.info("[OK] Delivery via Multipeer (target=\(multipeerAddr))")
                         logDeliveryAttempt(
                             messageId: traceMessageId,
                             medium: "multipeer",
@@ -4323,7 +4323,7 @@ final class MeshRepository {
                         if let central = bleCentralManager {
                             if let uuid = UUID(uuidString: target) {
                                 if central.sendData(to: uuid, data: envelopeData) {
-                                    logger.info("✓ Delivery via BLE Central (target=\(target))")
+                                    logger.info("[OK] Delivery via BLE Central (target=\(target))")
                                     logDeliveryAttempt(
                                         messageId: traceMessageId,
                                         medium: "ble",
@@ -4467,7 +4467,7 @@ final class MeshRepository {
                     }
                     do {
                         try transport.sendData(toPeerId: multipeerAddr, data: envelopeData)
-                        logger.info("✓ Delivery via Multipeer (target=\(multipeerAddr))")
+                        logger.info("[OK] Delivery via Multipeer (target=\(multipeerAddr))")
                         logDeliveryAttempt(
                             messageId: traceMessageId,
                             medium: "multipeer",
@@ -4525,7 +4525,7 @@ final class MeshRepository {
                         if let central = bleCentralManager {
                             if let uuid = UUID(uuidString: target) {
                                 if central.sendData(to: uuid, data: envelopeData) {
-                                    logger.info("✓ Delivery via BLE Central (target=\(target))")
+                                    logger.info("[OK] Delivery via BLE Central (target=\(target))")
                                     logDeliveryAttempt(
                                         messageId: traceMessageId,
                                         medium: "ble",
@@ -4661,7 +4661,7 @@ final class MeshRepository {
                     }
                     continue
                 }
-                logger.info("✓ Direct delivery ACK from \(routePeerId)")
+                logger.info("[OK] Direct delivery ACK from \(routePeerId)")
                 logDeliveryAttempt(
                     messageId: traceMessageId,
                     medium: "core",
@@ -4753,7 +4753,7 @@ final class MeshRepository {
                 // Reset failure count on success (LOG-AUDIT-001 fix)
                 consecutiveDeliveryFailures[peerKey] = 0
                 lastFailureTime.removeValue(forKey: peerKey)
-                logger.info("✓ Delivery ACK from \(routePeerId) after relay-circuit retry")
+                logger.info("[OK] Delivery ACK from \(routePeerId) after relay-circuit retry")
                 logDeliveryAttempt(
                     messageId: traceMessageId,
                     medium: "relay-circuit",
@@ -5732,7 +5732,7 @@ final class MeshRepository {
         }
         // Note: Only scan interval override is supported in new API
         autoAdjustEngine.overrideBleScanInterval(intervalMs: scanMs)
-        logger.info("✓ BLE interval overridden: scan=\(scanMs)ms advertise=\(advertiseMs)ms")
+        logger.info("[OK] BLE interval overridden: scan=\(scanMs)ms advertise=\(advertiseMs)ms")
     }
 
     func overrideRelayMax(maxRelayPerHour: UInt32) throws {
@@ -5740,7 +5740,7 @@ final class MeshRepository {
             throw MeshError.notInitialized("AutoAdjustEngine not initialized")
         }
         autoAdjustEngine.overrideRelayMaxPerHour(max: maxRelayPerHour)
-        logger.info("✓ Relay max overridden: \(maxRelayPerHour)/hour")
+        logger.info("[OK] Relay max overridden: \(maxRelayPerHour)/hour")
     }
 
     func clearAdjustmentOverrides() throws {
@@ -5748,7 +5748,7 @@ final class MeshRepository {
             throw MeshError.notInitialized("AutoAdjustEngine not initialized")
         }
         autoAdjustEngine.clearOverrides()
-        logger.info("✓ Adjustment overrides cleared")
+        logger.info("[OK] Adjustment overrides cleared")
         applyPowerAdjustments(reason: "overrides_cleared")
     }
 
@@ -6101,7 +6101,7 @@ final class MeshRepository {
         // 7. Delete diagnostics log
         try? FileManager.default.removeItem(at: diagnosticsLogURL)
 
-        logger.info("✓ All application data reset")
+        logger.info("[OK] All application data reset")
     }
 
     func getListeningAddresses() -> [String] {
@@ -6300,7 +6300,7 @@ final class MeshRepository {
         }
         try ironCore.setNickname(nickname: trimmedNickname)
         persistIdentityBackupToKeychain(ironCore: ironCore)
-        logger.info("✓ Nickname set to: \(trimmedNickname)")
+        logger.info("[OK] Nickname set to: \(trimmedNickname)")
         // If swarm start was postponed before identity/nickname was ready, resume now.
         initializeAndStartSwarm()
         broadcastIdentityBeacon()

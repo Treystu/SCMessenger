@@ -37,7 +37,7 @@ final class TopicManager {
         try meshRepository.subscribeTopic(topic)
         subscribedTopics.insert(topic)
 
-        logger.info("✓ Subscribed to topic: \(topic)")
+        logger.info("[OK] Subscribed to topic: \(topic)")
     }
 
     func unsubscribe(from topic: String) throws {
@@ -48,7 +48,7 @@ final class TopicManager {
         try meshRepository.unsubscribeTopic(topic)
         subscribedTopics.remove(topic)
 
-        logger.info("✓ Unsubscribed from topic: \(topic)")
+        logger.info("[OK] Unsubscribed from topic: \(topic)")
     }
 
     func publish(to topic: String, data: Data) throws {
@@ -62,7 +62,7 @@ final class TopicManager {
         }
         try meshRepository.publishTopic(topic, data: data)
 
-        logger.debug("✓ Published to topic: \(topic)")
+        logger.debug("[OK] Published to topic: \(topic)")
     }
 
     func listTopics() -> [String] {

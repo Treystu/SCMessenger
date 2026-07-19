@@ -67,7 +67,7 @@ struct SCMessengerApp: App {
             }
             refreshOnboardingGate()
         } catch {
-            print("❌ Failed to initialize repository: \(error)")
+            print("[ERROR] Failed to initialize repository: \(error)")
         }
     }
 
