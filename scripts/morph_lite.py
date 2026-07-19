@@ -3,7 +3,7 @@
 Morph Lite: Lightweight code transformation function using Morph V3 Fast.
 
 Scope: Single-file code edits only (< 500 lines per file).
-Cost cap: $0.001 per invocation (hard limit, never raised).
+Cost cap: $0.01 default, $0.05 hard ceiling per invocation (never raised past that).
 Purpose: Verify or apply tight-scoped Rust/Kotlin/TypeScript changes before orchestrator commit.
 
 Usage:
@@ -12,7 +12,7 @@ Usage:
     --instruction <change-description> \
     --edit-snippet <desired-change-snippet> \
     [--verify-only] \
-    [--max-cost 0.001]
+    [--max-cost 0.01]
 
 Exit codes:
   0 = change applied successfully, within cost/scope limits
@@ -32,7 +32,8 @@ from typing import NamedTuple, Optional
 OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions"
 MORPH_MODEL = "morph/morph-v3-fast"
 MAX_FILE_LINES = 500
-MAX_COST_PER_CALL = 0.001  # $0.001 hard ceiling
+DEFAULT_MAX_COST = 0.01  # $0.01 default ceiling
+HARD_MAX_COST = 0.05  # $0.05 hard ceiling, never raised past this via --max-cost
 INSTRUCTION_MAX_CHARS = 1000
 EDIT_SNIPPET_MAX_CHARS = 2000
 
@@ -75,8 +76,8 @@ def validate_config(cfg: MorphConfig) -> Optional[str]:
     if len(cfg.edit_snippet) > EDIT_SNIPPET_MAX_CHARS:
         return f"Edit snippet too long: {len(cfg.edit_snippet)} chars (max {EDIT_SNIPPET_MAX_CHARS})"
 
-    if cfg.max_cost > MAX_COST_PER_CALL:
-        return f"Cost cap ${cfg.max_cost:.6f} exceeds hard limit ${MAX_COST_PER_CALL:.6f}"
+    if cfg.max_cost > HARD_MAX_COST:
+        return f"Cost cap ${cfg.max_cost:.6f} exceeds hard limit ${HARD_MAX_COST:.6f}"
 
     return None
 
@@ -239,7 +240,7 @@ REQUIRED:
 
 OPTIONS:
   --verify-only          Fetch transformation but don't apply (dry run)
-  --max-cost <usd>       Cost ceiling; default $0.001 (never raised)
+  --max-cost <usd>       Cost ceiling; default $0.01, hard max $0.05 (never raised past that)
 
 ENVIRONMENT:
   OPENROUTER_API_KEY     API key for OpenRouter (required)
@@ -258,8 +259,8 @@ EXIT CODES:
     parser.add_argument(
         "--max-cost",
         type=float,
-        default=MAX_COST_PER_CALL,
-        help=f"Cost ceiling (default: ${MAX_COST_PER_CALL:.6f})",
+        default=DEFAULT_MAX_COST,
+        help=f"Cost ceiling (default: ${DEFAULT_MAX_COST:.6f}, hard max ${HARD_MAX_COST:.6f})",
     )
 
     args = parser.parse_args()

@@ -13,7 +13,8 @@ synthesis) using plain chat completions with NO tools key in any payload.
 HARD GUARANTEES:
   1. Every payload omits "tools" entirely.
   2. Worst-case cost (every call maxes max_tokens) computed BEFORE any
-     network call, checked against --max-cost (default $0.01). Refuses if
+     network call, checked against --max-cost (default $0.01, hard ceiling
+     $0.05 -- --max-cost can never be raised past that). Refuses if
      exceeded. NOTE: OpenRouter's pricing.prompt/completion fields are
      PER-TOKEN dollar prices already -- multiply directly, do not divide
      by 1e6 (an earlier version did, undercounting cost ~1,000,000x).
@@ -58,6 +59,7 @@ OPENROUTER_MODELS_URL = "https://openrouter.ai/api/v1/models"
 
 BYOK_DENYLIST_PREFIXES = ("mistralai/",)
 DEFAULT_MAX_COST = 0.01
+HARD_MAX_COST = 0.05  # --max-cost can never be raised past this, no exceptions
 DEFAULT_MAX_TOKENS = 300
 
 
@@ -234,7 +236,8 @@ def main():
     ap.add_argument("--panel", required=True)
     ap.add_argument("--judge", required=True)
     ap.add_argument("--max-tokens", type=int, default=DEFAULT_MAX_TOKENS)
-    ap.add_argument("--max-cost", type=float, default=DEFAULT_MAX_COST)
+    ap.add_argument("--max-cost", type=float, default=DEFAULT_MAX_COST,
+                     help=f"Cost ceiling (default: ${DEFAULT_MAX_COST:.6f}, hard max ${HARD_MAX_COST:.6f})")
     ap.add_argument("--expect-key-label", default=None,
                      help="Refuse to run unless the live key's masked label "
                           "(from GET /api/v1/key) contains this substring. "
@@ -243,6 +246,10 @@ def main():
                           "resolving to an unintended key.")
     ap.add_argument("--out", default=None)
     args = ap.parse_args()
+
+    if args.max_cost > HARD_MAX_COST:
+        eprint(f"[FATAL] --max-cost ${args.max_cost:.6f} exceeds hard ceiling ${HARD_MAX_COST:.6f}. Refusing to run.")
+        sys.exit(1)
 
     panel_models = [m.strip() for m in args.panel.split(",") if m.strip()]
     if not (2 <= len(panel_models) <= 4):
