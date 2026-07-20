@@ -39,9 +39,9 @@ Add unit test in `android/app/src/test/.../ReceiptUnificationTest.kt`:
 
 ## Files to Modify
 
-- `android/app/src/main/java/com/scmessenger/android/.../MeshRepository.kt`
-- `android/app/src/main/java/com/scmessenger/android/transport/TransportManager.kt` (or equivalent)
-- `android/app/src/test/.../ReceiptUnificationTest.kt` (NEW)
+- `android/app/src/main/java/com/scmessenger/android/data/MeshRepository.kt`
+- `android/app/src/main/java/com/scmessenger/android/transport/TransportManager.kt`
+- `android/app/src/test/java/com/scmessenger/android/ReceiptUnificationTest.kt` (NEW; use --allow-new-file)
 - `core/api.udl` (verify, no changes needed if bindings exist)
 
 ## Estimate

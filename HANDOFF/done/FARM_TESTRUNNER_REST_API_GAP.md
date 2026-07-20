@@ -58,3 +58,26 @@ particular harness.
   still worth a Fusion Lite pass given it's new attack surface).
 - (b) is the "fix the test, not the product" option: faster, but the test
   suite would then diverge further from testing real network behavior.
+
+## RESOLVED (2026-07-19, verified during V1.0.0 backlog sweep)
+
+This ticket's diagnosis was stale. `/api/identity` and `/api/peers` (plus
+`/api/swarm/stats`, `/api/listeners`, `/api/history`, `/api/discovery/*`,
+`/submit-run`, `/poll-status/:run_id`, `/fetch-artifact/:run_id/:name`, and
+`/health`) all already exist on the SAME axum router in
+`cli/src/api.rs::start_api_server` (routes registered ~line 1146-1171),
+serving on the `--http-bind` address. The ticket's diagnosis referenced
+`spawn_http_health_server` in `cli/src/main.rs` (line 164) -- that function
+is DEAD CODE, never called from anywhere in main.rs (confirmed via grep: no
+call sites). The real, live health/API server is `api::start_api_server`,
+wired via `api::start_api_server(api_ctx, http_bind_api).await` at both
+`cmd_start` (main.rs:1623) and `cmd_relay` (main.rs:2530).
+
+`handle_get_identity` (api.rs:963) and `handle_get_peers` (api.rs:624) are
+real, non-stub implementations backed by `ctx.core.get_identity_info()` and
+`ctx.swarm_handle.get_peers()`. Matches the `_QUEUE.md` 2026-07-17 header
+correction: "DONE since the 07-13 body was written: ... FARM_TESTRUNNER_REST_API_GAP."
+
+Moved to done/. No code change needed. Separately: `spawn_http_health_server`
+in main.rs is confirmed dead code (unreachable, unused) -- worth a follow-up
+cleanup removal, not done here to keep this ticket's scope to verification.

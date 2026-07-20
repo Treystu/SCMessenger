@@ -69,3 +69,50 @@ when a message needs to reach a specific peer that doesn't respond via relay.
 
 Mandatory crypto-security-auditor (transport/ routing concerns: modified dial
 behavior affects connection-layer security properties).
+
+## PROGRESS (2026-07-20)
+
+Items 1 (self-dial prevention) and 2 (private-range network-awareness)
+implemented directly in `cli/src/ledger.rs` (`is_self_address`,
+`is_dialable_for_this_node`) and wired into all 5 raw-dial call sites in
+`cli/src/main.rs`. Verified: `cargo check`/`clippy -D warnings`/`fmt --check`
+clean, `cargo test --workspace --no-run` clean, 12 unit tests pass
+(10 pre-existing + 2 new, later expanded to cover more edge cases).
+
+Mandatory crypto-security-auditor review (connection-layer/routing concern,
+per this ticket's own request) found a real MEDIUM-HIGH bug before merge:
+`is_dialable_for_this_node` didn't carry the `/p2p-circuit` unconditional-
+allow exemption its sibling `is_dialable_multiaddr` has, so a relay-circuit
+address whose RELAY HOP happened to be in a different RFC1918 class than
+this node's own address would be silently rejected -- breaking the primary
+NAT-traversal path this project relies on. Fixed: circuit addresses now
+short-circuit past the RFC1918 check entirely (self-dial check still
+applies). Added a regression test using this project's own test-fixture
+circuit-address shape (`core/src/transport/swarm.rs`'s
+`.../p2p-circuit/p2p/...` pattern). Also caught and fixed a bug in my OWN
+added test during verification (a wrong assertion about self-dial detection
+on circuit addresses -- the exact-string-match in `is_self_address` doesn't
+treat a circuit address as "self" just because the relay hop's IP matches,
+since the `/p2p-circuit` suffix makes the stripped strings differ; confirmed
+this is correct behavior, not a gap, and corrected the test's expectation).
+
+Auditor also flagged (both explicitly NOT fixed here, deferred to items 3+4
+below, but recorded so they aren't mistaken for closed):
+- Items 1+2 narrow WHICH addresses can be dialed but do not bound HOW MANY
+  concurrent dials one ledger-exchange burst can trigger -- a malicious/
+  compromised peer sending many filter-passing addresses in one
+  `LedgerReceived` event still causes a burst of concurrent `tokio::spawn`
+  dials (a third-party-hammering/resource-exhaustion vector). This is
+  exactly item 3 below; shipping 1+2 alone does not close it.
+- IPv6 Unique Local Addresses (`fc00::/7`) aren't covered by the private-
+  range-awareness logic (IPv4-only) -- a pre-existing gap in
+  `is_dialable_multiaddr` too, not a regression, but worth a follow-up.
+- `get_bound_addresses()` returns addresses populated only from successful
+  `NewListenAddr` events -- a node whose listeners all fail to bind (but is
+  still outbound-reachable on its LAN) would have permanently-empty
+  `my_addrs`, meaning it would NEVER dial any private-range peer for the
+  life of the process, with no diagnostic. Rare edge case, not fixed here.
+
+Items 3 (per-peer backoff + concurrent-dial cap) and 4 (prefer relay-circuit
+over promiscuous direct dial) still need larger dial-loop restructuring --
+not attempted this session.

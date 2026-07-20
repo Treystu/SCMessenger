@@ -193,3 +193,40 @@ After Qwen implements this, Opus will:
 2. Re-run Phase 2 tests with the bootstrap wiring active
 3. Run Phase 3 failure injection tests
 4. Iterate until all phases pass
+
+## PROGRESS (2026-07-20)
+
+An earlier Groq dispatch this session produced a BROKEN
+`docker/bootstrap-topology.sh` containing a literal placeholder comment
+(`# ... (rest of the file remains the same)`) instead of real content --
+caught during review, not shipped.
+
+Rewrote the script directly from the ticket's own inline spec, fixing two
+real bugs found in that spec along the way:
+- The ticket's own script never captured `libp2p_peer_id` (the actual
+  network peer ID field in `/api/identity`'s response) -- it extracted
+  `public_key_hex` into a variable misleadingly named `peer_id`, then
+  reused the target node's literal NAME string ("bob", "carol", etc.) as
+  the "peer_id" POST field to `/api/contacts`. Fixed: now captures
+  `libp2p_peer_id` correctly for the `peer_id` field.
+- `/api/contacts` (POST, `handle_add_contact` in `cli/src/api.rs`) expects
+  field name `public_key`, not `public_key_hex` as the ticket's script used.
+  Fixed.
+- `/api/contacts` had NO GET route at all (POST-only) -- step 4's
+  verification ("all nodes report 6 contacts") had no way to actually work.
+  Added `handle_get_contacts` + `GET /api/contacts` (chained onto the
+  existing POST route) returning `{"contacts": [...]}`, matching what the
+  script's `jq '.contacts | length'` check expects.
+- `docker-compose-extended.yml`'s alice/bob/carol/david/eve services had NO
+  `healthcheck:` defined at all (only relay1/relay2 did) -- the ticket's
+  suggested `bootstrap` service depends on `condition: service_healthy` for
+  all 7 nodes, which would never resolve for the 5 client nodes without one.
+  Added matching healthchecks to all 5, then added the `bootstrap` service
+  (scoped to the `test` compose profile, matching `test-runner`) and wired
+  `test-runner` to wait on `bootstrap: condition: service_completed_successfully`.
+
+Verified: `cargo check -p scmessenger-cli` clean (new `GET /api/contacts`
+route), YAML parses and validates via `python3 -c "import yaml..."`, bash
+syntax validated via `bash -n`. NOT live-tested against the actual 7-node
+docker farm-sim (would require rebuilding/redeploying the AWS docker rig,
+out of scope for this pass) -- static verification only.
