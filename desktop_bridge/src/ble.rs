@@ -128,6 +128,7 @@ pub async fn list_discovered_peers() -> Result<Vec<BlePeer>, String> {
         .await
         .map_err(|e| format!("Failed to create ObjectManager proxy: {e}"))?;
 
+    #[allow(clippy::type_complexity)]
     let (objects,): (
         std::collections::HashMap<
             zbus::zvariant::OwnedObjectPath,
