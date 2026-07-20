@@ -1833,7 +1833,17 @@ async fn cmd_start(port: Option<u16>, http_bind: Option<String>) -> Result<()> {
                                             continue;
                                         }
                                         if let Ok(addr) = addr_str.parse::<Multiaddr>() {
-                                            let _ = swarm_handle.dial(addr).await;
+                                            // Spawned, not awaited inline: dial() now blocks
+                                            // until a real connection/timeout resolves (up to
+                                            // ~10s each), and this loop can iterate over an
+                                            // arbitrary number of peer-supplied addresses --
+                                            // awaiting inline here would stall this shared
+                                            // event loop (including Ctrl+C shutdown) for
+                                            // N*10s in the worst case.
+                                            let swarm_clone = swarm_handle.clone();
+                                            tokio::spawn(async move {
+                                                let _ = swarm_clone.dial(addr).await;
+                                            });
                                         }
                                     }
                                 }
@@ -2735,7 +2745,16 @@ async fn cmd_relay(
                                     continue;
                                 }
                                 if let Ok(addr) = addr_str.parse::<Multiaddr>() {
-                                    let _ = swarm_handle.dial(addr).await;
+                                    // Spawned, not awaited inline: dial() now blocks until a
+                                    // real connection/timeout resolves (up to ~10s each), and
+                                    // this loop can iterate over an arbitrary number of
+                                    // peer-supplied addresses -- awaiting inline here would
+                                    // stall this shared event loop (including Ctrl+C
+                                    // shutdown) for N*10s in the worst case.
+                                    let swarm_clone = swarm_handle.clone();
+                                    tokio::spawn(async move {
+                                        let _ = swarm_clone.dial(addr).await;
+                                    });
                                 }
                             }
                         }

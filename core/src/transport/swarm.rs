@@ -290,6 +290,30 @@ const BOOTSTRAP_BACKOFF_INITIAL_SECS: u64 = 60;
 /// Maximum bootstrap re-dial backoff in seconds (16 minutes).
 const BOOTSTRAP_BACKOFF_MAX_SECS: u64 = 960;
 
+/// How long a `SwarmCommand::Dial` reply may wait for a real
+/// `ConnectionEstablished`/`OutgoingConnectionError` signal before the
+/// pending entry is expired with a timeout error.
+const PENDING_DIAL_TIMEOUT_SECS: u64 = 10;
+
+/// Tracks a `SwarmCommand::Dial` whose `swarm.dial()` call queued
+/// successfully but hasn't yet been confirmed connected or failed.
+/// Keyed in `pending_dials` by the originally-dialed (stripped of any
+/// `/p2p/` component) address so it can be resolved by matching against
+/// `ConnectionEstablished`'s remote address or `OutgoingConnectionError`'s
+/// failed transport addresses/peer_id — mirrors the same matching pattern
+/// already used for `bootstrap_backoff`/`resolved_to_dns` above.
+struct PendingDialEntry {
+    reply: mpsc::Sender<Result<(), String>>,
+    dialed_at: web_time::Instant,
+    /// All `/p2p/`-stripped addresses this specific dial could plausibly
+    /// resolve via: just the single dialed address for a peer-id-less dial,
+    /// or the full candidate ladder (original + last-known-good + port
+    /// fallbacks) for a `Some(pid)` dial. A `ConnectionEstablished`/
+    /// `OutgoingConnectionError` only resolves this entry if the connected/
+    /// failed address is a member of this set.
+    candidate_addrs: Vec<Multiaddr>,
+}
+
 struct RelayAbuseGuardrails {
     per_peer_buckets: HashMap<String, TokenBucketState>,
     recent_duplicates: HashMap<String, u64>,
@@ -2323,6 +2347,12 @@ pub async fn start_swarm_with_config(
                 std::collections::VecDeque::new();
             let mut in_flight_dns: HashSet<Multiaddr> = HashSet::new();
 
+            // Dials awaiting a real ConnectionEstablished/OutgoingConnectionError
+            // signal before their SwarmCommand::Dial reply is sent (see
+            // PendingDialEntry doc comment above).
+            let mut pending_dials: HashMap<Multiaddr, PendingDialEntry> = HashMap::new();
+            let mut pending_dial_sweep_interval = tokio::time::interval(Duration::from_secs(5));
+
             // Cover traffic — 1 dummy message/min to mask real traffic patterns
             let mut cover_traffic_interval = tokio::time::interval(Duration::from_secs(60));
 
@@ -2453,6 +2483,24 @@ pub async fn start_swarm_with_config(
                                 RELAY_MAX_INFLIGHT_DISPATCHES,
                                 "periodic_pull",
                             );
+                        }
+                    }
+
+                    // Expire pending Dial replies that never got a real
+                    // ConnectionEstablished/OutgoingConnectionError signal (e.g. the
+                    // dial went into a black hole — no ICMP/RST at all), so the
+                    // caller's reply_rx.recv().await doesn't hang forever.
+                    _ = pending_dial_sweep_interval.tick() => {
+                        let timed_out: Vec<Multiaddr> = pending_dials
+                            .iter()
+                            .filter(|(_, entry)| entry.dialed_at.elapsed() >= web_time::Duration::from_secs(PENDING_DIAL_TIMEOUT_SECS))
+                            .map(|(key, _)| key.clone())
+                            .collect();
+                        for key in timed_out {
+                            if let Some(entry) = pending_dials.remove(&key) {
+                                tracing::debug!("Pending dial to {} timed out after {}s with no connection signal", key, PENDING_DIAL_TIMEOUT_SECS);
+                                let _ = entry.reply.send(Err(format!("Dial timed out after {}s with no connection signal", PENDING_DIAL_TIMEOUT_SECS))).await;
+                            }
                         }
                     }
 
@@ -3942,6 +3990,29 @@ pub async fn start_swarm_with_config(
                                     peer_id,
                                     remote_addr
                                 );
+
+                                // Resolve any pending Dial waiting on this connection. Match by
+                                // address membership in the entry's own candidate_addrs (covers
+                                // both the None/peer-id-less branch, where candidate_addrs is
+                                // just the one dialed address, and the Some(pid) candidate-ladder
+                                // branch, where the connected address may be any rung of that
+                                // specific dial's own ladder) -- deliberately NOT matched by bare
+                                // peer_id, so an unrelated concurrent dial or background
+                                // reconnect to the SAME peer_id via a DIFFERENT address can't
+                                // falsely resolve this entry.
+                                let mut resolved_pending_key = None;
+                                for (key, entry) in pending_dials.iter() {
+                                    if entry.candidate_addrs.iter().any(|a| a == &remote_addr || a == &stripped_remote) {
+                                        resolved_pending_key = Some(key.clone());
+                                        break;
+                                    }
+                                }
+                                if let Some(key) = resolved_pending_key {
+                                    if let Some(entry) = pending_dials.remove(&key) {
+                                        let _ = entry.reply.send(Ok(())).await;
+                                    }
+                                }
+
                                 multi_path_delivery.record_recipient_seen_now(peer_id, peer_id);
 
                                 if let Some(c) = &core_handle {
@@ -4167,6 +4238,39 @@ pub async fn start_swarm_with_config(
                                 } else {
                                     tracing::debug!("[WARNING] Outgoing connection error: {}", error);
                                 }
+
+                                // Resolve any pending Dial(s) that this error corresponds to.
+                                // Match ONLY by address membership in each entry's own
+                                // candidate_addrs (mirrors the same exact/stripped matching
+                                // approach the bootstrap_backoff check below uses) --
+                                // deliberately NOT by bare peer_id, so a failure on one address
+                                // for a given peer can't falsely fail an unrelated concurrent
+                                // dial (or background reconnect) to the SAME peer via a
+                                // DIFFERENT address that hasn't actually failed. Entries whose
+                                // dial fails with a non-Transport DialError variant (rare) fall
+                                // through to the periodic sweep's timeout instead -- see review
+                                // notes; this is an accepted latency tradeoff, not a correctness
+                                // gap, since a peer_id-only fallback here previously reintroduced
+                                // exactly this false-attribution risk.
+                                let mut resolved_dial_keys: Vec<Multiaddr> = Vec::new();
+                                if let libp2p::swarm::DialError::Transport(ref errors) = error {
+                                    for (failed_addr, _) in errors {
+                                        let stripped_failed: Multiaddr = failed_addr.iter().filter(|p| !matches!(p, libp2p::multiaddr::Protocol::P2p(_))).collect();
+                                        for (key, entry) in pending_dials.iter() {
+                                            if entry.candidate_addrs.iter().any(|a| a == failed_addr || a == &stripped_failed)
+                                                && !resolved_dial_keys.contains(key)
+                                            {
+                                                resolved_dial_keys.push(key.clone());
+                                            }
+                                        }
+                                    }
+                                }
+                                for key in resolved_dial_keys {
+                                    if let Some(entry) = pending_dials.remove(&key) {
+                                        let _ = entry.reply.send(Err(format!("{}", error))).await;
+                                    }
+                                }
+
                                 // Exponential backoff for bootstrap re-dial: if the failed
                                 // connection matches any bootstrap addr (by IP+port for
                                 // peer_id=None errors, or by /p2p/ component), apply backoff
@@ -4512,6 +4616,13 @@ pub async fn start_swarm_with_config(
                                     }
                                 }
 
+                                // Every address actually dialed for this attempt, captured
+                                // (stripped of any /p2p/ component, for later comparison
+                                // against ConnectionEstablished/OutgoingConnectionError) so
+                                // resolution below can require address correspondence rather
+                                // than resolving on peer_id alone.
+                                let mut dial_candidate_addrs: Vec<Multiaddr> = Vec::new();
+
                                 let dial_res = if found_ip {
                                     match target_peer_id {
                                         Some(pid) => {
@@ -4540,6 +4651,11 @@ pub async fn start_swarm_with_config(
                                                 if !candidates.contains(&a) { candidates.push(a); }
                                             }
 
+                                            dial_candidate_addrs = candidates
+                                                .iter()
+                                                .map(|a| a.iter().filter(|p| !matches!(p, libp2p::multiaddr::Protocol::P2p(_))).collect())
+                                                .collect();
+
                                             tracing::debug!("Dialing candidate ladder for {}: {:?}", pid, candidates);
                                             let opts = libp2p::swarm::dial_opts::DialOpts::peer_id(pid)
                                                 .addresses(candidates)
@@ -4547,15 +4663,48 @@ pub async fn start_swarm_with_config(
                                             swarm.dial(opts)
                                         }
                                         None => {
+                                            dial_candidate_addrs.push(
+                                                addr.iter().filter(|p| !matches!(p, libp2p::multiaddr::Protocol::P2p(_))).collect(),
+                                            );
                                             swarm.dial(addr.clone())
                                         }
                                     }
                                 } else {
+                                    dial_candidate_addrs.push(
+                                        addr.iter().filter(|p| !matches!(p, libp2p::multiaddr::Protocol::P2p(_))).collect(),
+                                    );
                                     swarm.dial(addr.clone())
                                 };
 
                                 match dial_res {
-                                    Ok(_) => { let _ = reply.send(Ok(())).await; }
+                                    Ok(_) => {
+                                        // Don't reply yet: a queued dial is not a connected
+                                        // dial. Register it and wait for a real
+                                        // ConnectionEstablished/OutgoingConnectionError signal
+                                        // (or the periodic sweep's timeout) to resolve it.
+                                        let stripped_addr: Multiaddr = addr
+                                            .iter()
+                                            .filter(|p| !matches!(p, libp2p::multiaddr::Protocol::P2p(_)))
+                                            .collect();
+                                        // A prior in-flight dial to this same address gets an
+                                        // explicit error reply here rather than being silently
+                                        // dropped (which would otherwise close its reply channel
+                                        // and leave the caller with an opaque "No reply from
+                                        // swarm" error).
+                                        if let Some(old_entry) = pending_dials.remove(&stripped_addr) {
+                                            let _ = old_entry.reply.send(Err(
+                                                "Superseded by a newer dial to the same address".to_string(),
+                                            )).await;
+                                        }
+                                        pending_dials.insert(
+                                            stripped_addr,
+                                            PendingDialEntry {
+                                                reply,
+                                                dialed_at: web_time::Instant::now(),
+                                                candidate_addrs: dial_candidate_addrs,
+                                            },
+                                        );
+                                    }
                                     Err(e) => {
                                         let err_msg: String = format!("{}", e);
                                         let _ = reply.send(Err(err_msg)).await;
