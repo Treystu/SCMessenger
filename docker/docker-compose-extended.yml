@@ -82,6 +82,12 @@ services:
       - network-a
     tty: true
     stdin_open: true
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9876/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
 
   # Bob - Network B user
   bob:
@@ -100,6 +106,12 @@ services:
       - network-b
     tty: true
     stdin_open: true
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9876/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
 
   # Carol - Network A user (same network as Alice)
   carol:
@@ -118,6 +130,12 @@ services:
       - network-a
     tty: true
     stdin_open: true
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9876/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
 
   # David - Network B user (same network as Bob)
   david:
@@ -136,6 +154,12 @@ services:
       - network-b
     tty: true
     stdin_open: true
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9876/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
 
   # Eve - Network C user (requires multi-hop routing)
   eve:
@@ -154,6 +178,46 @@ services:
       - network-c
     tty: true
     stdin_open: true
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9876/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  # Bootstrap - one-shot init that cross-provisions every node as a contact
+  # of every other node via the existing /api/identity + /api/contacts
+  # endpoints (see docker/bootstrap-topology.sh and
+  # HANDOFF/todo/BOOTSTRAP_TOPOLOGY_WIRING.md). Runs to completion once, then
+  # exits -- test-runner waits for it via service_completed_successfully so
+  # tests never hit "Contact not found" against an unprovisioned mesh.
+  bootstrap:
+    image: docker:latest
+    container_name: scm-bootstrap
+    depends_on:
+      alice:
+        condition: service_healthy
+      bob:
+        condition: service_healthy
+      carol:
+        condition: service_healthy
+      david:
+        condition: service_healthy
+      eve:
+        condition: service_healthy
+      relay1:
+        condition: service_healthy
+      relay2:
+        condition: service_healthy
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./bootstrap-topology.sh:/bootstrap.sh:ro
+    entrypoint: /bin/sh
+    command: ["-c", "apk add --no-cache bash curl jq >/dev/null 2>&1; bash /bootstrap.sh"]
+    networks:
+      - network-a
+    profiles:
+      - test
 
   # Test Orchestrator - runs automated feature tests
   test-runner:
@@ -164,6 +228,8 @@ services:
       - RUST_LOG=info
       - TEST_MODE=true
     depends_on:
+      bootstrap:
+        condition: service_completed_successfully
       alice:
         condition: service_started
       bob:

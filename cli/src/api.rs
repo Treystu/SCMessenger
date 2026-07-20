@@ -43,6 +43,18 @@ pub struct AddContactRequest {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+pub struct ContactSummary {
+    pub peer_id: String,
+    pub public_key: String,
+    pub name: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct GetContactsResponse {
+    pub contacts: Vec<ContactSummary>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
 pub struct AddContactResponse {
     pub success: bool,
     pub error: Option<String>,
@@ -594,6 +606,30 @@ async fn handle_send_message(
         success: true,
         error: None,
     }))
+}
+
+async fn handle_get_contacts(
+    State(ctx): State<Arc<ApiContext>>,
+) -> Result<AxumJson<GetContactsResponse>, (StatusCode, String)> {
+    let contacts = ctx
+        .core
+        .contacts_store_manager()
+        .list()
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Failed to list contacts: {:?}", e),
+            )
+        })?
+        .into_iter()
+        .map(|c| ContactSummary {
+            peer_id: c.peer_id,
+            public_key: c.public_key,
+            name: c.local_nickname.or(c.nickname),
+        })
+        .collect();
+
+    Ok(AxumJson(GetContactsResponse { contacts }))
 }
 
 async fn handle_add_contact(
@@ -1149,7 +1185,10 @@ pub async fn start_api_server(ctx: ApiContext, bind_addr: Option<String>) -> Res
         )
         .route("/api/identity", get(handle_get_identity))
         .route("/api/send", post(handle_send_message))
-        .route("/api/contacts", post(handle_add_contact))
+        .route(
+            "/api/contacts",
+            get(handle_get_contacts).post(handle_add_contact),
+        )
         .route("/api/peers", get(handle_get_peers))
         .route("/api/swarm/stats", get(handle_get_swarm_stats))
         .route("/api/listeners", get(handle_get_listeners))

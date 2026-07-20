@@ -1518,6 +1518,19 @@ async fn cmd_start(port: Option<u16>, http_bind: Option<String>) -> Result<()> {
                 let l = ledger_clone.lock().await;
                 l.dialable_addresses(Some(&local_peer_id.to_string()))
             };
+            let my_addrs: Vec<String> = swarm_clone
+                .get_bound_addresses()
+                .await
+                .unwrap_or_default()
+                .iter()
+                .map(|a| a.to_string())
+                .collect();
+            let addrs: Vec<_> = addrs
+                .into_iter()
+                .filter(|(m, _)| {
+                    ledger::is_dialable_for_this_node(m, ledger::NetworkMode::Local, &my_addrs)
+                })
+                .collect();
 
             // Dial all known addresses (bootstrap + discovered)
             for (i, (multiaddr_str, _peer_id_opt)) in addrs.iter().enumerate() {
@@ -1821,6 +1834,20 @@ async fn cmd_start(port: Option<u16>, http_bind: Option<String>) -> Result<()> {
                                         .collect();
                                     drop(l); // release lock before dialing
 
+                                    // Graceful-AF dial policy: know our own addresses
+                                    // before promiscuously dialing whatever the ledger
+                                    // handed us, so we never self-dial or reach for a
+                                    // private-range address we have no route to (e.g.
+                                    // an emulator's internal 10.0.2.x when we're on a
+                                    // 192.168.x.x home LAN).
+                                    let my_addrs: Vec<String> = swarm_handle
+                                        .get_bound_addresses()
+                                        .await
+                                        .unwrap_or_default()
+                                        .iter()
+                                        .map(|a| a.to_string())
+                                        .collect();
+
                                     for addr_str in new_addrs {
                                         // Skip non-routable addresses (loopback,
                                         // link-local, site-local) a peer may
@@ -1829,6 +1856,13 @@ async fn cmd_start(port: Option<u16>, http_bind: Option<String>) -> Result<()> {
                                         if !ledger::is_dialable_multiaddr(
                                             &addr_str,
                                             ledger::NetworkMode::Local,
+                                        ) {
+                                            continue;
+                                        }
+                                        if !ledger::is_dialable_for_this_node(
+                                            &addr_str,
+                                            ledger::NetworkMode::Local,
+                                            &my_addrs,
                                         ) {
                                             continue;
                                         }
@@ -2563,6 +2597,19 @@ async fn cmd_relay(
                 let l = ledger_clone.lock().await;
                 l.dialable_addresses(Some(&local_peer_id.to_string()))
             };
+            let my_addrs: Vec<String> = swarm_clone
+                .get_bound_addresses()
+                .await
+                .unwrap_or_default()
+                .iter()
+                .map(|a| a.to_string())
+                .collect();
+            let addrs: Vec<_> = addrs
+                .into_iter()
+                .filter(|(m, _)| {
+                    ledger::is_dialable_for_this_node(m, ledger::NetworkMode::Local, &my_addrs)
+                })
+                .collect();
             for (i, (multiaddr_str, _)) in addrs.iter().enumerate() {
                 let stripped = ledger::strip_peer_id(multiaddr_str);
                 if let Ok(addr) = stripped.parse::<Multiaddr>() {
@@ -2593,6 +2640,19 @@ async fn cmd_relay(
                     let l = ledger_clone.lock().await;
                     l.dialable_addresses(Some(&local_peer_id.to_string()))
                 };
+                let my_addrs: Vec<String> = swarm_clone
+                    .get_bound_addresses()
+                    .await
+                    .unwrap_or_default()
+                    .iter()
+                    .map(|a| a.to_string())
+                    .collect();
+                let addrs: Vec<_> = addrs
+                    .into_iter()
+                    .filter(|(m, _)| {
+                        ledger::is_dialable_for_this_node(m, ledger::NetworkMode::Local, &my_addrs)
+                    })
+                    .collect();
                 for (multiaddr_str, _) in &addrs {
                     let stripped = ledger::strip_peer_id(multiaddr_str);
                     if let Ok(addr) = stripped.parse::<Multiaddr>() {
@@ -2737,11 +2797,27 @@ async fn cmd_relay(
                                 .map(|e| ledger::strip_peer_id(&e.multiaddr))
                                 .collect();
                             drop(l);
+
+                            // Graceful-AF dial policy: know our own addresses before
+                            // promiscuously dialing whatever the ledger handed us, so
+                            // we never self-dial or reach for a private-range address
+                            // we have no route to.
+                            let my_addrs: Vec<String> = swarm_handle
+                                .get_bound_addresses()
+                                .await
+                                .unwrap_or_default()
+                                .iter()
+                                .map(|a| a.to_string())
+                                .collect();
+
                             for addr_str in new_addrs {
                                 // Skip non-routable addresses (loopback, link-local,
                                 // site-local) a peer may advertise -- dialing them
                                 // fails forever and storms the request_response handler.
                                 if !ledger::is_dialable_multiaddr(&addr_str, ledger::NetworkMode::Local) {
+                                    continue;
+                                }
+                                if !ledger::is_dialable_for_this_node(&addr_str, ledger::NetworkMode::Local, &my_addrs) {
                                     continue;
                                 }
                                 if let Ok(addr) = addr_str.parse::<Multiaddr>() {

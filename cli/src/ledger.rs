@@ -470,6 +470,87 @@ pub fn is_dialable_multiaddr(multiaddr: &str, mode: NetworkMode) -> bool {
     true
 }
 
+/// Extract the first `/ip4/x.x.x.x/` component of a multiaddr, if any.
+fn extract_ipv4(multiaddr: &str) -> Option<std::net::Ipv4Addr> {
+    let parts: Vec<&str> = multiaddr.split('/').collect();
+    for i in 0..parts.len() {
+        if parts[i] == "ip4" && i + 1 < parts.len() {
+            if let Ok(ip) = parts[i + 1].parse::<std::net::Ipv4Addr>() {
+                return Some(ip);
+            }
+        }
+    }
+    None
+}
+
+/// Which RFC1918 private-address class an IPv4 address falls in, if any.
+/// `None` means the address is not a private (RFC1918) address at all.
+fn rfc1918_class(ip: &std::net::Ipv4Addr) -> Option<u8> {
+    let o = ip.octets();
+    if o[0] == 10 {
+        Some(0) // 10.0.0.0/8
+    } else if o[0] == 172 && (16..=31).contains(&o[1]) {
+        Some(1) // 172.16.0.0/12
+    } else if o[0] == 192 && o[1] == 168 {
+        Some(2) // 192.168.0.0/16
+    } else {
+        None
+    }
+}
+
+/// Returns true iff `candidate` is one of this node's own known addresses
+/// (listen or external) -- i.e. dialing it would be a self-dial. Compares
+/// the transport address only (strips any `/p2p/` peer-id suffix on both
+/// sides), since the same node can be observed with or without its own
+/// peer-id attached depending on which ledger entry produced it.
+pub fn is_self_address(candidate: &str, my_addrs: &[String]) -> bool {
+    let stripped_candidate = strip_peer_id(candidate);
+    my_addrs
+        .iter()
+        .any(|a| strip_peer_id(a) == stripped_candidate)
+}
+
+/// Returns true iff `candidate` is worth dialing given this node's own known
+/// addresses: rejects self-dials outright, and (in `NetworkMode::Local`)
+/// rejects a private-range (RFC1918) address unless this node itself holds
+/// an address in the SAME private-range class -- e.g. a node on
+/// `192.168.0.121` should not promiscuously dial an advertised
+/// `10.0.2.16` (a different private class it has no route to), but should
+/// still dial other `192.168.x.x` peers on its own LAN. This does not
+/// replace `is_dialable_multiaddr` -- callers should still apply that
+/// filter first (it rejects unconditionally-unroutable things like
+/// loopback/link-local); this is an additional, node-aware layer on top.
+pub fn is_dialable_for_this_node(multiaddr: &str, mode: NetworkMode, my_addrs: &[String]) -> bool {
+    if is_self_address(multiaddr, my_addrs) {
+        return false;
+    }
+    // A /p2p-circuit address's leading /ip4/.../ component is the RELAY
+    // hop's address, not the final target peer's -- applying RFC1918
+    // class-awareness to the relay's own address would incorrectly reject
+    // the only path to a NAT'd peer whenever the relay's IP happens to
+    // differ in private-range class from this node's own address. Mirrors
+    // the same unconditional-allow exemption is_dialable_multiaddr already
+    // gives circuit addresses.
+    if multiaddr.contains("/p2p-circuit") {
+        return true;
+    }
+    if mode == NetworkMode::Local {
+        if let Some(candidate_ip) = extract_ipv4(multiaddr) {
+            if let Some(candidate_class) = rfc1918_class(&candidate_ip) {
+                let my_ipv4s: Vec<std::net::Ipv4Addr> =
+                    my_addrs.iter().filter_map(|a| extract_ipv4(a)).collect();
+                let on_same_range = my_ipv4s
+                    .iter()
+                    .any(|m| rfc1918_class(m) == Some(candidate_class));
+                if !on_same_range {
+                    return false;
+                }
+            }
+        }
+    }
+    true
+}
+
 /// Strip the /p2p/PeerID suffix from a multiaddr string, leaving just the transport address.
 /// This is the core of "promiscuous" dialing — we dial the IP, not the identity.
 pub fn strip_peer_id(multiaddr: &str) -> String {
@@ -618,17 +699,137 @@ mod tests {
         assert!(!is_dialable_multiaddr("/ip4/0.0.0.0/tcp/9001", Local));
         assert!(!is_dialable_multiaddr("/ip4/169.254.1.2/tcp/9001", Local));
         assert!(!is_dialable_multiaddr("/ip6/::1/tcp/9001", Local));
-        assert!(!is_dialable_multiaddr("/ip6/fe80::1897:a8ff:fec5:3d16/tcp/443", Local));
+        assert!(!is_dialable_multiaddr(
+            "/ip6/fe80::1897:a8ff:fec5:3d16/tcp/443",
+            Local
+        ));
         assert!(!is_dialable_multiaddr("/ip6/fec0::1/tcp/9001", Local));
         // Globally routable: accepted.
         assert!(is_dialable_multiaddr("/ip4/1.2.3.4/tcp/9001", Local));
-        assert!(is_dialable_multiaddr("/ip6/2606:4700:4700::1111/tcp/9001", Local));
+        assert!(is_dialable_multiaddr(
+            "/ip6/2606:4700:4700::1111/tcp/9001",
+            Local
+        ));
         // Private/LAN: kept in Local, dropped in Public.
         assert!(is_dialable_multiaddr("/ip4/10.0.2.16/tcp/9001", Local));
         assert!(is_dialable_multiaddr("/ip4/192.168.1.5/tcp/9001", Local));
         assert!(!is_dialable_multiaddr("/ip4/10.0.2.16/tcp/9001", Public));
         assert!(!is_dialable_multiaddr("/ip4/192.168.1.5/tcp/9001", Public));
         // p2p-circuit always allowed (relay path).
-        assert!(is_dialable_multiaddr("/ip4/1.2.3.4/tcp/9001/p2p-circuit", Local));
+        assert!(is_dialable_multiaddr(
+            "/ip4/1.2.3.4/tcp/9001/p2p-circuit",
+            Local
+        ));
+    }
+
+    #[test]
+    fn test_is_self_address() {
+        let my_addrs = vec![
+            "/ip4/192.168.0.121/tcp/9001".to_string(),
+            "/ip4/1.2.3.4/tcp/9001/p2p/12D3KooWExample".to_string(),
+        ];
+        // Exact match (own LAN address) -> self-dial.
+        assert!(is_self_address("/ip4/192.168.0.121/tcp/9001", &my_addrs));
+        // Own address with a peer-id suffix attached still matches after stripping.
+        assert!(is_self_address(
+            "/ip4/192.168.0.121/tcp/9001/p2p/12D3KooWOther",
+            &my_addrs
+        ));
+        // Own public address matches regardless of which side carries the peer-id.
+        assert!(is_self_address("/ip4/1.2.3.4/tcp/9001", &my_addrs));
+        // A different address is not a self-dial.
+        assert!(!is_self_address("/ip4/10.0.2.16/tcp/9001", &my_addrs));
+    }
+
+    #[test]
+    fn test_is_dialable_for_this_node() {
+        use NetworkMode::Local;
+        // Node is on a 192.168.x.x home LAN.
+        let my_addrs = vec!["/ip4/192.168.0.121/tcp/9001".to_string()];
+
+        // Self-dial rejected even though it would otherwise be dialable.
+        assert!(!is_dialable_for_this_node(
+            "/ip4/192.168.0.121/tcp/9001",
+            Local,
+            &my_addrs
+        ));
+        // Another peer on the SAME private range (192.168.x.x) is fine.
+        assert!(is_dialable_for_this_node(
+            "/ip4/192.168.0.55/tcp/9001",
+            Local,
+            &my_addrs
+        ));
+        // A DIFFERENT private range (10.x.x.x, e.g. an emulator's internal
+        // address) is not reachable from a 192.168.x.x-only node.
+        assert!(!is_dialable_for_this_node(
+            "/ip4/10.0.2.16/tcp/9001",
+            Local,
+            &my_addrs
+        ));
+        // Globally routable addresses are unaffected by range-awareness.
+        assert!(is_dialable_for_this_node(
+            "/ip4/1.2.3.4/tcp/9001",
+            Local,
+            &my_addrs
+        ));
+
+        // A node with no private addresses of its own (e.g. cellular-only)
+        // should not dial ANY private-range address.
+        let public_only: Vec<String> = vec!["/ip4/1.2.3.4/tcp/9001".to_string()];
+        assert!(!is_dialable_for_this_node(
+            "/ip4/192.168.1.5/tcp/9001",
+            Local,
+            &public_only
+        ));
+
+        // Dual-homed node (has addresses in TWO different private classes):
+        // both classes should be dialable, not just the first one found.
+        let dual_homed = vec![
+            "/ip4/192.168.0.121/tcp/9001".to_string(),
+            "/ip4/10.5.5.5/tcp/9001".to_string(),
+        ];
+        assert!(is_dialable_for_this_node(
+            "/ip4/192.168.1.5/tcp/9001",
+            Local,
+            &dual_homed
+        ));
+        assert!(is_dialable_for_this_node(
+            "/ip4/10.9.9.9/tcp/9001",
+            Local,
+            &dual_homed
+        ));
+        // Still not the third RFC1918 class (172.16.0.0/12).
+        assert!(!is_dialable_for_this_node(
+            "/ip4/172.16.0.5/tcp/9001",
+            Local,
+            &dual_homed
+        ));
+
+        // A relay-circuit address's leading /ip4/.../ is the RELAY hop, not
+        // the final target -- it must NOT be subject to RFC1918
+        // class-matching against that hop's own address, or the only path
+        // to a NAT'd peer behind a cross-class relay would be silently
+        // dropped. Regression test for the exact shape used by this
+        // project's own test fixtures (core/src/transport/swarm.rs).
+        let my_addrs = vec!["/ip4/192.168.0.121/tcp/9001".to_string()];
+        assert!(is_dialable_for_this_node(
+            "/ip4/172.26.144.1/tcp/9101/p2p/12D3KooWRelay/p2p-circuit/p2p/12D3KooWTarget",
+            Local,
+            &my_addrs
+        ));
+        // A circuit address whose relay hop happens to share this node's IP
+        // is NOT treated as a self-dial: is_self_address does an exact
+        // string match after stripping at the first "/p2p/", and the
+        // "/p2p-circuit" suffix makes that stripped string differ from a
+        // plain "/ip4/.../tcp/9001" self-address, so this is correctly
+        // treated as "unconditionally allowed circuit address", not "self".
+        // (Genuinely self-targeted circuit dials are a degenerate case the
+        // ledger shouldn't produce in practice; libp2p itself also rejects
+        // dialing one's own PeerId at the connection layer as a backstop.)
+        assert!(is_dialable_for_this_node(
+            "/ip4/192.168.0.121/tcp/9001/p2p-circuit/p2p/12D3KooWTarget",
+            Local,
+            &my_addrs
+        ));
     }
 }
