@@ -285,9 +285,13 @@ jobs:
           path: wasm/pkg/*
 
   # Create GitHub Release
+  # Note: build-ios is intentionally excluded -- iOS distribution requires an
+  # Apple Developer account ($99/yr) which is a pending human decision. The
+  # iOS build job still runs independently so failures surface in CI, but the
+  # release is not blocked on it.
   create-release:
     name: Create GitHub Release
-    needs: [build-cli, build-android, build-ios, build-wasm]
+    needs: [build-cli, build-android, build-wasm]
     runs-on: ubuntu-latest
     permissions:
       contents: write
