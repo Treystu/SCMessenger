@@ -99,8 +99,20 @@ The `scm_pixel_34` AVD (API 34, Google APIs, x86_64, Pixel 6a profile) is
 already set up on this machine per `docs/CURRENT_STATE.md`.
 
 ```powershell
-emulator -avd scm_pixel_34 -gpu swiftshader_indirect -no-audio -no-boot-anim
+emulator -avd scm_pixel_34 -gpu host -no-audio -no-boot-anim
 ```
+
+**GPU mode:** use `-gpu host` (hardware-accelerated rendering), not
+`swiftshader_indirect`, on machines where WHPX/HAXM acceleration is
+available (verify with `emulator -accel-check`) -- confirmed the case on
+this Windows dev machine. `swiftshader_indirect` forces CPU-based software
+graphics rendering; on a Compose UI app that renders continuously, this
+starves the emulator's small vCPU allocation (`-cores 2` default) and was
+observed to cause repeated main-thread ANRs ("SCMessenger isn't
+responding") even though the CPU itself was WHPX-accelerated. Reserve
+`swiftshader_indirect` for genuinely non-accelerated hosts (e.g. the cloud
+worker path in `cloud/worker/android_worker_startup.sh`, which runs on
+hardware without WHPX/KVM/HAXM).
 
 Once booted, install/launch the app, then use the app's **Join Mesh**
 screen (`android/app/src/main/java/com/scmessenger/android/ui/join/JoinMeshScreen.kt`)
