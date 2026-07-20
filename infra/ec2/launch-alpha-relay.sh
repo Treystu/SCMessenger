@@ -45,7 +45,7 @@ STATE_FILE="$(dirname "$0")/alpha-relay-state.json"
 USERDATA_FILE="$(dirname "$0")/alpha-relay-userdata.sh"
 P2P_PORT=9001
 HTTP_STATUS_PORT=9000
-HEALTH_PORT=8080
+HEALTH_PORT=9876
 
 log() { echo "[INFO] $*" >&2; }
 ok()  { echo "[OK] $*" >&2; }

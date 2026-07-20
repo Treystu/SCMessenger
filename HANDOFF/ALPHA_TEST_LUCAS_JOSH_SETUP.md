@@ -51,7 +51,7 @@ bash infra/ec2/launch-alpha-relay.sh status us-east-1
 
 Build takes 45-90 minutes on a t3.micro (serial cargo build, deliberately
 capped to avoid OOM -- see infra/ec2/alpha-relay-userdata.sh comments).
-Once ready, `curl http://100.56.248.69:8080/health` returns
+Once ready, `curl http://100.56.248.69:9876/health` returns
 `{"status":"healthy"}`.
 
 **This relay is NOT the disposable farm-sim test fleet.** It has its own
@@ -179,7 +179,7 @@ the real internet.
 ## If Something Doesn't Work
 
 - **Can't connect at all**: verify the relay is actually up
-  (`curl http://100.56.248.69:8080/health`), and that both sides used the
+  (`curl http://100.56.248.69:9876/health`), and that both sides used the
   exact same bootstrap address.
 - **Connects but messages don't arrive**: check each side's local status
   (`scm status` on CLI, Diagnostics screen on Android) for peer count --

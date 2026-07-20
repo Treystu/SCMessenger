@@ -168,7 +168,7 @@ extension mDNSServiceDiscovery: NetServiceDelegate {
         
         // Convert sockaddr to string representation
         address.withUnsafeBytes { ptr in
-            let sockaddrPtr: UnsafePointer<sockaddr> = ptr.bindMemory(to: sockaddr.self)
+            let sockaddrPtr = ptr.bindMemory(to: sockaddr.self)
             guard let firstSockaddr = sockaddrPtr.first else { return }
             var buffer: [CChar] = [CChar](repeating: 0, count: Int(INET6_ADDRSTRLEN))
             if firstSockaddr.sa_family == sa_family_t(AF_INET) {

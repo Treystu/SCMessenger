@@ -72,7 +72,7 @@ docker kill scm-alice 2>/dev/null || true
 sleep 5
 docker start scm-alice
 sleep 10
-alice_health=$(docker exec scm-alice curl -s http://localhost:8080/health 2>/dev/null | jq '.status' || echo "offline")
+alice_health=$(docker exec scm-alice curl -s http://localhost:9876/health 2>/dev/null | jq '.status' || echo "offline")
 echo "  alice recovered: $alice_health"
 
 echo ""
@@ -104,19 +104,19 @@ sleep 50
 
 echo "[CHECK 4.1] All nodes healthy?"
 for node in alice bob relay1; do
-  health=$(docker exec scm-$node curl -s http://localhost:8080/health 2>/dev/null | jq '.status' || echo "offline")
+  health=$(docker exec scm-$node curl -s http://localhost:9876/health 2>/dev/null | jq '.status' || echo "offline")
   peers=$(docker exec scm-$node cat /root/.local/share/scmessenger/peers.json 2>/dev/null | jq '.entries | length' || echo "0")
   echo "  $node: $health ($peers peers)"
 done
 
 echo ""
 echo "[TEST 4.2] Message delivery alice ↔ bob"
-alice_send=$(docker exec scm-alice curl -s -X POST http://localhost:8080/api/send \
+alice_send=$(docker exec scm-alice curl -s -X POST http://localhost:9876/api/send \
   -H "Content-Type: application/json" \
   -d '{"recipient_peer_id":"bob","message":"test_from_alice"}' 2>/dev/null | jq '.status' || echo "ERROR")
 echo "  send alice→bob: $alice_send"
 
-bob_send=$(docker exec scm-bob curl -s -X POST http://localhost:8080/api/send \
+bob_send=$(docker exec scm-bob curl -s -X POST http://localhost:9876/api/send \
   -H "Content-Type: application/json" \
   -d '{"recipient_peer_id":"alice","message":"test_from_bob"}' 2>/dev/null | jq '.status' || echo "ERROR")
 echo "  send bob→alice: $bob_send"

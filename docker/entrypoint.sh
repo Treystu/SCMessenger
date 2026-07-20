@@ -73,7 +73,7 @@ if [ "$1" = "scm" ] && [ "$2" = "start" ]; then
 
     # Add global flags before subcommand
     if ! echo "$@" | grep -q "\-\-http-bind"; then
-        NEW_ARGS+=("--http-bind" "0.0.0.0:8080")
+        NEW_ARGS+=("--http-bind" "0.0.0.0:9876")
     fi
 
     NEW_ARGS+=("$2")  # start

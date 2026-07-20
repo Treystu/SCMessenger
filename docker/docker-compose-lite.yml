@@ -31,11 +31,11 @@ services:
       - SC_BOOTSTRAP_NODES=
     ports:
       - "4001:4001"
-      - "8080:8080"
+      - "9876:9876"
     networks:
       - network-core
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:9876/health"]
       interval: 10s
       timeout: 5s
       retries: 3
@@ -58,7 +58,7 @@ services:
     networks:
       - network-core
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:9876/health"]
       interval: 10s
       timeout: 5s
       retries: 3
@@ -81,7 +81,7 @@ services:
     networks:
       - network-core
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:9876/health"]
       interval: 10s
       timeout: 5s
       retries: 3

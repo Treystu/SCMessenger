@@ -74,7 +74,7 @@ check_api() {
     local host=$1
     local endpoint=${2:-/api/status}
 
-    if curl -sf "http://$host:8080$endpoint" > /dev/null 2>&1; then
+    if curl -sf "http://$host:9876$endpoint" > /dev/null 2>&1; then
         return 0
     else
         return 1
@@ -84,7 +84,7 @@ check_api() {
 # Helper function to get peer ID from a node
 get_peer_id() {
     local host=$1
-    curl -sf "http://$host:8080/api/identity" | jq -r '.peer_id' 2>/dev/null || echo ""
+    curl -sf "http://$host:9876/api/identity" | jq -r '.peer_id' 2>/dev/null || echo ""
 }
 
 # Helper function to send message via API
@@ -93,7 +93,7 @@ send_message() {
     local to_peer_id=$2
     local message=$3
 
-    curl -sf -X POST "http://$from_host:8080/api/send" \
+    curl -sf -X POST "http://$from_host:9876/api/send" \
         -H "Content-Type: application/json" \
         -d "{\"recipient\":\"$to_peer_id\",\"message\":\"$message\"}" \
         > /dev/null 2>&1
@@ -104,7 +104,7 @@ check_message_received() {
     local host=$1
     local expected_message=$2
 
-    local history=$(curl -sf "http://$host:8080/api/history" | jq -r '.messages[].content' 2>/dev/null)
+    local history=$(curl -sf "http://$host:9876/api/history" | jq -r '.messages[].content' 2>/dev/null)
     if echo "$history" | grep -q "$expected_message"; then
         return 0
     else
@@ -129,7 +129,7 @@ log_pass "All nodes initialized"
 
 # Test 1: Verify relay nodes are operational
 log_test "Test 1: Verify relay nodes are operational"
-if wait_for_service "relay1" "8080" && wait_for_service "relay2" "8080"; then
+if wait_for_service "relay1" "9876" && wait_for_service "relay2" "9876"; then
     log_pass "Test 1: Both relay nodes are operational"
 else
     log_fail "Test 1: One or more relay nodes failed to start"
@@ -249,7 +249,7 @@ fi
 log_test "Test 7: DHT peer discovery (check peer tables)"
 PEER_TABLE_SIZE=0
 for node in alice bob carol david eve; do
-    peer_count=$(curl -sf "http://$node:8080/api/peers" | jq '.peers | length' 2>/dev/null || echo "0")
+    peer_count=$(curl -sf "http://$node:9876/api/peers" | jq '.peers | length' 2>/dev/null || echo "0")
     log "  $node knows $peer_count peers"
     PEER_TABLE_SIZE=$((PEER_TABLE_SIZE + peer_count))
 done

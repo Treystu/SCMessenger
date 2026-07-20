@@ -13,7 +13,7 @@ sleep 30
 
 for node in alice bob relay1; do
   count=$(docker exec scm-$node cat /root/.local/share/scmessenger/peers.json 2>/dev/null | jq '.entries | length' || echo "0")
-  health=$(docker exec scm-$node curl -s http://localhost:8080/health 2>/dev/null | jq '.status' || echo "offline")
+  health=$(docker exec scm-$node curl -s http://localhost:9876/health 2>/dev/null | jq '.status' || echo "offline")
   echo "  $node: $count peers, $health"
 done
 
@@ -57,7 +57,7 @@ docker kill scm-alice || true
 sleep 5
 docker start scm-alice
 sleep 10
-health=$(docker exec scm-alice curl -s http://localhost:8080/health 2>/dev/null | jq '.status' || echo "offline")
+health=$(docker exec scm-alice curl -s http://localhost:9876/health 2>/dev/null | jq '.status' || echo "offline")
 echo "  alice recovered: $health"
 
 # 3.2: Latency Injection

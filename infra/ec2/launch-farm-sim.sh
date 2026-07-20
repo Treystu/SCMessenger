@@ -152,7 +152,7 @@ ensure_security_group() {
   # Intra-VPC (default VPC is 172.31.0.0/16) all-protocol rule: Phase 3
   # failure-injection tests use `tc netem` INSIDE each instance to simulate
   # latency/loss, not VPC-level firewalling, so this just needs to not be
-  # in the way of P2P discovery (mDNS/QUIC/relay) and the 8080 health check.
+  # in the way of P2P discovery (mDNS/QUIC/relay) and the 9876 health check.
   VPC_CIDR=$(aws ec2 describe-vpcs --region "$REGION" --vpc-ids "$VPC_ID" \
     --query 'Vpcs[0].CidrBlock' --output text)
   aws ec2 authorize-security-group-ingress --region "$REGION" \

@@ -41,7 +41,10 @@ docker builder prune -af || true
 # entrypoint.sh's `scm start`-only flag injection entirely (see
 # docker/entrypoint.sh line 52 -- its --http-bind/--port auto-injection
 # only fires when $2="start"). Explicit flags here instead:
-#   --http-bind 0.0.0.0:8080   -- health check API (matches farm-sim convention)
+#   --http-bind 0.0.0.0:9876   -- health check API (matches farm-sim convention;
+#                                 9876 is the control-API port; 8080 belongs to the
+#                                 swarm's adaptive transport set and must not be
+#                                 raced for -- see 2026-07-20 collision fix)
 #   --listen /ip4/0.0.0.0/tcp/9001 -- fixed P2P port, memorable for both
 #                                     Lucas and Josh's bootstrap config
 #   --http-port 9000           -- status/landing page
@@ -52,6 +55,6 @@ docker run -d \
   --restart unless-stopped \
   -e RUST_LOG=info,scmessenger=debug \
   scmessenger:latest \
-  scm --http-bind 0.0.0.0:8080 relay --listen /ip4/0.0.0.0/tcp/9001 --http-port 9000 --name alpha-relay
+  scm --http-bind 0.0.0.0:9876 relay --listen /ip4/0.0.0.0/tcp/9001 --http-port 9000 --name alpha-relay
 
 echo "[OK] alpha-relay user-data complete"
