@@ -35,7 +35,10 @@ MORPH_MODEL = "morph/morph-v3-fast"
 # (fast-apply reliability/cost degrades on very large files, so keep the
 # default conservative and raise deliberately for a specific cohesive file).
 DEFAULT_MAX_FILE_LINES = 500
-DEFAULT_MAX_COST = 0.01  # $0.01 default ceiling
+# Operator-set 2026-07-19: 2c default per call, dynamic across multiple calls
+# (morph may need several small insertions for one task -- each call is
+# capped individually, the total across calls is not artificially bounded).
+DEFAULT_MAX_COST = 0.02  # $0.02 default ceiling per call
 HARD_MAX_COST = 0.05  # $0.05 hard ceiling, never raised past this via --max-cost
 INSTRUCTION_MAX_CHARS = 1000
 EDIT_SNIPPET_MAX_CHARS = 4000
