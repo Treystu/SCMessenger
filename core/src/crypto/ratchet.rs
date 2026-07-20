@@ -811,6 +811,7 @@ impl RatchetSession {
         )
     }
 
+    #[allow(dead_code)]
     fn handle_dh_ratchet(&mut self, their_new_dh: &X25519PublicKey) -> Result<()> {
         let first_dh_secret = if let Some(identity_secret) = self.our_identity_secret.take() {
             identity_secret

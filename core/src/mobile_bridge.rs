@@ -2850,11 +2850,12 @@ impl LedgerManager {
         let target_port = get_multiaddr_port(&multiaddr);
         let mut found_dns_idx = None;
         for (idx, entry) in entries.iter().enumerate() {
-            if entry.peer_id.as_deref() == Some(&peer_id) && is_dns_multiaddr(&entry.multiaddr) {
-                if target_port.is_none() || get_multiaddr_port(&entry.multiaddr) == target_port {
-                    found_dns_idx = Some(idx);
-                    break;
-                }
+            if entry.peer_id.as_deref() == Some(&peer_id)
+                && is_dns_multiaddr(&entry.multiaddr)
+                && (target_port.is_none() || get_multiaddr_port(&entry.multiaddr) == target_port)
+            {
+                found_dns_idx = Some(idx);
+                break;
             }
         }
 
@@ -2917,11 +2918,12 @@ impl LedgerManager {
         let target_port = get_multiaddr_port(&multiaddr);
         let mut found_dns_idx = None;
         for (idx, entry) in entries.iter().enumerate() {
-            if entry.peer_id.as_deref() == Some(&peer_id) && is_dns_multiaddr(&entry.multiaddr) {
-                if target_port.is_none() || get_multiaddr_port(&entry.multiaddr) == target_port {
-                    found_dns_idx = Some(idx);
-                    break;
-                }
+            if entry.peer_id.as_deref() == Some(&peer_id)
+                && is_dns_multiaddr(&entry.multiaddr)
+                && (target_port.is_none() || get_multiaddr_port(&entry.multiaddr) == target_port)
+            {
+                found_dns_idx = Some(idx);
+                break;
             }
         }
 

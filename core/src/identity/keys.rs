@@ -128,13 +128,8 @@ impl IdentityKeys {
 
     /// Serialize keys to bytes
     pub fn to_bytes(&self) -> Vec<u8> {
-        if self.mldsa_keypair.is_some() {
+        if let Some(mldsa_kp) = self.mldsa_keypair.as_ref() {
             // V3 format with ML-DSA keys
-            // SAFETY: We just checked is_some() above in the if condition, so as_ref() is guaranteed to return Some.
-            let mldsa_kp = self
-                .mldsa_keypair
-                .as_ref()
-                .expect("mldsa_keypair verified Some above");
             let mut raw = IdentityKeysV3Raw {
                 signing_key_bytes: self.signing_key.to_bytes(),
                 x25519_secret_bytes: self.x25519_encryption_secret.to_bytes(),

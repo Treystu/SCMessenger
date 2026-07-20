@@ -136,6 +136,7 @@ impl RatchetSessionManager {
     }
 
     /// Create a receiver hybrid session.
+    #[allow(clippy::too_many_arguments)]
     pub fn create_receiver_session_hybrid(
         &mut self,
         peer_id: &str,

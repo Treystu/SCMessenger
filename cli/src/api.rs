@@ -189,7 +189,7 @@ pub struct FetchArtifactResponse {
 }
 
 #[derive(Debug, Clone)]
-enum RunStatus {
+pub enum RunStatus {
     Queued,
     Running,
     Done,
@@ -996,6 +996,7 @@ async fn handle_shutdown() -> impl IntoResponse {
     (StatusCode::OK, "Stopping...")
 }
 
+#[allow(clippy::disallowed_methods)] // serde_json::json! macro expands to internal unwrap() calls
 async fn handle_get_identity(
     State(ctx): State<Arc<ApiContext>>,
 ) -> Result<AxumJson<serde_json::Value>, (StatusCode, String)> {
@@ -1022,6 +1023,7 @@ fn generate_run_id() -> String {
     format!("run-{}", now)
 }
 
+#[allow(clippy::disallowed_methods)] // serde_json::json! macro expands to internal unwrap() calls
 async fn simulate_test_harness(run_id: String, config: TestConfig) {
     let mut state = RunState {
         status: RunStatus::Running,
@@ -1152,6 +1154,7 @@ async fn handle_fetch_artifact(
     }))
 }
 
+#[allow(clippy::disallowed_methods)] // serde_json::json! expands to unwrap() calls internally
 pub async fn start_api_server(ctx: ApiContext, bind_addr: Option<String>) -> Result<()> {
     let ctx = Arc::new(ctx);
     let addr = if let Some(bind_str) = bind_addr {

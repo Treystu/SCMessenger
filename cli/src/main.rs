@@ -161,6 +161,7 @@ struct Cli {
     command: Commands,
 }
 
+#[allow(clippy::disallowed_methods)] // serde_json::json! expands to unwrap() calls internally
 async fn spawn_http_health_server(bind_addr: String) {
     let addr: std::net::SocketAddr = match bind_addr.parse() {
         Ok(a) => a,
@@ -3060,7 +3061,7 @@ async fn queue_message_for_later_delivery(
         )
         .map(|pm| pm.envelope_data)?;
 
-    match Outbox::open_default(&data_dir) {
+    match Outbox::open_default(data_dir) {
         Ok(outbox_arc) => {
             let mut outbox = outbox_arc.lock().await;
             let now = std::time::SystemTime::now()

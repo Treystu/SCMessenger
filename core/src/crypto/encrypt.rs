@@ -503,6 +503,7 @@ fn should_use_ratcheted_encryption(
 ///
 /// # Returns
 /// An `Envelope` encrypted with the best available method.
+#[allow(clippy::too_many_arguments)]
 pub fn encrypt_with_ratchet_fallback(
     sender_signing_key: &SigningKey,
     recipient_bundle: Option<&crate::identity::PublicKeyBundle>,
@@ -516,7 +517,7 @@ pub fn encrypt_with_ratchet_fallback(
 ) -> Result<crate::message::WireEnvelope> {
     let session_exists = session_manager
         .as_ref()
-        .map_or(false, |mgr| mgr.has_session(peer_id));
+        .is_some_and(|mgr| mgr.has_session(peer_id));
 
     match should_use_ratcheted_encryption(recipient_bundle, session_exists, require_pq, peer_id)? {
         true => {

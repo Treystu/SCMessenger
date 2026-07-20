@@ -300,10 +300,6 @@ impl Outbox {
     pub fn drain_for_peer(&mut self, recipient_id: &str) -> Vec<QueuedMessage> {
         match &mut self.backend {
             OutboxBackend::Memory { queues, total } => {
-                let now = web_time::SystemTime::now()
-                    .duration_since(web_time::UNIX_EPOCH)
-                    .unwrap_or_default()
-                    .as_secs();
                 let mut drained = Vec::new();
                 if let Some(queue) = queues.remove(recipient_id) {
                     let count = queue.len();
@@ -705,7 +701,7 @@ impl RetryPolicy {
         // attempt 2: delay = initial * 1 = 100ms
         // attempt 3: delay = initial * 2 = 200ms
         // attempt 4: delay = initial * 4 = 400ms
-        let power = (attempt - 2) as u32;
+        let power = attempt - 2;
         let multiplier = (self.backoff_factor as u64).saturating_pow(power);
         let delay_ms = self.initial_delay_ms.saturating_mul(multiplier);
         Some(Duration::from_millis(delay_ms))

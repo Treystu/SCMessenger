@@ -314,8 +314,10 @@ impl MeshStore {
         for (_key, value) in entries {
             match bincode::deserialize::<StoredEnvelope>(&value) {
                 Ok(envelope) => {
-                    if !self.messages.contains_key(&envelope.message_id) {
-                        self.messages.insert(envelope.message_id, envelope);
+                    if let std::collections::hash_map::Entry::Vacant(e) =
+                        self.messages.entry(envelope.message_id)
+                    {
+                        e.insert(envelope);
                         loaded += 1;
                     }
                 }

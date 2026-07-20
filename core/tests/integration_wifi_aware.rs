@@ -110,6 +110,14 @@ fn test_wifi_aware_peer_discovered_triggers_data_path_and_dial() {
     // Start service
     service.clone().start().expect("Failed to start service");
 
+    // Initialize identity so that derive_wifi_aware_pmk (real ECDH PMK
+    // derivation added in commit 84e0651d) has key material. Without an
+    // initialized identity the spawned dial task exits early with
+    // NotInitialized and the dial never happens.
+    let core = service.get_core().expect("IronCore not set after start()");
+    core.grant_consent();
+    core.initialize_identity().expect("Failed to initialize identity");
+
     // Retrieve the SwarmBridge and set a mock SwarmHandle
     let swarm_bridge = service.get_swarm_bridge();
 

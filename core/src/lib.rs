@@ -203,7 +203,7 @@ pub mod retry_policy {
             // attempt 2: delay = initial * 1 = 100ms
             // attempt 3: delay = initial * 2 = 200ms
             // attempt 4: delay = initial * 4 = 400ms
-            let power = (attempt - 2) as u32;
+            let power = attempt - 2;
             let multiplier = (self.backoff_factor as u64).saturating_pow(power);
             let delay_ms = self.initial_delay_ms.saturating_mul(multiplier);
             Some(Duration::from_millis(delay_ms))

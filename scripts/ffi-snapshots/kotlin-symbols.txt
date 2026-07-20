@@ -4,14 +4,20 @@ class ByReference: RustBuffer(), Structure.ByReference
 class ByValue : ForeignBytes(), Structure.ByValue
 class ByValue: RustBuffer(), Structure.ByValue
 class ByValue: UniffiRustCallStatus(), Structure.ByValue
+class ConnectionLimit(message: String) : IronCoreException(message)
 class ConsentRequired(message: String) : IronCoreException(message)
 class CorruptionDetected(message: String) : IronCoreException(message)
 class CryptoException(message: String) : IronCoreException(message)
+class DialSelf(message: String) : IronCoreException(message)
 class Internal(message: String) : IronCoreException(message)
 class InternalException(message: String) : kotlin.Exception(message)
 class InvalidInput(message: String) : IronCoreException(message)
+class IoException(message: String) : IronCoreException(message)
+class MultiaddrNotSupported(message: String) : IronCoreException(message)
 class NetworkException(message: String) : IronCoreException(message)
+class NoAddresses(message: String) : IronCoreException(message)
 class NotInitialized(message: String) : IronCoreException(message)
+class OnionRoutingDisabled(message: String) : IronCoreException(message)
 class StorageException(message: String) : IronCoreException(message)
 class UniffiByValue(
 class UniffiByValue(
@@ -156,6 +162,7 @@ fun `getSwarmBridge`(): SwarmBridge
 fun `get`(`id`: kotlin.String): MessageRecord?
 fun `get`(`peerId`: kotlin.String): Contact?
 fun `grantConsent`()
+fun `handlePeerConnectionEvent`(`peerId`: kotlin.String, `connected`: kotlin.Boolean)
 fun `hideMessagesForPeer`(`peerId`: kotlin.String): kotlin.UInt
 fun `historyManager`(): HistoryManager
 fun `identityId`(): kotlin.String?

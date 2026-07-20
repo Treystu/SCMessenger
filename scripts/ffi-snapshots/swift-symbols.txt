@@ -96,6 +96,7 @@ open func getStats() -> ServiceStats  {
 open func getSwarmBridge() -> SwarmBridge  {
 open func getTopics()async  -> [String]  {
 open func grantConsent()  {try! rustCall() {
+open func handlePeerConnectionEvent(peerId: String, connected: Bool)  {try! rustCall() {
 open func hideMessagesForPeer(peerId: String)throws  -> UInt32  {
 open func historyManager()throws  -> HistoryManager  {
 open func identityId() -> String?  {

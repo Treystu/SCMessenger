@@ -79,7 +79,7 @@ async fn main() {
             last_send = now;
 
             // Progress indicator every 100 messages
-            if message_count % 100 == 0 {
+            if message_count.is_multiple_of(100) {
                 let elapsed = test_start.elapsed().as_secs_f64();
                 let actual_rate = message_count as f64 / elapsed;
                 print!(
