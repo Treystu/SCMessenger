@@ -116,7 +116,8 @@ fn test_wifi_aware_peer_discovered_triggers_data_path_and_dial() {
     // NotInitialized and the dial never happens.
     let core = service.get_core().expect("IronCore not set after start()");
     core.grant_consent();
-    core.initialize_identity().expect("Failed to initialize identity");
+    core.initialize_identity()
+        .expect("Failed to initialize identity");
 
     // Retrieve the SwarmBridge and set a mock SwarmHandle
     let swarm_bridge = service.get_swarm_bridge();
