@@ -17,6 +17,8 @@ final class NotificationLogger {
 
     private init() {
         // Create logs directory in app's documents folder
+        // urls(for:in:) always returns at least one element for .documentDirectory
+        // swiftlint:disable:next force_unwrapping
         let documentsPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
         let logsDirectory = documentsPath.appendingPathComponent("NotificationLogs", isDirectory: true)
 

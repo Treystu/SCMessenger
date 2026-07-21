@@ -474,8 +474,6 @@ struct MeshSettingsView: View {
                 }
             }
 
-
-
             // Battery Floor
             Section("Battery") {
                 VStack(alignment: .leading) {

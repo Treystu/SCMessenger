@@ -627,10 +627,8 @@ final class MeshRepository {
                 // Priority: Ledger (cached) → Remote → Static.
                 var bootstrapAddrs = Self.defaultBootstrapNodes
                 if let ledgerNodes = ledgerManager?.getPreferredRelays(limit: 10) {
-                    for entry in ledgerNodes {
-                        if !bootstrapAddrs.contains(entry.multiaddr) {
-                            bootstrapAddrs.append(entry.multiaddr)
-                        }
+                    for entry in ledgerNodes where !bootstrapAddrs.contains(entry.multiaddr) {
+                        bootstrapAddrs.append(entry.multiaddr)
                     }
                 }
 
@@ -899,7 +897,7 @@ final class MeshRepository {
             kSecAttrService as String: service,
             kSecAttrAccount as String: account,
             kSecReturnData as String: true,
-            kSecMatchLimit as String: kSecMatchLimitOne,
+            kSecMatchLimit as String: kSecMatchLimitOne
         ]
         var result: AnyObject?
         let status = SecItemCopyMatching(query as CFDictionary, &result)
@@ -913,7 +911,7 @@ final class MeshRepository {
                 kSecAttrService as String: service,
                 kSecAttrAccount as String: account,
                 kSecValueData as String: data,
-                kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly,
+                kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
             ]
             _ = SecItemAdd(addQuery as CFDictionary, nil)
         }
@@ -960,7 +958,7 @@ final class MeshRepository {
             kSecAttrService as String: IdentityBackupStore.service,
             kSecAttrAccount as String: IdentityBackupStore.account,
             kSecReturnData as String: true,
-            kSecMatchLimit as String: kSecMatchLimitOne,
+            kSecMatchLimit as String: kSecMatchLimitOne
         ]
         var result: AnyObject?
         let status = SecItemCopyMatching(query as CFDictionary, &result)
@@ -975,11 +973,11 @@ final class MeshRepository {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: IdentityBackupStore.service,
-            kSecAttrAccount as String: IdentityBackupStore.account,
+            kSecAttrAccount as String: IdentityBackupStore.account
         ]
         let attributes: [String: Any] = [
             kSecValueData as String: data,
-            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly,
+            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
         ]
         let updateStatus = SecItemUpdate(query as CFDictionary, attributes as CFDictionary)
         if updateStatus == errSecSuccess {
@@ -1342,7 +1340,7 @@ final class MeshRepository {
                 .nilIfEmpty
             var shouldPersistContact = false
 
-            if (existingContact.nickname?.isEmpty ?? true), let knownNickname, !knownNickname.isEmpty {
+            if existingContact.nickname?.isEmpty ?? true, let knownNickname, !knownNickname.isEmpty {
                 updatedNickname = knownNickname
                 shouldPersistContact = true
             }
@@ -1500,7 +1498,6 @@ final class MeshRepository {
             return
         }
 
-
         // Process message
         let content = decodedPayload.text
 
@@ -1586,7 +1583,7 @@ final class MeshRepository {
         let normalizedMessageId = messageId.trimmingCharacters(in: .whitespacesAndNewlines)
         guard normalized == "delivered" || normalized == "read" else { return }
         let hasPendingForReceipt = loadPendingOutbox().contains { $0.historyRecordId == normalizedMessageId }
-        let existingRecord = (try? historyManager?.get(id: normalizedMessageId)) ?? nil
+        let existingRecord = try? historyManager?.get(id: normalizedMessageId)
         guard let existingRecord else {
             if hasPendingForReceipt {
                 removePendingOutbound(historyRecordId: normalizedMessageId)
@@ -1793,7 +1790,7 @@ final class MeshRepository {
         guard !normalizedRoute.isEmpty, !isBootstrapRelayPeer(normalizedRoute) else { return }
         let now = Date()
         let lastSent = historySyncSentPeers[normalizedRoute]
-        let shouldSend = lastSent == nil || now.timeIntervalSince(lastSent!) > historySyncCooldown
+        let shouldSend = lastSent == nil || now.timeIntervalSince(lastSent ?? now) > historySyncCooldown
         logVerbose("sendHistorySyncIfNeeded shouldSend=\(shouldSend) for \(normalizedRoute) (age=\(lastSent.map { now.timeIntervalSince($0) } ?? 999)s)")
         guard shouldSend else { return }
         historySyncSentPeers[normalizedRoute] = now
@@ -2390,7 +2387,7 @@ final class MeshRepository {
                     incoming: discoveredNickname,
                     existing: existing.nickname
                 )
-                if (existing.routePeerId?.isEmpty ?? true), let routeCandidate { existing.routePeerId = routeCandidate }
+                if existing.routePeerId?.isEmpty ?? true, let routeCandidate { existing.routePeerId = routeCandidate }
                 if existing.transport != .internet, info.transport == .internet {
                     existing.transport = info.transport
                 }
@@ -2779,7 +2776,7 @@ final class MeshRepository {
             "relay_recent_events_60s": relayRecentEventTimes.count,
             "relay_backoff_until_ms": Int(relayBackoffUntil.timeIntervalSince1970 * 1000),
             "strict_ble_only_validation": strictBleOnlyValidation,
-            "generated_at_ms": Int(Date().timeIntervalSince1970 * 1000),
+            "generated_at_ms": Int(Date().timeIntervalSince1970 * 1000)
         ]
         if let multipeerStats {
             fallback["multipeer_connected_peers"] = multipeerStats.connectedPeers
@@ -3408,7 +3405,7 @@ final class MeshRepository {
     /// Handle libp2p transport identity updates from the Rust core.
     /// Transport peer IDs are route hints, not user/contact identities.
     func handleTransportPeerDiscovered(peerId: String) {
-        let _ = PeerIdValidator.normalize(peerId)
+        _ = PeerIdValidator.normalize(peerId)
         let selfLibp2p = ironCore?.getIdentityInfo().libp2pPeerId?
             .trimmingCharacters(in: .whitespacesAndNewlines)
         if let selfLibp2p, !selfLibp2p.isEmpty, selfLibp2p == peerId {
@@ -4101,7 +4098,7 @@ final class MeshRepository {
         guard !isKnownRelay(normalizedRoute) else { return false }
 
         guard let normalizedRecipientKey = normalizePublicKey(recipientPublicKey) else { return true }
-        let extractedKey = (try? ironCore?.extractPublicKeyFromPeerId(peerId: normalizedRoute)) ?? nil
+        let extractedKey = try? ironCore?.extractPublicKeyFromPeerId(peerId: normalizedRoute)
         if let normalizedExtracted = normalizePublicKey(extractedKey) {
             return normalizedExtracted == normalizedRecipientKey
         }
@@ -4894,7 +4891,7 @@ final class MeshRepository {
                 continue
             }
 
-            let contact = (try? contactManager?.get(peerId: item.peerId)) ?? nil
+            let contact = try? contactManager?.get(peerId: item.peerId)
             let latestRouting = parseRoutingHintsFromNotes(contact?.notes)
             let fallbackMultipeerPeerId = defaultMultipeerPeerId(fromPublicKey: contact?.publicKey)
             let routePeerCandidates = buildRoutePeerCandidates(
@@ -5333,14 +5330,12 @@ final class MeshRepository {
 
         // 2. Dynamically discovered headless/relay nodes
         let dynamicRelays = discoveredPeerMap.filter { $0.value.isRelay && !$0.value.isFull && $0.key != targetPeerId }
-        for (relayPeerId, _) in dynamicRelays {
-            if isLibp2pPeerId(relayPeerId) {
-                // If we have direct addresses for this relay, try using it
-                let directAddrs = getDialHintsForRoutePeer(relayPeerId)
-                for addr in directAddrs {
-                    let circuit = "\(addr)/p2p/\(relayPeerId)/p2p-circuit/p2p/\(targetPeerId)"
-                    if !relays.contains(circuit) { relays.append(circuit) }
-                }
+        for (relayPeerId, _) in dynamicRelays where isLibp2pPeerId(relayPeerId) {
+            // If we have direct addresses for this relay, try using it
+            let directAddrs = getDialHintsForRoutePeer(relayPeerId)
+            for addr in directAddrs {
+                let circuit = "\(addr)/p2p/\(relayPeerId)/p2p-circuit/p2p/\(targetPeerId)"
+                if !relays.contains(circuit) { relays.append(circuit) }
             }
         }
 
@@ -5865,7 +5860,7 @@ final class MeshRepository {
         let now = Date()
         if let state = dialThrottleState[key], now < state.nextAllowedAt {
             // P4: Only log dial_throttled once per address per 5-minute window
-            if dialThrottleLogCache[key] == nil || now.timeIntervalSince(dialThrottleLogCache[key]!) >= dialThrottleLogInterval {
+            if dialThrottleLogCache[key] == nil || now.timeIntervalSince(dialThrottleLogCache[key] ?? .distantPast) >= dialThrottleLogInterval {
                 appendDiagnostic("dial_throttled addr=\(key)")
                 dialThrottleLogCache[key] = now
             }
@@ -5980,7 +5975,7 @@ final class MeshRepository {
         // Consolidate logs: .4 -> .5, .3 -> .4, etc.
         for i in (1...4).reversed() {
             let current = parent.appendingPathComponent("\(name).\(i)")
-            let next = parent.appendingPathComponent("\(name).\(i+1)")
+            let next = parent.appendingPathComponent("\(name).\(i + 1)")
             if FileManager.default.fileExists(atPath: current.path) {
                 try? FileManager.default.removeItem(atPath: next.path)
                 try? FileManager.default.moveItem(at: current, to: next)

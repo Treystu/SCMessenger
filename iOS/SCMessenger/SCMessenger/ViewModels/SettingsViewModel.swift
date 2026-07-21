@@ -216,8 +216,6 @@ final class SettingsViewModel {
         debouncedUpdateSettings { self.saveSettings() }
     }
 
-
-
     func updateBatteryFloor(_ floor: UInt8) {
         guard var currentSettings = settings else { return }
         currentSettings.batteryFloor = floor
