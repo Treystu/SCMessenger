@@ -16,6 +16,11 @@ pub const COMMON_PORTS: &[u16] = &[
     9090, // Common alternative
 ];
 
+/// Ports excluded from adaptive swarm listening (control/health API ports)
+pub const EXCLUDED_PORTS: &[u16] = &[
+    9876, // Control API & Relay Health server port
+];
+
 /// Configuration for multi-port listening
 #[derive(Debug, Clone)]
 pub struct MultiPortConfig {
@@ -62,6 +67,9 @@ pub fn generate_listen_addresses(config: &MultiPortConfig) -> Vec<(Multiaddr, u1
 
     // Helper to add IPv4 and IPv6 addresses for a port (both TCP and WS)
     let mut add_port = |port: u16| {
+        if EXCLUDED_PORTS.contains(&port) {
+            return;
+        }
         if config.enable_ipv4 {
             let tcp_addr: Multiaddr = format!("/ip4/0.0.0.0/tcp/{}", port)
                 .parse()
@@ -363,5 +371,18 @@ mod tests {
         assert!(report.contains("Listening on 1 address"));
         assert!(report.contains("443"));
         assert!(report.contains("priority"));
+    }
+
+    #[test]
+    fn test_excluded_ports_filtered() {
+        let config = MultiPortConfig {
+            additional_ports: vec![9876, 9000],
+            preferred_port: Some(9876),
+            ..Default::default()
+        };
+        let addrs = generate_listen_addresses(&config);
+        for (_, port) in addrs {
+            assert_ne!(port, 9876, "Control API port 9876 must be excluded from listener addresses");
+        }
     }
 }
