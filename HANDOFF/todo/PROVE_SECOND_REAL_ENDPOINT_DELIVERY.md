@@ -1,6 +1,6 @@
 # Prove message delivery between two INDEPENDENT endpoints, not just Lucas's own two clients
 
-Status: OPEN -- this is the actual remaining proof before the Josh test, de-risked
+Status: DONE -- proven 2026-07-20, both directions confirmed
 Filed: 2026-07-20
 
 ## Why this ticket exists
