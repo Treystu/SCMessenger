@@ -4,6 +4,7 @@
 // Other CLI commands can send requests to this API instead of accessing the database directly
 
 use anyhow::{Context, Result};
+use hex;
 use axum::{
     extract::{Json as AxumJson, Path, State},
     http::{Method, StatusCode},
@@ -567,10 +568,31 @@ async fn handle_send_message(
         .find(|c| c.peer_id == request.recipient || c.nickname.as_ref() == Some(&request.recipient))
         .ok_or_else(|| (StatusCode::NOT_FOUND, "Contact not found".to_string()))?;
 
-    let peer_id = contact
-        .peer_id
-        .parse::<libp2p::PeerId>()
-        .map_err(|e| (StatusCode::BAD_REQUEST, format!("Invalid peer ID: {}", e)))?;
+    // contact.public_key (and contact.peer_id — they hold the same value) stores
+    // the Ed25519 public key as hex, not a libp2p 12D3Koo... base-58 peer ID.
+    // Derive the libp2p PeerId from the public key bytes.
+    let pk_bytes_vec =
+        hex::decode(&contact.public_key).map_err(|e| {
+            (
+                StatusCode::BAD_REQUEST,
+                format!("Invalid public key hex: {}", e),
+            )
+        })?;
+    let pk_bytes: [u8; 32] = pk_bytes_vec.try_into().map_err(|_| {
+        (
+            StatusCode::BAD_REQUEST,
+            "Public key must be exactly 32 bytes".to_string(),
+        )
+    })?;
+    let libp2p_pub =
+        libp2p::identity::ed25519::PublicKey::try_from_bytes(&pk_bytes).map_err(|e| {
+            (
+                StatusCode::BAD_REQUEST,
+                format!("Invalid Ed25519 public key: {}", e),
+            )
+        })?;
+    let peer_id =
+        libp2p::identity::PublicKey::from(libp2p_pub).to_peer_id();
 
     let prepared = core
         .prepare_message_with_id(
