@@ -517,7 +517,7 @@ struct MeshDashboardView: View {
             return .ble
         }
         // Detect LAN-direct peers via RFC1918 private IP addresses
-        if (trimmed.contains("/tcp/") || trimmed.contains("/udp/")) {
+        if trimmed.contains("/tcp/") || trimmed.contains("/udp/") {
             if trimmed.hasPrefix("/ip4/192.168.") || trimmed.hasPrefix("/ip4/10.") {
                 return .tcpMdns
             }

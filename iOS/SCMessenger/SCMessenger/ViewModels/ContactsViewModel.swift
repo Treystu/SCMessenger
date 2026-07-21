@@ -272,8 +272,9 @@ final class ContactsViewModel {
         return repo.isBootstrapRelayPeer(peerId)
     }
 
-    private func handleIdentityDiscovered(peerId: String, publicKey: String, nickname: String?,
-                                           libp2pPeerId: String?, listeners: [String], blePeerId: String?) {
+    private func handleIdentityDiscovered(
+        peerId: String, publicKey: String, nickname: String?,
+        libp2pPeerId: String?, listeners: [String], blePeerId: String?) {
         // Never surface bootstrap relay/headless nodes in the Contacts nearby list.
         let checkIds = [peerId, libp2pPeerId].compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
         if checkIds.contains(where: { isBootstrapRelayPeer($0) }) { return }

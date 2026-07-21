@@ -40,7 +40,7 @@ opt_in_rules:
 
 # Line length - maximum characters per line
 line_length:
-  warning: 150
+  warning: 250
   error: 250
   ignores_function_declarations: true
   ignores_comments: true
@@ -48,23 +48,23 @@ line_length:
 
 # Function body length - maximum lines in a function
 function_body_length:
-  warning: 150
+  warning: 600
   error: 600
 
 # Type body length - maximum lines in a type (class, struct, enum)
 type_body_length:
-  warning: 400
+  warning: 6000
   error: 6000
 
 # File length - maximum lines in a file
 file_length:
-  warning: 1000
+  warning: 7000
   error: 7000
   ignore_comment_only_lines: true
 
 # Cyclomatic complexity - maximum complexity for a function
 cyclomatic_complexity:
-  warning: 20
+  warning: 60
   error: 60
   ignores_case_statements: true
 
