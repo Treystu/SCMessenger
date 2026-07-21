@@ -1,8 +1,21 @@
 # SCMessenger Current State (Verified)
 
 Status: Active
-Last updated: 2026-07-09 (Qwen /scmqwen orchestrator session + emulator validation)
-Last verified: **2026-07-02** (v1.0.0 PR #1 merged, remaining items documented in `docs/release-readiness-2026-07-02.md`)
+Last updated: 2026-07-21 (Simple Install Guides [Android & iOS] added; key documentation audit completed)
+Last verified: **2026-07-21** (v1.0.0 PR #1 merged, remaining items documented in `docs/release-readiness-2026-07-02.md`)
+
+---
+
+## 2026-07-21: Pre-built APK/App Simple Install Guides (Android & iOS)
+
+**Status:** COMPLETE. Created standalone installation guides: [SIMPLE_INSTALL_ANDROID.md](file:///c:/Users/SCM/Documents/GitHub/SCMessenger/docs/SIMPLE_INSTALL_ANDROID.md) and [SIMPLE_INSTALL_IOS.md](file:///c:/Users/SCM/Documents/GitHub/SCMessenger/docs/SIMPLE_INSTALL_IOS.md), alongside 1-click batch script [install-apk.bat](file:///c:/Users/SCM/Documents/GitHub/SCMessenger/android/install-apk.bat).
+
+Key additions:
+- **Android Simple Install Guide**: Focuses on installing pre-built `app-debug.apk` via USB debugging from a Windows/Mac PC over cell/Wi-Fi. Includes 1-click installer ([install-apk.bat](file:///c:/Users/SCM/Documents/GitHub/SCMessenger/android/install-apk.bat)) that auto-grants network, Bluetooth, and location permissions.
+- **iOS Simple Install Guide**: Focuses on direct pre-built binary installation (`.app` / `.ipa`) via Xcode, Apple Configurator, or `devicectl` script ([install-device.sh](file:///c:/Users/SCM/Documents/GitHub/SCMessenger/iOS/install-device.sh)).
+- **Generic & Clean**: Stripped all personal names and removed TestFlight references.
+
+
 
 ---
 

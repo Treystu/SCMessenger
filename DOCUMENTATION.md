@@ -22,6 +22,8 @@ For lifecycle classification (`Active`, `Planned`, `Mixed`, `Historical`, `Super
 ## Active Canonical Docs (Read First)
 
 - [Repository Overview](README.md)
+- [Simple Android Installation Guide](docs/SIMPLE_INSTALL_ANDROID.md)
+- [Simple iOS Installation Guide](docs/SIMPLE_INSTALL_IOS.md)
 - [Repository Context](docs/REPO_CONTEXT.md)
 - **[Log Extraction Standard](LOG_EXTRACTION_STANDARD.md) [MANDATORY for iOS/Android]**
 - [Current Verified State](docs/CURRENT_STATE.md)
