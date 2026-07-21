@@ -44,7 +44,7 @@ else
   exit 1
 fi
 
-echo "✓ Swift bindings copied successfully"
+echo "[OK] Swift bindings copied successfully"
 echo
 echo "Files copied to:"
 echo "  - iOS/SCMessenger/SCMessenger/Generated/"
