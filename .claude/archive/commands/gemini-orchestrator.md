@@ -1,7 +1,7 @@
 #  SCMessenger Unified Lake Orchestrator 
 > **LAKE CONTRACT ACTIVATED:** See `docs/ORCHESTRATION.md` for the single source of truth on the delegation loop, model fleet, and commands. This applies uniformly to Claude, Gemini, Qwen, and Codex agents in rotation.
 
-# Gemini 3.5 Flash Orchestrator — Foreign-worker coordination for backlog continuity
+# Gemini 3.5 Flash Orchestrator -- Foreign-worker coordination for backlog continuity
 
 Status: Active
 Last updated: 2026-07-08
@@ -14,7 +14,7 @@ verify.
 
 **Operating context:** Native Claude subscription is at 98% weekly usage (resets
 2026-07-10). This orchestrator runs on foreign capacity (Gemini 3.5 Flash free
-tier + DashScope Qwen free tier + ollama-cloud free tier) — zero native token
+tier + DashScope Qwen free tier + ollama-cloud free tier) -- zero native token
 burn. Goal: maximize Phase 1 progress during the HARDLOCK window.
 
 ## Hard Constraints
@@ -26,7 +26,7 @@ burn. Goal: maximize Phase 1 progress during the HARDLOCK window.
   rules: they implement, you verify on Windows. Do NOT move HANDOFF files
   yourself; workers report results, you verify, then you move files and commit.
 - WINDOWS BUILD SERIALIZATION. The Windows host is the ONLY authority for build
-  verification. Cargo/Gradle state is shared — you will coordinate dispatch to
+  verification. Cargo/Gradle state is shared -- you will coordinate dispatch to
   prevent concurrent invocations. Before launching a worker, check:
   `tasklist //FI "IMAGENAME eq cargo.exe"` and `//FI "IMAGENAME eq java.exe"`.
   If either is non-empty from your prior work, wait for it to finish before
@@ -41,7 +41,7 @@ burn. Goal: maximize Phase 1 progress during the HARDLOCK window.
 
 ### Qwen (DashScope, free tier)
 - **Model**: qwen-plus (most cost-effective), qwen-turbo (faster), qwen-max
-  (deepest reasoning — only when qwen-plus fails).
+  (deepest reasoning -- only when qwen-plus fails).
 - **Access**: via OpenAI-compatible endpoint at DashScope API with key in
   `~/.config/scmorc/dashscope.env`.
 - **Best for**: mechanical tasks, standard implementation, test authoring,
@@ -69,7 +69,7 @@ burn. Goal: maximize Phase 1 progress during the HARDLOCK window.
 | Test authoring, property tests | qwen-plus | qwen-turbo | Well-scoped, low-risk |
 | Pre-dispatch validation, task triage | qwen-plus | gemini-3-flash-preview:cloud | Read-only, no code write needed |
 | Non-crypto security review (transport/routing cells) | deepseek-v3.2:cloud | deepseek-v4-pro:cloud | Good for adversarial probing |
-| Crypto/protocol review (MANDATORY audit) | FABLE via native | — | Must be native Claude. Schedule for after quota resets 2026-07-10 |
+| Crypto/protocol review (MANDATORY audit) | FABLE via native | -- | Must be native Claude. Schedule for after quota resets 2026-07-10 |
 
 ## Orchestrator Loop
 
@@ -178,7 +178,7 @@ Only after real diff + passing gate (+ security audit staged, if AUDIT-GATE):
    PowerShell or Git Bash).
 2. **Update tracking.** Edit `REMAINING_WORK_TRACKING.md` to record completion.
 3. **Commit.** `git add -A && git commit -m "swarm: completed [Task Name]"`.
-   (Provenance stays `swarm:` — these are foreign-worker completions, distinct
+   (Provenance stays `swarm:` -- these are foreign-worker completions, distinct
    from native `/scmorc`.)
    Include gate pass/fail in message.
 4. Log the dispatch in `tmp/gemini-orchestrator/dispatch_log.md`:
@@ -204,8 +204,8 @@ Only after real diff + passing gate (+ security audit staged, if AUDIT-GATE):
 You are a foreign worker for the SCMessenger project (AGENTS.md "FOREIGN WORKER" class). Read AGENTS.md; these rules govern you.
 
 CRITICAL CONSTRAINTS:
-- Do NOT run `cargo`/`gradlew` — Windows host serializes all builds. Implement the change, report, stop.
-- Do NOT commit, push, or move HANDOFF files — the orchestrator owns the state machine.
+- Do NOT run `cargo`/`gradlew` -- Windows host serializes all builds. Implement the change, report, stop.
+- Do NOT commit, push, or move HANDOFF files -- the orchestrator owns the state machine.
 - Do NOT run `git` commands except `git diff` (read-only).
 - Locate code with Grep/rg; read only the ~20-40 lines you need.
 - No emojis. Use [OK], [ERROR], [WARNING], [INFO], [DONE], [FAIL].
@@ -224,7 +224,7 @@ Gate command: cargo check --workspace -q --message-format=short
 
 Then include:
 
-**TASK:** (copied from the HANDOFF file — the requirement)
+**TASK:** (copied from the HANDOFF file -- the requirement)
 
 **TARGET FILES:** (exact paths to modify or create)
 

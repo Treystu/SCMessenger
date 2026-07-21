@@ -15,11 +15,24 @@ UniFFI bindings or JSON-RPC.
 by `HANDOFF/V1_0_0_EXECUTION_PLAN.md` (two-phase DAG; Phase 1 = Windows/Android
 transport parity — top priority). Dispatch order: `HANDOFF/todo/_QUEUE.md`.
 
-**Four operating modes share this repo:**
-1. **Native Claude Code** (default) — single session using the subagents/skills/hooks below.
-2. **Ollama-cloud swarm** — only under `/orchestrate` or `/swarm`; see `docs/CLAUDE_REFERENCE.md` section 4.
-3. **`/scmorc`** — headless per-task `claude -p` workers on the Anthropic subscription (`.claude/commands/scmorc.md`). Gold standard for batch processing.
-4. **`/scm`** — native cowork orchestrator using the `Agent` tool (`.claude/commands/scm.md`).
+**One unified orchestrator (consolidated 2026-07-20).** There is a single
+orchestrator command, `/orchestrate` (`.claude/commands/orchestrate.md`), a thin
+launcher over the canonical protocol `docs/ORCHESTRATION.md`. The old per-backend
+commands (`/scmorc`, `/scm`, `/scmqwen`, `/gemini-orchestrator`, `/swarm`) are
+archived under `.claude/archive/commands/`; their behaviour survives as selectable
+BACKENDS, not separate commands:
+- **`lanes`** (default) — script dispatch to free/paid API lakes via
+  `scripts/delegate_task.py`. The only backend a non-Claude orchestrator needs.
+- **`native`** — headless `claude -p` workers on the Anthropic subscription
+  (the old `/scmorc`; Quota Governor applies). Escalation/audit only.
+- **`agent`** — native `Agent`-tool subagents (the old `/scm`).
+- **`swarm`** — ollama pool via `orchestrator_manager.sh` (the old `/orchestrate`
+  + `/swarm`); small free tier.
+
+Delegation is mandatory for every task and holds no matter which model is
+orchestrating (`docs/ORCHESTRATION.md` Section 0). The lake fleet — free/trial and
+cheap-paid providers, endpoints, quotas, tokens/$ — is in
+`SCM_UNIFIED_LAKE_ORCHESTRATION.md`.
 
 Cross-mode protocol (state machine, dispatcher, tier routing, commit
 authority, token-efficiency rules): `docs/ORCHESTRATION.md` — supersedes role

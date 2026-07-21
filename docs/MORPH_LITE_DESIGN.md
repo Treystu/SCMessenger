@@ -320,4 +320,4 @@ Every invocation:
 - **OpenRouter pricing:** https://openrouter.ai/morph/morph-v3-fast
 - **Orchestration ladder:** `docs/ORCHESTRATION.md` Section 2.1
 - **Farm plan:** `HANDOFF/plans/FARM_FINAL_PLAN.md`
-- **Dispatch config:** `.claude/commands/scmorc.md`, `.claude/commands/scmqwen.md`
+- **Dispatch config:** `.claude/commands/orchestrate.md` (unified) + `docs/ORCHESTRATION.md`; the old `scmorc`/`scmqwen` are archived under `.claude/archive/commands/` as the `native`/`lanes` backends

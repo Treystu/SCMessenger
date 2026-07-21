@@ -148,3 +148,7 @@ rushing a partial, inconsistent pass under time pressure. This ticket is
 NOT blocking for Josh-sim/Farm-sim core P2P functionality (it is a
 robustness/hardening item, not a functional correctness gap) so deprioritizing
 relative to items that directly gate the live connectivity test.
+
+
+## COMPLETION NOTE (2026-07-21, Kimi-K3 orchestrator)
+The v0.4.0-scope slice was completed and documented in HANDOFF/done/D-05_UNWRAP_PANIC_HARDENING_REDISPATCH.md. Compile gates verified on the authoritative Windows host: `cargo clippy --workspace --all-features -- -D warnings` exit 0; `cargo test --workspace --no-run` exit 0. Broader v1.0.0-scale sweep remains tracked by HANDOFF/todo/D-05_unwrap_panic_hardening_v1.md (out of v0.4.0 scope).

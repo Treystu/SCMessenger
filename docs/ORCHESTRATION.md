@@ -1,30 +1,95 @@
 # SCMessenger Orchestration Protocol
 
-Status: Active. Last updated: 2026-07-17.
+Status: Active. Last updated: 2026-07-20.
 
-This is the canonical reference for all orchestration modes. Every command
-in `.claude/commands/` is a specialization of this protocol. Any model,
-running anywhere, can orchestrate the v1.0.0 farm build by reading this
-document plus the shared state files in Section 2.
+This is the single canonical reference for orchestration. There is now ONE
+orchestrator command -- `/orchestrate` (`.claude/commands/orchestrate.md`) -- and
+it is a thin launcher that points back here. Any model, running anywhere, can
+drive the v1.0.0 farm build by reading this document plus the shared state files
+in Section 2. The superseded per-backend commands (scmorc, scm, scmqwen,
+gemini-orchestrator, swarm) are archived under `.claude/archive/commands/`; their
+behaviour is preserved below as selectable BACKENDS (Section 5), not as separate
+commands.
+
+---
+
+## 0. Operating Contract (read first -- applies to every orchestrator, every model)
+
+These five rules are absolute. They are written plainly so that even a small,
+tool-poor but instruction-following model can orchestrate correctly.
+
+1. **DELEGATION IS MANDATORY. The orchestrator never writes application code.**
+   Every implementation, fix, test, or analysis task is dispatched to a lake
+   (Section 1). You may directly edit ONLY: HANDOFF task files (state moves), the
+   backlog tracker, prompt files under `tmp/`, and a surgical 1-3 line compile fix
+   that is the sole thing blocking a build gate. Anything larger -> delegate. If
+   you are about to type code into a `.rs/.kt/.java/.swift/.ts` file, STOP and
+   dispatch instead.
+
+2. **The canonical dispatch path is a script, so ANY model can run it.**
+   `python scripts/delegate_task.py --task <file> --provider <lake> [--model <m>]
+   --files <targets> --apply --verify "<gate>" --mode diff --max-rounds 3`.
+   The native `Agent` tool and `claude -p` workers are OPTIONAL accelerators
+   available only when the orchestrator is Claude; they are never required. A
+   non-Claude orchestrator uses the script for 100% of dispatches.
+
+3. **You are the only writer of builds, commits, and state.** Workers implement
+   and report; they never run `cargo`/`gradlew`, never commit, never move HANDOFF
+   files. You run the gate, you move the ticket, you commit. One build at a time
+   (Windows rlib-lock safety, Section 9).
+
+4. **Follow the loop in Section 2.2 for every task**, in order: read queue ->
+   validate -> pick lake (2.1 ladder) -> dispatch -> verify gate -> security gate
+   if required -> move ticket -> commit -> record ledger. No step is optional.
+
+5. **Record every dispatch in the ledger** (`tmp/lakes/ledger.jsonl` via
+   `scripts/lake_route.py --record ...`). The router is blind to what you do not
+   record; unrecorded dispatches burn lakes twice.
+
+Escalate to the operator before: architecture-direction changes, security/privacy
+trade-offs, tech-stack changes, API-contract breaks, or release/versioning
+decisions.
 
 ---
 
 ## 1. Lake Registry
 
-All agent API lakes available to any orchestrator. Full registry with endpoints
-and model lists: `SCM_UNIFIED_LAKE_ORCHESTRATION.md`.
+All agent API lakes available to any orchestrator. Full endpoint + model + quota
+registry, the ranked free-tier and tokens/$ comparison, and the rotation strategy:
+**`SCM_UNIFIED_LAKE_ORCHESTRATION.md`**.
+
+### Active lakes (wired in `scripts/delegate_task.py` today -- valid `--provider` values)
 
 | Lake        | Provider          | Best For                                              | Tiers              |
 |-------------|-------------------|-------------------------------------------------------|--------------------|
 | qwen        | DashScope/Alibaba | Rust/Kotlin implementation, deep CODER/THINK capacity | FLASH/CODER/THINK/MAX |
-| groq        | Groq Cloud        | Fast FLASH/CODER micro-tasks; daily reset each 24h    | FLASH/CODER/THINK  |
-| openrouter  | OpenRouter        | Morph Lite apply/verify; free model spillover         | FLASH/CODER/MORPH  |
-| gemini      | Google AI Studio  | Large-context review, whole-file analysis             | FLASH/CODER/THINK  |
-| ollama      | Local/cloud       | Zero-cost overflow; air-gap fallback                  | FLASH/CODER        |
+| groq        | Groq Cloud        | Fast FLASH micro-tasks; small TPM, micro-chunk        | FLASH/CODER        |
+| openrouter  | OpenRouter        | Free-model spillover; 1,000 req/day (via $10 topup)   | FLASH/CODER        |
+| gemini      | Google AI Studio  | Large-context review, whole-file analysis (key-gated) | FLASH/CODER/THINK  |
+| ollama      | Ollama free tier  | Small overflow (a few tasks/week); air-gap fallback   | FLASH/CODER        |
 
-Note: Groq free tier has a per-minute token cap (~12K TPM for most models).
-Prompts exceeding ~8K tokens must be micro-chunked before dispatch. See
-Section 2.1 for the dispatch ladder and Section 6 for the Groq chunk rule.
+### Candidate lakes (DOCUMENTED ONLY -- not yet wired; registry Section 6 has the exact add)
+
+Do NOT pass these as `--provider` yet: `delegate_task.py` rejects any provider not
+in its `choices` list, and each needs a `~/.config/scmorc/<lake>.env` key file
+first. They are researched and ready to wire, nothing more.
+
+| Lake        | Provider          | Best For                                              | Tiers              |
+|-------------|-------------------|-------------------------------------------------------|--------------------|
+| mistral     | Mistral (Plateforme+Codestral) | Best free code lake: 1B tok/mo, 500K TPM, Codestral | FLASH/CODER |
+| nvidia      | NVIDIA NIM        | 100+ models (qwen3-coder, DeepSeek, GLM); no CC       | FLASH/CODER/THINK  |
+| sambanova   | SambaNova Cloud   | Largest daily free budget; DeepSeek V3.2              | FLASH/CODER/THINK  |
+| cerebras    | Cerebras          | Fastest inference; 8K free context -> mechanical only | FLASH              |
+| modelscope  | Alibaba ModelScope| 2,000 calls/day free, separate from DashScope         | FLASH/CODER        |
+| scaleway    | Scaleway (EU)     | qwen3-coder-30b, devstral; 1M free tokens             | FLASH/CODER        |
+| deepseek    | DeepSeek (paid)   | Cheapest capable coder/$: V4 Flash, 98% cache discount | CODER/THINK       |
+
+Note: full quotas, endpoints, key files, and the free vs paid tokens/$ comparison
+live in `SCM_UNIFIED_LAKE_ORCHESTRATION.md`. Standing reality (2026-07-20):
+Ollama Cloud Pro is NOT currently subscribed (purchase candidate); OpenRouter sits
+at 1,000 req/day thanks to the one-time $10 lifetime topup. Groq's small per-minute
+token cap means prompts over ~6K tokens must be micro-chunked (Section 6);
+big-context lakes (qwen, mistral, nvidia, sambanova, gemini) do not.
 
 ---
 
@@ -77,6 +142,59 @@ For any task, try lanes in this order (first available with quota wins):
 
 ---
 
+## 2.2 The Orchestration Loop (run this for every task)
+
+This is the whole job. It was previously duplicated across five command files;
+it now lives here once. Follow it in order.
+
+1. **READ QUEUE.** Open `HANDOFF/todo/_QUEUE.md`; take the top actionable ticket.
+   Group consecutive tickets by domain (rust-core / android / wasm / desktop /
+   docs) to reuse worker context.
+2. **PRE-DISPATCH VALIDATION** (cheap, orchestrator-local -- never spend a worker
+   on a dead task). Read the ticket, identify the concrete target (symbol/file),
+   grep for it:
+   - FALSE_POSITIVE (target is a test/Kani/proptest/`GOLDEN_*` literal) -> move to
+     `HANDOFF/done/` with a note; next ticket.
+   - ALREADY_WIRED (the thing to "wire" already has callers) -> move to done/; next.
+   - NEEDS_REVIEW (target missing/ambiguous) -> STOP, ask the operator.
+   - VALID -> continue.
+3. **WRITE the worker prompt** to `tmp/<slug>.prompt.md`: self-contained --
+   requirement, exact target file paths, acceptance criteria, and the exact
+   build-gate command. Include the Worker Contract header (Section 3).
+4. **PICK THE LAKE** by the Section 2.1 ladder and the tier the task needs: FLASH
+   for mechanical, CODER for implementation, THINK/MAX for analysis and
+   adversarial review. Never send analysis or judgement to a FLASH lake (Section
+   9.13). Free lanes first, always.
+5. **DISPATCH** (canonical, any model): `scripts/delegate_task.py --task <file>
+   --provider <lake> --files <targets> --apply --verify "<gate>" --mode diff
+   --max-rounds 3`. Claude-only accelerators, if available: the `Agent` tool,
+   `claude -p` workers, or the ollama pool via `orchestrator_manager.sh` (Section
+   5). Always `--mode diff` (Section 9.3).
+6. **VERIFY.** Parse the worker's first line (RESULT/PATCH/VERDICT, Section 3).
+   `git diff --stat` scoped to the ticket:
+   - ZERO-DIFF -> do not trust it; ticket stays in todo/, log `requeued`.
+   - Real diff -> run the matching gate YOURSELF (Rust `cargo check --workspace`;
+     Android `cd android && ./gradlew assembleDebug -x lint --quiet`; WASM
+     `cargo check -p scmessenger-wasm --target wasm32-unknown-unknown`;
+     `CARGO_INCREMENTAL=0` on Windows). Grep the diff for
+     `simulate|mock|placeholder|in a real implementation` -- a clean compile is
+     NOT completion (Section 9.1).
+7. **SECURITY GATE** (Section 4). Diff touches `core/src/{crypto,transport,routing,
+   privacy}/` -> mandatory adversarial review at THINK/MAX tier before commit.
+   Delivery-logic diffs (outbox, receipt, custody, retry) -> triangulate: 3
+   distinct verifier dispatches or one Fusion Lite panel (Section 10).
+8. **MARK COMPLETE.** Real diff + passing gate (+ security pass where required) ->
+   move the ticket to `HANDOFF/done/`, update the tracker. A task is not complete
+   until the file has moved.
+9. **COMMIT.** `git add -A && git commit -m "<prov>: completed <task>"` (provenance:
+   `native:` for Claude-worker completions, `swarm:` for foreign/pool completions).
+   Record the gate result in the message. Never push unless the operator asks.
+10. **RECORD** the dispatch in the ledger (`lake_route.py --record`), re-check
+    quota/cooldowns, and return to step 1. Stop when the queue is empty, a
+    NEEDS_REVIEW/escalation is hit, or the operator interrupts.
+
+---
+
 ## 3. Worker Contract
 
 Every worker response MUST begin with one of:
@@ -108,19 +226,26 @@ files. The orchestrator owns ALL of those operations.
 
 ---
 
-## 5. Orchestrator Modes
+## 5. Backends (HOW you dispatch -- not separate commands)
 
-| Mode               | Command                              | Primary Lake          | When To Use                          |
-|--------------------|--------------------------------------|-----------------------|--------------------------------------|
-| `/scmorc`          | `.claude/commands/scmorc.md`         | Claude native + free  | Claude subscription available        |
-| `/scmqwen`         | `.claude/commands/scmqwen.md`        | Qwen DashScope        | Claude HARDLOCK, zero Anthropic cost |
-| `/gemini-orchestrator` | `.claude/commands/gemini-orchestrator.md` | Gemini/agy + Qwen | agy.exe available as primary       |
-| `/orchestrate`     | `.claude/commands/orchestrate.md`    | ollama-cloud swarm    | Swarm pool mode                      |
-| `/scm`             | `.claude/commands/scm.md`            | Claude native agents  | Native Agent tool mode               |
+There is one command: `/orchestrate`. A "backend" is only the mechanism that
+carries a given dispatch. Pick per task and mix freely within one run. All
+backends share the Section 2 state files, so you can switch backend mid-sprint
+with zero state loss. The old per-backend commands are archived under
+`.claude/archive/commands/` and map onto this table.
 
-All modes share the state files in Section 2. Swap mid-sprint with zero state
-loss: the new orchestrator reads the JSONL queue + ledger + HANDOFF tree and
-resumes exactly where the previous one stopped.
+| Backend | Invocation | Runs on | Use when | (archived command) |
+|---------|------------|---------|----------|--------------------|
+| Script lane (CANONICAL) | `scripts/delegate_task.py --provider <lake>` | Any free/paid API lake (Section 1) | Default for ~100% of tasks; the only path a non-Claude orchestrator needs | scmqwen, gemini-orchestrator |
+| Native Claude worker | `claude -p ... --model <alias> --effort <lvl>` (background Bash) | Anthropic subscription window | AUDIT-GATE adversarial verdicts (fable), or a task with 2+ free-lane failures | scmorc |
+| Native Agent subagent | `Agent` tool (`rust-implementer` / `android-qa` / `crypto-security-auditor` / `docs-sync-auditor` / `release-gatekeeper`) | Anthropic subscription window | Claude orchestrator wants isolated-context delegation without spawning a CLI | scm |
+| Ollama pool (micro-swarm) | `orchestrator_manager.sh pool launch <agent> <task>` | Ollama free tier (small: a few tasks/week) + any cloud pool | Batch fan-out across pooled agents | orchestrate (old), swarm |
+
+Rules that bind every backend: Free lanes first, always -- a native Claude
+worker is the last resort, not the default (it burns the Anthropic window; the
+Quota Governor tiers from the archived `scmorc` apply when you use that backend).
+The DELEGATION-IS-MANDATORY rule (Section 0) holds identically no matter which
+backend or which model is orchestrating.
 
 ---
 
@@ -158,7 +283,9 @@ Zero-diff worker responses are re-queued, not marked done.
 
 State is file-backed; resumption requires only: this document, the JSONL
 queue, the ledger, and the HANDOFF tree. No model memory is required.
-Follow `API_LIMIT_MANAGEMENT_PLAN.md` for per-lake exhaustion handling.
+Follow `API_LIMIT_MANAGEMENT_PLAN.md` and the routing/ledger sections of
+`SCM_UNIFIED_LAKE_ORCHESTRATION.md` (Section 3) for per-lake exhaustion and
+cooldown handling.
 
 ---
 

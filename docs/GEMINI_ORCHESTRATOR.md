@@ -1,8 +1,18 @@
 # Gemini Orchestrator Protocol
 # SCMessenger Swarm
 
-This document is the single source of truth for any Gemini session acting as
-the orchestrator for the SCMessenger backlog. Read this first, then act.
+> SUPERSEDED 2026-07-20 -- this is NOT the single source of truth. Orchestration
+> is now unified: the canonical protocol is `docs/ORCHESTRATION.md` (its Section 0
+> Operating Contract and Section 2.2 loop bind every orchestrating model, Gemini
+> included), launched via the one command `/orchestrate`. This file is retained
+> only as a Gemini-specific runbook for the `lanes` backend
+> (`scripts/delegate_task.py`); where it conflicts with ORCHESTRATION.md,
+> ORCHESTRATION.md wins. Model names and quotas below are historical -- the live
+> lake fleet is `SCM_UNIFIED_LAKE_ORCHESTRATION.md`.
+
+This document is a Gemini-specific runbook for orchestrating the SCMessenger
+backlog via the `lanes` backend. Read `docs/ORCHESTRATION.md` first, then use the
+concrete delegate examples below.
 
 ---
 

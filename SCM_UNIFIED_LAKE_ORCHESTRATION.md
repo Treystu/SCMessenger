@@ -2,9 +2,11 @@
 
 **Purpose:** any model, running anywhere, can orchestrate the v1.0.0 farm build by dispatching micro-tasks to any available "agent API lake" (free-tier capacity pools), with quota-aware routing and a single state machine.
 
+> Companion to the master protocol `docs/ORCHESTRATION.md` (the canonical loop, dispatch ladder, security gates, and the Section 0 Operating Contract) and launched by the one command `/orchestrate`. THIS file is the lake registry, routing table, setup checklist, and portable role-prompt. Where the two overlap, `docs/ORCHESTRATION.md` is authoritative.
+
 **Existing infrastructure this builds on** (already in repo, verified readable):
 - `scripts/delegate_task.py` — multi-provider dispatch: **qwen** (DashScope), **openrouter**, **ollama**, **groq** (OpenAI-compatible endpoints, env-file key loading from `~/.config/scmorc/<provider>.env`)
-- `.claude/commands/scmqwen.md` — proven orchestrator contract: tier roster, round-robin state, build serialization, escalation ladder
+- `.claude/archive/commands/scmqwen.md` (archived) — the proven orchestrator contract this builds on: tier roster, round-robin state, build serialization, escalation ladder. Now the Qwen `lanes` backend of the unified `/orchestrate`; `docs/ORCHESTRATION.md` governs.
 - `HANDOFF/MORPH_LITE_HANDOFF.md` — Morph V3 Fast lane via OpenRouter ($0.001/call ceiling) for single-file <500-line edits
 - `ORCHESTRATOR_DIRECTIVE.md` — gatekeeper protocol + agent pool
 - Queue: `scm_v1_farm_queue.jsonl` (machine) + `SCM_V1_FARM_BUILD_MASTER_BACKLOG.md` (human)
@@ -92,7 +94,8 @@ Quota numbers are **runtime-learned state, not hardcoded truth** — free tiers 
       "notes": "Existing MiMo-code lane; keep as configured, register here so the router can count it."
     }
   },
-  "optional_lakes": ["cerebras (free tier, fast llama)", "sambanova (free tier)", "mistral la plateforme (free tier)", "github models (free tier, GITHUB_TOKEN)"],
+  "optional_lakes": ["mistral", "mistral-codestral", "nvidia-nim", "sambanova", "modelscope", "cerebras", "scaleway", "github-models", "deepseek (paid)"],
+  "optional_lakes_detail": "see section 8 for verified 2026-07-20 free tiers, endpoints, and add-order; section 9 for paid tokens/$",
   "rules": [
     "Register every key in ~/.config/scmorc/<lake>.env — never in the repo.",
     "A lake with no key file is skipped silently by the router.",
@@ -235,3 +238,82 @@ Dispatch Z-01-class mechanical packet to every registered lake; confirm ledger r
 - **Same ledger** regardless of which lake served — quotas are learned, failover is automatic.
 - **Same gates** regardless of who wrote the code — orchestrator always verifies, workers never self-certify.
 - Any lake, any orchestrator, any worker can be swapped mid-sprint with zero state loss. That is the property the v1.0.0 farm build depends on, and it is satisfied by construction above.
+
+---
+
+## 8. Candidate lakes (DOCUMENTED ONLY -- researched, not yet wired) [verified 2026-07-20]
+
+These expand the `optional_lakes` list in section 1. They are researched and ready
+to register but are NOT in `delegate_task.py`'s `--provider` choices yet; each
+joins by adding one lake block (section 1 rules) plus a
+`~/.config/scmorc/<lake>.env` key. All are OpenAI-compatible unless noted. Ranked
+for this codebase (Rust/Kotlin, large files -> context window and TPM matter).
+Numbers confirmed against the sources in section 11; free tiers move, so
+re-confirm in each console before a sprint.
+
+| Lake | Free tier | Base URL | Best coding models | Add friction |
+|------|-----------|----------|--------------------|--------------|
+| mistral | 1 rps, 500K TPM, 1B tokens/month per model | https://api.mistral.ai/v1 | Codestral, Mistral Large/Medium 3.5 | phone + data-opt-in |
+| mistral-codestral | 30 rpm, 2,000 req/day (separate quota) | https://codestral.mistral.ai/v1 | Codestral | phone |
+| nvidia-nim | ~40 rpm, ~1,000 signup credits, no CC | https://integrate.api.nvidia.com/v1 | qwen3-coder, DeepSeek V4 Pro, GLM-4 | phone; context-limited |
+| sambanova | ~20M tokens/day (confirm) + $5/3mo credit | https://api.sambanova.ai/v1 | DeepSeek V3.2/V3.1, Llama 4 Maverick | signup |
+| modelscope | 2,000 calls/day (500/model), no CC | https://api-inference.modelscope.cn/v1 [verify] | Qwen (incl. coder), DeepSeek | signup |
+| cerebras | 1M tokens/day, 14,400 req/day, no CC | https://api.cerebras.ai/v1 | gpt-oss-120b (8K ctx -> mechanical only) | none |
+| scaleway | 1M free tokens (one-time), EU | https://api.scaleway.ai/v1 [verify] | qwen3-coder-30b, devstral | signup |
+| github-models | Copilot-tier gated, very restrictive tokens | (OpenAI-compatible) | GPT-5, DeepSeek-R1/V3, Grok 3 | GitHub/Copilot |
+
+Trial-credit lakes (burst fuel, not steady rotation): Baseten $30, NLP Cloud $15,
+AI21 $10/3mo, Upstage $10/3mo, Modal $5/mo, Hyperbolic $1 (free qwen3-coder-480b),
+Fireworks $1, Nebius $1, Novita $0.50, Inference.net $1. All OpenAI-compatible.
+
+Add-order by value-per-signup-minute: NVIDIA NIM -> Mistral (two lakes, one
+signup) -> SambaNova -> ModelScope -> Cerebras -> Hyperbolic -> Baseten.
+
+Needs an adapter (NOT OpenAI-compatible, defer): Cloudflare Workers AI (neuron
+binding), Cohere (native API).
+
+## 9. Paid options up to $20/month -- best tokens per dollar [verified 2026-07-20]
+
+Ollama Cloud Pro ($20/mo) is a purchase candidate, NOT currently subscribed.
+
+Subscriptions (flat monthly, best for sustained coding):
+- z.ai GLM Coding Plan Lite $18/mo (or $12.60 with the 30% promo through Sept
+  2026): GLM-5.2, GLM-5-Turbo, GLM-4.7, GLM-4.5-air on a Claude-Code-style quota.
+  Top pick under $20 and a distinct lake from everything free above.
+- Ollama Cloud Pro $20/mo: hosted flagship open models; re-subscribe only for the
+  managed reliability -- NIM + Hyperbolic + SambaNova reach similar models free.
+
+Pay-as-you-go (best raw tokens/$; a $20 budget lasts a long time):
+
+| Model (provider) | Input $/M | Output $/M | Tokens per $1 (in / out) |
+|------------------|-----------|------------|--------------------------|
+| DeepSeek V4 Flash (api.deepseek.com) | 0.14 | 0.28 | 7.14M / 3.57M -- cache-hit input 0.0028/M = 357M/$ |
+| DeepSeek V4 Pro | 0.435 | 0.87 | 2.30M / 1.15M |
+| GLM-4.6 API (z.ai pay-go) | 0.43 | 1.74 | 2.33M / 0.57M |
+
+Recommendation: buy the z.ai GLM Coding Plan Lite ($12.60 promo) for a flagship
+coder on a flat bill; or put $10-20 pay-go on DeepSeek V4 Flash for the cheapest
+capable coder per token (cache discounts make repeated-context agent loops nearly
+free).
+
+## 10. Standing reality (2026-07-20)
+
+- Ollama Cloud Pro: NOT subscribed (purchase candidate, section 9).
+- OpenRouter: 1,000 req/day via the one-time $10 lifetime topup (else 50/day).
+- Ollama free tier: small -- a few tasks/week; overflow / air-gap only.
+- The micro-swarm today = OpenRouter (1,000/day) + Groq (daily) + Qwen (trial) +
+  Ollama free. Each candidate lake in section 8 is another independent quota.
+
+## 11. Sources (verified 2026-07-20)
+
+- Aggregator: https://github.com/cheahjs/free-llm-api-resources
+- OpenRouter limits: https://openrouter.ai/docs/api/reference/limits
+- Gemini rate limits: https://ai.google.dev/gemini-api/docs/rate-limits
+- Cerebras: https://inference-docs.cerebras.ai/support/rate-limits
+- Mistral tiers: https://docs.mistral.ai/admin/user-management-finops/tier
+- NVIDIA NIM: https://build.nvidia.com/
+- SambaNova: https://sambanova.ai/blog/sambanova-cloud-developer-tier-is-live
+- ModelScope: https://free-model.com/providers/modelscope/
+- DeepSeek pricing: https://api-docs.deepseek.com/quick_start/pricing/
+- z.ai GLM Coding Plan: https://z.ai/subscribe
+- Scaleway: https://console.scaleway.com/generative-api/models

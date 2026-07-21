@@ -1,7 +1,10 @@
 # Prove message delivery between two INDEPENDENT endpoints, not just Lucas's own two clients
 
-Status: DONE -- proven 2026-07-20, both directions confirmed
+Status: DONE -- proven 2026-07-20, both directions confirmed.
 Filed: 2026-07-20
+Closed: 2026-07-19 (Bob planning session) -- moved to done/ per PROOF_TWO_ENDPOINT_DELIVERY_2026-07-20.md.
+Evidence: Two CLI identities (Alice pubkey b6ffcd97, Bob pubkey 94c1f6cb), both directions confirmed.
+Bug fixed as part of proof: handle_send_message peer_id parse (commit 29d01e5b, fusion_lite PASS).
 
 ## Why this ticket exists
 

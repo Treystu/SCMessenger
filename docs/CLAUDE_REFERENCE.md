@@ -1,7 +1,7 @@
 # CLAUDE_REFERENCE — On-Demand Detail for Agent Sessions
 
 Status: Active
-Last updated: 2026-07-06
+Last updated: 2026-07-20
 
 Companion to `CLAUDE.md`. CLAUDE.md is re-injected into context every turn, so
 it holds only the always-needed high-level rules and points here for detail.
@@ -107,11 +107,13 @@ as of re-enablement 2026-07-06; quarantined stragglers in
 
 ---
 
-## 4. Ollama Swarm Detail (`/orchestrate` + `/swarm` only)
+## 4. Ollama Swarm Detail (the `swarm` backend)
 
-Quota governor, agent routing table, and cloud model roster live in
-`.claude/commands/orchestrate.md` (loaded when `/orchestrate` runs) — fix
-drift there, not here. Orchestrator reads `HANDOFF/todo|IN_PROGRESS/`,
+The `swarm` backend of the unified `/orchestrate` command (`docs/ORCHESTRATION.md`
+Section 5) drives the ollama pool. Its full operating detail — 6-tier quota
+governor, agent routing table, and cloud model roster — was recovered when the old
+`/orchestrate` command folded into the unified launcher and now lives in
+`.claude/archive/commands/orchestrate-swarm-legacy.md` — fix drift there, not here. Orchestrator reads `HANDOFF/todo|IN_PROGRESS/`,
 launches via `.claude/orchestrator_manager.sh pool launch <agent> <task>`;
 workers implement one `BATCH_*.md`, run compile gates, move the file to
 `HANDOFF/done/`, commit `swarm: completed [Task]`. Fire-and-forget: once the

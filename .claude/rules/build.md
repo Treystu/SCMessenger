@@ -30,13 +30,14 @@ change; resolve failures before finalizing.
 - Incremental compilation disabled (`.cargo/config.toml`); also
   `export CARGO_INCREMENTAL=0` in the shell before cargo commands.
 - Never run two build-tool invocations concurrently (see CLAUDE.md
-  Windows-Specific Rules — Gradle can spawn cargo-ndk upstream).
-- Shell scripts need Git Bash/WSL; CI is ubuntu/macos only — Windows builds
+  Windows-Specific Rules -- Gradle can spawn cargo-ndk upstream).
+- Shell scripts need Git Bash/WSL; CI is ubuntu/macos only -- Windows builds
   verified locally.
 
-## Model Availability Check (ollama swarm modes ONLY)
+## Model Availability Check (the `swarm` backend ONLY)
 
-Only when acting as `/orchestrate`/`/swarm`: verify the target ollama model via
-`bash .claude/model_validation_template.sh` or `https://ollama.com/api/tags`.
-Not applicable to native or `/scmorc` sessions (their model truth is
-`claude --help` aliases).
+Only when using the `swarm` backend (ollama pool): verify the target ollama model
+via `bash .claude/model_validation_template.sh` or `https://ollama.com/api/tags`.
+Not applicable to the `lanes`, `native`, or `agent` backends -- for `native` the
+model truth is `claude --help` aliases; for `lanes` it is the lake registry
+`SCM_UNIFIED_LAKE_ORCHESTRATION.md`.

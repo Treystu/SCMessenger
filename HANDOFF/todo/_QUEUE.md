@@ -1,35 +1,21 @@
 # _QUEUE -- Dispatch Order for the Full v1.0.0 Backlog
 
 Status: Active
-Last updated: 2026-07-17 (status-correction header; body below retains the
-2026-07-13 narrative -- trust `scm_v1_farm_queue.jsonl` + this header over
-stale body lines)
+Last updated: 2026-07-21 (status-correction header reflecting early morning Kimi-K3 OpenCode session)
 
-## 2026-07-17 STATUS CORRECTIONS (authoritative over the body below)
+## 2026-07-21 STATUS CORRECTIONS (authoritative over the body below)
 
-- MACHINE QUEUE: `scm_v1_farm_queue.jsonl` (repo root) is the dispatch source
-  of truth; sprint plan: `unified-v1-orchestration-plan.md` (repo root).
-- DONE since the 07-13 body was written: U1-U4 (07-14), A-01 (A3 Android retry
-  suppression), A-02 (F1 confirm run), A-07 (dial-error observability), A-08
-  (onion gating), Site-2/Site-3 outbox flush (CRITICAL_OUTBOX ticket closed to
-  done/ 07-17), custody DriftFrame wrap (82adf735), FARM_TESTRUNNER_REST_API_GAP.
-- NEW CRITICAL (2026-07-17): the ratchet/PQ subsystem is NOT wired into
-  IronCore's production send/receive path -- see
-  `HANDOFF/todo/CRITICAL_RATCHET_SUBSYSTEM_NOT_WIRED_INTO_IRONCORE.md` (E-00,
-  operator gate). E-01 body items below are still real but E-00 reframes them.
-- Duplicate ticket stubs (A-04/A-05/E-02/E-04/D-01/U2/U3/U4 short-forms)
-  retired to `HANDOFF/retired/dupes_2026-07-17/`; canonical files remain in
-  todo/ (U5/U6/U7, PQC_07_*).
-- 2026-07-17 swarm run lesson: compile-only verify is NOT a completion gate.
-  Commits 71d02d4d/e298e9bf were reverted (23960b35/8da8cc90) after Qwen
-  output contained simulated/mock code. See docs/ORCHESTRATION.md lessons
-  section before dispatching another batch runner.
-(see
-`HANDOFF/SESSION_HANDOFF_2026-07-13_farm_v1_backlog.md` for the full session
-report). A1/A2/E2/E3 DONE this session; E1 BLOCKED twice (needs attempt 3,
-see below); F1 written, compiled clean, run result unconfirmed at session end
-- verify/commit first. AWS/B4 PAUSED per operator - infra is committed and
-ready but not a current priority. Delegation protocol: docs/ORCHESTRATION.md.
+- **v0.4.0 EXECUTION PLAN**: Active authority is `HANDOFF/plans/V040_ORCHESTRATION_PLAN.md` + `KIMI_K3_V040_ORCHESTRATION_PROMPT.md`.
+- **PROVE_SECOND_REAL_ENDPOINT_DELIVERY**: COMPLETED & VERIFIED (`HANDOFF/PROOF_TWO_ENDPOINT_DELIVERY_2026-07-20.md`, moved to `HANDOFF/done/`). Alice and Bob CLI instances exchanged bidirectional messages & receipts over real alpha relay (`100.56.248.69:9001`).
+- **GRACEFUL_AF_DIAL_POLICY (Items 3+4 & Audit Fixes)**: COMPLETED in `cli/src/ledger.rs` & `cli/src/main.rs`. Implemented per-peer backoff state, max 3 concurrent outbound dials, circuit-relay preference after connection established, plus peer spoofing & relay liveness audit hardening.
+- **A-04 ANDROID RECEIPT UNIFICATION**: COMPLETED. `core/src/iron_core.rs` replaced serde_json calls with `encode_receipt`/`decode_receipt`. `android/app/build.gradle` updated with test JNA dependency. `ReceiptUnificationTest.kt` added with native-aware `@BeforeClass` probe.
+- **D-05 UNWRAP PANIC HARDENING**: COMPLETED & moved to `HANDOFF/done/D-05_UNWRAP_PANIC_HARDENING.md`.
+- **CI FIX (P0a)**: Commit `bc94ffbb` ready locally (Lint, FFI snapshot drift, and `integration_wifi_aware` test fixed). Awaiting human operator `git push origin main`.
+- **NEXT ACTIONS FOR v0.4.0 RELEASE**:
+  1. `git push origin main` (operator action).
+  2. Verify GitHub Actions CI green (all 4 jobs).
+  3. Tag `v0.4.0-alpha.1` (`git tag v0.4.0-alpha.1 && git push origin v0.4.0-alpha.1`) to generate release APK & CLI artifacts for Josh test.
+
 
 ## EXECUTION ORDER -- next dispatches (pull top-down)
 

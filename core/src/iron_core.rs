@@ -22,6 +22,7 @@ use crate::crypto::{decrypt_message, encrypt_message, session_manager::RatchetSe
 use crate::drift::{MeshStore, NetworkState, RelayConfig, RelayEngine};
 use crate::identity::IdentityManager;
 use crate::message::{decode_envelope, decode_message, Message};
+use crate::message::types::{decode_receipt, encode_receipt};
 use crate::notification::NotificationEndpointRegistry;
 use crate::observability::{AuditEventType, AuditLog as AuditLogType};
 use crate::privacy::{
@@ -1687,7 +1688,7 @@ impl IronCore {
                 .unwrap_or_default()
                 .as_secs(),
         };
-        serde_json::to_vec(&receipt).map_err(|_| IronCoreError::Internal)
+        encode_receipt(&receipt).map_err(|_| IronCoreError::Internal)
     }
 
     /// Generate cover traffic payload (random bytes).
@@ -2880,7 +2881,7 @@ impl IronCore {
 
         // Handle receipt classification AFTER blocked-peer check to prevent metadata leaks/spam bypass
         if message.message_type == crate::MessageType::Receipt {
-            if let Ok(receipt) = serde_json::from_slice::<crate::Receipt>(&message.payload) {
+            if let Ok(receipt) = decode_receipt(&message.payload) {
                 if let Some(delegate) = self.delegate.read().as_ref() {
                     let status_str = match receipt.status {
                         crate::DeliveryStatus::Sent => "Sent".to_string(),

@@ -1022,6 +1022,12 @@ impl MeshService {
                                                 // false-failures from QUIC/WS/relay listeners. Genuine TCP bind
                                                 // failures will correctly trigger the 15s startup timeout.
                                             }
+                                            crate::transport::SwarmEvent::RelayCircuitEstablished => {
+                                                tracing::info!("Relay circuit established");
+                                            }
+                                            crate::transport::SwarmEvent::RelayCircuitBroken => {
+                                                tracing::info!("Relay circuit broken");
+                                            }
                                             other => {
                                                 tracing::debug!("Swarm event: {:?}", other);
                                             }

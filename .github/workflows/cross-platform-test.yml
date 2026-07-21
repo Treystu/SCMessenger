@@ -9,10 +9,10 @@
 # Triggers: Manual dispatch with sprint_id and git_branch inputs
 #
 # Jobs:
-#   test-linux:   Ubuntu — full workspace tests with all features
-#   test-macos:   macOS 14 (Apple Silicon) — workspace tests
-#   test-windows: Windows — workspace tests + CLI build
-#   test-wasm:    Ubuntu — wasm-pack build + headless Chrome tests
+#   test-linux:   Ubuntu -- full workspace tests with all features
+#   test-macos:   macOS 14 (Apple Silicon) -- workspace tests
+#   test-windows: Windows -- workspace tests + CLI build
+#   test-wasm:    Ubuntu -- wasm-pack build + headless Chrome tests
 #   notify:       Aggregates results and sends to orchestrator
 #
 # ==============================================================================

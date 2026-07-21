@@ -9,9 +9,11 @@
 // but are never deleted — they may come back.
 
 use anyhow::{Context, Result};
+use libp2p::PeerId;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::Path;
+use std::str::FromStr;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 /// A single entry in the connection ledger
@@ -44,6 +46,13 @@ pub struct LedgerEntry {
     /// Unix timestamp of when we can next attempt connection
     pub next_attempt_after: u64,
 
+    /// Whether this node has personally verified the address (successful
+    /// local connection, or operator-trusted bootstrap). Defaults to false for
+    /// entries loaded from disk that predate this field, so old peers.json
+    /// entries classify as unknown until re-verified locally.
+    #[serde(default)]
+    pub locally_verified: bool,
+
     /// Whether this is a hardcoded bootstrap node (never remove)
     pub is_bootstrap: bool,
 
@@ -75,6 +84,7 @@ impl LedgerEntry {
             consecutive_failures: 0,
             backoff_seconds: 0,
             next_attempt_after: 0,
+            locally_verified: false,
             is_bootstrap,
             known_topics: Vec::new(),
             label: None,
@@ -111,6 +121,7 @@ impl LedgerEntry {
         self.consecutive_failures = 0;
         self.backoff_seconds = 0;
         self.next_attempt_after = 0;
+        self.locally_verified = true;
     }
 
     /// Record a failed connection attempt with exponential backoff
@@ -149,6 +160,74 @@ impl LedgerEntry {
     }
 }
 
+/// Key for per-peer dial state: PeerId when known, else the stripped
+/// multiaddr (address-only dials must NEVER be dropped).
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+pub enum DialKey {
+    Peer(PeerId),
+    Addr(String),
+}
+
+impl DialKey {
+    /// Build a key from a target multiaddr and optional known PeerId.
+    pub fn for_target(multiaddr_str: &str, peer_id: Option<PeerId>) -> Self {
+        if let Some(pid) = peer_id {
+            return Self::Peer(pid);
+        }
+
+        if let Some(idx) = multiaddr_str.find("/p2p/") {
+            let remainder = &multiaddr_str[idx + "/p2p/".len()..];
+            if let Ok(pid) = PeerId::from_str(remainder) {
+                return Self::Peer(pid);
+            }
+        }
+
+        Self::Addr(strip_peer_id(multiaddr_str))
+    }
+}
+
+/// Process-lifetime per-peer dial state (NOT serialized to peers.json).
+#[derive(Debug, Clone, Default)]
+pub struct PeerDialState {
+    /// Consecutive dial failures this session (1st failure -> 5s delay).
+    pub consecutive_failures: u32,
+
+    /// Unix ts: next allowed dial attempt (0 = now).
+    pub next_attempt_after: u64,
+
+    /// A dial for this key is currently in flight.
+    pub in_flight: bool,
+
+    /// Has a successful connection history (seeded from ledger, set on success).
+    pub is_known_good: bool,
+}
+
+impl PeerDialState {
+    /// Backoff ladder in seconds: 5s, 30s, 2m, 5m, 30m.
+    pub const BACKOFF_LADDER: [u64; 5] = [5, 30, 120, 300, 1800];
+
+    /// Whether a new dial may be started now.
+    pub fn ready(&self, now: u64) -> bool {
+        now >= self.next_attempt_after && !self.in_flight
+    }
+
+    /// Reset state after a successful dial.
+    pub fn record_success(&mut self) {
+        self.consecutive_failures = 0;
+        self.next_attempt_after = 0;
+        self.in_flight = false;
+        self.is_known_good = true;
+    }
+
+    /// Back off after a failed dial.
+    pub fn record_failure(&mut self, now: u64) {
+        self.consecutive_failures = self.consecutive_failures.saturating_add(1);
+        let idx = std::cmp::min(self.consecutive_failures.saturating_sub(1), 4) as usize;
+        self.next_attempt_after = now.saturating_add(Self::BACKOFF_LADDER[idx]);
+        self.in_flight = false;
+    }
+}
+
 /// The Connection Ledger — persistent storage for all known peers
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ConnectionLedger {
@@ -160,6 +239,10 @@ pub struct ConnectionLedger {
 
     /// Last save timestamp
     pub last_saved: u64,
+
+    /// Process-lifetime per-peer dial state. Never persisted to peers.json.
+    #[serde(skip)]
+    pub peer_dial_states: HashMap<DialKey, PeerDialState>,
 }
 
 impl Default for ConnectionLedger {
@@ -168,6 +251,7 @@ impl Default for ConnectionLedger {
             entries: HashMap::new(),
             version: 1,
             last_saved: 0,
+            peer_dial_states: HashMap::new(),
         }
     }
 }
@@ -223,10 +307,12 @@ impl ConnectionLedger {
             .entry(stripped.clone())
             .and_modify(|e| {
                 e.is_bootstrap = true;
+                e.locally_verified = true;
             })
             .or_insert_with(|| {
                 let mut entry = LedgerEntry::new(stripped.clone(), true);
                 entry.label = Some(label);
+                entry.locally_verified = true;
                 entry
             });
     }
@@ -242,10 +328,12 @@ impl ConnectionLedger {
             .entry(stripped.clone())
             .and_modify(|e| {
                 e.record_success(peer_id);
+                e.locally_verified = true;
             })
             .or_insert_with(|| {
                 let mut entry = LedgerEntry::new(stripped.clone(), false);
                 entry.record_success(peer_id);
+                entry.locally_verified = true;
                 entry
             });
     }
@@ -413,6 +501,120 @@ impl ConnectionLedger {
             "Ledger: {} peers ({} bootstrap, {} reachable, {} in backoff)",
             total, bootstrap, reachable, backoff
         )
+    }
+
+    /// Decide whether a dial may be started for `key` right now.
+    ///
+    /// Returns true only when the key is ready and the dial is not suppressed
+    /// by a healthy relay path. When the key is new, it is seeded from the
+    /// persistent ledger so known-good peers are never suppressed.
+    pub fn try_begin_dial(&mut self, key: DialKey, now: u64, relay_healthy: bool) -> bool {
+        let is_circuit = Self::is_circuit_key(&key);
+        let is_bootstrap = self.is_bootstrap_key(&key);
+
+        if let Some(state) = self.peer_dial_states.get(&key) {
+            if !state.ready(now) {
+                return false;
+            }
+            if relay_healthy && !state.is_known_good && !is_circuit && !is_bootstrap {
+                return false;
+            }
+        } else {
+            let is_known_good = self.is_known_good_key(&key);
+            if relay_healthy && !is_known_good && !is_circuit && !is_bootstrap {
+                return false;
+            }
+
+            // Cap process-lifetime dial state at 4096 keys. Drop the entry
+            // with the smallest next_attempt_after (least urgent) in a single
+            // pass.
+            if self.peer_dial_states.len() >= 4096 {
+                if let Some(evict_key) = self
+                    .peer_dial_states
+                    .iter()
+                    .min_by_key(|(_, state)| state.next_attempt_after)
+                    .map(|(k, _)| k.clone())
+                {
+                    self.peer_dial_states.remove(&evict_key);
+                }
+            }
+
+            let state = PeerDialState {
+                is_known_good,
+                ..Default::default()
+            };
+            self.peer_dial_states.insert(key.clone(), state);
+        }
+
+        self.peer_dial_states
+            .get_mut(&key)
+            .expect("key was just inserted or already present")
+            .in_flight = true;
+        true
+    }
+
+    /// Record the outcome of a dial previously started with `try_begin_dial`.
+    pub fn complete_dial(
+        &mut self,
+        key: &DialKey,
+        success: bool,
+        now: u64,
+        learned_peer_id: Option<PeerId>,
+    ) {
+        if success {
+            let mut state = self
+                .peer_dial_states
+                .remove(key)
+                .unwrap_or_default();
+            state.record_success();
+
+            if let DialKey::Addr(_) = key {
+                if let Some(pid) = learned_peer_id {
+                    let peer_key = DialKey::Peer(pid);
+                    self.peer_dial_states.entry(peer_key).or_insert(state);
+                    return;
+                }
+            }
+
+            self.peer_dial_states.insert(key.clone(), state);
+        } else if let Some(state) = self.peer_dial_states.get_mut(key) {
+            state.record_failure(now);
+        }
+    }
+
+    /// Borrow a tracked dial state, if any.
+    pub fn dial_state(&self, key: &DialKey) -> Option<&PeerDialState> {
+        self.peer_dial_states.get(key)
+    }
+
+    fn is_circuit_key(key: &DialKey) -> bool {
+        matches!(key, DialKey::Addr(addr) if addr.contains("/p2p-circuit"))
+    }
+
+    fn is_bootstrap_key(&self, key: &DialKey) -> bool {
+        match key {
+            DialKey::Peer(pid) => self
+                .find_by_peer_id(&pid.to_string())
+                .map(|e| e.is_bootstrap)
+                .unwrap_or(false),
+            DialKey::Addr(addr) => self
+                .entries
+                .get(addr)
+                .map(|e| e.is_bootstrap)
+                .unwrap_or(false),
+        }
+    }
+
+    fn is_known_good_key(&self, key: &DialKey) -> bool {
+        match key {
+            DialKey::Peer(pid) => self
+                .find_by_peer_id(&pid.to_string())
+                .is_some_and(|e| e.locally_verified && e.last_peer_id.is_some() && e.consecutive_failures == 0),
+            DialKey::Addr(addr) => self
+                .entries
+                .get(addr)
+                .is_some_and(|e| e.locally_verified && e.last_peer_id.is_some() && e.consecutive_failures == 0),
+        }
     }
 }
 
@@ -831,5 +1033,207 @@ mod tests {
             Local,
             &my_addrs
         ));
+    }
+
+    #[test]
+    fn test_dial_key_for_target() {
+        let peer_id = libp2p::identity::Keypair::generate_ed25519()
+            .public()
+            .to_peer_id();
+        let peer_id_str = peer_id.to_string();
+
+        // Explicit peer id wins.
+        let key = DialKey::for_target("/ip4/1.2.3.4/tcp/9001", Some(peer_id));
+        assert_eq!(key, DialKey::Peer(peer_id));
+
+        // Parsed from /p2p/ suffix.
+        let addr_with_p2p = format!("/ip4/1.2.3.4/tcp/9001/p2p/{}", peer_id_str);
+        let key = DialKey::for_target(&addr_with_p2p, None);
+        assert_eq!(key, DialKey::Peer(peer_id));
+
+        // Address-only falls back to stripped multiaddr.
+        let key = DialKey::for_target("/ip4/1.2.3.4/tcp/9001", None);
+        assert_eq!(key, DialKey::Addr("/ip4/1.2.3.4/tcp/9001".to_string()));
+    }
+
+    #[test]
+    fn test_peer_dial_state_backoff_ladder() {
+        let mut state = PeerDialState::default();
+        let now = 1_000_000;
+        let expected = [5, 30, 120, 300, 1800, 1800];
+
+        for (i, &delay) in expected.iter().enumerate() {
+            state.record_failure(now);
+            assert_eq!(state.consecutive_failures, (i + 1) as u32);
+            assert_eq!(state.next_attempt_after.saturating_sub(now), delay);
+            assert!(!state.ready(now + delay - 1));
+            assert!(state.ready(now + delay));
+        }
+    }
+
+    #[test]
+    fn test_peer_dial_state_success_reset() {
+        let mut state = PeerDialState::default();
+        let now = 1_000_000;
+
+        state.record_failure(now);
+        state.record_failure(now);
+        assert!(!state.ready(now));
+
+        state.record_success();
+        assert!(state.ready(now));
+        assert_eq!(state.consecutive_failures, 0);
+        assert_eq!(state.next_attempt_after, 0);
+        assert!(state.is_known_good);
+    }
+
+    #[test]
+    fn test_try_begin_dial_blocks_in_flight_reuse() {
+        let mut ledger = ConnectionLedger::default();
+        let key = DialKey::Addr("/ip4/1.2.3.4/tcp/9001".to_string());
+
+        assert!(ledger.try_begin_dial(key.clone(), 0, false));
+        assert!(!ledger.try_begin_dial(key.clone(), 0, false));
+    }
+
+    #[test]
+    fn test_try_begin_dial_suppresses_unknown_when_relay_healthy() {
+        let mut ledger = ConnectionLedger::default();
+        let key = DialKey::Addr("/ip4/1.2.3.4/tcp/9001".to_string());
+
+        assert!(!ledger.try_begin_dial(key, 0, true));
+    }
+
+    #[test]
+    fn test_try_begin_dial_allows_circuit_when_relay_healthy() {
+        let mut ledger = ConnectionLedger::default();
+        let key = DialKey::Addr("/ip4/1.2.3.4/tcp/9001/p2p-circuit".to_string());
+
+        assert!(ledger.try_begin_dial(key, 0, true));
+    }
+
+    #[test]
+    fn test_try_begin_dial_allows_bootstrap_when_relay_healthy() {
+        let mut ledger = ConnectionLedger::default();
+        ledger.add_bootstrap("/ip4/1.2.3.4/tcp/9001", None);
+        let key = DialKey::Addr("/ip4/1.2.3.4/tcp/9001".to_string());
+
+        assert!(ledger.try_begin_dial(key, 0, true));
+    }
+
+    #[test]
+    fn test_try_begin_dial_allows_known_good_when_relay_healthy() {
+        let mut ledger = ConnectionLedger::default();
+        ledger.record_connection("/ip4/1.2.3.4/tcp/9001", "12D3KooWTestPeerId");
+        let key = DialKey::Addr("/ip4/1.2.3.4/tcp/9001".to_string());
+
+        assert!(ledger.try_begin_dial(key, 0, true));
+    }
+
+    #[test]
+    fn test_complete_dial_failure_enforces_backoff() {
+        let mut ledger = ConnectionLedger::default();
+        let key = DialKey::Addr("/ip4/1.2.3.4/tcp/9001".to_string());
+
+        assert!(ledger.try_begin_dial(key.clone(), 0, false));
+        ledger.complete_dial(&key, false, 0, None);
+
+        let state = ledger.dial_state(&key).unwrap();
+        assert!(!state.ready(4));
+        assert!(state.ready(5));
+    }
+
+    #[test]
+    fn test_complete_dial_migrates_addr_to_peer() {
+        let mut ledger = ConnectionLedger::default();
+        let addr_key = DialKey::Addr("/ip4/1.2.3.4/tcp/9001".to_string());
+        let peer_id = libp2p::identity::Keypair::generate_ed25519()
+            .public()
+            .to_peer_id();
+
+        assert!(ledger.try_begin_dial(addr_key.clone(), 0, false));
+        ledger.complete_dial(&addr_key, true, 0, Some(peer_id));
+
+        assert!(ledger.dial_state(&addr_key).is_none());
+        let peer_key = DialKey::Peer(peer_id);
+        let state = ledger.dial_state(&peer_key).unwrap();
+        assert!(state.is_known_good);
+    }
+
+    #[test]
+    fn test_peer_dial_states_eviction_caps_at_4096() {
+        let mut ledger = ConnectionLedger::default();
+
+        for i in 0..4096u64 {
+            let key = DialKey::Addr(format!("/ip4/1.2.3.4/tcp/{}", i));
+            assert!(ledger.try_begin_dial(key.clone(), i, false));
+            ledger.complete_dial(&key, false, i, None);
+        }
+        assert_eq!(ledger.peer_dial_states.len(), 4096);
+
+        let new_key = DialKey::Addr("/ip4/9.9.9.9/tcp/9999".to_string());
+        assert!(ledger.try_begin_dial(new_key.clone(), 5000, false));
+        assert_eq!(ledger.peer_dial_states.len(), 4096);
+        assert!(ledger.peer_dial_states.contains_key(&new_key));
+
+        let evicted_key = DialKey::Addr("/ip4/1.2.3.4/tcp/0".to_string());
+        assert!(!ledger.peer_dial_states.contains_key(&evicted_key));
+    }
+
+    #[test]
+    fn test_shared_entry_does_not_seed_known_good_until_locally_verified() {
+        let mut ledger = ConnectionLedger::default();
+        let shared = scmessenger_core::transport::SharedPeerEntry {
+            multiaddr: "/ip4/1.2.3.4/tcp/9001/p2p/12D3KooWSpoof".to_string(),
+            last_peer_id: Some("12D3KooWSpoof".to_string()),
+            last_seen: 1_700_000_000,
+            known_topics: vec![],
+        };
+        ledger.merge_shared_entries(&[shared]);
+
+        let entry = ledger.entries.get("/ip4/1.2.3.4/tcp/9001").unwrap();
+        assert!(entry.last_peer_id.is_some());
+        assert_eq!(entry.consecutive_failures, 0);
+        assert!(!entry.locally_verified);
+
+        let key = DialKey::Addr("/ip4/1.2.3.4/tcp/9001".to_string());
+        assert!(!ledger.try_begin_dial(key.clone(), 0, true));
+
+        ledger.record_connection("/ip4/1.2.3.4/tcp/9001/p2p/12D3KooWSpoof", "12D3KooWSpoof");
+        assert!(ledger.entries.get("/ip4/1.2.3.4/tcp/9001").unwrap().locally_verified);
+        assert!(ledger.try_begin_dial(key, 0, true));
+    }
+
+    #[test]
+    fn test_add_bootstrap_seeds_known_good() {
+        let mut ledger = ConnectionLedger::default();
+        ledger.add_bootstrap("/ip4/1.2.3.4/tcp/9001/p2p/12D3KooWBootstrap", None);
+
+        let entry = ledger.entries.get("/ip4/1.2.3.4/tcp/9001").unwrap();
+        assert!(entry.locally_verified);
+        assert!(entry.is_bootstrap);
+
+        let key = DialKey::Addr("/ip4/1.2.3.4/tcp/9001".to_string());
+        assert!(ledger.try_begin_dial(key, 0, true));
+    }
+
+    #[test]
+    fn test_locally_verified_defaults_false_on_deserialize() {
+        let json = r#"{
+            "address": "1.2.3.4:9001",
+            "multiaddr": "/ip4/1.2.3.4/tcp/9001",
+            "last_peer_id": "12D3KooWTest",
+            "observed_peer_ids": [],
+            "last_seen": 1700000000,
+            "first_seen": 1700000000,
+            "consecutive_failures": 0,
+            "backoff_seconds": 0,
+            "next_attempt_after": 0,
+            "is_bootstrap": false,
+            "known_topics": [],
+            "label": null
+        }"#;
+        let entry: LedgerEntry = serde_json::from_str(json).unwrap();
+        assert!(!entry.locally_verified);
     }
 }

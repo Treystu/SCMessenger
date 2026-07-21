@@ -86,4 +86,4 @@ re-queued, not merged.
 - `CLAUDE.md` — Claude-session superset (subagents, skills, hooks)
 - `docs/CLAUDE_REFERENCE.md` — build commands, module map, test inventory
 - `HANDOFF/todo/_QUEUE.md` — live dispatch order
-- `.claude/commands/scmorc.md` — orchestrator loop that verifies your work
+- `.claude/commands/orchestrate.md` + `docs/ORCHESTRATION.md` — the one unified orchestrator loop that verifies your work (the old per-backend commands are archived under `.claude/archive/commands/`)

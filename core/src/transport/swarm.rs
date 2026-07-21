@@ -1480,6 +1480,14 @@ pub enum SwarmEvent2 {
     /// Abuse signal detected by relay guardrails (P0_SECURITY_003).
     /// Carries the offending peer ID and the signal type name.
     AbuseSignalDetected { peer_id: PeerId, signal: String },
+    /// Relay client successfully established an outbound circuit.
+    /// Wired from libp2p::relay::client::Event::OutboundCircuitEstablished.
+    RelayCircuitEstablished,
+    /// Relay client circuit is broken.
+    /// NOTE: libp2p-relay 0.21.1 client::Event has no failure/closed variant, so this
+    /// is not currently emitted by the native swarm event loop. It is consumed in
+    /// main.rs so a future relay-client event can be wired here.
+    RelayCircuitBroken,
 }
 
 /// Handle to communicate with the running swarm task
@@ -3667,6 +3675,9 @@ pub async fn start_swarm_with_config(
                                             "Outbound relay circuit established via {} — connected to remote through relay",
                                             relay_peer_id
                                         );
+                                        let _ = event_tx
+                                            .send(SwarmEvent2::RelayCircuitEstablished)
+                                            .await;
                                     }
                                 }
                             }

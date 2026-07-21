@@ -1,12 +1,5 @@
----
-name: orchestrate
-description: >-
-  SCMessenger Swarm Orchestrator -- delegate work to the agent pool via ollama
-  cloud models
-metadata:
-  user-invocable: true
-  disable-model-invocation: true
----
+#  SCMessenger Unified Lake Orchestrator 
+> **LAKE CONTRACT ACTIVATED:** See `docs/ORCHESTRATION.md` for the single source of truth on the delegation loop, model fleet, and commands. This applies uniformly to Claude, Gemini, Qwen, and Codex agents in rotation.
 
 SCMessenger Swarm Orchestrator -- delegate work to the agent pool via ollama cloud models
 
@@ -40,7 +33,7 @@ BEFORE generating any tasks or doing any work, you MUST read `.claude/quota_stat
 3. **Activate orchestrator**: Run `bash .claude/orchestrator_manager.sh activate` (Windows: use full bash path) if not already active
 4. **Launch agent**: Run `bash .claude/orchestrator_manager.sh pool launch <agent_name> <task_file>` (Windows: use full bash path) to spawn an ollama cloud agent. *(Note: The script automatically handles REPO_MAP freshness checking and context injection for the agent).*
 5. **Monitor**: Use `bash .claude/orchestrator_manager.sh pool patrol` (Windows: use full bash path) to track progress, clear stale slots, and requeue or finalize tasks.
-6. **Native `<Agent>` tool:** ONLY permitted in TIER 1 (Vanguard Mode). In TIER 2-4, use `pool launch` via bash script exclusively -- the Agent tool clones your model and burns quota at full rate.
+6. **Native `<Agent>` tool:** ONLY permitted in TIER 1 (Vanguard Mode). In TIER 2--4, use `pool launch` via bash script exclusively -- the Agent tool clones your model and burns quota at full rate.
 
 ## Pre-Dispatch Validation (MANDATORY)
 
@@ -127,7 +120,7 @@ bash .claude/orchestrator_manager.sh pool launch rust-coder HANDOFF/todo/task_an
 ## Parallel Strategy
 
 - Launch up to 2 ollama cloud agents via `pool launch`
-- **[WARNING] Native `<Agent>` tool economics:** The native Agent tool spawns a clone of your current model (e.g., `glm-5.1:cloud`), NOT a cheap local model. It burns quota at the same rate as your own session. Only use `<Agent>` in TIER 1 (Vanguard Mode). In TIER 2-4, use the bash script exclusively.
+- **[WARNING] Native `<Agent>` tool economics:** The native Agent tool spawns a clone of your current model (e.g., `glm-5.1:cloud`), NOT a cheap local model. It burns quota at the same rate as your own session. Only use `<Agent>` in TIER 1 (Vanguard Mode). In TIER 2--4, use the bash script exclusively.
 - Verify after each agent completes: `cargo check --workspace`, `cargo clippy`, `cargo fmt`
 
 ## Operational Hygiene

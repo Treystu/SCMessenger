@@ -466,6 +466,157 @@ enum DiscoveryAction {
     Peers,
 }
 
+/// Current Unix timestamp in seconds.
+fn now_secs() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs()
+}
+
+/// TTL for relay-circuit health. libp2p relay client renews reservations
+/// periodically (new OutboundCircuitEstablished events refresh the timestamp);
+/// a 10-minute TTL bounds the stale-healthy window when the relay dies silently.
+const RELAY_HEALTHY_TTL_SECS: u64 = 600;
+
+/// Pure helper for testing: is a relay established-at timestamp healthy?
+fn relay_healthy_from_ts(established_at: u64, now: u64) -> bool {
+    established_at != 0 && now.saturating_sub(established_at) < RELAY_HEALTHY_TTL_SECS
+}
+
+/// Fire-and-forget outbound dial scheduler.
+///
+/// Enforces per-peer backoff and limits concurrent outbound dials to unknown
+/// peers. Once the relay path reports healthy, direct dials to unknown peers
+/// are suppressed in favor of relay circuits.
+#[derive(Clone)]
+struct DialScheduler {
+    ledger: Arc<tokio::sync::Mutex<ledger::ConnectionLedger>>,
+    swarm: transport::SwarmHandle,
+    unknown_dial_sem: Arc<tokio::sync::Semaphore>,
+    relay_established_at: Arc<std::sync::atomic::AtomicU64>,
+}
+
+impl DialScheduler {
+    fn new(
+        ledger: Arc<tokio::sync::Mutex<ledger::ConnectionLedger>>,
+        swarm: transport::SwarmHandle,
+    ) -> Self {
+        Self {
+            ledger,
+            swarm,
+            unknown_dial_sem: Arc::new(tokio::sync::Semaphore::new(3)),
+            relay_established_at: Arc::new(std::sync::atomic::AtomicU64::new(0)),
+        }
+    }
+
+    fn set_relay_healthy(&self, healthy: bool) {
+        let ts = if healthy { now_secs() } else { 0 };
+        self.relay_established_at
+            .store(ts, std::sync::atomic::Ordering::Relaxed);
+    }
+
+    fn relay_is_healthy(&self) -> bool {
+        let ts = self
+            .relay_established_at
+            .load(std::sync::atomic::Ordering::Relaxed);
+        relay_healthy_from_ts(ts, now_secs())
+    }
+
+    fn dial(&self, addr_str: String, peer_id_opt: Option<PeerId>) {
+        let ledger = Arc::clone(&self.ledger);
+        let swarm = self.swarm.clone();
+        let sem = Arc::clone(&self.unknown_dial_sem);
+        let scheduler = self.clone();
+
+        tokio::spawn(async move {
+            let key = ledger::DialKey::for_target(&addr_str, peer_id_opt);
+
+            // Optimistic unknown-class check without holding the ledger lock.
+            let is_unknown = {
+                let l = ledger.lock().await;
+                match l.dial_state(&key) {
+                    Some(state) => !state.is_known_good,
+                    None => true,
+                }
+            };
+
+            let permit: Option<tokio::sync::OwnedSemaphorePermit> = if is_unknown {
+                match sem.try_acquire_owned() {
+                    Ok(p) => Some(p),
+                    Err(_) => {
+                        tracing::debug!(
+                            "Dial to {} skipped: max concurrent unknown dials reached",
+                            addr_str
+                        );
+                        return;
+                    }
+                }
+            } else {
+                None
+            };
+
+            let now = now_secs();
+            let allowed = {
+                let mut l = ledger.lock().await;
+                l.try_begin_dial(key.clone(), now, scheduler.relay_is_healthy())
+            };
+            if !allowed {
+                drop(permit);
+                return;
+            }
+
+            let stripped = ledger::strip_peer_id(&addr_str);
+            let addr = match stripped.parse::<Multiaddr>() {
+                Ok(a) => a,
+                Err(e) => {
+                    tracing::error!("Invalid multiaddr: {} - {}", stripped, e);
+                    let mut l = ledger.lock().await;
+                    l.complete_dial(&key, false, now, None);
+                    drop(permit);
+                    return;
+                }
+            };
+
+            tokio::spawn(async move {
+                let result = swarm.dial(addr).await;
+                let now2 = now_secs();
+                let mut l = ledger.lock().await;
+                match result {
+                    Ok(_) => {
+                        l.complete_dial(&key, true, now2, None);
+                    }
+                    Err(_) => {
+                        l.record_failure(&addr_str);
+                        l.complete_dial(&key, false, now2, None);
+                    }
+                }
+                // OwnedSemaphorePermit drops here, releasing the concurrent-dial slot.
+            });
+        });
+    }
+}
+
+#[cfg(test)]
+mod dial_scheduler_tests {
+    use super::*;
+
+    #[test]
+    fn test_relay_healthy_from_ts_never_established() {
+        assert!(!relay_healthy_from_ts(0, 1_000_000));
+    }
+
+    #[test]
+    fn test_relay_healthy_from_ts_recent() {
+        assert!(relay_healthy_from_ts(1_000_000, 1_000_100));
+    }
+
+    #[test]
+    fn test_relay_healthy_from_ts_stale() {
+        assert!(!relay_healthy_from_ts(1_000_000, 1_000_601));
+    }
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     // 1. Determine data directory early for logging
@@ -1505,14 +1656,16 @@ async fn cmd_start(port: Option<u16>, http_bind: Option<String>) -> Result<()> {
 
     // ── Dial known peers from persistent ledger ──────────────────────────
     // Dial any peers from the persistent ledger that pass backoff.
+    let dial_scheduler = Arc::new(DialScheduler::new(ledger.clone(), swarm_handle.clone()));
     {
         println!();
         println!(
             "{} Aggressive Discovery — dialing known peers...",
             "".yellow()
         );
-        let swarm_clone = swarm_handle.clone();
+        let scheduler = Arc::clone(&dial_scheduler);
         let ledger_clone = ledger.clone();
+        let swarm_clone = swarm_handle.clone();
 
         tokio::spawn(async move {
             let addrs = {
@@ -1534,33 +1687,18 @@ async fn cmd_start(port: Option<u16>, http_bind: Option<String>) -> Result<()> {
                 .collect();
 
             // Dial all known addresses (bootstrap + discovered)
-            for (i, (multiaddr_str, _peer_id_opt)) in addrs.iter().enumerate() {
-                let stripped = ledger::strip_peer_id(multiaddr_str);
-                match stripped.parse::<Multiaddr>() {
-                    Ok(addr) => {
-                        let label = ledger::extract_ip_port(multiaddr_str)
-                            .unwrap_or_else(|| multiaddr_str.clone());
-                        println!("  {}.  Dialing {} (promiscuous)...", i + 1, label);
+            for (i, (multiaddr_str, peer_id_opt)) in addrs.iter().enumerate() {
+                let label = ledger::extract_ip_port(multiaddr_str)
+                    .unwrap_or_else(|| multiaddr_str.clone());
+                println!("  {}.  Dialing {} (promiscuous)...", i + 1, label);
 
-                        // Primary dial attempt with stored address
-                        match swarm_clone.dial(addr.clone()).await {
-                            Ok(_) => {
-                                println!("  {} Dial initiated to {}", "[OK]".green(), label);
-                            }
-                            Err(e) => {
-                                tracing::warn!("Dial failed to {}: {}", label, e);
-                                let mut l = ledger_clone.lock().await;
-                                l.record_failure(multiaddr_str);
-                            }
-                        }
+                let peer_id = peer_id_opt
+                    .as_ref()
+                    .and_then(|s| s.parse::<PeerId>().ok());
+                scheduler.dial(multiaddr_str.clone(), peer_id);
 
-                        // Brief pause between dials to avoid overwhelming
-                        tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
-                    }
-                    Err(e) => {
-                        tracing::error!("Invalid multiaddr: {} - {}", stripped, e);
-                    }
-                }
+                // Brief pause between dials to avoid overwhelming
+                tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
             }
         });
     }
@@ -1651,6 +1789,7 @@ async fn cmd_start(port: Option<u16>, http_bind: Option<String>) -> Result<()> {
     let peers_rx = peers.clone();
     let ledger_rx = ledger.clone();
     let outbox_rx = outbox.clone();
+    let scheduler_rx = Arc::clone(&dial_scheduler);
 
     // Stdin handling
     // Ctrl+C handler for graceful shutdown
@@ -1809,6 +1948,13 @@ async fn cmd_start(port: Option<u16>, http_bind: Option<String>) -> Result<()> {
                                 }
                             }
 
+                            SwarmEvent::RelayCircuitEstablished => {
+                                scheduler_rx.set_relay_healthy(true);
+                            }
+                            SwarmEvent::RelayCircuitBroken => {
+                                scheduler_rx.set_relay_healthy(false);
+                            }
+
                             // LEDGER EXCHANGE: Received peer list from a connected peer
                             SwarmEvent::LedgerReceived { from_peer, entries } => {
                                 let mut l = ledger_rx.lock().await;
@@ -1830,8 +1976,11 @@ async fn cmd_start(port: Option<u16>, http_bind: Option<String>) -> Result<()> {
                                     }
 
                                     // Dial newly discovered peers
-                                    let new_addrs: Vec<String> = entries.iter()
-                                        .map(|e| ledger::strip_peer_id(&e.multiaddr))
+                                    let new_entries: Vec<(String, Option<String>)> = entries
+                                        .iter()
+                                        .map(|e| {
+                                            (ledger::strip_peer_id(&e.multiaddr), e.last_peer_id.clone())
+                                        })
                                         .collect();
                                     drop(l); // release lock before dialing
 
@@ -1849,7 +1998,7 @@ async fn cmd_start(port: Option<u16>, http_bind: Option<String>) -> Result<()> {
                                         .map(|a| a.to_string())
                                         .collect();
 
-                                    for addr_str in new_addrs {
+                                    for (addr_str, peer_id_opt) in new_entries {
                                         // Skip non-routable addresses (loopback,
                                         // link-local, site-local) a peer may
                                         // advertise -- dialing them fails forever
@@ -1867,19 +2016,13 @@ async fn cmd_start(port: Option<u16>, http_bind: Option<String>) -> Result<()> {
                                         ) {
                                             continue;
                                         }
-                                        if let Ok(addr) = addr_str.parse::<Multiaddr>() {
-                                            // Spawned, not awaited inline: dial() now blocks
-                                            // until a real connection/timeout resolves (up to
-                                            // ~10s each), and this loop can iterate over an
-                                            // arbitrary number of peer-supplied addresses --
-                                            // awaiting inline here would stall this shared
-                                            // event loop (including Ctrl+C shutdown) for
-                                            // N*10s in the worst case.
-                                            let swarm_clone = swarm_handle.clone();
-                                            tokio::spawn(async move {
-                                                let _ = swarm_clone.dial(addr).await;
-                                            });
-                                        }
+                                        let peer_id = peer_id_opt
+                                            .as_ref()
+                                            .and_then(|s| s.parse::<PeerId>().ok());
+                                        // Fire-and-forget: scheduler spawns the actual dial
+                                        // so this shared event loop never blocks on a
+                                        // connection/timeout.
+                                        scheduler_rx.dial(addr_str, peer_id);
                                     }
                                 }
                             }
@@ -2590,9 +2733,11 @@ async fn cmd_relay(
     }
 
     // ── Initial bootstrap dial ──────────────────────────────────────────
+    let relay_scheduler = Arc::new(DialScheduler::new(ledger.clone(), swarm_handle.clone()));
     {
-        let swarm_clone = swarm_handle.clone();
+        let scheduler = Arc::clone(&relay_scheduler);
         let ledger_clone = ledger.clone();
+        let swarm_clone = swarm_handle.clone();
         tokio::spawn(async move {
             let addrs = {
                 let l = ledger_clone.lock().await;
@@ -2611,29 +2756,26 @@ async fn cmd_relay(
                     ledger::is_dialable_for_this_node(m, ledger::NetworkMode::Local, &my_addrs)
                 })
                 .collect();
-            for (i, (multiaddr_str, _)) in addrs.iter().enumerate() {
-                let stripped = ledger::strip_peer_id(multiaddr_str);
-                if let Ok(addr) = stripped.parse::<Multiaddr>() {
-                    let label = ledger::extract_ip_port(multiaddr_str)
-                        .unwrap_or_else(|| multiaddr_str.clone());
-                    println!("  {}.  Dialing {} ...", i + 1, label);
-                    match swarm_clone.dial(addr).await {
-                        Ok(_) => println!("  {} Dial initiated to {}", "[OK]".green(), label),
-                        Err(e) => {
-                            tracing::warn!("Dial failed to {}: {}", label, e);
-                            ledger_clone.lock().await.record_failure(multiaddr_str);
-                        }
-                    }
-                    tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
-                }
+            for (i, (multiaddr_str, peer_id_opt)) in addrs.iter().enumerate() {
+                let label = ledger::extract_ip_port(multiaddr_str)
+                    .unwrap_or_else(|| multiaddr_str.clone());
+                println!("  {}.  Dialing {} ...", i + 1, label);
+
+                let peer_id = peer_id_opt
+                    .as_ref()
+                    .and_then(|s| s.parse::<PeerId>().ok());
+                scheduler.dial(multiaddr_str.clone(), peer_id);
+
+                tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
             }
         });
     }
 
     // ── Periodic bootstrap re-dial (every 120 seconds) ──────────────────
     {
-        let swarm_clone = swarm_handle.clone();
+        let scheduler = Arc::clone(&relay_scheduler);
         let ledger_clone = ledger.clone();
+        let swarm_clone = swarm_handle.clone();
         tokio::spawn(async move {
             loop {
                 tokio::time::sleep(tokio::time::Duration::from_secs(120)).await;
@@ -2654,11 +2796,11 @@ async fn cmd_relay(
                         ledger::is_dialable_for_this_node(m, ledger::NetworkMode::Local, &my_addrs)
                     })
                     .collect();
-                for (multiaddr_str, _) in &addrs {
-                    let stripped = ledger::strip_peer_id(multiaddr_str);
-                    if let Ok(addr) = stripped.parse::<Multiaddr>() {
-                        let _ = swarm_clone.dial(addr).await;
-                    }
+                for (multiaddr_str, peer_id_opt) in &addrs {
+                    let peer_id = peer_id_opt
+                        .as_ref()
+                        .and_then(|s| s.parse::<PeerId>().ok());
+                    scheduler.dial(multiaddr_str.clone(), peer_id);
                 }
                 tracing::info!("Periodic re-dial: {} addresses attempted", addrs.len());
             }
@@ -2702,6 +2844,7 @@ async fn cmd_relay(
     let contacts_rx = contacts.clone();
     let ledger_rx = ledger.clone();
     let outbox_rx = outbox.clone();
+    let scheduler_rx = Arc::clone(&relay_scheduler);
 
     loop {
         tokio::select! {
@@ -2786,6 +2929,12 @@ async fn cmd_relay(
                         }
                         tracing::info!("Peer disconnected: {}", peer_id);
                     }
+                    SwarmEvent::RelayCircuitEstablished => {
+                        scheduler_rx.set_relay_healthy(true);
+                    }
+                    SwarmEvent::RelayCircuitBroken => {
+                        scheduler_rx.set_relay_healthy(false);
+                    }
                     SwarmEvent::LedgerReceived { from_peer, entries } => {
                         let mut l = ledger_rx.lock().await;
                         let new_count = l.merge_shared_entries(&entries);
@@ -2794,8 +2943,11 @@ async fn cmd_relay(
                             if let Err(e) = l.save(&data_dir) {
                                 tracing::error!("Failed to save ledger: {}", e);
                             }
-                            let new_addrs: Vec<String> = entries.iter()
-                                .map(|e| ledger::strip_peer_id(&e.multiaddr))
+                            let new_entries: Vec<(String, Option<String>)> = entries
+                                .iter()
+                                .map(|e| {
+                                    (ledger::strip_peer_id(&e.multiaddr), e.last_peer_id.clone())
+                                })
                                 .collect();
                             drop(l);
 
@@ -2811,7 +2963,7 @@ async fn cmd_relay(
                                 .map(|a| a.to_string())
                                 .collect();
 
-                            for addr_str in new_addrs {
+                            for (addr_str, peer_id_opt) in new_entries {
                                 // Skip non-routable addresses (loopback, link-local,
                                 // site-local) a peer may advertise -- dialing them
                                 // fails forever and storms the request_response handler.
@@ -2821,18 +2973,13 @@ async fn cmd_relay(
                                 if !ledger::is_dialable_for_this_node(&addr_str, ledger::NetworkMode::Local, &my_addrs) {
                                     continue;
                                 }
-                                if let Ok(addr) = addr_str.parse::<Multiaddr>() {
-                                    // Spawned, not awaited inline: dial() now blocks until a
-                                    // real connection/timeout resolves (up to ~10s each), and
-                                    // this loop can iterate over an arbitrary number of
-                                    // peer-supplied addresses -- awaiting inline here would
-                                    // stall this shared event loop (including Ctrl+C
-                                    // shutdown) for N*10s in the worst case.
-                                    let swarm_clone = swarm_handle.clone();
-                                    tokio::spawn(async move {
-                                        let _ = swarm_clone.dial(addr).await;
-                                    });
-                                }
+                                let peer_id = peer_id_opt
+                                    .as_ref()
+                                    .and_then(|s| s.parse::<PeerId>().ok());
+                                // Fire-and-forget: scheduler spawns the actual dial
+                                // so this shared event loop never blocks on a
+                                // connection/timeout.
+                                scheduler_rx.dial(addr_str, peer_id);
                             }
                         }
                     }

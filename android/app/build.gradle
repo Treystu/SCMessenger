@@ -224,6 +224,9 @@ dependencies {
     
     // UniFFI runtime (JNA for FFI)
     implementation 'net.java.dev.jna:jna:5.16.0@aar'
+    // Host-JVM JNA (with native dispatch resources) so UniFFI-backed classes
+    // can load in local JVM unit tests; the @aar variant ships device ABIs only.
+    testImplementation 'net.java.dev.jna:jna:5.16.0'
     
     // Permissions
     implementation 'com.google.accompanist:accompanist-permissions:0.32.0'

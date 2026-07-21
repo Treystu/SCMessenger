@@ -1,6 +1,6 @@
 # SCMessenger Orchestration Playbook (Quick Reference)
 
-Subordinate to docs/ORCHESTRATION.md (master protocol) and docs/GEMINI_ORCHESTRATOR.md (role protocol). This file is the quick command reference.
+Subordinate to docs/ORCHESTRATION.md (the single master protocol; its Section 0 Operating Contract and Section 2.2 loop bind every orchestrating model). This file is the quick command reference for the canonical script-dispatch backend (`lanes`).
 
 This playbook outlines the exact commands and workflow for dispatching tasks using the external model fleet (Qwen, OpenRouter, Ollama). We use the universal `scripts/delegate_task.py` tool to coordinate task delegation with verification loops and tier routing.
 
@@ -90,6 +90,6 @@ scripts/docs_sync_check.sh
 mv HANDOFF/todo/<TASK>.md HANDOFF/done/
 ```
 - Update `HANDOFF/todo/_QUEUE.md` to mark the task COMPLETE (same change set
-  as the file move -- atomicity rule, see docs/ORCHESTRATION.md Section 1).
+  as the file move -- see docs/ORCHESTRATION.md Section 2.2, step 8).
 - Do NOT run `git commit` or `git push`. Gemini-family orchestrators report
   only (AGENTS.md); a Claude session or the operator makes the commit.

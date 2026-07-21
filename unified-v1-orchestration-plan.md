@@ -4,6 +4,8 @@ Status: Active — approved for implementation
 Authored: 2026-07-17
 Authority: Additive to `HANDOFF/V1_0_0_EXECUTION_PLAN.md` and `HANDOFF/todo/_QUEUE.md`.
 
+> Note (2026-07-20): the orchestration unification described in Sub-Task 9 has since completed. There is now ONE command `/orchestrate` over the master protocol `docs/ORCHESTRATION.md`; the old per-backend commands are archived under `.claude/archive/commands/`. The backlog content below stands; treat any per-command references (scmorc/scmqwen/gemini-orchestrator/swarm) as historical -- they map to backends per `docs/ORCHESTRATION.md` Section 5.
+
 ---
 
 ## Context Summary

@@ -143,8 +143,8 @@ WS12.29_KNOWN_ISSUES_BURNDOWN_PLAN (superseded by REMAINING_WORK_TRACKING.md
 + HANDOFF/V1_0_0_EXECUTION_PLAN.md).
 
 New Active docs since the last index update: `docs/ORCHESTRATION.md` (master
-orchestration protocol, 2026-07-11), `docs/GEMINI_ORCHESTRATOR.md` (role
-protocol), `docs/ORCHESTRATION_PLAYBOOK.md` (quick reference),
+orchestration protocol, 2026-07-11), `docs/GEMINI_ORCHESTRATOR.md` (superseded 2026-07-20; now a
+Gemini runbook for the `lanes` backend, subordinate to docs/ORCHESTRATION.md), `docs/ORCHESTRATION_PLAYBOOK.md` (quick reference),
 `HANDOFF/V1_0_0_EXECUTION_PLAN.md` (two-phase DAG, sequencing authority),
 `docs/release-readiness-2026-07-02.md` (verified-vs-claimed ledger).
 

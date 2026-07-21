@@ -6,7 +6,7 @@ Launch an SCMessenger agent from the pool
 cd /Users/scmessenger/Documents/Github/SCMessenger
 ```
 
-If the directory is missing, **STOP and tell the user** — do not guess at a fallback path.
+If the directory is missing, **STOP and tell the user** -- do not guess at a fallback path.
 
 ```bash
 bash .claude/orchestrator_manager.sh pool launch $ARGUMENTS

@@ -249,8 +249,9 @@ jobs:
       - name: Optimize WASM
         run: |
           cd wasm
+          ORIG_SIZE=$(stat -c%s pkg/scmessenger_wasm_bg.wasm)
           wasm-opt -Oz pkg/scmessenger_wasm_bg.wasm -o pkg/scmessenger_wasm_bg.wasm
-          echo "Original size: $(stat -c%s pkg/scmessenger_wasm_bg.wasm.orig) bytes"
+          echo "Original size: $ORIG_SIZE bytes"
           echo "Optimized size: $(stat -c%s pkg/scmessenger_wasm_bg.wasm) bytes"
 
       - name: Generate ES Module and UMD formats
