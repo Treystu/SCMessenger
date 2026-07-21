@@ -114,7 +114,7 @@ struct MeshDashboardView: View {
         } catch {
             contacts = []
         }
-        
+
         let contactsByPeerId = Dictionary(uniqueKeysWithValues: contacts.map { ($0.peerId, $0) })
         var contactsByRoutePeerId: [String: Contact] = [:]
         var contactsByPublicKey: [String: Contact] = [:]
@@ -126,7 +126,7 @@ struct MeshDashboardView: View {
                     contactsByRoutePeerId[routePeerId] = contact
                 }
             }
-            
+
             let pk = contact.publicKey.trimmingCharacters(in: .whitespacesAndNewlines)
             if !pk.isEmpty {
                 contactsByPublicKey[pk] = contact
@@ -189,7 +189,7 @@ struct MeshDashboardView: View {
         } catch {
             entries = []
         }
-        
+
         for entry in entries {
             guard let routePeerId = entry.peerId?.trimmingCharacters(in: .whitespacesAndNewlines),
                   !routePeerId.isEmpty else { continue }

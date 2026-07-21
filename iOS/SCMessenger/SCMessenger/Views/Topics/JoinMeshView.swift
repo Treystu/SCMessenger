@@ -139,7 +139,6 @@ struct JoinMeshView: View {
     }
 
     private func joinFromBundle(_ raw: String) {
-        // swiftlint:disable:next nesting
         struct JoinBundle: Decodable {
             // swiftlint:disable:next identifier_name
             let bootstrap_peers: [String]

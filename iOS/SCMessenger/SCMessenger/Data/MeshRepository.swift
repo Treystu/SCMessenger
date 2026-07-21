@@ -43,14 +43,14 @@ final class MeshRepository {
         static let key = "mesh_install_marker_v1"
     }
     private let logger = Logger(subsystem: "com.scmessenger", category: "Repository")
-    
+
     /// Conditional logging - only log verbose messages in DEBUG builds
     private func logVerbose(_ message: @autoclosure @escaping () -> String) {
         #if DEBUG
         logger.debug("\(message())")
         #endif
     }
-    
+
     private func logDiagnostic(_ message: @autoclosure @escaping () -> String) {
         #if DEBUG
         appendDiagnostic(message())
@@ -126,7 +126,7 @@ final class MeshRepository {
     private var relayBootstrapDialInProgress = false
     private var dialThrottleState: [String: (attempts: Int, nextAllowedAt: Date)] = [:]
     private var relayDialDebounceState: [String: Date] = [:]
-    
+
     // MARK: - Retry Backoff & Circuit Breaker (LOG-AUDIT-001 fix)
     /// Tracks consecutive failures per peer for exponential backoff
     private var consecutiveDeliveryFailures: [String: Int] = [:]
@@ -1506,16 +1506,17 @@ final class MeshRepository {
             messageId: messageId,
             transport: .internet // Default transport for incoming messages
         )
-        
+
         if let existing = try? historyManager?.get(id: messageId),
            existing.direction == .received {
             logVerbose("Duplicate inbound message \(messageId); acknowledging without UI emit")
-            
+
             // Log duplicate with time variance for mesh enhancement
             if let dedup = dedupResult, dedup.isDuplicate, let timeVariance = dedup.timeVarianceMs {
-                logDiagnostic("msg_duplicate msg=\(messageId) time_variance_ms=\(timeVariance) first_transport=\(dedup.firstTransport?.rawValue ?? "unknown") duplicate_count=\(self.smartTransportRouter?.getDedupStats(messageId: messageId)?.duplicateCount ?? 0)")
+                let dupCount = self.smartTransportRouter?.getDedupStats(messageId: messageId)?.duplicateCount ?? 0
+                logDiagnostic("msg_duplicate msg=\(messageId) time_variance_ms=\(timeVariance) first_transport=\(dedup.firstTransport?.rawValue ?? "unknown") duplicate_count=\(dupCount)")
             }
-            
+
             sendDeliveryReceiptAsync(
                 senderPublicKeyHex: senderPublicKeyHex,
                 messageId: messageId,
@@ -1525,7 +1526,7 @@ final class MeshRepository {
             )
             return
         }
-        
+
         // First receipt of this message - log for mesh enhancement tracking
         if let dedup = dedupResult, !dedup.isDuplicate {
             logDiagnostic("msg_first_receipt msg=\(messageId) transport=\(dedup.firstTransport?.rawValue ?? "unknown")")
@@ -4413,7 +4414,7 @@ final class MeshRepository {
                         )
                         return false
                     }
-                    
+
                     let dialCandidates = self.buildDialCandidatesForPeer(
                         routePeerId: corePeerId,
                         rawAddresses: addresses,
@@ -4423,14 +4424,14 @@ final class MeshRepository {
                         self.connectToPeer(corePeerId, addresses: dialCandidates)
                         _ = await self.awaitPeerConnection(peerId: corePeerId)
                     }
-                    
+
                     let sendError = swarmBridge.sendMessageStatus(
                         peerId: corePeerId,
                         data: envelopeData,
                         recipientIdentityId: recipientIdentityId,
                         intendedDeviceId: intendedDeviceId
                     )
-                    
+
                     if sendError == nil {
                         self.logDeliveryAttempt(
                             messageId: traceMessageId,
@@ -4557,7 +4558,7 @@ final class MeshRepository {
                 timestamp: Date()
             )
         }
-        
+
         let localAcked = smartResult.success
         if strictBleOnly {
             logDeliveryAttempt(
@@ -4666,11 +4667,11 @@ final class MeshRepository {
                     outcome: "success",
                     detail: "ctx=\(attemptContext) route=\(routePeerId)"
                 )
-                
+
                 // Reset failure count on success (LOG-AUDIT-001 fix)
                 consecutiveDeliveryFailures[routePeerId] = 0
                 lastFailureTime.removeValue(forKey: routePeerId)
-                
+
                 return DeliveryAttemptResult(
                     acked: true,
                     routePeerId: routePeerId,
@@ -4684,7 +4685,7 @@ final class MeshRepository {
             let peerKey = routePeerId
             let failureCount = consecutiveDeliveryFailures[peerKey] ?? 0
             let lastFailure = lastFailureTime[peerKey]
-            
+
             // Circuit breaker: if too many consecutive failures, pause retries
             if failureCount >= circuitBreakerThreshold {
                 if let lastFailure = lastFailure,
@@ -4697,18 +4698,18 @@ final class MeshRepository {
                 // Reset after circuit breaker duration
                 consecutiveDeliveryFailures[peerKey] = 0
             }
-            
+
             let relayOnly = relayCircuitAddresses(for: routePeerId)
             if !relayOnly.isEmpty {
                 connectToPeer(routePeerId, addresses: relayOnly)
                 _ = await awaitPeerConnection(peerId: routePeerId, timeoutMs: 3000)
-                
+
                 // Exponential backoff before relay attempt (1s → 2s → 4s → 8s → 16s → 32s max)
                 let backoffExponent = min(failureCount, 5)
                 let backoffSeconds = TimeInterval(1 << backoffExponent)
                 logger.info("Relay-circuit backoff: \(backoffSeconds)s (failure count: \(failureCount))")
                 try? await Task.sleep(nanoseconds: UInt64(backoffSeconds * 1_000_000_000))
-                
+
                 logDeliveryAttempt(
                     messageId: traceMessageId,
                     medium: "relay-circuit",
@@ -4731,12 +4732,12 @@ final class MeshRepository {
                         outcome: "failed",
                         detail: "ctx=\(attemptContext) route=\(routePeerId) reason=\(sendError ?? "unknown")"
                     )
-                    
+
                     // Track failure for circuit breaker (LOG-AUDIT-001 fix)
                     self.consecutiveDeliveryFailures[peerKey] = (self.consecutiveDeliveryFailures[peerKey] ?? 0) + 1
                     self.lastFailureTime[peerKey] = Date()
                     logger.info("Delivery failure tracked: peer=\(String(describing: peerKey)) consecutive=\(self.consecutiveDeliveryFailures[peerKey] ?? 0)")
-                    
+
                     if isTerminalIdentityFailure(sendError) {
                         return DeliveryAttemptResult(
                             acked: false,
@@ -4746,7 +4747,7 @@ final class MeshRepository {
                     }
                     continue
                 }
-                
+
                 // Reset failure count on success (LOG-AUDIT-001 fix)
                 consecutiveDeliveryFailures[peerKey] = 0
                 lastFailureTime.removeValue(forKey: peerKey)
@@ -6307,9 +6308,9 @@ final class MeshRepository {
             sendHistorySyncIfNeeded(routePeerId: routePeerId)
         }
     }
-    
+
     // MARK: - ID Coalescence Migration
-    
+
     private func migrateToCanonicalIds() {
         guard let ironCore = ironCore,
               let historyManager = historyManager,
