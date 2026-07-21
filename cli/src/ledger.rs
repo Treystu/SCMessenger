@@ -562,10 +562,7 @@ impl ConnectionLedger {
         learned_peer_id: Option<PeerId>,
     ) {
         if success {
-            let mut state = self
-                .peer_dial_states
-                .remove(key)
-                .unwrap_or_default();
+            let mut state = self.peer_dial_states.remove(key).unwrap_or_default();
             state.record_success();
 
             if let DialKey::Addr(_) = key {
@@ -607,13 +604,12 @@ impl ConnectionLedger {
 
     fn is_known_good_key(&self, key: &DialKey) -> bool {
         match key {
-            DialKey::Peer(pid) => self
-                .find_by_peer_id(&pid.to_string())
-                .is_some_and(|e| e.locally_verified && e.last_peer_id.is_some() && e.consecutive_failures == 0),
-            DialKey::Addr(addr) => self
-                .entries
-                .get(addr)
-                .is_some_and(|e| e.locally_verified && e.last_peer_id.is_some() && e.consecutive_failures == 0),
+            DialKey::Peer(pid) => self.find_by_peer_id(&pid.to_string()).is_some_and(|e| {
+                e.locally_verified && e.last_peer_id.is_some() && e.consecutive_failures == 0
+            }),
+            DialKey::Addr(addr) => self.entries.get(addr).is_some_and(|e| {
+                e.locally_verified && e.last_peer_id.is_some() && e.consecutive_failures == 0
+            }),
         }
     }
 }
@@ -1200,7 +1196,13 @@ mod tests {
         assert!(!ledger.try_begin_dial(key.clone(), 0, true));
 
         ledger.record_connection("/ip4/1.2.3.4/tcp/9001/p2p/12D3KooWSpoof", "12D3KooWSpoof");
-        assert!(ledger.entries.get("/ip4/1.2.3.4/tcp/9001").unwrap().locally_verified);
+        assert!(
+            ledger
+                .entries
+                .get("/ip4/1.2.3.4/tcp/9001")
+                .unwrap()
+                .locally_verified
+        );
         assert!(ledger.try_begin_dial(key, 0, true));
     }
 

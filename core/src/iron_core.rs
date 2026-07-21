@@ -21,8 +21,8 @@ use crate::crypto::encrypt::{ed25519_public_to_x25519, ed25519_to_x25519_secret}
 use crate::crypto::{decrypt_message, encrypt_message, session_manager::RatchetSessionManager};
 use crate::drift::{MeshStore, NetworkState, RelayConfig, RelayEngine};
 use crate::identity::IdentityManager;
-use crate::message::{decode_envelope, decode_message, Message};
 use crate::message::types::{decode_receipt, encode_receipt};
+use crate::message::{decode_envelope, decode_message, Message};
 use crate::notification::NotificationEndpointRegistry;
 use crate::observability::{AuditEventType, AuditLog as AuditLogType};
 use crate::privacy::{

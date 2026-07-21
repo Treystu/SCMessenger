@@ -382,7 +382,10 @@ mod tests {
         };
         let addrs = generate_listen_addresses(&config);
         for (_, port) in addrs {
-            assert_ne!(port, 9876, "Control API port 9876 must be excluded from listener addresses");
+            assert_ne!(
+                port, 9876,
+                "Control API port 9876 must be excluded from listener addresses"
+            );
         }
     }
 }

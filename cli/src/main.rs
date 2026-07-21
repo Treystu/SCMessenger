@@ -1688,13 +1688,11 @@ async fn cmd_start(port: Option<u16>, http_bind: Option<String>) -> Result<()> {
 
             // Dial all known addresses (bootstrap + discovered)
             for (i, (multiaddr_str, peer_id_opt)) in addrs.iter().enumerate() {
-                let label = ledger::extract_ip_port(multiaddr_str)
-                    .unwrap_or_else(|| multiaddr_str.clone());
+                let label =
+                    ledger::extract_ip_port(multiaddr_str).unwrap_or_else(|| multiaddr_str.clone());
                 println!("  {}.  Dialing {} (promiscuous)...", i + 1, label);
 
-                let peer_id = peer_id_opt
-                    .as_ref()
-                    .and_then(|s| s.parse::<PeerId>().ok());
+                let peer_id = peer_id_opt.as_ref().and_then(|s| s.parse::<PeerId>().ok());
                 scheduler.dial(multiaddr_str.clone(), peer_id);
 
                 // Brief pause between dials to avoid overwhelming
@@ -2757,13 +2755,11 @@ async fn cmd_relay(
                 })
                 .collect();
             for (i, (multiaddr_str, peer_id_opt)) in addrs.iter().enumerate() {
-                let label = ledger::extract_ip_port(multiaddr_str)
-                    .unwrap_or_else(|| multiaddr_str.clone());
+                let label =
+                    ledger::extract_ip_port(multiaddr_str).unwrap_or_else(|| multiaddr_str.clone());
                 println!("  {}.  Dialing {} ...", i + 1, label);
 
-                let peer_id = peer_id_opt
-                    .as_ref()
-                    .and_then(|s| s.parse::<PeerId>().ok());
+                let peer_id = peer_id_opt.as_ref().and_then(|s| s.parse::<PeerId>().ok());
                 scheduler.dial(multiaddr_str.clone(), peer_id);
 
                 tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
@@ -2797,9 +2793,7 @@ async fn cmd_relay(
                     })
                     .collect();
                 for (multiaddr_str, peer_id_opt) in &addrs {
-                    let peer_id = peer_id_opt
-                        .as_ref()
-                        .and_then(|s| s.parse::<PeerId>().ok());
+                    let peer_id = peer_id_opt.as_ref().and_then(|s| s.parse::<PeerId>().ok());
                     scheduler.dial(multiaddr_str.clone(), peer_id);
                 }
                 tracing::info!("Periodic re-dial: {} addresses attempted", addrs.len());
