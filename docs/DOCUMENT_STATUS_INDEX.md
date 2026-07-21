@@ -30,6 +30,8 @@ Purpose: classify documentation by lifecycle state so execution decisions use au
 | ----------------------------------------------------- | ------ | -------------------------------------------------------------- |
 | `README.md`                                           | Active | Repo entrypoint and quick-start links                          |
 | `DOCUMENTATION.md`                                    | Active | Main docs hub and navigation policy                            |
+| `docs/SIMPLE_INSTALL_ANDROID.md`                      | Active | Standalone simple install guide for Android pre-built APK     |
+| `docs/SIMPLE_INSTALL_IOS.md`                          | Active | Standalone simple install guide for iOS pre-built app binary   |
 | `SUPPORT.md`                                          | Active | Support/reporting routing for contributors and operators       |
 | `.github/copilot-instructions.md`                     | Active | Canonical GitHub Copilot adapter to repo-agent guidance, including doc-sync and build-verify closeout rules |
 | `AGENTS.md`                                           | Active | Codex run policy, including mandatory doc sync and edited-target build verification |

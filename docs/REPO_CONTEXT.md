@@ -8,6 +8,7 @@ This is the canonical "how everything fits together" document for the repository
 Execution references:
 
 - Document status lifecycle: `docs/DOCUMENT_STATUS_INDEX.md`
+- Simple installation guides: `docs/SIMPLE_INSTALL_ANDROID.md` & `docs/SIMPLE_INSTALL_IOS.md`
 - Active milestone execution: `docs/MILESTONE_PLAN_V0.2.0_ALPHA.md`
 - Active residual risk register: `docs/V0.2.0_RESIDUAL_RISK_REGISTER.md`
 - Global rollout plan: `docs/GLOBAL_ROLLOUT_PLAN.md`

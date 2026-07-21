@@ -1,19 +1,60 @@
-# SCMessenger Current State (Verified)
+# SCMessenger Current State (Verified Snapshot)
 
 Status: Active
-Last updated: 2026-07-21 (Simple Install Guides [Android & iOS] added; key documentation audit completed)
-Last verified: **2026-07-21** (v1.0.0 PR #1 merged, remaining items documented in `docs/release-readiness-2026-07-02.md`)
+Last updated: 2026-07-21 (Unified version roadmap v0.3.5 -> v0.4.0 -> v0.5.0 -> v1.0.0; added simple install guides)
+Last verified: **2026-07-21** (Workspace build gates clean; docs-sync verified PASS)
 
 ---
 
-## 2026-07-21: Pre-built APK/App Simple Install Guides (Android & iOS)
+## 1. Executive Summary & Release Roadmap
 
-**Status:** COMPLETE. Created standalone installation guides: [SIMPLE_INSTALL_ANDROID.md](file:///c:/Users/SCM/Documents/GitHub/SCMessenger/docs/SIMPLE_INSTALL_ANDROID.md) and [SIMPLE_INSTALL_IOS.md](file:///c:/Users/SCM/Documents/GitHub/SCMessenger/docs/SIMPLE_INSTALL_IOS.md), alongside 1-click batch script [install-apk.bat](file:///c:/Users/SCM/Documents/GitHub/SCMessenger/android/install-apk.bat).
+SCMessenger is currently on release line **v0.3.5** (`Cargo.toml`). The project is actively executing towards **v0.4.0** under the Two-Phase DAG (`HANDOFF/V1_0_0_EXECUTION_PLAN.md`).
 
-Key additions:
-- **Android Simple Install Guide**: Focuses on installing pre-built `app-debug.apk` via USB debugging from a Windows/Mac PC over cell/Wi-Fi. Includes 1-click installer ([install-apk.bat](file:///c:/Users/SCM/Documents/GitHub/SCMessenger/android/install-apk.bat)) that auto-grants network, Bluetooth, and location permissions.
-- **iOS Simple Install Guide**: Focuses on direct pre-built binary installation (`.app` / `.ipa`) via Xcode, Apple Configurator, or `devicectl` script ([install-device.sh](file:///c:/Users/SCM/Documents/GitHub/SCMessenger/iOS/install-device.sh)).
-- **Generic & Clean**: Stripped all personal names and removed TestFlight references.
+```
+  v0.3.5 (Active Codebase)
+     │
+     ▼
+  v0.4.0 [NEXT RELEASE] ──► E-00 Ratchet Wiring, Outbox Flush Fixes, Android/Windows Transport Parity
+     │
+     ▼
+  v0.5.0 [FEATURE COMPLETE] ──► PQC Suite Negotiation (PQC-04+), Mobile UI/UX Parity & Multi-Device
+     │
+     ▼
+  v1.0.0 [PRODUCTION GA] ──► Final Hardware Mesh Verification & Formal Release Audit
+```
+
+---
+
+## 2. Active System Verification Snapshot (v0.3.5 Baseline)
+
+| Subsystem / Layer | Current Status | Primary Architectural Entry / Contract | Verified Evidence |
+| :--- | :--- | :--- | :--- |
+| **Rust Core (`core/`)** | **v0.3.5 Verified** | `IronCore` (`core/src/iron_core.rs`) | Cargo workspace compiles cleanly (`cargo check --workspace`). 1100+ lib unit tests pass. |
+| **Transport Layer** | **v0.3.5 / v0.4.0 Prep** | `SwarmBridge` (`core/src/transport/swarm.rs`) | mDNS, TCP, QUIC active. CLI BLE Outbound TX wired. Relay bootstrap active (`100.56.248.69:9001`). |
+| **PQC & Ratchet** | **v0.4.0 Blocked (E-00)** | `DoubleRatchet` & `IdentityKeys` | PQC-02 (Envelope v2) & PQC-03 (Keybundle v2) complete. E-00 Ratchet wiring ticket active. |
+| **Android Client** | **v0.3.5 Active** | `MeshRepository.kt` (`android/app/...`) | Kotlin UniFFI async bindings active. Pre-built APK installer ([install-apk.bat](../android/install-apk.bat)) verified. |
+| **iOS Client** | **v0.3.5 Active** | `MeshRepository.swift` (`iOS/SCMessenger/...`) | Swift UniFFI bindings active with WS12.22+ crash fixes. Cable installer ([install-device.sh](../iOS/install-device.sh)) verified. |
+| **WASM / Web** | **v0.3.5 Active** | `scmessenger-wasm` (`wasm/`) | Binds loopback WebSocket RPC on port 9002. Web asset server integrated in CLI daemon. |
+| **Documentation** | **100% Synchronized** | [DOCUMENTATION.md](../DOCUMENTATION.md) | `scripts/docs_sync_check.ps1` returns `PASS`. Standalone install guides active. |
+
+---
+
+## 3. Milestone Execution Progress Log
+
+### v0.4.0 Release Preparation (Current In-Flight Milestone)
+- **Simple Install Guides (2026-07-21)**: Created standalone, zero-toolchain pre-built install guides for Android ([SIMPLE_INSTALL_ANDROID.md](SIMPLE_INSTALL_ANDROID.md)) and iOS ([SIMPLE_INSTALL_IOS.md](SIMPLE_INSTALL_IOS.md)) alongside 1-click batch installer ([install-apk.bat](../android/install-apk.bat)).
+- **72-Hour Audit & Orchestration Unification (2026-07-17)**: E-00 Critical filed (Ratchet subsystem wiring to IronCore). Outbox flush sites 2+3 and DriftFrame custody wrapping completed.
+- **Farm v1.0.0 Backlog & Delivery Truth (2026-07-13)**: A1 (Outbox Flush-on-Connect), A2 (Receipt Round-Trip), and E3 (PQC Skipped Keys Persistence) completed with regression test coverage.
+
+### Prior Verified Milestones
+- **v0.3.5 Release Baseline (2026-07-10)**: PQC-03 `IDENTITY_V2_KEYBUNDLE` landed with ML-KEM-768 key encapsulation and V1->V2 identity storage migration.
+- **v0.3.4 Orchestrator & Emulator Baseline (2026-07-09)**: `/scmqwen` orchestrator command operational; Android emulator `scm_pixel_34` verified.
+- **v0.3.0–v0.3.3 Transport & Clippy Sprint (2026-07-08)**: CLI BLE Outbound TX path implemented; workspace clippy debt paid off.
+- **v0.2.1 Stabilization Sprint (2026-07-06)**: Mobile FFI surface converted to native async (`suspend fun`); `start_swarm` listening confirmation fixed.
+- **v0.2.0-alpha Milestone (WS12.01–44)**: Comprehensive platform stabilization, logging mincing, NAT traversal, and memory-bounded outbox retention.
+- **v0.1.2 Baseline**: Initial cross-platform proof of concept.
+
+---
 
 
 
@@ -76,7 +117,12 @@ Following the merge of PR #1 (`cbec1f4`), the repository has been evaluated for 
 3. [DONE] **Core / CLI Debt (S2-S8, T1-T7)**: All code fixes have been implemented and verified.
 4. [DONE] **Mobile (Android/iOS) (T8-T17)**: All SDK fixes are implemented in code.
 
-(See `REMAINING_WORK_TRACKING.md` or `docs/release-readiness-2026-07-02.md` for the exact breakdown).
+## 2026-07-04: v1.0.0 Execution Plan (Two-Phase DAG)
+
+**Status:** IN PROGRESS. Reference: `HANDOFF/V1_0_0_EXECUTION_PLAN.md`.
+- **Phase 1 Scope**: Android (Pixel 6a) <-> Windows full cooperation across all transports (BLE, WiFi Aware/Direct, mDNS/LAN, QUIC/TCP relay, internet relay) + adaptive port selection.
+- **Phase 2 Scope**: Backlog ship-blockers (backup.rs KDF gap, WiFi Aware orphaned instantiation, escalation authority consolidation, PQC_02 to PQC_14).
+- **Ground Truth**: WIRING_TASK_INDEX closed, libp2p single workspace pin confirmed (0.56), core compilation gates verified.
 
 ---
 
