@@ -284,7 +284,7 @@ struct SettingsView: View {
                 HStack {
                     Text("Version")
                     Spacer()
-                    Text("0.2.0")
+                    Text("0.4.0")
                         .foregroundStyle(Theme.onSurfaceVariant)
                 }
             } header: {

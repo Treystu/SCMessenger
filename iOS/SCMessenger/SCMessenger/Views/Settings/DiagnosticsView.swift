@@ -150,9 +150,9 @@ struct DiagnosticsView: View {
             "Notifications (optional delivery alerts)"
         ]
         let bundleText: String = """
-        === SCMessenger Diagnostics Bundle (v0.2.0 alpha) ===
+        === SCMessenger Diagnostics Bundle (v0.4.0) ===
         Generated: \(Date())
-        Version: 0.2.0-alpha
+        Version: 0.4.0
 
         --- Runtime Summary ---
         connection_path_state: \(repository.getConnectionPathState())
