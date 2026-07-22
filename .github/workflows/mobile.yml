@@ -44,7 +44,7 @@ jobs:
         env:
           ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
           ANDROID_NDK_ROOT: ${{ steps.setup-ndk.outputs.ndk-path }}
-        run: ./gradlew :app:assembleDebug -x buildRustAndroid -x generateUniFFIBindings
+        run: ./gradlew :app:assembleDebug -x buildRustAndroid
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
@@ -72,11 +72,13 @@ jobs:
         run: |
           mkdir -p iOS/SCMessengerCore.xcframework/ios-arm64
           mkdir -p iOS/SCMessengerCore.xcframework/ios-arm64-simulator
-          cp target/aarch64-apple-ios/release/libscmessenger_core.a iOS/SCMessengerCore.xcframework/ios-arm64/libscmessenger_core.a
-          cp target/aarch64-apple-ios-sim/release/libscmessenger_core.a iOS/SCMessengerCore.xcframework/ios-arm64-simulator/libscmessenger_core.a
+          cp target/aarch64-apple-ios/release/libscmessenger_core.a iOS/SCMessengerCore.xcframework/ios-arm64/
+          cp target/aarch64-apple-ios-sim/release/libscmessenger_core.a iOS/SCMessengerCore.xcframework/ios-arm64-simulator/
       - name: Build Xcode project
         run: |
-          xcodebuild -project iOS/SCMessenger/SCMessenger.xcodeproj \
+          xcodebuild -project iOS/SCMessenger.xcodeproj \
             -scheme SCMessenger \
-            -destination 'generic/platform=iOS Simulator' \
-            build CODE_SIGNING_ALLOWED=NO
+            -sdk iphonesimulator \
+            -configuration Debug \
+            CODE_SIGNING_ALLOWED=NO \
+            clean build
