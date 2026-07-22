@@ -75,10 +75,11 @@ jobs:
           cp target/aarch64-apple-ios/release/libscmessenger_core.a iOS/SCMessengerCore.xcframework/ios-arm64/
           cp target/aarch64-apple-ios-sim/release/libscmessenger_core.a iOS/SCMessengerCore.xcframework/ios-arm64-simulator/
       - name: Build Xcode project
+        working-directory: iOS
         run: |
-          xcodebuild -project iOS/SCMessenger/SCMessenger.xcodeproj \
+          xcodebuild build \
+            -project SCMessenger/SCMessenger.xcodeproj \
             -scheme SCMessenger \
-            -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' \
             -configuration Debug \
-            CODE_SIGNING_ALLOWED=NO \
-            clean build
+            CODE_SIGNING_ALLOWED=NO
