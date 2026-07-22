@@ -817,7 +817,14 @@ final class MeshRepository {
 
                 // P0_TRANSPORT_001: Use static port 9001 for LAN connectivity with CLI daemon.
                 // This ensures both sides can dial each other using predictable addresses.
-                try? meshService?.startSwarm(listenAddr: "/ip4/0.0.0.0/tcp/9001", bootstrapAddrs: [])
+                // `startSwarm` only returns after Rust has installed a usable
+                // SwarmBridge handle and the listener is live. Do not discard
+                // this error: reporting service_start success without that
+                // handle lets the outbox route into swarm_bridge_unavailable.
+                guard let service = meshService else {
+                    throw MeshError.notInitialized("MeshService was released before Swarm startup")
+                }
+                try service.startSwarm(listenAddr: "/ip4/0.0.0.0/tcp/9001", bootstrapAddrs: [])
                 broadcastIdentityBeacon()
                 logger.info("Internet transport (Swarm) initiated with \(bootstrapAddrs.count) bootstrap nodes")
             }
@@ -888,6 +895,13 @@ final class MeshRepository {
             logVerbose("[OK] Mesh service started successfully")
             logDiagnostic("service_start success")
         } catch {
+            // MeshService itself is already running by the time Swarm startup
+            // is attempted. Tear it down so a later retry creates a fresh
+            // service instead of retaining a bridge with no SwarmHandle.
+            meshService?.stop()
+            meshService = nil
+            swarmBridge = nil
+            ironCore = nil
             serviceState = .stopped
             statusEvents.send(.serviceStateChanged(.stopped))
             logger.error("Failed to start mesh service: \(error.localizedDescription)")

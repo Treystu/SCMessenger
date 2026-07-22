@@ -3654,6 +3654,29 @@ mod tests {
         );
     }
 
+    #[test]
+    fn start_swarm_success_installs_bridge_handle_before_returning() {
+        let dir = tempdir().unwrap();
+        let service = Arc::new(MeshService::with_storage(
+            MeshServiceConfig {
+                discovery_interval_ms: 5_000,
+                battery_floor_pct: 20,
+            },
+            dir.path().to_str().unwrap().to_string(),
+        ));
+        service.clone().start().unwrap();
+
+        service
+            .start_swarm("/ip4/127.0.0.1/tcp/0".to_string(), Vec::new())
+            .expect("a successful swarm start must wait for the bridge handle");
+
+        assert!(
+            service.get_swarm_bridge().handle.lock().is_some(),
+            "start_swarm must not report success before SwarmBridge is usable"
+        );
+        service.stop();
+    }
+
     // -----------------------------------------------------------------------
     // PlatformWifiAwareBridge::handle_data_path_confirmed tests
     // -----------------------------------------------------------------------
