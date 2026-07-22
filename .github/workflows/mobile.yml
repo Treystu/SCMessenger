@@ -44,8 +44,7 @@ jobs:
         env:
           ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
           ANDROID_NDK_ROOT: ${{ steps.setup-ndk.outputs.ndk-path }}
-          ANDROID_ABI_FILTERS: arm64-v8a
-        run: ./gradlew :app:assembleDebug
+        run: ./gradlew :app:assembleDebug -x buildRustAndroid -x generateUniFFIBindings
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
