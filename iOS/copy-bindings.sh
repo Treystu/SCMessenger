@@ -10,6 +10,7 @@ echo "=== Copying Swift bindings to iOS project ==="
 # Generate bindings first
 echo "1. Generating Swift bindings..."
 cd core
+cargo build -p scmessenger-core
 cargo run --bin gen_swift --features gen-bindings
 
 canonical_dir="../iOS/SCMessenger/SCMessenger/Generated"
