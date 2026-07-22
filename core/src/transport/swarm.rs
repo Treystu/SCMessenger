@@ -2000,7 +2000,10 @@ pub async fn start_swarm_with_config(
     {
         let local_peer_id = keypair.public().to_peer_id();
 
-        #[cfg(not(target_os = "android"))]
+        // libp2p's convenience WebSocket builder reads the system DNS config.
+        // iOS apps have no /etc/resolv.conf, so use the explicit resolver path
+        // below just as Android does.
+        #[cfg(all(not(target_os = "android"), not(target_os = "ios")))]
         let mut swarm: libp2p::Swarm<IronCoreBehaviour> =
             libp2p::SwarmBuilder::with_existing_identity(keypair)
                 .with_tokio()
@@ -2021,7 +2024,7 @@ pub async fn start_swarm_with_config(
                 })
                 .build();
 
-        #[cfg(target_os = "android")]
+        #[cfg(any(target_os = "android", target_os = "ios"))]
         let mut swarm: libp2p::Swarm<IronCoreBehaviour> = {
             use libp2p::Transport;
             libp2p::SwarmBuilder::with_existing_identity(keypair)

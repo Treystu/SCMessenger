@@ -900,7 +900,13 @@ final class MeshRepository {
         } catch {
             // MeshService itself is already running by the time Swarm startup
             // is attempted. Tear it down so a later retry creates a fresh
-            // service instead of retaining a bridge with no SwarmHandle.
+            // service instead of retaining a bridge with no SwarmHandle. Keep
+            // the verified public identity published first: a transport error
+            // must never present as identity loss in the UI.
+            if let liveIdentity = ironCore?.getIdentityInfo(), liveIdentity.initialized {
+                publishIdentityInfo(liveIdentity)
+                persistIdentityBackupToKeychain(ironCore: ironCore)
+            }
             meshService?.stop()
             meshService = nil
             swarmBridge = nil
