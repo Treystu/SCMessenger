@@ -805,6 +805,7 @@ final class MeshRepository {
             // Core auto-selects headless mode when identity is absent and upgrades when identity appears.
             // ASYNC FIX: Use default settings initially to avoid blocking I/O during service start
             let defaultSettings = settingsManager?.defaultSettings()
+            var swarmTransportStarted = defaultSettings?.internetEnabled != true
             if defaultSettings?.internetEnabled == true {
                 // Configure bootstrap nodes for NAT traversal.
                 // Priority: Ledger (cached) → Remote → Static.
@@ -821,12 +822,22 @@ final class MeshRepository {
                 // SwarmBridge handle and the listener is live. Do not discard
                 // this error: reporting service_start success without that
                 // handle lets the outbox route into swarm_bridge_unavailable.
-                guard let service = meshService else {
-                    throw MeshError.notInitialized("MeshService was released before Swarm startup")
+                do {
+                    guard let service = meshService else {
+                        throw MeshError.notInitialized("MeshService was released before Swarm startup")
+                    }
+                    try service.startSwarm(listenAddr: "/ip4/0.0.0.0/tcp/9001", bootstrapAddrs: [])
+                    swarmTransportStarted = true
+                    broadcastIdentityBeacon()
+                    logger.info("Internet transport (Swarm) initiated with \(bootstrapAddrs.count) bootstrap nodes")
+                } catch {
+                    // Identity/Core startup remains valid without internet transport.
+                    // Keep it alive for local data, BLE, Multipeer, and a later
+                    // Swarm retry rather than routing the UI back to onboarding.
+                    swarmBridge = nil
+                    appendDiagnostic("swarm_start degraded error=\(error.localizedDescription)")
+                    logger.error("Swarm transport unavailable; continuing with identity services: \(error.localizedDescription)")
                 }
-                try service.startSwarm(listenAddr: "/ip4/0.0.0.0/tcp/9001", bootstrapAddrs: [])
-                broadcastIdentityBeacon()
-                logger.info("Internet transport (Swarm) initiated with \(bootstrapAddrs.count) bootstrap nodes")
             }
             // Async reload of settings after service started
             Task { [weak self] in
@@ -895,8 +906,13 @@ final class MeshRepository {
 
             let info = getIdentityInfo()
             logger.info("SC_IDENTITY_OWN p2p_id=\(info?.libp2pPeerId ?? "unknown") pk=\(info?.publicKeyHex ?? "unknown")")
-            logVerbose("[OK] Mesh service started successfully")
-            logDiagnostic("service_start success")
+            if swarmTransportStarted {
+                logVerbose("[OK] Mesh service started successfully")
+                logDiagnostic("service_start success")
+            } else {
+                logVerbose("Mesh service started with Swarm transport unavailable")
+                logDiagnostic("service_start degraded swarm_unavailable")
+            }
         } catch {
             // MeshService itself is already running by the time Swarm startup
             // is attempted. Tear it down so a later retry creates a fresh
