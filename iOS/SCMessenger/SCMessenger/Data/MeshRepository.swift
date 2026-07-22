@@ -867,6 +867,9 @@ final class MeshRepository {
                 }
             }
             discovery.startBrowsing()
+            // Publish the same DNS-SD service we browse so Android and CLI
+            // peers can discover this iOS listener, not only the reverse.
+            discovery.startAdvertising(port: 9001)
             mdnsDiscovery = discovery
             Task { @MainActor [weak self] in
                 await self?.applyPowerAdjustments(reason: "service_started")
@@ -994,10 +997,18 @@ final class MeshRepository {
             do {
                 // Configure bootstrap nodes for NAT traversal
                 // P0_TRANSPORT_001: Use static port 9001 for LAN connectivity with CLI daemon.
-                try meshService?.startSwarm(listenAddr: "/ip4/0.0.0.0/tcp/9001", bootstrapAddrs: [])
+                guard let service = meshService else {
+                    throw MeshError.notInitialized("MeshService is unavailable for Swarm startup")
+                }
+                try service.startSwarm(listenAddr: "/ip4/0.0.0.0/tcp/9001", bootstrapAddrs: [])
+                // startSwarm only returns once Rust has installed its handle.
+                // Retain the matching bridge before any outbound work can route.
+                swarmBridge = service.getSwarmBridge()
                 broadcastIdentityBeacon()
-                logger.info("[OK] Internet transport (Swarm) started manually")
+                logger.info("[OK] Internet transport (Swarm) started manually and bridge wired")
             } catch {
+                // Do not leave a stale bridge available after a failed restart.
+                swarmBridge = nil
                 logger.error("Failed to start swarm: \(error.localizedDescription)")
             }
         }
