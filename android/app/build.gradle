@@ -379,11 +379,9 @@ targetList.each { arch ->
 }
 
 task buildRustAndroid {
-    description = 'Aggregated task to build all target architectures in parallel'
+    description = 'Aggregated task to build target architectures in parallel'
     group = 'rust'
-    dependsOn buildRustAndroidArm64
-    dependsOn buildRustAndroidArmv7
-    dependsOn buildRustAndroidX86_64
+    dependsOn targetList.collect { "buildRustAndroid${it.name}" }
 }
 
 
