@@ -21,8 +21,7 @@ use super::api::{
     AddContactRequest, AddContactResponse, ConnectionPathStateResponse, DiscoveredPeer,
     DiscoveryPeersResponse, DiscoveryStatusResponse, DriftStatusResponse,
     GetExternalAddressResponse, GetHistoryRequest, GetHistoryResponse, GetListenersResponse,
-    GetPeersResponse, HistoryMessage, PeerEntry, SendMessageRequest, SendMessageResponse,
-    API_PORT,
+    GetPeersResponse, HistoryMessage, PeerEntry, SendMessageRequest, SendMessageResponse, API_PORT,
 };
 
 // Farm Test Harness Types
@@ -266,10 +265,21 @@ async fn handle_send_message(
             scmessenger_core::MessageType::Text,
             None,
         )
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to prepare message: {:?}", e)))?;
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Failed to prepare message: {:?}", e),
+            )
+        })?;
 
-    let sent = crate::ble_mesh::send_ble_message(&peer_id.to_string(), &prepared.envelope_data).await.is_ok()
-        || ctx.swarm_handle.send_message(peer_id, prepared.envelope_data, None, None).await.is_ok();
+    let sent = crate::ble_mesh::send_ble_message(&peer_id.to_string(), &prepared.envelope_data)
+        .await
+        .is_ok()
+        || ctx
+            .swarm_handle
+            .send_message(peer_id, prepared.envelope_data, None, None)
+            .await
+            .is_ok();
 
     if !sent {
         return Err((
@@ -296,9 +306,12 @@ async fn handle_add_contact(
         contact.nickname = Some(name);
     }
 
-    contacts
-        .add(contact)
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to add contact: {:?}", e)))?;
+    contacts.add(contact).map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Failed to add contact: {:?}", e),
+        )
+    })?;
 
     Ok(AxumJson(AddContactResponse {
         success: true,
@@ -367,11 +380,21 @@ async fn handle_get_history(
     let messages = if let Some(peer_id) = request.peer_id {
         history
             .conversation(peer_id, request.limit.unwrap_or(20) as u32)
-            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to get history: {:?}", e)))?
+            .map_err(|e| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("Failed to get history: {:?}", e),
+                )
+            })?
     } else {
         history
             .recent(None, request.limit.unwrap_or(20) as u32)
-            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to get history: {:?}", e)))?
+            .map_err(|e| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("Failed to get history: {:?}", e),
+                )
+            })?
     };
 
     let history_messages: Vec<HistoryMessage> = messages
@@ -399,7 +422,12 @@ async fn handle_get_external_address(
         .swarm_handle
         .get_external_addresses()
         .await
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to get external addresses: {}", e)))?;
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Failed to get external addresses: {}", e),
+            )
+        })?;
 
     Ok(AxumJson(GetExternalAddressResponse {
         addresses: addresses.into_iter().map(|addr| addr.to_string()).collect(),
@@ -487,7 +515,8 @@ async fn handle_get_drift_status(
     }))
 }
 
-async fn handle_get_discovery_status() -> Result<AxumJson<DiscoveryStatusResponse>, (StatusCode, String)> {
+async fn handle_get_discovery_status(
+) -> Result<AxumJson<DiscoveryStatusResponse>, (StatusCode, String)> {
     let cfg = crate::config::Config::load().unwrap_or_default();
     Ok(AxumJson(DiscoveryStatusResponse {
         mdns_enabled: cfg.enable_mdns,
@@ -605,7 +634,10 @@ pub async fn start_api_server(ctx: ApiContext) -> Result<()> {
         .route("/api/listeners", get(handle_get_listeners))
         .route("/api/history", post(handle_get_history))
         .route("/api/external-address", get(handle_get_external_address))
-        .route("/api/connection-path-state", get(handle_get_connection_path_state))
+        .route(
+            "/api/connection-path-state",
+            get(handle_get_connection_path_state),
+        )
         .route("/api/diagnostics", get(handle_export_diagnostics))
         .route("/api/drift-status", get(handle_get_drift_status))
         .route("/api/discovery/status", get(handle_get_discovery_status))
