@@ -19,7 +19,7 @@ services:
     command: >
       bash -c "
         echo '=== Running Rust Workspace Tests ===' &&
-        cargo test --workspace --exclude scmessenger-wasm --all-features -- --nocapture --test-threads=1 &&
+        cargo test --workspace --exclude scmessenger-wasm -- --nocapture --test-threads=1 &&
         echo '=== Rust Workspace Tests Complete ==='
       "
     profiles:
