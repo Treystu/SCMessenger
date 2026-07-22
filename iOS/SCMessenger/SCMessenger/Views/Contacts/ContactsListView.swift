@@ -252,7 +252,9 @@ struct ContactsListView: View {
                 } else {
                     dialPeerId = peer.peerId
                 }
-                repository.connectToPeer(dialPeerId, addresses: peer.listeners)
+                Task {
+                    await repository.connectToPeer(dialPeerId, addresses: peer.listeners)
+                }
             }
             let displayName: String
             if let nickname = peer.nickname?.trimmingCharacters(in: .whitespacesAndNewlines),
@@ -538,7 +540,9 @@ struct AddContactView: View {
 
             if !listeners.isEmpty {
                 let peerIdForDial = libp2pPeerId.isEmpty ? finalPeerId : libp2pPeerId
-                repository.connectToPeer(peerIdForDial, addresses: listeners)
+                Task {
+                    await repository.connectToPeer(peerIdForDial, addresses: listeners)
+                }
             }
 
             if andChat {

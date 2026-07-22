@@ -35,10 +35,58 @@ private enum DefaultSettings {
 @MainActor
 @Observable
 final class MeshRepository {
+    enum IdentityHydrationState: Equatable {
+        /// A public snapshot may be available, but it has not yet been checked
+        /// against the live Rust core and encrypted Keychain backup.
+        case pending
+        case hydrating
+        case ready
+        case absent
+    }
+
     private enum IdentityBackupStore {
         static let service = "com.scmessenger.identity"
         static let account = "identity_backup_v1"
     }
+    /// A small public-identity snapshot lets the UI render immediately while the
+    /// Rust core is restoring its encrypted identity store.  The private key is
+    /// never placed in UserDefaults; recovery still requires the Keychain backup.
+    private enum IdentityCacheStore {
+        static let key = "com.scmessenger.identity.public_snapshot_v1"
+    }
+
+    private struct CachedIdentityInfo: Codable {
+        let identityId: String?
+        let publicKeyHex: String?
+        let deviceId: String?
+        let seniorityTimestamp: UInt64?
+        let initialized: Bool
+        let nickname: String?
+        let libp2pPeerId: String?
+
+        init(_ identity: IdentityInfo) {
+            identityId = identity.identityId
+            publicKeyHex = identity.publicKeyHex
+            deviceId = identity.deviceId
+            seniorityTimestamp = identity.seniorityTimestamp
+            initialized = identity.initialized
+            nickname = identity.nickname
+            libp2pPeerId = identity.libp2pPeerId
+        }
+
+        var identityInfo: IdentityInfo {
+            IdentityInfo(
+                identityId: identityId,
+                publicKeyHex: publicKeyHex,
+                deviceId: deviceId,
+                seniorityTimestamp: seniorityTimestamp,
+                initialized: initialized,
+                nickname: nickname,
+                libp2pPeerId: libp2pPeerId
+            )
+        }
+    }
+
     private enum InstallMarker {
         static let key = "mesh_install_marker_v1"
     }
@@ -120,6 +168,10 @@ final class MeshRepository {
     private var pendingOutboxRetryTask: Task<Void, Never>?
     private var coverTrafficTask: Task<Void, Never>?
     private var storageMaintenanceTask: Task<Void, Never>?
+    /// Coalesces high-frequency contact metadata updates (for example, last-seen
+    /// changes) into one durable Keychain recovery checkpoint.
+    private var pendingContactBackupTask: Task<Void, Never>?
+    private let contactBackupDebounceNanoseconds: UInt64 = 500_000_000
     private var pendingBleBeaconRefreshTask: Task<Void, Never>?
     private var pendingBleBeaconListenerRefreshTask: Task<Void, Never>?
     private var lastRelayBootstrapDialAt: Date = .distantPast
@@ -330,7 +382,20 @@ final class MeshRepository {
     var serviceState: ServiceState = .stopped
     var serviceStats: ServiceStats?
     var networkStatus = NetworkStatus()
+    /// Shared identity state for all UI surfaces.  Android exposes the same
+    /// state through a StateFlow so onboarding, Settings, and the tab gate
+    /// cannot disagree while the core is warming up.
+    private(set) var identityInfo: IdentityInfo?
+    private(set) var identityHydrationState: IdentityHydrationState = .pending
+    private(set) var isCreatingIdentity: Bool = false
     private var discoveredPeerMap: [String: PeerDiscoveryInfo] = [:]
+
+    /// True only after the running core (or a successful Keychain restore) has
+    /// confirmed the identity.  UI gates must use this rather than a cached
+    /// public snapshot, which can survive independently from secure key data.
+    var hasVerifiedIdentity: Bool {
+        identityHydrationState == .ready && identityInfo?.initialized == true
+    }
 
     struct NetworkStatus {
         var wifi: Bool = false
@@ -388,6 +453,13 @@ final class MeshRepository {
         let appSupportPath = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         let meshPath = appSupportPath.appendingPathComponent("mesh", isDirectory: true)
         self.storagePath = meshPath.path
+        self.identityInfo = Self.readCachedIdentityInfo()
+
+        // Android previously shipped the bridge contacts store under
+        // `contacts/`; the current cross-platform contract is `contacts.db/`.
+        // Promote that legacy store before any ContactManager opens it so a
+        // normal app update cannot make an existing address book appear empty.
+        migrateLegacyContactStoreIfNeeded()
 
         // Load existing logs into memory buffer if they exist
         if let existingLogs = try? String(contentsOf: diagnosticsLogURL, encoding: .utf8) {
@@ -400,15 +472,103 @@ final class MeshRepository {
             logger.warning("Strict BLE-only validation mode is enabled (SC_BLE_ONLY_VALIDATION)")
         }
 
-        // Do NOT exclude the entire mesh directory from backup.
-        // history.db and contacts.db must survive app reinstalls via iCloud/device backup.
-        // The raw identity key directory (identity/) is excluded individually after start()
-        // since private keys are already protected in iOS Keychain.
+        // Do NOT exclude the entire mesh directory from backup. In-place app
+        // updates retain this container. If a container is ever lost, the
+        // current encrypted Keychain recovery snapshot restores contacts.
+        // The raw identity key directory (identity/) is excluded individually
+        // after start() because private keys are already Keychain-protected.
 
         reconcileInstallScopedIdentityState()
 
+        if identityInfo?.initialized == true {
+            logVerbose("Loaded cached public identity snapshot before core hydration")
+        }
+
         logDiagnostic("repo_init storage=\(self.storagePath)")
         startHeartbeat()
+    }
+
+    /// Migrate the only known legacy UniFFI contact-store layout:
+    /// `<mesh>/contacts/` -> `<mesh>/contacts.db/`.
+    ///
+    /// The migration is deliberately filesystem-first and runs before any sled
+    /// handle is opened. It never replaces a current populated store, keeps the
+    /// legacy directory intact as rollback data, and promotes only a staged copy
+    /// that can be opened and read as contacts.
+    private func migrateLegacyContactStoreIfNeeded() {
+        let fileManager = FileManager.default
+        let storageURL = URL(fileURLWithPath: storagePath, isDirectory: true)
+        let legacyStoreURL = storageURL.appendingPathComponent("contacts", isDirectory: true)
+        let currentStoreURL = storageURL.appendingPathComponent("contacts.db", isDirectory: true)
+
+        guard fileManager.fileExists(atPath: legacyStoreURL.path) else { return }
+
+        if fileManager.fileExists(atPath: currentStoreURL.path),
+           let currentCount = contactCount(inStorageDirectory: storageURL),
+           currentCount > 0 {
+            logger.info("Contact-store migration skipped: current contacts.db already has \(currentCount) contact(s)")
+            return
+        }
+
+        let stagingRoot = storageURL.appendingPathComponent(
+            ".contacts-migration-\(UUID().uuidString)",
+            isDirectory: true
+        )
+        let stagedStoreURL = stagingRoot.appendingPathComponent("contacts.db", isDirectory: true)
+
+        do {
+            try fileManager.createDirectory(at: stagingRoot, withIntermediateDirectories: true)
+            try fileManager.copyItem(at: legacyStoreURL, to: stagedStoreURL)
+
+            guard let stagedCount = contactCount(inStorageDirectory: stagingRoot), stagedCount > 0 else {
+                logger.warning("Contact-store migration skipped: legacy contacts store could not be validated")
+                try? fileManager.removeItem(at: stagingRoot)
+                return
+            }
+
+            var rollbackStoreURL: URL?
+            if fileManager.fileExists(atPath: currentStoreURL.path) {
+                let rollback = storageURL.appendingPathComponent(
+                    ".contacts.db-pre-migration-\(UUID().uuidString)",
+                    isDirectory: true
+                )
+                try fileManager.moveItem(at: currentStoreURL, to: rollback)
+                rollbackStoreURL = rollback
+            }
+
+            do {
+                // Both paths are siblings in the app container, so this is an
+                // atomic rename on iOS's local filesystem.
+                try fileManager.moveItem(at: stagedStoreURL, to: currentStoreURL)
+                try? fileManager.removeItem(at: stagingRoot)
+                logger.info("Migrated \(stagedCount) contact(s) from legacy contacts store")
+            } catch {
+                // Restore the untouched prior current store if promotion failed.
+                if let rollbackStoreURL,
+                   !fileManager.fileExists(atPath: currentStoreURL.path) {
+                    try? fileManager.moveItem(at: rollbackStoreURL, to: currentStoreURL)
+                }
+                throw error
+            }
+        } catch {
+            try? fileManager.removeItem(at: stagingRoot)
+            logger.warning("Contact-store migration failed safely: \(error.localizedDescription, privacy: .public)")
+        }
+    }
+
+    /// Open a known `contacts.db` directory just long enough to verify that it
+    /// is readable and contains contacts. Returning nil means the store is not
+    /// safe to promote over another store.
+    private func contactCount(inStorageDirectory storageDirectory: URL) -> Int? {
+        let storeURL = storageDirectory.appendingPathComponent("contacts.db", isDirectory: true)
+        guard FileManager.default.fileExists(atPath: storeURL.path) else { return nil }
+        do {
+            let manager = try ContactManager(storagePath: storageDirectory.path)
+            return try manager.list().count
+        } catch {
+            logger.warning("Could not validate contact store at \(storeURL.path, privacy: .private): \(error.localizedDescription, privacy: .public)")
+            return nil
+        }
     }
 
     private func startHeartbeat() {
@@ -494,6 +654,7 @@ final class MeshRepository {
             }
             UserDefaults.standard.set(true, forKey: key)
             if cleaned > 0 {
+                checkpointContactPersistence(reason: "routing_hint_migration")
                 logVerbose("Routing hint migration: cleaned \(cleaned) contact(s) with stale routing entries")
             }
         } catch {
@@ -505,14 +666,36 @@ final class MeshRepository {
     func start() {
         logDiagnostic("repo_start_requested")
         logVerbose("Application requested repository start")
+        identityHydrationState = .hydrating
         do {
             try ensureServiceInitialized()
+            try ensureLocalIdentityFederation()
+            validatePublishedIdentityAfterHydration()
 
             // Apply saved BLE settings now that managers are initialized
             blePeripheralManager?.setRotationEnabled(blePrivacyEnabled)
             blePeripheralManager?.setRotationInterval(blePrivacyInterval)
         } catch {
+            // A startup error is not proof that the snapshot is valid.  Keep the
+            // state pending so UI surfaces remain in the identity-creation path
+            // until a later successful service transition can verify it.
+            identityHydrationState = .pending
             logger.error("Failed to start repository: \(error.localizedDescription)")
+        }
+    }
+
+    /// Revalidate identity whenever a UI surface appears or the service returns
+    /// to running.  This mirrors Android's Settings/MainViewModel force-refresh
+    /// and prevents a stale public snapshot from suppressing identity creation.
+    func refreshIdentityHydration() {
+        identityHydrationState = .hydrating
+        do {
+            try ensureServiceInitialized()
+            try ensureLocalIdentityFederation()
+            validatePublishedIdentityAfterHydration()
+        } catch {
+            identityHydrationState = .pending
+            logger.error("Failed to hydrate identity state: \(error.localizedDescription)")
         }
     }
 
@@ -622,6 +805,7 @@ final class MeshRepository {
             // Core auto-selects headless mode when identity is absent and upgrades when identity appears.
             // ASYNC FIX: Use default settings initially to avoid blocking I/O during service start
             let defaultSettings = settingsManager?.defaultSettings()
+            var swarmTransportStarted = defaultSettings?.internetEnabled != true
             if defaultSettings?.internetEnabled == true {
                 // Configure bootstrap nodes for NAT traversal.
                 // Priority: Ledger (cached) → Remote → Static.
@@ -634,9 +818,26 @@ final class MeshRepository {
 
                 // P0_TRANSPORT_001: Use static port 9001 for LAN connectivity with CLI daemon.
                 // This ensures both sides can dial each other using predictable addresses.
-                try? meshService?.startSwarm(listenAddr: "/ip4/0.0.0.0/tcp/9001", bootstrapAddrs: [])
-                broadcastIdentityBeacon()
-                logger.info("Internet transport (Swarm) initiated with \(bootstrapAddrs.count) bootstrap nodes")
+                // `startSwarm` only returns after Rust has installed a usable
+                // SwarmBridge handle and the listener is live. Do not discard
+                // this error: reporting service_start success without that
+                // handle lets the outbox route into swarm_bridge_unavailable.
+                do {
+                    guard let service = meshService else {
+                        throw MeshError.notInitialized("MeshService was released before Swarm startup")
+                    }
+                    try service.startSwarm(listenAddr: "/ip4/0.0.0.0/tcp/9001", bootstrapAddrs: [])
+                    swarmTransportStarted = true
+                    broadcastIdentityBeacon()
+                    logger.info("Internet transport (Swarm) initiated with \(bootstrapAddrs.count) bootstrap nodes")
+                } catch {
+                    // Identity/Core startup remains valid without internet transport.
+                    // Keep it alive for local data, BLE, Multipeer, and a later
+                    // Swarm retry rather than routing the UI back to onboarding.
+                    swarmBridge = nil
+                    appendDiagnostic("swarm_start degraded error=\(error.localizedDescription)")
+                    logger.error("Swarm transport unavailable; continuing with identity services: \(error.localizedDescription)")
+                }
             }
             // Async reload of settings after service started
             Task { [weak self] in
@@ -649,7 +850,8 @@ final class MeshRepository {
             statusEvents.send(.serviceStateChanged(.running))
 
             // Protect raw identity sled store from backup — keys are already in Keychain.
-            // history.db and contacts.db remain in backup scope so reinstalls preserve them.
+            // In-place updates retain contacts.db; the current encrypted Keychain
+            // snapshot is the deterministic fallback if an app container is lost.
             excludeIdentitySubdirFromBackup()
 
             // Start BLE advertising and scanning
@@ -663,19 +865,26 @@ final class MeshRepository {
             // Start mDNS/DNS-SD service discovery for cross-platform LAN peer resolution
             let discovery = mDNSServiceDiscovery(meshRepository: self)
             discovery.onLanPeerResolved = { [weak self] peerId, host, port in
-                guard let self, let bridge = self.swarmBridge else { return }
-                let ipProto = host.contains(":") ? "ip6" : "ip4"
-                let multiaddr = "/\(ipProto)/\(host)/tcp/\(port)"
-                self.logger.info("mDNS: Dialing resolved LAN peer \(peerId) at \(multiaddr)")
-                do {
-                    try bridge.dial(multiaddr: multiaddr)
-                } catch {
-                    self.logger.error("mDNS: Failed to dial \(multiaddr): \(error.localizedDescription)")
+                Task { @MainActor [weak self] in
+                    guard let self, let bridge = self.swarmBridge else { return }
+                    let ipProto = host.contains(":") ? "ip6" : "ip4"
+                    let multiaddr = "/\(ipProto)/\(host)/tcp/\(port)"
+                    self.logger.info("mDNS: Dialing resolved LAN peer \(peerId) at \(multiaddr)")
+                    do {
+                        try await bridge.dial(multiaddr: multiaddr)
+                    } catch {
+                        self.logger.error("mDNS: Failed to dial \(multiaddr): \(error.localizedDescription)")
+                    }
                 }
             }
             discovery.startBrowsing()
+            // Publish the same DNS-SD service we browse so Android and CLI
+            // peers can discover this iOS listener, not only the reverse.
+            discovery.startAdvertising(port: 9001)
             mdnsDiscovery = discovery
-            applyPowerAdjustments(reason: "service_started")
+            Task { @MainActor [weak self] in
+                await self?.applyPowerAdjustments(reason: "service_started")
+            }
             startPendingOutboxRetryLoop()
             startCoverTrafficLoopIfEnabled()
             Task { await flushPendingOutbox(reason: "service_started") }
@@ -697,9 +906,27 @@ final class MeshRepository {
 
             let info = getIdentityInfo()
             logger.info("SC_IDENTITY_OWN p2p_id=\(info?.libp2pPeerId ?? "unknown") pk=\(info?.publicKeyHex ?? "unknown")")
-            logVerbose("[OK] Mesh service started successfully")
-            logDiagnostic("service_start success")
+            if swarmTransportStarted {
+                logVerbose("[OK] Mesh service started successfully")
+                logDiagnostic("service_start success")
+            } else {
+                logVerbose("Mesh service started with Swarm transport unavailable")
+                logDiagnostic("service_start degraded swarm_unavailable")
+            }
         } catch {
+            // MeshService itself is already running by the time Swarm startup
+            // is attempted. Tear it down so a later retry creates a fresh
+            // service instead of retaining a bridge with no SwarmHandle. Keep
+            // the verified public identity published first: a transport error
+            // must never present as identity loss in the UI.
+            if let liveIdentity = ironCore?.getIdentityInfo(), liveIdentity.initialized {
+                publishIdentityInfo(liveIdentity)
+                persistIdentityBackupToKeychain(ironCore: ironCore)
+            }
+            meshService?.stop()
+            meshService = nil
+            swarmBridge = nil
+            ironCore = nil
             serviceState = .stopped
             statusEvents.send(.serviceStateChanged(.stopped))
             logger.error("Failed to start mesh service: \(error.localizedDescription)")
@@ -717,6 +944,8 @@ final class MeshRepository {
             logger.warning("Service not running")
             return
         }
+
+        checkpointPersistentState(reason: "service_stop")
 
         serviceState = .stopping
         statusEvents.send(.serviceStateChanged(.stopping))
@@ -790,10 +1019,18 @@ final class MeshRepository {
             do {
                 // Configure bootstrap nodes for NAT traversal
                 // P0_TRANSPORT_001: Use static port 9001 for LAN connectivity with CLI daemon.
-                try meshService?.startSwarm(listenAddr: "/ip4/0.0.0.0/tcp/9001", bootstrapAddrs: [])
+                guard let service = meshService else {
+                    throw MeshError.notInitialized("MeshService is unavailable for Swarm startup")
+                }
+                try service.startSwarm(listenAddr: "/ip4/0.0.0.0/tcp/9001", bootstrapAddrs: [])
+                // startSwarm only returns once Rust has installed its handle.
+                // Retain the matching bridge before any outbound work can route.
+                swarmBridge = service.getSwarmBridge()
                 broadcastIdentityBeacon()
-                logger.info("[OK] Internet transport (Swarm) started manually")
+                logger.info("[OK] Internet transport (Swarm) started manually and bridge wired")
             } catch {
+                // Do not leave a stale bridge available after a failed restart.
+                swarmBridge = nil
                 logger.error("Failed to start swarm: \(error.localizedDescription)")
             }
         }
@@ -803,32 +1040,47 @@ final class MeshRepository {
 
     /// Get identity information
     func getIdentityInfo() -> IdentityInfo? {
-        return ironCore?.getIdentityInfo()
+        if let liveIdentity = ironCore?.getIdentityInfo(), liveIdentity.initialized {
+            return liveIdentity
+        }
+        return identityInfo
     }
 
-    /// Check if identity is initialized.
-    ///
-    /// Intentionally lightweight — reads current ironCore state only.
-    /// Do NOT call ensureServiceInitialized() here; this function is called
-    /// Check if identity is initialized.
-    /// Multi-tier detection matching Android's approach:
-    /// 1. Rust core check (authoritative)
-    /// 2. Keychain backup check (fast path for cold starts where core hasn't hydrated)
-    /// Note: This is called from inside startMeshService() and a recursive
-    /// ensureServiceInitialized() would destroy the service being started.
+    /// Check whether a verified identity is available.  A Keychain backup and
+    /// public snapshot are recovery inputs, not proof of a working identity:
+    /// only the live core or a completed restore can unlock identity-only UI.
+    /// This remains lightweight and never starts the service recursively.
     func isIdentityInitialized() -> Bool {
+        if hasVerifiedIdentity {
+            return true
+        }
+        if identityHydrationState == .absent {
+            return false
+        }
         if ironCore?.getIdentityInfo().initialized == true {
             return true
         }
-        // P0: Check Keychain backup as fallback — matches Android's SharedPreferences
-        // backup check in MeshRepository.isIdentityInitialized(). On cold starts the
-        // Rust core may not have hydrated from sled yet, but the Keychain backup
-        // is immediately available.
-        return readIdentityBackupFromKeychain() != nil
+        // A backup is only a recovery candidate.  It must be imported and
+        // verified before it is allowed to unlock the identity-only UI.
+        return false
     }
 
-    /// Create a new identity (first-time setup)
-    func createIdentity() throws {
+    /// Records the onboarding consent in the core.  This is intentionally
+    /// idempotent so it can be called from both onboarding and recovery flows.
+    func grantIdentityConsent() {
+        do {
+            try ensureServiceInitialized()
+            ironCore?.grantConsent()
+        } catch {
+            logger.error("Failed to record identity consent: \(error.localizedDescription)")
+        }
+    }
+
+    /// Create a new identity (first-time setup).  This is deliberately safe to
+    /// call from more than one surface: an existing identity is published rather
+    /// than replaced, matching Android's serialized creation coordinator.
+    @discardableResult
+    func createIdentity() throws -> IdentityInfo {
         logVerbose("Creating identity")
 
         do {
@@ -839,20 +1091,95 @@ final class MeshRepository {
                 throw MeshError.notInitialized("Mesh service initialization failed")
             }
 
+            let existing = ironCore.getIdentityInfo()
+            if existing.initialized {
+                publishIdentityInfo(existing)
+                return existing
+            }
+
+            guard !isCreatingIdentity else {
+                throw MeshError.invalidInput("Identity creation is already in progress")
+            }
+            isCreatingIdentity = true
+            defer { isCreatingIdentity = false }
+
             // P0: Grant consent before identity initialization.
             // The Rust core requires consent_granted=true for initialize_identity().
             // Android already does this; adding for iOS parity.
             ironCore.grantConsent()
             logVerbose("Calling ironCore.initializeIdentity()...")
             try ironCore.initializeIdentity()
-            try ensureLocalIdentityFederation()
+
+            // Publish and persist immediately after key generation.  The UI must
+            // never wait for nickname assignment, BLE advertising, or swarm startup
+            // to learn that the identity exists.
+            let created = ironCore.getIdentityInfo()
+            guard created.initialized else {
+                throw MeshError.notInitialized("Identity generation completed without an initialized identity")
+            }
+            publishIdentityInfo(created)
+            persistIdentityBackupToKeychain(ironCore: ironCore)
+
             logVerbose("[OK] Identity created successfully")
             initializeAndStartSwarm()
             broadcastIdentityBeacon()
+            return created
         } catch {
             logger.error("Failed to create identity: \(error.localizedDescription)")
             throw error
         }
+    }
+
+    /// Complete the identity setup shared by onboarding and Settings.  Keeping
+    /// creation, nickname persistence, verification, and onboarding completion
+    /// together prevents the split-state race the Android coordinator avoids.
+    @discardableResult
+    func createIdentity(nickname: String) async throws -> IdentityInfo {
+        let trimmedNickname = nickname.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedNickname.isEmpty else {
+            throw MeshError.invalidInput("Nickname is required")
+        }
+
+        try ensureServiceInitialized()
+        guard let ironCore else {
+            throw MeshError.notInitialized("Mesh service initialization failed")
+        }
+
+        guard !isCreatingIdentity else {
+            throw MeshError.invalidInput("Identity creation is already in progress")
+        }
+        isCreatingIdentity = true
+        defer { isCreatingIdentity = false }
+
+        let current = ironCore.getIdentityInfo()
+        if current.initialized {
+            publishIdentityInfo(current)
+        } else {
+            // The generated UniFFI surface is isolated to this target's main
+            // actor. Yield once so SwiftUI can render the in-progress state,
+            // then perform the synchronous FFI transaction on its required actor.
+            await Task.yield()
+            ironCore.grantConsent()
+            try ironCore.initializeIdentity()
+            let created = ironCore.getIdentityInfo()
+
+            guard created.initialized else {
+                throw MeshError.notInitialized("Identity generation completed without an initialized identity")
+            }
+            publishIdentityInfo(created)
+            await persistIdentityBackupToKeychainAsync(ironCore: ironCore)
+        }
+
+        try await setNickname(trimmedNickname)
+
+        guard let verified = getIdentityInfo(), verified.initialized else {
+            throw MeshError.notInitialized("Identity was created but verification failed")
+        }
+
+        publishIdentityInfo(verified)
+        UserDefaults.standard.set(true, forKey: "hasCompletedInstallModeChoice")
+        UserDefaults.standard.set(true, forKey: "hasCompletedOnboarding")
+        return verified
     }
 
     private func ensureLocalIdentityFederation() throws {
@@ -874,6 +1201,7 @@ final class MeshRepository {
         }
         if !info.initialized {
             logVerbose("Identity not initialized; onboarding required")
+            markIdentityAbsent()
             return
         }
 
@@ -882,11 +1210,77 @@ final class MeshRepository {
         // (e.g., after a process restart where consent_granted resets to false).
         // grantConsent is idempotent — calling it when already granted is a no-op.
         ironCore.grantConsent()
+        publishIdentityInfo(info)
+        // Persist even before a nickname is selected.  Android creates its backup
+        // immediately after key generation; doing the same keeps a skipped or
+        // interrupted setup recoverable on the next launch.
+        persistIdentityBackupToKeychain(ironCore: ironCore)
+    }
 
-        let nickname = info.nickname?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        if !nickname.isEmpty {
-            persistIdentityBackupToKeychain(ironCore: ironCore)
+    /// Refresh the shared identity state after a service transition.  This is
+    /// intentionally a lifecycle operation rather than a getter side effect, so
+    /// SwiftUI never mutates observable state while rendering a view.
+    private func refreshPublishedIdentityFromCore() {
+        guard let ironCore else { return }
+        let liveIdentity = ironCore.getIdentityInfo()
+        guard liveIdentity.initialized else {
+            markIdentityAbsent()
+            return
         }
+        publishIdentityInfo(liveIdentity)
+    }
+
+    private func validatePublishedIdentityAfterHydration() {
+        guard let ironCore else {
+            identityHydrationState = .pending
+            return
+        }
+        let liveIdentity = ironCore.getIdentityInfo()
+        guard liveIdentity.initialized else {
+            markIdentityAbsent()
+            return
+        }
+        publishIdentityInfo(liveIdentity)
+    }
+
+    private func publishIdentityInfo(_ info: IdentityInfo) {
+        guard info.initialized else { return }
+        if identityInfo != info {
+            identityInfo = info
+        }
+        identityHydrationState = .ready
+        Self.writeCachedIdentityInfo(info)
+    }
+
+    private func clearPublishedIdentity() {
+        identityInfo = nil
+        identityHydrationState = .absent
+        Self.clearCachedIdentityInfo()
+    }
+
+    private func markIdentityAbsent() {
+        clearPublishedIdentity()
+    }
+
+    private static func readCachedIdentityInfo() -> IdentityInfo? {
+        guard let data = UserDefaults.standard.data(forKey: IdentityCacheStore.key),
+              let cached = try? JSONDecoder().decode(CachedIdentityInfo.self, from: data),
+              cached.initialized else {
+            return nil
+        }
+        return cached.identityInfo
+    }
+
+    private static func writeCachedIdentityInfo(_ info: IdentityInfo) {
+        guard info.initialized,
+              let data = try? JSONEncoder().encode(CachedIdentityInfo(info)) else {
+            return
+        }
+        UserDefaults.standard.set(data, forKey: IdentityCacheStore.key)
+    }
+
+    private static func clearCachedIdentityInfo() {
+        UserDefaults.standard.removeObject(forKey: IdentityCacheStore.key)
     }
 
     private func getPlatformSecuredPassphrase() -> String {
@@ -926,13 +1320,17 @@ final class MeshRepository {
         let passphrase = getPlatformSecuredPassphrase()
         do {
             try ironCore.importIdentityBackup(backup: backupPayload, passphrase: passphrase)
-            logVerbose("Restored identity from iOS Keychain backup payload")
+            reloadContactManagerAfterIdentityImport()
+            refreshPublishedIdentityFromCore()
+            logVerbose("Restored identity and \(self.contactManager?.count() ?? 0) contact(s) from iOS Keychain backup payload")
             return true
         } catch {
             // Legacy fallback if the backup was encrypted with the old placeholder
             do {
                 try ironCore.importIdentityBackup(backup: backupPayload, passphrase: "SCMessenger-Backup-Placeholder")
-                logVerbose("Restored identity using legacy iOS Keychain backup placeholder passphrase")
+                reloadContactManagerAfterIdentityImport()
+                refreshPublishedIdentityFromCore()
+                logVerbose("Restored identity and \(self.contactManager?.count() ?? 0) contact(s) using legacy iOS Keychain backup placeholder passphrase")
                 return true
             } catch {
                 logger.warning("Identity Keychain restore failed: \(error.localizedDescription, privacy: .public)")
@@ -941,15 +1339,86 @@ final class MeshRepository {
         }
     }
 
+    /// Recovery writes are committed before this method is called. Rebind the
+    /// UI-facing manager to that durable store after any identity import. The
+    /// current core shares contact handles for the same store, and reopening is
+    /// an extra lifecycle safeguard for recovery paths that began with an
+    /// already-open address book.
+    private func reloadContactManagerAfterIdentityImport() {
+        contactManager = nil
+        do {
+            contactManager = try ContactManager(storagePath: storagePath)
+            contactManager?.flush()
+        } catch {
+            logger.error("Failed to reopen contacts after identity recovery: \(error.localizedDescription, privacy: .public)")
+        }
+    }
+
     private func persistIdentityBackupToKeychain(ironCore: IronCore?) {
         guard let ironCore else { return }
         do {
+            // A bridge ContactManager buffers sled writes. Flush before taking
+            // the recovery snapshot so the exported payload always reflects
+            // every contact mutation that completed on this device.
+            contactManager?.flush()
             let passphrase = getPlatformSecuredPassphrase()
-            let backup = try ironCore.exportIdentityBackup(passphrase: passphrase)
+            // This is a device-bound auto-backup: its passphrase is a 256-bit
+            // random Keychain value, so the fast Blake3 KDF is appropriate and
+            // lets us checkpoint contacts after every semantic change. The
+            // user-facing export flow intentionally continues using Argon2id.
+            let backup = try ironCore.exportIdentityBackupFast(passphrase: passphrase)
             writeIdentityBackupToKeychain(backup)
         } catch {
             logger.warning("Failed to persist identity backup payload: \(error.localizedDescription, privacy: .public)")
         }
+    }
+
+    private func persistIdentityBackupToKeychainAsync(ironCore: IronCore?) async {
+        guard let ironCore else { return }
+        // See createIdentity(nickname:): yield for responsive state publication,
+        // then remain on the generated binding's required actor.
+        await Task.yield()
+        persistIdentityBackupToKeychain(ironCore: ironCore)
+    }
+
+    /// Make the address book durable both in its normal sled store and in the
+    /// encrypted device recovery snapshot. This is intentionally synchronous:
+    /// the fast backup KDF is intended for high-entropy device keys, and a
+    /// contact saved immediately before an app update must not be lost to a
+    /// delayed background task.
+    private func checkpointContactPersistence(reason: String) {
+        contactManager?.flush()
+        guard let ironCore, ironCore.getIdentityInfo().initialized else { return }
+        persistIdentityBackupToKeychain(ironCore: ironCore)
+        logVerbose("Contact recovery checkpoint completed: \(reason)")
+    }
+
+    /// Coalesce non-user-facing, high-frequency metadata changes. Explicit
+    /// address-book edits use `checkpointContactPersistence(reason:)` directly.
+    private func scheduleContactPersistenceCheckpoint(reason: String) {
+        guard contactManager != nil,
+              ironCore?.getIdentityInfo().initialized == true else {
+            return
+        }
+
+        pendingContactBackupTask?.cancel()
+        let delay = contactBackupDebounceNanoseconds
+        pendingContactBackupTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: delay)
+            guard !Task.isCancelled, let self else { return }
+            self.pendingContactBackupTask = nil
+            self.checkpointContactPersistence(reason: reason)
+        }
+    }
+
+    /// Called by lifecycle owners before the app is backgrounded or the mesh
+    /// service is stopped. It cancels a pending coalesced checkpoint and writes
+    /// the current contact snapshot immediately.
+    func checkpointPersistentState(reason: String) {
+        pendingContactBackupTask?.cancel()
+        pendingContactBackupTask = nil
+        historyManager?.flush()
+        checkpointContactPersistence(reason: reason)
     }
 
     private func readIdentityBackupFromKeychain() -> String? {
@@ -998,10 +1467,10 @@ final class MeshRepository {
 
         defaults.set(true, forKey: InstallMarker.key)
 
-        // Detect reinstall with existing Keychain identity but missing local data.
-        // When the identity exists in Keychain but contacts/history are not on disk,
-        // this is a fresh reinstall (not a first install). Flag it so the post-start
-        // sequence can broadcast an aggressive identity beacon to recover from peers.
+        // Detect a new app container with a surviving device Keychain recovery
+        // snapshot. Contacts are restored from that snapshot during hydration;
+        // the post-start beacon remains a secondary recovery path for historic
+        // snapshots that predate contact backup support.
         let keychainHasIdentity = readIdentityBackupFromKeychain() != nil
         let contactsOnDisk = FileManager.default.fileExists(
             atPath: URL(fileURLWithPath: storagePath).appendingPathComponent("contacts.db").path)
@@ -1018,7 +1487,8 @@ final class MeshRepository {
 
     /// Exclude raw identity storage from iCloud/local backup after the identity
     /// subdirectory has been created by ensure_storage_layout (called during start()).
-    /// history.db and contacts.db are intentionally left in backup scope.
+    /// Contacts remain in normal backup scope for ordinary device restoration;
+    /// immediate reinstall recovery is provided by the encrypted Keychain snapshot.
     private func excludeIdentitySubdirFromBackup() {
         let base = URL(fileURLWithPath: storagePath)
         // Exclude the Rust identity sled directory (keys already live in Keychain).
@@ -1108,7 +1578,7 @@ final class MeshRepository {
         let preferredRoutePeerId = routePeerCandidates.first
 
         // Prepare and send message (use trimmed key to handle any stored whitespace)
-        let outboundContent = encodeMessageWithIdentityHints(content)
+        let outboundContent = await encodeMessageWithIdentityHints(content)
         let prepared = try ironCore.prepareMessageWithId(
             recipientPublicKeyHex: trimmedKey,
             text: outboundContent,
@@ -1324,6 +1794,7 @@ final class MeshRepository {
                 do {
                     try contactManager?.add(contact: autoContact)
                     contactManager?.flush()
+                    checkpointContactPersistence(reason: "incoming_contact_created")
                     logVerbose("Auto-created contact from received message: \(canonicalPeerId.prefix(8)) key: \(normalizedSenderKey.prefix(8))...")
                 } catch {
                     logger.warning("Auto-create contact failed for \(canonicalPeerId.prefix(8)): \(error.localizedDescription)")
@@ -1331,6 +1802,7 @@ final class MeshRepository {
             }
         } else if let existingContact {
             try? contactManager?.updateLastSeen(peerId: canonicalPeerId)
+            scheduleContactPersistenceCheckpoint(reason: "incoming_contact_last_seen")
 
             var updatedNotes = existingContact.notes
             var updatedNickname = existingContact.nickname
@@ -1381,6 +1853,7 @@ final class MeshRepository {
                 )
                 try? contactManager?.add(contact: updatedContact)
                 contactManager?.flush()
+                checkpointContactPersistence(reason: "incoming_contact_updated")
             }
         }
 
@@ -1740,7 +2213,7 @@ final class MeshRepository {
             }
 
             do {
-                let payload = encodeIdentitySyncPayload()
+                let payload = await encodeIdentitySyncPayload()
                 let prepared = try ironCore?.prepareMessageWithId(
                     recipientPublicKeyHex: recipientPublicKey,
                     text: payload,
@@ -1807,7 +2280,7 @@ final class MeshRepository {
             }
 
             do {
-                let payload = encodeMeshMessagePayload(content: "", kind: "history_sync")
+                let payload = await encodeMeshMessagePayload(content: "", kind: "history_sync")
                 guard let prepared = try? ironCore?.prepareMessageWithId(
                     recipientPublicKeyHex: recipientPublicKey,
                     text: payload,
@@ -1894,7 +2367,7 @@ final class MeshRepository {
                         continue
                     }
 
-                    let payload = encodeMeshMessagePayload(content: jsonStr, kind: "history_sync_data")
+                    let payload = await encodeMeshMessagePayload(content: jsonStr, kind: "history_sync_data")
                     guard let prepared = try? ironCore?.prepareMessageWithId(
                         recipientPublicKeyHex: recipientPublicKey,
                         text: payload,
@@ -2023,22 +2496,22 @@ final class MeshRepository {
         return resolvedCanonicalPeerId
     }
 
-    private func encodeMessageWithIdentityHints(_ content: String) -> String {
-        return encodeMeshMessagePayload(content: content, kind: "text")
+    private func encodeMessageWithIdentityHints(_ content: String) async -> String {
+        return await encodeMeshMessagePayload(content: content, kind: "text")
     }
 
-    private func encodeIdentitySyncPayload() -> String {
-        return encodeMeshMessagePayload(content: "", kind: "identity_sync")
+    private func encodeIdentitySyncPayload() async -> String {
+        return await encodeMeshMessagePayload(content: "", kind: "identity_sync")
     }
 
-    private func encodeMeshMessagePayload(content: String, kind: String) -> String {
+    private func encodeMeshMessagePayload(content: String, kind: String) async -> String {
         guard let info = ironCore?.getIdentityInfo(),
               let publicKeyHex = normalizePublicKey(info.publicKeyHex) else {
             return kind == "identity_sync" ? "" : content
         }
 
-        let listeners = Array(normalizeOutboundListenerHints(getListeningAddresses()).prefix(3))
-        let externalAddresses = Array(normalizeExternalAddressHints(getExternalAddresses()).prefix(3))
+        let listeners = Array(normalizeOutboundListenerHints(await getListeningAddresses()).prefix(3))
+        let externalAddresses = Array(normalizeExternalAddressHints(await getExternalAddresses()).prefix(3))
         let connectionHints = (listeners + externalAddresses).reduce(into: [String]()) { acc, addr in
             if !acc.contains(addr) { acc.append(addr) }
         }
@@ -2481,7 +2954,8 @@ final class MeshRepository {
             notifyDmInForeground: false,
             notifyDmRequestInForeground: true,
             soundEnabled: true,
-            badgeEnabled: true
+            badgeEnabled: true,
+            requirePq: true
         )
     }
 
@@ -2513,6 +2987,7 @@ final class MeshRepository {
         )
         try? contactManager?.add(contact: updated)
         contactManager?.flush()
+        checkpointContactPersistence(reason: "notification_contact_updated")
     }
 
     private func displayNameForContact(_ contact: Contact?, fallbackPeerId: String) -> String {
@@ -2868,6 +3343,7 @@ final class MeshRepository {
             publicKey: finalContact.publicKey,
             nickname: finalContact.nickname
         )
+        checkpointContactPersistence(reason: "contact_added")
         logger.info("[OK] Contact added: \(finalContact.peerId)")
     }
 
@@ -2877,6 +3353,7 @@ final class MeshRepository {
         }
         try contactManager.remove(peerId: peerId)
         try? historyManager?.removeConversation(peerId: peerId)
+        checkpointContactPersistence(reason: "contact_removed")
         logger.info("[OK] Contact removed: \(peerId) and their message history")
     }
 
@@ -2895,6 +3372,7 @@ final class MeshRepository {
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .nilIfEmpty
         try contactManager.setNickname(peerId: peerId, nickname: normalizedNickname)
+        checkpointContactPersistence(reason: "contact_nickname_updated")
         logger.info("[OK] Contact nickname updated: \(peerId)")
     }
 
@@ -2906,6 +3384,7 @@ final class MeshRepository {
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .nilIfEmpty
         try contactManager.setLocalNickname(peerId: peerId, nickname: normalizedNickname)
+        checkpointContactPersistence(reason: "contact_local_nickname_updated")
         logger.info("[OK] Local nickname updated: \(peerId)")
     }
 
@@ -2922,6 +3401,7 @@ final class MeshRepository {
             throw MeshError.notInitialized("ContactManager not initialized")
         }
         try contactManager.markVerified(peerId: peerId)
+        checkpointContactPersistence(reason: "contact_verified")
         logger.info("[OK] Contact marked verified: \(peerId)")
     }
 
@@ -2931,6 +3411,7 @@ final class MeshRepository {
             throw MeshError.notInitialized("ContactManager not initialized")
         }
         try contactManager.unverify(peerId: peerId)
+        checkpointContactPersistence(reason: "contact_verification_cleared")
         logger.info("[OK] Contact verification cleared: \(peerId)")
     }
 
@@ -3178,6 +3659,7 @@ final class MeshRepository {
             throw MeshError.notInitialized("ContactManager not initialized")
         }
         try contactManager.updateDeviceId(peerId: peerId, deviceId: deviceId)
+        checkpointContactPersistence(reason: "contact_device_id_updated")
     }
 
     // MARK: - History Retention
@@ -3238,7 +3720,9 @@ final class MeshRepository {
             motionState: currentMotionState
         )
         meshService?.updateDeviceState(profile: profile)
-        applyPowerAdjustments(reason: "battery_changed")
+        Task { @MainActor [weak self] in
+            await self?.applyPowerAdjustments(reason: "battery_changed")
+        }
     }
 
     func reportNetwork(wifi: Bool, cellular: Bool) {
@@ -3257,14 +3741,18 @@ final class MeshRepository {
             motionState: currentMotionState
         )
         meshService?.updateDeviceState(profile: profile)
-        applyPowerAdjustments(reason: "network_changed")
+        Task { @MainActor [weak self] in
+            await self?.applyPowerAdjustments(reason: "network_changed")
+        }
         broadcastIdentityBeacon()
 
         // When WiFi comes back, immediately try to deliver pending messages
         if wifi && !previousWifi {
             logger.info("WiFi recovered — flushing pending outbox")
             appendDiagnostic("network_recovery wifi=true flush_triggered=true")
-            primeRelayBootstrapConnections()
+            Task { @MainActor [weak self] in
+                await self?.primeRelayBootstrapConnections()
+            }
             dispatchFlushPendingOutbox(reason: "wifi_recovered")
         }
     }
@@ -3283,13 +3771,17 @@ final class MeshRepository {
             motionState: state
         )
         meshService?.updateDeviceState(profile: profile)
-        applyPowerAdjustments(reason: "motion_changed")
+        Task { @MainActor [weak self] in
+            await self?.applyPowerAdjustments(reason: "motion_changed")
+        }
     }
 
     func setAutoAdjustEnabled(_ enabled: Bool) {
         UserDefaults.standard.set(enabled, forKey: "auto_adjust_enabled")
         logger.info("AutoAdjust toggled: \(enabled)")
-        applyPowerAdjustments(reason: "settings_toggled")
+        Task { @MainActor [weak self] in
+            await self?.applyPowerAdjustments(reason: "settings_toggled")
+        }
     }
 
     // MARK: - Background Operations
@@ -3330,7 +3822,7 @@ final class MeshRepository {
                   !routing.addresses.isEmpty else {
                 continue
             }
-            connectToPeer(routing.libp2pPeerId, addresses: routing.addresses)
+            await connectToPeer(routing.libp2pPeerId, addresses: routing.addresses)
         }
 
         await flushPendingOutbox(reason: "sync_pending")
@@ -3468,8 +3960,11 @@ final class MeshRepository {
             )
             try? contactManager?.updateLastSeen(peerId: transportIdentity.canonicalPeerId)
             try? contactManager?.updateLastSeen(peerId: peerId)
+            scheduleContactPersistenceCheckpoint(reason: "transport_contact_last_seen")
             if !relayHints.isEmpty {
-                connectToPeer(peerId, addresses: relayHints)
+                Task { @MainActor [weak self] in
+                    await self?.connectToPeer(peerId, addresses: relayHints)
+                }
             }
         } else {
             let discoveryInfo = PeerDiscoveryInfo(
@@ -3624,6 +4119,7 @@ final class MeshRepository {
                 )
                 try? contactManager?.updateLastSeen(peerId: transportIdentity.canonicalPeerId)
                 try? contactManager?.updateLastSeen(peerId: peerId)
+                scheduleContactPersistenceCheckpoint(reason: "transport_identity_last_seen")
             } else {
                 let discoveryInfo = PeerDiscoveryInfo(
                     canonicalPeerId: peerId,
@@ -3778,6 +4274,7 @@ final class MeshRepository {
                 )
                 try? contactManager?.add(contact: updatedContact)
                 contactManager?.flush()
+                checkpointContactPersistence(reason: "ble_routing_updated")
                 logger.debug("Updated persistent BLE routing for \(identityId.prefix(8)): \(blePeerId.prefix(8))")
             }
         }
@@ -3843,6 +4340,7 @@ final class MeshRepository {
         if let libp2pPeerId, !libp2pPeerId.isEmpty {
             try? contactManager?.updateLastSeen(peerId: libp2pPeerId)
         }
+        scheduleContactPersistenceCheckpoint(reason: "ble_contact_last_seen")
         upsertFederatedContact(
             canonicalPeerId: normalizedKey,       // UNIFIED ID FIX: canonical = public_key_hex
             publicKey: normalizedKey,
@@ -3856,7 +4354,9 @@ final class MeshRepository {
         // Auto-dial discovered peer via Swarm if we have libp2p info
         if let peerId = nonEmptyLibp2p, !dialCandidates.isEmpty {
             logger.info("Auto-dialing discovered peer over Swarm: \(peerId)")
-            connectToPeer(peerId, addresses: dialCandidates)
+            Task { @MainActor [weak self] in
+                await self?.connectToPeer(peerId, addresses: dialCandidates)
+            }
             triggerPendingSyncForPeerIds(
                 [identityId, blePeerId, peerId],
                 reason: "peer_identity_read"
@@ -4138,7 +4638,7 @@ final class MeshRepository {
         pendingOutboxRetryTask = Task { [weak self] in
             while !Task.isCancelled {
                 // Proactively ensure we stay connected to relays
-                self?.primeRelayBootstrapConnections()
+                await self?.primeRelayBootstrapConnections()
 
                 await self?.flushPendingOutbox(reason: "periodic")
                 try? await Task.sleep(nanoseconds: 8_000_000_000) // 8s loop
@@ -4159,7 +4659,7 @@ final class MeshRepository {
                 guard let core = self.ironCore, let bridge = self.swarmBridge else { continue }
                 do {
                     let payload = try core.prepareCoverTraffic(sizeBytes: 256)
-                    try bridge.sendToAllPeers(data: payload)
+                    try await bridge.sendToAllPeers(data: payload)
                 } catch {
                     self.logger.debug("Cover traffic send skipped: \(error.localizedDescription)")
                 }
@@ -4370,12 +4870,12 @@ final class MeshRepository {
                             includeRelayCircuits: false
                         )
                         if !dialCandidates.isEmpty {
-                            self.connectToPeer(lanPeerId, addresses: dialCandidates)
+                            await self.connectToPeer(lanPeerId, addresses: dialCandidates)
                             _ = await self.awaitPeerConnection(peerId: lanPeerId)
                         }
                     }
 
-                    let sendError = swarmBridge.sendMessageStatus(
+                    let sendError = await swarmBridge.sendMessageStatus(
                         peerId: lanPeerId,
                         data: envelopeData,
                         recipientIdentityId: recipientIdentityId,
@@ -4421,11 +4921,11 @@ final class MeshRepository {
                         includeRelayCircuits: true
                     )
                     if !dialCandidates.isEmpty {
-                        self.connectToPeer(corePeerId, addresses: dialCandidates)
+                        await self.connectToPeer(corePeerId, addresses: dialCandidates)
                         _ = await self.awaitPeerConnection(peerId: corePeerId)
                     }
 
-                    let sendError = swarmBridge.sendMessageStatus(
+                    let sendError = await swarmBridge.sendMessageStatus(
                         peerId: corePeerId,
                         data: envelopeData,
                         recipientIdentityId: recipientIdentityId,
@@ -4612,7 +5112,7 @@ final class MeshRepository {
             )
         }
 
-        primeRelayBootstrapConnections()
+        await primeRelayBootstrapConnections()
 
         for routePeerId in sanitizedCandidates {
             let dialCandidates = buildDialCandidatesForPeer(
@@ -4621,7 +5121,7 @@ final class MeshRepository {
                 includeRelayCircuits: true
             )
             if !dialCandidates.isEmpty {
-                connectToPeer(routePeerId, addresses: dialCandidates)
+                await connectToPeer(routePeerId, addresses: dialCandidates)
                 _ = await awaitPeerConnection(peerId: routePeerId)
             }
 
@@ -4635,7 +5135,7 @@ final class MeshRepository {
                     outcome: "attempt",
                     detail: "ctx=\(attemptContext) route=\(routePeerId)"
                 )
-                let sendError = swarmBridge.sendMessageStatus(
+                let sendError = await swarmBridge.sendMessageStatus(
                     peerId: routePeerId,
                     data: envelopeData,
                     recipientIdentityId: recipientIdentityId,
@@ -4701,7 +5201,7 @@ final class MeshRepository {
 
             let relayOnly = relayCircuitAddresses(for: routePeerId)
             if !relayOnly.isEmpty {
-                connectToPeer(routePeerId, addresses: relayOnly)
+                await connectToPeer(routePeerId, addresses: relayOnly)
                 _ = await awaitPeerConnection(peerId: routePeerId, timeoutMs: 3000)
 
                 // Exponential backoff before relay attempt (1s → 2s → 4s → 8s → 16s → 32s max)
@@ -4717,7 +5217,7 @@ final class MeshRepository {
                     outcome: "attempt",
                     detail: "ctx=\(attemptContext) route=\(routePeerId)"
                 )
-                let sendError = swarmBridge.sendMessageStatus(
+                let sendError = await swarmBridge.sendMessageStatus(
                     peerId: routePeerId,
                     data: envelopeData,
                     recipientIdentityId: recipientIdentityId,
@@ -4785,7 +5285,7 @@ final class MeshRepository {
         guard let swarmBridge else { return false }
         let deadline = Date().addingTimeInterval(Double(timeoutMs) / 1000.0)
         while Date() < deadline {
-            if swarmBridge.getPeers().contains(peerId) {
+            if await swarmBridge.getPeers().contains(peerId) {
                 return true
             }
             try? await Task.sleep(nanoseconds: 100_000_000)
@@ -4852,7 +5352,7 @@ final class MeshRepository {
         defer { outboxFlushInFlight = false }
 
         // Ensure relay backbone is reachable whenever we check outbox
-        primeRelayBootstrapConnections()
+        await primeRelayBootstrapConnections()
 
         let now = UInt64(Date().timeIntervalSince1970)
         let queue = loadPendingOutbox()
@@ -5417,7 +5917,7 @@ final class MeshRepository {
         }
     }
 
-    private func primeRelayBootstrapConnections() {
+    private func primeRelayBootstrapConnections() async {
         guard let swarmBridge else { return }
         guard !relayBootstrapDialInProgress else {
             appendDiagnostic("relay_prime_skipped reason=in_progress")
@@ -5440,7 +5940,7 @@ final class MeshRepository {
                 if let relayPeerId {
                     updateRelayAvailability(peerId: relayPeerId, event: "dial_attempt")
                 }
-                try swarmBridge.dial(multiaddr: addr)
+                try await swarmBridge.dial(multiaddr: addr)
                 if let relayPeerId {
                     updateRelayAvailability(peerId: relayPeerId, event: "dial_started")
                 }
@@ -5467,6 +5967,7 @@ final class MeshRepository {
         }()
         let normalizedTransportKey = knownPublicKey
             ?? normalizePublicKey(extractedTransportKey)
+        var didUpdateContact = false
 
         for contact in contacts {
             let routing = parseRoutingHintsFromNotes(contact.notes)
@@ -5496,6 +5997,11 @@ final class MeshRepository {
             )
             try? contactManager?.add(contact: updated)
             contactManager?.flush()
+            didUpdateContact = true
+        }
+
+        if didUpdateContact {
+            scheduleContactPersistenceCheckpoint(reason: "transport_route_hints_updated")
         }
     }
 
@@ -5568,6 +6074,7 @@ final class MeshRepository {
         )
         try? contactManager?.add(contact: updated)
         contactManager?.flush()
+        scheduleContactPersistenceCheckpoint(reason: "federated_contact_upserted")
         annotateIdentityInLedger(
             routePeerId: normalizedLibp2p,
             listeners: listeners,
@@ -5587,6 +6094,13 @@ final class MeshRepository {
     }
 
     private func broadcastIdentityBeacon() {
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            await self.broadcastIdentityBeaconInternal()
+        }
+    }
+
+    private func broadcastIdentityBeaconInternal() async {
         let now = Date()
         if let last = lastBleBeaconUpdate, now.timeIntervalSince(last) < bleBeaconUpdateInterval {
             // Already sent a beacon recently; skip to avoid radio churn
@@ -5599,23 +6113,23 @@ final class MeshRepository {
 
         // 1. Immediate update with just identity (no listeners yet)
         // This allows peers to "see" us in the UI immediately while we wait for swarm listeners to bind.
-        setIdentityBeaconInternal(info: info, listeners: [])
+        await setIdentityBeaconInternal(info: info, listeners: [])
 
         // 2. Delayed update with full connection hints
         pendingBleBeaconListenerRefreshTask?.cancel()
-        pendingBleBeaconListenerRefreshTask = Task { [weak self] in
+        pendingBleBeaconListenerRefreshTask = Task { @MainActor [weak self] in
             guard let self else { return }
             defer { self.pendingBleBeaconListenerRefreshTask = nil }
-            var listeners = getListeningAddresses()
+            var listeners = await getListeningAddresses()
             var attempts = 0
             while listeners.isEmpty && attempts < 10 {
                 try? await Task.sleep(nanoseconds: 500_000_000) // 500ms
                 guard !Task.isCancelled else { return }
-                listeners = getListeningAddresses()
+                listeners = await getListeningAddresses()
                 attempts += 1
             }
             guard !Task.isCancelled else { return }
-            setIdentityBeaconInternal(info: info, listeners: listeners)
+            await setIdentityBeaconInternal(info: info, listeners: listeners)
         }
     }
 
@@ -5634,13 +6148,13 @@ final class MeshRepository {
         }
     }
 
-    private func setIdentityBeaconInternal(info: IdentityInfo, listeners rawListeners: [String]) {
+    private func setIdentityBeaconInternal(info: IdentityInfo, listeners rawListeners: [String]) async {
         guard let publicKeyHex = info.publicKeyHex else { return }
 
         // Keep BLE identity beacons compact to avoid platform read failures.
         // Android/iOS both have observed issues when payload exceeds ~512 bytes.
         var listeners = Array(normalizeOutboundListenerHints(rawListeners).prefix(2))
-        var externalAddresses = Array(normalizeExternalAddressHints(getExternalAddresses()).prefix(2))
+        var externalAddresses = Array(normalizeExternalAddressHints(await getExternalAddresses()).prefix(2))
         let nickname = String((info.nickname ?? "").prefix(32))
 
         func buildBeacon() -> [String: Any] {
@@ -5745,10 +6259,12 @@ final class MeshRepository {
         }
         autoAdjustEngine.clearOverrides()
         logger.info("[OK] Adjustment overrides cleared")
-        applyPowerAdjustments(reason: "overrides_cleared")
+        Task { @MainActor [weak self] in
+            await self?.applyPowerAdjustments(reason: "overrides_cleared")
+        }
     }
 
-    private func applyPowerAdjustments(reason: String) {
+    private func applyPowerAdjustments(reason: String) async {
         guard let meshService = meshService else { return }
         guard let engine = autoAdjustEngine else {
             logger.debug("Power profile skipped (\(reason)): AutoAdjustEngine unavailable")
@@ -5776,7 +6292,7 @@ final class MeshRepository {
         let relayAdjustment = engine.computeRelayAdjustment(profile: adjustmentProfile)
         let bleAdjustment = engine.computeBleAdjustment(profile: adjustmentProfile)
 
-        meshService.setRelayBudget(messagesPerHour: relayAdjustment.maxPerHour)
+        await meshService.setRelayBudget(messagesPerHour: relayAdjustment.maxPerHour)
         bleCentralManager?.applyScanSettings(intervalMs: bleAdjustment.scanIntervalMs)
 
         let snapshot = [
@@ -5805,7 +6321,7 @@ final class MeshRepository {
         return ledgerManager?.getPreferredRelays(limit: 1).first?.peerId
     }
 
-    func connectToPeer(_ peerId: String, addresses: [String]) {
+    func connectToPeer(_ peerId: String, addresses: [String]) async {
         appendDiagnostic("connect_to_peer peer=\(peerId) addr_count=\(addresses.count)")
         let dialCandidates = buildDialCandidatesForPeer(
             routePeerId: peerId,
@@ -5838,7 +6354,7 @@ final class MeshRepository {
                 if let relayPeerId {
                     updateRelayAvailability(peerId: relayPeerId, event: "dial_attempt")
                 }
-                try swarmBridge?.dial(multiaddr: finalAddr)
+                try await swarmBridge?.dial(multiaddr: finalAddr)
                 logger.info("Dialing \(finalAddr)")
                 appendDiagnostic("dial_attempt addr=\(finalAddr)")
                 if let relayPeerId {
@@ -6029,9 +6545,15 @@ final class MeshRepository {
     /// Delete all app data and reset to factory defaults.
     /// Mirrors: android/.../data/MeshRepository.kt resetAllData()
     @MainActor
-    func resetAllData() {
+    func resetAllData() async {
         logger.warning("RESETTING ALL APPLICATION DATA")
         appendDiagnostic("factory_reset requested")
+
+        // A factory reset is intentionally destructive. Prevent a delayed
+        // contact checkpoint from recreating the Keychain recovery snapshot
+        // after this method has removed it.
+        pendingContactBackupTask?.cancel()
+        pendingContactBackupTask = nil
 
         // 1. Stop all active services
         if serviceState == .running {
@@ -6047,7 +6569,7 @@ final class MeshRepository {
         blePeripheralManager?.stopAdvertising()
 
         // 2. Release UniFFI objects
-        swarmBridge?.shutdown()
+        await swarmBridge?.shutdown()
         swarmBridge = nil
         meshService?.stop()
         meshService = nil
@@ -6067,6 +6589,8 @@ final class MeshRepository {
         identitySyncSentPeers.removeAll()
         historySyncSentPeers.removeAll()
         discoveredPeerMap.removeAll()
+        isCreatingIdentity = false
+        clearPublishedIdentity()
 
         // 4. Delete Keychain backup (persisted identity)
         let keychainQuery: [String: Any] = [
@@ -6074,6 +6598,11 @@ final class MeshRepository {
             kSecAttrService as String: "com.scmessenger.identity"
         ]
         SecItemDelete(keychainQuery as CFDictionary)
+        let passphraseQuery: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: "com.scmessenger.identity.passphrase"
+        ]
+        SecItemDelete(passphraseQuery as CFDictionary)
 
         // 5. Clear UserDefaults app state
         let keysToRemove = [
@@ -6100,37 +6629,37 @@ final class MeshRepository {
         logger.info("[OK] All application data reset")
     }
 
-    func getListeningAddresses() -> [String] {
-        return swarmBridge?.getListeners() ?? []
+    func getListeningAddresses() async -> [String] {
+        return await swarmBridge?.getListeners() ?? []
     }
 
-    func getExternalAddresses() -> [String] {
-        return swarmBridge?.getExternalAddresses() ?? []
+    func getExternalAddresses() async -> [String] {
+        return await swarmBridge?.getExternalAddresses() ?? []
     }
 
-    func getTopics() -> [String] {
-        return swarmBridge?.getTopics() ?? []
+    func getTopics() async -> [String] {
+        return await swarmBridge?.getTopics() ?? []
     }
 
-    func subscribeTopic(_ topic: String) throws {
+    func subscribeTopic(_ topic: String) async throws {
         guard let swarmBridge = swarmBridge else {
             throw MeshError.notInitialized("SwarmBridge not initialized")
         }
-        try swarmBridge.subscribeTopic(topic: topic)
+        try await swarmBridge.subscribeTopic(topic: topic)
     }
 
-    func unsubscribeTopic(_ topic: String) throws {
+    func unsubscribeTopic(_ topic: String) async throws {
         guard let swarmBridge = swarmBridge else {
             throw MeshError.notInitialized("SwarmBridge not initialized")
         }
-        try swarmBridge.unsubscribeTopic(topic: topic)
+        try await swarmBridge.unsubscribeTopic(topic: topic)
     }
 
-    func publishTopic(_ topic: String, data: Data) throws {
+    func publishTopic(_ topic: String, data: Data) async throws {
         guard let swarmBridge = swarmBridge else {
             throw MeshError.notInitialized("SwarmBridge not initialized")
         }
-        try swarmBridge.publishTopic(topic: topic, data: data)
+        try await swarmBridge.publishTopic(topic: topic, data: data)
     }
 
     func getLocalIpAddress() -> String? {
@@ -6186,7 +6715,7 @@ final class MeshRepository {
     // MARK: - Identity Helpers
 
     func getFullIdentityInfo() -> IdentityInfo? {
-        return ironCore?.getIdentityInfo()
+        return getIdentityInfo()
     }
 
     /// Export a passphrase-encrypted identity backup: the identity signing
@@ -6209,15 +6738,30 @@ final class MeshRepository {
             throw MeshError.notInitialized("IronCore not initialized")
         }
         try ironCore.importIdentityBackup(backup: backup, passphrase: passphrase)
-        if ironCore.getIdentityInfo().initialized {
-            ironCore.grantConsent()
-        }
+        finalizeImportedIdentity()
     }
 
-    func getIdentityExportString() -> String {
+    /// Complete identity activation after an import performed by a background
+    /// FFI task.  Keeping this separate preserves a responsive import UI while
+    /// still publishing the result on the repository's main-actor state.
+    func finalizeImportedIdentity() {
+        guard let ironCore else { return }
+        let imported = ironCore.getIdentityInfo()
+        guard imported.initialized else { return }
+        reloadContactManagerAfterIdentityImport()
+        ironCore.grantConsent()
+        publishIdentityInfo(imported)
+        persistIdentityBackupToKeychain(ironCore: ironCore)
+        initializeAndStartSwarm()
+        broadcastIdentityBeacon()
+        UserDefaults.standard.set(true, forKey: "hasCompletedInstallModeChoice")
+        UserDefaults.standard.set(true, forKey: "hasCompletedOnboarding")
+    }
+
+    func getIdentityExportString() async -> String {
         guard let identity = getFullIdentityInfo() else { return "{}" }
-        var listeners = normalizeOutboundListenerHints(getListeningAddresses())
-        let externalAddresses = normalizeExternalAddressHints(getExternalAddresses())
+        var listeners = normalizeOutboundListenerHints(await getListeningAddresses())
+        let externalAddresses = normalizeExternalAddressHints(await getExternalAddresses())
         let relay = getPreferredRelay() ?? "None"
         let localIp = getLocalIpAddress()
 
@@ -6268,7 +6812,7 @@ final class MeshRepository {
     }
 
     func getIdentitySnippet() -> String {
-        guard let identity = ironCore?.getIdentityInfo(),
+        guard let identity = getFullIdentityInfo(),
               let publicKey = identity.publicKeyHex else {
             return "????????"
         }
@@ -6276,17 +6820,17 @@ final class MeshRepository {
     }
 
     func getIdentityDisplay() -> String {
-        if let nick = ironCore?.getIdentityInfo().nickname {
+        if let nick = getFullIdentityInfo()?.nickname {
             return nick
         }
         return getIdentitySnippet()
     }
 
     func getNickname() -> String? {
-        return ironCore?.getIdentityInfo().nickname
+        return getFullIdentityInfo()?.nickname
     }
 
-    func setNickname(_ nickname: String) throws {
+    func setNickname(_ nickname: String) async throws {
         guard let ironCore = ironCore else {
             throw MeshError.notInitialized("IronCore not initialized")
         }
@@ -6295,14 +6839,18 @@ final class MeshRepository {
             throw MeshError.invalidInput("Nickname cannot be empty")
         }
         try ironCore.setNickname(nickname: trimmedNickname)
-        persistIdentityBackupToKeychain(ironCore: ironCore)
+        let updated = ironCore.getIdentityInfo()
+        if updated.initialized {
+            publishIdentityInfo(updated)
+        }
+        await persistIdentityBackupToKeychainAsync(ironCore: ironCore)
         logger.info("[OK] Nickname set to: \(trimmedNickname)")
         // If swarm start was postponed before identity/nickname was ready, resume now.
         initializeAndStartSwarm()
         broadcastIdentityBeacon()
         identitySyncSentPeers.removeAll()
         historySyncSentPeers.removeAll()
-        let connectedPeers = swarmBridge?.getPeers() ?? []
+        let connectedPeers = await swarmBridge?.getPeers() ?? []
         for routePeerId in connectedPeers {
             sendIdentitySyncIfNeeded(routePeerId: routePeerId)
             sendHistorySyncIfNeeded(routePeerId: routePeerId)
@@ -6324,6 +6872,7 @@ final class MeshRepository {
         do {
             let contacts = try contactManager.list()
             var idMap: [String: String] = [:]
+            var migratedContactCount = 0
 
             for contact in contacts {
                 if let identityId = try? ironCore.resolveIdentity(anyId: contact.publicKey),
@@ -6347,6 +6896,7 @@ final class MeshRepository {
                          try contactManager.add(contact: newContact)
                     }
                     try contactManager.remove(peerId: contact.peerId)
+                    migratedContactCount += 1
                 }
             }
 
@@ -6374,8 +6924,11 @@ final class MeshRepository {
 
             if updatedCount > 0 {
                 logger.info("Migrated \(updatedCount) messages to canonical peer IDs")
-                try historyManager.flush()
-                try contactManager.flush()
+                historyManager.flush()
+            }
+            if migratedContactCount > 0 {
+                contactManager.flush()
+                checkpointContactPersistence(reason: "canonical_contact_id_migration")
             }
 
             UserDefaults.standard.set(true, forKey: "v2_id_coalescence")

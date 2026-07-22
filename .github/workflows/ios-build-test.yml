@@ -182,7 +182,11 @@ jobs:
   test-macos-native:
     name: macOS Native Tests
     runs-on: macos-14  # Apple Silicon M1 runner
-    timeout-minutes: 15
+    # `cargo test --workspace` compiles the complete Rust workspace before the
+    # release CLI build below. A cold macOS runner can exceed 15 minutes before
+    # tests even begin, so keep the native gate bounded but give it enough time
+    # to run its intended verification.
+    timeout-minutes: 45
 
     steps:
       # --- Checkout ---

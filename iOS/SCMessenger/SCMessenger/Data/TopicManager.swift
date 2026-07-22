@@ -19,12 +19,15 @@ final class TopicManager {
 
     init(meshRepository: MeshRepository) {
         self.meshRepository = meshRepository
-        self.subscribedTopics = Set(meshRepository.getTopics())
+        Task { [weak self, weak meshRepository] in
+            guard let self, let meshRepository else { return }
+            self.subscribedTopics = Set(await meshRepository.getTopics())
+        }
     }
 
     // MARK: - Topic Management
 
-    func subscribe(to topic: String) throws {
+    func subscribe(to topic: String) async throws {
         logger.info("Subscribing to topic: \(topic)")
 
         // Validate topic name
@@ -34,24 +37,24 @@ final class TopicManager {
         guard let meshRepository = meshRepository else {
             throw TopicError.publishFailed("Mesh repository unavailable")
         }
-        try meshRepository.subscribeTopic(topic)
+        try await meshRepository.subscribeTopic(topic)
         subscribedTopics.insert(topic)
 
         logger.info("[OK] Subscribed to topic: \(topic)")
     }
 
-    func unsubscribe(from topic: String) throws {
+    func unsubscribe(from topic: String) async throws {
         logger.info("Unsubscribing from topic: \(topic)")
         guard let meshRepository = meshRepository else {
             throw TopicError.publishFailed("Mesh repository unavailable")
         }
-        try meshRepository.unsubscribeTopic(topic)
+        try await meshRepository.unsubscribeTopic(topic)
         subscribedTopics.remove(topic)
 
         logger.info("[OK] Unsubscribed from topic: \(topic)")
     }
 
-    func publish(to topic: String, data: Data) throws {
+    func publish(to topic: String, data: Data) async throws {
         logger.info("Publishing to topic: \(topic) (\(data.count) bytes)")
 
         guard subscribedTopics.contains(topic) else {
@@ -60,7 +63,7 @@ final class TopicManager {
         guard let meshRepository = meshRepository else {
             throw TopicError.publishFailed("Mesh repository unavailable")
         }
-        try meshRepository.publishTopic(topic, data: data)
+        try await meshRepository.publishTopic(topic, data: data)
 
         logger.debug("[OK] Published to topic: \(topic)")
     }

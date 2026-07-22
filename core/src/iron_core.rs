@@ -1635,6 +1635,11 @@ impl IronCore {
             for contact in bridge_contacts {
                 bridge.add(contact)?;
             }
+            // Import is a recovery boundary. Force bridge-contact writes to
+            // stable storage before returning so a mobile client can release
+            // and reopen its pre-existing ContactManager immediately after a
+            // Keychain backup restore.
+            bridge.flush();
         } else {
             let _ = bridge_contacts;
         }

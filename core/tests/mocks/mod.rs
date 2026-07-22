@@ -19,8 +19,8 @@ pub mod routing;
 
 // Re-export for convenience
 pub use identity::MockIdentityKeys;
-pub use transport::MockSwarmHandle;
 pub use routing::MockRoutingEngine;
+pub use transport::MockSwarmHandle;
 
 #[cfg(test)]
 mod tests {

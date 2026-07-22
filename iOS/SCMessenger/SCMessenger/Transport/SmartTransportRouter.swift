@@ -284,7 +284,7 @@ final class SmartTransportRouter {
             logger.info("Trying preferred transport \(preferred.rawValue) for peer \(peerId.prefix(8))")
             
             // Race preferred transport against timeout
-            let preferredResult: Bool?? = await withTaskGroup(of: Bool?.self, returning: Bool?.self) { group in
+            let preferredResult: Bool? = await withTaskGroup(of: Bool?.self, returning: Bool?.self) { group in
                 // Preferred transport attempt
                 group.addTask {
                     await preferredAttempt.attempt()
@@ -297,7 +297,9 @@ final class SmartTransportRouter {
                 }
                 
                 // Wait for first result
-                let result: Bool? = await group.next()
+                guard let result = await group.next() else {
+                    return nil
+                }
                 group.cancelAll()
                 return result
             }

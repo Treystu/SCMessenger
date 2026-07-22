@@ -45,22 +45,27 @@ final class SettingsViewModel {
         if let name = repository?.getNickname() {
             self.nickname = name
         } else {
-            self.nickname = "User" // Default
+            // A relay-only installation has no identity yet.  Showing a fake
+            // default name makes Settings look initialized and can accidentally
+            // create an identity with an unintended nickname.
+            self.nickname = ""
         }
     }
 
     func updateNickname(_ name: String) {
-        do {
-            try repository?.setNickname(name)
-            self.nickname = name
-            successMessage = "Nickname updated"
-        } catch {
-            self.error = "Failed to update nickname: \(error.localizedDescription)"
+        Task { @MainActor in
+            do {
+                try await repository?.setNickname(name)
+                self.nickname = name
+                successMessage = "Nickname updated"
+            } catch {
+                self.error = "Failed to update nickname: \(error.localizedDescription)"
+            }
         }
     }
 
-    func getIdentityExportString() -> String {
-        return repository?.getIdentityExportString() ?? "{}"
+    func getIdentityExportString() async -> String {
+        return await repository?.getIdentityExportString() ?? "{}"
     }
 
     // MARK: - Identity Backup (passphrase-encrypted)
@@ -72,29 +77,30 @@ final class SettingsViewModel {
     /// sessions + contacts). Distinct from `getIdentityExportString()`, which
     /// exports the public identity card with no encryption.
     ///
-    /// Runs the actual Argon2id-backed encryption off the main actor: the
-    /// repository call goes straight through to a plain (non-actor-isolated)
-    /// UniFFI method that's safe to call from any thread, so doing it here
-    /// synchronously would otherwise freeze the Settings UI for the KDF's
-    /// duration (T16).
+    /// The generated UniFFI surface follows this target's MainActor isolation.
+    /// Yield first so the progress state is rendered before the synchronous
+    /// encryption call begins.
     func exportIdentityBackup(passphrase: String) {
         guard let core = repository?.ironCore else {
             backupExportResult = .failure(MeshError.notInitialized("IronCore not initialized"))
             return
         }
         isExportingBackup = true
-        Task.detached(priority: .userInitiated) { [weak self] in
+        Task { @MainActor [weak self] in
+            await Task.yield()
             let result: Result<String, Error>
             do {
                 result = .success(try core.exportIdentityBackup(passphrase: passphrase))
             } catch {
                 result = .failure(error)
             }
-            await MainActor.run {
-                self?.isExportingBackup = false
-                self?.backupExportResult = result
-            }
+            self?.finishBackupExport(result)
         }
+    }
+
+    private func finishBackupExport(_ result: Result<String, Error>) {
+        isExportingBackup = false
+        backupExportResult = result
     }
 
     func clearBackupExportResult() {
@@ -104,16 +110,17 @@ final class SettingsViewModel {
     var backupImportResult: Result<Void, Error>?
     var isImportingBackup = false
 
-    /// Import an identity backup using a user-supplied passphrase. Same
-    /// off-main-actor treatment as `exportIdentityBackup` (T16); mirrors
-    /// `MeshRepository.importIdentityBackup`'s post-import consent grant.
+    /// Import an identity backup using a user-supplied passphrase. This mirrors
+    /// `exportIdentityBackup`'s progress yield and completes repository-level
+    /// identity publication after a successful import.
     func importIdentityBackup(backup: String, passphrase: String) {
         guard let core = repository?.ironCore else {
             backupImportResult = .failure(MeshError.notInitialized("IronCore not initialized"))
             return
         }
         isImportingBackup = true
-        Task.detached(priority: .userInitiated) { [weak self] in
+        Task { @MainActor [weak self] in
+            await Task.yield()
             let result: Result<Void, Error>
             do {
                 try core.importIdentityBackup(backup: backup, passphrase: passphrase)
@@ -124,17 +131,23 @@ final class SettingsViewModel {
             } catch {
                 result = .failure(error)
             }
-            await MainActor.run {
-                self?.isImportingBackup = false
-                switch result {
-                case .success:
-                    self?.successMessage = "Identity restored successfully"
-                case .failure(let error):
-                    self?.error = "Failed to restore identity: \(error.localizedDescription)"
-                }
-                self?.backupImportResult = result
-            }
+            self?.finishBackupImport(result)
         }
+    }
+
+    private func finishBackupImport(_ result: Result<Void, Error>) {
+        if case .success = result {
+            repository?.finalizeImportedIdentity()
+            loadNickname()
+        }
+        isImportingBackup = false
+        switch result {
+        case .success:
+            successMessage = "Identity restored successfully"
+        case .failure(let error):
+            self.error = "Failed to restore identity: \(error.localizedDescription)"
+        }
+        backupImportResult = result
     }
 
     func clearBackupImportResult() {
@@ -413,9 +426,10 @@ final class SettingsViewModel {
     // MARK: - Factory Reset (mirrors Android resetAllData)
 
     /// Wipe all local data and return the app to first-run state.
-    func resetAllData() {
-        Task { @MainActor in
-            repository?.resetAllData()
-        }
+    func resetAllData() async {
+        await repository?.resetAllData()
+        nickname = ""
+        successMessage = nil
+        error = nil
     }
 }

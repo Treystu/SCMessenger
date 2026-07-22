@@ -45,7 +45,9 @@ impl Default for MockIdentityKeys {
 
 /// Generate multiple mock identities for multi-party tests
 pub fn generate_mock_identities(count: usize) -> Vec<MockIdentityKeys> {
-    (0..count).map(|i| MockIdentityKeys::with_seed(i as u64)).collect()
+    (0..count)
+        .map(|i| MockIdentityKeys::with_seed(i as u64))
+        .collect()
 }
 
 #[cfg(test)]

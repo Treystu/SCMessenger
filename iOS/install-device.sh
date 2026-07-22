@@ -12,6 +12,17 @@ DERIVED_DATA_PATH="${DERIVED_DATA_PATH:-$ROOT_DIR/.build/ios-device}"
 APP_PATH="$DERIVED_DATA_PATH/Build/Products/${CONFIGURATION}-iphoneos/SCMessenger.app"
 CLEAN_BUILD="${CLEAN_BUILD:-1}"
 UNINSTALL_FIRST="${UNINSTALL_FIRST:-0}"
+ALLOW_DATA_ERASING_UNINSTALL="${ALLOW_DATA_ERASING_UNINSTALL:-0}"
+
+# A normal `devicectl install app` is an in-place update for the same bundle
+# identifier and preserves the app container. Uninstalling first destroys that
+# container, including contacts, so require an explicit second opt-in for the
+# rare cases where a clean-device test is genuinely intended.
+if [ "$UNINSTALL_FIRST" = "1" ] && [ "$ALLOW_DATA_ERASING_UNINSTALL" != "1" ]; then
+  echo "error: UNINSTALL_FIRST=1 would erase SCMessenger's on-device contacts and history."
+  echo "Use the default in-place update, or set ALLOW_DATA_ERASING_UNINSTALL=1 to confirm a destructive clean install."
+  exit 1
+fi
 
 # ── Auto-detect APPLE_TEAM_ID from .xcodeproj if not provided ──────────────
 APPLE_TEAM_ID="${APPLE_TEAM_ID:-}"
@@ -140,6 +151,11 @@ echo "DerivedData:         $DERIVED_DATA_PATH"
 echo "Clean build:         $CLEAN_BUILD"
 echo "Uninstall first:     $UNINSTALL_FIRST"
 echo "Launch after install $LAUNCH_AFTER_INSTALL"
+if [ "$UNINSTALL_FIRST" = "0" ]; then
+  echo "Data preservation:   in-place update (existing app data retained)"
+else
+  echo "Data preservation:   destructive clean install explicitly confirmed"
+fi
 echo
 
 echo "1) Generating/copying UniFFI bindings..."
@@ -178,7 +194,7 @@ fi
 
 echo
 if [ "$UNINSTALL_FIRST" = "1" ]; then
-  echo "4) Removing previous install (if present)..."
+  echo "4) Removing previous install and its app container (explicitly confirmed)..."
   xcrun devicectl device uninstall app --device "$DEVICECTL_IDENTIFIER" "$BUNDLE_ID" || true
   echo
 fi
