@@ -366,13 +366,15 @@ targetList.each { arch ->
 
             runCargoNdkBuild(arch.target, sdkDir, ndkDir, rustProfile, rustDir, isWindows, msysUcrtBin)
 
-            // Copy output to destination
+            // Copy output to destination if built
             def sourceFile = file("../../target/${arch.target}/${rustDir}/libscmessenger_core.so")
             def destDir = file("../../core/target/android-libs/${arch.abi}")
-            destDir.mkdirs()
-            copy {
-                from sourceFile
-                into destDir
+            if (sourceFile.exists()) {
+                destDir.mkdirs()
+                copy {
+                    from sourceFile
+                    into destDir
+                }
             }
         }
     }
