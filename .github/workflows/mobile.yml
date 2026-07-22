@@ -76,7 +76,7 @@ jobs:
           cp target/aarch64-apple-ios-sim/release/libscmessenger_core.a iOS/SCMessengerCore.xcframework/ios-arm64-simulator/
       - name: Build Xcode project
         run: |
-          xcodebuild -project iOS/SCMessenger.xcodeproj \
+          xcodebuild -project iOS/SCMessenger/SCMessenger.xcodeproj \
             -scheme SCMessenger \
             -sdk iphonesimulator \
             -configuration Debug \
