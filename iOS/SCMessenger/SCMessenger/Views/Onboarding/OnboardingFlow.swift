@@ -100,7 +100,15 @@ struct IdentityView: View {
                         .foregroundStyle(Theme.onSurfaceVariant)
                 }
                 .primaryContainerStyle()
-            } else {
+            }
+
+            TextField("Choose a nickname", text: $nickname)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+                .padding(12)
+                .background(Theme.primaryContainer, in: RoundedRectangle(cornerRadius: 12))
+
+            if identity == nil {
                 Button {
                     generateIdentity()
                 } label: {
@@ -111,14 +119,8 @@ struct IdentityView: View {
                     }
                 }
                 .buttonStyle(.borderedProminent)
-                .disabled(isGenerating)
+                .disabled(isGenerating || nickname.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
-
-            TextField("Choose a nickname", text: $nickname)
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
-                .padding(12)
-                .background(Theme.primaryContainer, in: RoundedRectangle(cornerRadius: 12))
 
             if let setupError {
                 Text(setupError)
@@ -146,14 +148,10 @@ struct IdentityView: View {
         }
         .padding(Theme.spacingLarge)
         .onAppear {
-            if identity == nil, let info = repository.getIdentityInfo(), info.initialized {
-                identity = info
-            }
-            if nickname.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-               let existing = repository.getIdentityInfo()?.nickname,
-               !existing.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                nickname = existing
-            }
+            hydrateIdentityState()
+        }
+        .onChange(of: repository.identityInfo) { _, _ in
+            hydrateIdentityState()
         }
     }
 
@@ -163,15 +161,12 @@ struct IdentityView: View {
             defer { isGenerating = false }
 
             do {
-                try repository.createIdentity()
                 let trimmedNickname = nickname.trimmingCharacters(in: .whitespacesAndNewlines)
-                if !trimmedNickname.isEmpty {
-                    try repository.setNickname(trimmedNickname)
-                }
-                identity = repository.getIdentityInfo()
+                identity = try await repository.createIdentity(nickname: trimmedNickname)
+                setupError = nil
             } catch {
                 logger.error("Failed to generate identity: \(error.localizedDescription)")
-                // Keep identity as nil to show error state
+                setupError = "Failed to generate identity: \(error.localizedDescription)"
             }
         }
     }
@@ -188,12 +183,11 @@ struct IdentityView: View {
                     return
                 }
 
-                if !(repository.getIdentityInfo()?.initialized ?? false) {
-                    try repository.createIdentity()
-                }
-                try repository.setNickname(trimmedNickname)
-                if let info = repository.getIdentityInfo(), info.initialized {
-                    identity = info
+                if repository.identityInfo?.initialized == true {
+                    try await repository.setNickname(trimmedNickname)
+                    identity = repository.getIdentityInfo()
+                } else {
+                    identity = try await repository.createIdentity(nickname: trimmedNickname)
                 }
                 setupError = nil
                 viewModel.advance()
@@ -201,6 +195,20 @@ struct IdentityView: View {
                 setupError = "Failed to complete identity setup: \(error.localizedDescription)"
                 logger.error("Failed to complete identity step: \(error.localizedDescription)")
             }
+        }
+    }
+
+    private func hydrateIdentityState() {
+        guard repository.hasVerifiedIdentity,
+              let info = repository.identityInfo ?? repository.getIdentityInfo(),
+              info.initialized else {
+            return
+        }
+        identity = info
+        if nickname.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+           let existing = info.nickname,
+           !existing.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            nickname = existing
         }
     }
 }
@@ -285,6 +293,7 @@ struct RelayExplanationView: View {
 }
 
 struct ConsentView: View {
+    @Environment(MeshRepository.self) private var repository
     @Environment(OnboardingViewModel.self) private var viewModel
     @State private var accepted: Bool = false
 
@@ -341,6 +350,7 @@ struct ConsentView: View {
 
             Button("Continue") {
                 UserDefaults.standard.set(true, forKey: "hasAcceptedConsent")
+                repository.grantIdentityConsent()
                 viewModel.advance()
             }
             .buttonStyle(.borderedProminent)

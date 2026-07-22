@@ -500,12 +500,12 @@ fn iron_core_import_rejects_corrupted_ratchet_session_entry() {
 /// internal `contact_manager`, but Android/iOS add contacts through the
 /// separate UniFFI-bridge `contacts_manager()` store (`contacts.db`) - a
 /// mobile export's address book was silently empty/stale on restore. This
-/// exercises the actual mobile code path: add a contact via
-/// `contacts_manager()`, export, restore onto a fresh persistent core
-/// (simulating a new device), and confirm the bridge contact - including
-/// `verified_at` - survives.
+/// exercises the actual mobile code path: add a contact through the UI-owned
+/// bridge manager, export through the fast device-bound auto-backup path,
+/// restore onto a fresh persistent core (simulating a new app container),
+/// and confirm every user-visible bridge-contact field survives.
 #[test]
-fn iron_core_backup_restore_preserves_bridge_contacts() {
+fn iron_core_fast_backup_restore_preserves_bridge_contacts() {
     use tempfile::tempdir;
 
     let alice_dir = tempdir().unwrap();
@@ -516,41 +516,134 @@ fn iron_core_backup_restore_preserves_bridge_contacts() {
     let mut bridge_contact =
         scmessenger_core::contacts_bridge::Contact::new("bob".to_string(), hex::encode([9u8; 32]));
     bridge_contact.nickname = Some("Bob".to_string());
+    bridge_contact.local_nickname = Some("Bobby".to_string());
+    bridge_contact.added_at = 1_699_999_900;
+    bridge_contact.last_seen = Some(1_700_000_100);
+    bridge_contact.notes = Some("libp2p_peer_id:12D3KooExample;favorite:true".to_string());
+    bridge_contact.last_known_device_id = Some("bob-phone-2".to_string());
     bridge_contact.verified_at = Some(1_700_000_000);
-    alice
-        .contacts_manager()
-        .unwrap()
+    // Mirror the iOS app: the UI owns a bridge ContactManager while IronCore
+    // independently exports the recovery payload.
+    let ios_source_manager = scmessenger_core::contacts_bridge::ContactManager::new(
+        alice_dir.path().to_str().unwrap().to_string(),
+    )
+    .expect("iOS bridge contacts store opens");
+    ios_source_manager
         .add(bridge_contact)
         .expect("alice adds bob via the bridge contacts store");
+    ios_source_manager.flush();
 
-    let passphrase = "bridge-contacts-test";
+    let passphrase = "bridge-contacts-device-bound-key-0123456789abcdef0123456789abcdef";
     let backup = alice
-        .export_identity_backup(passphrase.to_string())
+        .export_identity_backup_fast(passphrase.to_string())
         .expect("export succeeds");
 
     // Restore onto a fresh persistent core with its own (empty) bridge
     // contacts.db, simulating a new device.
     let restored_dir = tempdir().unwrap();
-    let restored = IronCore::with_storage(restored_dir.path().to_str().unwrap().to_string());
+    let restored_path = restored_dir.path().to_str().unwrap().to_string();
+    let restored = IronCore::with_storage(restored_path.clone());
+
+    // iOS opens its bridge ContactManager before identity hydration. Keep that
+    // handle alive while the core imports the Keychain recovery payload to
+    // prove the restored contacts are immediately visible to the UI's store.
+    let ios_contact_manager = scmessenger_core::contacts_bridge::ContactManager::new(restored_path)
+        .expect("iOS bridge contacts store opens before restore");
     restored
         .import_identity_backup(backup, passphrase.to_string())
         .expect("import succeeds");
 
-    let restored_contacts = restored
-        .contacts_manager()
-        .unwrap()
+    let immediately_visible_contacts = ios_contact_manager.list().expect(
+        "restored contacts are immediately visible through the pre-opened iOS bridge store",
+    );
+    assert_eq!(
+        immediately_visible_contacts.len(),
+        1,
+        "the pre-opened iOS contact store must observe a Keychain restore immediately"
+    );
+    drop(ios_contact_manager);
+
+    // The app releases and reopens its stale UI bridge handle after the core
+    // writes imported contacts through a separate sled handle.
+    let reopened_ios_contact_manager = scmessenger_core::contacts_bridge::ContactManager::new(
+        restored_dir.path().to_str().unwrap().to_string(),
+    )
+    .expect("iOS bridge contacts store reopens after restore");
+    let restored_contacts = reopened_ios_contact_manager
         .list()
-        .expect("restored bridge contacts list");
+        .expect("restored contacts are visible through the reopened iOS bridge store");
     assert_eq!(
         restored_contacts.len(),
         1,
         "bridge contact must survive the backup/restore"
     );
-    assert_eq!(restored_contacts[0].peer_id, "bob");
+    let restored_contact = &restored_contacts[0];
+    assert_eq!(restored_contact.peer_id, "bob");
+    assert_eq!(restored_contact.nickname.as_deref(), Some("Bob"));
+    assert_eq!(restored_contact.local_nickname.as_deref(), Some("Bobby"));
+    assert_eq!(restored_contact.added_at, 1_699_999_900);
+    assert_eq!(restored_contact.last_seen, Some(1_700_000_100));
     assert_eq!(
-        restored_contacts[0].verified_at,
+        restored_contact.notes.as_deref(),
+        Some("libp2p_peer_id:12D3KooExample;favorite:true")
+    );
+    assert_eq!(
+        restored_contact.last_known_device_id.as_deref(),
+        Some("bob-phone-2")
+    );
+    assert_eq!(
+        restored_contact.verified_at,
         Some(1_700_000_000),
         "verified_at must survive the backup/restore intact"
+    );
+    assert!(!restored_contact.is_tombstone);
+}
+
+/// The device snapshot represents the current address book, rather than a
+/// grow-only history. A contact removed before an update must stay removed
+/// after recovery from the most recent fast auto-backup.
+#[test]
+fn iron_core_fast_backup_tracks_bridge_contact_removals() {
+    use tempfile::tempdir;
+
+    let source_dir = tempdir().unwrap();
+    let source_path = source_dir.path().to_str().unwrap().to_string();
+    let source = IronCore::with_storage(source_path.clone());
+    source.grant_consent();
+    source.initialize_identity().expect("source identity init");
+
+    let ios_contact_manager = scmessenger_core::contacts_bridge::ContactManager::new(source_path)
+        .expect("source iOS contacts store opens");
+    ios_contact_manager
+        .add(scmessenger_core::contacts_bridge::Contact::new(
+            "removed-peer".to_string(),
+            hex::encode([4u8; 32]),
+        ))
+        .expect("contact add succeeds");
+    ios_contact_manager.flush();
+    ios_contact_manager
+        .remove("removed-peer".to_string())
+        .expect("contact removal succeeds");
+    ios_contact_manager.flush();
+
+    let passphrase = "bridge-removal-device-bound-key-0123456789abcdef0123456789abcdef";
+    let backup = source
+        .export_identity_backup_fast(passphrase.to_string())
+        .expect("current address book export succeeds");
+
+    let restored_dir = tempdir().unwrap();
+    let restored_path = restored_dir.path().to_str().unwrap().to_string();
+    let restored = IronCore::with_storage(restored_path.clone());
+    restored
+        .import_identity_backup(backup, passphrase.to_string())
+        .expect("restore succeeds");
+    let restored_contacts = scmessenger_core::contacts_bridge::ContactManager::new(restored_path)
+        .expect("restored iOS contacts store opens")
+        .list()
+        .expect("restored contacts list loads");
+    assert!(
+        restored_contacts.is_empty(),
+        "the most recent auto-backup must not resurrect removed contacts"
     );
 }
 

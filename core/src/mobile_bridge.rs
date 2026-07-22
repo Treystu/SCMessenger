@@ -3371,6 +3371,7 @@ impl SwarmBridge {
             let _ = handle.shutdown().await;
         }
     }
+
 }
 
 // Non-UniFFI internal methods for SwarmBridge

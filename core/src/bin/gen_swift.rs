@@ -124,35 +124,35 @@ fn main() {
         let replacements = [
             (
                 "static func lift(_ value: FfiType) throws -> SwiftType",
-                "nonisolated(unsafe) static func lift(_ value: FfiType) throws -> SwiftType",
+                "nonisolated static func lift(_ value: FfiType) throws -> SwiftType",
             ),
             (
                 "static func lower(_ value: SwiftType) -> FfiType",
-                "nonisolated(unsafe) static func lower(_ value: SwiftType) -> FfiType",
+                "nonisolated static func lower(_ value: SwiftType) -> FfiType",
             ),
             (
                 "static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType",
-                "nonisolated(unsafe) static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType",
+                "nonisolated static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType",
             ),
             (
                 "static func write(_ value: SwiftType, into buf: inout [UInt8])",
-                "nonisolated(unsafe) static func write(_ value: SwiftType, into buf: inout [UInt8])",
+                "nonisolated static func write(_ value: SwiftType, into buf: inout [UInt8])",
             ),
             (
                 "public static func lift(_ value: FfiType) throws -> SwiftType",
-                "public nonisolated(unsafe) static func lift(_ value: FfiType) throws -> SwiftType",
+                "public nonisolated static func lift(_ value: FfiType) throws -> SwiftType",
             ),
             (
                 "public static func lower(_ value: SwiftType) -> FfiType",
-                "public nonisolated(unsafe) static func lower(_ value: SwiftType) -> FfiType",
+                "public nonisolated static func lower(_ value: SwiftType) -> FfiType",
             ),
             (
                 "public static func lift(_ buf: RustBuffer) throws -> SwiftType",
-                "public nonisolated(unsafe) static func lift(_ buf: RustBuffer) throws -> SwiftType",
+                "public nonisolated static func lift(_ buf: RustBuffer) throws -> SwiftType",
             ),
             (
                 "public static func lower(_ value: SwiftType) -> RustBuffer",
-                "public nonisolated(unsafe) static func lower(_ value: SwiftType) -> RustBuffer",
+                "public nonisolated static func lower(_ value: SwiftType) -> RustBuffer",
             ),
         ];
 

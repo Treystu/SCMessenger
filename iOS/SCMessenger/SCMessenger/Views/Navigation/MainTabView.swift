@@ -78,6 +78,12 @@ struct MainTabView: View {
             repository.setNotificationAppInForeground(true)
             refreshIdentityRole()
         }
+        .onChange(of: repository.identityHydrationState) { _, _ in
+            refreshIdentityRole()
+        }
+        .onChange(of: repository.identityInfo) { _, _ in
+            refreshIdentityRole()
+        }
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
             repository.setNotificationAppInForeground(true)
             refreshIdentityRole()
@@ -92,7 +98,7 @@ struct MainTabView: View {
     }
 
     private func refreshIdentityRole() {
-        identityInitialized = repository.isIdentityInitialized()
+        identityInitialized = repository.hasVerifiedIdentity
         if !identityInitialized && (selectedTab == .messages || selectedTab == .contacts) {
             selectedTab = .mesh
         }

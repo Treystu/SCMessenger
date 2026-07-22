@@ -120,21 +120,25 @@ struct JoinMeshView: View {
     }
 
     private func joinMesh() {
-        do {
-            try topicManager?.subscribe(to: topicName)
-            error = nil
-            topicName = ""
-        } catch {
-            self.error = error.localizedDescription
+        Task {
+            do {
+                try await topicManager?.subscribe(to: topicName)
+                error = nil
+                topicName = ""
+            } catch {
+                self.error = error.localizedDescription
+            }
         }
     }
 
     private func leaveTopic(_ topic: String) {
-        do {
-            try topicManager?.unsubscribe(from: topic)
-            error = nil
-        } catch {
-            self.error = error.localizedDescription
+        Task {
+            do {
+                try await topicManager?.unsubscribe(from: topic)
+                error = nil
+            } catch {
+                self.error = error.localizedDescription
+            }
         }
     }
 
@@ -156,15 +160,17 @@ struct JoinMeshView: View {
             return
         }
 
-        for addr in bundle.bootstrap_peers {
-            repository.connectToPeer("", addresses: [addr])
-        }
+        Task {
+            for addr in bundle.bootstrap_peers {
+                await repository.connectToPeer("", addresses: [addr])
+            }
 
-        for topic in bundle.topics {
-            do {
-                try topicManager?.subscribe(to: topic)
-            } catch {
-                self.error = "Failed subscribing to topic \(topic): \(error.localizedDescription)"
+            for topic in bundle.topics {
+                do {
+                    try await topicManager?.subscribe(to: topic)
+                } catch {
+                    self.error = "Failed subscribing to topic \(topic): \(error.localizedDescription)"
+                }
             }
         }
     }

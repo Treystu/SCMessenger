@@ -8,8 +8,9 @@ use anyhow::{Context, Result};
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 use sled::Db;
+use std::collections::HashMap;
 use std::path::PathBuf;
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock, Weak};
 
 /// Public contact structure exposed via UniFFI
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -77,10 +78,24 @@ impl Contact {
     }
 }
 
-/// Contact manager with thread-safe sled database backend
+/// Contact manager with thread-safe sled database backend.
+///
+/// Mobile clients hold a bridge manager for their UI while IronCore opens the
+/// same store for identity backup/restore. All handles for a storage path must
+/// share one `Db` instance; otherwise sled's per-handle view can make a just
+/// saved contact invisible to the backup exporter (or a restored contact
+/// invisible to the UI) until a process restart.
 #[derive(uniffi::Object)]
 pub struct ContactManager {
     db: Arc<Mutex<Db>>,
+}
+
+type SharedContactDatabase = Arc<Mutex<Db>>;
+type WeakContactDatabase = Weak<Mutex<Db>>;
+
+fn contact_database_registry() -> &'static Mutex<HashMap<PathBuf, WeakContactDatabase>> {
+    static REGISTRY: OnceLock<Mutex<HashMap<PathBuf, WeakContactDatabase>>> = OnceLock::new();
+    REGISTRY.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
 #[uniffi::export]
@@ -89,17 +104,27 @@ impl ContactManager {
     #[uniffi::constructor]
     pub fn new(storage_path: String) -> Result<Self, crate::IronCoreError> {
         let path = PathBuf::from(storage_path).join("contacts.db");
+        let mut registry = contact_database_registry().lock();
+
+        if let Some(existing) = registry.get(&path).and_then(Weak::upgrade) {
+            return Ok(Self { db: existing });
+        }
+
+        // A previous manager may have been released after an app lifecycle
+        // transition. Drop its expired weak entry before opening a new store.
+        registry.remove(&path);
         let db = sled::Config::default()
-            .path(path)
+            .path(&path)
             .mode(sled::Mode::LowSpace)
             .use_compression(false)
             .open()
             .context("Failed to open contacts database")
             .map_err(|_| crate::IronCoreError::StorageError)?;
 
-        Ok(Self {
-            db: Arc::new(Mutex::new(db)),
-        })
+        let db: SharedContactDatabase = Arc::new(Mutex::new(db));
+        registry.insert(path, Arc::downgrade(&db));
+
+        Ok(Self { db })
     }
 
     /// Add a contact to the database

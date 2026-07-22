@@ -14,6 +14,7 @@ struct SettingsView: View {
     @State private var showingIdentityQr: Bool = false
     @State private var showingResetConfirmation: Bool = false
     @State private var identitySetupError: String?
+    @State private var nicknameDraft: String = ""
     @State private var showingExportBackup: Bool = false
     @State private var showingImportBackup: Bool = false
     let onIdentityChanged: () -> Void
@@ -142,20 +143,27 @@ struct SettingsView: View {
 
             // MARK: - Identity
             Section {
-                if repository.isIdentityInitialized() {
+                if repository.hasVerifiedIdentity,
+                   let identity = repository.identityInfo,
+                   identity.initialized {
                     HStack {
                         Text("Nickname")
                         Spacer()
-                        TextField("Enter nickname", text: Binding(
-                            get: { viewModel?.nickname ?? "" },
-                            set: { viewModel?.updateNickname($0) }
-                        ))
+                        TextField("Enter nickname", text: $nicknameDraft)
                         .multilineTextAlignment(.trailing)
                         .autocorrectionDisabled()
                         .textInputAutocapitalization(.words)
                     }
 
-                    if let peerId = repository.getFullIdentityInfo()?.libp2pPeerId {
+                    Button("Save Nickname") {
+                        viewModel?.updateNickname(nicknameDraft)
+                    }
+                    .disabled(
+                        nicknameDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
+                        nicknameDraft == viewModel?.nickname
+                    )
+
+                    if let peerId = identity.libp2pPeerId {
                         HStack {
                             Text("Peer ID (Network)")
                             Spacer()
@@ -178,7 +186,7 @@ struct SettingsView: View {
                     }
 
                     Button {
-                        if let id = repository.getFullIdentityInfo()?.identityId {
+                        if let id = identity.identityId {
                             UIPasteboard.general.string = id
                         }
                     } label: {
@@ -186,7 +194,7 @@ struct SettingsView: View {
                     }
 
                     Button {
-                        if let key = repository.getFullIdentityInfo()?.publicKeyHex {
+                        if let key = identity.publicKeyHex {
                             UIPasteboard.general.string = key
                         }
                     } label: {
@@ -194,7 +202,8 @@ struct SettingsView: View {
                     }
 
                     Button {
-                        if let export = viewModel?.getIdentityExportString() {
+                        Task { @MainActor in
+                            guard let export = await viewModel?.getIdentityExportString() else { return }
                             UIPasteboard.general.string = export
                         }
                     } label: {
@@ -238,8 +247,13 @@ struct SettingsView: View {
                     Button {
                         createIdentityFromSettings()
                     } label: {
-                        Label("Create Identity", systemImage: "person.crop.circle.badge.plus")
+                        if repository.isCreatingIdentity {
+                            Label("Creating Identity…", systemImage: "hourglass")
+                        } else {
+                            Label("Create Identity", systemImage: "person.crop.circle.badge.plus")
+                        }
                     }
+                    .disabled(repository.isCreatingIdentity)
 
                     if let identitySetupError {
                         Text(identitySetupError)
@@ -297,6 +311,26 @@ struct SettingsView: View {
                 viewModel = SettingsViewModel(repository: repository)
                 viewModel?.loadSettings()
             }
+            nicknameDraft = viewModel?.nickname ?? ""
+            repository.refreshIdentityHydration()
+        }
+        .onChange(of: repository.serviceState) { _, state in
+            if state == .running {
+                repository.refreshIdentityHydration()
+            }
+        }
+        .onChange(of: repository.identityHydrationState) { _, state in
+            if state == .ready {
+                viewModel?.loadNickname()
+                nicknameDraft = viewModel?.nickname ?? ""
+                identitySetupError = nil
+            }
+        }
+        .onChange(of: repository.identityInfo) { _, identity in
+            guard repository.hasVerifiedIdentity, identity?.initialized == true else { return }
+            viewModel?.loadNickname()
+            nicknameDraft = viewModel?.nickname ?? ""
+            identitySetupError = nil
         }
         .sheet(isPresented: $showingIdentityQr) {
             IdentityQrSheet(payload: repository.getIdentityQrPayload())
@@ -317,8 +351,10 @@ struct SettingsView: View {
             titleVisibility: .visible
         ) {
             Button("Delete All Data", role: .destructive) {
-                viewModel?.resetAllData()
-                onIdentityChanged()
+                Task { @MainActor in
+                    await viewModel?.resetAllData()
+                    onIdentityChanged()
+                }
             }
             Button("Cancel", role: .cancel) { }
         } message: {
@@ -327,23 +363,22 @@ struct SettingsView: View {
     }
 
     private func createIdentityFromSettings() {
-        guard let viewModel else { return }
-        let trimmedNickname = viewModel.nickname.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedNickname.isEmpty else {
-            identitySetupError = "Nickname is required"
-            return
-        }
+        Task { @MainActor in
+            guard let viewModel else { return }
+            let trimmedNickname = viewModel.nickname.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmedNickname.isEmpty else {
+                identitySetupError = "Nickname is required"
+                return
+            }
 
-        do {
-            try repository.createIdentity()
-            try repository.setNickname(trimmedNickname)
-            UserDefaults.standard.set(true, forKey: "hasCompletedInstallModeChoice")
-            UserDefaults.standard.set(true, forKey: "hasCompletedOnboarding")
-            viewModel.loadNickname()
-            identitySetupError = nil
-            onIdentityChanged()
-        } catch {
-            identitySetupError = "Failed to create identity: \(error.localizedDescription)"
+            do {
+                _ = try await repository.createIdentity(nickname: trimmedNickname)
+                viewModel.loadNickname()
+                identitySetupError = nil
+                onIdentityChanged()
+            } catch {
+                identitySetupError = "Failed to create identity: \(error.localizedDescription)"
+            }
         }
     }
 }
