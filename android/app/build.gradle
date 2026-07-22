@@ -327,11 +327,14 @@ def runCargoNdkBuild(String target, String sdkDir, String ndkDir, String rustPro
     }
 }
 
+def abiFilterProp = project.findProperty('abiFilters') ?: System.getenv('ANDROID_ABI_FILTERS')
+def abiFilterList = abiFilterProp ? abiFilterProp.split(',').collect { it.trim() } : null
+
 def targetList = [
     [name: 'Arm64', target: 'aarch64-linux-android', abi: 'arm64-v8a'],
     [name: 'Armv7', target: 'armv7-linux-androideabi', abi: 'armeabi-v7a'],
     [name: 'X86_64', target: 'x86_64-linux-android', abi: 'x86_64']
-]
+].findAll { arch -> abiFilterList == null || abiFilterList.contains(arch.abi) }
 
 targetList.each { arch ->
     task "buildRustAndroid${arch.name}" {
