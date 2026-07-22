@@ -310,6 +310,7 @@ def runCargoNdkBuild(String target, String sdkDir, String ndkDir, String rustPro
             environment "PATH", "${msysUcrtBin};${System.getenv('PATH')}"
         }
 
+        def cargoCmd = isWindows ? 'cargo' : (file("${System.getProperty('user.home')}/.cargo/bin/cargo").exists() ? "${System.getProperty('user.home')}/.cargo/bin/cargo" : 'cargo')
         if (isWindows) {
             if (rustProfile) {
                 commandLine 'cmd', '/c', "cargo ndk -t $target build $rustProfile -p scmessenger-core"
@@ -317,7 +318,7 @@ def runCargoNdkBuild(String target, String sdkDir, String ndkDir, String rustPro
                 commandLine 'cmd', '/c', "cargo ndk -t $target build -p scmessenger-core"
             }
         } else {
-            def cmd = ['cargo', 'ndk', '-t', target, 'build']
+            def cmd = [cargoCmd, 'ndk', '-t', target, 'build']
             if (rustProfile) {
                 cmd.add(rustProfile)
             }
@@ -419,6 +420,8 @@ task generateUniFFIBindings {
         // Resolve the host cdylib name
         def cdylibName = isWindows ? 'scmessenger_core.dll' : (isMac ? 'libscmessenger_core.dylib' : 'libscmessenger_core.so')
 
+        def cargoCmd = isWindows ? 'cargo' : (file("${System.getProperty('user.home')}/.cargo/bin/cargo").exists() ? "${System.getProperty('user.home')}/.cargo/bin/cargo" : 'cargo')
+
         // Step 1: build the host cdylib
         exec {
             workingDir project.file('../../')
@@ -427,7 +430,7 @@ task generateUniFFIBindings {
             if (isWindows) {
                 commandLine 'cmd', '/c', 'cargo build -p scmessenger-core'
             } else {
-                commandLine 'cargo', 'build', '-p', 'scmessenger-core'
+                commandLine cargoCmd, 'build', '-p', 'scmessenger-core'
             }
         }
 
@@ -456,7 +459,7 @@ task generateUniFFIBindings {
             if (isWindows) {
                 commandLine 'cmd', '/c', 'cargo build --bin gen_kotlin --features gen-bindings'
             } else {
-                commandLine 'cargo', 'build', '--bin', 'gen_kotlin', '--features', 'gen-bindings'
+                commandLine cargoCmd, 'build', '--bin', 'gen_kotlin', '--features', 'gen-bindings'
             }
         }
 
