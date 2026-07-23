@@ -86,7 +86,7 @@ jobs:
 
       # --- Host Native Build for Bindings Generation ---
       - name: Build host native library for bindings generation
-        run: cargo build -p scmessenger-mobile
+        run: cargo build -p scmessenger-core
 
       # --- Swift Bindings Drift Check ---
       - name: Verify Swift bindings are up to date

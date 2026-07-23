@@ -22,12 +22,12 @@ pub enum DeliveryStatus {
     Delivered,
     /// Deprecated: retained for backward-compatible deserialization of receipts
     /// from older peers. Treated as no-op (mapped to `Delivered` in processing).
-    #[deprecated(
-        note = "Zero-Status Architecture: Read receipts are no longer emitted or displayed"
-    )]
+    /// Do not emit — Zero-Status Architecture: read receipts are no longer
+    /// emitted or displayed. (Not `#[deprecated]` because the UniFFI scaffolding
+    /// must construct it, and generated code cannot carry allow attributes.)
     Read,
     /// Delivery failed
-    Failed(String),
+    Failed,
 }
 
 /// A plaintext message before encryption.

@@ -20,6 +20,7 @@ use super::behaviour::{
     Libp2pMessageRequest, Libp2pMessageResponse, RegistrationMessage, RegistrationRequest,
     RegistrationResponse, RelayResponse, SharedPeerEntry,
 };
+use super::dial_policy::{multiaddr_to_key, CircuitRelayLadder, DialPolicyManager};
 use super::discovery::DiscoveryConfig;
 #[cfg(not(target_arch = "wasm32"))]
 use super::mesh_routing::{
@@ -2364,6 +2365,13 @@ pub async fn start_swarm_with_config(
             let mut pending_dials: HashMap<Multiaddr, PendingDialEntry> = HashMap::new();
             let mut pending_dial_sweep_interval = tokio::time::interval(Duration::from_secs(5));
 
+            // P1 Item 3: Per-peer backoff state machine (max 3 concurrent dials)
+            let dial_policy_manager = DialPolicyManager::new();
+            let mut backoff_prune_interval = tokio::time::interval(Duration::from_secs(300)); // Prune stale entries every 5 minutes
+
+            // P1 Item 4: Circuit-relay preference after connection established
+            let circuit_relay_ladder = CircuitRelayLadder::new();
+
             // Cover traffic — 1 dummy message/min to mask real traffic patterns
             let mut cover_traffic_interval = tokio::time::interval(Duration::from_secs(60));
 
@@ -2509,10 +2517,21 @@ pub async fn start_swarm_with_config(
                             .collect();
                         for key in timed_out {
                             if let Some(entry) = pending_dials.remove(&key) {
+                                // P1 Item 3: Complete and apply backoff on timeout
+                                let key_str = key.to_string();
+                                dial_policy_manager.complete_dial_attempt(&key_str);
+                                dial_policy_manager.record_dial_failure(&key_str, None);
+
                                 tracing::debug!("Pending dial to {} timed out after {}s with no connection signal", key, PENDING_DIAL_TIMEOUT_SECS);
                                 let _ = entry.reply.send(Err(format!("Dial timed out after {}s with no connection signal", PENDING_DIAL_TIMEOUT_SECS))).await;
                             }
                         }
+                    }
+
+                    _ = backoff_prune_interval.tick() => {
+                        // P1 Item 3: Periodically prune old backoff entries to prevent memory leak
+                        dial_policy_manager.prune_old_entries(Duration::from_secs(3600)); // Prune entries older than 1 hour
+                        tracing::debug!("[DIAL-POLICY] Pruned stale backoff entries");
                     }
 
                     // Mycorrhizal routing: periodic optimization tick
@@ -3987,6 +4006,18 @@ pub async fn start_swarm_with_config(
                             SwarmEvent::ConnectionEstablished { peer_id, endpoint, connection_id, .. } => {
                                 let remote_addr = endpoint.get_remote_address().clone();
 
+                                // P1 Item 3: Reset backoff state on successful connection
+                                let addr_key = multiaddr_to_key(&remote_addr);
+                                dial_policy_manager.reset_on_connection_established(&addr_key, Some(peer_id));
+                                // Complete the dial attempt since it succeeded
+                                dial_policy_manager.complete_dial_attempt(&addr_key);
+
+                                // P1 Item 4: Add this peer as a relay candidate for circuit-relay addresses
+                                let external_addrs: Vec<Multiaddr> = swarm.external_addresses().cloned().collect();
+                                if !external_addrs.is_empty() {
+                                    circuit_relay_ladder.add_relay(peer_id, external_addrs);
+                                }
+
                                 // Prune resolved_to_dns mappings for this peer / hostname
                                 let stripped_remote: Multiaddr = remote_addr.iter().filter(|p| !matches!(p, libp2p::multiaddr::Protocol::P2p(_))).collect();
                                 let mut dns_to_prune = None;
@@ -4270,6 +4301,12 @@ pub async fn start_swarm_with_config(
                                 if let libp2p::swarm::DialError::Transport(ref errors) = error {
                                     for (failed_addr, _) in errors {
                                         let stripped_failed: Multiaddr = failed_addr.iter().filter(|p| !matches!(p, libp2p::multiaddr::Protocol::P2p(_))).collect();
+
+                                        // P1 Item 3: Apply backoff on transient dial failure
+                                        let addr_key = multiaddr_to_key(&stripped_failed);
+                                        dial_policy_manager.record_dial_failure(&addr_key, peer_id);
+                                        dial_policy_manager.complete_dial_attempt(&addr_key);
+
                                         for (key, entry) in pending_dials.iter() {
                                             if entry.candidate_addrs.iter().any(|a| a == failed_addr || a == &stripped_failed)
                                                 && !resolved_dial_keys.contains(key)
@@ -4630,6 +4667,25 @@ pub async fn start_swarm_with_config(
                                     }
                                 }
 
+                                // P1 Item 3: Check dial policy (backoff + concurrent limit)
+                                let addr_key = multiaddr_to_key(&addr);
+                                if !dial_policy_manager.register_dial_attempt(&addr_key, target_peer_id) {
+                                    let policy_error = if let Some(state) = dial_policy_manager.get_backoff_state(&addr_key) {
+                                        if state.is_dead {
+                                            "Peer marked as dead after 3 failed dial attempts (session)".to_string()
+                                        } else {
+                                            format!("Peer is backed off (attempt_count={}/3, backoff={}s)",
+                                                    state.attempt_count,
+                                                    state.backoff_duration.as_secs())
+                                        }
+                                    } else {
+                                        "Peer is at concurrent dial limit (3/3)".to_string()
+                                    };
+                                    tracing::debug!("[DIAL-REJECTED] {}: {}", addr_key, policy_error);
+                                    let _ = reply.send(Err(policy_error)).await;
+                                    continue;
+                                }
+
                                 // Every address actually dialed for this attempt, captured
                                 // (stripped of any /p2p/ component, for later comparison
                                 // against ConnectionEstablished/OutgoingConnectionError) so
@@ -4663,6 +4719,15 @@ pub async fn start_swarm_with_config(
                                                 a.push(libp2p::multiaddr::Protocol::Tcp(port));
                                                 a.push(libp2p::multiaddr::Protocol::P2p(pid));
                                                 if !candidates.contains(&a) { candidates.push(a); }
+                                            }
+
+                                            // P1 Item 4: Add circuit-relay addresses to the candidate ladder
+                                            // These are tried after direct addresses
+                                            let relay_addrs = circuit_relay_ladder.build_relay_addresses(pid);
+                                            for relay_addr in relay_addrs {
+                                                if !candidates.contains(&relay_addr) {
+                                                    candidates.push(relay_addr);
+                                                }
                                             }
 
                                             dial_candidate_addrs = candidates
@@ -4721,6 +4786,8 @@ pub async fn start_swarm_with_config(
                                     }
                                     Err(e) => {
                                         let err_msg: String = format!("{}", e);
+                                        // P1 Item 3: Complete the dial attempt since it failed to queue
+                                        dial_policy_manager.complete_dial_attempt(&addr_key);
                                         let _ = reply.send(Err(err_msg)).await;
                                     }
                                 }

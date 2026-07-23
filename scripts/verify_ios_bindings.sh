@@ -9,9 +9,11 @@ COMMITTED_SWIFT="iOS/SCMessenger/SCMessenger/Generated/api.swift"
 
 echo "Verifying iOS Swift bindings..."
 
-# Build host-native library required by gen_swift
-if ! cargo build -p scmessenger-mobile; then
-    echo "ERROR: Failed to build scmessenger-mobile"
+# Build host-native library required by gen_swift. Must be the core package
+# itself: only a direct -p scmessenger-core build emits the libscmessenger_core
+# cdylib that gen_swift reads (bins and dependent crates only link the rlib).
+if ! cargo build -p scmessenger-core; then
+    echo "ERROR: Failed to build scmessenger-core"
     exit 1
 fi
 

@@ -82,7 +82,7 @@ fn main() {
         .unwrap_or_else(|| {
             panic!(
                 "scmessenger_core cdylib not found. \
-                 Please run: cargo build -p scmessenger-mobile"
+                 Please run: cargo build -p scmessenger-core"
             )
         });
 

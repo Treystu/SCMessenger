@@ -18,6 +18,22 @@ dictionary PeelResult {
     bytes remaining_data;
 };
 
+/// Delivery status of a message (for receipt encoding/decoding)
+enum DeliveryStatus {
+    "Sent",
+    "Delivered",
+    "Read",
+    "Failed",
+};
+
+/// A delivery receipt — canonical wire format for delivery confirmations.
+/// All platforms use these functions to encode/decode receipts to/from JSON bytes.
+dictionary Receipt {
+    string message_id;
+    DeliveryStatus status;
+    u64 timestamp;
+};
+
 // ============================================================================
 // IDENTITY
 // ============================================================================
@@ -404,4 +420,21 @@ namespace api {
     BlockedIdentity blocked_identity_with_device_id(BlockedIdentity blocked, string device_id);
     BlockedIdentity blocked_identity_with_reason(BlockedIdentity blocked, string reason);
     BlockedIdentity blocked_identity_with_notes(BlockedIdentity blocked, string notes);
+
+    // ============================================================================
+    // RECEIPT ENCODING/DECODING
+    // ============================================================================
+    // Canonical receipt wire format: JSON bytes, used by all platforms.
+    // These are the ONLY functions for receipt serialization across CLI, Android, iOS, WASM.
+
+    /// Encode a Receipt struct to JSON bytes (canonical wire format).
+    /// Used by all platforms before sending delivery confirmations over transport.
+    [Throws=IronCoreError]
+    bytes encode_receipt(Receipt receipt);
+
+    /// Decode a Receipt struct from JSON bytes (canonical wire format).
+    /// Used by all platforms after receiving delivery confirmations.
+    /// Throws IronCoreError::CryptoError if deserialization fails.
+    [Throws=IronCoreError]
+    Receipt decode_receipt(bytes data);
 };

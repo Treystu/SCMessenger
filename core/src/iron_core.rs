@@ -21,7 +21,6 @@ use crate::crypto::encrypt::{ed25519_public_to_x25519, ed25519_to_x25519_secret}
 use crate::crypto::{decrypt_message, encrypt_message, session_manager::RatchetSessionManager};
 use crate::drift::{MeshStore, NetworkState, RelayConfig, RelayEngine};
 use crate::identity::IdentityManager;
-use crate::message::types::{decode_receipt, encode_receipt};
 use crate::message::{decode_envelope, decode_message, Message};
 use crate::notification::NotificationEndpointRegistry;
 use crate::observability::{AuditEventType, AuditLog as AuditLogType};
@@ -1693,7 +1692,7 @@ impl IronCore {
                 .unwrap_or_default()
                 .as_secs(),
         };
-        encode_receipt(&receipt).map_err(|_| IronCoreError::Internal)
+        crate::message::types::encode_receipt(&receipt).map_err(|_| IronCoreError::Internal)
     }
 
     /// Generate cover traffic payload (random bytes).
@@ -2630,45 +2629,186 @@ impl IronCore {
     }
 
     /// Handle peer connection event: on connect, flush outbox messages for that peer and send them.
+    ///
+    /// # Behavior
+    /// When a peer is identified (Identify protocol completes), this method:
+    /// 1. Fetches all pending (unsent) messages from the outbox for that peer
+    /// 2. Attempts delivery via transport layer
+    /// 3. On success: marks message as sent (removed from outbox)
+    /// 4. On transient error (timeout, network): re-enqueues with exponential backoff
+    /// 5. On persistent error (peer rejected, too large): re-enqueues with backoff for later retry
+    ///
+    /// # Verbose Logging
+    /// Each step emits INFO-level logs at decision points:
+    /// - `outbox_reconnect_detected`: peer identified after connection
+    /// - `outbox_flush_started`: beginning flush for peer with N pending messages
+    /// - `outbox_retry_attempt`: attempting to send message (attempt #X)
+    /// - `outbox_delivery_success`: message sent successfully
+    /// - `outbox_delivery_failed_transient`: delivery failed with backoff retry
     pub fn handle_peer_connection_event(&self, peer_id: &str, connected: bool) {
         if connected {
+            tracing::info!(
+                event = "outbox_reconnect_detected",
+                peer_id = %peer_id,
+                "Peer identified; triggering outbox flush"
+            );
+
             let messages = self.outbox.write().flush_peer_messages(peer_id);
-            if !messages.is_empty() {
-                if let Ok(recipient_bytes) = hex::decode(peer_id) {
-                    if let Ok(recipient_pk) = recipient_bytes.try_into() {
-                        for mut msg in messages {
-                            if self
-                                .transport_manager
-                                .read()
-                                .send_to_peer(recipient_pk, msg.envelope_data.clone(), 1)
-                                .is_err()
-                            {
-                                // Delivery failed after the message was already drained from
-                                // the outbox - re-enqueue with backoff instead of dropping it,
-                                // otherwise a transient send failure loses the message forever.
-                                msg.attempts = msg.attempts.saturating_add(1);
+            if messages.is_empty() {
+                tracing::debug!(
+                    event = "outbox_flush_completed",
+                    peer_id = %peer_id,
+                    pending_count = 0,
+                    "No pending messages to flush"
+                );
+                return;
+            }
+
+            tracing::info!(
+                event = "outbox_flush_started",
+                peer_id = %peer_id,
+                pending_count = messages.len(),
+                "Starting flush of {} pending messages",
+                messages.len()
+            );
+
+            if let Ok(recipient_bytes) = hex::decode(peer_id) {
+                if let Ok(recipient_pk) = recipient_bytes.try_into() {
+                    let mut succeeded = 0;
+                    let mut failed = 0;
+
+                    for mut msg in messages {
+                        let msg_id = msg.message_id.clone();
+                        let current_attempt = msg.attempts.saturating_add(1);
+
+                        tracing::info!(
+                            event = "outbox_retry_attempt",
+                            message_id = %msg_id,
+                            peer_id = %peer_id,
+                            attempt = current_attempt,
+                            "Attempting delivery (attempt #{}/12)",
+                            current_attempt
+                        );
+
+                        match self.transport_manager.read().send_to_peer(
+                            recipient_pk,
+                            msg.envelope_data.clone(),
+                            1,
+                        ) {
+                            Ok(crate::transport::manager::SendResult::Queued(transport_type)) => {
+                                tracing::info!(
+                                    event = "outbox_delivery_success",
+                                    message_id = %msg_id,
+                                    peer_id = %peer_id,
+                                    transport = ?transport_type,
+                                    "Message queued to transport"
+                                );
+                                succeeded += 1;
+                                // Message was sent successfully; remove from outbox
+                                self.outbox.write().remove(&msg_id);
+                            }
+                            Err(e) => {
+                                // Delivery failed - treat as transient for now
+                                // (network timeout, peer temporarily unavailable, etc.)
+                                tracing::debug!(
+                                    event = "outbox_delivery_failed_transient",
+                                    message_id = %msg_id,
+                                    peer_id = %peer_id,
+                                    error = %e,
+                                    attempt = current_attempt,
+                                    "Delivery attempt failed; re-enqueueing with backoff"
+                                );
+
+                                // Re-enqueue with exponential backoff instead of dropping
+                                msg.attempts = current_attempt;
                                 let backoff_secs =
-                                    2u64.saturating_pow(msg.attempts.min(12)).min(3600);
+                                    2u64.saturating_pow(current_attempt.min(12)).min(3600);
                                 let now_secs = web_time::SystemTime::now()
                                     .duration_since(web_time::UNIX_EPOCH)
                                     .unwrap_or_default()
                                     .as_secs();
                                 msg.next_retry_at = Some(now_secs + backoff_secs);
+
+                                tracing::info!(
+                                    event = "outbox_retry_scheduled",
+                                    message_id = %msg_id,
+                                    peer_id = %peer_id,
+                                    backoff_secs = backoff_secs,
+                                    next_retry_at = msg.next_retry_at.unwrap_or(0),
+                                    "Message scheduled for retry in {} seconds",
+                                    backoff_secs
+                                );
+
                                 let _ = self.outbox.write().enqueue(msg);
+                                failed += 1;
                             }
                         }
-                    } else {
-                        tracing::warn!(
-                            "Failed to convert decoded peer_id bytes to public key: {}",
-                            peer_id
-                        );
                     }
+
+                    tracing::info!(
+                        event = "outbox_flush_completed",
+                        peer_id = %peer_id,
+                        succeeded = succeeded,
+                        failed = failed,
+                        "Outbox flush complete: {} sent, {} scheduled for retry",
+                        succeeded,
+                        failed
+                    );
                 } else {
-                    tracing::warn!("Failed to hex decode peer_id: {}", peer_id);
+                    tracing::warn!(
+                        event = "outbox_peer_key_invalid",
+                        peer_id = %peer_id,
+                        "Failed to convert decoded peer_id bytes to public key"
+                    );
                 }
+            } else {
+                tracing::warn!(
+                    event = "outbox_peer_id_decode_failed",
+                    peer_id = %peer_id,
+                    "Failed to hex decode peer_id"
+                );
             }
         }
     }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// RECEIPT ENCODING/DECODING (exported via UniFFI for cross-platform consistency)
+// ═══════════════════════════════════════════════════════════════════════════════
+//
+// These functions are the ONLY way receipts should be serialized/deserialized
+// across all platforms (CLI, Android, iOS, WASM). They guarantee that receipt
+// encoding is byte-compatible across all clients and eliminate version drift.
+
+/// Encode a Receipt struct to JSON bytes (canonical wire format).
+/// Used by all platforms before sending delivery confirmations over transport.
+#[cfg(not(target_arch = "wasm32"))]
+pub fn encode_receipt(receipt: crate::Receipt) -> Result<Vec<u8>, IronCoreError> {
+    crate::message::types::encode_receipt(&receipt).map_err(|e| {
+        tracing::error!(
+            event = "receipt_encode_failed",
+            message_id = %receipt.message_id,
+            error = %e,
+            "Failed to encode receipt to JSON bytes"
+        );
+        IronCoreError::CryptoError
+    })
+}
+
+/// Decode a Receipt struct from JSON bytes (canonical wire format).
+/// Used by all platforms after receiving delivery confirmations.
+/// Returns error with full context if deserialization fails.
+#[cfg(not(target_arch = "wasm32"))]
+pub fn decode_receipt(data: Vec<u8>) -> Result<crate::Receipt, IronCoreError> {
+    crate::message::types::decode_receipt(&data).map_err(|e| {
+        tracing::error!(
+            event = "receipt_decode_failed",
+            data_len = data.len(),
+            error = %e,
+            "Failed to decode receipt from JSON bytes"
+        );
+        IronCoreError::CryptoError
+    })
 }
 
 // Non-FFI-safe methods moved to plain impl block to avoid uniffi::export compilation errors.
@@ -2886,7 +3026,7 @@ impl IronCore {
 
         // Handle receipt classification AFTER blocked-peer check to prevent metadata leaks/spam bypass
         if message.message_type == crate::MessageType::Receipt {
-            if let Ok(receipt) = decode_receipt(&message.payload) {
+            if let Ok(receipt) = crate::message::types::decode_receipt(&message.payload) {
                 if let Some(delegate) = self.delegate.read().as_ref() {
                     let status_str = match receipt.status {
                         crate::DeliveryStatus::Sent => "Sent".to_string(),

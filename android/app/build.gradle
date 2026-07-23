@@ -234,6 +234,9 @@ dependencies {
 
     // Testing
     testImplementation 'junit:junit:4.13.2'
+    // Real org.json for JVM unit tests: the android.jar stubs no-op under
+    // returnDefaultValues, which silently empties any JSON round-trip.
+    testImplementation 'org.json:json:20240303'
     testImplementation 'org.jetbrains.kotlinx:kotlinx-coroutines-test:1.7.3'
     testImplementation 'io.mockk:mockk:1.13.10'
     testImplementation 'io.mockk:mockk-agent-jvm:1.13.10'

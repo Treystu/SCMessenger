@@ -20,9 +20,8 @@ fn arb_delivery_status() -> impl Strategy<Value = DeliveryStatus> {
     prop_oneof![
         Just(DeliveryStatus::Sent),
         Just(DeliveryStatus::Delivered),
-        #[allow(deprecated)]
         Just(DeliveryStatus::Read),
-        any::<String>().prop_map(DeliveryStatus::Failed),
+        Just(DeliveryStatus::Failed),
     ]
 }
 

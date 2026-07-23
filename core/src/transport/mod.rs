@@ -7,6 +7,7 @@ pub mod bootstrap;
 pub mod capability;
 pub mod circuit_breaker;
 pub mod diagnostics;
+pub mod dial_policy;
 pub mod discovery;
 pub mod escalation;
 pub mod health;
@@ -40,6 +41,9 @@ pub use circuit_breaker::{
 };
 pub use diagnostics::{
     get_network_diagnostics_report, NetworkDiagnosticsReport, PeerConnectionSummary,
+};
+pub use dial_policy::{
+    multiaddr_to_key, CircuitRelayLadder, DialPolicyManager, PerPeerBackoffState,
 };
 pub use discovery::{DiscoveryConfig, DiscoveryMode};
 pub use health::{

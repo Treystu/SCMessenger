@@ -78,7 +78,13 @@ pub use error::{
 };
 pub use identity::IdentityManager;
 pub use message::codec::decode_envelope;
-pub use message::types::{decode_receipt, encode_receipt, Receipt};
+pub use message::types::Receipt;
+// FFI-facing receipt codec wrappers (owned args, IronCoreError) — these are what
+// the UniFFI scaffolding binds; the canonical serializers live in message::types.
+#[cfg(not(target_arch = "wasm32"))]
+pub use iron_core::{decode_receipt, encode_receipt};
+#[cfg(target_arch = "wasm32")]
+pub use message::types::{decode_receipt, encode_receipt};
 pub use message::MessageType;
 pub use message::{DeliveryStatus, Envelope, Message, TtlConfig};
 pub use notification::{

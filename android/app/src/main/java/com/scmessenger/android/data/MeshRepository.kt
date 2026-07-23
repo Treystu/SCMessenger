@@ -391,7 +391,11 @@ open class MeshRepository(
     // P1: Mutex to synchronize contact upsert operations and prevent duplicate contact creation
     // during concurrent peer identification callbacks (AND-CONTACT-DUP-001)
     private val contactUpsertMutex = kotlinx.coroutines.sync.Mutex()
-    private val receiptAwaitSeconds: Long = 8L
+    // P3_ANDROID_RETRY_SUPPRESSION: Receipt ACK window expanded to 60 seconds
+    // to allow for relay custody delay + network latency. Prevents premature
+    // timeout-induced downgrade of successfully-sent messages.
+    private val RECEIPT_ACK_TIMEOUT_MS: Long = 60_000L
+    private val receiptAwaitSeconds: Long = RECEIPT_ACK_TIMEOUT_MS / 1000L  // 60 seconds
     private val pendingOutboxMaxAttempts: Int = 12
     private val pendingOutboxMaxAgeSeconds: Long = 7L * 24L * 60L * 60L
     private val historySyncSentPeers = java.util.concurrent.ConcurrentHashMap<String, Long>()
@@ -577,7 +581,10 @@ open class MeshRepository(
         var deliveryStatus: DeliveryStatus = DeliveryStatus.PENDING,
         var lastErrorCode: String? = null,
         var corruptionDetected: Boolean = false,
-        var recoveredAt: Long? = null
+        var recoveredAt: Long? = null,
+        // P3_ANDROID_RETRY_SUPPRESSION: number of transport-level acks observed.
+        // Non-zero blocks the corruption downgrade in markMessageCorrupted().
+        var ackedCount: Int = 0
     ) {
         /**
          * Check if this tracking entry is corrupted and needs recovery.
@@ -605,6 +612,7 @@ open class MeshRepository(
             this.lastDeliveryAttemptAt = System.currentTimeMillis()
             this.corruptionDetected = false
             this.recoveredAt = null
+            this.ackedCount++
         }
 
         /**
@@ -636,7 +644,10 @@ open class MeshRepository(
                     messageId = tracking.messageId,
                     attemptCount = 0,
                     corruptionDetected = false,
-                    recoveredAt = System.currentTimeMillis()
+                    recoveredAt = System.currentTimeMillis(),
+                    // P3: transport-ack history survives recovery so the
+                    // no-downgrade rule keeps holding for this message.
+                    ackedCount = tracking.ackedCount
                 )
             }
         }
@@ -689,11 +700,18 @@ open class MeshRepository(
     /**
      * Mark a message as corrupted in the tracking cache.
      * Called when message processing encounters unrecoverable errors.
+     * P3_ANDROID_RETRY_SUPPRESSION: Guards against downgrading transport-acked messages.
      */
     fun markMessageCorrupted(messageId: String) {
         val tracking = messageTrackingCache[messageId] ?: return
+        // P3: No-downgrade rule - log if attempting to corrupt an acked message
+        if (tracking.ackedCount > 0) {
+            Timber.e("NO-DOWNGRADE VIOLATION: Attempted to mark transport-acked message $messageId as corrupted (ackedCount=${tracking.ackedCount}). Skipping corruption flag.")
+            Timber.d("Message $messageId state: acked=${ tracking.ackedCount}, attempts=${tracking.attemptCount}")
+            return  // Prevent downgrade
+        }
         tracking.markCorrupted()
-        Timber.w("Message $messageId marked as corrupted")
+        Timber.w("Message $messageId marked as corrupted (acked=false, attempts=${tracking.attemptCount})")
     }
 
     /**
@@ -747,6 +765,14 @@ open class MeshRepository(
             val tracking = getMessageIdTracking(messageId)
             tracking.recordFailure(null)
         }
+    }
+
+    /**
+     * P3_ANDROID_RETRY_SUPPRESSION: Record a transport-level ack for a message.
+     * Feeds the no-downgrade rule in markMessageCorrupted().
+     */
+    private fun recordMessageTransportAck(messageId: String) {
+        getMessageIdTracking(messageId).ackedCount++
     }
 
     /**
@@ -2133,19 +2159,60 @@ open class MeshRepository(
                 }
 
                 override fun onReceiptReceived(messageId: String, status: String) {
-                    Timber.d("Receipt for $messageId: $status")
+                    // [VERBOSE] Log: Receipt arrived from core
+                    Timber.i(
+                        "[RECEIPT-RX] Received from core: msg=$messageId status=$status"
+                    )
+
                     val normalized = status.trim().lowercase()
+                    Timber.d("[RECEIPT-RX] Normalized status: $normalized")
+
                     if (normalized != "delivered" && normalized != "read") {
+                        Timber.w(
+                            "[RECEIPT-RX] IGNORING: Unknown delivery status: " +
+                            "msg=$messageId status=$status normalized=$normalized"
+                        )
+                        logDeliveryAttempt(
+                            messageId = messageId,
+                            medium = "receipt",
+                            phase = "rx",
+                            outcome = "ignored_unknown_status",
+                            detail = "status=$status normalized=$normalized"
+                        )
                         return
                     }
+                    // [VERBOSE] Step 1: Look up message in history
                     val existingRecord = try {
-                        historyManager?.get(messageId)
-                    } catch (_: Exception) {
+                        val rec = historyManager?.get(messageId)
+                        Timber.d(
+                            "[RECEIPT-RX] History lookup: msg=$messageId " +
+                            "found=${rec != null} direction=${rec?.direction}"
+                        )
+                        rec
+                    } catch (e: Exception) {
+                        Timber.e(
+                            e,
+                            "[ERROR] History lookup FAILED: msg=$messageId error=${e.message}"
+                        )
                         null
                     }
+
+                    // [VERBOSE] Step 2: Check pending outbox
                     val hasPendingForReceipt = loadPendingOutbox().any { it.historyRecordId == messageId }
+                    Timber.d(
+                        "[RECEIPT-RX] Pending outbox check: msg=$messageId " +
+                        "has_pending=$hasPendingForReceipt existing=${existingRecord != null}"
+                    )
+
                     if (existingRecord == null || existingRecord.direction != uniffi.api.MessageDirection.SENT) {
+                        Timber.w(
+                            "[RECEIPT-RX] INVALID: Receipt for non-sent message: " +
+                            "msg=$messageId direction=${existingRecord?.direction ?: "null"}"
+                        )
                         if (hasPendingForReceipt) {
+                            Timber.i(
+                                "[RECEIPT-RX] RECOVERY: Found in pending outbox, marking delivered: msg=$messageId"
+                            )
                             removePendingOutbound(messageId)
                             logDeliveryState(
                                 messageId = messageId,
@@ -2154,6 +2221,10 @@ open class MeshRepository(
                             )
                             return
                         }
+                        Timber.d(
+                            "[RECEIPT-RX] IGNORING: No pending outbox entry: " +
+                            "msg=$messageId status=$normalized direction=${existingRecord?.direction ?: "missing"}"
+                        )
                         logDeliveryState(
                             messageId = messageId,
                             state = "pending",
@@ -2161,9 +2232,24 @@ open class MeshRepository(
                         )
                         return
                     }
+                    // [VERBOSE] Step 3: Check if already delivered
                     val wasAlreadyDelivered = existingRecord.delivered
+                    Timber.d(
+                        "[RECEIPT-RX] Delivery state check: msg=$messageId " +
+                        "was_delivered=$wasAlreadyDelivered"
+                    )
+
+                    // [VERBOSE] Step 4: Deduplication - mark receipt seen
                     val firstReceiptSeen = markDeliveredReceiptSeen(messageId)
+                    Timber.d(
+                        "[RECEIPT-RX] Dedup check: msg=$messageId " +
+                        "first_receipt=$firstReceiptSeen was_already_delivered=$wasAlreadyDelivered"
+                    )
+
                     if (!firstReceiptSeen && wasAlreadyDelivered) {
+                        Timber.i(
+                            "[RECEIPT-RX] DUPLICATE: Already delivered and already processed receipt: msg=$messageId"
+                        )
                         removePendingOutbound(messageId)
                         logDeliveryState(
                             messageId = messageId,
@@ -2172,33 +2258,96 @@ open class MeshRepository(
                         )
                         return
                     }
+
+                    // [VERBOSE] Step 5: Update history if first delivery
                     if (!wasAlreadyDelivered) {
-                        historyManager?.markDelivered(messageId)
-                        historyManager?.flush()
+                        Timber.i(
+                            "[RECEIPT-RX] Marking as delivered: msg=$messageId status=$normalized"
+                        )
+                        try {
+                            historyManager?.markDelivered(messageId)
+                            historyManager?.flush()
+                            Timber.d("[RECEIPT-RX] History updated: msg=$messageId")
+                        } catch (e: Exception) {
+                            Timber.e(
+                                e,
+                                "[ERROR] History update FAILED: msg=$messageId error=${e.message}"
+                            )
+                        }
+                    } else {
+                        Timber.d(
+                            "[RECEIPT-RX] Already delivered in history, skipping update: msg=$messageId"
+                        )
                     }
+
+                    // [VERBOSE] Step 6: Clean up pending outbox
                     removePendingOutbound(messageId)
+                    Timber.d("[RECEIPT-RX] Removed from pending outbox: msg=$messageId")
+
+                    // [VERBOSE] Step 7: Refresh and emit UI updates
                     val refreshedRecord = try {
-                        historyManager?.get(messageId)
-                    } catch (_: Exception) {
+                        val rec = historyManager?.get(messageId)
+                        Timber.d(
+                            "[RECEIPT-RX] Refreshed record: msg=$messageId " +
+                            "delivered=${rec?.delivered} status=${rec?.status}"
+                        )
+                        rec
+                    } catch (e: Exception) {
+                        Timber.e(
+                            e,
+                            "[ERROR] Refresh FAILED: msg=$messageId error=${e.message}"
+                        )
                         null
                     }
+
                     if (refreshedRecord != null) {
                         repoScope.launch {
                             _messageUpdates.emit(refreshedRecord)
+                            Timber.d("[RECEIPT-RX] Emitted UI update: msg=$messageId")
                         }
                     }
-                    if (wasAlreadyDelivered) return
-                    ironCore?.markMessageSent(messageId)
-                    // Bridge to ChatViewModel: emit Delivered so UI delivery indicator updates
-                    repoScope.launch {
-                        com.scmessenger.android.service.MeshEventBus.emitMessageEvent(
-                            com.scmessenger.android.service.MessageEvent.Delivered(messageId)
+
+                    // [VERBOSE] Step 8: Call core API if first delivery
+                    if (wasAlreadyDelivered) {
+                        Timber.d(
+                            "[RECEIPT-RX] Skipping core.markMessageSent (already delivered): msg=$messageId"
+                        )
+                        return
+                    }
+
+                    try {
+                        ironCore?.markMessageSent(messageId)
+                        Timber.i("[RECEIPT-RX] Called core.markMessageSent: msg=$messageId")
+                    } catch (e: Exception) {
+                        Timber.e(
+                            e,
+                            "[ERROR] core.markMessageSent FAILED: msg=$messageId error=${e.message}"
                         )
                     }
+
+                    // [VERBOSE] Step 9: Bridge to ChatViewModel
+                    repoScope.launch {
+                        try {
+                            com.scmessenger.android.service.MeshEventBus.emitMessageEvent(
+                                com.scmessenger.android.service.MessageEvent.Delivered(messageId)
+                            )
+                            Timber.d("[RECEIPT-RX] Emitted MessageEvent.Delivered: msg=$messageId")
+                        } catch (e: Exception) {
+                            Timber.e(
+                                e,
+                                "[ERROR] MeshEventBus.emit FAILED: msg=$messageId error=${e.message}"
+                            )
+                        }
+                    }
+
+                    // [VERBOSE] Step 10: Final logging
                     logDeliveryState(
                         messageId = messageId,
                         state = "delivered",
-                        detail = "delivery_receipt_status=$normalized"
+                        detail = "delivery_receipt_status=$normalized first_receipt=$firstReceiptSeen"
+                    )
+                    Timber.i(
+                        "[OK] Receipt processing complete: msg=$messageId status=$normalized"
                     )
                 }
             }
@@ -2293,11 +2442,69 @@ open class MeshRepository(
         ) {
             try {
                 for (attempt in 1..receiptSendMaxAttempts) {
-                    val receiptBytes = ironCore?.prepareReceipt(senderPublicKeyHex, normalizedMessageId)
-                    if (receiptBytes == null) {
-                        Timber.d("Skipping delivery receipt for $normalizedMessageId: prepareReceipt returned null")
-                        return@launch
+                    // [VERBOSE] Log: Starting receipt encode attempt
+                    Timber.i(
+                        "[RECEIPT-ENCODE] Attempt $attempt/$receiptSendMaxAttempts: " +
+                        "msg=$normalizedMessageId sender=$senderId"
+                    )
+
+                    // [CRITICAL] Step 1: Create Receipt struct with core types
+                    val receipt = uniffi.api.Receipt(
+                        messageId = normalizedMessageId,
+                        status = uniffi.api.DeliveryStatus.DELIVERED,
+                        timestamp = (System.currentTimeMillis() / 1000).toULong()
+                    )
+
+                    // [CRITICAL] Step 2: Encode Receipt to JSON bytes using core bindings
+                    val receiptBytes = try {
+                        Timber.d(
+                            "[RECEIPT-ENCODE] Encoding Receipt struct: " +
+                            "msg=$normalizedMessageId status=${receipt.status} ts=${receipt.timestamp}"
+                        )
+                        uniffi.api.encodeReceipt(receipt)
+                    } catch (e: Exception) {
+                        Timber.e(
+                            e,
+                            "[ERROR] Receipt encode FAILED: msg=$normalizedMessageId " +
+                            "error=${e.message} class=${e.javaClass.simpleName} attempt=$attempt"
+                        )
+                        logDeliveryAttempt(
+                            messageId = normalizedMessageId,
+                            medium = "receipt",
+                            phase = "encode",
+                            outcome = "error",
+                            detail = "encode_error msg=$normalizedMessageId error=${e.message} attempt=$attempt"
+                        )
+                        if (attempt < receiptSendMaxAttempts) {
+                            kotlinx.coroutines.delay(getRetryDelay(attempt - 1))
+                            continue
+                        } else {
+                            Timber.e(
+                                "[ERROR] Receipt encode exhausted after $receiptSendMaxAttempts attempts: " +
+                                "msg=$normalizedMessageId sender=$senderId"
+                            )
+                            logDeliveryAttempt(
+                                messageId = normalizedMessageId,
+                                medium = "receipt",
+                                phase = "encode",
+                                outcome = "exhausted",
+                                detail = "encode_error_final msg=$normalizedMessageId attempts=$receiptSendMaxAttempts error=${e.message}"
+                            )
+                            return@launch
+                        }
                     }
+
+                    Timber.i(
+                        "[RECEIPT-ENCODE] SUCCESS: msg=$normalizedMessageId " +
+                        "bytes=${receiptBytes.size} status=${receipt.status}"
+                    )
+                    logDeliveryAttempt(
+                        messageId = normalizedMessageId,
+                        medium = "receipt",
+                        phase = "encode",
+                        outcome = "success",
+                        detail = "encoded_bytes=${receiptBytes.size} attempt=$attempt"
+                    )
                     val contact = try { contactManager?.get(senderId) } catch (_: Exception) { null }
                     val hints = parseRoutingHints(contact?.notes)
                     val routeCandidates = buildRoutePeerCandidates(
@@ -4598,6 +4805,8 @@ open class MeshRepository(
                 val selectedRoutePeerId = delivery.routePeerId ?: preferredRoutePeerId
 
                 if (delivery.acked) {
+                    // P3: feed the no-downgrade rule in markMessageCorrupted()
+                    recordMessageTransportAck(realMessageId)
                     promotePendingOutboundForPeer(peerId = normalizedPeerId, excludingMessageId = realMessageId)
                     // AND-NO-ROUTE-001: Persist last-known-good route in contact notes for future fallback
                     storeLastKnownRoutePeerId(normalizedPeerId, selectedRoutePeerId)
@@ -6593,9 +6802,30 @@ open class MeshRepository(
                     updated = true
                     continue
                 }
+                // P3_ANDROID_RETRY_SUPPRESSION: No-downgrade rule enforcement
+                // Once message reaches Sent state (confirmed by transport), it may NOT move to Failed or Corrupted.
+                // Messages that have been acked by transport are tracked separately (ackedWithoutReceiptCount)
+                // and should only be stopped via age-based ceiling (above), never via attempt-count ceiling.
+                if (item.ackedWithoutReceiptCount > 0) {
+                    // Transport-confirmed success: keep message in Sent state indefinitely (until age-based stop)
+                    Timber.d("Skipping retry for ${item.historyRecordId}: transport-acked message cannot be downgraded acked_count=${item.ackedWithoutReceiptCount}")
+                    logDeliveryState(
+                        messageId = item.historyRecordId,
+                        state = "held",
+                        detail = "acked_without_receipt_protection acked_count=${item.ackedWithoutReceiptCount} attempt=${item.attemptCount}"
+                    )
+                    iterator.set(
+                        item.copy(
+                            nextAttemptAtEpochSec = now + 120L  // Schedule next check in 2 minutes
+                        )
+                    )
+                    updated = true
+                    continue
+                }
                 // AND-DELIVERY-001: Enforce maximum retry limit to prevent infinite retries
+                // Only applies to messages that have NOT been transport-acked
                 if (item.attemptCount >= pendingOutboxMaxAttempts) {
-                    Timber.w("Dropping message ${item.historyRecordId} after ${item.attemptCount} attempts (max=$pendingOutboxMaxAttempts)")
+                    Timber.w("Dropping message ${item.historyRecordId} after ${item.attemptCount} attempts (max=$pendingOutboxMaxAttempts) - NOT transport-acked")
                     markMessageCorrupted(item.historyRecordId)
                     logDeliveryState(
                         messageId = item.historyRecordId,
@@ -6688,15 +6918,20 @@ open class MeshRepository(
                 }
 
                 if (delivery.acked) {
+                    // P3: feed the no-downgrade rule in markMessageCorrupted()
+                    recordMessageTransportAck(item.historyRecordId)
                     // AND-NO-ROUTE-001: Persist last-known-good route in contact notes for future fallback
                     storeLastKnownRoutePeerId(item.peerId, selectedRoutePeerId)
                     // AND-DELIVERY-001 / FARM WS-A3: transport genuinely succeeded, so
                     // track this on the separate ackedWithoutReceiptCount counter, NOT
                     // attemptCount - a confirmed send must never count toward the
                     // genuine-failure ceiling below (pendingOutboxMaxAttempts).
+                    // P3_ANDROID_RETRY_SUPPRESSION: First receipt window is now 60s (RECEIPT_ACK_TIMEOUT_MS)
+                    // to allow relay custody delay + network latency. No-downgrade rule prevents
+                    // transport-acked messages from being marked Failed/Corrupted.
                     val nextAckedWithoutReceiptCount = item.ackedWithoutReceiptCount + 1
                     val adaptiveReceiptWait = when {
-                        nextAckedWithoutReceiptCount <= 3 -> receiptAwaitSeconds  // 8s for first few
+                        nextAckedWithoutReceiptCount <= 3 -> receiptAwaitSeconds  // 60s for first few attempts (P3 hardened)
                         nextAckedWithoutReceiptCount <= 8 -> 30L                 // 30s for moderate retries
                         else -> 120L                                             // 2 min for later ones
                     }
@@ -6914,7 +7149,10 @@ open class MeshRepository(
                             strictBleOnlyMode = if (obj.has("strict_ble_only_mode")) obj.optBoolean("strict_ble_only_mode") else null,
                             recipientIdentityId = obj.optString("recipient_identity_id").ifBlank { null },
                             intendedDeviceId = obj.optString("intended_device_id").ifBlank { null },
-                            terminalFailureCode = obj.optString("terminal_failure_code").ifBlank { null }
+                            terminalFailureCode = obj.optString("terminal_failure_code").ifBlank { null },
+                            // P3: ack history must survive restart or the
+                            // no-downgrade/held protections reset to zero.
+                            ackedWithoutReceiptCount = obj.optInt("acked_without_receipt_count", 0)
                         )
                     )
                 }
@@ -6952,6 +7190,7 @@ open class MeshRepository(
                         .put("recipient_identity_id", item.recipientIdentityId ?: "")
                         .put("intended_device_id", item.intendedDeviceId ?: "")
                         .put("terminal_failure_code", item.terminalFailureCode ?: "")
+                        .put("acked_without_receipt_count", item.ackedWithoutReceiptCount)
                 )
             }
             pendingOutboxFile.writeText(arr.toString())

@@ -639,7 +639,7 @@ pub fn is_dialable_multiaddr(multiaddr: &str, mode: NetworkMode) -> bool {
             "p2p-circuit" => return true,
             "ip4" => {
                 if let Ok(ip) = parts[i + 1].parse::<std::net::Ipv4Addr>() {
-                    if ip.is_unspecified() || ip.is_link_local() {
+                    if ip.is_loopback() || ip.is_unspecified() || ip.is_link_local() {
                         return false;
                     }
                     if mode == NetworkMode::Public && ip.is_private() {

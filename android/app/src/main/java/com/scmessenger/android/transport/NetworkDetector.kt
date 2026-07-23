@@ -93,6 +93,18 @@ class NetworkDetector @Inject constructor(
             return
         }
 
+        // Registration must never abort the caller: some OEM ConnectivityManager
+        // implementations throw (SecurityException, TooManyRequestsException),
+        // and JVM unit tests stub the framework classes entirely. The mesh
+        // degrades to no cellular-awareness, which is safe.
+        try {
+            startMonitoringInternal()
+        } catch (e: Exception) {
+            Timber.w(e, "NetworkDetector monitoring unavailable; continuing without it")
+        }
+    }
+
+    private fun startMonitoringInternal() {
         val request = NetworkRequest.Builder()
             .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
             .build()

@@ -9,6 +9,7 @@ WORKDIR /workspace
 # Install additional dependencies
 RUN apt-get update && apt-get install -y \
     build-essential \
+    libdbus-1-dev \
     libssl-dev \
     pkg-config \
     protobuf-compiler \

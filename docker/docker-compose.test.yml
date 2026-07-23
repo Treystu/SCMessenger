@@ -141,10 +141,10 @@ services:
       - RUSTFLAGS=-C link-arg=-Wl,-z,max-page-size=16384
     command: |
       bash -c "
-        echo '=== Generating UniFFI Bindings ===' &&
-        cargo run --manifest-path core/Cargo.toml --bin gen_kotlin --features gen-bindings &&
         echo '=== Building Native Library for Host (Linux) ===' &&
         cargo build --manifest-path core/Cargo.toml --release &&
+        echo '=== Generating UniFFI Bindings ===' &&
+        cargo run --manifest-path core/Cargo.toml --bin gen_kotlin --features gen-bindings &&
         mkdir -p core/target/android-libs/host &&
         cp target/release/libscmessenger_core.so core/target/android-libs/host/libuniffi_api.so &&
         echo '=== Running Android Unit Tests ===' &&

@@ -24,6 +24,9 @@ cargo build --target "$SIM_TARGET" -p scmessenger-core --release
 
 echo "Generating Swift bindings..."
 
+# gen_swift reads the host libscmessenger_core cdylib, which only a direct
+# -p scmessenger-core build emits (cargo run only links the rlib).
+cargo build -p scmessenger-core
 cargo run --bin gen_swift --features gen-bindings
 
 # Stage generated Swift bindings where the Xcode project expects them
