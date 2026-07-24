@@ -166,7 +166,7 @@ pub struct IronCore {
 
     /// Ledger manager for connection tracking (used by mobile bridge).
     #[cfg(not(target_arch = "wasm32"))]
-    pub ledger_manager: crate::mobile_bridge::LedgerManager,
+    pub ledger_manager: crate::store::LedgerManager,
 
     /// Running state flag.
     running: Arc<RwLock<bool>>,
@@ -336,7 +336,7 @@ impl IronCore {
             storage_path: None,
             log_directory: None,
             #[cfg(not(target_arch = "wasm32"))]
-            ledger_manager: crate::mobile_bridge::LedgerManager::new(
+            ledger_manager: crate::store::LedgerManager::new(
                 std::env::temp_dir().to_str().unwrap_or("/tmp").to_string(),
             ),
             running: Arc::new(RwLock::new(false)),
@@ -429,7 +429,7 @@ impl IronCore {
             storage_path: Some(path),
             log_directory: None,
             #[cfg(not(target_arch = "wasm32"))]
-            ledger_manager: crate::mobile_bridge::LedgerManager::new(p),
+            ledger_manager: crate::store::LedgerManager::new(p),
             running: Arc::new(RwLock::new(false)),
             routing_engine: Arc::new(RwLock::new(None)),
             cover_traffic_generator: Arc::new(RwLock::new(None)),
@@ -520,7 +520,7 @@ impl IronCore {
             storage_path: Some(path),
             log_directory: Some(log_dir),
             #[cfg(not(target_arch = "wasm32"))]
-            ledger_manager: crate::mobile_bridge::LedgerManager::new(p),
+            ledger_manager: crate::store::LedgerManager::new(p),
             running: Arc::new(RwLock::new(false)),
             routing_engine: Arc::new(RwLock::new(None)),
             cover_traffic_generator: Arc::new(RwLock::new(None)),
@@ -805,6 +805,7 @@ impl IronCore {
                 .is_peer_connected(recipient_pk);
             if !connected {
                 let _ = self.outbox.write().enqueue(QueuedMessage {
+                    version: 1,
                     message_id: message_id.clone(),
                     recipient_id: recipient_id.to_string(),
                     envelope_data: envelope_data.clone(),
@@ -3062,6 +3063,7 @@ impl IronCore {
             let mut inbox = self.inbox.write();
             if !inbox.is_duplicate(&message.id) {
                 inbox.receive(ReceivedMessage {
+                    version: 1,
                     message_id: message.id.clone(),
                     sender_id: message.sender_id.clone(),
                     payload: message.payload.clone(),

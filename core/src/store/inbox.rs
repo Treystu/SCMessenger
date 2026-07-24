@@ -10,6 +10,36 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 
+#[derive(Serialize, Deserialize)]
+struct LegacyReceivedMessage {
+    pub message_id: String,
+    pub sender_id: String,
+    pub payload: Vec<u8>,
+    pub received_at: u64,
+}
+
+fn deserialize_received_message(data: &[u8]) -> Result<ReceivedMessage, bincode::Error> {
+    if data.is_empty() {
+        return Err(Box::new(bincode::ErrorKind::Io(std::io::Error::new(std::io::ErrorKind::UnexpectedEof, "empty"))));
+    }
+    // If the first byte is 1, it's the new versioned format.
+    // Legacy format starts with a String length. Since string lengths are usually 36 (for UUIDs), 
+    // their first byte is 36, not 1.
+    if data[0] == 1 {
+        bincode::deserialize(data)
+    } else {
+        let legacy: LegacyReceivedMessage = bincode::deserialize(data)?;
+        Ok(ReceivedMessage {
+            version: 1,
+            message_id: legacy.message_id,
+            sender_id: legacy.sender_id,
+            payload: legacy.payload,
+            received_at: legacy.received_at,
+            sender_public_key_hex: None,
+        })
+    }
+}
+
 /// Maximum tracked message IDs (for deduplication)
 const MAX_SEEN_IDS: usize = 50_000;
 
@@ -20,6 +50,9 @@ const MESSAGES_PREFIX: &[u8] = b"inbox_msg_";
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(not(target_arch = "wasm32"), derive(uniffi::Record))]
 pub struct ReceivedMessage {
+    /// Version byte for serialization format
+    #[serde(default = "default_version")]
+    pub version: u8,
     /// Message ID
     pub message_id: String,
     /// Sender's identity ID
@@ -36,6 +69,10 @@ pub struct ReceivedMessage {
     /// broadcast. `None` for messages received before this field existed.
     #[serde(default)]
     pub sender_public_key_hex: Option<String>,
+}
+
+fn default_version() -> u8 {
+    1
 }
 
 /// Storage backend for inbox
@@ -220,7 +257,7 @@ impl Inbox {
                 if let Ok(results) = db.scan_prefix(prefix_str.as_bytes()) {
                     results
                         .into_iter()
-                        .filter_map(|(_, value)| bincode::deserialize(&value).ok())
+                        .filter_map(|(_, value)| deserialize_received_message(&value).ok())
                         .collect()
                 } else {
                     Vec::new()
@@ -239,7 +276,7 @@ impl Inbox {
                 if let Ok(results) = db.scan_prefix(MESSAGES_PREFIX) {
                     results
                         .into_iter()
-                        .filter_map(|(_, value)| bincode::deserialize(&value).ok())
+                        .filter_map(|(_, value)| deserialize_received_message(&value).ok())
                         .collect()
                 } else {
                     Vec::new()
@@ -264,7 +301,7 @@ impl Inbox {
                 let mut senders: FxHashSet<String> = FxHashSet::default();
                 if let Ok(results) = db.scan_prefix(MESSAGES_PREFIX) {
                     for (_, value) in results {
-                        if let Ok(msg) = bincode::deserialize::<ReceivedMessage>(&value) {
+                        if let Ok(msg) = deserialize_received_message(&value) {
                             senders.insert(msg.sender_id);
                         }
                     }
@@ -297,7 +334,7 @@ impl Inbox {
                 let results = db.scan_prefix(MESSAGES_PREFIX).unwrap_or_default();
                 let mut drained = Vec::with_capacity(results.len());
                 for (key, value) in &results {
-                    if let Ok(msg) = bincode::deserialize::<ReceivedMessage>(value) {
+                    if let Ok(msg) = deserialize_received_message(value) {
                         drained.push(msg);
                     }
                     let _ = db.remove(key);
@@ -342,6 +379,7 @@ mod tests {
 
     fn make_received(id: &str, sender: &str, payload: &str) -> ReceivedMessage {
         ReceivedMessage {
+            version: 1,
             message_id: id.to_string(),
             sender_id: sender.to_string(),
             payload: payload.as_bytes().to_vec(),
@@ -524,7 +562,7 @@ mod tests {
         let legacy_bytes = bincode::serialize(&legacy).unwrap();
 
         assert!(
-            bincode::deserialize::<ReceivedMessage>(&legacy_bytes).is_err(),
+            deserialize_received_message(&legacy_bytes).unwrap().sender_public_key_hex.is_none(),
             "pre-change bincode records are not decodable under the current \
              ReceivedMessage shape - confirms this would be a real gap if the \
              persistent inbox backend were ever wired into production"

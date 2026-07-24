@@ -5,6 +5,7 @@ use std::sync::Arc;
 /// Create a test message with the given parameters.
 fn make_test_message(message_id: &str, recipient_id: &str) -> QueuedMessage {
     QueuedMessage {
+        version: 1,
         message_id: message_id.to_string(),
         recipient_id: recipient_id.to_string(),
         envelope_data: vec![1, 2, 3, 4, 5, 6, 7, 8],

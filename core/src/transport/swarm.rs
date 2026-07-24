@@ -16,10 +16,10 @@
 #[cfg(not(target_arch = "wasm32"))]
 use super::behaviour::RelayRequest;
 use super::behaviour::{
-    DeregistrationRequest, IronCoreBehaviour, LedgerExchangeRequest, LedgerExchangeResponse,
-    Libp2pMessageRequest, Libp2pMessageResponse, RegistrationMessage, RegistrationRequest,
-    RegistrationResponse, RelayResponse, SharedPeerEntry,
+    DeregistrationRequest, IronCoreBehaviour, Libp2pMessageRequest, Libp2pMessageResponse,
+    RegistrationMessage, RegistrationRequest, RegistrationResponse, RelayResponse,
 };
+use crate::store::ledger_entry::{LedgerExchangeRequest, LedgerExchangeResponse, SharedPeerEntry};
 use super::dial_policy::{multiaddr_to_key, CircuitRelayLadder, DialPolicyManager};
 use super::discovery::DiscoveryConfig;
 #[cfg(not(target_arch = "wasm32"))]
@@ -3505,6 +3505,7 @@ pub async fn start_swarm_with_config(
                                         let _ = swarm.behaviour_mut().ledger_exchange.send_response(
                                             channel,
                                             LedgerExchangeResponse {
+                                                version_tag: 1,
                                                 peers: Vec::new(), // App layer fills this via ShareLedger
                                                 new_peers_learned: new_count,
                                                 version: 1,
@@ -5000,6 +5001,7 @@ pub async fn start_swarm_with_config(
                                     );
 
                                     let request = LedgerExchangeRequest {
+                                        version_tag: 1,
                                         peers: entries,
                                         sender_peer_id: local_peer_id.to_string(),
                                         version: 1,

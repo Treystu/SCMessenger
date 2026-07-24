@@ -35,6 +35,7 @@ fn recipient_hint_hex(recipient_pubkey_hex: &str) -> String {
 
 fn make_msg(id: &str, recipient: &str, attempts: u32) -> QueuedMessage {
     QueuedMessage {
+        version: 1,
         message_id: id.to_string(),
         recipient_id: recipient.to_string(),
         envelope_data: vec![1, 2, 3, 4],

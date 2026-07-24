@@ -95,6 +95,7 @@ pub use notification::{
 };
 pub use observability::{AuditEvent, AuditEventType};
 pub use settings::{DiscoveryMode, MeshSettings};
+pub use store::ledger_entry::LedgerEntry;
 pub use store::outbox::RetryPolicy;
 pub use transport::{start_swarm, start_swarm_with_config, SwarmCommand, SwarmEvent, SwarmHandle};
 

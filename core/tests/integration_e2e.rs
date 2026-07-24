@@ -63,6 +63,7 @@ fn test_e2e_message_flow_two_peers() {
     let envelope_data = bincode::serialize(&signed_envelope).expect("Failed to serialize envelope");
 
     let queued_msg = QueuedMessage {
+        version: 1,
         message_id: message.id.clone(),
         recipient_id: bob_id.clone(),
         envelope_data,
@@ -104,6 +105,7 @@ fn test_e2e_message_flow_two_peers() {
     // Step 9: Store in inbox (Bob's side)
     let mut bob_inbox = Inbox::new();
     let received_msg = scmessenger_core::store::ReceivedMessage {
+        version: 1,
         message_id: received_message.id.clone(),
         sender_id: received_message.sender_id.clone(),
         payload: received_message.payload.clone(),
@@ -125,6 +127,7 @@ fn test_e2e_message_flow_two_peers() {
 
     // Step 11: Verify deduplication
     let duplicate_msg = scmessenger_core::store::ReceivedMessage {
+        version: 1,
         message_id: received_message.id.clone(),
         sender_id: received_message.sender_id.clone(),
         payload: received_message.payload.clone(),
@@ -192,6 +195,7 @@ fn test_e2e_persistent_message_flow() {
         let mut outbox = Outbox::persistent(outbox_backend);
 
         let queued_msg = QueuedMessage {
+            version: 1,
             message_id: message_id.clone(),
             recipient_id: bob_keys.identity_id(),
             envelope_data,
@@ -253,6 +257,7 @@ fn test_e2e_persistent_message_flow() {
         let mut inbox = Inbox::persistent(inbox_backend);
 
         let received_msg = scmessenger_core::store::ReceivedMessage {
+            version: 1,
             message_id: received_message.id.clone(),
             sender_id: received_message.sender_id.clone(),
             payload: received_message.payload.clone(),
@@ -323,6 +328,7 @@ fn test_e2e_multi_peer_scenario() {
 
     outbox
         .enqueue(QueuedMessage {
+            version: 1,
             message_id: message_to_bob.id.clone(),
             recipient_id: bob_id.clone(),
             envelope_data: bincode::serialize(&bob_envelope).unwrap(),
@@ -337,6 +343,7 @@ fn test_e2e_multi_peer_scenario() {
 
     outbox
         .enqueue(QueuedMessage {
+            version: 1,
             message_id: message_to_carol.id.clone(),
             recipient_id: carol_id.clone(),
             envelope_data: bincode::serialize(&carol_envelope).unwrap(),

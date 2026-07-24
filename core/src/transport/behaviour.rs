@@ -15,6 +15,7 @@
 use super::discovery::DiscoveryConfig;
 use super::reflection::{AddressReflectionRequest, AddressReflectionResponse};
 use crate::identity::IdentityKeys;
+use crate::store::ledger_entry::{LedgerExchangeRequest, LedgerExchangeResponse};
 #[cfg(all(not(target_arch = "wasm32"), not(target_os = "android")))]
 use libp2p::mdns;
 #[cfg(all(not(target_arch = "wasm32"), not(target_os = "android")))]
@@ -323,42 +324,8 @@ fn validate_identity_owner(
     Ok(())
 }
 
-/// A shared peer entry for ledger exchange.
-/// Stripped-down version of ledger data suitable for wire transfer.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub struct SharedPeerEntry {
-    /// The multiaddr (transport address only, no /p2p/ suffix)
-    pub multiaddr: String,
-    /// Last known PeerID at this address (if any)
-    pub last_peer_id: Option<String>,
-    /// Unix timestamp of last successful connection
-    pub last_seen: u64,
-    /// Gossipsub topics this peer was subscribed to
-    pub known_topics: Vec<String>,
-}
-
-/// Ledger exchange request — sent automatically on new connection.
-/// "Here are all the peers I know about. Tell me yours."
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub struct LedgerExchangeRequest {
-    /// Our known peers (shared generously)
-    pub peers: Vec<SharedPeerEntry>,
-    /// Our own PeerID (so the remote can record us)
-    pub sender_peer_id: String,
-    /// Protocol version for forward compatibility
-    pub version: u32,
-}
-
-/// Ledger exchange response — reciprocal sharing.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub struct LedgerExchangeResponse {
-    /// Their known peers (shared back)
-    pub peers: Vec<SharedPeerEntry>,
-    /// Number of new peers they learned from our request
-    pub new_peers_learned: u32,
-    /// Protocol version
-    pub version: u32,
-}
+// SharedPeerEntry, LedgerExchangeRequest, and LedgerExchangeResponse 
+// have been moved to crate::store::ledger_entry
 
 impl IronCoreBehaviour {
     /// Create a new behaviour with the given keypair.

@@ -41,14 +41,7 @@ Last updated: 2026-07-21 (status-correction header reflecting early morning Kimi
 
 1. ~~**F1 `integration_ledger_convergence.rs`**~~ **DONE 2026-07-23** -- file was committed and bug was fixed (p2p addr suffix appended).
 2. ~~**A3 Android Kotlin retry suppression**~~ **DONE 2026-07-23** -- closes `CRITICAL_ANDROID_FALSE_DELIVERY_FAILURE_NO_RECEIPT_ACK.md` via task `P3_ANDROID_RETRY_SUPPRESSION.md`. (FARM WS-A3.)
-3. **E1 attempt 3** -- `PQC_07_PQ_SECRET_NEVER_MIXED_INTO_ROOT_KEY.md`
-   [OPUS+/THINK, CRITICAL][AUDIT-GATE]. Two prior attempts BLOCKED by
-   adversarial/triangulated review for two different desync failure modes
-   (reorder, then packet loss) - the ticket's "what attempt 3 needs to get
-   right" section synthesizes both. This needs real design work, not a
-   single-shot dispatch. `PQC_07_FORCE_RATCHET_SAME_DEFECT.md` and
-   `PQC_07_PQ_REFRESH_WITHOUT_DH_CROSSING.md` are the same defect family.
-   PQC-11/13 stay frozen until this lands (standing rule). (FARM WS-E1/E2.)
+3. ~~**E1 attempt 4** -- `PQC_07_PQ_SECRET_NEVER_MIXED_INTO_ROOT_KEY.md`~~ **DONE 2026-07-23** -- Root key symmetry fixed by preferring candidate PQ secret during DH ratchet trial. All 1158 unit tests and 6/6 integration_pq_session tests PASS.
 4. ~~`PQC_08_LEGACY_PATH_RETIREMENT.md`~~ DONE (verified 2026-07-13 - this
    entry was stale, the ticket has been in HANDOFF/done/ with a complete
    call-site inventory and "[x] File moved to done/" since 2026-07-11).
@@ -235,10 +228,7 @@ NOT-orphaned per B3) -- it re-ranks what happens next:
 
 ### F2/F3 Backlog unification
 
-7. **U7 Schema drift audit** [OPUS+ investigation, then SONNET impl] — verify
-   ledger/history/message persistence formats are NOT drifting between
-   CLI/Android/iOS, or add explicit versioning if they are. Farm-relevant
-   for long-lived deployments. (UNIFICATION U7.)
+7. ~~**U7 Schema drift audit**~~ **DONE 2026-07-23** — Audit map produced (`HANDOFF/docs/SCHEMA_VERSIONING_MAP.md`), bincode versioning added to inbox/outbox, and ledger structures consolidated under `store::ledger_entry`. (UNIFICATION U7.)
 
 ## Phase 1 filler lane (independent, idle capacity only)
 

@@ -3210,6 +3210,7 @@ async fn queue_message_for_later_delivery(
                 .unwrap_or_default()
                 .as_secs();
             let queued_msg = QueuedMessage {
+                version: 1,
                 message_id: uuid::Uuid::new_v4().to_string(),
                 recipient_id: contact.peer_id.clone(),
                 envelope_data: envelope_bytes,

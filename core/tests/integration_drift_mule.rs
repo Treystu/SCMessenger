@@ -149,6 +149,7 @@ fn outbox_drift_single_ownership() {
 
     // Enqueue in outbox
     let msg = scmessenger_core::store::outbox::QueuedMessage {
+        version: 1,
         message_id: "msg-ownership-1".to_string(),
         recipient_id: "peer-b".to_string(),
         envelope_data: vec![1, 2, 3],

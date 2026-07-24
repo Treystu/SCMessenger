@@ -11,6 +11,49 @@ use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
 use std::time::Duration;
 
+#[derive(Serialize, Deserialize)]
+struct LegacyQueuedMessage {
+    pub message_id: String,
+    pub recipient_id: String,
+    pub envelope_data: Vec<u8>,
+    pub queued_at: u64,
+    pub attempts: u32,
+    pub next_retry_at: Option<u64>,
+    #[serde(default = "default_false")]
+    pub in_custody: bool,
+    #[serde(default = "default_zero")]
+    pub custody_established_at: u64,
+    #[serde(default = "default_enqueued")]
+    pub state: MessageState,
+}
+
+fn deserialize_queued_message(data: &[u8]) -> Result<QueuedMessage, bincode::Error> {
+    if data.is_empty() {
+        return Err(Box::new(bincode::ErrorKind::Io(std::io::Error::new(std::io::ErrorKind::UnexpectedEof, "empty"))));
+    }
+    // If the first byte is 1, it's the new versioned format.
+    // Legacy format starts with a String length. Since string lengths are usually 36 (for UUIDs), 
+    // their first byte is 36, not 1.
+    if data[0] == 1 {
+        bincode::deserialize(data)
+    } else {
+        let legacy: LegacyQueuedMessage = bincode::deserialize(data)?;
+        Ok(QueuedMessage {
+            version: 1,
+            message_id: legacy.message_id,
+            recipient_id: legacy.recipient_id,
+            envelope_data: legacy.envelope_data,
+            queued_at: legacy.queued_at,
+            attempts: legacy.attempts,
+            next_retry_at: legacy.next_retry_at,
+            in_custody: legacy.in_custody,
+            custody_established_at: legacy.custody_established_at,
+            state: legacy.state,
+        })
+    }
+}
+
+
 /// Maximum messages queued per peer
 const MAX_QUEUE_PER_PEER: usize = 1000;
 
@@ -36,6 +79,9 @@ pub enum MessageState {
 /// A queued outbound message
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct QueuedMessage {
+    /// Version byte for serialization format
+    #[serde(default = "default_version")]
+    pub version: u8,
     /// Unique message ID
     pub message_id: String,
     /// Target peer's identity ID
@@ -57,6 +103,10 @@ pub struct QueuedMessage {
     /// Current state of the message
     #[serde(default = "default_enqueued")]
     pub state: MessageState,
+}
+
+fn default_version() -> u8 {
+    1
 }
 
 fn default_false() -> bool {
@@ -263,7 +313,7 @@ impl Outbox {
                 if let Ok(results) = db.scan_prefix(prefix_str.as_bytes()) {
                     results
                         .into_iter()
-                        .filter_map(|(_, value)| bincode::deserialize(&value).ok())
+                        .filter_map(|(_, value)| deserialize_queued_message(&value).ok())
                         .collect()
                 } else {
                     Vec::new()
@@ -290,7 +340,7 @@ impl Outbox {
                 let mut all_pending = Vec::new();
                 if let Ok(results) = db.scan_prefix(QUEUE_PREFIX) {
                     for (_, value) in results {
-                        if let Ok(msg) = bincode::deserialize::<QueuedMessage>(&value) {
+                        if let Ok(msg) = deserialize_queued_message(&value) {
                             if msg.state == MessageState::Enqueued {
                                 all_pending.push(msg);
                             }
@@ -319,7 +369,7 @@ impl Outbox {
                 // Find and remove the message
                 if let Ok(results) = db.scan_prefix(QUEUE_PREFIX) {
                     for (key, value) in results {
-                        if let Ok(msg) = bincode::deserialize::<QueuedMessage>(&value) {
+                        if let Ok(msg) = deserialize_queued_message(&value) {
                             if msg.message_id == message_id {
                                 let _ = db.remove(&key);
                                 let _ = db.flush();
@@ -368,7 +418,7 @@ impl Outbox {
 
                 if let Ok(results) = db.scan_prefix(prefix_str.as_bytes()) {
                     for (key, value) in results {
-                        if let Ok(msg) = bincode::deserialize::<QueuedMessage>(&value) {
+                        if let Ok(msg) = deserialize_queued_message(&value) {
                             if !msg.in_custody {
                                 messages.push(msg);
                                 keys_to_remove.push(key);
@@ -460,7 +510,7 @@ impl Outbox {
 
                 if let Ok(results) = db.scan_prefix(prefix_str.as_bytes()) {
                     for (key, value) in results {
-                        if let Ok(msg) = bincode::deserialize::<QueuedMessage>(&value) {
+                        if let Ok(msg) = deserialize_queued_message(&value) {
                             // Skip messages that are in custody or not Enqueued
                             if msg.in_custody || msg.state != MessageState::Enqueued {
                                 continue;
@@ -503,7 +553,7 @@ impl Outbox {
             OutboxBackend::Persistent(db) => {
                 if let Ok(results) = db.scan_prefix(QUEUE_PREFIX) {
                     for (key, value) in results {
-                        if let Ok(mut msg) = bincode::deserialize::<QueuedMessage>(&value) {
+                        if let Ok(mut msg) = deserialize_queued_message(&value) {
                             if msg.message_id == message_id {
                                 // If message is in custody, suppress local retries
                                 if msg.in_custody {
@@ -540,7 +590,7 @@ impl Outbox {
             OutboxBackend::Persistent(db) => {
                 if let Ok(results) = db.scan_prefix(QUEUE_PREFIX) {
                     for (key, value) in results {
-                        if let Ok(mut msg) = bincode::deserialize::<QueuedMessage>(&value) {
+                        if let Ok(mut msg) = deserialize_queued_message(&value) {
                             if msg.message_id == message_id {
                                 msg.in_custody = true;
                                 msg.custody_established_at = custody_established_at;
@@ -573,7 +623,7 @@ impl Outbox {
             OutboxBackend::Persistent(db) => {
                 if let Ok(results) = db.scan_prefix(QUEUE_PREFIX) {
                     for (key, value) in results {
-                        if let Ok(mut msg) = bincode::deserialize::<QueuedMessage>(&value) {
+                        if let Ok(mut msg) = deserialize_queued_message(&value) {
                             if msg.message_id == message_id {
                                 msg.in_custody = false;
                                 msg.custody_established_at = 0;
@@ -605,7 +655,7 @@ impl Outbox {
             OutboxBackend::Persistent(db) => {
                 if let Ok(results) = db.scan_prefix(QUEUE_PREFIX) {
                     for (_, value) in results {
-                        if let Ok(msg) = bincode::deserialize::<QueuedMessage>(&value) {
+                        if let Ok(msg) = deserialize_queued_message(&value) {
                             if msg.message_id == message_id {
                                 return msg.in_custody;
                             }
@@ -634,7 +684,7 @@ impl Outbox {
                 let mut peers: HashSet<String> = HashSet::new();
                 if let Ok(results) = db.scan_prefix(QUEUE_PREFIX) {
                     for (_, value) in results {
-                        if let Ok(msg) = bincode::deserialize::<QueuedMessage>(&value) {
+                        if let Ok(msg) = deserialize_queued_message(&value) {
                             peers.insert(msg.recipient_id);
                         }
                     }
@@ -673,7 +723,7 @@ impl Outbox {
 
                 if let Ok(results) = db.scan_prefix(QUEUE_PREFIX) {
                     for (key, value) in results {
-                        if let Ok(msg) = bincode::deserialize::<QueuedMessage>(&value) {
+                        if let Ok(msg) = deserialize_queued_message(&value) {
                             if now.saturating_sub(msg.queued_at) >= max_age_secs {
                                 keys_to_remove.push(key);
                             }
@@ -706,7 +756,7 @@ impl Outbox {
             OutboxBackend::Persistent(db) => {
                 if let Ok(results) = db.scan_prefix(QUEUE_PREFIX) {
                     for (key, value) in results {
-                        if let Ok(mut msg) = bincode::deserialize::<QueuedMessage>(&value) {
+                        if let Ok(mut msg) = deserialize_queued_message(&value) {
                             if msg.message_id == message_id {
                                 msg.state = MessageState::Sent;
                                 if let Ok(bytes) = bincode::serialize(&msg) {
@@ -737,7 +787,7 @@ impl Outbox {
             OutboxBackend::Persistent(db) => {
                 if let Ok(results) = db.scan_prefix(QUEUE_PREFIX) {
                     for (key, value) in results {
-                        if let Ok(mut msg) = bincode::deserialize::<QueuedMessage>(&value) {
+                        if let Ok(mut msg) = deserialize_queued_message(&value) {
                             if msg.message_id == message_id {
                                 msg.state = MessageState::Failed;
                                 if let Ok(bytes) = bincode::serialize(&msg) {
@@ -861,6 +911,7 @@ mod tests {
 
     fn make_msg(id: &str, recipient: &str) -> QueuedMessage {
         QueuedMessage {
+            version: 1,
             message_id: id.to_string(),
             recipient_id: recipient.to_string(),
             envelope_data: vec![1, 2, 3],

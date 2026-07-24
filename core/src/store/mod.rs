@@ -13,6 +13,7 @@ pub mod storage;
 pub mod sweeper;
 pub mod tracing_init;
 pub mod transport_memory;
+pub mod ledger_entry;
 
 pub use backend::StorageBackend;
 // Note: BlockedIdentity/BlockedManager exported through blocked_bridge for UniFFI
@@ -29,3 +30,4 @@ pub use relay_custody::{
 pub use storage::{DiskStats, RetentionConfig, StorageManager};
 pub use sweeper::*;
 pub use transport_memory::*;
+pub use ledger_entry::*;

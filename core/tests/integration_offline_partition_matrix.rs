@@ -16,6 +16,7 @@ fn now_secs() -> u64 {
 
 fn queued_message(message_id: &str, recipient_id: &str) -> QueuedMessage {
     QueuedMessage {
+        version: 1,
         message_id: message_id.to_string(),
         recipient_id: recipient_id.to_string(),
         envelope_data: vec![7, 1, 7, 1],

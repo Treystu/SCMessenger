@@ -58,6 +58,7 @@ mod tests {
     // Helper to create a ReceivedMessage with a specific received_at time
     fn create_received_message(id: &str, sender: &str, received_at: u64) -> ReceivedMessage {
         ReceivedMessage {
+            version: 1,
             message_id: id.to_string(),
             sender_id: sender.to_string(),
             payload: vec![1, 2, 3],

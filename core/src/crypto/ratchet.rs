@@ -700,10 +700,11 @@ impl RatchetSession {
         ciphertext: &[u8],
         aad: &[u8],
     ) -> Result<Vec<u8>> {
-        let mut candidates = vec![None];
+        let mut candidates = Vec::new();
         if let Some(ref pending_sent) = self.pq_pending_sent {
             candidates.push(Some(pending_sent.ss.clone()));
         }
+        candidates.push(None);
 
         let mut errors = Vec::new();
 
@@ -719,11 +720,16 @@ impl RatchetSession {
                 secret
             };
             let dh_output = first_dh_secret.diffie_hellman(their_new_dh);
+            let pq_ss_1 = if trial.negotiated_suite == Some(0x02) {
+                trial.pq_pending_recv.clone()
+            } else {
+                None
+            };
             let (new_root_key, receiving_chain_key) = if trial.negotiated_suite == Some(0x02) {
                 root_key_ratchet_v2(
                     &trial.root_key,
                     dh_output.as_bytes(),
-                    candidate.as_ref().map(|k| k.as_bytes().to_vec()),
+                    pq_ss_1.as_ref().map(|k| k.as_bytes().to_vec()),
                 )
             } else {
                 root_key_ratchet_v1(&trial.root_key, dh_output.as_bytes())
@@ -739,7 +745,7 @@ impl RatchetSession {
 
             let dh_output_2 = new_dh_secret.diffie_hellman(their_new_dh);
             let pq_ss_2 = if trial.negotiated_suite == Some(0x02) {
-                trial.pq_pending_recv.clone()
+                candidate.clone()
             } else {
                 None
             };
@@ -826,16 +832,13 @@ impl RatchetSession {
 
         // Handle PQ ratchet step if this is a suite 0x02 session
         let pq_ss = if self.negotiated_suite == Some(0x02) {
-            // Check if we have PQ fields available (should be provided externally)
-            // For now, we'll assume the PQ handling is done in the calling code
-            // This function just handles the DH part, PQ is handled separately
-            None
+            self.pq_pending_recv.clone()
         } else {
             None
         };
 
         let (new_root_key, receiving_chain_key) = if self.negotiated_suite == Some(0x02) {
-            root_key_ratchet_v2(&self.root_key, dh_output.as_bytes(), pq_ss.clone())
+            root_key_ratchet_v2(&self.root_key, dh_output.as_bytes(), pq_ss.as_ref().map(|k| k.as_bytes().to_vec()))
         } else {
             root_key_ratchet_v1(&self.root_key, dh_output.as_bytes())
         };
@@ -849,8 +852,13 @@ impl RatchetSession {
         let new_dh_public = X25519PublicKey::from(&new_dh_secret);
 
         let dh_output_2 = new_dh_secret.diffie_hellman(their_new_dh);
+        let pq_ss_2 = if self.negotiated_suite == Some(0x02) {
+            self.pq_pending_sent.as_ref().map(|p| p.ss.clone())
+        } else {
+            None
+        };
         let (new_root_key_2, sending_chain_key) = if self.negotiated_suite == Some(0x02) {
-            root_key_ratchet_v2(&new_root_key, dh_output_2.as_bytes(), pq_ss)
+            root_key_ratchet_v2(&new_root_key, dh_output_2.as_bytes(), pq_ss_2.as_ref().map(|k| k.as_bytes().to_vec()))
         } else {
             root_key_ratchet_v1(&new_root_key, dh_output_2.as_bytes())
         };
