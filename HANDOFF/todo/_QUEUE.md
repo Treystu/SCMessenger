@@ -68,8 +68,7 @@ Last updated: 2026-07-21 (status-correction header reflecting early morning Kimi
    (farm-anchor runbook + AWS/Alibaba cloud relays) infra is committed and
    ready (`infra/aws/`) but PAUSED per operator directive 2026-07-13 - do
    not resume without the operator re-opening it.
-6. iOS lane opener: GitHub billing unlock [HUMAN] then verify
-   `HANDOFF/done/TASK_CI_IOS_MACOS_RUNNER_FIX.md` -- NOTE: file was moved to
+6. iOS lane opener: Verify `HANDOFF/done/TASK_CI_IOS_MACOS_RUNNER_FIX.md` -- NOTE: file was moved to
    done/ but its own header still says TODO (premature-move pattern);
    verify-first whether ios-build-test.yml fixes actually landed, re-open if
    not [SONNET]. iOS is v1.0.0 farm-gating per decision 4 RESOLVED below.
@@ -347,11 +346,7 @@ Fine-planning happens as P2-00 after Phase 1 exit, per the execution plan.
 2. **Internet relay live proof** -- AWS approved 2026-07-11; needs the rig
    built (P1-14/P1-18 entries above). Record the plan revision in
    HANDOFF/V1_0_0_EXECUTION_PLAN.md when the rig lands.
-3. **GitHub billing unlock** -- Actions jobs are created but blocked:
-   "account is locked due to a billing issue" (personal account governs the
-   public repo; the Enterprise trial does not cover it). Fix billing or
-   transfer the repo into the trial org. Unblocks free macOS runners ->
-   the whole iOS lane.
+3. ~~GitHub billing unlock~~ **RESOLVED 2026-07-23**: Enterprise trial covers Actions. Mac runners and all CI are unblocked.
 4. ~~iOS scope~~ **RESOLVED 2026-07-13**: half or more of the farm's users
    carry iPhones (operator-confirmed), so iOS parity is IN v1.0.0 scope and
    farm-gating (FARM plan AD-7 / WS-FARM-C). Execution plan amended by this
@@ -359,9 +354,7 @@ Fine-planning happens as P2-00 after Phase 1 exit, per the execution plan.
    lands, unchanged. Distribution decision (Apple Developer account for
    TestFlight, USD 99/yr) is a new [HUMAN] item — required before the F3
    pilot phase.
-5. **KMP D2 stack correction** -- TASK_KMP_COMPOSE_ARCHITECT targets Compose
-   UI on linuxX64 native; Compose Desktop is JVM-only. Pick: JVM desktop
-   target (recommended) or a different UI stack. Blocks D2 dispatch.
+5. ~~KMP D2 stack correction~~ **RESOLVED 2026-07-23**: Desktop bridge migrated to Compose JVM desktop target.
 6. **Second Android device / WiFi Aware cell** -- still [BLOCKED-HW];
    acquire or record the waiver in the exit matrix.
 7. **WSL2 for KMP Linux validation** -- accepted with BlueZ caveat, or name
