@@ -62,18 +62,10 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           key: ios-build
-      - name: Generate Swift bindings
-        run: bash ./iOS/copy-bindings.sh
-      - name: Build for iOS
-        run: cargo build --target aarch64-apple-ios -p scmessenger-core --release
-      - name: Build for iOS Simulator
-        run: cargo build --target aarch64-apple-ios-sim -p scmessenger-core --release
-      - name: Copy static libraries into XCFramework
+      - name: Build XCFramework and Swift bindings
         run: |
-          mkdir -p iOS/SCMessengerCore.xcframework/ios-arm64
-          mkdir -p iOS/SCMessengerCore.xcframework/ios-arm64-simulator
-          cp target/aarch64-apple-ios/release/libscmessenger_core.a iOS/SCMessengerCore.xcframework/ios-arm64/
-          cp target/aarch64-apple-ios-sim/release/libscmessenger_core.a iOS/SCMessengerCore.xcframework/ios-arm64-simulator/
+          chmod +x scripts/build_xcframework.sh
+          scripts/build_xcframework.sh
       - name: Build Xcode project
         working-directory: iOS
         run: |
