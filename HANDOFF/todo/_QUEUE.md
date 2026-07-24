@@ -63,7 +63,7 @@ Last updated: 2026-07-21 (status-correction header reflecting early morning Kimi
    [SONNET][AUDIT-GATE: transport/ble/].
 9. F1 ledger convergence test + F2 custody persistence verify-first
    [SONNET high]. (FARM WS-F.)
-10. ~~`PQC_10_MLDSA_IDENTITY_SIGNATURES.md`~~ **DONE 2026-07-23**; ~~`PQC_11_RELAY_INVITE_HYBRID_AUTH.md`~~ **DONE 2026-07-23** -- dual-sig invite tokens & relay registration implemented, 36/36 tests PASS; then PQC_12 -> PQC_13 -> PQC_08 final compat pass -> PQC_14. PQC-09 wiring stays parked.
+10. ~~`PQC_10_MLDSA_IDENTITY_SIGNATURES.md`~~ **DONE 2026-07-23**; ~~`PQC_11_RELAY_INVITE_HYBRID_AUTH.md`~~ **DONE 2026-07-23**; ~~`PQC_12_TRANSPORT_TLS_PQ.md`~~ **DONE 2026-07-23**; ~~`PQC_13_VERIFICATION_SUITE.md`~~ **DONE 2026-07-23** -- full master verification suite 4/4 PASS; then PQC_08 final compat pass -> PQC_14. PQC-09 wiring stays parked.
 11. `TASK_KMP_RUST_UNIFFI_LINUX.md` [QWEN max] anytime (verify-only start);
     `TASK_KMP_COMPOSE_ARCHITECT.md` [HUMAN-gated] unchanged.
 12. [NEEDS PLANNING] pair: BLE GATT traits decision FOLDS INTO FARM WS-D1
