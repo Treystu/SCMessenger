@@ -22,7 +22,7 @@ use libp2p::swarm::behaviour::toggle::Toggle;
 #[cfg(all(not(target_arch = "wasm32"), not(target_os = "android")))]
 use libp2p::upnp;
 use libp2p::{
-    autonat, dcutr, gossipsub, identify, kad, ping, relay,
+    autonat, connection_limits, dcutr, gossipsub, identify, kad, ping, relay,
     request_response::{self, ProtocolSupport},
     swarm::NetworkBehaviour,
     StreamProtocol,
@@ -69,6 +69,8 @@ pub struct IronCoreBehaviour {
     /// UPnP port mapping
     #[cfg(all(not(target_arch = "wasm32"), not(target_os = "android")))]
     pub upnp: upnp::tokio::Behaviour,
+    /// Connection limits to prevent resource exhaustion
+    pub connection_limits: connection_limits::Behaviour,
 }
 
 /// A libp2p request_response message request sent to a peer
@@ -553,6 +555,15 @@ impl IronCoreBehaviour {
         // Relay server - all nodes act as relays for NAT traversal
         let relay_server = relay::Behaviour::new(peer_id, relay::Config::default());
 
+        // Connection limits to prevent resource exhaustion
+        let connection_limits = connection_limits::Behaviour::new(
+            connection_limits::ConnectionLimits::default()
+                .with_max_pending_outgoing(Some(32))
+                .with_max_established_outgoing(Some(128))
+                .with_max_established_incoming(Some(64))
+                .with_max_established_per_peer(Some(4)),
+        );
+
         Ok(Self {
             relay_client,
             relay_server,
@@ -571,6 +582,7 @@ impl IronCoreBehaviour {
             identify,
             #[cfg(all(not(target_arch = "wasm32"), not(target_os = "android")))]
             upnp,
+            connection_limits,
         })
     }
 }

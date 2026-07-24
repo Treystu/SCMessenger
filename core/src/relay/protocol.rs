@@ -162,6 +162,9 @@ pub enum RelayProtocolError {
 }
 
 impl RelayMessage {
+    /// Maximum allowed payload size for a relay message (64 KiB)
+    pub const MAX_MESSAGE_BYTES: usize = 64 * 1024;
+
     /// Serialize a relay message to bytes using bincode
     pub fn to_bytes(&self) -> Result<Vec<u8>, RelayProtocolError> {
         bincode::serialize(self).map_err(|e| RelayProtocolError::SerializationError(e.to_string()))
@@ -169,6 +172,13 @@ impl RelayMessage {
 
     /// Deserialize a relay message from bytes
     pub fn from_bytes(bytes: &[u8]) -> Result<Self, RelayProtocolError> {
+        if bytes.len() > Self::MAX_MESSAGE_BYTES {
+            return Err(RelayProtocolError::DeserializationError(format!(
+                "Message size {} exceeds maximum allowed {}",
+                bytes.len(),
+                Self::MAX_MESSAGE_BYTES
+            )));
+        }
         bincode::deserialize(bytes)
             .map_err(|e| RelayProtocolError::DeserializationError(e.to_string()))
     }
@@ -211,6 +221,13 @@ mod tests {
         assert!(cap.full_node);
         assert!(cap.is_relay());
         assert!(cap.is_store());
+    }
+
+    #[test]
+    fn test_oversized_message_rejected() {
+        let oversized = vec![0u8; RelayMessage::MAX_MESSAGE_BYTES + 1];
+        let result = RelayMessage::from_bytes(&oversized);
+        assert!(result.is_err());
     }
 
     #[test]

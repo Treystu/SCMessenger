@@ -157,6 +157,7 @@ fn outbox_drift_single_ownership() {
         next_retry_at: None,
         in_custody: false,
         custody_established_at: 0,
+        state: scmessenger_core::store::outbox::MessageState::Enqueued,
     };
     outbox.enqueue(msg).unwrap();
 

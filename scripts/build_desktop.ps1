@@ -1,29 +1,21 @@
-# =============================================================================
-# scripts/build_desktop.ps1 — Desktop build script for SCMessenger KMP
-#
-# Builds the Rust workspace and then packages the .deb via Gradle.
-#
-# Usage:
-#   .\scripts\build_desktop.ps1
-# =============================================================================
+# SCMessenger Desktop One-Command Build Script for PowerShell
+param (
+    [switch]$Release
+)
 
 $ErrorActionPreference = "Stop"
-$ProgressPreference = "Continue"
 
-# Disable Cargo incremental builds for reproducible output
-$env:CARGO_INCREMENTAL = "0"
+Write-Host "=== SCMessenger Desktop Build (PowerShell) ===" -ForegroundColor Green
 
-$RepoRoot = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
-Set-Location $RepoRoot
+$releaseArg = if ($Release) { "--release" } else { "" }
 
-Write-Host "━━━ Building Rust workspace ━━━" -ForegroundColor Green
-cargo build --workspace
-if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+Write-Host "1. Building scmessenger-desktop-bridge native library..."
+cargo build -p scmessenger-desktop-bridge $releaseArg
 
-Write-Host "━━━ Packaging .deb ━━━" -ForegroundColor Green
-Set-Location "$RepoRoot\android"
-& .\gradlew :shared:packageDeb
-if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+Write-Host "2. Generating Kotlin FFI bindings..."
+cargo run -p scmessenger-desktop-bridge --bin gen_kotlin --features gen-bindings
 
-Set-Location $RepoRoot
-Write-Host "Build complete." -ForegroundColor Green
+Write-Host "3. Building KMP Desktop artifact..."
+cmd /c "gradlew.bat :shared:packageAppImage"
+
+Write-Host "=== Build Complete ===" -ForegroundColor Green

@@ -1,0 +1,43 @@
+name: Desktop CI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'shared/**'
+      - 'desktop_bridge/**'
+      - 'scripts/build_desktop.*'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'shared/**'
+      - 'desktop_bridge/**'
+      - 'scripts/build_desktop.*'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libdbus-1-dev pkg-config
+
+      - name: Set up Rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
+
+      - name: Build desktop-bridge with gen-bindings feature
+        run: cargo build -p scmessenger-desktop-bridge --features gen-bindings
+
+      - name: Generate Kotlin bindings
+        run: cargo run -p scmessenger-desktop-bridge --bin gen_kotlin --features gen-bindings
+
+      - name: Compile Kotlin for LinuxX64
+        run: ./gradlew :shared:compileKotlinLinuxX64

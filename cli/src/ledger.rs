@@ -10,6 +10,7 @@
 
 use anyhow::{Context, Result};
 use libp2p::PeerId;
+use scmessenger_core::transport::dial_policy::DialPolicyManager;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::Path;
@@ -243,6 +244,10 @@ pub struct ConnectionLedger {
     /// Process-lifetime per-peer dial state. Never persisted to peers.json.
     #[serde(skip)]
     pub peer_dial_states: HashMap<DialKey, PeerDialState>,
+
+    /// Global dial policy manager enforcing per-peer backoff and concurrent dial limits.
+    #[serde(skip)]
+    pub dial_policy: DialPolicyManager,
 }
 
 impl Default for ConnectionLedger {
@@ -252,6 +257,7 @@ impl Default for ConnectionLedger {
             version: 1,
             last_saved: 0,
             peer_dial_states: HashMap::new(),
+            dial_policy: DialPolicyManager::new(),
         }
     }
 }
@@ -317,12 +323,39 @@ impl ConnectionLedger {
             });
     }
 
+    /// Extract address key string and optional PeerId for DialPolicyManager calls.
+    pub fn key_to_policy_args(&self, key: &DialKey) -> (String, Option<PeerId>) {
+        match key {
+            DialKey::Peer(pid) => {
+                let addr_key = if let Some(entry) = self.find_by_peer_id(&pid.to_string()) {
+                    strip_peer_id(&entry.multiaddr)
+                } else {
+                    pid.to_string()
+                };
+                (addr_key, Some(*pid))
+            }
+            DialKey::Addr(addr) => {
+                let pid = if let Some(idx) = addr.find("/p2p/") {
+                    let remainder = &addr[idx + "/p2p/".len()..];
+                    PeerId::from_str(remainder).ok()
+                } else {
+                    None
+                };
+                (strip_peer_id(addr), pid)
+            }
+        }
+    }
+
     /// Add or update a peer after successful connection
     pub fn record_connection(&mut self, multiaddr: &str, peer_id: &str) {
         let stripped = strip_peer_id(multiaddr);
         if !is_dialable_multiaddr(&stripped, NetworkMode::Local) {
             return;
         }
+
+        let parsed_pid = PeerId::from_str(peer_id).ok();
+        self.dial_policy
+            .reset_on_connection_established(&stripped, parsed_pid);
 
         self.entries
             .entry(stripped.clone())
@@ -349,6 +382,14 @@ impl ConnectionLedger {
     /// Record a failed connection attempt
     pub fn record_failure(&mut self, multiaddr: &str) {
         let stripped = strip_peer_id(multiaddr);
+        let parsed_pid = if let Some(idx) = multiaddr.find("/p2p/") {
+            let remainder = &multiaddr[idx + "/p2p/".len()..];
+            PeerId::from_str(remainder).ok()
+        } else {
+            None
+        };
+        self.dial_policy.record_dial_failure(&stripped, parsed_pid);
+
         if let Some(entry) = self.entries.get_mut(&stripped) {
             entry.record_failure();
             tracing::warn!(
@@ -505,9 +546,9 @@ impl ConnectionLedger {
 
     /// Decide whether a dial may be started for `key` right now.
     ///
-    /// Returns true only when the key is ready and the dial is not suppressed
-    /// by a healthy relay path. When the key is new, it is seeded from the
-    /// persistent ledger so known-good peers are never suppressed.
+    /// Returns true only when the key is ready, backoff eligible, under concurrent limit,
+    /// and the dial is not suppressed by a healthy relay path. When the key is new, it is seeded
+    /// from the persistent ledger so known-good peers are never suppressed.
     pub fn try_begin_dial(&mut self, key: DialKey, now: u64, relay_healthy: bool) -> bool {
         let is_circuit = Self::is_circuit_key(&key);
         let is_bootstrap = self.is_bootstrap_key(&key);
@@ -524,32 +565,37 @@ impl ConnectionLedger {
             if relay_healthy && !is_known_good && !is_circuit && !is_bootstrap {
                 return false;
             }
-
-            // Cap process-lifetime dial state at 4096 keys. Drop the entry
-            // with the smallest next_attempt_after (least urgent) in a single
-            // pass.
-            if self.peer_dial_states.len() >= 4096 {
-                if let Some(evict_key) = self
-                    .peer_dial_states
-                    .iter()
-                    .min_by_key(|(_, state)| state.next_attempt_after)
-                    .map(|(k, _)| k.clone())
-                {
-                    self.peer_dial_states.remove(&evict_key);
-                }
-            }
-
-            let state = PeerDialState {
-                is_known_good,
-                ..Default::default()
-            };
-            self.peer_dial_states.insert(key.clone(), state);
         }
 
-        self.peer_dial_states
-            .get_mut(&key)
-            .expect("key was just inserted or already present")
-            .in_flight = true;
+        // Enforce DialPolicyManager backoff and concurrent dial limits
+        let (addr_key, pid_opt) = self.key_to_policy_args(&key);
+        if !self.dial_policy.register_dial_attempt(&addr_key, pid_opt) {
+            return false;
+        }
+
+        // Cap process-lifetime dial state at 4096 keys. Drop the entry
+        // with the smallest next_attempt_after (least urgent) in a single
+        // pass.
+        if self.peer_dial_states.len() >= 4096 {
+            if let Some(evict_key) = self
+                .peer_dial_states
+                .iter()
+                .min_by_key(|(_, state)| state.next_attempt_after)
+                .map(|(k, _)| k.clone())
+            {
+                self.peer_dial_states.remove(&evict_key);
+            }
+        }
+
+        let is_known_good = self.is_known_good_key(&key);
+        let state = self
+            .peer_dial_states
+            .entry(key.clone())
+            .or_insert_with(|| PeerDialState {
+                is_known_good,
+                ..Default::default()
+            });
+        state.in_flight = true;
         true
     }
 
@@ -561,7 +607,14 @@ impl ConnectionLedger {
         now: u64,
         learned_peer_id: Option<PeerId>,
     ) {
+        let (addr_key, pid_opt) = self.key_to_policy_args(key);
+        self.dial_policy.complete_dial_attempt(&addr_key);
+
         if success {
+            let target_pid = learned_peer_id.or(pid_opt);
+            self.dial_policy
+                .reset_on_connection_established(&addr_key, target_pid);
+
             let mut state = self.peer_dial_states.remove(key).unwrap_or_default();
             state.record_success();
 
@@ -574,8 +627,11 @@ impl ConnectionLedger {
             }
 
             self.peer_dial_states.insert(key.clone(), state);
-        } else if let Some(state) = self.peer_dial_states.get_mut(key) {
-            state.record_failure(now);
+        } else {
+            self.dial_policy.record_dial_failure(&addr_key, pid_opt);
+            if let Some(state) = self.peer_dial_states.get_mut(key) {
+                state.record_failure(now);
+            }
         }
     }
 
@@ -1237,5 +1293,21 @@ mod tests {
         }"#;
         let entry: LedgerEntry = serde_json::from_str(json).unwrap();
         assert!(!entry.locally_verified);
+    }
+
+    #[test]
+    fn test_dial_policy_manager_integration() {
+        let mut ledger = ConnectionLedger::default();
+        let key = DialKey::Addr("/ip4/1.2.3.4/tcp/9001".to_string());
+
+        // First attempt allowed
+        assert!(ledger.try_begin_dial(key.clone(), 0, false));
+
+        // Complete dial with success -> resets policy
+        ledger.complete_dial(&key, true, 0, None);
+
+        // Complete dial with failure -> records failure in policy
+        assert!(ledger.try_begin_dial(key.clone(), 0, false));
+        ledger.complete_dial(&key, false, 0, None);
     }
 }

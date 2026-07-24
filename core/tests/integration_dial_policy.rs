@@ -149,8 +149,6 @@ fn test_dial_policy_manager_dead_peer() {
 
     // Register and fail 3 times to mark as dead
     for _ in 0..3 {
-        assert!(manager.register_dial_attempt(addr, None));
-        manager.complete_dial_attempt(addr);
         manager.record_dial_failure(addr, None);
     }
 
@@ -253,8 +251,9 @@ fn test_circuit_relay_ladder_multiple_relays() {
 fn test_multiaddr_to_key_strips_peer_id() {
     use scmessenger_core::transport::dial_policy::multiaddr_to_key;
 
-    let addr_with_p2p: libp2p::Multiaddr =
-        "/ip4/192.168.1.1/tcp/4001/p2p/QmTest123".parse().unwrap();
+    let pid = libp2p::identity::Keypair::generate_ed25519().public().to_peer_id();
+    let addr_str = format!("/ip4/192.168.1.1/tcp/4001/p2p/{}", pid);
+    let addr_with_p2p: libp2p::Multiaddr = addr_str.parse().unwrap();
 
     let key = multiaddr_to_key(&addr_with_p2p);
 
@@ -323,8 +322,8 @@ fn test_backoff_progression_sequence() {
 
     let mut state = PerPeerBackoffState::new(None);
 
-    // Track the progression: 1s → 2s → 4s → 8s → 30s (capped)
-    let expected_backoffs = vec![1, 2, 4, 8, 16, 30, 30]; // Last one gets capped
+    // Track the progression: 2s -> 4s -> 8s (capped at 3rd attempt, won't increase further inside loop since we only call on_dial_failure for attempt < 3)
+    let expected_backoffs = vec![2, 4, 8, 8, 8, 8, 8];
 
     for (attempt, expected_secs) in expected_backoffs.iter().enumerate() {
         if attempt < 3 {

@@ -3218,6 +3218,7 @@ async fn queue_message_for_later_delivery(
                 next_retry_at: None,
                 in_custody: false,
                 custody_established_at: 0,
+                state: scmessenger_core::store::outbox::MessageState::Enqueued,
             };
             match outbox.enqueue(queued_msg) {
                 Ok(()) => {

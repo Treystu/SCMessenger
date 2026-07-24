@@ -46,6 +46,7 @@ fn make_msg(id: &str, recipient: &str, attempts: u32) -> QueuedMessage {
         next_retry_at: None,
         in_custody: false,
         custody_established_at: 0,
+        state: scmessenger_core::store::outbox::MessageState::Enqueued,
     }
 }
 

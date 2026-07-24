@@ -4812,7 +4812,7 @@ open class MeshRepository(
                     storeLastKnownRoutePeerId(normalizedPeerId, selectedRoutePeerId)
                 }
 
-                val receiptAwaitSeconds = 30L
+                val receiptAwaitSeconds = RECEIPT_ACK_TIMEOUT_MS / 1000L
                 val strictBleOnlyValidation = false
 
                 if (isMessageDeliveredLocally(realMessageId)) {

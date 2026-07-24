@@ -816,6 +816,7 @@ impl IronCore {
                     next_retry_at: None,
                     in_custody: false,
                     custody_established_at: 0,
+                    state: crate::store::outbox::MessageState::Enqueued,
                 });
             }
         }
@@ -2704,43 +2705,50 @@ impl IronCore {
                                     "Message queued to transport"
                                 );
                                 succeeded += 1;
+                                msg.state = crate::store::outbox::MessageState::Sent;
                                 // Message was sent successfully; remove from outbox
                                 self.outbox.write().remove(&msg_id);
                             }
                             Err(e) => {
-                                // Delivery failed - treat as transient for now
-                                // (network timeout, peer temporarily unavailable, etc.)
-                                tracing::debug!(
-                                    event = "outbox_delivery_failed_transient",
-                                    message_id = %msg_id,
-                                    peer_id = %peer_id,
-                                    error = %e,
-                                    attempt = current_attempt,
-                                    "Delivery attempt failed; re-enqueueing with backoff"
-                                );
-
-                                // Re-enqueue with exponential backoff instead of dropping
                                 msg.attempts = current_attempt;
-                                let backoff_secs =
-                                    2u64.saturating_pow(current_attempt.min(12)).min(3600);
-                                let now_secs = web_time::SystemTime::now()
-                                    .duration_since(web_time::UNIX_EPOCH)
-                                    .unwrap_or_default()
-                                    .as_secs();
-                                msg.next_retry_at = Some(now_secs + backoff_secs);
+                                if current_attempt >= 3 {
+                                    // Persistent failure after 3 attempts: mark as Failed, keep in outbox for UX
+                                    msg.state = crate::store::outbox::MessageState::Failed;
+                                    msg.next_retry_at = None;
+                                    tracing::debug!(
+                                        event = "outbox_delivery_failed_persistent",
+                                        message_id = %msg_id,
+                                        peer_id = %peer_id,
+                                        error = %e,
+                                        attempt = current_attempt,
+                                        "Delivery attempt failed 3 times; marking as Failed in outbox"
+                                    );
+                                    let _ = self.outbox.write().enqueue(msg);
+                                    failed += 1;
+                                } else {
+                                    // Transient failure (< 3 attempts): leave as Enqueued with exponential backoff
+                                    msg.state = crate::store::outbox::MessageState::Enqueued;
+                                    let backoff_secs =
+                                        2u64.saturating_pow(current_attempt.min(12)).min(3600);
+                                    let now_secs = web_time::SystemTime::now()
+                                        .duration_since(web_time::UNIX_EPOCH)
+                                        .unwrap_or_default()
+                                        .as_secs();
+                                    msg.next_retry_at = Some(now_secs + backoff_secs);
 
-                                tracing::info!(
-                                    event = "outbox_retry_scheduled",
-                                    message_id = %msg_id,
-                                    peer_id = %peer_id,
-                                    backoff_secs = backoff_secs,
-                                    next_retry_at = msg.next_retry_at.unwrap_or(0),
-                                    "Message scheduled for retry in {} seconds",
-                                    backoff_secs
-                                );
+                                    tracing::debug!(
+                                        event = "outbox_delivery_failed_transient",
+                                        message_id = %msg_id,
+                                        peer_id = %peer_id,
+                                        error = %e,
+                                        attempt = current_attempt,
+                                        backoff_secs = backoff_secs,
+                                        "Delivery attempt failed; re-enqueueing with backoff"
+                                    );
 
-                                let _ = self.outbox.write().enqueue(msg);
-                                failed += 1;
+                                    let _ = self.outbox.write().enqueue(msg);
+                                    failed += 1;
+                                }
                             }
                         }
                     }

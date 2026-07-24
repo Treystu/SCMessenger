@@ -21,9 +21,14 @@ kotlin {
             }
         }
         val linuxX64Main by getting {
+            dependsOn(commonMain)
             dependencies {
                 implementation(compose.desktop.currentOs)
+                // Wire generated UniFFI Kotlin bindings from desktop_bridge
+                compileOnly(files("../desktop_bridge/target/generated-sources/uniffi"))
             }
+            // Include generated sources in compilation
+            kotlin.srcDir("../desktop_bridge/target/generated-sources/uniffi")
         }
     }
 }

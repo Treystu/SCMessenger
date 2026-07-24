@@ -52,6 +52,10 @@ impl PerPeerBackoffState {
         if self.attempt_count >= 3 {
             return false;
         }
+        // Allow the first attempt immediately.
+        if self.attempt_count == 0 {
+            return true;
+        }
         Instant::now() >= self.last_attempt_ts + self.backoff_duration
     }
 
@@ -109,6 +113,7 @@ impl PerPeerBackoffState {
 
 /// Global dial policy manager: tracks per-peer backoff state and enforces
 /// concurrent dial limits (max 3 concurrent outbound dials to any peer).
+#[derive(Debug, Clone)]
 pub struct DialPolicyManager {
     /// Per-peer backoff state, keyed by peer address (stripped of /p2p/).
     /// Using String as key to handle addresses without peer IDs.
@@ -503,7 +508,9 @@ mod tests {
 
     #[test]
     fn test_multiaddr_to_key() {
-        let addr: Multiaddr = "/ip4/192.168.1.1/tcp/4001/p2p/QmTest".parse().unwrap();
+        let pid = libp2p::identity::Keypair::generate_ed25519().public().to_peer_id();
+        let addr_str = format!("/ip4/192.168.1.1/tcp/4001/p2p/{}", pid);
+        let addr: Multiaddr = addr_str.parse().unwrap();
         let key = multiaddr_to_key(&addr);
         assert!(!key.contains("/p2p/"));
         assert!(key.contains("192.168.1.1"));

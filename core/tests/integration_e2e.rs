@@ -74,6 +74,7 @@ fn test_e2e_message_flow_two_peers() {
         next_retry_at: None,
         in_custody: false,
         custody_established_at: 0,
+        state: scmessenger_core::store::outbox::MessageState::Enqueued,
     };
 
     alice_outbox
@@ -199,6 +200,7 @@ fn test_e2e_persistent_message_flow() {
             next_retry_at: None,
             in_custody: false,
             custody_established_at: 0,
+            state: scmessenger_core::store::outbox::MessageState::Enqueued,
         };
 
         outbox.enqueue(queued_msg).expect("Failed to enqueue");
@@ -329,6 +331,7 @@ fn test_e2e_multi_peer_scenario() {
             next_retry_at: None,
             in_custody: false,
             custody_established_at: 0,
+            state: scmessenger_core::store::outbox::MessageState::Enqueued,
         })
         .unwrap();
 
@@ -342,6 +345,7 @@ fn test_e2e_multi_peer_scenario() {
             next_retry_at: None,
             in_custody: false,
             custody_established_at: 0,
+            state: scmessenger_core::store::outbox::MessageState::Enqueued,
         })
         .unwrap();
 

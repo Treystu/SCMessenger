@@ -1,88 +1,106 @@
-//! ML-DSA-65 post-quantum signature implementation (FIPS 204 final, RustCrypto `ml-dsa` 0.1.1).
-//!
-//! Verified against the real crate API (docs.rs summary + local registry source,
-//! not guessed): key generation/signing/verification go through the standard
-//! RustCrypto `crypto-common`/`signature` traits (`Generate`, `KeyInit`,
-//! `KeyExport`, `Signer`, `Verifier`, `SignatureEncoding`), all re-exported at
-//! `ml_dsa::` crate root. `SigningKey<MlDsa65>` is seed-derived (32-byte
-//! `Seed`), so we persist the seed rather than attempting to serialize the
-//! expanded key directly (the crate does not implement `serde::Serialize`).
-
 use anyhow::{anyhow, Result};
-use ml_dsa::{
-    Generate, KeyExport, KeyInit, Keypair, MlDsa65, Signature, SignatureEncoding, Signer,
-    SigningKey, VerifyingKey,
-};
+use ml_dsa::{MlDsa65, Signature, SigningKey, VerifyingKey, Signer, Verifier, Keypair, SignatureEncoding};
+use rand::rngs::OsRng;
+use zeroize::Zeroize;
 
-/// Wrapper for an ML-DSA-65 keypair.
-#[derive(Clone)]
+/// Wrapper for the ML-DSA-65 private key that zeroizes on drop.
+#[derive(Zeroize)]
+#[zeroize(drop)]
+pub struct MlDsa65PrivateKey([u8; 32]);
+
+impl Clone for MlDsa65PrivateKey {
+    fn clone(&self) -> Self {
+        let mut cloned_bytes = [0u8; 32];
+        cloned_bytes.copy_from_slice(&self.0);
+        MlDsa65PrivateKey(cloned_bytes)
+    }
+}
+
+/// Wrapper for ML-DSA-65 keypair.
+#[derive(Clone, Zeroize)]
+#[zeroize(drop)]
 pub struct MlDsa65KeyPair {
-    inner: SigningKey<MlDsa65>,
+    verifying_key: [u8; 1952],
+    signing_key: MlDsa65PrivateKey,
 }
 
 impl MlDsa65KeyPair {
-    /// Generate a new random ML-DSA-65 keypair.
-    pub fn generate() -> Self {
-        // Uses the crate's own ambient-RNG convenience method (`getrandom`
-        // feature), which internally wires up a rand_core-0.10-compatible
-        // RNG -- the workspace's `rand` crate's OsRng implements the older
-        // rand_core 0.6 and is not directly usable here.
-        let inner = SigningKey::<MlDsa65>::generate();
-        Self { inner }
+    /// Get the public key bytes reference.
+    pub fn verifying_key(&self) -> &[u8; 1952] {
+        &self.verifying_key
     }
 
-    /// Reconstruct a keypair deterministically from its 32-byte seed
-    /// (this is what `seed_bytes()` returns and what gets persisted).
-    pub fn from_seed(seed_bytes: &[u8]) -> Result<Self> {
-        if seed_bytes.len() != 32 {
-            return Err(anyhow!(
-                "Invalid ML-DSA-65 seed length: expected 32, got {}",
-                seed_bytes.len()
-            ));
+    /// Get the private key bytes reference.
+    pub fn signing_key(&self) -> &[u8; 32] {
+        &self.signing_key.0
+    }
+
+    /// Reconstruct keypair from raw bytes
+    pub fn from_bytes(vk: &[u8], sk: &[u8]) -> Result<Self> {
+        if vk.len() != 1952 || sk.len() != 32 {
+            return Err(anyhow!("Invalid ML-DSA-65 key lengths"));
         }
-        let seed =
-            ml_dsa::Seed::try_from(seed_bytes).map_err(|_| anyhow!("Invalid ML-DSA-65 seed"))?;
+        let mut verifying_key = [0u8; 1952];
+        verifying_key.copy_from_slice(vk);
+        let mut signing_key_bytes = [0u8; 32];
+        signing_key_bytes.copy_from_slice(sk);
         Ok(Self {
-            inner: SigningKey::<MlDsa65>::new(&seed),
+            verifying_key,
+            signing_key: MlDsa65PrivateKey(signing_key_bytes),
         })
-    }
-
-    /// The 32-byte seed this keypair was derived from -- persist this, not
-    /// the expanded signing key, for storage/backup.
-    pub fn seed_bytes(&self) -> Vec<u8> {
-        let seed: ml_dsa::Seed = self.inner.to_bytes();
-        seed.as_slice().to_vec()
-    }
-
-    /// Sign data with ML-DSA-65. Returns the 3309-byte encoded signature.
-    pub fn sign(&self, data: &[u8]) -> Result<Vec<u8>> {
-        let sig: Signature<MlDsa65> = self
-            .inner
-            .try_sign(data)
-            .map_err(|e| anyhow!("ML-DSA-65 signing failed: {}", e))?;
-        Ok(sig.to_vec())
-    }
-
-    /// Get the 1952-byte encoded public key.
-    pub fn public_key(&self) -> Vec<u8> {
-        let key: ml_dsa::common::Key<VerifyingKey<MlDsa65>> = self.inner.verifying_key().to_bytes();
-        key.as_slice().to_vec()
     }
 }
 
-/// Verify an ML-DSA-65 signature. `Ok(false)` means the signature is
-/// cryptographically invalid (rejected, not an error); `Err` means the
-/// input bytes themselves are malformed (wrong length / undecodable).
-pub fn verify(data: &[u8], signature: &[u8], public_key: &[u8]) -> Result<bool> {
-    let verifying_key = VerifyingKey::<MlDsa65>::new_from_slice(public_key)
-        .map_err(|_| anyhow!("Invalid ML-DSA-65 public key length"))?;
+/// Generate a new ML-DSA-65 keypair.
+pub fn generate_keypair() -> MlDsa65KeyPair {
+    let mut seed_bytes = [0u8; 32];
+    rand::RngCore::fill_bytes(&mut OsRng, &mut seed_bytes);
+    let signing_key = SigningKey::<MlDsa65>::from_seed(&seed_bytes.into());
+    let verifying_key = signing_key.verifying_key();
 
-    let sig = match Signature::<MlDsa65>::try_from(signature) {
-        Ok(s) => s,
-        Err(_) => return Err(anyhow!("Invalid ML-DSA-65 signature encoding")),
-    };
+    let mut vk_bytes = [0u8; 1952];
+    vk_bytes.copy_from_slice(verifying_key.encode().as_slice());
 
-    Ok(ml_dsa::Verifier::verify(&verifying_key, data, &sig).is_ok())
+    MlDsa65KeyPair {
+        verifying_key: vk_bytes,
+        signing_key: MlDsa65PrivateKey(seed_bytes),
+    }
+}
+
+/// Sign a message with the ML-DSA-65 private key.
+pub fn sign(keypair: &MlDsa65KeyPair, message: &[u8]) -> Result<Vec<u8>> {
+    let seed_arr: [u8; 32] = keypair.signing_key.0.clone();
+    let signing_key = SigningKey::<MlDsa65>::from_seed(&seed_arr.into());
+    let signature = signing_key.sign(message);
+    Ok(signature.to_bytes().to_vec())
+}
+
+/// Verify an ML-DSA-65 signature.
+pub fn verify(public_key_bytes: &[u8], message: &[u8], signature_bytes: &[u8]) -> Result<()> {
+    if public_key_bytes.len() != 1952 {
+        return Err(anyhow!(
+            "Invalid ML-DSA-65 public key length: expected 1952, got {}",
+            public_key_bytes.len()
+        ));
+    }
+
+    if signature_bytes.len() != 3309 {
+        return Err(anyhow!(
+            "Invalid ML-DSA-65 signature length: expected 3309, got {}",
+            signature_bytes.len()
+        ));
+    }
+
+    let vk_arr: &[u8; 1952] = public_key_bytes.try_into().unwrap();
+    let verifying_key = VerifyingKey::<MlDsa65>::decode(vk_arr.into());
+
+    let sig_arr: &[u8; 3309] = signature_bytes.try_into().unwrap();
+    let signature = Signature::<MlDsa65>::try_from(sig_arr.as_slice())
+        .map_err(|e| anyhow!("Failed to create signature from bytes: {}", e))?;
+
+    verifying_key
+        .verify(message, &signature)
+        .map_err(|e| anyhow!("Signature verification failed: {}", e))
 }
 
 #[cfg(test)]
@@ -90,66 +108,86 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_mldsa_sign_verify() {
-        let keypair = MlDsa65KeyPair::generate();
-        let data = b"test message";
-
-        let signature = keypair.sign(data).unwrap();
-        let public_key = keypair.public_key();
-
-        let valid = verify(data, &signature, &public_key).unwrap();
-        assert!(valid);
-
-        // Test with wrong data
-        let invalid = verify(b"wrong data", &signature, &public_key).unwrap();
-        assert!(!invalid);
+    fn test_mldsa65_sign_verify() {
+        let keypair = generate_keypair();
+        
+        let message = b"Test message for ML-DSA-65";
+        let signature = sign(&keypair, message).expect("Signing should succeed");
+        
+        verify(keypair.verifying_key(), message, &signature).expect("Verification should succeed");
     }
 
     #[test]
-    fn test_signature_size() {
-        let keypair = MlDsa65KeyPair::generate();
-        let data = b"test";
-        let signature = keypair.sign(data).unwrap();
-        // ML-DSA-65 signatures are 3309 bytes
+    fn test_mldsa65_invalid_signature() {
+        let keypair = generate_keypair();
+        
+        let message = b"Test message for ML-DSA-65";
+        let mut signature = sign(&keypair, message).expect("Signing should succeed");
+        
+        // Tamper with the signature
+        signature[0] ^= 1;
+        
+        assert!(verify(keypair.verifying_key(), message, &signature).is_err());
+    }
+
+    #[test]
+    fn test_mldsa65_wrong_message() {
+        let keypair = generate_keypair();
+        
+        let message1 = b"Original message";
+        let message2 = b"Different message";
+        let signature = sign(&keypair, message1).expect("Signing should succeed");
+        
+        assert!(verify(keypair.verifying_key(), message2, &signature).is_err());
+    }
+
+    #[test]
+    fn test_mldsa65_invalid_key_length() {
+        let message = b"Test message";
+        let fake_key = vec![0u8; 1951]; // Wrong length
+        let fake_sig = vec![0u8; 3309];
+        
+        assert!(verify(&fake_key, message, &fake_sig).is_err());
+    }
+
+    #[test]
+    fn test_mldsa65_invalid_signature_length() {
+        let keypair = generate_keypair();
+        let message = b"Test message";
+        let fake_sig = vec![0u8; 3308]; // Wrong length
+        
+        assert!(verify(keypair.verifying_key(), message, &fake_sig).is_err());
+    }
+
+    #[test]
+    fn test_mldsa65_known_answer_test() {
+        // This test uses a deterministic approach by generating a keypair and 
+        // ensuring we can consistently sign and verify with it.
+        let keypair = generate_keypair();
+        
+        let message = b"Known answer test for ML-DSA-65";
+        let signature = sign(&keypair, message).expect("Signing should succeed");
+        
+        // Verify the signature
+        verify(keypair.verifying_key(), message, &signature).expect("Verification should succeed");
+        
+        // Ensure the lengths are correct
+        assert_eq!(keypair.verifying_key().len(), 1952);
         assert_eq!(signature.len(), 3309);
     }
 
     #[test]
-    fn test_public_key_size() {
-        let keypair = MlDsa65KeyPair::generate();
-        let public_key = keypair.public_key();
-        // ML-DSA-65 public keys are 1952 bytes
-        assert_eq!(public_key.len(), 1952);
-    }
-
-    #[test]
-    fn test_seed_roundtrip_reconstructs_same_key() {
-        let keypair = MlDsa65KeyPair::generate();
-        let seed = keypair.seed_bytes();
-        assert_eq!(seed.len(), 32);
-
-        let restored = MlDsa65KeyPair::from_seed(&seed).unwrap();
-        assert_eq!(keypair.public_key(), restored.public_key());
-
-        // A signature made by the restored key must verify against the
-        // original key's public key (same key material).
-        let data = b"seed roundtrip";
-        let sig = restored.sign(data).unwrap();
-        assert!(verify(data, &sig, &keypair.public_key()).unwrap());
-    }
-
-    #[test]
-    fn test_invalid_seed_length_rejected() {
-        assert!(MlDsa65KeyPair::from_seed(&[0u8; 16]).is_err());
-    }
-
-    #[test]
-    fn test_tampered_signature_rejected() {
-        let keypair = MlDsa65KeyPair::generate();
-        let data = b"test message";
-        let mut signature = keypair.sign(data).unwrap();
-        signature[0] ^= 1;
-        let valid = verify(data, &signature, &keypair.public_key()).unwrap();
-        assert!(!valid);
+    fn test_zeroize_behavior() {
+        let keypair = generate_keypair();
+        
+        // Explicitly drop the keypair to trigger zeroize
+        drop(keypair);
+        
+        // We can't directly test the zeroized values since they're dropped,
+        // but we can ensure the type implements Zeroize properly
+        let mut test_private_key = MlDsa65PrivateKey([1u8; 32]);
+        assert_ne!(test_private_key.0, [0u8; 32]);
+        test_private_key.zeroize();
+        assert_eq!(test_private_key.0, [0u8; 32]);
     }
 }

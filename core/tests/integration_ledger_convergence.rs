@@ -94,7 +94,7 @@ async fn test_ledger_convergence_between_nodes() {
     .await
     .expect("Failed to start swarm2");
 
-    tokio::time::sleep(Duration::from_millis(500)).await;
+    tokio::time::sleep(Duration::from_millis(1500)).await;
 
     // LedgerManager derives uniffi::Object, not Clone - Arc-wrap so both the
     // spawned event-loop task and this function's final assertion can share it.
@@ -130,16 +130,15 @@ async fn test_ledger_convergence_between_nodes() {
     // Append /p2p/<peer_id1> so libp2p can associate the dial with a known PeerId.
     // Without this suffix, dial() succeeds but libp2p reports "no addresses for peer"
     // because it cannot track the connection against a specific PeerId.
-    let node1_addr_with_peer = node1_addr
-        .clone()
-        .with(libp2p::multiaddr::Protocol::P2p(peer_id1));
+    let mut dial_addr = node1_addr.clone();
+    dial_addr.push(libp2p::multiaddr::Protocol::P2p(peer_id1));
     swarm2
-        .dial(node1_addr_with_peer)
+        .dial(dial_addr)
         .await
         .expect("Failed to dial");
 
     // Wait for connection handshake and protocols to negotiate
-    tokio::time::sleep(Duration::from_millis(500)).await;
+    tokio::time::sleep(Duration::from_millis(1000)).await;
 
     // Trigger the ledger share directly from Node 1 to Node 2 now that they are connected
     let entries = ledger1.dialable_addresses();

@@ -24,6 +24,7 @@ fn queued_message(message_id: &str, recipient_id: &str) -> QueuedMessage {
         next_retry_at: None,
         in_custody: false,
         custody_established_at: 0,
+        state: scmessenger_core::store::outbox::MessageState::Enqueued,
     }
 }
 

@@ -72,7 +72,7 @@ impl IdentityKeys {
         x25519_bytes.zeroize();
 
         let mlkem_keypair = crate::crypto::pq::generate();
-        let mldsa_keypair = Some(crate::crypto::pq::mldsa::MlDsa65KeyPair::generate());
+        let mldsa_keypair = Some(crate::crypto::pq::mldsa::generate_keypair());
 
         Self {
             signing_key,
@@ -103,7 +103,7 @@ impl IdentityKeys {
     /// Sign data with ML-DSA-65
     pub fn sign_mldsa(&self, data: &[u8]) -> Result<Vec<u8>> {
         if let Some(ref kp) = self.mldsa_keypair {
-            kp.sign(data)
+            crate::crypto::pq::mldsa::sign(kp, data)
         } else {
             Err(anyhow::anyhow!("ML-DSA keypair not available"))
         }
@@ -134,13 +134,9 @@ impl IdentityKeys {
                 signing_key_bytes: self.signing_key.to_bytes(),
                 x25519_secret_bytes: self.x25519_encryption_secret.to_bytes(),
                 mlkem_seed: self.mlkem_keypair.seed.to_vec(),
-                mldsa_public_key: mldsa_kp.public_key(),
-                // ML-DSA-65's SigningKey is seed-derived (32 bytes) and does
-                // not implement Serialize; persist the seed and reconstruct
-                // via MlDsa65KeyPair::from_seed on load (field name kept for
-                // minimal diff, semantically holds the seed, not a raw
-                // expanded secret key).
-                mldsa_secret_key: mldsa_kp.seed_bytes(),
+                mldsa_public_key: mldsa_kp.verifying_key().to_vec(),
+                // ML-DSA-65 private key is persisted directly (4032 bytes)
+                mldsa_secret_key: mldsa_kp.signing_key().to_vec(),
             };
             let mut serialized = bincode::serialize(&raw)
                 .expect("bincode serialization of IdentityKeysV3Raw cannot fail");
@@ -185,7 +181,7 @@ impl IdentityKeys {
             let mlkem_keypair = crate::crypto::pq::generate();
 
             // Generate ML-DSA keypair for migration
-            let mldsa_keypair = Some(crate::crypto::pq::mldsa::MlDsa65KeyPair::generate());
+            let mldsa_keypair = Some(crate::crypto::pq::mldsa::generate_keypair());
 
             Ok(Self {
                 signing_key,
@@ -212,7 +208,7 @@ impl IdentityKeys {
             raw.zeroize();
 
             // Generate ML-DSA keypair for migration
-            let mldsa_keypair = Some(crate::crypto::pq::mldsa::MlDsa65KeyPair::generate());
+            let mldsa_keypair = Some(crate::crypto::pq::mldsa::generate_keypair());
 
             Ok(Self {
                 signing_key,
@@ -237,12 +233,9 @@ impl IdentityKeys {
             let mlkem_keypair = crate::crypto::pq::from_seed(mlkem_seed_arr);
             mlkem_seed_arr.zeroize();
 
-            // Reconstruct the ML-DSA keypair deterministically from its
-            // persisted 32-byte seed (mldsa_secret_key holds the seed, see
-            // to_bytes() above) -- this restores the SAME identity, not a
-            // fresh one.
+            // Reconstruct the ML-DSA keypair from persisted bytes
             let mldsa_keypair = Some(
-                crate::crypto::pq::mldsa::MlDsa65KeyPair::from_seed(&raw.mldsa_secret_key)
+                crate::crypto::pq::mldsa::MlDsa65KeyPair::from_bytes(&raw.mldsa_public_key, &raw.mldsa_secret_key)
                     .map_err(|e| anyhow::anyhow!("Failed to restore ML-DSA-65 keypair: {}", e))?,
             );
 
@@ -323,7 +316,7 @@ pub fn sign_bundle(keys: &IdentityKeys) -> Result<PublicKeyBundle> {
     let ed25519_public = keys.signing_key.verifying_key().to_bytes();
     let x25519_public = x25519_dalek::PublicKey::from(&keys.x25519_encryption_secret).to_bytes();
     let mlkem_encaps_key = keys.mlkem_keypair.public_key().to_vec();
-    let mldsa_public = keys.mldsa_keypair.as_ref().map(|kp| kp.public_key());
+    let mldsa_public = keys.mldsa_keypair.as_ref().map(|kp| kp.verifying_key().to_vec());
     let created_at = web_time::SystemTime::now()
         .duration_since(web_time::UNIX_EPOCH)
         .unwrap_or_default()
@@ -403,8 +396,8 @@ pub fn verify_bundle(bundle: &PublicKeyBundle) -> Result<()> {
 
         // Verify ML-DSA signature
         let mldsa_verified =
-            crate::crypto::pq::mldsa::verify(&sig_input, mldsa_signature, mldsa_public)
-                .unwrap_or(false);
+            crate::crypto::pq::mldsa::verify(mldsa_public, &sig_input, mldsa_signature)
+                .is_ok();
 
         if ed_verified && mldsa_verified {
             Ok(())

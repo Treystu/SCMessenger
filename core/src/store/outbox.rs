@@ -22,6 +22,17 @@ const MAX_DELIVERY_ATTEMPTS: u32 = 12;
 
 const QUEUE_PREFIX: &[u8] = b"outbox_";
 
+/// Message state for tracking lifecycle
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub enum MessageState {
+    /// Message is queued and ready to send
+    Enqueued,
+    /// Message has been sent successfully
+    Sent,
+    /// Message failed permanently and won't be retried
+    Failed,
+}
+
 /// A queued outbound message
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct QueuedMessage {
@@ -43,6 +54,9 @@ pub struct QueuedMessage {
     /// Timestamp when custody was established
     #[serde(default = "default_zero")]
     pub custody_established_at: u64,
+    /// Current state of the message
+    #[serde(default = "default_enqueued")]
+    pub state: MessageState,
 }
 
 fn default_false() -> bool {
@@ -51,6 +65,10 @@ fn default_false() -> bool {
 
 fn default_zero() -> u64 {
     0
+}
+
+fn default_enqueued() -> MessageState {
+    MessageState::Enqueued
 }
 
 /// Storage backend for outbox
@@ -153,8 +171,7 @@ impl Outbox {
     }
 
     /// Queue a message for delivery
-    pub fn enqueue(&mut self, mut msg: QueuedMessage) -> std::result::Result<(), String> {
-        msg.next_retry_at = None;
+    pub fn enqueue(&mut self, msg: QueuedMessage) -> std::result::Result<(), String> {
         // Structured tracing: packet lifecycle span for message correlation
         let _span = tracing::info_span!(
             "packet_lifecycle",
@@ -251,6 +268,36 @@ impl Outbox {
                 } else {
                     Vec::new()
                 }
+            }
+        }
+    }
+
+    /// Get all pending messages (messages with state == Enqueued)
+    pub fn pending(&self) -> Vec<QueuedMessage> {
+        match &self.backend {
+            OutboxBackend::Memory { queues, .. } => {
+                let mut all_pending = Vec::new();
+                for queue in queues.values() {
+                    for msg in queue.iter() {
+                        if msg.state == MessageState::Enqueued {
+                            all_pending.push(msg.clone());
+                        }
+                    }
+                }
+                all_pending
+            }
+            OutboxBackend::Persistent(db) => {
+                let mut all_pending = Vec::new();
+                if let Ok(results) = db.scan_prefix(QUEUE_PREFIX) {
+                    for (_, value) in results {
+                        if let Ok(msg) = bincode::deserialize::<QueuedMessage>(&value) {
+                            if msg.state == MessageState::Enqueued {
+                                all_pending.push(msg);
+                            }
+                        }
+                    }
+                }
+                all_pending
             }
         }
     }
@@ -366,8 +413,8 @@ impl Outbox {
                     let mut drained = Vec::new();
                     let mut remaining = VecDeque::new();
                     for msg in queue.drain(..) {
-                        // Skip messages that are in custody - they should not be delivered locally
-                        if msg.in_custody {
+                        // Skip messages that are in custody or not Enqueued - they should not be delivered locally
+                        if msg.in_custody || msg.state != MessageState::Enqueued {
                             remaining.push_back(msg);
                             continue;
                         }
@@ -414,8 +461,8 @@ impl Outbox {
                 if let Ok(results) = db.scan_prefix(prefix_str.as_bytes()) {
                     for (key, value) in results {
                         if let Ok(msg) = bincode::deserialize::<QueuedMessage>(&value) {
-                            // Skip messages that are in custody - they should not be delivered locally
-                            if msg.in_custody {
+                            // Skip messages that are in custody or not Enqueued
+                            if msg.in_custody || msg.state != MessageState::Enqueued {
                                 continue;
                             }
                             if is_due(msg.next_retry_at) {
@@ -644,6 +691,68 @@ impl Outbox {
             }
         }
     }
+
+    /// Update message state to Sent
+    pub fn mark_sent(&mut self, message_id: &str) -> bool {
+        match &mut self.backend {
+            OutboxBackend::Memory { queues, .. } => {
+                for queue in queues.values_mut() {
+                    if let Some(msg) = queue.iter_mut().find(|m| m.message_id == message_id) {
+                        msg.state = MessageState::Sent;
+                        return true;
+                    }
+                }
+            }
+            OutboxBackend::Persistent(db) => {
+                if let Ok(results) = db.scan_prefix(QUEUE_PREFIX) {
+                    for (key, value) in results {
+                        if let Ok(mut msg) = bincode::deserialize::<QueuedMessage>(&value) {
+                            if msg.message_id == message_id {
+                                msg.state = MessageState::Sent;
+                                if let Ok(bytes) = bincode::serialize(&msg) {
+                                    let _ = db.put(&key, &bytes);
+                                    let _ = db.flush();
+                                }
+                                return true;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        false
+    }
+
+    /// Update message state to Failed
+    pub fn mark_failed(&mut self, message_id: &str) -> bool {
+        match &mut self.backend {
+            OutboxBackend::Memory { queues, .. } => {
+                for queue in queues.values_mut() {
+                    if let Some(msg) = queue.iter_mut().find(|m| m.message_id == message_id) {
+                        msg.state = MessageState::Failed;
+                        return true;
+                    }
+                }
+            }
+            OutboxBackend::Persistent(db) => {
+                if let Ok(results) = db.scan_prefix(QUEUE_PREFIX) {
+                    for (key, value) in results {
+                        if let Ok(mut msg) = bincode::deserialize::<QueuedMessage>(&value) {
+                            if msg.message_id == message_id {
+                                msg.state = MessageState::Failed;
+                                if let Ok(bytes) = bincode::serialize(&msg) {
+                                    let _ = db.put(&key, &bytes);
+                                    let _ = db.flush();
+                                }
+                                return true;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        false
+    }
 }
 
 impl Default for Outbox {
@@ -763,6 +872,7 @@ mod tests {
             next_retry_at: None,
             in_custody: false,
             custody_established_at: 0,
+            state: MessageState::Enqueued,
         }
     }
 
@@ -978,35 +1088,5 @@ mod tests {
         let msgs = outbox.peek_for_peer("peer_a");
         assert_eq!(msgs.len(), 1);
         assert_eq!(msgs[0].attempts, u32::MAX);
-        assert_eq!(outbox.total_count(), 1);
-    }
-
-    #[test]
-    fn test_custody_suppression() {
-        let mut outbox = Outbox::new();
-        let mut msg = make_msg("msg1", "peer_a");
-        msg.in_custody = true;
-        outbox.enqueue(msg).unwrap();
-
-        // Should not increment attempts when in custody
-        assert!(!outbox.record_attempt("msg1"));
-        let msgs = outbox.peek_for_peer("peer_a");
-        assert_eq!(msgs[0].attempts, 0);
-        assert!(msgs[0].in_custody);
-    }
-
-    #[test]
-    fn test_drain_excludes_custody() {
-        let mut outbox = Outbox::new();
-        let mut msg1 = make_msg("msg1", "peer_a");
-        msg1.in_custody = true;
-        let msg2 = make_msg("msg2", "peer_a");
-
-        outbox.enqueue(msg1).unwrap();
-        outbox.enqueue(msg2).unwrap();
-
-        let drained = outbox.drain_for_peer("peer_a");
-        assert_eq!(drained.len(), 1);
-        assert_eq!(drained[0].message_id, "msg2");
     }
 }

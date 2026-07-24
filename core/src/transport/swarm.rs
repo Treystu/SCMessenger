@@ -4075,6 +4075,7 @@ pub async fn start_swarm_with_config(
                                         if port > 0 {
                                             let _ = c_arc.transport_memory.read().record_success(&peer_id, &fp, transport, port, 0);
                                         }
+                                        c_arc.handle_peer_connection_event(&peer_id.to_string(), true);
                                     }
                                 }
 

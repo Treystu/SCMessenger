@@ -16,6 +16,7 @@ fn make_test_message(message_id: &str, recipient_id: &str) -> QueuedMessage {
         next_retry_at: None,
         in_custody: false,
         custody_established_at: 0,
+        state: scmessenger_core::store::outbox::MessageState::Enqueued,
     }
 }
 
@@ -200,7 +201,7 @@ fn test_outbox_retry_backoff_schedule() {
             .unwrap_or_default()
             .as_secs();
         current_msg.next_retry_at = Some(now_secs + backoff_secs);
-
+        outbox.remove(&current_msg.message_id);
         outbox.enqueue(current_msg.clone()).ok();
 
         let updated = outbox.peek_for_peer(peer_id)[0].clone();
@@ -315,6 +316,7 @@ fn test_outbox_retry_state_transitions() {
         .as_secs();
     failed_msg.next_retry_at = Some(now_secs + 2); // 2 second backoff
 
+    outbox.remove(&failed_msg.message_id);
     outbox
         .enqueue(failed_msg)
         .expect("re-enqueue after transient failure");
@@ -348,10 +350,10 @@ fn test_outbox_flush_with_persistent_storage() {
         .expect("convert path to string")
         .to_string();
 
-    let backend1 = Arc::new(
-        scmessenger_core::store::backend::SledStorage::new(&path).expect("create SledStorage"),
-    );
     {
+        let backend1 = Arc::new(
+            scmessenger_core::store::backend::SledStorage::new(&path).expect("create SledStorage"),
+        );
         let mut outbox = Outbox::persistent(backend1.clone());
 
         // Enqueue messages
