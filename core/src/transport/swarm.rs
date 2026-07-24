@@ -1341,6 +1341,11 @@ pub enum SwarmCommand {
         addr: Multiaddr,
         reply: mpsc::Sender<Result<(), String>>,
     },
+    /// Dial a discovered address (with rate-limiting)
+    DiscoveryDial {
+        peer_id: PeerId,
+        addr: Multiaddr,
+    },
     /// Dial resolved IP addresses for a DNS multiaddr
     DialResolved {
         original_dns: Multiaddr,
@@ -2350,9 +2355,27 @@ pub async fn start_swarm_with_config(
             // Bootstrap reconnection timer — re-dial bootstrap nodes every 60s
             // to handle network changes and maintain connectivity.
             // Exponential backoff per addr: 60s → 120s → … → 960s max on failure;
+            // Exponential backoff per addr: 60s → 120s → … → 960s max on failure;
             // resets to 60s on success.
             let mut bootstrap_reconnect_interval = tokio::time::interval(Duration::from_secs(60));
             let bootstrap_addrs_clone = bootstrap_addrs;
+            let mut known_relays: HashSet<PeerId> = HashSet::new();
+            for addr in &bootstrap_addrs_clone {
+                if let Some(libp2p::multiaddr::Protocol::P2p(peer_id)) = addr.iter().find(|p| matches!(p, libp2p::multiaddr::Protocol::P2p(_))) {
+                    known_relays.insert(peer_id);
+                }
+            }
+
+            let (discovery_dial_tx, mut discovery_dial_rx) = tokio::sync::mpsc::channel::<(PeerId, Multiaddr)>(64);
+            let command_tx_for_drain = command_tx.clone();
+            tokio::spawn(async move {
+                let mut interval = tokio::time::interval(tokio::time::Duration::from_millis(250));
+                while let Some((peer_id, addr)) = discovery_dial_rx.recv().await {
+                    interval.tick().await;
+                    let _ = command_tx_for_drain.send(SwarmCommand::DiscoveryDial { peer_id, addr }).await;
+                }
+            });
+
             let mut bootstrap_backoff: HashMap<Multiaddr, BootstrapBackoffEntry> = HashMap::new();
             let mut resolved_to_dns: HashMap<Multiaddr, Multiaddr> = HashMap::new();
             let mut resolved_keys_fifo: std::collections::VecDeque<Multiaddr> =
@@ -2783,13 +2806,38 @@ pub async fn start_swarm_with_config(
                                         if let Ok(relay_msg) = crate::relay::protocol::RelayMessage::from_bytes(&envelope_payload) {
                                             match relay_msg {
                                                 crate::relay::protocol::RelayMessage::PeerJoined { peer_info } => {
+                                                    if !known_relays.contains(&peer) {
+                                                        tracing::debug!("Discarding PeerJoined from non-relay peer {}", peer);
+                                                        let _ = swarm.behaviour_mut().messaging.send_response(
+                                                            channel,
+                                                            Libp2pMessageResponse { accepted: true, error: None },
+                                                        );
+                                                        continue;
+                                                    }
                                                     tracing::info!("Received PeerJoined: {} with {} addresses", peer_info.peer_id, peer_info.addresses.len());
                                                     let mut dialed = 0usize;
+                                                    let connected_peers: HashSet<PeerId> = swarm.connected_peers().cloned().collect();
+                                                    let mut already_dialed = HashSet::new();
                                                     for addr_str in peer_info.addresses.iter().take(MAX_DISCOVERY_DIALS) {
                                                         if let Ok(addr) = addr_str.parse::<Multiaddr>() {
                                                             if is_discoverable_multiaddr(&addr) {
-                                                                tracing::debug!("  Dialing announced peer at {}", addr);
-                                                                let _ = swarm.dial(addr);
+                                                                let mut target_peer = None;
+                                                                for p in addr.iter() {
+                                                                    if let libp2p::multiaddr::Protocol::P2p(pid) = p {
+                                                                        target_peer = Some(pid);
+                                                                    }
+                                                                }
+                                                                if let Some(pid) = target_peer {
+                                                                    if connected_peers.contains(&pid) {
+                                                                        continue;
+                                                                    }
+                                                                }
+                                                                let key = addr.to_string();
+                                                                if !already_dialed.insert(key) {
+                                                                    continue;
+                                                                }
+                                                                tracing::debug!("  Queuing announced peer at {}", addr);
+                                                                let _ = discovery_dial_tx.try_send((peer, addr));
                                                                 dialed += 1;
                                                             }
                                                         }
@@ -2804,10 +2852,20 @@ pub async fn start_swarm_with_config(
                                                     continue;
                                                 }
                                                 crate::relay::protocol::RelayMessage::PeerListResponse { peers } => {
+                                                    if !known_relays.contains(&peer) {
+                                                        tracing::debug!("Discarding PeerListResponse from non-relay peer {}", peer);
+                                                        let _ = swarm.behaviour_mut().messaging.send_response(
+                                                            channel,
+                                                            Libp2pMessageResponse { accepted: true, error: None },
+                                                        );
+                                                        continue;
+                                                    }
                                                     tracing::info!("Received peer list: {} peers", peers.len());
                                                     // Cap TOTAL dials across all peers, not per-peer, so a
                                                     // large peer list cannot amplify into thousands of dials.
                                                     let mut dialed = 0usize;
+                                                    let connected_peers: HashSet<PeerId> = swarm.connected_peers().cloned().collect();
+                                                    let mut already_dialed = HashSet::new();
                                                     'outer: for peer_info in peers {
                                                         tracing::debug!("  Peer: {} ({} addresses)", peer_info.peer_id, peer_info.addresses.len());
                                                         for addr_str in &peer_info.addresses {
@@ -2817,7 +2875,22 @@ pub async fn start_swarm_with_config(
                                                             }
                                                             if let Ok(addr) = addr_str.parse::<Multiaddr>() {
                                                                 if is_discoverable_multiaddr(&addr) {
-                                                                    let _ = swarm.dial(addr);
+                                                                    let mut target_peer = None;
+                                                                    for p in addr.iter() {
+                                                                        if let libp2p::multiaddr::Protocol::P2p(pid) = p {
+                                                                            target_peer = Some(pid);
+                                                                        }
+                                                                    }
+                                                                    if let Some(pid) = target_peer {
+                                                                        if connected_peers.contains(&pid) {
+                                                                            continue;
+                                                                        }
+                                                                    }
+                                                                    let key = addr.to_string();
+                                                                    if !already_dialed.insert(key) {
+                                                                        continue;
+                                                                    }
+                                                                    let _ = discovery_dial_tx.try_send((peer, addr));
                                                                     dialed += 1;
                                                                 }
                                                             }
@@ -4641,11 +4714,16 @@ pub async fn start_swarm_with_config(
                                 let _ = reply.send(bound_addresses.clone()).await;
                             }
                             SwarmCommand::GetExternalAddresses { reply } => {
-                                let addresses = address_observer.external_addresses().to_vec();
-                                let _ = reply.send(addresses).await;
-                            }
+                                                let addresses = address_observer.external_addresses().to_vec();
+                                                let _ = reply.send(addresses).await;
+                                            }
 
-                            SwarmCommand::Dial { addr, reply } => {
+                                            SwarmCommand::DiscoveryDial { peer_id, addr } => {
+                                                tracing::debug!("Processing off-loop discovery dial to {} for peer {}", addr, peer_id);
+                                                let _ = swarm.dial(addr);
+                                            }
+
+                                            SwarmCommand::Dial { addr, reply } => {
                                 tracing::debug!("Dialing {} (synthesizing port ladder if applicable)", addr);
                                 let s = addr.to_string();
                                 let is_direct = !s.contains("/p2p-circuit/") && !s.contains("/ws/") && !s.contains("/wss/");
@@ -5237,6 +5315,10 @@ pub async fn start_swarm_with_config(
                             SwarmCommand::GetExternalAddresses { reply } => {
                                 let addresses = address_observer.external_addresses().to_vec();
                                 let _ = reply.send(addresses).await;
+                            }
+                            SwarmCommand::DiscoveryDial { peer_id, addr } => {
+                                tracing::debug!("Processing off-loop discovery dial to {} for peer {}", addr, peer_id);
+                                let _ = swarm.dial(addr);
                             }
                             SwarmCommand::Dial { addr, reply } => {
                                 match swarm.dial(addr) {

@@ -4660,6 +4660,7 @@ open class MeshRepository(
                 hidden = false
             )
 
+            var coreEnqueued = false
             try {
                 historyManager?.add(initialRecord)
                 historyManager?.flush()
@@ -4737,6 +4738,8 @@ open class MeshRepository(
                         Timber.e("Failed to prepare message: IronCore not initialized")
                         return@withContext
                     }
+                
+                coreEnqueued = true
 
                 val realMessageId = prepared.messageId.trim()
                 if (realMessageId.isBlank()) {
@@ -4861,6 +4864,12 @@ open class MeshRepository(
                 Timber.i("Message sent (encrypted) to $normalizedPeerId (id=$realMessageId)")
             } catch (e: Exception) {
                 Timber.e(e, "Failed to send message to $normalizedPeerId")
+                
+                if (coreEnqueued) {
+                    Timber.i("Suppressing exception because message was successfully enqueued in core outbox: ${e.message}")
+                    return@withContext
+                }
+
                 // Even on error, the message is in history (initialRecord),
                 // but we should probably ensure it's also in the pending outbox for retry if it's a transient error.
                 // However, most exceptions here (invalid key, etc.) are non-transient.
