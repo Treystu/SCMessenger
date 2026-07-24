@@ -10,6 +10,16 @@
 use serde::{Deserialize, Serialize};
 
 // ============================================================================
+// ERRORS
+// ============================================================================
+
+#[derive(Debug, Clone, Serialize, Deserialize, uniffi::Error, thiserror::Error)]
+pub enum DesktopBridgeError {
+    #[error("Desktop bridge error: {0}")]
+    General(String),
+}
+
+// ============================================================================
 // XDG PATH CONFIGURATION
 // ============================================================================
 

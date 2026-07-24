@@ -4,8 +4,7 @@ plugins {
 }
 
 kotlin {
-    jvm()
-    linuxX64()
+    jvm("desktop")
 
     sourceSets {
         val commonMain by getting {
@@ -15,20 +14,16 @@ kotlin {
                 implementation(compose.material)
             }
         }
-        val jvmMain by getting {
+        val desktopMain by getting {
             dependencies {
                 implementation(compose.desktop.currentOs)
-            }
-        }
-        val linuxX64Main by getting {
-            dependsOn(commonMain)
-            dependencies {
-                implementation(compose.desktop.currentOs)
+                implementation("net.java.dev.jna:jna:5.14.0")
                 // Wire generated UniFFI Kotlin bindings from desktop_bridge
-                compileOnly(files("../desktop_bridge/target/generated-sources/uniffi"))
+                compileOnly(files("../desktop_bridge/target/generated-sources/uniffi/kotlin"))
+                // NOTE: UniFFI Kotlin bindings require JNA to be added at runtime, but for compile time the files are enough.
             }
             // Include generated sources in compilation
-            kotlin.srcDir("../desktop_bridge/target/generated-sources/uniffi")
+            kotlin.srcDir("../desktop_bridge/target/generated-sources/uniffi/kotlin")
         }
     }
 }
