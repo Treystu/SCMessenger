@@ -63,8 +63,12 @@ jobs:
         run: |
           echo "Checking for trailing whitespace..."
           
-          # Find files with trailing whitespace (exclude binary files and specific patterns)
-          if git diff --check HEAD^ HEAD 2>&1 | grep -v "warning: CRLF will be replaced"; then
+          # Generated UniFFI sources preserve upstream generator formatting.
+          # Check authored files while excluding deterministic generated output.
+          if git diff --check HEAD^ HEAD -- . \
+            ':(exclude)iOS/SCMessenger/SCMessenger/Generated/**' \
+            ':(exclude)iOS/SCMessengerCore.xcframework/**/Headers/**' \
+            2>&1 | grep -v "warning: CRLF will be replaced"; then
             echo "❌ ERROR: Trailing whitespace found"
             echo "Run: git diff --check to see details"
             exit 1
