@@ -10,8 +10,7 @@
 
 use libp2p::identity::Keypair;
 use libp2p::Multiaddr;
-use scmessenger_core::mobile_bridge::LedgerManager;
-use scmessenger_core::transport::behaviour::SharedPeerEntry;
+use scmessenger_core::store::ledger_entry::{LedgerManager, SharedPeerEntry};
 use scmessenger_core::transport::swarm::{start_swarm, SwarmEvent2, SwarmHandle};
 use std::sync::Arc;
 use std::time::Duration;
