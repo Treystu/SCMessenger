@@ -39,17 +39,8 @@ Last updated: 2026-07-21 (status-correction header reflecting early morning Kimi
 
 ### F0 Delivery truth (after unifications land)
 
-1. **F1 `integration_ledger_convergence.rs`** -- file exists on disk
-   UNCOMMITTED, compiles clean, FAILS at runtime: `swarm2.dial(node1_addr)`
-   -> "no addresses for peer" (likely missing /p2p/<peer_id> suffix on the
-   dialed Multiaddr - see full diagnosis in
-   HANDOFF/SESSION_HANDOFF_2026-07-13_farm_v1_backlog.md). Fix and re-run
-   before committing. (FARM WS-F1.)
-2. **A3 Android Kotlin retry suppression** -- closes
-   `CRITICAL_ANDROID_FALSE_DELIVERY_FAILURE_NO_RECEIPT_ACK.md` step 3 (steps
-   1-2 DONE 2026-07-13): transport-success must never escalate to
-   failed/corrupted, widen the receipt window, Kotlin regression test.
-   [SONNET, Kotlin-side]. (FARM WS-A3.)
+1. ~~**F1 `integration_ledger_convergence.rs`**~~ **DONE 2026-07-23** -- file was committed and bug was fixed (p2p addr suffix appended).
+2. ~~**A3 Android Kotlin retry suppression**~~ **DONE 2026-07-23** -- closes `CRITICAL_ANDROID_FALSE_DELIVERY_FAILURE_NO_RECEIPT_ACK.md` via task `P3_ANDROID_RETRY_SUPPRESSION.md`. (FARM WS-A3.)
 3. **E1 attempt 3** -- `PQC_07_PQ_SECRET_NEVER_MIXED_INTO_ROOT_KEY.md`
    [OPUS+/THINK, CRITICAL][AUDIT-GATE]. Two prior attempts BLOCKED by
    adversarial/triangulated review for two different desync failure modes
