@@ -227,6 +227,7 @@ open func stats()throws  -> HistoryStats  {
 open func stop()  {try! rustCall() {
 open func stop()  {try! rustCall() {
 open func subscribeTopic(topic: String)async throws   {
+open func summary() -> String  {
 open func swarmCanBootstrapOthers() -> Bool  {
 open func swarmGetBestPaths(targetPeerId: String, count: UInt32) -> [[String]]  {
 open func swarmGetBestRelays(count: UInt32) -> [String]  {

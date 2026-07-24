@@ -304,6 +304,7 @@ fun `start`()
 fun `stats`(): HistoryStats
 fun `stop`()
 fun `stop`()
+fun `summary`(): kotlin.String
 fun `swarmCanBootstrapOthers`(): kotlin.Boolean
 fun `swarmGetBestPaths`(`targetPeerId`: kotlin.String, `count`: kotlin.UInt): List<List<kotlin.String>>
 fun `swarmGetBestRelays`(`count`: kotlin.UInt): List<kotlin.String>

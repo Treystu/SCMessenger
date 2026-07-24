@@ -239,6 +239,11 @@ impl LedgerManager {
         topics.dedup();
         topics
     }
+
+    pub fn summary(&self) -> String {
+        let entries = self.entries.lock();
+        format!("Ledger contains {} peer entries", entries.len())
+    }
 }
 
 /// A shared peer entry for ledger exchange.
