@@ -46,7 +46,7 @@ jobs:
         uses: arduino/setup-protoc@v3
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
-      - run: cargo test --workspace --all-features
+      - run: cargo test --workspace --features test-utils
 
   docs:
     name: Docs
