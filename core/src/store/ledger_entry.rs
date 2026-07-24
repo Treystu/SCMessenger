@@ -46,13 +46,13 @@ fn get_multiaddr_port(addr_str: &str) -> Option<u16> {
     None
 }
 
-#[derive(uniffi::Object)]
+#[cfg_attr(not(target_arch = "wasm32"), derive(uniffi::Object))]
 pub struct LedgerManager {
     storage_path: std::path::PathBuf,
     entries: Arc<Mutex<Vec<LedgerEntry>>>,
 }
 
-#[uniffi::export]
+#[cfg_attr(not(target_arch = "wasm32"), uniffi::export)]
 impl LedgerManager {
     #[uniffi::constructor]
     pub fn new(storage_path: String) -> Self {

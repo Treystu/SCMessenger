@@ -5402,6 +5402,7 @@ pub async fn start_swarm_with_config(
                             SwarmCommand::ShareLedger { peer_id, entries } => {
                                 if !ledger_exchanged_peers.contains(&peer_id) {
                                     let request = LedgerExchangeRequest {
+                                        version_tag: 1,
                                         peers: entries,
                                         sender_peer_id: local_peer_id.to_string(),
                                         version: 1,
@@ -5848,6 +5849,7 @@ pub async fn start_swarm_with_config(
                                             let _ = swarm.behaviour_mut().ledger_exchange.send_response(
                                                 channel,
                                                 LedgerExchangeResponse {
+                                                    version_tag: 1,
                                                     peers: Vec::new(),
                                                     new_peers_learned: 0,
                                                     version: 1,
