@@ -3,7 +3,7 @@
 #
 # Usage: scripts/build_xcframework.sh
 #
-# Produces: ios/SCMessengerCore.xcframework
+# Produces: iOS/SCMessengerCore.xcframework
 # Contains: arm64 (device) + arm64-sim (simulator) static libraries
 # with the generated Swift bindings.
 
@@ -15,7 +15,7 @@ ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 DEVICE_TARGET="aarch64-apple-ios"
 SIM_TARGET="aarch64-apple-ios-sim"
 BUILD_DIR="$ROOT_DIR/target/xcframework"
-OUTPUT="$ROOT_DIR/ios/SCMessengerCore.xcframework"
+OUTPUT="$ROOT_DIR/iOS/SCMessengerCore.xcframework"
 
 echo "Building Rust static libraries..."
 
@@ -31,7 +31,7 @@ cargo run --bin gen_swift --features gen-bindings
 
 # Stage generated Swift bindings where the Xcode project expects them
 SWIFT_GEN_DIR="$ROOT_DIR/core/target/generated-sources/uniffi/swift"
-IOS_GEN_DIR="$ROOT_DIR/ios/SCMessenger/SCMessenger/Generated"
+IOS_GEN_DIR="$ROOT_DIR/iOS/SCMessenger/SCMessenger/Generated"
 mkdir -p "$IOS_GEN_DIR"
 cp "$SWIFT_GEN_DIR/SCMessengerCore.swift" "$IOS_GEN_DIR/api.swift"
 cp "$SWIFT_GEN_DIR/scmessenger_core.h" "$IOS_GEN_DIR/apiFFI.h"

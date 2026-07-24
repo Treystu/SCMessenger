@@ -1,5 +1,5 @@
 Status: Active
-Last updated: 2026-04-10
+Last updated: 2026-07-24
 
 # Feature Parity & Cross-Platform Function Audit
 
@@ -14,142 +14,154 @@ docs/REPO_CONTEXT.md, and DOCUMENTATION.md.
 
 ## [Current] Complete Function Parity Matrix (2026-03-27)
 
-Legend: ✅ = Wired & callable | ⚠️ = Partially wired | ❌ = Not wired | N/A = Not applicable
+Legend: [OK] = Wired & callable | [WARNING] = Partially wired | [FAIL] = Not wired | N/A = Not applicable
 
 ### IronCore Methods
 
 | Function                     | Core | CLI | Android | iOS | WASM | Notes |
 |:-----------------------------|:----:|:---:|:-------:|:---:|:----:|:------|
-| `initializeIdentity`        | ✅   | ✅  | ✅      | ✅  | ✅   | |
-| `getIdentityInfo`           | ✅   | ✅  | ✅      | ✅  | ✅   | |
-| `setNickname`               | ✅   | ✅  | ✅      | ✅  | ✅   | |
-| `getDeviceId`               | ✅   | ✅  | ✅      | ✅  | ✅   | CLI/Android/iOS wired 2026-03-27 |
-| `getSeniorityTimestamp`      | ✅   | ✅  | ✅      | ✅  | ✅   | CLI/Android/iOS wired 2026-03-27 |
-| `getRegistrationState`       | ✅   | ✅  | ✅      | ✅  | ✅   | CLI/Android/iOS wired 2026-03-27 |
-| `exportIdentityBackup`      | ✅   | ✅  | ✅      | ✅  | ✅   | |
-| `importIdentityBackup`      | ✅   | ✅  | ✅      | ✅  | ✅   | |
-| `signData`                   | ✅   | ✅  | ✅      | ✅  | ✅   | CLI/Android/iOS wired 2026-03-27 |
-| `verifySignature`            | ✅   | ✅  | ✅      | ✅  | ✅   | CLI/Android/iOS wired 2026-03-27 |
-| `extractPublicKeyFromPeerId` | ✅   | ✅  | ✅      | ✅  | ✅   | |
-| `resolveIdentity`           | ✅   | ✅  | ✅      | ✅  | ✅   | |
-| `resolveToIdentityId`       | ✅   | ✅  | ✅      | ✅  | ✅   | |
-| `prepareMessage`            | ✅   | ✅  | ✅      | ✅  | ✅   | |
-| `prepareMessageWithId`      | ✅   | N/A | ✅      | ✅  | ✅   | CLI uses `prepareMessage` (design choice) |
-| `prepareReceipt`            | ✅   | N/A | ✅      | ✅  | ✅   | CLI has automatic receipt handling in event loop |
-| `prepareCoverTraffic`       | ✅   | N/A | ✅      | ✅  | ✅   | iOS wired via sendCoverTraffic() |
-| `receiveMessage`            | ✅   | ✅  | N/A     | N/A | ✅   | Mobile decrypts via delegate callback path |
-| `markMessageSent`           | ✅   | ✅  | ✅      | ✅  | ✅   | |
-| `outboxCount`               | ✅   | ✅  | ✅      | ✅  | ✅   | iOS wired 2026-03-27 |
-| `inboxCount`                | ✅   | ✅  | ✅      | ✅  | ✅   | Android/iOS wired 2026-03-27 |
-| `classifyNotification`      | ✅   | N/A | ✅      | ✅  | ✅   | |
-| `blockPeer`                 | ✅   | ✅  | ✅      | ✅  | ✅   | CLI wired 2026-03-27 |
-| `unblockPeer`               | ✅   | ✅  | ✅      | ✅  | ✅   | CLI wired 2026-03-27 |
-| `blockAndDeletePeer`        | ✅   | ✅  | ✅      | ✅  | ✅   | Wired across all platforms 2026-03-31 |
-| `isPeerBlocked`             | ✅   | ✅  | ✅      | ✅  | ✅   | CLI wired 2026-03-27 |
-| `listBlockedPeers`          | ✅   | ✅  | ✅      | ✅  | ✅   | CLI wired 2026-03-27; includes `is_deleted` field |
-| `blockedCount`              | ✅   | ✅  | ✅      | ✅  | ✅   | CLI wired 2026-03-27 |
-| `setDelegate`               | ✅   | N/A | ✅      | ✅  | N/A  | WASM uses polling via `drainReceivedMessages` |
-| `contactsManager`           | ✅   | ✅  | ✅      | ✅  | ✅   | |
-| `historyManager`            | ✅   | ✅  | ✅      | ✅  | ✅   | |
-| `updateDiskStats`           | ✅   | N/A | ✅      | ✅  | ✅   | |
-| `performMaintenance`        | ✅   | N/A | ✅      | ✅  | ✅   | |
-| `recordLog`                 | ✅   | N/A | ✅      | ✅  | ✅   | Android via FileLoggingTree |
-| `exportLogs`                | ✅   | N/A | ✅      | ✅  | ✅   | Android/iOS wired 2026-03-27 |
-| `notifyPeerDiscovered`      | ✅   | ✅  | ✅      | ✅  | ✅   | |
-| `notifyPeerDisconnected`    | ✅   | ✅  | ✅      | ✅  | ✅   | |
+| `initializeIdentity`        | [OK] | [OK]| [OK]    | [OK]| [OK] | |
+| `getIdentityInfo`           | [OK] | [OK]| [OK]    | [OK]| [OK] | |
+| `setNickname`               | [OK] | [OK]| [OK]    | [OK]| [OK] | |
+| `getDeviceId`               | [OK] | [OK]| [OK]    | [OK]| [OK] | CLI/Android/iOS wired 2026-03-27 |
+| `getSeniorityTimestamp`      | [OK] | [OK]| [OK]    | [OK]| [OK] | CLI/Android/iOS wired 2026-03-27 |
+| `getRegistrationState`       | [OK] | [OK]| [OK]    | [OK]| [OK] | CLI/Android/iOS wired 2026-03-27 |
+| `exportIdentityBackup`      | [OK] | [OK]| [OK]    | [OK]| [OK] | |
+| `importIdentityBackup`      | [OK] | [OK]| [OK]    | [OK]| [OK] | |
+| `signData`                   | [OK] | [OK]| [OK]    | [OK]| [OK] | CLI/Android/iOS wired 2026-03-27 |
+| `verifySignature`            | [OK] | [OK]| [OK]    | [OK]| [OK] | CLI/Android/iOS wired 2026-03-27 |
+| `extractPublicKeyFromPeerId` | [OK] | [OK]| [OK]    | [OK]| [OK] | |
+| `resolveIdentity`           | [OK] | [OK]| [OK]    | [OK]| [OK] | |
+| `resolveToIdentityId`       | [OK] | [OK]| [OK]    | [OK]| [OK] | |
+| `prepareMessage`            | [OK] | [OK]| [OK]    | [OK]| [OK] | |
+| `prepareMessageWithId`      | [OK] | N/A | [OK]    | [OK]| [OK] | CLI uses `prepareMessage` (design choice) |
+| `prepareReceipt`            | [OK] | N/A | [OK]    | [OK]| [OK] | CLI has automatic receipt handling in event loop |
+| `prepareCoverTraffic`       | [OK] | N/A | [OK]    | [OK]| [OK] | iOS wired via sendCoverTraffic() |
+| `receiveMessage`            | [OK] | [OK]| N/A     | N/A | [OK] | Mobile decrypts via delegate callback path |
+| `markMessageSent`           | [OK] | [OK]| [OK]    | [OK]| [OK] | |
+| `outboxCount`               | [OK] | [OK]| [OK]    | [OK]| [OK] | iOS wired 2026-03-27 |
+| `inboxCount`                | [OK] | [OK]| [OK]    | [OK]| [OK] | Android/iOS wired 2026-03-27 |
+| `classifyNotification`      | [OK] | N/A | [OK]    | [OK]| [OK] | |
+| `blockPeer`                 | [OK] | [OK]| [OK]    | [OK]| [OK] | CLI wired 2026-03-27 |
+| `unblockPeer`               | [OK] | [OK]| [OK]    | [OK]| [OK] | CLI wired 2026-03-27 |
+| `blockAndDeletePeer`        | [OK] | [OK]| [OK]    | [OK]| [OK] | Wired across all platforms 2026-03-31 |
+| `isPeerBlocked`             | [OK] | [OK]| [OK]    | [OK]| [OK] | CLI wired 2026-03-27 |
+| `listBlockedPeers`          | [OK] | [OK]| [OK]    | [OK]| [OK] | CLI wired 2026-03-27; includes `is_deleted` field |
+| `blockedCount`              | [OK] | [OK]| [OK]    | [OK]| [OK] | CLI wired 2026-03-27 |
+| `setDelegate`               | [OK] | N/A | [OK]    | [OK]| N/A  | WASM uses polling via `drainReceivedMessages` |
+| `contactsManager`           | [OK] | [OK]| [OK]    | [OK]| [OK] | |
+| `historyManager`            | [OK] | [OK]| [OK]    | [OK]| [OK] | |
+| `updateDiskStats`           | [OK] | N/A | [OK]    | [OK]| [OK] | |
+| `performMaintenance`        | [OK] | N/A | [OK]    | [OK]| [OK] | |
+| `recordLog`                 | [OK] | N/A | [OK]    | [OK]| [OK] | Android via FileLoggingTree |
+| `exportLogs`                | [OK] | N/A | [OK]    | [OK]| [OK] | Android/iOS wired 2026-03-27 |
+| `notifyPeerDiscovered`      | [OK] | [OK]| [OK]    | [OK]| [OK] | |
+| `notifyPeerDisconnected`    | [OK] | [OK]| [OK]    | [OK]| [OK] | |
 
 ### ContactManager Methods
 
 | Function            | Core | CLI | Android | iOS | WASM | Notes |
 |:--------------------|:----:|:---:|:-------:|:---:|:----:|:------|
-| `add`               | ✅   | ✅  | ✅      | ✅  | ✅   | |
-| `get`               | ✅   | ✅  | ✅      | ✅  | ✅   | |
-| `remove`            | ✅   | ✅  | ✅      | ✅  | ✅   | |
-| `list`              | ✅   | ✅  | ✅      | ✅  | ✅   | |
-| `search`            | ✅   | ✅  | ✅      | ✅  | ✅   | |
-| `setNickname`       | ✅   | ✅  | ✅      | ✅  | ✅   | CLI wired 2026-03-27 |
-| `setLocalNickname`  | ✅   | ✅  | ✅      | ✅  | ✅   | |
-| `updateLastSeen`    | ✅   | N/A | ✅      | ✅  | ✅   | |
-| `updateDeviceId`    | ✅   | N/A | ✅      | ✅  | ✅   | Android/iOS wired 2026-03-27 |
-| `count`             | ✅   | ✅  | ✅      | ✅  | ✅   | |
-| `flush`             | ✅   | N/A | ✅      | ✅  | ✅   | |
+| `add`               | [OK] | [OK]| [OK]    | [OK]| [OK] | |
+| `get`               | [OK] | [OK]| [OK]    | [OK]| [OK] | |
+| `remove`            | [OK] | [OK]| [OK]    | [OK]| [OK] | |
+| `list`              | [OK] | [OK]| [OK]    | [OK]| [OK] | |
+| `search`            | [OK] | [OK]| [OK]    | [OK]| [OK] | |
+| `setNickname`       | [OK] | [OK]| [OK]    | [OK]| [OK] | CLI wired 2026-03-27 |
+| `setLocalNickname`  | [OK] | [OK]| [OK]    | [OK]| [OK] | |
+| `updateLastSeen`    | [OK] | N/A | [OK]    | [OK]| [OK] | |
+| `updateDeviceId`    | [OK] | N/A | [OK]    | [OK]| [OK] | Android/iOS wired 2026-03-27 |
+| `count`             | [OK] | [OK]| [OK]    | [OK]| [OK] | |
+| `flush`             | [OK] | N/A | [OK]    | [OK]| [OK] | |
 
 ### HistoryManager Methods
 
 | Function             | Core | CLI | Android | iOS | WASM | Notes |
 |:---------------------|:----:|:---:|:-------:|:---:|:----:|:------|
-| `add`                | ✅   | ✅  | ✅      | ✅  | ✅   | |
-| `get`                | ✅   | ✅  | ✅      | ✅  | ✅   | CLI wired 2026-03-27 |
-| `recent`             | ✅   | ✅  | ✅      | ✅  | ✅   | |
-| `conversation`       | ✅   | ✅  | ✅      | ✅  | ✅   | CLI via `history --peer` |
-| `removeConversation` | ✅   | ✅  | ✅      | ✅  | ✅   | CLI wired 2026-03-27; iOS wired |
-| `search`             | ✅   | ✅  | ✅      | ✅  | ✅   | CLI via `history --search` |
-| `markDelivered`      | ✅   | ✅  | ✅      | ✅  | ✅   | CLI wired 2026-03-27 |
-| `clear`              | ✅   | ✅  | ✅      | ✅  | ✅   | |
-| `clearConversation`  | ✅   | ✅  | ✅      | ✅  | ✅   | CLI wired 2026-03-27 |
-| `delete`             | ✅   | ✅  | ✅      | ✅  | ✅   | CLI wired 2026-03-27 |
-| `stats`              | ✅   | ✅  | ✅      | ✅  | ✅   | CLI wired 2026-03-27 |
-| `count`              | ✅   | ✅  | ✅      | ✅  | ✅   | CLI wired 2026-03-27 |
-| `enforceRetention`   | ✅   | ✅  | ✅      | ✅  | ✅   | |
-| `pruneBefore`        | ✅   | ✅  | ✅      | ✅  | ✅   | |
-| `flush`              | ✅   | N/A | ✅      | ✅  | ✅   | |
+| `add`                | [OK] | [OK]| [OK]    | [OK]| [OK] | |
+| `get`                | [OK] | [OK]| [OK]    | [OK]| [OK] | CLI wired 2026-03-27 |
+| `recent`             | [OK] | [OK]| [OK]    | [OK]| [OK] | |
+| `conversation`       | [OK] | [OK]| [OK]    | [OK]| [OK] | CLI via `history --peer` |
+| `removeConversation` | [OK] | [OK]| [OK]    | [OK]| [OK] | CLI wired 2026-03-27; iOS wired |
+| `search`             | [OK] | [OK]| [OK]    | [OK]| [OK] | CLI via `history --search` |
+| `markDelivered`      | [OK] | [OK]| [OK]    | [OK]| [OK] | CLI wired 2026-03-27 |
+| `clear`              | [OK] | [OK]| [OK]    | [OK]| [OK] | |
+| `clearConversation`  | [OK] | [OK]| [OK]    | [OK]| [OK] | CLI wired 2026-03-27 |
+| `delete`             | [OK] | [OK]| [OK]    | [OK]| [OK] | CLI wired 2026-03-27 |
+| `stats`              | [OK] | [OK]| [OK]    | [OK]| [OK] | CLI wired 2026-03-27 |
+| `count`              | [OK] | [OK]| [OK]    | [OK]| [OK] | CLI wired 2026-03-27 |
+| `enforceRetention`   | [OK] | [OK]| [OK]    | [OK]| [OK] | |
+| `pruneBefore`        | [OK] | [OK]| [OK]    | [OK]| [OK] | |
+| `flush`              | [OK] | N/A | [OK]    | [OK]| [OK] | |
 
 ### MeshService / SwarmBridge Methods
 
 | Function                | Core | CLI | Android | iOS | WASM | Notes |
 |:------------------------|:----:|:---:|:-------:|:---:|:----:|:------|
-| `start` / `startSwarm`  | ✅   | ✅  | ✅      | ✅  | ✅   | WASM uses `startSwarm` |
-| `stop`                  | ✅   | ✅  | ✅      | ✅  | ✅   | |
-| `pause` / `resume`      | ✅   | N/A | ✅      | ✅  | N/A  | Mobile lifecycle |
-| `sendMessage`           | ✅   | ✅  | ✅      | ✅  | ✅   | WASM via `sendPreparedEnvelope` |
-| `getPeers`              | ✅   | ✅  | ✅      | ✅  | ✅   | |
-| `getListeners`          | ✅   | ✅  | ✅      | ✅  | ✅   | WASM wired 2026-03-27 |
-| `getExternalAddresses`  | ✅   | ✅  | ✅      | ✅  | ✅   | |
-| `subscribeTopic`        | ✅   | N/A | ✅      | ✅  | ✅   | WASM wired 2026-03-27 |
-| `unsubscribeTopic`      | ✅   | N/A | ✅      | ✅  | ✅   | WASM wired 2026-03-27 |
-| `publishTopic`          | ✅   | N/A | ✅      | ✅  | ✅   | WASM wired 2026-03-27 |
-| `sendToAllPeers`        | ✅   | ✅  | ✅      | ✅  | ✅   | WASM wired 2026-03-27; iOS wired |
-| `dial`                  | ✅   | ✅  | ✅      | ✅  | ✅   | WASM wired 2026-03-27 |
-| `shutdown`              | ✅   | ✅  | ✅      | ✅  | ✅   | |
-| `getConnectionPathState` | ✅  | ✅  | ✅      | ✅  | ✅   | |
-| `getNatStatus`          | ✅   | ✅  | ✅      | ✅  | ✅   | WASM returns "unknown" (browser) |
-| `exportDiagnostics`     | ✅   | ✅  | ✅      | ✅  | ✅   | |
+| `start` / `startSwarm`  | [OK] | [OK]| [OK]    | [OK]| [OK] | WASM uses `startSwarm` |
+| `stop`                  | [OK] | [OK]| [OK]    | [OK]| [OK] | |
+| `pause` / `resume`      | [OK] | N/A | [OK]    | [OK]| N/A  | Mobile lifecycle |
+| `sendMessage`           | [OK] | [OK]| [OK]    | [OK]| [OK] | WASM via `sendPreparedEnvelope` |
+| `getPeers`              | [OK] | [OK]| [OK]    | [OK]| [OK] | |
+| `getListeners`          | [OK] | [OK]| [OK]    | [OK]| [OK] | WASM wired 2026-03-27 |
+| `getExternalAddresses`  | [OK] | [OK]| [OK]    | [OK]| [OK] | |
+| `subscribeTopic`        | [OK] | N/A | [OK]    | [OK]| [OK] | WASM wired 2026-03-27 |
+| `unsubscribeTopic`      | [OK] | N/A | [OK]    | [OK]| [OK] | WASM wired 2026-03-27 |
+| `publishTopic`          | [OK] | N/A | [OK]    | [OK]| [OK] | WASM wired 2026-03-27 |
+| `sendToAllPeers`        | [OK] | [OK]| [OK]    | [OK]| [OK] | WASM wired 2026-03-27; iOS wired |
+| `dial`                  | [OK] | [OK]| [OK]    | [OK]| [OK] | WASM wired 2026-03-27 |
+| `shutdown`              | [OK] | [OK]| [OK]    | [OK]| [OK] | |
+| `getConnectionPathState` | [OK] | [OK]| [OK]    | [OK]| [OK] | |
+| `getNatStatus`          | [OK] | [OK]| [OK]    | [OK]| [OK] | WASM returns "unknown" (browser) |
+| `exportDiagnostics`     | [OK] | [OK]| [OK]    | [OK]| [OK] | |
 
 ### AutoAdjustEngine / Settings / Ledger / Bootstrap
 
 | Function                  | Core | CLI | Android | iOS | WASM | Notes |
 |:--------------------------|:----:|:---:|:-------:|:---:|:----:|:------|
-| `computeProfile`          | ✅   | N/A | ✅      | ✅  | N/A  | Mobile power management; browser always plugged in |
-| `computeBleAdjustment`    | ✅   | N/A | ✅      | ✅  | N/A  | |
-| `computeRelayAdjustment`  | ✅   | N/A | ✅      | ✅  | N/A  | |
-| `overrideBleScanInterval` | ✅   | N/A | ✅      | ✅  | N/A  | |
-| `overrideRelayMaxPerHour` | ✅   | N/A | ✅      | ✅  | N/A  | |
-| `clearOverrides`          | ✅   | N/A | ✅      | ✅  | N/A  | |
-| `loadSettings`            | ✅   | N/A | ✅      | ✅  | ✅   | WASM via getSettings/updateSettings |
-| `saveSettings`            | ✅   | N/A | ✅      | ✅  | ✅   | WASM via getSettings/updateSettings |
-| `validateSettings`        | ✅   | N/A | ✅      | ✅  | ✅   | WASM wired 2026-03-27 |
-| `defaultSettings`         | ✅   | N/A | ✅      | ✅  | ✅   | |
-| `BootstrapResolver`       | ✅   | ✅  | ✅      | ✅  | N/A  | WASM takes bootstrap addrs directly |
-| `LedgerManager`           | ✅   | ✅  | ✅      | ✅  | N/A  | Browser has no persistent ledger storage |
+| `computeProfile`          | [OK] | N/A | [OK]    | [OK]| N/A  | Mobile power management; browser always plugged in |
+| `computeBleAdjustment`    | [OK] | N/A | [OK]    | [OK]| N/A  | |
+| `computeRelayAdjustment`  | [OK] | N/A | [OK]    | [OK]| N/A  | |
+| `overrideBleScanInterval` | [OK] | N/A | [OK]    | [OK]| N/A  | |
+| `overrideRelayMaxPerHour` | [OK] | N/A | [OK]    | [OK]| N/A  | |
+| `clearOverrides`          | [OK] | N/A | [OK]    | [OK]| N/A  | |
+| `loadSettings`            | [OK] | N/A | [OK]    | [OK]| [OK] | WASM via getSettings/updateSettings |
+| `saveSettings`            | [OK] | N/A | [OK]    | [OK]| [OK] | WASM via getSettings/updateSettings |
+| `validateSettings`        | [OK] | N/A | [OK]    | [OK]| [OK] | WASM wired 2026-03-27 |
+| `defaultSettings`         | [OK] | N/A | [OK]    | [OK]| [OK] | |
+| `BootstrapResolver`       | [OK] | [OK]| [OK]    | [OK]| N/A  | WASM takes bootstrap addrs directly |
+| `LedgerManager`           | [OK] | [OK]| [OK]    | [OK]| N/A  | Browser has no persistent ledger storage |
 
 ### Transport Layer (Platform-Specific)
 
 | Feature                  | Core | CLI | Android | iOS | WASM | Notes |
 |:-------------------------|:----:|:---:|:-------:|:---:|:----:|:------|
-| BLE (L2CAP/GATT)        | N/A  | N/A | ✅      | ✅  | N/A  | |
-| WiFi Direct              | N/A  | N/A | ✅      | N/A | N/A  | Android only |
-| WiFi Aware               | N/A  | N/A | ✅      | N/A | N/A  | Android only |
-| Multipeer Connectivity   | N/A  | N/A | N/A     | ✅  | N/A  | iOS only |
-| mDNS Discovery           | ✅   | ✅  | ✅      | ✅  | N/A  | |
-| TCP/QUIC (libp2p)        | ✅   | ✅  | ✅      | ✅  | N/A  | Mobile via SwarmBridge TCP_MDNS transport (2026-04-09) |
-| TCP/mDNS LAN delivery    | ✅   | ✅  | ✅      | ✅  | N/A  | SmartTransportRouter scores TCP_MDNS for LAN peers |
-| WebSocket/WebRTC         | ✅   | N/A | N/A     | N/A | ⚠️   | WASM partial |
+| BLE (L2CAP/GATT)        | N/A  | N/A | [OK]    | [OK]| N/A  | |
+| WiFi Direct              | N/A  | N/A | [OK]    | N/A | N/A  | Android only |
+| WiFi Aware               | N/A  | N/A | [OK]    | N/A | N/A  | Android only |
+| Multipeer Connectivity   | N/A  | N/A | N/A     | [OK]| N/A  | iOS only (Intentional equivalent to WiFi Direct/Aware) |
+| mDNS Discovery           | [OK] | [OK]| [OK]    | [OK]| N/A  | |
+| TCP/QUIC (libp2p)        | [OK] | [OK]| [OK]    | [OK]| N/A  | Mobile via SwarmBridge TCP_MDNS transport (2026-04-09) |
+| TCP/mDNS LAN delivery    | [OK] | [OK]| [OK]    | [OK]| N/A  | SmartTransportRouter scores TCP_MDNS for LAN peers |
+| WebSocket/WebRTC         | [OK] | N/A | N/A     | N/A | [WARNING] | WASM partial |
+
+---
+
+## [Current] iOS v0.4.0 Parity Status (2026-07-24)
+
+- **Parity Implementation**: The scoped v0.4.0 iOS code paths are present in `SCMessenger-full/iOS`:
+  - `MeshRepository.swift`: `shouldStopAckedWithoutReceiptRetries` ceiling evaluation helper and `flushPendingOutbox` integration added.
+  - `OutboxRetryPolicyTests.swift`: Focused XCTest coverage for the outbox retry policy ceiling (max age vs acknowledgement state).
+  - `local_transport_fallback_tests.swift`: Repaired stale type name (`LocalTransportFallbackResult`).
+- **Intentional Multipeer vs WiFi Direct Equivalence**: Multipeer Connectivity (iOS) and WiFi Direct / WiFi Aware (Android) serve as intentional platform-equivalent local peer-to-peer transport layers. `LocalTransportFallback` provides deterministic local fallback (Multipeer -> BLE) on iOS matching Android's local transport fallback architecture.
+- **Verification**: The standalone local-transport and role-mode checks pass; generated Swift bindings pass the drift check; the Rust ledger-convergence integration target compiles; and the full `SCMessenger` simulator build and XCTest run passes on iPhone 17 Pro. The project now has an executable `SCMessengerTests` target containing the three outbox retry-policy parity tests.
+- **Device-only boundary**: Bidirectional relay delivery and real receipt round-trips still require two physical peers. This is a hardware verification boundary, not a known scoped implementation gap.
 
 ---
 
 ## [Current] Remaining Parity Gaps
 
-### None — 100% feature parity achieved (2026-03-27, transport parity 2026-04-09)
+### No known scoped implementation gaps (iOS v0.4.0 simulator verification complete)
 
 All core API functions are now wired across all applicable platforms. TCP/mDNS transport
 parity was achieved on 2026-04-09: SmartTransportRouter on Android and iOS now includes
@@ -171,14 +183,14 @@ functional parity with the Android/iOS native apps for all non-transport feature
 
 | Android Screen        | Web UI Equivalent       | Status |
 |:----------------------|:------------------------|:------:|
-| ConversationsScreen   | Chats tab               | ✅     |
-| ChatScreen            | Chat overlay view       | ✅     |
-| ContactsScreen        | Contacts tab + FAB      | ✅     |
-| DashboardScreen       | Mesh tab                | ✅     |
-| SettingsScreen         | Settings tab            | ✅     |
-| OnboardingScreen      | First-run modal         | ✅     |
-| DiagnosticsScreen     | Connection path in Mesh | ✅     |
-| IdentityScreen        | Identity card (Settings)| ✅     |
+| ConversationsScreen   | Chats tab               | [OK]   |
+| ChatScreen            | Chat overlay view       | [OK]   |
+| ContactsScreen        | Contacts tab + FAB      | [OK]   |
+| DashboardScreen       | Mesh tab                | [OK]   |
+| SettingsScreen         | Settings tab            | [OK]   |
+| OnboardingScreen      | First-run modal         | [OK]   |
+| DiagnosticsScreen     | Connection path in Mesh | [OK]   |
+| IdentityScreen        | Identity card (Settings)| [OK]   |
 
 **Web UI features matching Android:**
 - Bottom navigation bar (Chats / Contacts / Mesh / Settings)
@@ -223,4 +235,3 @@ Android contacts screen lacks feature parity with iOS for:
 
 ### Priority
 P1 - Core UX parity required for alpha
-

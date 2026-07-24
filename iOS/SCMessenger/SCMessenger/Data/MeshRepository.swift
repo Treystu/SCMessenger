@@ -190,7 +190,7 @@ final class MeshRepository {
     private let circuitBreakerDuration: TimeInterval = 300 // 5 minutes
     private let relayDialDebounceInterval: TimeInterval = 10
     private let receiptAwaitSeconds: UInt64 = 8
-    private let pendingOutboxMaxAttempts: UInt32 = 120
+    private let pendingOutboxMaxAttempts: UInt32 = 12
     private let pendingOutboxMaxAgeSeconds: UInt64 = 7 * 24 * 60 * 60
     private var historySyncSentPeers: [String: Date] = [:]
     private let historySyncCooldown: TimeInterval = 60
@@ -201,6 +201,17 @@ final class MeshRepository {
     private let receiptSendMaxAttempts = 6
     private var notificationAppInForeground = true
     private var notificationActiveConversationId: String?
+
+    static func shouldStopAckedWithoutReceiptRetries(
+        ackedWithoutReceiptCount: UInt32,
+        createdAtEpochSec: UInt64,
+        nowEpochSec: UInt64,
+        maxAgeSeconds: UInt64
+    ) -> Bool {
+        ackedWithoutReceiptCount > 0 &&
+            nowEpochSec >= createdAtEpochSec &&
+            nowEpochSec - createdAtEpochSec >= maxAgeSeconds
+    }
 
     // TCP/mDNS transport parity: Track peers discovered on LAN via libp2p mDNS.
     // Key = libp2p PeerId, Value = array of LAN multiaddresses for direct TCP delivery.
@@ -255,6 +266,7 @@ final class MeshRepository {
         let recipientIdentityId: String?
         let intendedDeviceId: String?
         let terminalFailureCode: String?
+        var ackedWithoutReceiptCount: UInt32? = nil
     }
 
     struct DeliveryStatePresentation {
@@ -5367,6 +5379,18 @@ final class MeshRepository {
             // 99% and trigger the iOS watchdog kill.
             await Task.yield()
 
+            let ackedWithoutReceiptCount = item.ackedWithoutReceiptCount ?? 0
+            if Self.shouldStopAckedWithoutReceiptRetries(
+                ackedWithoutReceiptCount: ackedWithoutReceiptCount,
+                createdAtEpochSec: item.createdAtEpochSec,
+                nowEpochSec: now,
+                maxAgeSeconds: pendingOutboxMaxAgeSeconds
+            ) {
+                appendDiagnostic(
+                    "delivery_state msg=\(item.historyRecordId) state=delivered_unconfirmed detail=stopped_pending_outbox reason=max_age_exceeded_acked_without_receipt acked_without_receipt=\(ackedWithoutReceiptCount)"
+                )
+                continue
+            }
             if let expiryReason = pendingOutboxExpiryReason(for: item, nowEpochSec: now) {
                 appendDiagnostic(
                     "delivery_state msg=\(item.historyRecordId) state=failed detail=dropped_pending_outbox reason=\(expiryReason) attempt=\(item.attemptCount)"
@@ -5442,7 +5466,8 @@ final class MeshRepository {
                         strictBleOnlyMode: item.strictBleOnlyMode,
                         recipientIdentityId: item.recipientIdentityId,
                         intendedDeviceId: item.intendedDeviceId,
-                        terminalFailureCode: terminalFailureCode
+                        terminalFailureCode: terminalFailureCode,
+                        ackedWithoutReceiptCount: item.ackedWithoutReceiptCount
                     )
                 )
                 appendDiagnostic("delivery_state msg=\(item.historyRecordId) state=rejected detail=terminal_failure_code=\(terminalFailureCode)")
@@ -5450,18 +5475,16 @@ final class MeshRepository {
             }
 
             if delivery.acked {
-                // Adaptive post-ACK receipt wait: grows with attempt count to prevent
-                // re-delivering the same message every 8 seconds indefinitely when
-                // receipt delivery is slow or broken.
+                // A transport ACK is not a genuine delivery failure. Track it
+                // separately so it never consumes the failure-attempt ceiling.
+                let nextAckedWithoutReceiptCount = ackedWithoutReceiptCount + 1
                 let adaptiveReceiptWait: UInt64
-                if item.attemptCount <= 3 {
+                if nextAckedWithoutReceiptCount <= 3 {
                     adaptiveReceiptWait = receiptAwaitSeconds      // 8s for first few
-                } else if item.attemptCount <= 10 {
+                } else if nextAckedWithoutReceiptCount <= 8 {
                     adaptiveReceiptWait = 30                       // 30s for moderate retries
-                } else if item.attemptCount <= 30 {
-                    adaptiveReceiptWait = 60                       // 60s for persistent retries
                 } else {
-                    adaptiveReceiptWait = 120                      // 2 min for very old messages
+                    adaptiveReceiptWait = 120                      // 2 min for later retries
                 }
                 nextQueue.append(
                     PendingOutboundEnvelope(
@@ -5472,15 +5495,16 @@ final class MeshRepository {
                         addresses: resolvedAddresses,
                         envelopeBase64: item.envelopeBase64,
                         createdAtEpochSec: item.createdAtEpochSec,
-                        attemptCount: item.attemptCount + 1,
+                        attemptCount: item.attemptCount,
                         nextAttemptAtEpochSec: now + adaptiveReceiptWait,
                         strictBleOnlyMode: item.strictBleOnlyMode,
                         recipientIdentityId: item.recipientIdentityId,
                         intendedDeviceId: item.intendedDeviceId,
-                        terminalFailureCode: item.terminalFailureCode
+                        terminalFailureCode: item.terminalFailureCode,
+                        ackedWithoutReceiptCount: nextAckedWithoutReceiptCount
                     )
                 )
-                appendDiagnostic("delivery_state msg=\(item.historyRecordId) state=stored detail=awaiting_receipt_delay_sec=\(adaptiveReceiptWait)")
+                appendDiagnostic("delivery_state msg=\(item.historyRecordId) state=stored detail=awaiting_receipt_delay_sec=\(adaptiveReceiptWait) acked_without_receipt=\(nextAckedWithoutReceiptCount)")
                 continue
             }
 
@@ -5511,7 +5535,8 @@ final class MeshRepository {
                         strictBleOnlyMode: item.strictBleOnlyMode,
                         recipientIdentityId: item.recipientIdentityId,
                         intendedDeviceId: item.intendedDeviceId,
-                        terminalFailureCode: item.terminalFailureCode
+                        terminalFailureCode: item.terminalFailureCode,
+                        ackedWithoutReceiptCount: item.ackedWithoutReceiptCount
                     )
             )
             appendDiagnostic("delivery_state msg=\(item.historyRecordId) state=stored detail=retry_backoff_sec=\(backoff) attempt=\(nextAttemptCount)")
@@ -5544,8 +5569,10 @@ final class MeshRepository {
         for item: PendingOutboundEnvelope,
         nowEpochSec: UInt64
     ) -> String? {
-        // PHILOSOPHY: Messages NEVER expire. Every message retries
-        // until successfully delivered. No attempt limit, no age limit.
+        if (item.ackedWithoutReceiptCount ?? 0) == 0,
+           item.attemptCount >= pendingOutboxMaxAttempts {
+            return "max_attempts_exceeded"
+        }
         return nil
     }
 
@@ -5606,7 +5633,8 @@ final class MeshRepository {
                 strictBleOnlyMode: item.strictBleOnlyMode,
                 recipientIdentityId: item.recipientIdentityId,
                 intendedDeviceId: item.intendedDeviceId,
-                terminalFailureCode: item.terminalFailureCode
+                terminalFailureCode: item.terminalFailureCode,
+                ackedWithoutReceiptCount: item.ackedWithoutReceiptCount
             )
         }
         guard changed else { return }

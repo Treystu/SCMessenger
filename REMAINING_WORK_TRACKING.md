@@ -1,7 +1,16 @@
 # SCMessenger Remaining Work Tracking
 
 Status: Active
-Last updated: 2026-07-17 (72h audit + orchestration unification sprint-prep)
+Last updated: 2026-07-24 (iOS v0.4.0 parity audit & fixes)
+
+## 2026-07-24 iOS V0.4.0 PARITY SPRINT — Core Parity Implemented
+
+- **iOS 0.4.0 Parity Complete (`SCMessenger-full/iOS`)**:
+  - `MeshRepository.swift`: Added `shouldStopAckedWithoutReceiptRetries` ceiling evaluation static helper and integrated it into `flushPendingOutbox()` to enforce max-age outbox retry policy.
+  - `OutboxRetryPolicyTests.swift`: Added focused XCTest coverage for acknowledged-without-receipt age handling and registered it in the executable `SCMessengerTests` target.
+  - `local_transport_fallback_tests.swift`: Repaired stale type name (`LocalTransportFallbackResult`).
+- **Transport Equivalence**: Multipeer Connectivity (iOS) and WiFi Direct / WiFi Aware (Android) are maintained as intentional platform-equivalent local peer-to-peer transport layers.
+- **Verification Status**: `iOS/verify-local-transport.sh`, `iOS/verify-role-mode.sh`, generated-binding drift verification, and the Rust ledger-convergence compile gate pass. A full iPhone 17 Pro simulator build and XCTest run passes all three outbox retry-policy tests. Physical two-peer relay/receipt validation remains a hardware-only gate, not a known implementation blocker.
 
 ## 2026-07-17 72-HOUR AUDIT + ORCHESTRATION UNIFICATION — E-00 CRITICAL filed, queue corrected, lanes smoke-tested
 

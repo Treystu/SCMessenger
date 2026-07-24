@@ -3,7 +3,7 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 77;
+	objectVersion = 56;
 	objects = {
 
 /* Begin PBXBuildFile section */
@@ -44,7 +44,18 @@
 		DDEB56032F3FE0BD00387CC8 /* VerifySafetyNumberSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDEB56022F3FE0BD00387CC8 /* VerifySafetyNumberSheet.swift */; };
 		DDEB56052F3FE0BD00387CC8 /* BackupPassphraseValidator.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDEB56042F3FE0BD00387CC8 /* BackupPassphraseValidator.swift */; };
 		DDEB56072F3FE0BD00387CC8 /* IdentityBackupSheets.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDEB56062F3FE0BD00387CC8 /* IdentityBackupSheets.swift */; };
+		DDEB57012F3FE0BD00387CC8 /* OutboxRetryPolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDEB57002F3FE0BD00387CC8 /* OutboxRetryPolicyTests.swift */; };
 /* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		DDEB57042F3FE0BD00387CC8 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = DDEB563A2F3FDFC400387CC8 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = DDEB56412F3FDFC400387CC8;
+			remoteInfo = SCMessenger;
+		};
+/* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
 		26843792FCDC4F8089378862 /* SmartTransportRouter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SmartTransportRouter.swift; sourceTree = "<group>"; };
@@ -88,6 +99,8 @@
 		DDEB56022F3FE0BD00387CC8 /* VerifySafetyNumberSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VerifySafetyNumberSheet.swift; sourceTree = "<group>"; };
 		DDEB56042F3FE0BD00387CC8 /* BackupPassphraseValidator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackupPassphraseValidator.swift; sourceTree = "<group>"; };
 		DDEB56062F3FE0BD00387CC8 /* IdentityBackupSheets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IdentityBackupSheets.swift; sourceTree = "<group>"; };
+		DDEB57002F3FE0BD00387CC8 /* OutboxRetryPolicyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OutboxRetryPolicyTests.swift; sourceTree = "<group>"; };
+		DDEB57032F3FE0BD00387CC8 /* SCMessengerTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SCMessengerTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -99,6 +112,14 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+
+		DDEB57072F3FE0BD00387CC8 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -106,6 +127,7 @@
 			isa = PBXGroup;
 			children = (
 				DDEB56C32F3FE0BD00387CC8 /* SCMessenger */,
+				DDEB57082F3FE0BD00387CC8 /* SCMessengerTests */,
 				DDEB56E22F3FE20E00387CC8 /* Frameworks */,
 				DDEB56432F3FDFC500387CC8 /* Products */,
 			);
@@ -115,6 +137,7 @@
 			isa = PBXGroup;
 			children = (
 				DDEB56422F3FDFC500387CC8 /* SCMessenger.app */,
+				DDEB57032F3FE0BD00387CC8 /* SCMessengerTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -285,6 +308,15 @@
 			name = Frameworks;
 			sourceTree = "<group>";
 		};
+		DDEB57082F3FE0BD00387CC8 /* SCMessengerTests */ = {
+			isa = PBXGroup;
+			children = (
+				DDEB57002F3FE0BD00387CC8 /* OutboxRetryPolicyTests.swift */,
+			);
+			name = SCMessengerTests;
+			path = ../SCMessengerTests;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -308,6 +340,25 @@
 			productReference = DDEB56422F3FDFC500387CC8 /* SCMessenger.app */;
 			productType = "com.apple.product-type.application";
 		};
+		DDEB57022F3FE0BD00387CC8 /* SCMessengerTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = DDEB570A2F3FE0BD00387CC8 /* Build configuration list for PBXNativeTarget "SCMessengerTests" */;
+			buildPhases = (
+				DDEB57062F3FE0BD00387CC8 /* Sources */,
+				DDEB57072F3FE0BD00387CC8 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				DDEB57052F3FE0BD00387CC8 /* PBXTargetDependency */,
+			);
+			name = SCMessengerTests;
+			packageProductDependencies = (
+			);
+			productName = SCMessengerTests;
+			productReference = DDEB57032F3FE0BD00387CC8 /* SCMessengerTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -321,6 +372,10 @@
 					DDEB56412F3FDFC400387CC8 = {
 						CreatedOnToolsVersion = 26.2;
 					};
+					DDEB57022F3FE0BD00387CC8 = {
+						CreatedOnToolsVersion = 26.2;
+						TestTargetID = DDEB56412F3FDFC400387CC8;
+					};
 				};
 			};
 			buildConfigurationList = DDEB563D2F3FDFC400387CC8 /* Build configuration list for PBXProject "SCMessenger" */;
@@ -332,12 +387,13 @@
 			);
 			mainGroup = DDEB56392F3FDFC400387CC8;
 			minimizedProjectReferenceProxies = 1;
-			preferredProjectObjectVersion = 77;
+			preferredProjectObjectVersion = 56;
 			productRefGroup = DDEB56432F3FDFC500387CC8 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
 				DDEB56412F3FDFC400387CC8 /* SCMessenger */,
+				DDEB57022F3FE0BD00387CC8 /* SCMessengerTests */,
 			);
 		};
 /* End PBXProject section */
@@ -419,7 +475,23 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		DDEB57062F3FE0BD00387CC8 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				DDEB57012F3FE0BD00387CC8 /* OutboxRetryPolicyTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		DDEB57052F3FE0BD00387CC8 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = DDEB56412F3FDFC400387CC8 /* SCMessenger */;
+			targetProxy = DDEB57042F3FE0BD00387CC8 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		DDEB564B2F3FDFC600387CC8 /* Debug */ = {
@@ -634,6 +706,60 @@
 			};
 			name = Release;
 		};
+		DDEB570B2F3FE0BD00387CC8 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = JSZ36WH4C8;
+				"EXCLUDED_ARCHS[sdk=iphonesimulator*]" = x86_64;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = SovereignCommunications.SCMessengerTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/SCMessenger.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/SCMessenger";
+			};
+			name = Debug;
+		};
+		DDEB570C2F3FE0BD00387CC8 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = JSZ36WH4C8;
+				"EXCLUDED_ARCHS[sdk=iphonesimulator*]" = x86_64;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = SovereignCommunications.SCMessengerTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/SCMessenger.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/SCMessenger";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -651,6 +777,15 @@
 			buildConfigurations = (
 				DDEB564E2F3FDFC600387CC8 /* Debug */,
 				DDEB564F2F3FDFC600387CC8 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		DDEB570A2F3FE0BD00387CC8 /* Build configuration list for PBXNativeTarget "SCMessengerTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				DDEB570B2F3FE0BD00387CC8 /* Debug */,
+				DDEB570C2F3FE0BD00387CC8 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

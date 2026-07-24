@@ -148,7 +148,7 @@ services:
         mkdir -p core/target/android-libs/host &&
         cp target/release/libscmessenger_core.so core/target/android-libs/host/libuniffi_api.so &&
         echo '=== Running Android Unit Tests ===' &&
-        cd android && ./gradlew test -Pkotlin.compiler.execution.strategy=\"out-process\" --info --stacktrace &&
+        cd android && ./gradlew test -Pkotlin.compiler.execution.strategy=\"out-of-process\" --info --stacktrace &&
         cd .. &&
         mkdir -p /workspace/test-results/android &&
         find android -name '*.xml' -path '*/test-results/*' -exec cp {} /workspace/test-results/android/ \\; &&

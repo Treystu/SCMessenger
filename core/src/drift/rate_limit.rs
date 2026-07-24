@@ -62,8 +62,10 @@ impl SyncRateLimiter {
     /// assert!(limiter.allow_sync("peer1"));
     /// ```
     pub fn allow_sync(&mut self, peer_id: &str) -> bool {
-        let now = Instant::now();
+        self.allow_sync_at(peer_id, Instant::now())
+    }
 
+    fn allow_sync_at(&mut self, peer_id: &str, now: Instant) -> bool {
         // Get or create entry for peer
         let timestamps = self.limits.entry(peer_id.to_string()).or_default();
 
@@ -205,22 +207,19 @@ mod tests {
     #[test]
     fn test_sliding_window() {
         let mut limiter = SyncRateLimiter::new(Duration::from_millis(200), 2);
+        let start = Instant::now();
 
         // First request
-        assert!(limiter.allow_sync("peer1"));
-        thread::sleep(Duration::from_millis(50));
+        assert!(limiter.allow_sync_at("peer1", start));
 
         // Second request
-        assert!(limiter.allow_sync("peer1"));
+        assert!(limiter.allow_sync_at("peer1", start + Duration::from_millis(50)));
 
         // Third request denied (within window)
-        assert!(!limiter.allow_sync("peer1"));
-
-        // Wait for first request to expire
-        thread::sleep(Duration::from_millis(160));
+        assert!(!limiter.allow_sync_at("peer1", start + Duration::from_millis(50)));
 
         // Should be allowed now (first request expired)
-        assert!(limiter.allow_sync("peer1"));
+        assert!(limiter.allow_sync_at("peer1", start + Duration::from_millis(210)));
     }
 
     #[test]

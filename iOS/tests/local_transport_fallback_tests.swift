@@ -18,7 +18,7 @@ private func expect(_ condition: @autoclosure () -> Bool, _ message: String) {
 private func testMultipeerPathSuccess() {
     var attempted: [String] = []
 
-    let result: LocalTransportFallback.FallbackResult = LocalTransportFallback.attemptMultipeerThenBle(
+    let result: LocalTransportFallbackResult = LocalTransportFallback.attemptMultipeerThenBle(
         multipeerPeerId: "deadbeef",
         blePeerId: "f4d0b0b4-512f-465f-a5e4-39ee7bf7b1cb",
         tryMultipeer: { _ in
@@ -42,7 +42,7 @@ private func testMultipeerPathSuccess() {
 private func testFallbackWhenMultipeerUnavailable() {
     var attempted: [String] = []
 
-    let result: LocalTransportFallback.FallbackResult = LocalTransportFallback.attemptMultipeerThenBle(
+    let result: LocalTransportFallbackResult = LocalTransportFallback.attemptMultipeerThenBle(
         multipeerPeerId: "facefeed",
         blePeerId: "2e8e2a58-40e2-4c49-b0c7-8f3706e2ad90",
         tryMultipeer: { _ in
@@ -67,7 +67,7 @@ private func testReconnectContinuationAndThroughputStability() {
     var multipeerOnline: Bool = false
 
     // Reconnect continuation: first fallback to BLE, then resume Multipeer once online.
-    let beforeReconnect: LocalTransportFallback.FallbackResult = LocalTransportFallback.attemptMultipeerThenBle(
+    let beforeReconnect: LocalTransportFallbackResult = LocalTransportFallback.attemptMultipeerThenBle(
         multipeerPeerId: "cafebabe",
         blePeerId: "a8cd0a14-00a2-4b53-af4c-a12de228ec7c",
         tryMultipeer: { _ in multipeerOnline },
@@ -76,7 +76,7 @@ private func testReconnectContinuationAndThroughputStability() {
     expect(beforeReconnect.bleAttempted && beforeReconnect.bleAcked, "BLE fallback should carry delivery while multipeer is offline")
 
     multipeerOnline = true
-    let afterReconnect: LocalTransportFallback.FallbackResult = LocalTransportFallback.attemptMultipeerThenBle(
+    let afterReconnect: LocalTransportFallbackResult = LocalTransportFallback.attemptMultipeerThenBle(
         multipeerPeerId: "cafebabe",
         blePeerId: "a8cd0a14-00a2-4b53-af4c-a12de228ec7c",
         tryMultipeer: { _ in multipeerOnline },
@@ -93,7 +93,7 @@ private func testReconnectContinuationAndThroughputStability() {
 
     for index in 0..<1500 {
         let isMultipeerAvailable: Bool = index % 3 != 0
-        let result: LocalTransportFallback.FallbackResult = LocalTransportFallback.attemptMultipeerThenBle(
+        let result: LocalTransportFallbackResult = LocalTransportFallback.attemptMultipeerThenBle(
             multipeerPeerId: "a11ce123",
             blePeerId: "90bb12c3-f84f-48dc-a306-3d77df6964ab",
             tryMultipeer: { _ in
@@ -130,7 +130,7 @@ private func testBleOnlyTerminalFailureSignal() {
     var multipeerCalled: Bool = false
     var bleCalled: Bool = false
 
-    let result: LocalTransportFallback.FallbackResult = LocalTransportFallback.attemptMultipeerThenBle(
+    let result: LocalTransportFallbackResult = LocalTransportFallback.attemptMultipeerThenBle(
         multipeerPeerId: nil,
         blePeerId: "2cc7db8f-3142-4b8c-9157-2be2d7502e7f",
         tryMultipeer: { _ in

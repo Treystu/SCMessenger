@@ -121,7 +121,7 @@ Custom rules, prompts, and skills for the Claude Code agent harness:
 - [NAT Traversal Guide](docs/NAT_TRAVERSAL_GUIDE.md)
 - [Scripts Operations Guide](scripts/README.md)
 - [Log Mincing / Exploratory Analysis](scripts/mince_logs.py)
-- **[Log Correlation & Validation Agent](tmp/session_logs/README.md) [NEW]** - Comprehensive log analysis and documentation synchronization validator
+- **[Log Correlation & Validation Guide](docs/troubleshooting/RUNTIME_ISSUES.md)** - Log analysis and troubleshooting guide
 
 ## Mixed and Historical Context
 
