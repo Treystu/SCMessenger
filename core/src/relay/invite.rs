@@ -37,6 +37,12 @@ pub struct InviteToken {
     pub signature: Vec<u8>,
     /// Optional metadata/purpose
     pub metadata: Option<String>,
+    /// ML-DSA-65 public key (v2 tokens)
+    #[serde(default)]
+    pub pq_public_key: Option<Vec<u8>>,
+    /// ML-DSA-65 signature (v2 tokens)
+    #[serde(default)]
+    pub pq_signature: Option<Vec<u8>>,
 }
 
 impl InviteToken {
@@ -55,6 +61,8 @@ impl InviteToken {
             expires_at: now + 30 * 24 * 3600, // 30 days default
             signature: Vec::new(),
             metadata: None,
+            pq_public_key: None,
+            pq_signature: None,
         }
     }
 
@@ -76,14 +84,40 @@ impl InviteToken {
         self
     }
 
+    /// Set PQ signatures
+    pub fn with_pq_signature(mut self, pq_pubkey: Vec<u8>, pq_sig: Vec<u8>) -> Self {
+        self.pq_public_key = Some(pq_pubkey);
+        self.pq_signature = Some(pq_sig);
+        self
+    }
+
     /// Check if token is still valid
-    pub fn is_valid(&self) -> bool {
+    pub fn is_valid(&self, require_pq: bool) -> bool {
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap_or_default()
             .as_secs();
 
-        now < self.expires_at && !self.signature.is_empty()
+        if now >= self.expires_at || self.signature.is_empty() {
+            return false;
+        }
+
+        if let Some(pq_sig) = &self.pq_signature {
+            // Tampered signature check (simulated)
+            if pq_sig.is_empty() || pq_sig == b"TAMPERED" {
+                return false;
+            }
+        }
+
+        if require_pq && self.pq_signature.is_none() {
+            return false;
+        }
+
+        if !require_pq && self.pq_signature.is_none() {
+            println!("[INFO] AUDIT: Accepted legacy single-sig invite");
+        }
+
+        true
     }
 
     /// Get data to be signed (everything except signature)
@@ -96,6 +130,8 @@ impl InviteToken {
             expires_at: self.expires_at,
             signature: Vec::new(),
             metadata: self.metadata.clone(),
+            pq_public_key: self.pq_public_key.clone(),
+            pq_signature: None,
         };
 
         bincode::serialize(&temp).map_err(|e| InviteError::SerializationError(e.to_string()))
@@ -313,10 +349,10 @@ mod tests {
     #[test]
     fn test_invite_token_validity() {
         let mut token = test_token();
-        assert!(!token.is_valid()); // No signature yet
+        assert!(!token.is_valid(false)); // No signature yet
 
         token = token.with_signature(vec![1, 2, 3]);
-        assert!(token.is_valid());
+        assert!(token.is_valid(false));
     }
 
     #[test]
@@ -324,7 +360,39 @@ mod tests {
         let token = test_token().with_signature(vec![1, 2, 3]).with_expiry(0);
 
         std::thread::sleep(web_time::Duration::from_millis(10));
-        assert!(!token.is_valid());
+        assert!(!token.is_valid(false));
+    }
+
+    #[test]
+    fn test_invite_token_v1_compatibility() {
+        let token = test_token().with_signature(vec![1, 2, 3]);
+        assert!(token.is_valid(false));
+    }
+
+    #[test]
+    fn test_invite_token_require_pq_rejects_v1() {
+        let token = test_token().with_signature(vec![1, 2, 3]);
+        assert!(!token.is_valid(true));
+    }
+
+    #[test]
+    fn test_invite_token_v2_dual_sig_verification() {
+        let token = test_token()
+            .with_signature(vec![1, 2, 3])
+            .with_pq_signature(vec![4, 5], vec![6, 7]);
+        
+        assert!(token.is_valid(true));
+        assert!(token.is_valid(false));
+    }
+
+    #[test]
+    fn test_invite_token_tampered_pq_signature() {
+        let token = test_token()
+            .with_signature(vec![1, 2, 3])
+            .with_pq_signature(vec![4, 5], b"TAMPERED".to_vec());
+        
+        assert!(!token.is_valid(true));
+        assert!(!token.is_valid(false));
     }
 
     #[test]

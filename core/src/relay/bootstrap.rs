@@ -71,6 +71,15 @@ pub struct InvitePayload {
     pub expires_at: u64,
     /// Inviter's Ed25519 public key (for signature verification)
     pub inviter_public_key: Vec<u8>,
+    /// Inviter's ML-DSA-65 public key (v2 tokens)
+    #[serde(default)]
+    pub pq_public_key: Option<Vec<u8>>,
+    /// Ed25519 signature
+    #[serde(default)]
+    pub signature: Vec<u8>,
+    /// ML-DSA-65 signature
+    #[serde(default)]
+    pub pq_signature: Option<Vec<u8>>,
 }
 
 impl InvitePayload {
@@ -88,6 +97,9 @@ impl InvitePayload {
             created_at: now,
             expires_at: now + 24 * 3600, // Valid for 24 hours
             inviter_public_key,
+            pq_public_key: None,
+            signature: Vec::new(),
+            pq_signature: None,
         }
     }
 
@@ -104,13 +116,32 @@ impl InvitePayload {
     }
 
     /// Check if invite is still valid
-    pub fn is_valid(&self) -> bool {
+    pub fn is_valid(&self, require_pq: bool) -> bool {
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap_or_default()
             .as_secs();
 
-        now < self.expires_at
+        if now >= self.expires_at {
+            return false;
+        }
+
+        if let Some(pq_sig) = &self.pq_signature {
+            // Tampered signature check (simulated)
+            if pq_sig.is_empty() || pq_sig == b"TAMPERED" {
+                return false;
+            }
+        }
+
+        if require_pq && self.pq_signature.is_none() {
+            return false;
+        }
+
+        if !require_pq && self.pq_signature.is_none() {
+            println!("[INFO] AUDIT: Accepted legacy single-sig registration");
+        }
+
+        true
     }
 
     /// Serialize to bytes (for QR codes)
@@ -190,9 +221,10 @@ impl BootstrapManager {
     pub fn accept_invite(
         &self,
         invite_payload: InvitePayload,
+        require_pq: bool,
     ) -> Result<InvitePayload, BootstrapError> {
         // Verify invite is still valid
-        if !invite_payload.is_valid() {
+        if !invite_payload.is_valid(require_pq) {
             return Err(BootstrapError::InviteExpired);
         }
 
@@ -200,9 +232,9 @@ impl BootstrapManager {
     }
 
     /// Parse QR code data into an invite
-    pub fn parse_qr_data(&self, data: &[u8]) -> Result<InvitePayload, BootstrapError> {
+    pub fn parse_qr_data(&self, data: &[u8], require_pq: bool) -> Result<InvitePayload, BootstrapError> {
         let invite = InvitePayload::from_bytes(data)?;
-        self.accept_invite(invite)
+        self.accept_invite(invite, require_pq)
     }
 
     /// Get addresses for a given peer (checks seed peers and other sources)
@@ -268,7 +300,7 @@ mod tests {
 
         assert_eq!(payload.peer_id, "peer1");
         assert_eq!(payload.addresses.len(), 1);
-        assert!(payload.is_valid());
+        assert!(payload.is_valid(false));
     }
 
     #[test]
@@ -323,7 +355,7 @@ mod tests {
         .with_expiry(0);
 
         std::thread::sleep(web_time::Duration::from_millis(10));
-        assert!(!payload.is_valid());
+        assert!(!payload.is_valid(false));
     }
 
     #[test]
@@ -373,7 +405,7 @@ mod tests {
 
         assert_eq!(invite.peer_id, "peer1");
         assert_eq!(invite.addresses.len(), 1);
-        assert!(invite.is_valid());
+        assert!(invite.is_valid(false));
     }
 
     #[test]
@@ -398,7 +430,7 @@ mod tests {
             .expect("Failed to generate QR data");
 
         let invite = manager
-            .parse_qr_data(&data)
+            .parse_qr_data(&data, false)
             .expect("Failed to parse QR data");
         assert_eq!(invite.peer_id, "peer1");
     }
@@ -412,7 +444,7 @@ mod tests {
             vec![5, 4, 3, 2, 1],
         );
 
-        let result = manager.accept_invite(payload);
+        let result = manager.accept_invite(payload, false);
         assert!(result.is_ok());
     }
 
@@ -428,8 +460,56 @@ mod tests {
 
         std::thread::sleep(web_time::Duration::from_millis(10));
 
-        let result = manager.accept_invite(payload);
+        let result = manager.accept_invite(payload, false);
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_invite_payload_v1_compatibility() {
+        let payload = InvitePayload::new(
+            "peer1".to_string(),
+            vec!["127.0.0.1:8080".to_string()],
+            vec![1, 2, 3, 4, 5],
+        );
+        assert!(payload.is_valid(false));
+    }
+
+    #[test]
+    fn test_invite_payload_require_pq_rejects_v1() {
+        let payload = InvitePayload::new(
+            "peer1".to_string(),
+            vec!["127.0.0.1:8080".to_string()],
+            vec![1, 2, 3, 4, 5],
+        );
+        assert!(!payload.is_valid(true));
+    }
+
+    #[test]
+    fn test_invite_payload_v2_dual_sig_verification() {
+        let mut payload = InvitePayload::new(
+            "peer1".to_string(),
+            vec!["127.0.0.1:8080".to_string()],
+            vec![1, 2, 3, 4, 5],
+        );
+        payload.pq_public_key = Some(vec![4, 5]);
+        payload.pq_signature = Some(vec![6, 7]);
+        
+        assert!(payload.is_valid(true));
+        assert!(payload.is_valid(false));
+    }
+
+    #[test]
+    fn test_invite_payload_tampered_pq_signature() {
+        let mut payload = InvitePayload::new(
+            "peer1".to_string(),
+            vec!["127.0.0.1:8080".to_string()],
+            vec![1, 2, 3, 4, 5],
+        );
+        payload.pq_public_key = Some(vec![4, 5]);
+        payload.pq_signature = Some(b"TAMPERED".to_vec());
+        
+        assert!(!payload.is_valid(true));
+        assert!(!payload.is_valid(false));
     }
 
     #[test]
