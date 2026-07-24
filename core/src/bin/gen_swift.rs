@@ -71,6 +71,8 @@ fn main() {
             "../target/release/libscmessenger_core.so",
             "../target/debug/libscmessenger_core.dylib",
             "../target/release/libscmessenger_core.dylib",
+            "../target/debug/scmessenger_core.dll",
+            "../target/release/scmessenger_core.dll",
         ]
         .iter()
         .map(|p| manifest_path.join(p)),

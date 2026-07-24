@@ -54,6 +54,7 @@ data class NotificationMessageContext (
 data class NotificationUiState (
 data class PeelResult (
 data class PreparedMessage (
+data class Receipt (
 data class ReceivedMessage (
 data class RegistrationStateInfo (
 data class RelayAdjustment (
@@ -63,6 +64,7 @@ data class TtlConfig (
 enum class AdjustmentProfile {
 enum class AuditEventType {
 enum class ConnectionPathState {
+enum class DeliveryStatus {
 enum class DiscoveryMode {
 enum class MessageDirection {
 enum class MessageStatus {
@@ -302,7 +304,6 @@ fun `start`()
 fun `stats`(): HistoryStats
 fun `stop`()
 fun `stop`()
-fun `summary`(): kotlin.String
 fun `swarmCanBootstrapOthers`(): kotlin.Boolean
 fun `swarmGetBestPaths`(`targetPeerId`: kotlin.String, `count`: kotlin.UInt): List<List<kotlin.String>>
 fun `swarmGetBestRelays`(`count`: kotlin.UInt): List<kotlin.String>

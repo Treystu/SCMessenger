@@ -227,7 +227,6 @@ open func stats()throws  -> HistoryStats  {
 open func stop()  {try! rustCall() {
 open func stop()  {try! rustCall() {
 open func subscribeTopic(topic: String)async throws   {
-open func summary() -> String  {
 open func swarmCanBootstrapOthers() -> Bool  {
 open func swarmGetBestPaths(targetPeerId: String, count: UInt32) -> [[String]]  {
 open func swarmGetBestRelays(count: UInt32) -> [String]  {
@@ -248,6 +247,7 @@ open func verifySignature(data: Data, signature: Data, publicKeyHex: String)thro
 public enum AdjustmentProfile: Equatable, Hashable {
 public enum AuditEventType: Equatable, Hashable {
 public enum ConnectionPathState: Equatable, Hashable {
+public enum DeliveryStatus: Equatable, Hashable {
 public enum DiscoveryMode: Equatable, Hashable {
 public enum IronCoreError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
 public enum MessageDirection: Equatable, Hashable {
@@ -282,6 +282,8 @@ public func FfiConverterTypeContactManager_lift(_ handle: UInt64) throws -> Cont
 public func FfiConverterTypeContactManager_lower(_ value: ContactManager) -> UInt64 {
 public func FfiConverterTypeContact_lift(_ buf: RustBuffer) throws -> Contact {
 public func FfiConverterTypeContact_lower(_ value: Contact) -> RustBuffer {
+public func FfiConverterTypeDeliveryStatus_lift(_ buf: RustBuffer) throws -> DeliveryStatus {
+public func FfiConverterTypeDeliveryStatus_lower(_ value: DeliveryStatus) -> RustBuffer {
 public func FfiConverterTypeDeviceProfile_lift(_ buf: RustBuffer) throws -> DeviceProfile {
 public func FfiConverterTypeDeviceProfile_lower(_ value: DeviceProfile) -> RustBuffer {
 public func FfiConverterTypeDeviceState_lift(_ buf: RustBuffer) throws -> DeviceState {
@@ -340,6 +342,8 @@ public func FfiConverterTypePreparedMessage_lift(_ buf: RustBuffer) throws -> Pr
 public func FfiConverterTypePreparedMessage_lower(_ value: PreparedMessage) -> RustBuffer {
 public func FfiConverterTypeProximityTransport_lift(_ buf: RustBuffer) throws -> ProximityTransport {
 public func FfiConverterTypeProximityTransport_lower(_ value: ProximityTransport) -> RustBuffer {
+public func FfiConverterTypeReceipt_lift(_ buf: RustBuffer) throws -> Receipt {
+public func FfiConverterTypeReceipt_lower(_ value: Receipt) -> RustBuffer {
 public func FfiConverterTypeReceivedMessage_lift(_ buf: RustBuffer) throws -> ReceivedMessage {
 public func FfiConverterTypeReceivedMessage_lower(_ value: ReceivedMessage) -> RustBuffer {
 public func FfiConverterTypeRegistrationStateInfo_lift(_ buf: RustBuffer) throws -> RegistrationStateInfo {
@@ -360,6 +364,8 @@ public func blockedIdentityNew(peerId: String) -> BlockedIdentity  {
 public func blockedIdentityWithDeviceId(blocked: BlockedIdentity, deviceId: String) -> BlockedIdentity  {
 public func blockedIdentityWithNotes(blocked: BlockedIdentity, notes: String) -> BlockedIdentity  {
 public func blockedIdentityWithReason(blocked: BlockedIdentity, reason: String) -> BlockedIdentity  {
+public func decodeReceipt(data: Data)throws  -> Receipt  {
+public func encodeReceipt(receipt: Receipt)throws  -> Data  {
 public func getBuildProvenance() -> String  {
 public func recommendedTransport(peerId: String) -> ProximityTransport  {
 public func safetyNumber(ourPubkeyHex: String, theirPubkeyHex: String) -> String  {
@@ -401,6 +407,7 @@ public struct FfiConverterTypeBlockedIdentity: FfiConverterRustBuffer {
 public struct FfiConverterTypeConnectionPathState: FfiConverterRustBuffer {
 public struct FfiConverterTypeContact: FfiConverterRustBuffer {
 public struct FfiConverterTypeContactManager: FfiConverter {
+public struct FfiConverterTypeDeliveryStatus: FfiConverterRustBuffer {
 public struct FfiConverterTypeDeviceProfile: FfiConverterRustBuffer {
 public struct FfiConverterTypeDeviceState: FfiConverterRustBuffer {
 public struct FfiConverterTypeDiscoveryMode: FfiConverterRustBuffer {
@@ -430,6 +437,7 @@ public struct FfiConverterTypeNotificationUiState: FfiConverterRustBuffer {
 public struct FfiConverterTypePeelResult: FfiConverterRustBuffer {
 public struct FfiConverterTypePreparedMessage: FfiConverterRustBuffer {
 public struct FfiConverterTypeProximityTransport: FfiConverterRustBuffer {
+public struct FfiConverterTypeReceipt: FfiConverterRustBuffer {
 public struct FfiConverterTypeReceivedMessage: FfiConverterRustBuffer {
 public struct FfiConverterTypeRegistrationStateInfo: FfiConverterRustBuffer {
 public struct FfiConverterTypeRelayAdjustment: FfiConverterRustBuffer {
@@ -458,6 +466,7 @@ public struct NotificationMessageContext: Equatable, Hashable {
 public struct NotificationUiState: Equatable, Hashable {
 public struct PeelResult: Equatable, Hashable {
 public struct PreparedMessage: Equatable, Hashable {
+public struct Receipt: Equatable, Hashable {
 public struct ReceivedMessage: Equatable, Hashable {
 public struct RegistrationStateInfo: Equatable, Hashable {
 public struct RelayAdjustment: Equatable, Hashable {
