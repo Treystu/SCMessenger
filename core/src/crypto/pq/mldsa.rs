@@ -71,7 +71,7 @@ pub fn generate_keypair() -> MlDsa65KeyPair {
 
 /// Sign a message with the ML-DSA-65 private key.
 pub fn sign(keypair: &MlDsa65KeyPair, message: &[u8]) -> Result<Vec<u8>> {
-    let seed_arr: [u8; 32] = keypair.signing_key.0.clone();
+    let seed_arr: [u8; 32] = keypair.signing_key.0;
     let signing_key = SigningKey::<MlDsa65>::from_seed(&seed_arr.into());
     let signature = signing_key.sign(message);
     Ok(signature.to_bytes().to_vec())
@@ -93,10 +93,14 @@ pub fn verify(public_key_bytes: &[u8], message: &[u8], signature_bytes: &[u8]) -
         ));
     }
 
-    let vk_arr: &[u8; 1952] = public_key_bytes.try_into().unwrap();
+    let vk_arr: &[u8; 1952] = public_key_bytes
+        .try_into()
+        .map_err(|_| anyhow!("Invalid ML-DSA-65 public key length"))?;
     let verifying_key = VerifyingKey::<MlDsa65>::decode(vk_arr.into());
 
-    let sig_arr: &[u8; 3309] = signature_bytes.try_into().unwrap();
+    let sig_arr: &[u8; 3309] = signature_bytes
+        .try_into()
+        .map_err(|_| anyhow!("Invalid ML-DSA-65 signature length"))?;
     let signature = Signature::<MlDsa65>::try_from(sig_arr.as_slice())
         .map_err(|e| anyhow!("Failed to create signature from bytes: {}", e))?;
 
