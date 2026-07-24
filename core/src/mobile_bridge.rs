@@ -3337,8 +3337,8 @@ fn current_timestamp() -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tempfile::tempdir;
     use crate::store::ledger_entry::LedgerManager;
+    use tempfile::tempdir;
 
     // -----------------------------------------------------------------------
     // DeviceState / BehaviorAdjustment tests

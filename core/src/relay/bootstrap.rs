@@ -232,7 +232,11 @@ impl BootstrapManager {
     }
 
     /// Parse QR code data into an invite
-    pub fn parse_qr_data(&self, data: &[u8], require_pq: bool) -> Result<InvitePayload, BootstrapError> {
+    pub fn parse_qr_data(
+        &self,
+        data: &[u8],
+        require_pq: bool,
+    ) -> Result<InvitePayload, BootstrapError> {
         let invite = InvitePayload::from_bytes(data)?;
         self.accept_invite(invite, require_pq)
     }
@@ -493,7 +497,7 @@ mod tests {
         );
         payload.pq_public_key = Some(vec![4, 5]);
         payload.pq_signature = Some(vec![6, 7]);
-        
+
         assert!(payload.is_valid(true));
         assert!(payload.is_valid(false));
     }
@@ -507,7 +511,7 @@ mod tests {
         );
         payload.pq_public_key = Some(vec![4, 5]);
         payload.pq_signature = Some(b"TAMPERED".to_vec());
-        
+
         assert!(!payload.is_valid(true));
         assert!(!payload.is_valid(false));
     }

@@ -1,5 +1,7 @@
 use anyhow::{anyhow, Result};
-use ml_dsa::{MlDsa65, Signature, SigningKey, VerifyingKey, Signer, Verifier, Keypair, SignatureEncoding};
+use ml_dsa::{
+    Keypair, MlDsa65, Signature, SignatureEncoding, Signer, SigningKey, Verifier, VerifyingKey,
+};
 use rand::rngs::OsRng;
 use zeroize::Zeroize;
 
@@ -110,34 +112,34 @@ mod tests {
     #[test]
     fn test_mldsa65_sign_verify() {
         let keypair = generate_keypair();
-        
+
         let message = b"Test message for ML-DSA-65";
         let signature = sign(&keypair, message).expect("Signing should succeed");
-        
+
         verify(keypair.verifying_key(), message, &signature).expect("Verification should succeed");
     }
 
     #[test]
     fn test_mldsa65_invalid_signature() {
         let keypair = generate_keypair();
-        
+
         let message = b"Test message for ML-DSA-65";
         let mut signature = sign(&keypair, message).expect("Signing should succeed");
-        
+
         // Tamper with the signature
         signature[0] ^= 1;
-        
+
         assert!(verify(keypair.verifying_key(), message, &signature).is_err());
     }
 
     #[test]
     fn test_mldsa65_wrong_message() {
         let keypair = generate_keypair();
-        
+
         let message1 = b"Original message";
         let message2 = b"Different message";
         let signature = sign(&keypair, message1).expect("Signing should succeed");
-        
+
         assert!(verify(keypair.verifying_key(), message2, &signature).is_err());
     }
 
@@ -146,7 +148,7 @@ mod tests {
         let message = b"Test message";
         let fake_key = vec![0u8; 1951]; // Wrong length
         let fake_sig = vec![0u8; 3309];
-        
+
         assert!(verify(&fake_key, message, &fake_sig).is_err());
     }
 
@@ -155,22 +157,22 @@ mod tests {
         let keypair = generate_keypair();
         let message = b"Test message";
         let fake_sig = vec![0u8; 3308]; // Wrong length
-        
+
         assert!(verify(keypair.verifying_key(), message, &fake_sig).is_err());
     }
 
     #[test]
     fn test_mldsa65_known_answer_test() {
-        // This test uses a deterministic approach by generating a keypair and 
+        // This test uses a deterministic approach by generating a keypair and
         // ensuring we can consistently sign and verify with it.
         let keypair = generate_keypair();
-        
+
         let message = b"Known answer test for ML-DSA-65";
         let signature = sign(&keypair, message).expect("Signing should succeed");
-        
+
         // Verify the signature
         verify(keypair.verifying_key(), message, &signature).expect("Verification should succeed");
-        
+
         // Ensure the lengths are correct
         assert_eq!(keypair.verifying_key().len(), 1952);
         assert_eq!(signature.len(), 3309);
@@ -179,10 +181,10 @@ mod tests {
     #[test]
     fn test_zeroize_behavior() {
         let keypair = generate_keypair();
-        
+
         // Explicitly drop the keypair to trigger zeroize
         drop(keypair);
-        
+
         // We can't directly test the zeroized values since they're dropped,
         // but we can ensure the type implements Zeroize properly
         let mut test_private_key = MlDsa65PrivateKey([1u8; 32]);

@@ -324,7 +324,7 @@ fn validate_identity_owner(
     Ok(())
 }
 
-// SharedPeerEntry, LedgerExchangeRequest, and LedgerExchangeResponse 
+// SharedPeerEntry, LedgerExchangeRequest, and LedgerExchangeResponse
 // have been moved to crate::store::ledger_entry
 
 impl IronCoreBehaviour {

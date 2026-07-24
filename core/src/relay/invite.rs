@@ -380,7 +380,7 @@ mod tests {
         let token = test_token()
             .with_signature(vec![1, 2, 3])
             .with_pq_signature(vec![4, 5], vec![6, 7]);
-        
+
         assert!(token.is_valid(true));
         assert!(token.is_valid(false));
     }
@@ -390,7 +390,7 @@ mod tests {
         let token = test_token()
             .with_signature(vec![1, 2, 3])
             .with_pq_signature(vec![4, 5], b"TAMPERED".to_vec());
-        
+
         assert!(!token.is_valid(true));
         assert!(!token.is_valid(false));
     }

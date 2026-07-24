@@ -19,13 +19,13 @@ use super::behaviour::{
     DeregistrationRequest, IronCoreBehaviour, Libp2pMessageRequest, Libp2pMessageResponse,
     RegistrationMessage, RegistrationRequest, RegistrationResponse, RelayResponse,
 };
-use crate::store::ledger_entry::{LedgerExchangeRequest, LedgerExchangeResponse, SharedPeerEntry};
 use super::dial_policy::{multiaddr_to_key, CircuitRelayLadder, DialPolicyManager};
 use super::discovery::DiscoveryConfig;
 #[cfg(not(target_arch = "wasm32"))]
 use super::mesh_routing::{
     advance_route_cursor, BootstrapCapability, MultiPathDelivery, RankedRoute,
 };
+use crate::store::ledger_entry::{LedgerExchangeRequest, LedgerExchangeResponse, SharedPeerEntry};
 // Import mycorrhizal routing modules
 #[cfg(target_arch = "wasm32")]
 use super::multiport::MultiPortConfig;
@@ -1342,10 +1342,7 @@ pub enum SwarmCommand {
         reply: mpsc::Sender<Result<(), String>>,
     },
     /// Dial a discovered address (with rate-limiting)
-    DiscoveryDial {
-        peer_id: PeerId,
-        addr: Multiaddr,
-    },
+    DiscoveryDial { peer_id: PeerId, addr: Multiaddr },
     /// Dial resolved IP addresses for a DNS multiaddr
     DialResolved {
         original_dns: Multiaddr,
@@ -2361,18 +2358,24 @@ pub async fn start_swarm_with_config(
             let bootstrap_addrs_clone = bootstrap_addrs;
             let mut known_relays: HashSet<PeerId> = HashSet::new();
             for addr in &bootstrap_addrs_clone {
-                if let Some(libp2p::multiaddr::Protocol::P2p(peer_id)) = addr.iter().find(|p| matches!(p, libp2p::multiaddr::Protocol::P2p(_))) {
+                if let Some(libp2p::multiaddr::Protocol::P2p(peer_id)) = addr
+                    .iter()
+                    .find(|p| matches!(p, libp2p::multiaddr::Protocol::P2p(_)))
+                {
                     known_relays.insert(peer_id);
                 }
             }
 
-            let (discovery_dial_tx, mut discovery_dial_rx) = tokio::sync::mpsc::channel::<(PeerId, Multiaddr)>(64);
+            let (discovery_dial_tx, mut discovery_dial_rx) =
+                tokio::sync::mpsc::channel::<(PeerId, Multiaddr)>(64);
             let command_tx_for_drain = command_tx.clone();
             tokio::spawn(async move {
                 let mut interval = tokio::time::interval(tokio::time::Duration::from_millis(250));
                 while let Some((peer_id, addr)) = discovery_dial_rx.recv().await {
                     interval.tick().await;
-                    let _ = command_tx_for_drain.send(SwarmCommand::DiscoveryDial { peer_id, addr }).await;
+                    let _ = command_tx_for_drain
+                        .send(SwarmCommand::DiscoveryDial { peer_id, addr })
+                        .await;
                 }
             });
 

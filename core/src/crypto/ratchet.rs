@@ -838,7 +838,11 @@ impl RatchetSession {
         };
 
         let (new_root_key, receiving_chain_key) = if self.negotiated_suite == Some(0x02) {
-            root_key_ratchet_v2(&self.root_key, dh_output.as_bytes(), pq_ss.as_ref().map(|k| k.as_bytes().to_vec()))
+            root_key_ratchet_v2(
+                &self.root_key,
+                dh_output.as_bytes(),
+                pq_ss.as_ref().map(|k| k.as_bytes().to_vec()),
+            )
         } else {
             root_key_ratchet_v1(&self.root_key, dh_output.as_bytes())
         };
@@ -858,7 +862,11 @@ impl RatchetSession {
             None
         };
         let (new_root_key_2, sending_chain_key) = if self.negotiated_suite == Some(0x02) {
-            root_key_ratchet_v2(&new_root_key, dh_output_2.as_bytes(), pq_ss_2.as_ref().map(|k| k.as_bytes().to_vec()))
+            root_key_ratchet_v2(
+                &new_root_key,
+                dh_output_2.as_bytes(),
+                pq_ss_2.as_ref().map(|k| k.as_bytes().to_vec()),
+            )
         } else {
             root_key_ratchet_v1(&new_root_key, dh_output_2.as_bytes())
         };

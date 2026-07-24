@@ -28,12 +28,14 @@ pub mod websocket;
 pub mod wifi_aware;
 pub mod wifi_direct;
 
+pub use crate::store::ledger_entry::{
+    LedgerExchangeRequest, LedgerExchangeResponse, SharedPeerEntry,
+};
 pub use behaviour::{
     DeregistrationPayload, DeregistrationRequest, IronCoreBehaviour, Libp2pMessageRequest,
     Libp2pMessageResponse, RegistrationMessage, RegistrationPayload, RegistrationRequest,
     RegistrationResponse, RelayRequest, RelayResponse,
 };
-pub use crate::store::ledger_entry::{LedgerExchangeRequest, LedgerExchangeResponse, SharedPeerEntry};
 pub use bootstrap::{BootstrapConfig, BootstrapManager, BootstrapState};
 pub use capability::can_forward_for_wasm;
 pub use circuit_breaker::{

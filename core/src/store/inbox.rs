@@ -20,10 +20,13 @@ struct LegacyReceivedMessage {
 
 fn deserialize_received_message(data: &[u8]) -> Result<ReceivedMessage, bincode::Error> {
     if data.is_empty() {
-        return Err(Box::new(bincode::ErrorKind::Io(std::io::Error::new(std::io::ErrorKind::UnexpectedEof, "empty"))));
+        return Err(Box::new(bincode::ErrorKind::Io(std::io::Error::new(
+            std::io::ErrorKind::UnexpectedEof,
+            "empty",
+        ))));
     }
     // If the first byte is 1, it's the new versioned format.
-    // Legacy format starts with a String length. Since string lengths are usually 36 (for UUIDs), 
+    // Legacy format starts with a String length. Since string lengths are usually 36 (for UUIDs),
     // their first byte is 36, not 1.
     if data[0] == 1 {
         bincode::deserialize(data)
@@ -562,7 +565,10 @@ mod tests {
         let legacy_bytes = bincode::serialize(&legacy).unwrap();
 
         assert!(
-            deserialize_received_message(&legacy_bytes).unwrap().sender_public_key_hex.is_none(),
+            deserialize_received_message(&legacy_bytes)
+                .unwrap()
+                .sender_public_key_hex
+                .is_none(),
             "pre-change bincode records are not decodable under the current \
              ReceivedMessage shape - confirms this would be a real gap if the \
              persistent inbox backend were ever wired into production"

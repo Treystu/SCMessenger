@@ -508,7 +508,9 @@ mod tests {
 
     #[test]
     fn test_multiaddr_to_key() {
-        let pid = libp2p::identity::Keypair::generate_ed25519().public().to_peer_id();
+        let pid = libp2p::identity::Keypair::generate_ed25519()
+            .public()
+            .to_peer_id();
         let addr_str = format!("/ip4/192.168.1.1/tcp/4001/p2p/{}", pid);
         let addr: Multiaddr = addr_str.parse().unwrap();
         let key = multiaddr_to_key(&addr);

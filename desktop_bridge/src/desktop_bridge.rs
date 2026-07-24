@@ -252,22 +252,30 @@ impl DesktopBridge {
 impl DesktopBridge {
     /// Get BLE adapter info (non-Linux stub).
     pub fn get_ble_adapter_info(&self) -> Result<crate::BleAdapterInfo, crate::DesktopBridgeError> {
-        Err(crate::DesktopBridgeError::General("BLE adapter info is only supported on Linux".to_string()))
+        Err(crate::DesktopBridgeError::General(
+            "BLE adapter info is only supported on Linux".to_string(),
+        ))
     }
 
     /// List discovered BLE peers (non-Linux stub).
     pub fn list_ble_peers(&self) -> Result<Vec<crate::BlePeer>, crate::DesktopBridgeError> {
-        Err(crate::DesktopBridgeError::General("BLE peer discovery is only supported on Linux".to_string()))
+        Err(crate::DesktopBridgeError::General(
+            "BLE peer discovery is only supported on Linux".to_string(),
+        ))
     }
 
     /// Start BLE scan (non-Linux stub).
     pub fn start_ble_scan(&self) -> Result<(), crate::DesktopBridgeError> {
-        Err(crate::DesktopBridgeError::General("BLE scanning is only supported on Linux".to_string()))
+        Err(crate::DesktopBridgeError::General(
+            "BLE scanning is only supported on Linux".to_string(),
+        ))
     }
 
     /// Stop BLE scan (non-Linux stub).
     pub fn stop_ble_scan(&self) -> Result<(), crate::DesktopBridgeError> {
-        Err(crate::DesktopBridgeError::General("BLE scanning is only supported on Linux".to_string()))
+        Err(crate::DesktopBridgeError::General(
+            "BLE scanning is only supported on Linux".to_string(),
+        ))
     }
 }
 

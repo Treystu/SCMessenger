@@ -29,10 +29,13 @@ struct LegacyQueuedMessage {
 
 fn deserialize_queued_message(data: &[u8]) -> Result<QueuedMessage, bincode::Error> {
     if data.is_empty() {
-        return Err(Box::new(bincode::ErrorKind::Io(std::io::Error::new(std::io::ErrorKind::UnexpectedEof, "empty"))));
+        return Err(Box::new(bincode::ErrorKind::Io(std::io::Error::new(
+            std::io::ErrorKind::UnexpectedEof,
+            "empty",
+        ))));
     }
     // If the first byte is 1, it's the new versioned format.
-    // Legacy format starts with a String length. Since string lengths are usually 36 (for UUIDs), 
+    // Legacy format starts with a String length. Since string lengths are usually 36 (for UUIDs),
     // their first byte is 36, not 1.
     if data[0] == 1 {
         bincode::deserialize(data)
@@ -52,7 +55,6 @@ fn deserialize_queued_message(data: &[u8]) -> Result<QueuedMessage, bincode::Err
         })
     }
 }
-
 
 /// Maximum messages queued per peer
 const MAX_QUEUE_PER_PEER: usize = 1000;

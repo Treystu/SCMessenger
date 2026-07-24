@@ -251,7 +251,9 @@ fn test_circuit_relay_ladder_multiple_relays() {
 fn test_multiaddr_to_key_strips_peer_id() {
     use scmessenger_core::transport::dial_policy::multiaddr_to_key;
 
-    let pid = libp2p::identity::Keypair::generate_ed25519().public().to_peer_id();
+    let pid = libp2p::identity::Keypair::generate_ed25519()
+        .public()
+        .to_peer_id();
     let addr_str = format!("/ip4/192.168.1.1/tcp/4001/p2p/{}", pid);
     let addr_with_p2p: libp2p::Multiaddr = addr_str.parse().unwrap();
 

@@ -132,10 +132,7 @@ async fn test_ledger_convergence_between_nodes() {
     // because it cannot track the connection against a specific PeerId.
     let mut dial_addr = node1_addr.clone();
     dial_addr.push(libp2p::multiaddr::Protocol::P2p(peer_id1));
-    swarm2
-        .dial(dial_addr)
-        .await
-        .expect("Failed to dial");
+    swarm2.dial(dial_addr).await.expect("Failed to dial");
 
     // Wait for connection handshake and protocols to negotiate
     tokio::time::sleep(Duration::from_millis(1000)).await;
