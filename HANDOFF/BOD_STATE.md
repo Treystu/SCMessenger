@@ -1,5 +1,13 @@
 # Board of Directors (BoD) State — Live Governance Ledger
 
+<!-- HANDOFF-SCOPE-BEGIN -->
+scope: SCMessenger
+owner: Sovereign-Communication/SCMessenger
+purpose: SCMessenger-only findings and remediation handoff
+foreign_material: NONE
+boundary: No foreign-repository findings, evidence, status, or remediation are included.
+<!-- HANDOFF-SCOPE-END -->
+
 Status: Active
 Last updated: 2026-09-11
 Entry point: `/bod` (Codebuff/Freebuff: `/skill:bod`)
@@ -10,8 +18,8 @@ The Board of Directors seat is the highest governance authority in SCMessenger.
 It ensures that all architectural, cryptographic, strategic, and philosophical
 proposals strictly align with the repository's foundational doctrine.
 
-The Board is executed as an automated 5-judge panel powered by
-`sovereign-harness`, backed by an independent judge model.
+The Board is executed as an automated five-judge panel backed by an independent
+synthesis judge model.
 
 ## Canonical rules
 
@@ -1405,3 +1413,15 @@ Record of all formal resolutions adjudicated by the Board of Directors:
 - **Judge Model**: `deepseek/deepseek-v4.1-flash` (Agreed: False)
 - **Proposal Text**:
   > DISPOSITION RULING REQUESTED - P1 Windows node silent wedge for v0.4.0 tag: The Windows desktop node silently wedged for 2h45m (process alive, logs frozen at 2026-09-15T01:32:14Z, HTTP API unresponsive, CLOSE_WAIT pile-up, no panic, existing event-loop watchdog blind because the event loop never died). Store-and-forward doctrine itself performed perfectly: 12/12 custody entries held on the AWS cloud node burst-delivered within 1s of node recovery, zero message loss, receipts converged (evidence: HANDOFF/audit/CELLULAR_PATH_TRIANGULATION_2026-09-15.md). Remediation landed: a log-silence heartbeat watchdog now exits the node loudly after 600s of no log output (verified by 2 black-box integration tests, locally 2 passed in 6.32s, CI Test lane re-runs), converting the silent wedge into a bounded, observable outage. PROPOSAL: Accept the P1 for the v0.4.0 tag as a KNOWN issue with the watchdog bounding its blast radius (max 10 min silent outage instead of unbounded), explicitly defer root-cause reproduction and fix to v0.5.0 (ticket P1_WINDOWS_NODE_SILENT_WEDGE_2026-09-15.md stays open), and proceed with the tag once CI is green. Alternative considered and rejected: block the tag on root-causing a nondeterministic 2h45m hang with zero log fingerprint, which has no reproduction path yet and would stall the release indefinitely. Is this disposition doctrinally sound (nodes-not-relays, sovereignty, cryptographic integrity, hygiene) and operationally safe for a 0.4.0 tag?
+
+### Resolution bod-6402e0fa [DEFERRED]
+- **Timestamp**: 2026-10-24T10:59:21.326922+00:00
+- **Tier**: free
+- **Verdict**: `DEFERRED_PANEL_SHORTFALL`
+- **Cost**: $0.000186 (Ceiling: $0.10)
+- **Summary**: Only 1/5 models submitted valid votes. Fails closed.
+- **Panel Voting** (1/5 APPROVE):
+  - `inclusionai/ling-3.0-flash`: **APPROVE** (Score: 0.93) - _The proposal is a planning-control governance framework that strengthens verification, custody integrity, and failsafe safeguards without modifying SCMessenger's node architecture, cryptographic protocols, or network sovereignty, and it explicitly authorizes no operational changes._
+- **Judge Model**: `z-ai/glm-5.3-flash` (Agreed: False)
+- **Proposal Text**:
+  > Proposal for SCMessenger Phase 2 backup-planning safeguards: For each existing remote-ref or ancestry witness classified as a prospective prove item, keep the item pending until the named remote custodian acknowledges continued retention of the exact repository, full ref name, full object SHA, and timestamp on #602, with current full-SHA read-back and isolated retrieval/restore evidence. Every future batch preflight must list acknowledged and unacknowledged prove items separately; any unacknowledged item remains pending and cannot be counted complete or used to authorize deletion. Before any backup write, designate a visibility-compatible CI-inert destination only after an authoritative Actions-disabled read-back, complete repository and organization hook and installed-App audit, named owner/CI-custodian attestation for external CI and automation, and immediate pre-write recheck. Unknown access or integrations keep execution blocked. This is a planning-control proposal only: it authorizes no refs, repository setting change, backup, purge, PR action, or release. Does this proposal uphold SCMessenger's nodes-only architecture, sovereignty, cryptographic custody integrity, platform parity, and hygiene?
