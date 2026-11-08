@@ -150,12 +150,12 @@ Adopted 2026-11-05 under LANE PROTOCOL clause 12 (audit dissemination R5). One r
 The ledger ranges cover triage only. Implementation effort, total critical-path duration and calendar window are **UNVERIFIED** until WIP, owner scope, reviewer/provider capacity and device availability are known. Do not add overlapping PR/issue estimates. Risks: stale/vacuous CI; unaudited identity/disclosure/replay behavior; irreversible store/wire/FFI change; unowned WIP; unavailable physical nodes; artifact-SHA mismatch. Mitigate with independent reviews and fail-closed exact-SHA gates.
 
 After owner approval:
-1. Controller refreshes paginated PR/issue heads, checks and owners; proof is reconciled census, no shared WIP mutation.
-2. CI owner retrieves failed Full Test Suite log or records access failure, then scopes repair and exact-head proof.
+1. Controller refreshes paginated PR/issue heads, checks and owners; proof is reconciled census, no shared WIP mutation. [PARTIAL 2026-11-08: the seven C1/C4 car heads were re-read with `per_page=100` paginated to `total_count` (section 3 of `docs/audit/CLUSTER_DISPOSITIONS_2026-11-07.md`); the full ~41-PR census has NOT been refreshed this session.]
+2. CI owner retrieves failed Full Test Suite log or records access failure, then scopes repair and exact-head proof. [DISCHARGED as far as this lane can: A13 records the access failure (log 404 `BlobNotFound`) AND the classification obtained without it - `System.IO.IOException: No space left on device`, runner disk exhaustion, environmental not product. The remaining coverage caveat stands: the suite has no passing verdict at any recent head, so it must not be reported green.]
 3. Gate owner resolves #622 key format and supplies positive/negative regressions and provider evidence.
 4. Platform implementer compares #510 archive repair with live head and owner work; obtains SwiftLint/build/simulator evidence on an authorized head.
 5. Controller and owner classify archived WIP and #623-625 as in/out/duplicate with re-entry; no preservation or deletion is authorized here.
-6. Independent reviewer scopes #554 and #521/#599 against current combined hashes and records outstanding findings and Jev requirements.
+6. Independent reviewer scopes #554 and #521/#599 against current combined hashes and records outstanding findings and Jev requirements. [BLOCKED 2026-11-08: A16 - the repository has exactly one collaborator (`Treystu`), so no independent reviewer exists to be dispatched. #554's content reads clean on its own head (0 failures, 5/5 required, `docs/audit/CLUSTER_DISPOSITIONS_2026-11-07.md` section 3); #599's base now carries main's `ci.yml` byte-for-byte (A20 closed), so only the re-base decision (A17) and the crypto verdict remain.]
 7. Release owner prepares exact-SHA signing, upgrade/downgrade and log procedures; operator supplies a device window only after code is ready.
 
 ## Coverage audit and unfinished inventory

@@ -235,3 +235,22 @@ protection change, no force-push was performed this session.
 GATE: local pass (decision-signal) - port the last cheap real gate with both steps enforcing, rather
 than shipping an eleventh context that cannot fail - checks 1-5 clean (head
 `68e6f6b4a8ab39ea3a21f892357684e7fa3d1ee3`)
+
+## SUPERSEDED-BY (appended 2026-11-08, later the same day)
+
+This digest's NEXT ACTION said to port `naming-policy` as wave 3. That is **done**: `68e6f6b4a`, green on the
+rail at `b7e59787f` (`ci/circleci: Naming policy` success `04:09:13Z`). A resume from this file would redo
+finished work, which is the specific failure this note prevents.
+
+State now, so the next resume point is unambiguous:
+
+| item | state |
+|---|---|
+| wave-3 `naming-policy` port | **DONE** - `68e6f6b4a`, 12/12 green at `b7e59787f` |
+| register overdue rows | **7 -> 3** - A3/A5/A20/A26 read to a verdict in `06ea1e4c7`, then A3's numbers corrected in `a1c2d6cd6` |
+| #643 carve-outs | **DONE** - `7bc5e0250`, guard-preserving half only |
+| C1/C4 car table | **REFRESHED** - `9f4a62223`, section 3 of `CLUSTER_DISPOSITIONS_2026-11-07.md` |
+| still overdue | **A7, A8, A9** - all need a named, granted non-author reviewer |
+
+Records added since this file: `REGISTER_CLOSURES_2026-11-08.md`, `CI_CARVEOUTS_LANDED_2026-11-08.md`,
+`SESSION_DIGEST_2026-11-08_PM.md`.
