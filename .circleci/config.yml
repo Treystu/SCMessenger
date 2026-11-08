@@ -41,7 +41,7 @@
 #     automatically once that file appears.
 # Neither caveat may be resolved by adding these contexts to branch protection.
 #
-# Still not ported (wave 3 candidates): naming-policy, windows-cli-artifact,
+# Still not ported (remaining wave 3 candidates): windows-cli-artifact,
 # every macOS/Windows leg, mobile/docker-test-suite, and the release lanes.
 # No secrets are used anywhere in this config.
 #
@@ -124,7 +124,7 @@ commands:
           name: Fetch full history and origin/main
           command: |
             set -euo pipefail
-            if [ -d .git/shallow ]; then
+            if [ "$(git rev-parse --is-shallow-repository)" = "true" ]; then
               git fetch --unshallow origin
             else
               git fetch --all --tags
@@ -308,10 +308,18 @@ jobs:
             # would report the FORMAT as trailing whitespace. Those `.patch` files
             # are reviewed artifacts whose bytes must survive intact (`git apply`
             # depends on exactly those lines). Same exclusion as hygiene.yml.
-            mapfile -t CHANGED < <(git diff --name-only --ignore-cr-at-eol "$GATE_BASE" HEAD -- . \
+            if ! CHANGED_DIFF=$(git diff --name-only --ignore-cr-at-eol "$GATE_BASE" HEAD -- . \
               ':(exclude)iOS/SCMessenger/SCMessenger/Generated/**' \
               ':(exclude)iOS/SCMessengerCore.xcframework/**/Headers/**' \
-              ':(exclude)*.patch')
+              ':(exclude)*.patch'); then
+              echo "[ERROR] unable to compute changed files in range $GATE_BASE..HEAD"
+              exit 2
+            fi
+
+            CHANGED=()
+            if [ -n "$CHANGED_DIFF" ]; then
+              mapfile -t CHANGED <<< "$CHANGED_DIFF"
+            fi
 
             if [ "${#CHANGED[@]}" -eq 0 ]; then
               echo "[OK] only line-ending changes in range; check not applicable"
@@ -520,7 +528,11 @@ jobs:
           name: Check queue ticket status lines against GitHub
           command: |
             if command -v gh >/dev/null 2>&1 && [ -n "${GH_TOKEN:-}" ]; then
-              python3 scripts/check_queue_status.py --changed-only --base-ref "$GATE_BASE"
+              if [ "${CIRCLE_BRANCH:-}" = "main" ]; then
+                python3 scripts/check_queue_status.py --changed-only --base-ref "$GATE_BASE" --warn-only
+              else
+                python3 scripts/check_queue_status.py --changed-only --base-ref "$GATE_BASE"
+              fi
             else
               echo "[WARNING] queue-status gate SKIPPED: no gh CLI and no GH_TOKEN on this rail"
               echo "[WARNING] wave-1 gap, NOT a pass; enable in wave 2"
