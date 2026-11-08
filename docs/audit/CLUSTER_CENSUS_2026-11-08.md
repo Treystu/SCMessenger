@@ -257,3 +257,151 @@ here so the repo-wide blast radius is visible before anyone dispositions #528 as
 Read #677's battery to terminal and land it under the merge law, then the cluster order resumes at C1
 with #660 - which, once the port is on main, becomes the first car in the backlog able to carry an
 admissible battery rather than only a billing annotation.
+
+## 8. Second pass, same day: C2, C4, C3, C5 and #208 worked
+
+Sections 1-7 censused the population. This section is the cluster work itself: C2 first (as tasked),
+then C4, C3 (#178 first per the plan), C5, and #208 - five clusters, eleven cars, every one re-read
+before any disposition was written.
+
+### 8.1 A method correction that had to be made before any of this counted
+
+The check-runs **list** endpoint does not populate `runner_name` or `steps`. Both appear only on the
+single-run endpoint (`/check-runs/<id>`). A classifier that reads the list response therefore scores
+every failure as "runner empty, steps=0", which is this project's signature of a billing refusal - so a
+list-only pass reports a clean car as billing-blocked and a genuinely broken car as billing-blocked too.
+
+That defect appeared in this session's first walk and was caught before anything was filed: the pass
+scored #208 (three genuine required reds) as 6/6 billing. The classifier now reads each failing run
+individually plus its annotations. Every number below comes from that version. It is recorded here
+because the same shortcut will look correct to the next reader as well.
+
+### 8.2 The eleven cars, read fresh
+
+`genuine` counts failures that are neither a billing refusal nor a cancelled/skipped run. `required`
+reads the five protected contexts by name on the exact head.
+
+| Car | Cluster | Head | mergeable | behind | required | runs | fail | genuine | Disposition |
+|---|---|---|---|---|---|---|---|---|---|
+| #611 | C2 | `e03c1d7df43a` | unstable | 0 | 5/5 success | 22 | 8 | 0 | DECISION-READY (rail) |
+| #643 | C2 | `0340c094468f` | dirty | 34 | 5/5 success | 26 | 0 | 0 | CI owner - split recommended |
+| #609 | C2 | `4ed8168bbf1f` | dirty | 46 | 5/5 success | 27 | 0 | 0 | DECISION-READY (owner: pool) |
+| #506 | C4 | `16b4edf7540b` | unstable | 0 | 5/5 success | 27 | 11 | 0 | DECISION-READY (rail) |
+| #507 | C4 | `f4d5155d4af5` | blocked | 0 | 4/5 (`Test`) | 27 | 11 | 0 | BLOCKED - billing lock read on a required leg |
+| #508 | C4 | `475816012256` | unstable | 0 | 5/5 success | 27 | 11 | 0 | DECISION-READY (rail) |
+| #510 | C4 | `c48cb42b0920` | behind | 37 | 5/5 success | 35 | 3 | 3 | PARKED (owner plan next-action 4) |
+| #178 | C3 | `c1b457bbb1ce` | dirty | 1137 | none published | 6 | 3 | 3 | OWNER-HELD (A6) |
+| #521 | C5 | `5c6b5e52ed29` | unstable | 0 | 5/5 success | 29 | 14 | 0 | DECISION-READY (non-author gate) |
+| #599 | C5 | `a7ef2f299753` | clean | 63* | none published | 9 | 0 | 0 | BLOCKED on base re-point |
+| #208 | #208 | `11f3e5e93f2a` | dirty | 807 | 2/5 (`Hygiene`, `Lint`, `RustLint` red) | 27 | 6 | 6 | DECISION-READY (fork author) |
+
+\* #599's `behind_by` is measured against `main`, but its base is `feat/conn-admission-dynamic`, which is
+why it publishes none of the five required contexts. It is level with its actual base.
+
+### 8.3 What the eleven rows actually say
+
+- **Seven cars are clean on content and blocked on the rail.** #611, #506, #508, #521, and (with the
+  conflict resolved) #643 and #609 publish all five required contexts as `success` on their current
+  heads. They are not defects. They cannot produce an admissible CircleCI battery because the config is
+  not on `main`, and #677 is the only thing standing between them and a merge decision.
+- **#510 is the one car whose failures were silently misclassified in the census.** Its three genuine
+  failures are all macOS-class - `iOS Build` exit 65, `iOS Build & Simulator Test` exit 65, `Swift
+  Linting` exit 2, all from 2026-10-24 - and none is a required context. The census called it
+  "3 failures, no required red", which was true but not informative; the class matters because macOS
+  capacity is environmental and this host cannot verify an iOS gate (AGENTS.md).
+- **#208 is the only car in this walk with genuine required reds**: `Repository Hygiene Checks`,
+  `Rust Linting` and `Lint`, all exit 1, all 2026-08-22, on a fork head the lane cannot push to. The
+  root causes and patches are filed on the PR (A29/A30).
+- **#507 is unchanged and remains the lane's clearest billing artefact**: `Test (ubuntu-latest)` reads
+  `failure` while all 11 of its failures are account-lock refusals, on a one-file Kotlin-only diff that
+  the #642 inert-diff contract routes to hosted by design (A25).
+
+### 8.4 C2, worked first and in full
+
+**#609 - blocked at the infrastructure layer, and now provably so.** The PR routes five core jobs to
+`ubicloud-standard-2`. The repository's registered runner set:
+
+```
+total=2
+oci-a1-phx-1  online  busy=true   labels=self-hosted,Linux,ARM64,oci,arm64-oci
+oci-a1-phx-2  online  busy=true   labels=self-hosted,Linux,ARM64,oci,arm64-oci
+```
+
+No runner carries that label. The PR is not wrong in content (5/5 required success, 0 failures); it is
+unroutable, and the decision between provisioning Ubicloud and closing it as superseded by the ARM OCI
+pool belongs to the CI owner. Filed on the PR with the read.
+
+**#643 - A12 re-confirmed, and the one time this session tried to overturn it, the clean read refused.**
+An intermediate count in this session read `USE_OCI_RUNNER` as 0 occurrences on *both* main and the
+branch, which would have made A12's premise stale and the PR landable. The clean repo-wide read
+(`git grep -c` against `origin/main`) is:
+
+```
+.github/workflows/ci.yml                        8
+.github/workflows/lint.yml                      2
+.github/workflows/oci-probe.yml                 2
+.github/workflows/hygiene.yml                   1
+.github/workflows/security-regression-tests.yml 1
+```
+
+The branch's `ci.yml` carries 0. A12 stands: landing the PR as a whole deletes the rollback switch. The
+earlier count came from a mangled shell expansion, not from the repository - and the lesson is that a
+number which would reverse a filed finding deserves a second independent read before it is written down.
+
+What the PR does have that main does not: dependabot exclusions (main has **zero** anywhere under
+`.github/workflows`), the `CI_SMALL_RUNNER` indirection for `Docs` and `FFI Surface Contract`, and
+`scripts/ci_pool_route.py` (151 lines, a no-network text validator for the allocation contract). The
+conflict itself is confined to one file (`git merge-tree --write-tree` reports exactly one):
+`.github/workflows/ci.yml`. A four-step split is filed on the PR for the CI owner.
+
+The dependabot exclusion is not cosmetic tonight. Both ARM OCI runners read `busy=true` while #677's
+required contexts sit `queued`, and 20 open dependabot PRs compete for the same two slots. That is the
+starvation the exclusion exists to prevent, observed live rather than argued.
+
+**#611 - clean and cheap.** One file, behind 0, 5/5 required success, 8 failures all billing refusals.
+DECISION-READY; first landing after the rail.
+
+### 8.5 The port's own merge, attempted rather than assumed
+
+`gh pr merge 677 --merge` was attempted on the green CircleCI battery and **refused**:
+
+```
+X Pull request #677 is not mergeable: the base branch policy prohibits the merge.
+```
+
+Read at that moment: the CircleCI rail is 12 `success` / 0 pending (combined status `state=success`), and
+three of the five protected contexts are still `queued` from GitHub Actions - `Lint`,
+`Test (ubuntu-latest)`, `Handoff ownership scope` - every one of them inside run `42473076374`, waiting
+on the two busy ARM runners.
+
+The rule-18-compliant completion is a conditional merge, so it was gated (proceed 0.80, destructive 0.11,
+actual_risk 0.21, evidence 0.72; `jev-1.14.0`, no fallback) and then attempted:
+
+```
+GraphQL: Auto merge is not allowed for this repository (enablePullRequestAutoMerge)
+```
+
+**So the port is blocked by two stacked facts, and neither is a code problem:**
+
+1. Base protection requires five Actions contexts; three are queued behind two busy ARM64 runners.
+2. Auto-merge, the only way to complete without polling, is disabled at the repository level.
+   Enabling it is a repository-configuration change, which is an access/config change reserved to the
+   owner.
+
+That is filed rather than worked around. The lane will not enable a repository setting to make its
+own merge go through, and it will not `--admin` past a protection rule.
+
+### 8.6 Three fences, and every cluster now reduces to one of them
+
+After eleven cars and five clusters, the blockers are no longer eleven - they are three, and each is
+named, owned and measured:
+
+| Fence | Cars held behind it | What clears it |
+|---|---|---|
+| The rail does not exist on main | #611, #506, #508, #521, #643, #609 (six clean cars) | #677 landing: three queued Actions contexts plus a repo setting the lane may not change |
+| No non-author reviewer exists | every car, including #677 and #521 | a second account; the repo has exactly one collaborator |
+| Owner-held decisions | #178 (A6), #510 (plan next-action 4), #208 (fork author), #643/#609 (CI owner pool policy) | the respective owner |
+
+This is the honest shape of the burndown at this head: the lane can still census, read, classify and
+file - and it did, for every car in every cluster - but no car in the backlog can land until fence one
+falls, and fence one is now a repository setting rather than a missing file in a branch.
