@@ -132,14 +132,14 @@ reads above are still the latest for those heads.
 |---|---|---|---|
 | #528 | Lint | 1 | toolchain pin (see above) |
 | #528 | Rust Linting | 1 | warning `Unexpected input(s) 'toolchain'` on the setup action |
-| #528 | Test (ubuntu-latest) | 1 | unclassified, log required |
-| #528 | Repository Hygiene Checks | 1 | unclassified, log required |
+| #528 | Test (ubuntu-latest) | 1 | unclassified, unread (log not fetched) |
+| #528 | Repository Hygiene Checks | 1 | unclassified, unread (log not fetched) |
 | #528 | Kotlin Linting, Swift Linting, Windows CLI Artifact, Test (macos-latest), Test (windows-latest), WASM, label, JavaScript Linting | 0 steps | billing-lock refusals, not defects |
 | #538 | Lint, FFI Surface Contract, Docs, Test (ubuntu-latest), Test (macos-latest), iOS Build, iOS Build & Simulator Test, macOS Native Tests, Forgery/Negative Security Regression Tests, WASM | 101 | classified: one `rand_core` mismatch |
-| #538 | Test (windows-latest), Windows CLI Artifact, Android JVM Unit Tests, Android Debug APK | 1 | log required |
+| #538 | Test (windows-latest), Windows CLI Artifact, Android JVM Unit Tests, Android Debug APK | 1 | classified: same `rand_core` mismatch |
 | #633 | Lint, WASM, macOS Native Tests, iOS Build & Simulator Test | 101 | classified: `rand` 0.9 migration |
-| #633 | Test (windows-latest), Windows CLI Artifact, Android JVM Unit Tests, Android Debug APK | 1 | log required |
-| #647 | Kotlin Linting, Android JVM Unit Tests, Android Debug APK | 1 | log required |
+| #633 | Test (windows-latest), Windows CLI Artifact, Android JVM Unit Tests, Android Debug APK | 1 | classified: `rand` 0.9 migration |
+| #647 | Kotlin Linting, Android JVM Unit Tests, Android Debug APK | 1 | unread (log not fetched) |
 | #647 | Repository Hygiene Checks | 1 | trailing whitespace (see above) |
 
 ## What this hands to the CI owner
