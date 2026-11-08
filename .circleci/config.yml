@@ -889,6 +889,41 @@ jobs:
               echo "[SKIPPED] eslint: no package.json in wasm/ (not a pass, a documented gap)"
             fi
 
+  # ---------------------------------------------------------------------------
+  # 12. Naming policy  <- .github/workflows/ci.yml job `naming-policy`
+  # ---------------------------------------------------------------------------
+  # A ratchet, not a sweep: scripts/check_naming.py judges only the lines a
+  # change ADDS, so it starts green and cannot be loosened by editing history.
+  # The tree already holds 57 `isRelay`, 38 `delete_*` and 165 `lastSeen`; those
+  # stay the audit's backlog and are deliberately not reported here.
+  #
+  # The self-test runs on every build and is not decoration: a gate that has
+  # stopped denying anything looks exactly like a gate with nothing to deny, so
+  # the matcher and the policy validation are proved able to fail every time.
+  #
+  # [ENFORCING] Both steps can fail this context: the first on a policy
+  # violation in an added line, the second if the matcher or policy validation
+  # drifts. Unlike Kotlin Linting and JavaScript Linting, nothing here is
+  # routed around.
+  naming_policy:
+    executor: python-linux
+    steps:
+      - checkout
+      # Both the base computation and the diff need real history; a shallow
+      # clone makes the range unavailable rather than empty.
+      - fetch_full_history
+      - compute_gate_base
+      - run:
+          name: Enforce naming policy on added lines
+          command: |
+            set -euo pipefail
+            python3 scripts/check_naming.py --repo-root . --changed-from "$GATE_BASE"
+      - run:
+          name: Prove the gate can still fail
+          command: |
+            set -euo pipefail
+            python3 scripts/check_naming.py --repo-root . --self-test
+
 workflows:
   ci:
     jobs:
@@ -918,3 +953,8 @@ workflows:
           name: Kotlin Linting
       - javascript_linting:
           name: JavaScript Linting
+      # --- wave 3 (2026-11-08) -------------------------------------------------
+      # Ported from ci.yml's `naming-policy`. ENFORCING on both steps, unlike
+      # the two wave-2 contexts above.
+      - naming_policy:
+          name: Naming policy
