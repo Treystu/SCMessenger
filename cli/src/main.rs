@@ -5500,6 +5500,11 @@ async fn cmd_test() -> Result<()> {
     println!("{} Message decryption", "[OK]".green());
 
     let eve = IronCore::new();
+    // `eve` is the negative case: it must initialize like every other instance
+    // in this self-test, and then fail to decrypt. Without consent here the
+    // whole self-test aborted at this stage with "Consent required" (#651),
+    // after every earlier stage had already reported [OK].
+    eve.grant_consent();
     eve.initialize_identity()?;
 
     let envelope = alice.prepare_message(
@@ -5519,6 +5524,21 @@ async fn cmd_test() -> Result<()> {
     println!("{}", "All tests passed!".green().bold());
 
     Ok(())
+}
+
+/// #651 regression guard: the self-test must run to completion with no
+/// interactive consent, including the third (negative-case) instance that
+/// previously aborted the run at the "Encryption security" stage.
+#[cfg(test)]
+mod selftest_consent_tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn self_test_runs_to_completion_without_interactive_consent() {
+        cmd_test()
+            .await
+            .expect("scm test must complete non-interactively");
+    }
 }
 
 /// Returns true if `s` is exactly 64 hex characters — the shape of a
