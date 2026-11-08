@@ -113,3 +113,22 @@ cars named so they are not mistaken for part of the train.
 GATE: local pass (decision-signal) - measured every value the API exposes, corrected the census undercount with
 timestamps rather than narrating it, and recorded three unmeasured quantities with their reasons instead of
 inferring them.
+
+## Verification of this artifact, 2026-11-08
+
+Re-read at the pushed head `c6f2e6ec8` in a later session (worktree blob hash equal to the origin blob hash) and
+re-derived from the live API rather than trusted:
+
+- car set re-computed from `pulls?state=open` plus a compare read per head: **the same 10 numbers, same 10 heads**.
+- per car, five fields re-derived and compared programmatically - head SHA, required-red count, changed-file count,
+  diff additions/deletions, gated-file count - **50 fields, 50 matches, 0 mismatches**.
+- `mergeable` / `mergeable_state` re-read per head: unchanged (`true` / `unstable` for the eight, `true` / `blocked`
+  for #507 and #528), and `pending` re-counted as 0 on every head.
+
+No value required repair. The two failures this check produced were in the checking script, not the artifact (a
+column index that read the required-red cell as the file count), and are recorded here so the receipt is not
+mistaken for a first-pass success.
+
+Register row A23 on this branch points at this document and reads MEASURED. A repair was needed there: the earlier
+append had landed on row A5 - `str.find` matched a marker earlier in the file - so A5 was restored byte-for-byte
+from `origin/lane/burndown` and the MEASURED text moved to A23.
