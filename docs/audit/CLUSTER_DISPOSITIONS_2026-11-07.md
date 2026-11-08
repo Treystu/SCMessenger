@@ -70,7 +70,7 @@ dependency resolves, packet attached below), **HELD** (standing order, untouched
 |---|---|---|
 | #601 | **CLOSED** | Fresh read: `state=CLOSED`, closed 2026-11-05T12:19:59Z. Row closed. |
 | #611 | **DECISION-READY** | Fresh: UNSTABLE/MERGEABLE, 1 file, 0 reviews, **CI UNREAD** on the admissible rail (correction pushed today; the earlier GREEN and 2,292-test claims rested on Actions and are withdrawn). Re-read path: port lands on main, #611 forward-merged, then read its `ci/circleci:*` contexts plus the CircleCI job output. |
-| #643 | **DECISION-READY** (CI owner) | Fresh: DIRTY/CONFLICTING. Filed reads A12/A26: the guard-preserving subset (two dependabot carve-outs) is verified and applies cleanly; the remainder re-scopes pool allocation and is not a lane repair. |
+| #643 | **DECISION-READY** (CI owner) | Fresh: DIRTY/CONFLICTING. Filed reads A12/A26: the guard-preserving subset (two dependabot carve-outs) is verified and applies cleanly; the remainder re-scopes pool allocation and is not a lane repair. **Carve-out half LANDED on `lane/burndown` 2026-11-08 in `7bc5e0250`** (`docs/audit/CI_CARVEOUTS_LANDED_2026-11-08.md`), so what still needs the CI owner is only the pool-allocation re-scope. |
 | #609 | **DECISION-READY** (infra owner #607) | Fresh: DIRTY/CONFLICTING, one conflicted file `.github/workflows/ci.yml`. Filed reads A11/A22/A27: `ubicloud-standard-2` has no registered runner (`actions/runners` = `oci-a1-phx-1/2`), so landing it would strand two required contexts. Provision the runner class and re-scope routing, or withdraw. |
 
 ### C4 - Batch C platform cars
@@ -128,3 +128,39 @@ the only item whose completion changes what is possible for the other sixteen.
 
 `#653` lands last, as ordered. No PR state was changed by this record, no run was dispatched, and
 no branch was refreshed.
+
+## 3. Refresh, 2026-11-08: the C1/C4 car rows re-read with pagination
+
+Everything below is a fresh read taken on 2026-11-08, not a restatement of the 2026-11-07 census. The heads
+happen to be unchanged, which is itself the finding: nothing has moved on these cars in a day.
+
+Method note, because it changes one earlier number: `commits/<sha>/check-runs` returns **30 items by
+default**, so a count of exactly 30 is a ceiling. These reads used `per_page=100` and paginated to
+`total_count`.
+
+| car | head | check-runs | required contexts | failures | failure class |
+|---|---|---|---|---|---|
+| #550 | `6441203a1617` | 46 | **5/5 success** | 0 | - |
+| #554 | `5b3efc47de11` | 47 | **5/5 success** | 0 | - |
+| #556 | `9282583a93e4` | 57 | **5/5 success** | 3 | environmental (Node.js 20 deprecation annotations on Windows-only jobs, 2026-10-22) |
+| #660 | `210b7d932f4e` | 29 | **5/5 success** | 13 | **13/13 billing-lock residue** |
+| #506 | `16b4edf7540b` | 27 | **5/5 success** | 11 | 11/11 billing-lock residue |
+| #507 | `f4d5155d4af5` | 27 | **4/5** (`Test (ubuntu-latest)` failure `127192677132`) | 11 | 11/11 billing-lock residue |
+| #508 | `475816012256` | 27 | **5/5 success** | 11 | 11/11 billing-lock residue |
+
+Across the seven heads: **zero code defects**. Every failure is either the account lock or a deprecated
+runner-image notice.
+
+What this changes in the rows above:
+
+- **#550/#554/#556 remain closeable-as-superseded behind #660** and their content is clean by every
+  readable signal. Nothing about them needs a lane repair.
+- **#507's row stands exactly as filed.** Its required leg still fails, still by design (A25: Kotlin-only inert
+  diff routed to hosted, refused by the lock), and the PR is still `BLOCKED`. The refresh cure is spent - it
+  was tried on 2026-11-05 and this is the refreshed head.
+- **#506/#508 are ready in every respect except clause 10** (0 reviews each), which A16 shows the repo cannot
+  supply.
+- **#643's carve-out half has landed on the lane**; only the pool re-scope is still the CI owner's.
+
+This section is evidence, not merge authority. No car was refreshed, merged, closed or re-labelled in
+producing it, and #489 remains untouched.
