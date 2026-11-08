@@ -192,6 +192,46 @@ Single unblocked item, in order:
 
 1. Port `naming-policy` to the CircleCI rail as wave 3, and print its enforcement limit honestly
    the way the other jobs do - unless the owner answers the protection switch first, in which case
-   the port lands instead and this item waits.
+   the port lands instead and this item waits. **STARTED AND PUSHED this session - see section 7.**
 2. If the protection decision arrives: land the port under the owner's chosen option, then
    re-read the required contexts on the new main.
+
+## 7. WAVE 3 - the naming-policy ratchet, ported and pushed (after the seat read in section 1)
+
+The seat table in section 1 records the head the session's reads were taken at. The lane tip has
+since advanced by this session's two commits:
+
+| commit | subject |
+|---|---|
+| `02ce6fdda` | `docs(audit): close the wave-1 verdict at 5 of 5 and reconcile the register` |
+| **`68e6f6b4a`** | `ci(circleci): port the naming-policy ratchet as wave 3, enforcing on both steps` |
+
+`naming_policy` is the 12th job on the rail, ported from `.github/workflows/ci.yml`'s
+`naming-policy`. It is deliberately **ENFORCING on both steps**, unlike the two wave-2 contexts:
+
+- `scripts/check_naming.py --changed-from "$GATE_BASE"` fails on a denied name added by the change.
+  It is a ratchet, so the tree's pre-existing 57 `isRelay`, 38 `delete_*` and 165 `lastSeen` stay the
+  audit's backlog and are never re-litigated here.
+- `--self-test` proves on every build that the matcher and the policy validation can still deny
+  something, because a gate that has stopped denying anything looks exactly like a gate with
+  nothing to deny.
+
+Local verification actually run (no build; disk is below the hard floor):
+
+| Check | Result |
+|---|---|
+| `.circleci/config.yml` parsed under a duplicate-key loader | `[OK]` 12 jobs, 12 workflow entries, **no dangling job ids**, `naming_policy` present in both |
+| `python scripts/check_naming.py --repo-root . --self-test` | `[OK] self-test passed: 13 scan cases + 8 policy-validation cases`, exit 0 |
+| `python scripts/check_naming.py --staged` | `[OK]` 0 files in scope, no denied name added, exit 0 |
+
+One limit stated plainly: the config's own gate scopes to source files, so the `--staged` run above
+is a trivial pass on a YAML file and proves only that the gate does not miscount; the self-test is
+the evidence that the matcher works, and the first real behavioural verdict for this job belongs to
+the `68e6f6b4a` battery on the rail.
+
+The `68e6f6b4a` battery is **running and is reported as it reads, not asserted**. No merge, no
+protection change, no force-push was performed this session.
+
+GATE: local pass (decision-signal) - port the last cheap real gate with both steps enforcing, rather
+than shipping an eleventh context that cannot fail - checks 1-5 clean (head
+`68e6f6b4a8ab39ea3a21f892357684e7fa3d1ee3`)
