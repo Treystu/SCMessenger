@@ -6,7 +6,10 @@ Fixed schema: SEAT / PROGRAM / READS / CORRECTION / BOARD ROWS / BLOCKERS / NEXT
 
 Repo `Sovereign-Communication/SCMessenger`, branch `lane/burndown`, base `main`.
 Head before: `a00dda682` (== `origin/lane/burndown` at start, 0 ahead / 0 behind).
-Head after: `778c0495a`, pushed `a00dda682..778c0495a` (fast-forward, no force).
+Pushes: `a00dda682..778c0495a` (the cluster record), then the digest's own commit. The digest's "head
+after" is deliberately not restated here: an artifact cannot contain the hash of the commit that
+carries it. Resolve it with `git log -1 -- docs/audit/SESSION_DIGEST_2026-11-09.md`, and the closing
+#653 status comment states it. Both pushes were fast-forwards; no force-push, no rewrite.
 Working tree: one pre-existing modification (`scripts/harness_admission.json`) and four untracked
 archives, none created by this session, none staged, reverted or committed. PR #489 untouched beyond
 its census row. #653 remained a draft; no PR state, label, protection, reviewer or setting was changed.
