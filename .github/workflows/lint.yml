@@ -47,10 +47,14 @@ jobs:
           exit 1
       - uses: actions/checkout@v7
 
+      # The pin lives in the action REF, not in an input: dtolnay/rust-toolchain
+      # declares only targets/target/components (read at tag 1.99.0), so a
+      # `toolchain:` here is an undeclared input that the action ignores. The
+      # ref is what `scripts/check_toolchain_pin.py` verifies against
+      # rust-toolchain.toml, so the single source of truth is the ref above.
       - uses: dtolnay/rust-toolchain@1.99.0
         if: needs.changes.outputs.rust_relevant == 'true'
         with:
-          toolchain: 1.99.0
           components: rustfmt
 
       - name: Check Rust formatting

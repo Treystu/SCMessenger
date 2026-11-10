@@ -188,6 +188,42 @@ API budget (60 requests/hour) was exhausted before that read, so the 11-09 overs
 reading (5/5 success, latest per job) is CARRIED and labelled, not restated as this
 session's own.
 
+### The folded #528 repair (steering P1 item 4: "drop the `toolchain:` input, keep the pin in the action ref")
+
+`.github/workflows/lint.yml` fed a `toolchain:` input to an action that has no such
+input. Read from the action's own manifest at the pinned tag:
+
+```
+$ curl https://raw.githubusercontent.com/dtolnay/rust-toolchain/1.99.0/action.yml
+inputs:
+  targets:     ...
+  target:      "Alias for `targets`"
+  components:  ...
+```
+
+No `toolchain` input exists. The version at that tag is baked into the action body
+(`env: toolchain: 1.99.0` inside the composite step), so **the ref is the pin** and the
+call-site input was an undeclared input the action ignores. Fixed by deleting that one
+line and leaving `components: rustfmt`, plus a comment saying where the pin now lives.
+
+Checked, not assumed:
+
+```
+$ python3 -c "...yaml.safe_load('lint.yml')..."        -> yaml OK, 5 jobs
+$ job rust (name: "Rust Linting")
+    uses : dtolnay/rust-toolchain@1.99.0
+    with : {'components': 'rustfmt'}
+$ python3 scripts/check_toolchain_pin.py
+  pinned toolchain: 1.99.0  (from rust-toolchain.toml)
+  checked 26 declaration(s): 25 action ref(s), 1 toolchain input(s)
+  [OK] every declared Rust toolchain is pinned to 1.99.0 and agrees with rust-toolchain.toml
+  exit=0
+```
+
+It was `27 declaration(s): 25 action ref(s), 2 toolchain input(s)` before the edit. The
+one remaining `toolchain:` input is `desktop.yml:40` on `actions-rs/toolchain@v1`, whose
+manifest **does** declare `toolchain` - so it is correct there and was left alone.
+
 ---
 
 ## 3. #619 - what the code actually says (new narrowing)
@@ -318,6 +354,8 @@ is possible for all of them (`#677` landing) needs a re-fire this lane cannot pe
 | Port ancestry | `git merge-base` / `git rev-list --count` | merge-base = main head; 3 commits |
 | Rail evidence | `commits/<sha>/status` x3 | port 0, main 0, lane 12 success |
 | Post-site coverage | `python3 scripts/notification_gate_audit.py` | 8 sites classified, exit 0 |
+| #528 repair | `python3 scripts/check_toolchain_pin.py` | 26 decls, all 1.99.0, exit 0 (27 before) |
+| #528 repair | `yaml.safe_load(.github/workflows/lint.yml)` | parses, 5 jobs, Rust Linting step ok |
 | Disk guard | `python3 scripts/disk_budget.py` | TIGHT, 9.46 GB free, exit 1 |
 | Jev gate | `python3 scripts/jev_canonical_check.py ...` | FAIL, Harness checkout missing, exit 1 |
 | Device transport | `adb devices -l` | command not found, exit 127 |
