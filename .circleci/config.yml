@@ -164,8 +164,46 @@ commands:
           name: Install Linux build dependencies
           command: |
             set -euo pipefail
-            sudo apt-get update
-            sudo apt-get install -y --no-install-recommends \
+            # apt-get update exits 100 when ANY index fails to fetch, and Ubuntu
+            # republishes jammy/jammy-updates continuously, so a mirror that is
+            # mid-sync serves a Packages.gz whose size no longer matches the
+            # Release file. Quoted from build 426 (Forgery, head 788ae12bec) and
+            # build 438 (Test ubuntu-latest, head 90f2b3ae0a):
+            #
+            #   E: Failed to fetch
+            #      http://archive.ubuntu.com/ubuntu/dists/jammy-updates/main/binary-amd64/Packages.gz
+            #      File has unexpected size (4844004 != 4844002).
+            #      Mirror sync in progress? [IP: 91.189.91.82 80]
+            #   Exited with code exit status 100
+            #
+            # Both jobs died here, before a single Rust file was compiled, on a
+            # diff that changed no Rust at all. The Actions original is immune
+            # for a structural reason, not a better apt: on the OCI self-hosted
+            # runner .github/actions/linux-build-deps runs in VERIFY-ONLY mode
+            # and never invokes apt. A fresh container must actually install,
+            # so the port is the only rail exposed to this race.
+            #
+            # This is a transient upstream race, not a missing dependency, so it
+            # is retried a bounded number of times and then still fails closed.
+            # Acquire::Retries re-fetches inside one apt process; the loop covers
+            # a mirror that stays inconsistent for a whole invocation. The two
+            # assertions below are unchanged and remain the real gate: a package
+            # that is genuinely absent still fails this job.
+            APT_OPTS=(-o Acquire::Retries=5 -o Acquire::http::Timeout=30)
+            updated=0
+            for attempt in 1 2 3; do
+              if sudo apt-get "${APT_OPTS[@]}" update; then
+                updated=1
+                break
+              fi
+              echo "[WARNING] apt-get update attempt ${attempt}/3 failed; retrying" >&2
+              sleep $((attempt * 10))
+            done
+            if [ "$updated" -ne 1 ]; then
+              echo "[FAIL] apt-get update failed 3 times; this is not the mirror race" >&2
+              exit 1
+            fi
+            sudo DEBIAN_FRONTEND=noninteractive apt-get "${APT_OPTS[@]}" install -y --no-install-recommends \
               libdbus-1-dev pkg-config protobuf-compiler libssl-dev
             pkg-config --exists dbus-1 || { echo "[FAIL] libdbus-1-dev not visible to pkg-config" >&2; exit 1; }
             command -v protoc >/dev/null 2>&1 || { echo "[FAIL] protoc missing" >&2; exit 1; }
