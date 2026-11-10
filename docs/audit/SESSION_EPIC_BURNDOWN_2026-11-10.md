@@ -288,6 +288,22 @@ it, so the shade never looks different after flipping the switch. This is not pr
 only the device window proves which card the owner saw - but it is the only remaining
 candidate on this head, because F1 and F2 close the message and store paths.
 
+**F4a - and that card keeps rewriting itself.** `updateNotification()` is called from
+three collectors, not just at startup:
+
+```
+MeshForegroundService.kt:399  PeerEvent.Connected     -> connectedPeers.add(...); updateNotification()
+MeshForegroundService.kt:409  PeerEvent.Disconnected  -> connectedPeers.remove(...); updateNotification()
+MeshForegroundService.kt:422  StatusEvent.StatsUpdated -> messagesRelayed.set(...); updateNotification()
+```
+
+and the text it re-posts is `notification_mesh_status_content_format` filled with
+`connectedPeers.size` and `messagesRelayed.get()`. So with the toggle OFF the card does
+not merely persist - its text visibly changes on every peer connect/disconnect and
+every stats tick. Peer-discovery cards themselves are gated (F1), so peer events
+produce no *new* card; they refresh the mandatory one. That is a better fit for
+"notifications still come through anyways" than a permanent static card is.
+
 **F5 - "OFF means nothing posts" is not implementable literally while the mesh runs as
 a foreground service.** Android requires a visible notification for an FGS; suppressing
 it would end the foreground state, which is the thing keeping the mesh alive. #619
@@ -309,8 +325,32 @@ is intentionally exempt, say so explicitly in the fix and in the UI copy."*
 compiled or unit-tested; and because main carries no rail (section 2), it could not be
 verified downstream either. Writing an uncompilable edit into a shared service file
 whose only checker is a CI run that cannot happen yet is the worst trade available.
-The guard, the inventory and the decision are the honest deliverable; the edit is one
-string plus one condition once a build exists.
+The guard, the inventory and the decision are the honest deliverable.
+
+### The exact cure, for a session that has a JDK
+
+Four edits, all inside the F1/F4a boundary, none of which touches `startForeground`:
+
+1. `res/values/strings.xml` - add
+   `settings_description_notifications_off`:
+   "Message notifications are off. One silent card stays visible while the mesh
+   service runs, because Android requires it for a background service."
+2. `ui/screens/SettingsScreen.kt` (`AppPreferencesSection`, the
+   `SwitchPreference` at ~714) - select that string as the subtitle when
+   `notificationsEnabled` is false, keeping `settings_description_notifications`
+   otherwise. This is the UI copy #619 asks for.
+3. `service/MeshForegroundService.kt` (`createNotification`) - when
+   `NotificationHelper.notificationsEnabled == false`, use a static content string
+   with no peer/relay counts or actions instead of the formatted one. The card still
+   exists (F5), it just stops carrying live mesh state.
+4. `service/MeshForegroundService.kt` (`updateNotification`) - early-return when the
+gate is false, since the card content is now constant: no re-post on peer or stats
+   events, which is the F4a churn that makes the toggle look inert.
+
+Then: `python3 scripts/notification_gate_audit.py` (must stay exit 0),
+`./gradlew :app:testDebugUnitTest --tests '*NotificationGateTest' --tests
+'*NotificationHelperGateTest'`, and the on-device pass in #619 criteria 1-5 on the
+device window that the capture already needs.
 
 ---
 
