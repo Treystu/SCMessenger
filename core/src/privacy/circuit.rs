@@ -281,7 +281,7 @@ impl DepthPolicy {
     /// relays with attributed outcome history count, so minted identities cannot
     /// inflate the floor, and the floor tracks what the network can actually
     /// provide right now.
-    pub fn floor_for(_depth: usize, proven_segments: usize) -> usize {
+    pub fn floor_for(proven_segments: usize) -> usize {
         // NOT min(depth, proven): that made the floor trivially true at depth 1
         // (min(3,1) == 1), which collapsed every circuit to one hop in the first
         // harness run and is precisely the "depth failing to track proven
@@ -296,7 +296,7 @@ impl DepthPolicy {
         proven_segments: usize,
         feedback: &FeedbackStore,
     ) -> Option<usize> {
-        let floor = Self::floor_for(0, proven_segments);
+        let floor = Self::floor_for(proven_segments);
         let mut feasible: Vec<&DepthPrediction> =
             predictions.iter().filter(|p| p.segments >= floor).collect();
         if feasible.is_empty() {
