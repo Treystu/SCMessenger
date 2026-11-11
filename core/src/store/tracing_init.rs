@@ -177,8 +177,14 @@ mod tests {
         std::fs::write(&log, b"first run evidence").unwrap();
 
         // A cap of 1 byte makes the existing file oversized without writing 64 MiB.
-        assert!(rotate_oversized_log(&log, 1).unwrap(), "oversized file rotates");
-        assert!(!log.exists(), "the live log path is free for the new session");
+        assert!(
+            rotate_oversized_log(&log, 1).unwrap(),
+            "oversized file rotates"
+        );
+        assert!(
+            !log.exists(),
+            "the live log path is free for the new session"
+        );
         let rotated = dir.join(format!("{}.1", MESH_LOG_FILENAME));
         assert_eq!(std::fs::read(&rotated).unwrap(), b"first run evidence");
 
@@ -200,8 +206,10 @@ mod tests {
         let dir = scratch("keep");
         let log = dir.join(MESH_LOG_FILENAME);
 
-        assert!(!rotate_oversized_log(&log, MESH_LOG_CAP_BYTES).unwrap(),
-                "a missing file is not an error and nothing is created");
+        assert!(
+            !rotate_oversized_log(&log, MESH_LOG_CAP_BYTES).unwrap(),
+            "a missing file is not an error and nothing is created"
+        );
         assert!(!log.exists());
 
         std::fs::write(&log, b"small").unwrap();
