@@ -667,6 +667,15 @@ jobs:
           name: Run workspace tests
           no_output_timeout: 30m
           command: cargo test --workspace --features test-utils
+      # The audit tooling is stdlib-only Python, and until this step ran nothing
+      # executed its tests: a broken gate script or evaluator could land while
+      # every context stayed green. Both suites are cheap and deterministic.
+      - run:
+          name: Run audit-tooling tests (canonical gate + delivery evaluator)
+          command: |
+            set -euo pipefail
+            python3 -m unittest scripts/test_jev_canonical_check.py
+            python3 -m unittest scripts/test_delivery_probability.py
       - save_cargo_cache
 
   # ---------------------------------------------------------------------------
