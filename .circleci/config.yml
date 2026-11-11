@@ -684,6 +684,7 @@ jobs:
             python3 scripts/discovery_cadence_bakeoff.py --self-check
             python3 scripts/routing_params_bakeoff.py --self-check
             python3 scripts/reputation_scoring_bakeoff.py --self-check
+            python3 scripts/cover_traffic_bakeoff.py --self-check
       - save_cargo_cache
 
   # ---------------------------------------------------------------------------
