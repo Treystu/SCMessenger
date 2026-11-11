@@ -387,6 +387,11 @@ class NetworkDetector @Inject constructor(
         if (newType != previousType) {
             notifyNetworkChange(newType)
         }
+        // Defect C (cell test 2026-10-10): every ConnectivityManager callback
+        // re-enters here, and the unconditional logs below repeated the same
+        // "X -> X" line (plus the cellular port warning) for each one. Behavior
+        // (blocked ports) is still recomputed every time; only logging is gated.
+        val changed = shouldLogNetworkTypeTransition(previousType, newType)
 
         // R3-F5b: one owner for the blocked-ports derivation. UNKNOWN (no
         // verified network evidence) must not silently retain a previous
