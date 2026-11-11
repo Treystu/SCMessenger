@@ -628,6 +628,7 @@ internal fun shouldLogNetworkTypeTransition(
     current: NetworkType
 ): Boolean = previous != current
 
+/**
  * Maps a [NetworkType] to the (hasWifi, hasCellular) pair the core understands.
  * Both false means "lost", so only genuinely disconnected states may produce it.
  */
