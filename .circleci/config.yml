@@ -679,6 +679,7 @@ jobs:
             python3 scripts/circuit_bakeoff.py --self-check
             python3 scripts/routing_calibration.py --self-check
             python3 scripts/drift_sketch_bakeoff.py --self-check
+            python3 scripts/gateway_ranking_bakeoff.py --self-check
       - save_cargo_cache
 
   # ---------------------------------------------------------------------------
