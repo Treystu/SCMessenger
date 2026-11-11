@@ -211,8 +211,21 @@ impl CircuitBuilder {
         let segments: Vec<_> = by_segment.keys().collect();
         let mut segment_idx = 0;
 
+        // Progress guarantee (#683). The relay-count guard above is not enough:
+        // `eligible` is a list of records, not of distinct peer ids, so a peer
+        // that carries two segment records (the same relay observed on two
+        // networks) can satisfy `eligible.len() >= num_hops` while the pool
+        // holds fewer distinct relays than the draw asks for. Once every
+        // segment's peers are used, `best_peer` is `None` on every iteration and
+        // the loop spins forever. A full pass over all segments without a
+        // single selection means no distinct relay remains, so stop there.
+        let mut segments_without_progress = 0usize;
+
         while selected.len() < num_hops {
             if segments.is_empty() {
+                return Err(CircuitError::InsufficientPeers);
+            }
+            if segments_without_progress >= segments.len() {
                 return Err(CircuitError::InsufficientPeers);
             }
 
@@ -229,9 +242,13 @@ impl CircuitBuilder {
                         .unwrap_or(std::cmp::Ordering::Equal)
                 });
 
-            if let Some(peer) = best_peer {
-                selected.push((peer.peer_id.clone(), peer.public_key.clone()));
-                used_peers.insert(peer.peer_id.clone());
+            match best_peer {
+                Some(peer) => {
+                    selected.push((peer.peer_id.clone(), peer.public_key.clone()));
+                    used_peers.insert(peer.peer_id.clone());
+                    segments_without_progress = 0;
+                }
+                None => segments_without_progress += 1,
             }
 
             segment_idx += 1;
@@ -246,8 +263,8 @@ impl CircuitBuilder {
         num_hops: usize,
         destination: &PeerInfo,
     ) -> Result<Vec<(String, Vec<u8>)>, CircuitError> {
-        use rand::seq::SliceRandom;
         use rand::thread_rng;
+        use rand::Rng;
 
         let eligible: Vec<_> = self
             .peers
@@ -262,11 +279,46 @@ impl CircuitBuilder {
             return Err(CircuitError::InsufficientPeers);
         }
 
+        // Weighted sampling without replacement (#683). This function is
+        // documented as weighting by reliability, but `choose_multiple` draws
+        // uniformly, which discards exactly the signal the field carries: a
+        // 0.95 relay and a 0.51 relay entered the path with equal probability.
+        // Draw proportional to the score instead (ticket = score / total), and
+        // remove each pick so no peer occupies two hops.
+        let mut pool: Vec<&PeerInfo> = eligible;
         let mut rng = thread_rng();
-        let selected: Vec<_> = eligible
-            .choose_multiple(&mut rng, num_hops)
-            .map(|p| (p.peer_id.clone(), p.public_key.clone()))
-            .collect();
+        let mut selected = Vec::with_capacity(num_hops);
+
+        for _ in 0..num_hops {
+            if pool.is_empty() {
+                return Err(CircuitError::InsufficientPeers);
+            }
+
+            let total: f64 = pool
+                .iter()
+                .map(|p| p.reliability_score.max(0.0) as f64)
+                .sum();
+
+            let picked = if total > 0.0 {
+                let mut ticket = rng.gen::<f64>() * total;
+                let mut choice = pool.len() - 1;
+                for (index, peer) in pool.iter().enumerate() {
+                    ticket -= peer.reliability_score.max(0.0) as f64;
+                    if ticket <= 0.0 {
+                        choice = index;
+                        break;
+                    }
+                }
+                choice
+            } else {
+                // Every eligible score is zero; fall back to a uniform draw so
+                // the caller still receives a path when one exists.
+                rng.gen_range(0..pool.len())
+            };
+
+            let peer = pool.swap_remove(picked);
+            selected.push((peer.peer_id.clone(), peer.public_key.clone()));
+        }
 
         Ok(selected)
     }
@@ -487,6 +539,105 @@ mod tests {
             assert!(!seen.contains(peer_id));
             seen.insert(peer_id.clone());
         }
+    }
+
+    #[test]
+    fn test_select_diverse_hops_terminates_when_distinct_relays_run_out() {
+        // #683(a): `eligible` counts records, not distinct ids. The same relay
+        // observed on two segments yields 6 records for 3 distinct peers, which
+        // satisfies the record-count guard (`eligible.len() >= num_hops`) while
+        // the pool cannot supply 5 distinct relays. Before the progress guard
+        // this loop never returned.
+        let peers: Vec<PeerInfo> = (0..3)
+            .flat_map(|i| {
+                (0..2).map(move |segment| PeerInfo {
+                    peer_id: format!("peer_{}", i),
+                    public_key: vec![i as u8; 32],
+                    reliability_score: 0.8,
+                    network_segment: format!("segment_{}", segment),
+                })
+            })
+            .collect();
+
+        assert_eq!(peers.len(), 6);
+        assert_eq!(
+            peers
+                .iter()
+                .map(|p| p.peer_id.as_str())
+                .collect::<std::collections::HashSet<_>>()
+                .len(),
+            3
+        );
+
+        let config = CircuitConfig {
+            min_hops: 5,
+            max_hops: 5,
+            prefer_diverse_paths: true,
+            min_reliability: 0.5,
+        };
+        let builder = CircuitBuilder::new(peers, config).unwrap();
+
+        let destination = PeerInfo {
+            peer_id: "dest".to_string(),
+            public_key: vec![99; 32],
+            reliability_score: 0.9,
+            network_segment: "seg".to_string(),
+        };
+
+        let result = builder.build_circuit(destination);
+        assert!(matches!(result, Err(CircuitError::InsufficientPeers)));
+    }
+
+    #[test]
+    fn test_select_random_hops_weights_by_reliability() {
+        // #683(b): the documented weighting must be real. One strong relay and
+        // one weak relay, one hop requested, many draws: the strong relay should
+        // dominate in proportion to its score, not appear half the time.
+        let peers = vec![
+            PeerInfo {
+                peer_id: "strong".to_string(),
+                public_key: vec![1; 32],
+                reliability_score: 0.95,
+                network_segment: "segment_a".to_string(),
+            },
+            PeerInfo {
+                peer_id: "weak".to_string(),
+                public_key: vec![2; 32],
+                reliability_score: 0.51,
+                network_segment: "segment_b".to_string(),
+            },
+        ];
+        let config = CircuitConfig {
+            min_hops: 1,
+            max_hops: 1,
+            prefer_diverse_paths: false,
+            min_reliability: 0.5,
+        };
+        let builder = CircuitBuilder::new(peers, config).unwrap();
+
+        let mut strong = 0usize;
+        let trials = 2000usize;
+        for _ in 0..trials {
+            let destination = PeerInfo {
+                peer_id: "dest".to_string(),
+                public_key: vec![99; 32],
+                reliability_score: 0.9,
+                network_segment: "seg".to_string(),
+            };
+            let circuit = builder.build_circuit(destination).unwrap();
+            assert_eq!(circuit.hop_count(), 1);
+            if circuit.hops[0].0 == "strong" {
+                strong += 1;
+            }
+        }
+
+        // Expected share 0.95 / 1.46 = 0.65. Uniform sampling gave ~0.50, which
+        // this bound excludes with a wide margin at n=2000.
+        let share = strong as f64 / trials as f64;
+        assert!(
+            share > 0.60,
+            "strong relay share {share:.3} is too low for a reliability-weighted draw"
+        );
     }
 
     #[test]
