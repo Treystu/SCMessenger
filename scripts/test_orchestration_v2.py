@@ -20,7 +20,7 @@ from orchestrate_strict import (
     register_review_assignment, recover_interrupted_dispatch,
     required_review_roles, state_for_task, write_state,
 )
-from jev_canonical_check import CANON_QUESTIONS
+from jev_canonical_check import CANON_QUESTIONS, build_questions
 from parse_orchestration_footer import parse_footer
 
 
@@ -586,6 +586,63 @@ NOTES: [\"fixture verifies durable assignment binding\"]
             ("supported above one", honest_jev_payload(supported=1.5), "supported fraction is missing"),
             ("confidence as a boolean", honest_jev_payload(confidence=False), "confidence is missing"),
         ), "predicate")
+
+    def test_completion_gate_accepts_the_real_bucketed_pack_it_is_handed_in_production(self):
+        # #622: the gate demanded answers keyed exactly by CANON_QUESTIONS as `noul`, but since the
+        # 2026-10-07 bucketed rewrite the helper emits `bucket.qid` ids and asks identity/routing as
+        # `choice`. The pack below is built by the real helper, not a mock, so this test fails on the
+        # gate as it was written and passes once the key/type resolution matches production.
+        pack = build_questions(["identity", "routing", "instruction"])
+        self.assertNotEqual(set(pack), set(CANON_QUESTIONS),
+                            "the real merged pack must be bucket-qualified for this test to mean anything")
+
+        def real_answers(noul_value=0.95, choice_confidence=0.92, overrides=None):
+            answers = {}
+            for qid, question in pack.items():
+                if question["type"] == "noul":
+                    answers[qid] = {"type": "noul", "noul": noul_value}
+                else:
+                    answers[qid] = {"type": "choice", "choice": "yes",
+                                    "probabilities": {"yes": choice_confidence, "no": 0.03, "na": 0.02},
+                                    "confidence": choice_confidence}
+            answers.update(overrides or {})
+            return answers
+
+        def signals(answers):
+            """The arithmetic harness/jev.py applies, over every answer in the pack."""
+            nouls = [a["noul"] for a in answers.values() if a.get("type") == "noul"]
+            confs = [a["confidence"] for a in answers.values() if a.get("type") in ("choice", "score")]
+            return min(nouls), (min(confs) if confs else 0.0)
+
+        def honest(overrides=None):
+            answers = real_answers(overrides=overrides)
+            supported, confidence = signals(answers)
+            return honest_jev_payload(answers=answers, supported=supported, confidence=confidence)
+
+        weak_recovery = {"identity.recipient_parse_safe": {
+            "type": "choice", "choice": "yes",
+            "probabilities": {"yes": 0.80, "no": 0.15, "na": 0.05}, "confidence": 0.40}}
+        weak_callbacks = {"routing.callbacks_validated": {
+            "type": "choice", "choice": "yes",
+            "probabilities": {"yes": 0.80, "no": 0.15, "na": 0.05}, "confidence": 0.40}}
+        bad_type = {"instruction.instruction_matches": {"type": "verdict", "verdict": "pass"}}
+
+        self.assert_gate_verdicts((
+            ("genuine pass over the real merged pack", honest(), None),
+            # A weak answer outside the canonical three must still be aggregated, not ignored: the
+            # old gate only read the canonical keys and would have passed this.
+            ("weak non-canonical bucket answer lowers the floor",
+             honest(weak_recovery), "below the canonical minimum"),
+            # ...and a helper reporting that same weakness as strong is caught by recomputation.
+            ("weak non-canonical answer reported as strong",
+             honest_jev_payload(answers=real_answers(overrides=weak_callbacks),
+                                supported=0.95, confidence=0.92),
+             "do not match its own answers"),
+            ("bucket-qualified answer with an unusable type",
+             honest_jev_payload(answers=real_answers(overrides=bad_type),
+                                supported=0.95, confidence=0.92),
+             "is not a noul/choice/score answer"),
+        ), "bucketed-pack")
 
     def test_completion_gate_requires_action_confidence_when_the_pack_has_a_choice_or_score_question(self):
         # Confidence 0.0 means "no Choice/Score question was asked". Once one is asked, its confidence
