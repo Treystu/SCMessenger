@@ -302,6 +302,21 @@ class ScoringTests(unittest.TestCase):
         st = jc.with_evidence_ids({"evidence": ["cmd one"]})
         self.assertEqual(st["evidence"], [{"id": "E1", "text": "cmd one"}])
 
+    def test_evidence_mapping_keeps_author_ids_and_text(self):
+        """A dict-shaped evidence block is id -> text: both must survive verbatim.
+
+        The checked-in reference states under HANDOFF/freebuff/jev/ use this
+        shape. Reading them positionally hands the evaluator the id NAMES as the
+        evidence text, so the instruction question is asked to confirm acceptance
+        rows while holding labels like `diff_stat` instead of the reading itself.
+        """
+        idx = jc.evidence_index({"evidence": {"diff_stat": "$ git diff --stat -> 3 files",
+                                              "ci": "rail 12/12 on abc123"}})
+        self.assertEqual(list(idx), ["diff_stat", "ci"])
+        self.assertEqual(idx["ci"], "rail 12/12 on abc123")
+        st = jc.with_evidence_ids({"evidence": {"ci": "rail 12/12"}})
+        self.assertEqual(st["evidence"], [{"id": "ci", "text": "rail 12/12"}])
+
     def test_protected_primary_na_is_hard_fail(self):
         sel = ["identity", "instruction"]
         ans = answers_for(sel, overrides={
