@@ -677,6 +677,7 @@ jobs:
             python3 -m unittest scripts/test_jev_canonical_check.py
             python3 -m unittest scripts/test_delivery_probability.py
             python3 scripts/circuit_bakeoff.py --self-check
+            python3 scripts/routing_calibration.py --self-check
       - save_cargo_cache
 
   # ---------------------------------------------------------------------------
