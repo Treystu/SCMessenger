@@ -682,6 +682,7 @@ jobs:
             python3 scripts/gateway_ranking_bakeoff.py --self-check
             python3 scripts/multipath_union_bakeoff.py --self-check
             python3 scripts/discovery_cadence_bakeoff.py --self-check
+            python3 scripts/routing_params_bakeoff.py --self-check
       - save_cargo_cache
 
   # ---------------------------------------------------------------------------
