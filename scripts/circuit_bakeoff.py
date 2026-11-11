@@ -130,7 +130,7 @@ def eligible(pool: Pool) -> List[Relay]:
     ]
 
 
-def champion_path(pool: Pool, rng: random.Random) -> List[Relay]:
+def champion_path(pool: Pool, rng: random.Random, hops_override: int | None = None) -> List[Relay]:
     """core/src/privacy/circuit.rs select_diverse_hops, reproduced faithfully.
 
     Known hazard reproduced rather than fixed: if every segment is exhausted the
@@ -138,7 +138,7 @@ def champion_path(pool: Pool, rng: random.Random) -> List[Relay]:
     hanging, and such pools are counted separately (`short_pools`), because an
     infinite loop is not something a benchmark should reproduce literally.
     """
-    hops = rng.randint(MIN_HOPS, MAX_HOPS)
+    hops = rng.randint(MIN_HOPS, MAX_HOPS) if hops_override is None else hops_override
     elig = eligible(pool)
     if len(elig) < hops:
         return []
@@ -241,13 +241,23 @@ def run(sizes: Sequence[int], pools: int, seed: int) -> Dict[str, object]:
         rng = random.Random(seed * 1000 + size)
         results: List[Result] = []
         short_pools = 0
+        # Same selector as the champion, hop count pinned to MIN_HOPS: isolates how
+        # much of the headline gap is relay choice and how much is simply the
+        # uniform 3-5 hop draw. Without this split the headline number cannot be
+        # acted on -- "adopt the joint optimum" and "always use three hops" are
+        # very different changes.
+        fixed_gaps: List[float] = []
+        hop_effect: List[float] = []
         for _ in range(pools):
             pool = make_pool(rng, size, operators=max(3, size // 3), segments=max(3, size // 4))
             champ = champion_path(pool, rng)
+            champ_fixed = champion_path(pool, rng, hops_override=MIN_HOPS)
             challenger = joint_optimum(pool)
-            if len(champ) < MIN_HOPS:
+            if len(champ) < MIN_HOPS or len(champ_fixed) < MIN_HOPS:
                 short_pools += 1
                 continue
+            fixed_gaps.append(100.0 * (delivery_probability(pool, challenger) - delivery_probability(pool, champ_fixed)))
+            hop_effect.append(100.0 * (delivery_probability(pool, champ_fixed) - delivery_probability(pool, champ)))
             results.append(
                 Result(
                     pool_size=size,
@@ -278,6 +288,13 @@ def run(sizes: Sequence[int], pools: int, seed: int) -> Dict[str, object]:
                     str(h): sum(1 for r in results if r.challenger_hops == h) for h in range(MIN_HOPS, MAX_HOPS + 1)
                 },
                 "identical_paths": sum(1 for r in results if set(r.champion_path) == set(r.challenger_path)),
+                # Decomposition of the headline gap (challenger minus champion):
+                #   relay_choice_pp = challenger minus 3-hop greedy (equal hop count)
+                #   hop_count_pp   = 3-hop greedy minus as-shipped champion
+                "relay_choice_median_pp": statistics.median(fixed_gaps),
+                "relay_choice_p90_pp": sorted(fixed_gaps)[int(round(0.9 * (len(fixed_gaps) - 1)))],
+                "hop_count_median_pp": statistics.median(hop_effect),
+                "hop_count_p90_pp": sorted(hop_effect)[int(round(0.9 * (len(hop_effect) - 1)))],
             }
         )
     medians = [c["gap_median_pp"] for c in classes]
@@ -354,6 +371,11 @@ def main(argv: Sequence[str]) -> int:
             f"champ_median={c['champion_median_prob']:.4f} chall_median={c['challenger_median_prob']:.4f} "
             f"gap_median={c['gap_median_pp']:.2f}pp gap_p90={c['gap_p90_pp']:.2f}pp "
             f"pools>=2pp={c['pools_with_gap_over_2pp']}/{c['pools']} identical={c['identical_paths']}"
+        )
+        print(
+            f"        decomposition: relay_choice_median={c['relay_choice_median_pp']:.2f}pp "
+            f"(p90 {c['relay_choice_p90_pp']:.2f}) | hop_count_median={c['hop_count_median_pp']:.2f}pp "
+            f"(p90 {c['hop_count_p90_pp']:.2f})"
         )
     print(
         f"median-of-class-medians={report['median_of_class_medians_pp']:.2f}pp "
