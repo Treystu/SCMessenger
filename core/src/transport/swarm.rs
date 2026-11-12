@@ -13738,7 +13738,10 @@ mod retry_ceiling_tests {
             assert!(dispatches < 1_000, "retry loop did not terminate");
         }
         assert_eq!(dispatch_attempts, MAX_DELIVERY_ATTEMPTS);
-        assert!(dispatches < 630, "must park well before the 630 dials measured on device");
+        assert!(
+            dispatches < 630,
+            "must park well before the 630 dials measured on device"
+        );
     }
 
     /// A three-candidate ladder reaches the same ceiling by a different path; the
@@ -13757,12 +13760,14 @@ mod retry_ceiling_tests {
             dispatch_attempts += 1;
         }
         assert_eq!(dispatch_attempts, MAX_DELIVERY_ATTEMPTS);
-        assert!(wrappers > 0, "the wide ladder must still wrap at least once");
+        assert!(
+            wrappers > 0,
+            "the wide ladder must still wrap at least once"
+        );
     }
 
     #[test]
     fn the_ceiling_engages_exactly_at_the_boundary_and_not_before() {
-        assert!(MAX_DELIVERY_ATTEMPTS > 0);
         assert!(!delivery_exhausted(1));
         assert!(!delivery_exhausted(MAX_DELIVERY_ATTEMPTS - 1));
         assert!(delivery_exhausted(MAX_DELIVERY_ATTEMPTS));
