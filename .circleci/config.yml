@@ -678,6 +678,13 @@ jobs:
             python3 -m unittest scripts/test_delivery_probability.py
             python3 scripts/circuit_bakeoff.py --self-check
             python3 scripts/routing_calibration.py --self-check
+            python3 scripts/drift_sketch_bakeoff.py --self-check
+            python3 scripts/gateway_ranking_bakeoff.py --self-check
+            python3 scripts/multipath_union_bakeoff.py --self-check
+            python3 scripts/discovery_cadence_bakeoff.py --self-check
+            python3 scripts/routing_params_bakeoff.py --self-check
+            python3 scripts/reputation_scoring_bakeoff.py --self-check
+            python3 scripts/cover_traffic_bakeoff.py --self-check
       - save_cargo_cache
 
   # ---------------------------------------------------------------------------
