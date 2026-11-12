@@ -371,6 +371,12 @@ class NetworkDetector @Inject constructor(
     internal fun updateNetworkType(newType: NetworkType) {
         val previousType = _networkType.value
         _networkType.value = newType
+        // Defect C (cell test 2026-10-10): every ConnectivityManager callback
+        // re-enters here, and the unconditional logs below repeated the same
+        // "X -> X" line (plus the cellular port warning) for each one. Behavior
+        // (blocked ports) is still recomputed every time; only logging is gated.
+        val changed = shouldLogNetworkTypeTransition(previousType, newType)
+
         // Remember the physical transport so a VPN (which rides on top of one)
         // is classified by what it runs over rather than as "lost".
         when (newType) {
