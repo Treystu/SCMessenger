@@ -461,3 +461,60 @@ local, gitignored), never committed. This cure removes the *false absence* and
 makes the absence auditable; it cannot manufacture a credential that does not
 exist on this machine.
 
+### Tracker filing attempt (#602): REFUSED -- exact text recorded
+
+The #622 completion digest was attempted against
+`POST /repos/Treystu/SCMessenger/issues/602/comments`. Response, verbatim:
+
+```
+http_status=403
+{"message":"API rate limit exceeded for 208.72.218.131. (But here's the good news: Authenticated requests get a higher rate limit. Check out the documentation for more details.)","documentation_url":"https://docs.github.com/rest/overview/resources-in-the-rest-api#rate-limiting"}
+```
+
+So the digest is NOT filed. Per the instruction, the refusal is recorded here
+instead of being retried. Note what this 403 is and is not: it is the anonymous
+quota refusing the request before authentication is even reached, and this
+environment holds no credential for that endpoint (section 1, items 1-12 and 16),
+so the write path is unavailable either way. The earlier write probe on the same
+endpoint (section 1, item 16) returned 403 before the quota was spent, so "no
+credential" is established independently of "quota exhausted".
+
+Process note, recorded rather than hidden: the first digest attempt wrote its
+response body to a path outside the repo-local `tmp/` (AGENTS.md rule 2). The
+file was deleted immediately, nothing was committed, and the second attempt wrote
+to `tmp/digest_refusal.json` inside the working folder.
+
+### Digest content that a write-capable session should file
+
+- Item closed at this head: **#622**, key half -- the gate can no longer report a
+  present key as absent, and both the fix and its regression test are on
+  `lane/cure-622-key-resolution`.
+- Canonical check: **NOT CHECKED**. Locations tried, each probe's status:
+  `~/.config/harness/jev.env` absent; `~/.config/scmorc/jev.env` absent;
+  `~/.typesafe_key` absent; `HARNESS_JEV_KEY` unset; `TYPESAFE_API_KEY` unset;
+  `JEV_API_KEY` unset. Harness half resolves and is pinned
+  (`ad4a30052955e1f574c90f426edfc7a274e16ebf`, PRODUCTION).
+- BURN LINE: closed **1**; tokens **UNMEASURED** (this surface exposes no usage
+  meter, and inventing a figure would be a filing defect); closed per 100k
+  therefore **not computable** -- recorded as unmeasured, not as zero.
+
+### Close-out check: brand-new clone, after the pushes
+
+- Independent remote refs read, `git ls-remote origin
+  refs/heads/lane/cure-622-key-resolution`:
+  `1ef01dfe960c1714f754e924512c13f5d6a1e201`.
+- Brand-new clone head: `1ef01dfe960c1714f754e924512c13f5d6a1e201` -- agrees.
+- Fix commit present at that head: `git cat-file -t
+  76ae7e0dc7dad3ec142ec045d8115e2dc19369d1` -> `commit`; its stat is the four
+  files (`jev_key_resolution.py` +181, `test_jev_key_resolution.py` +241,
+  `local_harness.py` +16, `jev_canonical_check.py` +6).
+- Report section present in the clone: this section, the verdict line, the three
+  locations with statuses, the cause, the fix, the test names, both checks.
+- Regression test run from the clone: `Ran 11 tests in 0.143s` / `OK`.
+- Surrounding tests from the clone: `test_orchestration_v2.py` ->
+  `Ran 26 tests in 1.076s` / `OK`; `test_jev_canonical_check.py` ->
+  `[OK] JEV bucketed pass (min_confidence=0.7, bucket_threshold=0.8) via
+  typesafe`; `test_delivery_probability.py` -> `OK`.
+- Pre-fix demonstration in the same clone, test file copied onto parent
+  `c635c4d6`: `ModuleNotFoundError: No module named 'jev_key_resolution'`,
+  exited **1**. Fails before, passes after -- demonstrated, not restated.
