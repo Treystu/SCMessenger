@@ -13,12 +13,37 @@ appears in this file.
 
 ## 0. Where this file lives on the remote
 
-- Branch: `lane/cure-decision-ready-2026-11-13`
-- Commit carrying this report: `fd51818fa639c79cb86cf25c4a6202400c9bb4d0`
-  (subject: `docs(cure): file the SCM-CURE lane's decision-ready report for 2026-11-13`)
-- Repository: `Treystu/SCMessenger`. Retrieve without this session via
-  `git fetch origin lane/cure-decision-ready-2026-11-13` then
-  `git show fd51818f:SCM_CURE_DECISION_READY_2026-11-13.md`.
+- Branch: `lane/cure-decision-ready-2026-11-13` (verified present on the remote
+  by a fresh clone taken for this check).
+- Retrieve without this session, keyed to the branch and not to any SHA:
+  `git fetch origin lane/cure-decision-ready-2026-11-13 && git show
+  FETCH_HEAD:SCM_CURE_DECISION_READY_2026-11-13.md`, or
+  `git log origin/lane/cure-decision-ready-2026-11-13 --
+  SCM_CURE_DECISION_READY_2026-11-13.md` to list every commit that touched it.
+- Revisions verified to resolve on the remote, with what each blob actually
+  holds (line counts measured in a fresh clone, not assumed):
+  - `fd51818fa639c79cb86cf25c4a6202400c9bb4d0` -- origin commit, subject
+    `docs(cure): file the SCM-CURE lane's decision-ready report for 2026-11-13`;
+    its blob is the FIRST DRAFT, 306 lines, WITHOUT this section and without the
+    #690 correction note below. It is the origin of the file, not a copy of the
+    final text.
+  - `5a871ef859f33014ad24f99510643c8c031f16de` -- adds this section; blob 328
+    lines; carries the #690 correction but still the incorrect origin-SHA
+    wording corrected here.
+  - The branch head is the current revision; its SHA is deliberately not
+    hardcoded, because no commit can contain its own SHA (writing it changes the
+    content that the SHA hashes) and a hardcoded head SHA goes stale on the next
+    commit. The branch name above is the stable key; `git log` prints the head.
+- CORRECTION, recorded rather than overwritten: an earlier revision of this
+  section said the report was carried by commit `fd51818f...`. That was wrong.
+  A fresh clone shows `git show fd51818f:SCM_CURE_DECISION_READY_2026-11-13.md`
+  -> 306 lines, matching on this section's heading 0 times -- i.e. the SHA named
+  the first draft, not the complete report, and a reader following it would have
+  got a version missing section 0 and the #690 correction. Cause: the SHA was
+  written into the file before this section existed, and the self-reference is
+  not fixable by writing a newer SHA, only by keying retrieval to the branch.
+  The credential table, every per-item status and both two-check results are
+  unchanged by this correction.
 - Push route: the platform git credential (`cloud_git`), which the sweep proved
   works (item 17). The GitHub REST path stayed refused (403) and was not retried.
 
