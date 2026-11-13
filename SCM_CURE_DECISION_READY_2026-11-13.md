@@ -610,3 +610,31 @@ reviewer who did not author it, and this lane cannot author that review.
 No Batch C2 cure PR exists, because opening a PR needs the REST write path that
 returned 403. The queue therefore stands where it did except for the #684 branch
 above and the #622 cure already pushed.
+### Rail read on the #684 head, individually (never combined)
+
+Read: `GET /repos/Treystu/SCMessenger/commits/1e84743f/status` (2026-11-13T05:47Z),
+`total_count=12`. Each context as it read, not a summary:
+
+| context | state | updated |
+|---|---|---|
+| ci/circleci: Orchestration control plane | success | 05:45:06Z |
+| ci/circleci: Naming policy | success | 05:45:07Z |
+| ci/circleci: Handoff ownership scope | success | 05:45:08Z |
+| ci/circleci: JavaScript Linting | success | 05:45:12Z |
+| ci/circleci: Rust Linting | success | 05:45:12Z |
+| ci/circleci: Repository Hygiene Checks | success | 05:45:26Z |
+| ci/circleci: Test (ubuntu-latest) | pending | 05:45:00Z |
+| ci/circleci: Lint | pending | 05:45:00Z |
+| ci/circleci: Docs | pending | 05:45:00Z |
+| ci/circleci: FFI Surface Contract | pending | 05:45:00Z |
+| ci/circleci: Kotlin Linting | pending | 05:45:00Z |
+| ci/circleci: Forgery/Negative Security Regression Tests | pending | 05:45:12Z |
+
+Six success, six pending, zero failure at that read. `Rust Linting` passing is a
+real signal for this change -- it formats/parses the touched Rust -- but it is
+not a compile and not a test pass; `Test (ubuntu-latest)` is the context that
+would settle that, and it was still pending when the read was taken. This
+section records that read rather than a verdict: the five required contexts are
+Repository Hygiene Checks, Lint, Rust Linting, Test (ubuntu-latest) and Handoff
+ownership scope, so three of the five are green, one (Lint) is pending, and the
+Test leg is pending.
