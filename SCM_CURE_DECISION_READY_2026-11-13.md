@@ -27,9 +27,12 @@ appears in this file.
     its blob is the FIRST DRAFT, 306 lines, WITHOUT this section and without the
     #690 correction note below. It is the origin of the file, not a copy of the
     final text.
-  - `5a871ef859f33014ad24f99510643c8c031f16de` -- adds this section; blob 328
-    lines; carries the #690 correction but still the incorrect origin-SHA
-    wording corrected here.
+  - `5a871ef859f33014ad24f99510643c8c031f16de` -- adds this section; blob 327
+    lines by `wc -l`; carries the #690 correction but still the incorrect
+    origin-SHA wording corrected here. (Second correction: an earlier draft of
+    this bullet said 328 lines. `wc -l` on the blob in a fresh clone returns
+    327; 328 was the trailing newline counted as an extra line. The measurement
+    is the authority, not the earlier text.)
   - The branch head is the current revision; its SHA is deliberately not
     hardcoded, because no commit can contain its own SHA (writing it changes the
     content that the SHA hashes) and a hardcoded head SHA goes stale on the next
