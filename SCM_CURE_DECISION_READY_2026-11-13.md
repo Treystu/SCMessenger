@@ -11,6 +11,27 @@ sweep below is complete and location-by-location; the queue items that need no
 GitHub write are resolved or given an evidence-backed current status. No secret
 appears in this file.
 
+## 0. Where this file lives on the remote
+
+- Branch: `lane/cure-decision-ready-2026-11-13`
+- Commit carrying this report: `fd51818fa639c79cb86cf25c4a6202400c9bb4d0`
+  (subject: `docs(cure): file the SCM-CURE lane's decision-ready report for 2026-11-13`)
+- Repository: `Treystu/SCMessenger`. Retrieve without this session via
+  `git fetch origin lane/cure-decision-ready-2026-11-13` then
+  `git show fd51818f:SCM_CURE_DECISION_READY_2026-11-13.md`.
+- Push route: the platform git credential (`cloud_git`), which the sweep proved
+  works (item 17). The GitHub REST path stayed refused (403) and was not retried.
+
+Known leftover, recorded so nobody is surprised by it: the credential probe
+created the remote branch `freebuff/cad77275a05a93d4f6e716b6` (same name as this
+session's local branch) by pushing the current HEAD to it. It holds no unique
+content -- it points at `ced2189e9`, which is `origin/main` -- and it is the
+proof that git write exists. It could not be deleted here: `cloud_git` exposes
+fetch, pull and push only, and the REST branch-delete endpoint is behind the
+same 403. Delete it with `gh api -X DELETE
+repos/Treystu/SCMessenger/git/refs/heads/freebuff/cad77275a05a93d4f6e716b6`
+once write access exists.
+
 ---
 
 ## 1. Credential sweep (present/absent plus the read that showed it)
