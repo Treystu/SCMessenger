@@ -180,7 +180,7 @@ mod tests {
         quarantine.mark_mismatch(PEER, ADDR, t0);
         quarantine.mark_mismatch(PEER, OTHER_ADDR, t0 + Duration::from_secs(8));
         assert_eq!(quarantine.len(), 2);
-        assert!(quarantine.is_empty() == false);
+        assert!(!quarantine.is_empty());
 
         let removed = quarantine.prune(t0 + Duration::from_secs(12));
         assert_eq!(removed, 1, "the older verdict expired");

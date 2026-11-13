@@ -3379,7 +3379,6 @@ struct PendingMessage {
 /// line when it happens, the caller is told, and the entry stays in the swarm
 /// task's `parked_messages` map instead of the cycle restarting forever.
 #[derive(Debug)]
-#[cfg_attr(target_arch = "wasm32", allow(dead_code))]
 struct ParkedMessage {
     target_peer: PeerId,
     attempts: u32,
@@ -4988,12 +4987,17 @@ pub async fn start_swarm_with_config(
                                     swarm.is_connected(&pending.target_peer),
                                 );
                                 if pending.dispatch_attempts >= attempt_budget {
+                                    let parked = ParkedMessage {
+                                        target_peer: pending.target_peer,
+                                        attempts: pending.dispatch_attempts,
+                                        passes: pending.pass_count,
+                                    };
                                     tracing::warn!(
                                         "PARK message_id={} target={} attempts={} passes={} budget={} candidates={} reason=RETRY_BUDGET_EXHAUSTED parked_total={}",
                                         msg_id,
-                                        pending.target_peer,
-                                        pending.dispatch_attempts,
-                                        pending.pass_count,
+                                        parked.target_peer,
+                                        parked.attempts,
+                                        parked.passes,
                                         attempt_budget,
                                         routes.len(),
                                         parked_messages.len()
@@ -5001,14 +5005,7 @@ pub async fn start_swarm_with_config(
                                     let _ = pending.reply_tx.try_send(Err(
                                         "Delivery parked: retry budget exhausted".to_string()
                                     ));
-                                    parked_messages.insert(
-                                        msg_id.clone(),
-                                        ParkedMessage {
-                                            target_peer: pending.target_peer,
-                                            attempts: pending.dispatch_attempts,
-                                            passes: pending.pass_count,
-                                        },
-                                    );
+                                    parked_messages.insert(msg_id.clone(), parked);
                                     continue;
                                 }
 
