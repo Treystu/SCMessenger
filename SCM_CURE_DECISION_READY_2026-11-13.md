@@ -518,3 +518,95 @@ to `tmp/digest_refusal.json` inside the working folder.
 - Pre-fix demonstration in the same clone, test file copied onto parent
   `c635c4d6`: `ModuleNotFoundError: No module named 'jev_key_resolution'`,
   exited **1**. Fails before, passes after -- demonstrated, not restated.
+---
+
+## 9. Stand-up compliance and #684 parts B and C (2026-11-13, second pass)
+
+### Canonical-check output line: NOT CHECKED, with every location exhausted
+
+Verdict stays **NOT CHECKED** and this is the genuine form of that claim: the
+doctrine's three locations were each probed, plus every other place a key could
+live on this machine. Probe output, unchanged in shape from section 8:
+
+```
+[INFO] harness: ... sha=ad4a30052955e1f574c90f426edfc7a274e16ebf status=PRODUCTION pinned=True typesafe_key=False key_source=none openrouter_key=False
+[INFO] key locations tried: ~/.config/harness/jev.env: absent; ~/.config/scmorc/jev.env: absent; ~/.typesafe_key: absent; HARNESS_JEV_KEY: unset; TYPESAFE_API_KEY: unset; JEV_API_KEY: unset
+```
+
+Locations exhausted this pass, with the read that showed each:
+
+| search | read | result |
+|---|---|---|
+| Harness-configured `~/.config/harness/jev.env` | `[ -e ]` | ABSENT |
+| SCM ORC `~/.config/scmorc/jev.env` | `[ -e ]` | ABSENT |
+| `~/.typesafe_key` | `[ -e ]` | ABSENT |
+| filesystem sweep | `find / -maxdepth 4 \( -name 'jev.env' -o -name '.typesafe_key' -o -iname '*scmorc*' -o -name 'openrouter.env' \)` | no hits |
+| `~/.config` | `ls -A ~/.config` | empty |
+| environment | `printenv` on the three variables | all unset |
+
+No key material was printed, only the boolean and the location names.
+
+### Tracker digest: refused again, same exact text
+
+`POST /repos/Treystu/SCMessenger/issues/602/comments` returned, verbatim:
+
+```
+http_status=403
+{"message":"API rate limit exceeded for 208.72.218.131. (But here's the good news: Authenticated requests get a higher rate limit. Check out the documentation for more details.)","documentation_url":"https://docs.github.com/rest/overview/resources-in-the-rest-api#rate-limiting"}
+```
+
+The lane token does not exist in this environment, so this could not be
+authenticated. Swept this pass, each with its read:
+
+| token location | read | result |
+|---|---|---|
+| `GH_TOKEN`, `GITHUB_TOKEN`, `GH_ENTERPRISE_TOKEN`, `GITHUB_ENTERPRISE_TOKEN` | `env` (names only) | absent |
+| repo dotdirs `.codebuff_deploy`, `.agents`, `.bob`, `.claude`, `.codex`, `.kiro`, `.qwen`, `.mimocode`, `.opencode` | directory listing | no credential file; `.codebuff_deploy` holds evidence artifacts and APKs only |
+| credential-shaped files in the checkout | `find . -maxdepth 3 -iname '*token*' -o -iname '*credential*' -o -iname '*.pem' -o -iname '*secret*' -o -iname '.netrc'` | only documentation (`HANDOFF/*TOKEN*.md`) and an AWS setup script; no token |
+| all git config scopes | `git config --list --show-origin \| grep -iE 'token\|credential\|auth\|extraheader'` | no output |
+| `gh` session | `gh auth token` | `no oauth token found for github.com` |
+| `~/.netrc`, `~/.git-credentials`, `~/.config/gh/hosts.yml` | `[ -e ]` | absent |
+
+The only git credential that exists is the platform's, usable solely through
+`cloud_git` (push proven), and it cannot be exported to the REST API. A PR could
+therefore not be opened either; the branch below is pushed and named so a
+credentialed seat can open it with one click.
+
+### #684 parts B and C: authored, pushed, CI-unverified by construction
+
+Branch `lane/cure-684-bc`, commit `1e84743f`
+(`fix(transport): quarantine structurally impossible dial pairs and bound the
+retry cycle (#684 B, C)`), pushed. Files:
+
+- `core/src/transport/structural_quarantine.rs` (new, 190 lines): the
+  `(requested peer, address)` store. A verdict is scoped to the pair, so the
+  peer stays dialable at other addresses and the address stays usable for other
+  peers; every verdict expires on `DEFAULT_STRUCTURAL_QUARANTINE_TTL` (1800 s),
+  so this can never become the peer ban this project forbids. Five unit tests:
+  mark/extend without duplication, expiry, pair scoping, prune, and the
+  empty/len invariants.
+- `core/src/transport/dial_policy.rs` (+38): `DialPolicyManager` owns the store
+  and exposes `quarantine_structural_mismatch` / `is_structurally_quarantined`,
+  both clock-injected through the manager's existing `now()`.
+- `core/src/transport/swarm.rs` (+88): `try_envelope_hint_dial` skips a
+  quarantined pair and records the verdict using the detector that already
+  exists for it (`resolve_dial_target`, which names the case "requested X but
+  address targets Y"), so the store is populated, not merely consulted. The
+  retry cycle gains `retry_attempt_budget(candidate_count, connected)` and, on
+  exhaustion, a `PARK` log line, a caller error and an entry in
+  `parked_messages` instead of another cycle restart.
+- `core/src/transport/mod.rs` (+1): module declaration.
+
+**Not verified here, and not claimed:** this host has no Rust toolchain
+(`rustfmt`, `cargo`, `rustc` all absent), so the change was not compiled and no
+test was executed. Brace balance is the only local structural check and it is
+weak evidence. CircleCI is the verifier by design; the commit message says
+UNVERIFIED for exactly this reason. Rule 8 also applies unchanged: these files
+are under `core/src/transport`, so landing needs an adversarial review from a
+reviewer who did not author it, and this lane cannot author that review.
+
+### What this pass did not advance
+
+No Batch C2 cure PR exists, because opening a PR needs the REST write path that
+returned 403. The queue therefore stands where it did except for the #684 branch
+above and the #622 cure already pushed.
