@@ -2852,6 +2852,31 @@ fn try_envelope_hint_dial(
                 continue;
             }
         }
+        // #684 part B: skip a pair already proven structurally impossible. The
+        // evidence expires on its own TTL, so this is a pause in retrying, not
+        // a peer ban.
+        let peer_key = peer_id.to_string();
+        if dial_policy_manager.is_structurally_quarantined(&peer_key, &addr_key) {
+            tracing::debug!(
+                "[HINT-DIAL] Skipping structurally quarantined candidate {} for {}",
+                addr_key,
+                peer_id
+            );
+            continue;
+        }
+        // The existing pre-dial detector already names the case: an address whose
+        // embedded /p2p/<id> targets a different peer than the one requested can
+        // never satisfy this request. Record that verdict so the pair is not
+        // dialed again until the TTL expires.
+        if resolve_dial_target(&addr, Some(peer_id)).is_err() {
+            dial_policy_manager.quarantine_structural_mismatch(&peer_key, &addr_key);
+            tracing::debug!(
+                "[HINT-DIAL] Recorded structurally impossible pair {} for {}",
+                addr_key,
+                peer_id
+            );
+            continue;
+        }
         candidates.push(addr);
     }
     if candidates.is_empty() {
@@ -3345,6 +3370,34 @@ struct PendingMessage {
     recipient_identity_id: Option<String>,
     /// WS13 tight-pair metadata: specific device UUID being targeted.
     intended_device_id: Option<String>,
+}
+
+/// A message taken out of the retry cycle because its attempt budget was
+/// exhausted for the candidate set it actually has (#684 part C).
+///
+/// Parking is a visible state, not a silent drop: the route log carries a PARK
+/// line when it happens, the caller is told, and the entry stays in the swarm
+/// task's `parked_messages` map instead of the cycle restarting forever.
+#[derive(Debug)]
+#[cfg_attr(target_arch = "wasm32", allow(dead_code))]
+struct ParkedMessage {
+    target_peer: PeerId,
+    attempts: u32,
+    passes: u32,
+}
+
+/// Per-message attempt budget for the cyclic retry ladder (#684 part C).
+///
+/// Derived from live state rather than a literal: a message may traverse its
+/// whole ranked candidate set a small number of times, and a peer with no live
+/// connection gets more passes because reconnection itself costs a pass. A
+/// message can therefore never restart the cycle forever, which is what let one
+/// stuck message reach `attempt=630 pass=629` and write 4.19 GB of log.
+#[cfg(not(target_arch = "wasm32"))]
+fn retry_attempt_budget(candidate_count: usize, connected: bool) -> u32 {
+    let passes: u64 = if connected { 2 } else { 4 };
+    let budget = (candidate_count.max(1) as u64).saturating_mul(passes);
+    budget.min(u32::MAX as u64) as u32
 }
 
 /// Commands that can be sent to the swarm task
@@ -4550,6 +4603,8 @@ pub async fn start_swarm_with_config(
 
         // Track pending message deliveries
         let mut pending_messages: HashMap<String, PendingMessage> = HashMap::new();
+        // Messages parked because their retry budget was exhausted (#684 part C).
+        let mut parked_messages: HashMap<String, ParkedMessage> = HashMap::new();
 
         // SyncSession management for Drift Protocol mesh synchronization
         let mut sync_sessions: HashMap<PeerId, SyncSession> = HashMap::new();
@@ -4921,6 +4976,39 @@ pub async fn start_swarm_with_config(
                                         msg_id
                                     );
                                     pending_messages.insert(msg_id, pending);
+                                    continue;
+                                }
+
+                                // #684 part C: a message may traverse its live candidate
+                                // set a bounded number of times, then it parks visibly
+                                // instead of restarting the cycle. Before this,
+                                // `dispatch_attempts` grew with no reader at all.
+                                let attempt_budget = retry_attempt_budget(
+                                    routes.len(),
+                                    swarm.is_connected(&pending.target_peer),
+                                );
+                                if pending.dispatch_attempts >= attempt_budget {
+                                    tracing::warn!(
+                                        "PARK message_id={} target={} attempts={} passes={} budget={} candidates={} reason=RETRY_BUDGET_EXHAUSTED parked_total={}",
+                                        msg_id,
+                                        pending.target_peer,
+                                        pending.dispatch_attempts,
+                                        pending.pass_count,
+                                        attempt_budget,
+                                        routes.len(),
+                                        parked_messages.len()
+                                    );
+                                    let _ = pending.reply_tx.try_send(Err(
+                                        "Delivery parked: retry budget exhausted".to_string()
+                                    ));
+                                    parked_messages.insert(
+                                        msg_id.clone(),
+                                        ParkedMessage {
+                                            target_peer: pending.target_peer,
+                                            attempts: pending.dispatch_attempts,
+                                            passes: pending.pass_count,
+                                        },
+                                    );
                                     continue;
                                 }
 
