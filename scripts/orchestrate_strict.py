@@ -62,6 +62,60 @@ def read_next_task(queue_file, done_dir="HANDOFF/done", already_seen=None):
     return None
 
 
+def resolve_queue(explicit, manifest):
+    """The queue to read: `--queue` when given, else the manifest's declared queue.
+
+    `#579`: the default used to be the literal `scm_v1_farm_queue.jsonl`, the older
+    farm-wave queue, which holds none of the V051 cars. A controller that cannot
+    name its queue must not guess at one, so a manifest with no `queue` block and
+    no `--queue` is an error rather than a silent fallback.
+    """
+    if explicit:
+        return explicit
+    declared = manifest.get("queue") or {}
+    path = declared.get("path")
+    if not path:
+        raise ContractError(
+            "no queue: pass --queue or declare queue.path in orchestration/manifest.yaml")
+    return path
+
+
+def list_queue(queue_file, manifest):
+    """Print every entry in the queue, in file order, with its provenance.
+
+    Nothing is truncated (AGENTS.md rule 15): a dry run that listed five cars and
+    said "and more" would be the same defect as an unlisted queue, one layer in.
+    """
+    declared = manifest.get("queue") or {}
+    try:
+        lines = Path(queue_file).read_text(encoding="utf-8").splitlines()
+    except OSError as exc:
+        print(f"[ERROR] cannot read queue {queue_file}: {exc}", file=sys.stderr)
+        return
+    entries = []
+    for number, line in enumerate(lines, start=1):
+        if not line.strip():
+            continue
+        try:
+            entries.append(json.loads(line))
+        except json.JSONDecodeError:
+            print(f"[WARNING] {queue_file}:{number} is not JSON and is not listed")
+    counts = {}
+    for entry in entries:
+        status = entry.get("status", "unknown")
+        counts[status] = counts.get(status, 0) + 1
+    print(f"[QUEUE] {queue_file}: {len(entries)} cars from "
+          f"{declared.get('source_document', 'an undeclared source')} "
+          f"(release target {declared.get('release_target', 'unstated')})")
+    for entry in entries:
+        depends = ",".join(entry.get("depends") or []) or "-"
+        print(f"[QUEUE] {entry.get('id')} [{entry.get('status')}] "
+              f"review={entry.get('review', 'none')} depends={depends}: "
+              f"{entry.get('description', '')}")
+    print("[QUEUE] totals: "
+          + ", ".join(f"{status}={count}" for status, count in sorted(counts.items())))
+
+
 OPERATOR_BANNED_PROVIDERS = {"qwenpaid", "dashscope"}
 OPERATOR_BANNED_LANE_IDS = {"qwenpaid", "dashscope"}
 
@@ -735,7 +789,7 @@ def load_review_assignment(value):
 
 def main():
     parser = argparse.ArgumentParser(description="Fail-closed orchestration kernel")
-    parser.add_argument("--queue", default="scm_v1_farm_queue.jsonl")
+    parser.add_argument("--queue", help="Queue jsonl; defaults to the manifest's declared queue (#579)")
     parser.add_argument("--max-tasks", type=int, default=5)
     parser.add_argument("--provider", help="Force a configured provider; provenance still records it")
     parser.add_argument("--lake-route-script", default="scripts/lake_route.py")
@@ -755,6 +809,15 @@ def main():
     except ContractError as exc:
         print(f"[ERROR] {exc}", file=sys.stderr)
         return 2
+
+    try:
+        queue_file = resolve_queue(args.queue, manifest)
+    except ContractError as exc:
+        print(f"[ERROR] {exc}", file=sys.stderr)
+        return 2
+
+    if args.dry_run:
+        list_queue(queue_file, manifest)
 
     try:
         for value in args.record_review_assignment:
@@ -781,7 +844,7 @@ def main():
 
     seen = set()
     for _ in range(args.max_tasks):
-        task = read_next_task(args.queue, already_seen=seen)
+        task = read_next_task(queue_file, already_seen=seen)
         if not task:
             print("[INFO] no ready task")
             break

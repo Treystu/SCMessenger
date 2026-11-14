@@ -60,6 +60,120 @@ fn rotate_oversized_log(path: &Path, cap_bytes: u64) -> std::io::Result<bool> {
     Ok(true)
 }
 
+/// A `std::io::Write` sink that keeps the live mesh log under `cap_bytes` for the
+/// whole life of the process, not only at start-up.
+///
+/// `tracing_appender::rolling::never` has no size policy: once opened, nothing in
+/// the tree checks the file's length. The start-up rotation in
+/// `init_file_tracing` therefore bounds the file across restarts but not within a
+/// session, and the node that does not restart is exactly the one at risk -- the
+/// always-on cloud node lives for weeks. #679 measured that same failure at
+/// 4.19 GB. This sink counts the bytes it writes and rotates at the cap, so the
+/// bound holds within a session as well as across restarts.
+///
+/// Rotation keeps the two-file shape of `rotate_oversized_log`: the live file
+/// becomes `<path>.1` and a fresh live file is opened, so the pair stays inside
+/// `2 * cap_bytes`. The rotation is recorded as one JSON line written straight to
+/// the new file rather than through `tracing` -- logging from inside the sink the
+/// appender is calling would re-enter that appender.
+#[cfg(not(target_arch = "wasm32"))]
+struct CappedFileWriter {
+    path: std::path::PathBuf,
+    file: Option<std::fs::File>,
+    written: u64,
+    cap_bytes: u64,
+    rotations: u64,
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+impl CappedFileWriter {
+    fn open(path: &Path, cap_bytes: u64) -> std::io::Result<Self> {
+        let file = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(path)?;
+        // Count what is already on disk, so a file the start-up rotation left in
+        // place is bounded by the same cap rather than starting the count at zero.
+        let written = file.metadata().map(|md| md.len()).unwrap_or(0);
+        Ok(Self {
+            path: path.to_path_buf(),
+            file: Some(file),
+            written,
+            cap_bytes,
+            rotations: 0,
+        })
+    }
+
+    /// The open sink, reopening the live file if a previous rotation left none.
+    fn sink(&mut self) -> std::io::Result<&mut std::fs::File> {
+        if self.file.is_none() {
+            self.file = Some(
+                std::fs::OpenOptions::new()
+                    .create(true)
+                    .append(true)
+                    .open(&self.path)?,
+            );
+        }
+        Ok(self.file.as_mut().expect("sink was just opened"))
+    }
+
+    /// Replace the live file with `<path>.1` and reopen an empty one.
+    ///
+    /// The handle is dropped before the rename because Windows cannot rename an
+    /// open file. If rotation is impossible (read-only directory, a `.1` that
+    /// cannot be replaced) the count restarts at zero and the sink degrades to the
+    /// unbounded append it replaces, instead of attempting a rename per log line.
+    fn rotate(&mut self) -> std::io::Result<()> {
+        self.file = None;
+        let rotated = std::path::PathBuf::from(format!("{}.1", self.path.display()));
+        if rotated.exists() {
+            let _ = std::fs::remove_file(&rotated);
+        }
+        let renamed = std::fs::rename(&self.path, &rotated).is_ok();
+        let mut file = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&self.path)?;
+        self.written = 0;
+        if renamed {
+            self.rotations += 1;
+            let marker = format!(
+                "{{\"level\":\"WARN\",\"event\":\"mesh_log_rotated\",\"cap_bytes\":{},\"rotation\":{},\"rotated_to\":\"{}\"}}\n",
+                self.cap_bytes,
+                self.rotations,
+                rotated.display()
+            );
+            // Direct write, not `tracing::warn!`: this runs inside the appender's
+            // own sink, and re-entering it would deadlock the non-blocking writer.
+            std::io::Write::write_all(&mut file, marker.as_bytes())?;
+            self.written = marker.len() as u64;
+        }
+        self.file = Some(file);
+        Ok(())
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+impl std::io::Write for CappedFileWriter {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        // Rotate before the write that would cross the cap, so the file that ends
+        // up as `.1` never exceeds the cap by more than the line that crossed it.
+        if self.written + buf.len() as u64 > self.cap_bytes {
+            self.rotate()?;
+        }
+        let written = std::io::Write::write(self.sink()?, buf)?;
+        self.written += written as u64;
+        Ok(written)
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        match self.file.as_mut() {
+            Some(file) => std::io::Write::flush(file),
+            None => Ok(()),
+        }
+    }
+}
+
 #[cfg(not(target_arch = "wasm32"))]
 pub fn init_file_tracing(log_directory: &str) -> Result<(), Box<dyn std::error::Error>> {
     let log_path = Path::new(log_directory);
@@ -67,14 +181,14 @@ pub fn init_file_tracing(log_directory: &str) -> Result<(), Box<dyn std::error::
     // Ensure the directory exists (critical for mobile sandboxing)
     std::fs::create_dir_all(log_path)?;
 
-    // Bound the file's growth before opening it. `rolling::never` is still the
-    // right appender (the host reads one predictable filename), but nothing in
-    // the appender caps size, and #679 measured a 4.19 GB mesh log on the Pixel
-    // 6a: a stuck message in an unbounded retry cycle wrote for 30 days. The
-    // rotation below runs at init, which mobile executes on every app start and
-    // on every MeshService warm boot, so the file cannot grow without bound
-    // across sessions. Growth WITHIN one session is bounded by the retry cure in
-    // core/src/transport (separate, gated change), not here.
+    // Bound the file's growth before opening it. #679 measured a 4.19 GB mesh log
+    // on the Pixel 6a: a stuck message in an unbounded retry cycle wrote for 30
+    // days. The rotation below runs at init, which mobile executes on every app
+    // start and on every MeshService warm boot, so a file written by an older
+    // build cannot be inherited unbounded. Growth WITHIN one session is bounded by
+    // the `CappedFileWriter` sink below, which counts bytes and rotates at the
+    // same cap; the retry-cycle cure in core/src/transport (separate, gated
+    // change) bounds the rate at which those bytes are produced.
     if rotate_oversized_log(&log_path.join(MESH_LOG_FILENAME), MESH_LOG_CAP_BYTES)? {
         tracing::warn!(
             event = "mesh_log_rotated",
@@ -83,9 +197,13 @@ pub fn init_file_tracing(log_directory: &str) -> Result<(), Box<dyn std::error::
         );
     }
 
-    // Non-blocking file appender (prevents I/O from blocking async mesh router)
-    let file_appender = tracing_appender::rolling::never(log_path, MESH_LOG_FILENAME);
-    let (non_blocking, _guard) = tracing_appender::non_blocking(file_appender);
+    // Non-blocking file appender (prevents I/O from blocking async mesh router).
+    // The sink is `CappedFileWriter`, not `rolling::never`: the appender applies
+    // no size policy of its own, so a session that never restarts would write an
+    // unbounded file. The sink rotates at the cap during the session; the rotation
+    // above bounds the file that already exists when this process starts.
+    let file_sink = CappedFileWriter::open(&log_path.join(MESH_LOG_FILENAME), MESH_LOG_CAP_BYTES)?;
+    let (non_blocking, _guard) = tracing_appender::non_blocking(file_sink);
 
     // CRITICAL: Must leak the guard to prevent appender from flushing/dropping prematurely.
     // The guard's lifetime must outlive the tracing subscriber, or logs will be lost.
@@ -146,7 +264,8 @@ pub fn init_file_tracing(_log_directory: &str) -> Result<(), Box<dyn std::error:
 
 #[cfg(all(test, not(target_arch = "wasm32")))]
 mod tests {
-    use super::{rotate_oversized_log, MESH_LOG_CAP_BYTES, MESH_LOG_FILENAME};
+    use super::{rotate_oversized_log, CappedFileWriter, MESH_LOG_CAP_BYTES, MESH_LOG_FILENAME};
+    use std::io::Write;
     use std::path::{Path, PathBuf};
 
     /// Scratch space under the repo-local `tmp/` (AGENTS.md rule 2: never the
@@ -168,6 +287,55 @@ mod tests {
         ));
         std::fs::create_dir_all(&dir).expect("scratch dir");
         dir
+    }
+
+    #[test]
+    fn live_log_rotates_within_a_session_at_the_cap() {
+        // #684: the start-up rotation bounds the file across restarts only. A node
+        // that stays up (the always-on cloud node) has to be bounded inside the
+        // session too, or #679's 4.19 GB growth simply recurs without a restart.
+        let dir = scratch("capped-writer");
+        let log = dir.join(MESH_LOG_FILENAME);
+        let cap = 2048u64;
+        let first = vec![b'a'; 1200];
+        let second = vec![b'b'; 1200];
+
+        {
+            let mut sink = CappedFileWriter::open(&log, cap).expect("sink opens");
+            sink.write_all(&first).expect("first write fits");
+            assert_eq!(sink.rotations, 0, "the first write is under the cap");
+            sink.write_all(&second)
+                .expect("second write crosses the cap and still lands");
+            sink.flush().expect("flush");
+            assert_eq!(sink.rotations, 1, "crossing the cap rotates exactly once");
+        }
+
+        let live = std::fs::read(&log).expect("live log is readable");
+        assert!(
+            live.len() as u64 <= cap,
+            "the live file stays under the cap ({} bytes)",
+            live.len()
+        );
+        assert!(
+            live.ends_with(&second),
+            "the write that crossed the cap is in the live file"
+        );
+        assert!(
+            String::from_utf8_lossy(&live).contains("mesh_log_rotated"),
+            "the rotation is auditable from the file itself"
+        );
+
+        let rotated = dir.join(format!("{}.1", MESH_LOG_FILENAME));
+        let previous = std::fs::read(&rotated).expect("rotated file exists");
+        assert_eq!(
+            previous, first,
+            "the pre-rotation evidence is preserved in .1"
+        );
+        assert!(
+            previous.len() as u64 <= cap,
+            "the rotated file is under the cap as well"
+        );
+        std::fs::remove_dir_all(&dir).ok();
     }
 
     #[test]
