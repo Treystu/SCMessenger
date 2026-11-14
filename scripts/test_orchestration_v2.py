@@ -5,12 +5,13 @@ import json
 import os
 import shutil
 import subprocess
+import sys
 import unittest
 import uuid
 from pathlib import Path
 from unittest.mock import patch
 
-from orchestration_contract import load_manifest, valid_transition
+from orchestration_contract import ContractError, load_manifest, valid_transition
 from orchestration_completion_gate import CompletionGateError, run_completion_gate
 from orchestration_worktree import create, plan
 from orchestrator_guard import evaluate
@@ -18,7 +19,7 @@ from orchestrate_strict import (
     COMPLETION_JUDGE_FILES, advance_review, capture_worker_diff, complete_integration, has_independent_review_evidence,
     initialize_state, is_in_scope, judge_integrity_violations, load_state, record_review_evidence,
     register_review_assignment, recover_interrupted_dispatch,
-    required_review_roles, state_for_task, write_state,
+    required_review_roles, resolve_queue, state_for_task, write_state,
 )
 from jev_canonical_check import CANON_QUESTIONS, build_questions
 from parse_orchestration_footer import parse_footer
@@ -888,6 +889,36 @@ print(worker['path'])
         item = plan("V2-ISOLATION")
         self.assertIn("tmp/orchestration/worktrees/V2-ISOLATION", item["path"].replace("\\", "/"))
         self.assertTrue(item["base_sha"])
+
+    def test_kernel_reads_the_declared_v051_queue(self):
+        # #579: the kernel defaulted to the farm-wave jsonl, which holds none of
+        # the V051 cars, and the manifest named no queue. The queue is now
+        # generated from the merge-train document and declared in the manifest, so
+        # a dry run has to list every car rather than report nothing ready.
+        root = Path(__file__).resolve().parent.parent
+        manifest = load_manifest()
+        self.assertEqual(manifest["queue"]["path"], "orchestration/v051_cars.jsonl")
+        self.assertEqual(resolve_queue(None, manifest), "orchestration/v051_cars.jsonl")
+        self.assertEqual(resolve_queue("explicit.jsonl", manifest), "explicit.jsonl")
+        with self.assertRaises(ContractError):
+            resolve_queue(None, {})
+
+        sync = subprocess.run(
+            [sys.executable, "scripts/v051_queue_sync.py", "--check"],
+            cwd=root, capture_output=True, text=True)
+        self.assertEqual(sync.returncode, 0, sync.stdout + sync.stderr)
+
+        dry = subprocess.run(
+            [sys.executable, "scripts/orchestrate_strict.py", "--dry-run"],
+            cwd=root, capture_output=True, text=True, timeout=120)
+        self.assertEqual(dry.returncode, 0, dry.stdout[-2000:] + dry.stderr[-2000:])
+        queue_path = root / "orchestration" / "v051_cars.jsonl"
+        cars = [json.loads(line) for line in
+                queue_path.read_text(encoding="utf-8").splitlines() if line.strip()]
+        self.assertTrue(cars, "the declared queue is not empty")
+        for car in cars:
+            self.assertIn(f"[QUEUE] {car['id']} [{car['status']}]", dry.stdout,
+                          f"{car['id']} is not listed by the dry run")
 
 
 if __name__ == "__main__":

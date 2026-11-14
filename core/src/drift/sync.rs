@@ -13,8 +13,15 @@ use crate::drift::DriftError;
 use crate::error::MeshError;
 use bincode;
 
-/// Current sync protocol schema version
-pub const SYNC_SCHEMA_VERSION: u32 = 1;
+/// Current sync protocol schema version.
+///
+/// Bumped to 2 by #671, which adds [`SyncMessage::SyncRetry`]. Version 1 is still
+/// accepted on read, so a peer that predates the retry ladder keeps working: it simply
+/// never receives one, and it keeps the store-relative sizing it always had.
+pub const SYNC_SCHEMA_VERSION: u32 = 2;
+
+/// Lowest schema version this build still accepts.
+pub const SYNC_SCHEMA_VERSION_MIN: u32 = 1;
 
 /// Versioned wrapper for sync messages to enable protocol evolution
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -36,7 +43,9 @@ impl VersionedSyncMessage {
 
     /// Validate that the message schema version matches our expected version
     pub fn validate(&self) -> Result<(), MeshError> {
-        if self.schema_version != SYNC_SCHEMA_VERSION {
+        if self.schema_version < SYNC_SCHEMA_VERSION_MIN
+            || self.schema_version > SYNC_SCHEMA_VERSION
+        {
             return Err(MeshError::VersionMismatch {
                 expected: SYNC_SCHEMA_VERSION,
                 received: self.schema_version,
@@ -87,6 +96,14 @@ pub enum SyncMessage {
         /// Serialized StoredEnvelopes that the responder doesn't have
         missing_envelopes: Vec<Vec<u8>>,
     },
+    /// Step 2b: Responder could not peel the offered table, so instead of failing the
+    /// session it asks for a larger one (#671). The cell format is unchanged.
+    SyncRetry {
+        /// Cell count the responder believes it can peel at; the initiator clamps it.
+        suggested_cells: u32,
+        /// Why the retry happened: 1 = decode could not peel, kept for future causes.
+        reason: u8,
+    },
 }
 
 impl SyncMessage {
@@ -106,9 +123,34 @@ impl SyncMessage {
             SyncMessage::SyncOffer { .. } => FrameType::SyncReq,
             SyncMessage::SyncResponse { .. } => FrameType::SyncResp,
             SyncMessage::SyncComplete { .. } => FrameType::SyncResp,
+            SyncMessage::SyncRetry { .. } => FrameType::SyncResp,
         }
     }
 }
+
+/// How the initiator sizes its IBLT (#671).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SyncSizing {
+    /// Control path, unchanged from before #671: size from the local store's message
+    /// count (4n + 8 differences). Cost tracks what the node holds, not what differs.
+    StoreRelative,
+    /// Size from an estimate of the symmetric difference and escalate on a decode
+    /// failure instead of failing the session.
+    DifferenceDriven {
+        /// Cells requested for the first offer. Clamped up to a small floor.
+        cells: u32,
+    },
+}
+
+/// Cells the initiator asks for on the first offer of a difference-driven sync.
+///
+/// Deliberately small: the ladder is what corrects an underestimate, and every step is
+/// one retry rather than a failed session.
+pub const DIFF_DRIVEN_MIN_CELLS: u32 = 12;
+/// Growth factor applied per retry.
+pub const RETRY_GROWTH: u32 = 2;
+/// Never climb past this many cells; a table this large peels any realistic difference.
+pub const RETRY_MAX_CELLS: u32 = 1 << 20;
 
 /// Track the state of a synchronization session
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -130,6 +172,14 @@ pub enum SyncState {
 pub struct SyncSession {
     /// Current state of the sync
     state: SyncState,
+    /// Sizing policy for the next offer (#671)
+    sizing: SyncSizing,
+    /// Cell count used by the most recent offer, so a retry can grow from it
+    last_offer_cells: u32,
+    /// Retries already taken in this session
+    retries: u32,
+    /// Retry ceiling; a table that still will not peel at this point fails honestly
+    max_retries: u32,
     /// Our IBLT (for computing differences)
     our_iblt: Option<IBLT>,
     /// Peer's IBLT (received in response)
@@ -147,12 +197,28 @@ impl SyncSession {
     pub fn new() -> Self {
         Self {
             state: SyncState::Ready,
+            sizing: SyncSizing::StoreRelative,
+            last_offer_cells: 0,
+            retries: 0,
+            max_retries: 12,
             our_iblt: None,
             peer_iblt: None,
             peer_missing: Vec::new(),
             our_missing: Vec::new(),
             peer_message_count: 0,
         }
+    }
+
+    /// Build a session with an explicit sizing policy (#671).
+    pub fn with_sizing(sizing: SyncSizing) -> Self {
+        let mut session = Self::new();
+        session.sizing = sizing;
+        session
+    }
+
+    /// Retries taken so far in this session.
+    pub fn retries(&self) -> u32 {
+        self.retries
     }
 
     /// Get current sync state
@@ -178,12 +244,56 @@ impl SyncSession {
             ));
         }
 
+        let cells = match self.sizing {
+            // Control path: byte-for-byte the sizing that shipped before #671.
+            SyncSizing::StoreRelative => {
+                let message_count = store.len() as u32;
+                // Differences can be at most message_count + peer_message_count, but we
+                // do not know peer_count yet, so size from the local store with headroom.
+                let iblt_capacity = (message_count as usize * 4 + 8).max(1);
+                IBLT::new(iblt_capacity).cell_count() as u32
+            }
+            SyncSizing::DifferenceDriven { cells } => cells.max(DIFF_DRIVEN_MIN_CELLS),
+        };
+        self.retries = 0;
+        self.build_offer(store, cells)
+    }
+
+    /// Re-offer after a [`SyncMessage::SyncRetry`] (#671).
+    ///
+    /// The ladder grows the table instead of ending the session. The suggested size is
+    /// clamped: never below the first-offer floor, never above [`RETRY_MAX_CELLS`], and
+    /// always at least one growth step so a responder that repeats its suggestion cannot
+    /// pin the session in place.
+    pub fn handle_retry(
+        &mut self,
+        store: &MeshStore,
+        suggested_cells: u32,
+    ) -> Result<SyncMessage, DriftError> {
+        if self.state != SyncState::AwaitingResponse {
+            return Err(DriftError::DecompressionFailed(
+                "SyncSession not awaiting a retry".to_string(),
+            ));
+        }
+        if self.retries >= self.max_retries {
+            self.state = SyncState::Failed;
+            return Err(DriftError::DecompressionFailed(format!(
+                "IBLT decode failed after {} retries at {} cells",
+                self.retries, self.last_offer_cells
+            )));
+        }
+        let grown = self.last_offer_cells.saturating_mul(RETRY_GROWTH);
+        let target = suggested_cells
+            .max(grown)
+            .clamp(DIFF_DRIVEN_MIN_CELLS, RETRY_MAX_CELLS);
+        self.retries += 1;
+        self.build_offer(store, target)
+    }
+
+    /// Build and record an offer at an explicit cell count.
+    fn build_offer(&mut self, store: &MeshStore, cells: u32) -> Result<SyncMessage, DriftError> {
         let message_count = store.len() as u32;
-        // Size IBLT generously to handle expected differences
-        // Differences can be at most message_count + peer_message_count, but we don't know peer_count yet
-        // Use 4x message_count + 8 as a reasonable estimate with headroom for small sets
-        let iblt_capacity = (message_count as usize * 4 + 8).max(1);
-        let mut iblt = IBLT::new(iblt_capacity);
+        let mut iblt = IBLT::with_cells(cells.max(1) as usize);
 
         for msg_id in store.message_ids() {
             iblt.insert(&msg_id);
@@ -202,6 +312,7 @@ impl SyncSession {
             .as_secs();
 
         self.our_iblt = Some(iblt);
+        self.last_offer_cells = sketch_capacity;
         self.state = SyncState::AwaitingResponse;
 
         Ok(SyncMessage::SyncOffer {
@@ -253,7 +364,24 @@ impl SyncSession {
 
         // Compute difference: our IBLT - their IBLT = (we have, they don't) - (they have, we don't)
         let diff = our_iblt.subtract(&peer_iblt)?;
-        let (they_have_not, they_have_we_dont) = diff.decode()?;
+        let (they_have_not, they_have_we_dont) = match diff.decode() {
+            Ok(pair) => pair,
+            // #671: an undersized offer is a size problem, not a session failure. Ask for
+            // twice the table instead of returning an error the caller cannot act on.
+            Err(_) => {
+                self.state = SyncState::Ready;
+                let suggested = (peer_capacity as u32)
+                    .saturating_mul(RETRY_GROWTH)
+                    .min(RETRY_MAX_CELLS);
+                return Ok((
+                    SyncMessage::SyncRetry {
+                        suggested_cells: suggested.max(DIFF_DRIVEN_MIN_CELLS),
+                        reason: 1,
+                    },
+                    Vec::new(),
+                ));
+            }
+        };
 
         // Store for later use
         self.peer_missing = they_have_not.clone();
@@ -707,5 +835,145 @@ mod tests {
             // B should identify that it is missing val_a
             assert!(session_b.our_missing_ids().contains(&make_test_id(val_a)));
         }
+    }
+
+    #[test]
+    fn test_control_sizing_is_unchanged_by_671() {
+        // The control path must keep the exact pre-#671 table size, or old peers would
+        // see a different offer cost for the same store.
+        let mut store = MeshStore::new();
+        for i in 0..10u8 {
+            store.insert(make_test_envelope(make_test_id(i), 100));
+        }
+        let mut session = SyncSession::with_sizing(SyncSizing::StoreRelative);
+        match session.initiate(&store).unwrap() {
+            SyncMessage::SyncOffer {
+                sketch_capacity, ..
+            } => assert_eq!(sketch_capacity, ((10 * 4 + 8) * 3) as u32),
+            _ => panic!("expected SyncOffer"),
+        }
+    }
+
+    #[test]
+    fn test_difference_driven_first_offer_is_small() {
+        let mut store = MeshStore::new();
+        for i in 0..50u8 {
+            store.insert(make_test_envelope(make_test_id(i), 100));
+        }
+        let mut session = SyncSession::with_sizing(SyncSizing::DifferenceDriven {
+            cells: DIFF_DRIVEN_MIN_CELLS,
+        });
+        match session.initiate(&store).unwrap() {
+            SyncMessage::SyncOffer {
+                sketch_capacity, ..
+            } => {
+                assert_eq!(sketch_capacity, DIFF_DRIVEN_MIN_CELLS);
+                // and far below the control sizing for the same store
+                assert!(sketch_capacity < ((50 * 4 + 8) * 3) as u32);
+            }
+            _ => panic!("expected SyncOffer"),
+        }
+    }
+
+    #[test]
+    fn test_retry_escalates_from_an_undersized_offer() {
+        // 20 vs 20 disjoint ids cannot peel from a 12-cell table, so the responder must
+        // answer with SyncRetry rather than an error, and the initiator must grow the
+        // table instead of ending the session. No decode success is required here: the
+        // point of the test is the handshake, and a table this small cannot succeed.
+        let mut store_a = MeshStore::new();
+        let mut store_b = MeshStore::new();
+        for i in 0..20u8 {
+            store_a.insert(make_test_envelope(make_test_id(i), 100));
+        }
+        for i in 100..120u8 {
+            store_b.insert(make_test_envelope(make_test_id(i), 100));
+        }
+
+        let mut session_a = SyncSession::with_sizing(SyncSizing::DifferenceDriven {
+            cells: DIFF_DRIVEN_MIN_CELLS,
+        });
+        let mut session_b = SyncSession::new();
+
+        let offer = session_a.initiate(&store_a).unwrap();
+        assert_eq!(session_a.state(), SyncState::AwaitingResponse);
+
+        let (response, envelopes) = session_b.respond(&store_b, &offer).unwrap();
+        assert!(envelopes.is_empty());
+        let suggested = match response {
+            SyncMessage::SyncRetry {
+                suggested_cells,
+                reason,
+            } => {
+                assert_eq!(reason, 1);
+                suggested_cells
+            }
+            _ => panic!("an unpeelable offer must produce SyncRetry, not a response"),
+        };
+        assert_eq!(suggested, DIFF_DRIVEN_MIN_CELLS * RETRY_GROWTH);
+        // The responder is ready for a re-offer, not stuck mid-session.
+        assert_eq!(session_b.state(), SyncState::Ready);
+
+        let retry_offer = session_a.handle_retry(&store_a, suggested).unwrap();
+        assert_eq!(session_a.retries(), 1);
+        assert_eq!(session_a.state(), SyncState::AwaitingResponse);
+        match retry_offer {
+            SyncMessage::SyncOffer {
+                sketch_capacity, ..
+            } => assert_eq!(sketch_capacity, suggested),
+            _ => panic!("a retry must re-offer"),
+        }
+    }
+
+    #[test]
+    fn test_difference_driven_path_reconciles_when_the_table_fits() {
+        // The ladder must still land a sync end to end when the first offer is big
+        // enough to peel; three ids per side against a 144-cell table does.
+        let mut store_a = MeshStore::new();
+        let mut store_b = MeshStore::new();
+        for i in 0..3u8 {
+            store_a.insert(make_test_envelope(make_test_id(i), 100));
+        }
+        for i in 10..13u8 {
+            store_b.insert(make_test_envelope(make_test_id(i), 100));
+        }
+
+        let mut session_a = SyncSession::with_sizing(SyncSizing::DifferenceDriven { cells: 144 });
+        let mut session_b = SyncSession::new();
+
+        let offer = session_a.initiate(&store_a).unwrap();
+        let (response, _) = session_b.respond(&store_b, &offer).unwrap();
+        assert_eq!(session_a.retries(), 0);
+
+        session_a.complete(&store_a, &response).unwrap();
+
+        assert_eq!(session_a.our_missing_ids().len(), 3);
+        assert_eq!(session_a.peer_missing_ids().len(), 3);
+        assert_eq!(session_b.our_missing_ids().len(), 3);
+        assert_eq!(session_a.state(), SyncState::Complete);
+    }
+
+    #[test]
+    fn test_retry_ceiling_fails_honestly() {
+        // A session that cannot grow past its ceiling must fail with a decode error,
+        // never spin or report success.
+        let mut store = MeshStore::new();
+        for i in 0..5u8 {
+            store.insert(make_test_envelope(make_test_id(i), 100));
+        }
+        let mut session = SyncSession::with_sizing(SyncSizing::DifferenceDriven {
+            cells: DIFF_DRIVEN_MIN_CELLS,
+        });
+        let _ = session.initiate(&store).unwrap();
+        let mut failed = false;
+        for _ in 0..13 {
+            // Suggest the same small size every time: growth comes from the ladder itself.
+            if session.handle_retry(&store, DIFF_DRIVEN_MIN_CELLS).is_err() {
+                failed = true;
+                break;
+            }
+        }
+        assert!(failed, "the ladder must stop at its ceiling");
+        assert_eq!(session.state(), SyncState::Failed);
     }
 }
