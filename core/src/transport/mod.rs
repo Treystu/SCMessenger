@@ -36,6 +36,7 @@ pub mod reflection;
 pub mod relay_health;
 pub mod reputation;
 pub mod routing;
+pub mod structural_quarantine;
 pub mod swarm;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod websocket;
