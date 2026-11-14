@@ -504,7 +504,8 @@ impl AdmissionBehaviour {
         src: Option<IpAddr>,
     ) {
         if let std::collections::hash_map::Entry::Vacant(slot) = self.pending.entry(id) {
-            let known = inbound && src.is_some_and(|ip| self.known_sources.contains_key(&normalize_ip(ip)));
+            let known =
+                inbound && src.is_some_and(|ip| self.known_sources.contains_key(&normalize_ip(ip)));
             let conn = PendingConn {
                 start: now,
                 inbound,
