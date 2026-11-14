@@ -1473,6 +1473,39 @@ const DELIVERY_CONVERGENCE_TOPIC: &str = "sc-receipt-convergence";
 const DELIVERY_CONVERGENCE_PREFIX: &[u8] = b"scm.delivery.convergence.v1:";
 const RELAY_MAX_INFLIGHT_DISPATCHES: usize = 256;
 
+// --- #679: terminal ceiling for one pending message -------------------------
+//
+// A pending message used to be re-inserted after every dispatch with no bound on
+// `dispatch_attempts` or `pass_count`, and `RetryStrategy::default()` carries
+// `max_attempts: None` ("WS1: no terminal retry cap"), so `should_retry()` never
+// returned false. #679 measured the consequence on a Pixel 6a: one message whose
+// candidate address answered as a *different peer* reached `attempt=630 pass=629`
+// over 30 days, never delivered, never failed, never parked -- 4.19 GB of log and
+// an indefinitely dialling radio.
+//
+// The retry ceiling is therefore explicit and terminal, not another backoff
+// tweak: the counters already existed and were already logged, they were simply
+// never compared against anything.
+/// Hard ceiling on dispatch attempts per pending message.
+///
+/// One counter, not two: `pass_count` only advances when the candidate ladder
+/// wraps, so on the one-candidate ladder #679 measured it advances with every
+/// attempt -- a pass ceiling would then be a second, tighter attempt ceiling that
+/// binds first and makes the stated number a lie. The bake-off
+/// (`scripts/retry_ceiling_bakeoff.py`) shows attempts is the binding constraint
+/// for both ladder widths, and 16 is the knee: 98.0% of lossy-but-reachable
+/// messages still deliver, while the structural case parks at 16 dials instead of
+/// the 630 measured on the device.
+const MAX_DELIVERY_ATTEMPTS: u32 = 16;
+
+/// #679: is this message out of retry budget?
+///
+/// Pure, so the decision is testable without a swarm or a socket. A message is
+/// out of budget once it has spent `MAX_DELIVERY_ATTEMPTS` dispatches.
+fn delivery_exhausted(dispatch_attempts: u32) -> bool {
+    dispatch_attempts >= MAX_DELIVERY_ATTEMPTS
+}
+
 // --- TRN-07: per-peer share of the hourly relay budget ---
 //
 // The hourly budget gate used to be evaluated before any per-peer fairness
@@ -4903,6 +4936,30 @@ pub async fn start_swarm_with_config(
                         // Process retries
                         for msg_id in to_retry {
                             if let Some(mut pending) = pending_messages.remove(&msg_id) {
+                                // #679: terminal state. The message is already out
+                                // of `pending_messages` here; returning without
+                                // re-inserting it is what makes the ceiling
+                                // terminal, and the caller gets one explicit
+                                // failure instead of a promise that never
+                                // resolves. One log line, not one per pass.
+                                if delivery_exhausted(pending.dispatch_attempts) {
+                                    tracing::warn!(
+                                        event = "delivery_parked",
+                                        message_id = %msg_id,
+                                        attempts = pending.dispatch_attempts,
+                                        passes = pending.pass_count,
+                                        "Delivery parked: retry ceiling reached"
+                                    );
+                                    let _ = pending
+                                        .reply_tx
+                                        .send(Err(format!(
+                                            "Delivery failed after {} attempts across {} passes",
+                                            pending.dispatch_attempts, pending.pass_count
+                                        )))
+                                        .await;
+                                    continue;
+                                }
+
                                 let routes = multi_path_delivery.ranked_routes(&pending.target_peer, 3);
                                 if routes.is_empty() {
                                     // Last-resort candidate refresh before keeping the message
@@ -13657,5 +13714,70 @@ mod event_driven_wake_tests {
         for _ in 0..50 {
             assert_eq!(wake_on_identify(&manager, peer, &[]), 0);
         }
+    }
+}
+
+#[cfg(test)]
+mod retry_ceiling_tests {
+    use super::{delivery_exhausted, MAX_DELIVERY_ATTEMPTS};
+
+    /// The #679 shape: the candidate ladder has one entry, so every dispatch also
+    /// wraps a pass and `RETRY_CYCLE_RESTART` repeated (506 times in one 2 MB
+    /// window, `attempt=630 pass=629` overall). This models the retry loop's own
+    /// counter advance and asks the ceiling. Before the cure there was no
+    /// comparison at all -- `RetryStrategy::default()` is `max_attempts: None` and
+    /// the message was re-inserted unconditionally -- so this loop is unbounded and
+    /// the assertion below cannot pass.
+    #[test]
+    fn the_679_one_candidate_loop_terminates() {
+        let mut dispatch_attempts: u32 = 1;
+        let mut dispatches: usize = 0;
+        while !delivery_exhausted(dispatch_attempts) {
+            dispatch_attempts = dispatch_attempts.saturating_add(1);
+            dispatches += 1;
+            assert!(dispatches < 1_000, "retry loop did not terminate");
+        }
+        assert_eq!(dispatch_attempts, MAX_DELIVERY_ATTEMPTS);
+        assert!(
+            dispatches < 630,
+            "must park well before the 630 dials measured on device"
+        );
+    }
+
+    /// A three-candidate ladder reaches the same ceiling by a different path; the
+    /// ceiling must not be a per-candidate allowance that triples the budget.
+    #[test]
+    fn a_wide_ladder_gets_the_same_attempt_budget() {
+        let mut dispatch_attempts: u32 = 1;
+        let mut candidate = 0usize;
+        let mut wrappers: u32 = 0;
+        while !delivery_exhausted(dispatch_attempts) {
+            candidate += 1;
+            if candidate >= 3 {
+                candidate = 0;
+                wrappers += 1;
+            }
+            dispatch_attempts += 1;
+        }
+        assert_eq!(dispatch_attempts, MAX_DELIVERY_ATTEMPTS);
+        assert!(
+            wrappers > 0,
+            "the wide ladder must still wrap at least once"
+        );
+    }
+
+    #[test]
+    fn the_ceiling_engages_exactly_at_the_boundary_and_not_before() {
+        assert!(!delivery_exhausted(1));
+        assert!(!delivery_exhausted(MAX_DELIVERY_ATTEMPTS - 1));
+        assert!(delivery_exhausted(MAX_DELIVERY_ATTEMPTS));
+        assert!(delivery_exhausted(MAX_DELIVERY_ATTEMPTS + 1));
+    }
+
+    /// The real counter saturates, and a saturated counter must read as exhausted
+    /// rather than wrapping back to a fresh budget.
+    #[test]
+    fn a_saturated_counter_reads_as_exhausted() {
+        assert!(delivery_exhausted(u32::MAX));
     }
 }

@@ -677,6 +677,7 @@ jobs:
             python3 -m unittest scripts/test_jev_canonical_check.py
             python3 -m unittest scripts/test_delivery_probability.py
             python3 scripts/circuit_bakeoff.py --self-check
+            python3 scripts/retry_ceiling_bakeoff.py --self-check
             python3 scripts/routing_calibration.py --self-check
             python3 scripts/drift_sketch_bakeoff.py --self-check
             python3 scripts/gateway_ranking_bakeoff.py --self-check
