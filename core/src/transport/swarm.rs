@@ -2973,6 +2973,31 @@ fn try_envelope_hint_dial(
                 continue;
             }
         }
+        // #684 part B: skip a pair already proven structurally impossible. The
+        // evidence expires on its own TTL, so this is a pause in retrying, not
+        // a peer ban.
+        let peer_key = peer_id.to_string();
+        if dial_policy_manager.is_structurally_quarantined(&peer_key, &addr_key) {
+            tracing::debug!(
+                "[HINT-DIAL] Skipping structurally quarantined candidate {} for {}",
+                addr_key,
+                peer_id
+            );
+            continue;
+        }
+        // The existing pre-dial detector already names the case: an address whose
+        // embedded /p2p/<id> targets a different peer than the one requested can
+        // never satisfy this request. Record that verdict so the pair is not
+        // dialed again until the TTL expires.
+        if resolve_dial_target(&addr, Some(peer_id)).is_err() {
+            dial_policy_manager.quarantine_structural_mismatch(&peer_key, &addr_key);
+            tracing::debug!(
+                "[HINT-DIAL] Recorded structurally impossible pair {} for {}",
+                addr_key,
+                peer_id
+            );
+            continue;
+        }
         candidates.push(addr);
     }
     if candidates.is_empty() {
@@ -3001,16 +3026,6 @@ fn try_envelope_hint_dial(
             tracing::debug!("[HINT-DIAL] Hint dial to {} not queued: {}", peer_id, e);
             0
         }
-    }
-}
-
-/// Convert libp2p Kademlia protocol mode to routing transport type.
-/// Maps the Kademlia query mode to the appropriate transport classification.
-#[cfg(not(target_arch = "wasm32"))]
-fn transport_type_to_routing_transport(mode: kad::Mode) -> RoutingTransportType {
-    match mode {
-        kad::Mode::Client => RoutingTransportType::QUIC,
-        kad::Mode::Server => RoutingTransportType::TCP,
     }
 }
 
@@ -3476,6 +3491,33 @@ struct PendingMessage {
     recipient_identity_id: Option<String>,
     /// WS13 tight-pair metadata: specific device UUID being targeted.
     intended_device_id: Option<String>,
+}
+
+/// A message taken out of the retry cycle because its attempt budget was
+/// exhausted for the candidate set it actually has (#684 part C).
+///
+/// Parking is a visible state, not a silent drop: the route log carries a PARK
+/// line when it happens, the caller is told, and the entry stays in the swarm
+/// task's `parked_messages` map instead of the cycle restarting forever.
+#[derive(Debug)]
+struct ParkedMessage {
+    target_peer: PeerId,
+    attempts: u32,
+    passes: u32,
+}
+
+/// Per-message attempt budget for the cyclic retry ladder (#684 part C).
+///
+/// Derived from live state rather than a literal: a message may traverse its
+/// whole ranked candidate set a small number of times, and a peer with no live
+/// connection gets more passes because reconnection itself costs a pass. A
+/// message can therefore never restart the cycle forever, which is what let one
+/// stuck message reach `attempt=630 pass=629` and write 4.19 GB of log.
+#[cfg(not(target_arch = "wasm32"))]
+fn retry_attempt_budget(candidate_count: usize, connected: bool) -> u32 {
+    let passes: u64 = if connected { 2 } else { 4 };
+    let budget = (candidate_count.max(1) as u64).saturating_mul(passes);
+    budget.min(u32::MAX as u64) as u32
 }
 
 /// Commands that can be sent to the swarm task
@@ -4194,6 +4236,26 @@ impl SwarmHandle {
     }
 }
 
+/// Identify-confirmed peer: record it through the canonical validated routing
+/// ingress, `IronCore::routing_peer_seen` -- the same entry the
+/// ConnectionEstablished arms use. That entry bounds and parses the peer id
+/// (oversized, unparseable and all-zero ids are dropped, fail closed) before
+/// it reaches the engine, whose `peer_seen` binds the peer's canonical
+/// key-derived hint, so a connected, identified peer is directly routable
+/// without any announcement. Hint binding is not subject to the log rate limit.
+/// A dropped core handle is a no-op. Kept as a function so the identify arm's
+/// wiring is testable.
+#[cfg(not(target_arch = "wasm32"))]
+fn bind_identified_peer_to_routing(
+    core_handle: &Option<Weak<crate::IronCore>>,
+    peer_id: &PeerId,
+    transport: &str,
+) {
+    if let Some(core) = core_handle.as_ref().and_then(|weak| weak.upgrade()) {
+        core.routing_peer_seen(peer_id.to_string(), transport.to_string());
+    }
+}
+
 /// Create a default (empty) routing engine handle for use by callers that
 /// don't have an IronCore instance (e.g. CLI, WASM). The handle will be
 /// seeded with the local peer ID when the swarm starts.
@@ -4651,9 +4713,7 @@ pub async fn start_swarm_with_config(
         // peer ID so routing can begin immediately.
         let local_peer_id_bytes_raw = local_peer_id.to_bytes();
         let local_peer_id_bytes: [u8; 32] = extract_peer_id_bytes(&local_peer_id_bytes_raw);
-        let local_hint = blake3::hash(&local_peer_id_bytes).as_bytes()[0..8]
-            .try_into()
-            .expect("blake3 hash should be at least 8 bytes");
+        let local_hint = crate::identity::keys::routing_hint_from_public_key(&local_peer_id_bytes);
         {
             let mut guard = routing_engine_handle.write();
             if guard.is_none() {
@@ -4663,6 +4723,8 @@ pub async fn start_swarm_with_config(
 
         // Track pending message deliveries
         let mut pending_messages: HashMap<String, PendingMessage> = HashMap::new();
+        // Messages parked because their retry budget was exhausted (#684 part C).
+        let mut parked_messages: HashMap<String, ParkedMessage> = HashMap::new();
 
         // SyncSession management for Drift Protocol mesh synchronization
         let mut sync_sessions: HashMap<PeerId, SyncSession> = HashMap::new();
@@ -5037,6 +5099,37 @@ pub async fn start_swarm_with_config(
                                         msg_id
                                     );
                                     pending_messages.insert(msg_id, pending);
+                                    continue;
+                                }
+
+                                // #684 part C: a message may traverse its live candidate
+                                // set a bounded number of times, then it parks visibly
+                                // instead of restarting the cycle. Before this,
+                                // `dispatch_attempts` grew with no reader at all.
+                                let attempt_budget = retry_attempt_budget(
+                                    routes.len(),
+                                    swarm.is_connected(&pending.target_peer),
+                                );
+                                if pending.dispatch_attempts >= attempt_budget {
+                                    let parked = ParkedMessage {
+                                        target_peer: pending.target_peer,
+                                        attempts: pending.dispatch_attempts,
+                                        passes: pending.pass_count,
+                                    };
+                                    tracing::warn!(
+                                        "PARK message_id={} target={} attempts={} passes={} budget={} candidates={} reason=RETRY_BUDGET_EXHAUSTED parked_total={}",
+                                        msg_id,
+                                        parked.target_peer,
+                                        parked.attempts,
+                                        parked.passes,
+                                        attempt_budget,
+                                        routes.len(),
+                                        parked_messages.len()
+                                    );
+                                    let _ = pending.reply_tx.try_send(Err(
+                                        "Delivery parked: retry budget exhausted".to_string()
+                                    ));
+                                    parked_messages.insert(msg_id.clone(), parked);
                                     continue;
                                 }
 
@@ -7310,23 +7403,11 @@ pub async fn start_swarm_with_config(
                                 dial_policy_manager.reset_peer_backoff(peer_id);
 
                                 // MYCORRHIZAL ROUTING: Update routing engine with peer discovery
-                                let peer_id_bytes = extract_peer_id_bytes(&peer_id.to_bytes());
-                                let _peer_hint: [u8; 8] = blake3::hash(&peer_id_bytes).as_bytes()[0..8]
-                                    .try_into()
-                                    .expect("blake3 hash should be at least 8 bytes");
-                                // When identity protocol confirms a peer, use the Kademlia server
-                                // mode as the transport type basis since identity requires a
-                                // server-capable connection.
-                                let transport_type = transport_type_to_routing_transport(kad::Mode::Server);
-                                {
-                                    let mut guard = routing_engine_handle.write();
-                                    if let Some(ref mut engine) = guard.as_mut() {
-                                        engine.base_engine_mut().local_cell_mut().peer_seen(
-                                            peer_id_bytes,
-                                            transport_type,
-                                        );
-                                    }
-                                }
+                                // through the canonical validated ingress
+                                // (`IronCore::routing_peer_seen`). Identity requires a
+                                // server-capable connection, so the sighting is a direct
+                                // TCP one.
+                                bind_identified_peer_to_routing(&core_handle, &peer_id, "tcp");
                                 // Update routing engine with peer hints from identify info
                                 // (peers announce what hints they can reach)
 
@@ -8516,9 +8597,7 @@ pub async fn start_swarm_with_config(
                                 // Convert libp2p PeerId to routing module format
                                 let peer_id_bytes = extract_peer_id_bytes(&peer_id.to_bytes());
                                 // Get recipient hint from peer_id (first 8 bytes of blake3 hash)
-                                let hint = blake3::hash(&peer_id_bytes).as_bytes()[0..8]
-                                    .try_into()
-                                    .expect("blake3 hash should be at least 8 bytes");
+                                let hint = crate::identity::keys::routing_hint_from_public_key(&peer_id_bytes);
 
                                 // Route message using mycorrhizal routing engine.
                                 //
@@ -11365,8 +11444,72 @@ use libp2p::identify;
 use libp2p::mdns;
 use libp2p::{gossipsub, request_response};
 
-#[cfg(test)]
+#[cfg(all(test, not(target_arch = "wasm32")))]
 mod tests {
+    fn core_with_engine() -> Arc<crate::IronCore> {
+        let core = Arc::new(crate::IronCore::new());
+        *core.routing_engine_handle().write() =
+            Some(super::OptimizedRoutingEngine::new([0u8; 32], [0u8; 8]));
+        core
+    }
+
+    fn peer_from_key_bytes(key: [u8; 32]) -> libp2p::PeerId {
+        let mut raw = vec![0x00u8, 0x20];
+        raw.extend_from_slice(&key);
+        libp2p::PeerId::from_bytes(&raw).expect("identity multihash peer id")
+    }
+
+    #[test]
+    fn identify_wiring_binds_peer_direct_hint_via_validated_ingress() {
+        let core = core_with_engine();
+        let core_handle = Some(Arc::downgrade(&core));
+        let key = [0x42u8; 32];
+        let peer = peer_from_key_bytes(key);
+        // Same call the Identify Received arm makes; no announcement, no contact.
+        super::bind_identified_peer_to_routing(&core_handle, &peer, "tcp");
+        let direct_hint = crate::identity::keys::routing_hint_from_public_key(&key);
+        let handle = core.routing_engine_handle();
+        let mut guard = handle.write();
+        let Some(engine) = guard.as_mut() else {
+            panic!("engine must remain installed");
+        };
+        let bound = engine
+            .base_engine_mut()
+            .local_cell_mut()
+            .get_peer(&key)
+            .map(|p| p.reachable_hints.contains(&direct_hint));
+        assert_eq!(bound, Some(true), "identify must bind the canonical hint");
+    }
+
+    #[test]
+    fn identify_wiring_rejects_peer_failing_validation() {
+        let core = core_with_engine();
+        let core_handle = Some(Arc::downgrade(&core));
+        // An all-zero key is rejected by the canonical ingress and must not be bound.
+        let bad = peer_from_key_bytes([0u8; 32]);
+        super::bind_identified_peer_to_routing(&core_handle, &bad, "tcp");
+        let handle = core.routing_engine_handle();
+        let mut guard = handle.write();
+        let Some(engine) = guard.as_mut() else {
+            panic!("engine must remain installed");
+        };
+        assert_eq!(
+            engine.base_engine_mut().local_cell_mut().peer_count(),
+            0,
+            "a peer failing validation must not be bound"
+        );
+    }
+
+    #[test]
+    fn identify_wiring_without_core_or_engine_is_a_noop() {
+        let peer = peer_from_key_bytes([1u8; 32]);
+        super::bind_identified_peer_to_routing(&None, &peer, "tcp");
+        let core = Arc::new(crate::IronCore::new());
+        let core_handle = Some(Arc::downgrade(&core));
+        super::bind_identified_peer_to_routing(&core_handle, &peer, "tcp");
+        assert!(core.routing_engine_handle().read().is_none());
+    }
+
     use super::{
         addr_targets_self, build_mdns_dial_addr, build_routable_relay_addrs, classify_deny_cause,
         endpoint_transport_string, extract_ed25519_public_key_from_peer_id, extract_ip_component,
@@ -11603,8 +11746,8 @@ mod tests {
         for (i, (_, remote)) in conns.iter().enumerate() {
             tracker.add_connection(
                 PeerId::random(),
-                remote.parse().unwrap(),
-                "/ip4/0.0.0.0/tcp/0".parse().unwrap(),
+                remote.parse().expect("test remote multiaddr"),
+                "/ip4/0.0.0.0/tcp/0".parse().expect("test local multiaddr"),
                 format!("c{i}"),
             );
         }
@@ -11612,7 +11755,8 @@ mod tests {
     }
 
     fn skip(tracker: &crate::transport::observation::ConnectionTracker, addr: &str) -> bool {
-        super::address_only_dial_skip_reason(&addr.parse().unwrap(), None, false, tracker).is_some()
+        let addr = addr.parse().expect("test dial multiaddr");
+        super::address_only_dial_skip_reason(&addr, None, false, tracker).is_some()
     }
 
     #[tokio::test]

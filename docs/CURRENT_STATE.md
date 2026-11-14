@@ -7,10 +7,32 @@
 > authority once v0.4.0 is tagged. (Added 2026-08-15.)
 
 Status: Active
-Last updated: 2026-10-07 (bootstrap section rewritten to the #469 decided model; stale GCP bootstrap VM reference marked superseded; no runtime or release status changed)
+Last updated: 2026-10-31 (completion gate contract)
 Last verified: No build was run for the 2026-10-01 checkpoint; the 2026-07-21 host-gate result is historical and must be rerun.
 
 ---
+
+### Canonical completion gate contract (2026-10-31)
+
+The controller invokes `jev_canonical_check.py --canon-only` for the three
+bare Noul questions in schema 1.0.0. The helper's default bucketed WP gate
+continues to use schema 1.1.0. Completion evidence covers controller-supplied
+metadata and mechanical checks; it does not replace independent patch review
+or release approval.
+
+### Dependency security patch candidate (2026-10-16)
+
+`Cargo.lock` selects rustls 0.23.46 as the patch candidate for
+RUSTSEC-2026-0346, RUSTSEC-2026-0347, RUSTSEC-2026-0348, and
+RUSTSEC-2026-0349. Full `cargo metadata --locked --format-version 1
+--all-features` completed without changing the lockfile. At PR #604 head
+`7e5993cc3248beef515263119a50f618e415e52c`, GitHub Actions Lint run
+[39179788169](https://github.com/Sovereign-Communication/SCMessenger/actions/runs/39179788169)
+completed with `cargo deny check` failing on RUSTSEC-2026-0370,
+RUSTSEC-2026-0371, and RUSTSEC-2026-0372 through transitive dependencies
+of `zbus` 4.4.0. The Ubuntu, macOS, and Windows workspace Test jobs passed.
+Security Regression Tests run [39179788173](https://github.com/Sovereign-Communication/SCMessenger/actions/runs/39179788173)
+was cancelled.
 
 ## 1. Executive Summary & Release Roadmap
 

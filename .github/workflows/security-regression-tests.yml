@@ -35,20 +35,9 @@
 # tests, the job fails loudly rather than reporting a silent, meaningless
 # green.
 #
-# WHY THIS TRIGGERS ON EVERY PUSH/PR RATHER THAN BEING PATH-FILTERED
+# Documentation-only push and PR events do not change these tests.
+# Required checks remain in their own unfiltered workflows.
 # ---------------------------------------------------------------------
-# The task this job exists for is "every change touching
-# core/src/{crypto,transport,routing,privacy}/", which argues for a `paths:`
-# filter on the trigger below. That filter was deliberately NOT added: this
-# repo's branch protection uses classic required-status-check *contexts*
-# (job/workflow names), and a required context whose workflow is path-filtered
-# leaves any PR that doesn't touch those paths stuck showing "Expected --
-# waiting for a status to be reported" forever, because the workflow (and
-# therefore the check) never runs for that PR at all. None of this repo's
-# other required checks (Lint, Rust Linting, Test) use path filters for
-# exactly that reason. Running unconditionally is a strict superset of
-# "every change touching the perimeter" and costs a few extra minutes of CI
-# time on unrelated PRs in exchange for never getting stuck.
 #
 # NOTE: adding this workflow does not, by itself, make it a *required* check
 # for merging (see the branch-protection findings in the CI-hardening task
@@ -63,8 +52,14 @@ name: Security Regression Tests
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - 'docs/**'
+      - '**.md'
   pull_request:
     branches: [main]
+    paths-ignore:
+      - 'docs/**'
+      - '**.md'
 
 permissions:
   contents: read
@@ -80,24 +75,26 @@ env:
 jobs:
   forgery-regression:
     name: Forgery/Negative Security Regression Tests
-    # Runner selection: repo variable vars.CI_RUNNER = blacksmith | oci | hosted.
-    # Unset keeps the legacy USE_OCI_RUNNER behaviour. Only trusted events (push,
-    # same-repo PR) get blacksmith/oci; fork PRs always get ubuntu-latest.
-    # Blacksmith scope (free tier = 3000 2vCPU-min/mo; 4vCPU burns 2x): vars.CI_RUNNER_BLACKSMITH_JOBS
-    # comma list of test,docs,ffi,forgery,pr (default 'test'; push-to-main only unless 'pr').
-    # Rollback: set CI_RUNNER=hosted, or delete the variable. See
-    # docs/runbooks/CI_RUNNER_SELECTION.md.
-    runs-on: ${{ vars.CI_RUNNER == 'blacksmith' && contains(format(',{0},', vars.CI_RUNNER_BLACKSMITH_JOBS || 'test'), ',forgery,') && (github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && contains(format(',{0},', vars.CI_RUNNER_BLACKSMITH_JOBS || 'test'), ',pr,'))) && 'blacksmith-4vcpu-ubuntu-2404' || (github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)) && (vars.CI_RUNNER == 'oci' || (vars.CI_RUNNER == '' && vars.USE_OCI_RUNNER != 'false')) && fromJSON('["self-hosted","oci"]') || 'ubuntu-latest' }}
-    timeout-minutes: 45
+    # Same dependabot carve-out as ci.yml's required leg: this suite runs ~41-50
+    # min, so a dependency re-head is the worst possible tenant for the two ARM
+    # OCI slots. Only the carve-out is adopted from #643, not its pool re-scope.
+    runs-on: ${{ (github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.user.login != 'dependabot[bot]')) && (vars.CI_RUNNER == 'oci' || (vars.CI_RUNNER == '' && vars.USE_OCI_RUNNER != 'false')) && fromJSON('["self-hosted","oci"]') || 'ubuntu-latest' }}
+    # 90, not 45: the full `forg` suite takes ~41-50 min on the OCI runner
+    # (passing run on PR #611: 41 min; runs on #612-#615 and on main were
+    # cancelled at the 45-minute cap with zero test failures -- the timeout
+    # WAS the failure). 90 restores ~2x headroom over the worst observed
+    # runtime. This job deliberately stays on the primary runners (OCI via
+    # CI_RUNNER, GitHub-hosted otherwise): the Ubicloud trial tier
+    # (ubicloud-standard-2, see ci.yml / USE_UBICLOUD) is queue-clearing
+    # backup for short jobs -- a cold-cache 2-vCPU runner would make this
+    # suite slower, not faster.
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v7
 
-      # Docs-only PRs (markdown, docs/, HANDOFF/) cannot change what this job
-      # compiles or tests. The job still starts and completes green so the
-      # check reports instead of vanishing; every compile and test step below
-      # is gated on the classifier. detect-platform-change fails open: push to
-      # main, undiffable PRs and unrecognised paths all report
-      # rust_relevant=true, so main's runs are never weakened.
+      # For mixed or code changes, the classifier still gates compile and
+      # test steps and fails open for undiffable or unrecognised paths.
+      # Documentation-only push and PR events are filtered above.
       - name: Detect Rust-relevant change
         id: platform
         uses: ./.github/actions/detect-platform-change

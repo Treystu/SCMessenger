@@ -939,6 +939,95 @@ pub async fn stop_node_via_api() -> Result<()> {
     Ok(())
 }
 
+/// Whether `target` is in the set of peers we hold a live connection to.
+///
+/// A swarm `send_message` that resolves `Ok` is only a confirmation from the
+/// recipient when it went over a direct link. When the recipient is not
+/// connected, `Ok` means a relay node accepted custody of the envelope
+/// (store-and-carry), which says nothing about the recipient having received
+/// it. Callers use this to decide whether the transport ACK may release the
+/// outbox entry or whether it must stay until an application receipt arrives.
+pub(crate) fn recipient_in_connected_set(
+    connected: &[libp2p::PeerId],
+    target: &libp2p::PeerId,
+) -> bool {
+    connected.iter().any(|p| p == target)
+}
+
+/// Connected peer ids from the swarm. A failed query is logged and treated as
+/// "no direct link", which is the safe direction (the outbox entry is kept).
+async fn connected_peers(swarm: &scmessenger_core::transport::SwarmHandle) -> Vec<libp2p::PeerId> {
+    match swarm.get_peers().await {
+        Ok(peers) => peers,
+        Err(e) => {
+            tracing::warn!("get_peers failed; treating recipient as not directly connected: {e}");
+            Vec::new()
+        }
+    }
+}
+
+/// Whether a transport ACK may release the sender's outbox entry.
+///
+/// Release only when the dispatch succeeded AND the recipient held a live
+/// connection both before and after it. A link that appeared or vanished
+/// during the send means the ACK may have come from a relay custody handoff,
+/// so the entry stays for the reconnect flush and retry sweep. The connected
+/// set cannot distinguish a relay circuit from a direct link, so that case
+/// remains a known limit until the swarm reply reports the route taken.
+pub(crate) fn should_release_outbox(
+    send_ok: bool,
+    direct_before: bool,
+    direct_after: bool,
+) -> bool {
+    send_ok && direct_before && direct_after
+}
+
+/// Dispatch, then release the outbox entry only per `should_release_outbox`.
+/// Generic over the three effects so every send site shares one tested path.
+pub(crate) async fn dispatch_then_release<P, PF, S, SF, R>(
+    target: &libp2p::PeerId,
+    peers: P,
+    send: S,
+    release: R,
+) -> Result<()>
+where
+    P: Fn() -> PF,
+    PF: std::future::Future<Output = Vec<libp2p::PeerId>>,
+    S: FnOnce() -> SF,
+    SF: std::future::Future<Output = Result<()>>,
+    R: FnOnce(),
+{
+    let direct_before = recipient_in_connected_set(&peers().await, target);
+    let result = send().await;
+    if result.is_ok() {
+        let direct_after = recipient_in_connected_set(&peers().await, target);
+        if should_release_outbox(true, direct_before, direct_after) {
+            release();
+        }
+    }
+    result
+}
+
+/// Send over the swarm and release the outbox entry on a direct-link ACK.
+pub(crate) async fn swarm_send_releasing_on_direct_ack(
+    swarm: &scmessenger_core::transport::SwarmHandle,
+    core: &scmessenger_core::IronCore,
+    target: libp2p::PeerId,
+    envelope: Vec<u8>,
+    recipient_identity_id: Option<String>,
+    message_id: String,
+) -> Result<()> {
+    dispatch_then_release(
+        &target,
+        || connected_peers(swarm),
+        || swarm.send_message(target, envelope, recipient_identity_id, None),
+        || {
+            core.mark_message_sent(message_id);
+        },
+    )
+    .await
+}
+
 // Axum handler functions
 
 async fn handle_send_message(
@@ -995,15 +1084,15 @@ async fn handle_send_message(
     // the peer is nearby + swarm), so it goes first; the raw BLE write below is
     // only a last-resort fallback when the swarm dispatch itself fails.
     let ble_fallback_data = prepared.envelope_data.clone();
-    let (http_status, status, warning) = match ctx
-        .swarm_handle
-        .send_message(
-            recipient.peer_id,
-            prepared.envelope_data,
-            Some(recipient.identity_id.clone()),
-            None,
-        )
-        .await
+    let (http_status, status, warning) = match swarm_send_releasing_on_direct_ack(
+        &ctx.swarm_handle,
+        core,
+        recipient.peer_id,
+        prepared.envelope_data,
+        Some(recipient.identity_id.clone()),
+        prepared.message_id.clone(),
+    )
+    .await
     {
         Ok(()) => {
             // send_message().await == Ok is the transport's true-delivery ACK
@@ -1012,7 +1101,12 @@ async fn handle_send_message(
             // delivered text whose Delivered receipt never arrives must still
             // release the sender's outbox entry. Never cleared on a buffer
             // enqueue -- send_message is the delivery layer, not the queue.
-            core.mark_message_sent(prepared.message_id.clone());
+            //
+            // The outbox entry was released inside the helper, and only if
+            // the recipient stayed directly connected across the dispatch.
+            // Otherwise Ok may be relay custody, not recipient receipt; the
+            // entry stays so the reconnect flush and retry sweep can still
+            // deliver it (msg d10c45f8).
             (StatusCode::OK, "accepted".to_string(), None)
         }
         Err(_swarm_err) => {
@@ -1849,6 +1943,58 @@ async fn handle_invite_redeem(
     }))
 }
 
+/// Returns true only when `origin` is exactly `http(s)://<loopback-host>[:port]`
+/// where the host is `localhost`, `127.0.0.1` or `[::1]`.
+///
+/// This is the CORS allow-list predicate for the control API. It parses the
+/// whole Origin value instead of matching a prefix, so look-alike hosts such as
+/// `http://localhost.evil.com`, `http://localhost@evil.com` or
+/// `http://127.0.0.1.evil.com` are rejected, as are `null`, `file://` and any
+/// value with a path, query, fragment, userinfo or non-numeric port.
+///
+/// Requests with no Origin header (curl, the CLI, other non-browser clients)
+/// never reach this predicate: CORS is a browser mechanism and tower-http only
+/// consults the predicate when an Origin header is present. Those requests are
+/// deliberately unaffected by this check.
+pub fn is_loopback_origin(origin: &[u8]) -> bool {
+    let Ok(origin) = std::str::from_utf8(origin) else {
+        return false;
+    };
+    let rest = if let Some(r) = origin.strip_prefix("http://") {
+        r
+    } else if let Some(r) = origin.strip_prefix("https://") {
+        r
+    } else {
+        return false;
+    };
+    // Split an optional port off the authority.
+    let (host, port) = if let Some(bracketed) = rest.strip_prefix('[') {
+        let Some((inner, tail)) = bracketed.split_once(']') else {
+            return false;
+        };
+        let host = &rest[..inner.len() + 2];
+        match tail.strip_prefix(':') {
+            Some(p) => (host, Some(p)),
+            None if tail.is_empty() => (host, None),
+            None => return false,
+        }
+    } else {
+        match rest.split_once(':') {
+            Some((h, p)) => (h, Some(p)),
+            None => (rest, None),
+        }
+    };
+    if let Some(p) = port {
+        if p.is_empty() || p.len() > 5 || !p.bytes().all(|b| b.is_ascii_digit()) {
+            return false;
+        }
+        if p.parse::<u16>().is_err() {
+            return false;
+        }
+    }
+    host.eq_ignore_ascii_case("localhost") || host == "127.0.0.1" || host == "[::1]"
+}
+
 #[allow(clippy::disallowed_methods)] // serde_json::json! expands to unwrap() calls internally
 pub async fn start_api_server(ctx: ApiContext, bind_addr: Option<String>) -> Result<()> {
     let ctx = Arc::new(ctx);
@@ -1869,9 +2015,11 @@ pub async fn start_api_server(ctx: ApiContext, bind_addr: Option<String>) -> Res
         SocketAddr::from(([127, 0, 0, 1], API_PORT))
     };
 
-    // Create CORS layer
+    // Create CORS layer restricted to localhost / loopback origins to prevent cross-origin attack vectors
     let cors = CorsLayer::new()
-        .allow_origin(tower_http::cors::Any)
+        .allow_origin(tower_http::cors::AllowOrigin::predicate(|origin, _| {
+            is_loopback_origin(origin.as_bytes())
+        }))
         .allow_methods([Method::GET, Method::POST])
         .allow_headers(tower_http::cors::Any);
 
@@ -1943,8 +2091,68 @@ pub async fn start_api_server(ctx: ApiContext, bind_addr: Option<String>) -> Res
 }
 
 #[cfg(test)]
+mod cors_origin_tests {
+    use super::is_loopback_origin;
+
+    #[test]
+    fn loopback_origins_are_allowed() {
+        for o in [
+            "http://localhost",
+            "https://localhost",
+            "http://localhost:3000",
+            "https://localhost:8443",
+            "http://127.0.0.1",
+            "https://127.0.0.1:9876",
+            "http://[::1]",
+            "http://[::1]:5173",
+            "http://LOCALHOST:8080",
+        ] {
+            assert!(is_loopback_origin(o.as_bytes()), "should allow {o}");
+        }
+    }
+
+    #[test]
+    fn hostile_origins_are_rejected() {
+        for o in [
+            "http://localhost.evil.com",
+            "http://localhost@evil.com",
+            "http://localhost:80@evil.com",
+            "http://127.0.0.1.evil.com",
+            "http://127.0.0.1@evil.com",
+            "http://localhost/",
+            "http://localhost/path",
+            "http://localhost?x=1",
+            "http://localhost:",
+            "http://localhost:abc",
+            "http://localhost:99999",
+            "http://[::1]evil.com",
+            "http://[::1",
+            "http://[::2]",
+            "http://localhostevil.com",
+            "http://127.0.0.2",
+            "null",
+            "file://",
+            "file:///etc/passwd",
+            "file://localhost",
+            "ftp://localhost",
+            "localhost",
+            "http://",
+            "",
+            " http://localhost",
+            "http://localhost ",
+        ] {
+            assert!(!is_loopback_origin(o.as_bytes()), "should reject {o:?}");
+        }
+        assert!(!is_loopback_origin(&[0xff, 0xfe, 0x00]));
+    }
+}
+
+#[cfg(test)]
 mod tests {
-    use super::{resolve_api_recipient, ApiRecipient, SendMessageResponse};
+    use super::{
+        dispatch_then_release, recipient_in_connected_set, resolve_api_recipient,
+        should_release_outbox, ApiRecipient, SendMessageResponse,
+    };
     use scmessenger_core::identity::keys::KeyPair;
     use scmessenger_core::store::Contact;
 
@@ -1953,6 +2161,95 @@ mod tests {
         let public_key = hex::encode(key_pair.verifying_key().to_bytes());
         super::api_recipient_from_public_key(public_key)
             .expect("generated test key must resolve to an API recipient")
+    }
+
+    #[test]
+    fn relayed_ack_does_not_release_outbox_entry() {
+        let recipient = libp2p::PeerId::random();
+        let relay = libp2p::PeerId::random();
+        assert!(!recipient_in_connected_set(&[relay], &recipient));
+        assert!(!recipient_in_connected_set(&[], &recipient));
+        assert!(recipient_in_connected_set(&[relay, recipient], &recipient));
+    }
+
+    #[test]
+    fn release_decision_requires_ok_and_stable_direct_link() {
+        assert!(should_release_outbox(true, true, true));
+        assert!(!should_release_outbox(false, true, true));
+        assert!(!should_release_outbox(true, false, false));
+        assert!(!should_release_outbox(true, true, false));
+        assert!(!should_release_outbox(true, false, true));
+    }
+
+    /// Drives the shared helper that all five send sites use. `snapshots` is
+    /// the connected set returned by successive peer queries.
+    async fn run_dispatch(
+        snapshots: Vec<Vec<libp2p::PeerId>>,
+        send_ok: bool,
+        target: libp2p::PeerId,
+    ) -> (bool, bool) {
+        let queries = std::cell::Cell::new(0usize);
+        let released = std::cell::Cell::new(false);
+        let result = dispatch_then_release(
+            &target,
+            || {
+                let i = queries.get().min(snapshots.len() - 1);
+                queries.set(queries.get() + 1);
+                let snap = snapshots[i].clone();
+                async move { snap }
+            },
+            || async move {
+                if send_ok {
+                    Ok(())
+                } else {
+                    Err(anyhow::anyhow!("dispatch failed"))
+                }
+            },
+            || released.set(true),
+        )
+        .await;
+        (result.is_ok(), released.get())
+    }
+
+    #[tokio::test]
+    async fn direct_ack_releases_outbox_entry() {
+        let target = libp2p::PeerId::random();
+        let (ok, released) = run_dispatch(vec![vec![target], vec![target]], true, target).await;
+        assert!(ok);
+        assert!(released);
+    }
+
+    #[tokio::test]
+    async fn relay_only_ack_keeps_outbox_entry() {
+        let target = libp2p::PeerId::random();
+        let relay = libp2p::PeerId::random();
+        let (ok, released) = run_dispatch(vec![vec![relay], vec![relay]], true, target).await;
+        assert!(ok);
+        assert!(!released);
+    }
+
+    #[tokio::test]
+    async fn peer_dropping_mid_dispatch_keeps_outbox_entry() {
+        let target = libp2p::PeerId::random();
+        let (ok, released) = run_dispatch(vec![vec![target], vec![]], true, target).await;
+        assert!(ok);
+        assert!(!released);
+    }
+
+    #[tokio::test]
+    async fn peer_appearing_mid_dispatch_keeps_outbox_entry() {
+        let target = libp2p::PeerId::random();
+        let (ok, released) = run_dispatch(vec![vec![], vec![target]], true, target).await;
+        assert!(ok);
+        assert!(!released);
+    }
+
+    #[tokio::test]
+    async fn failed_dispatch_keeps_outbox_entry() {
+        let target = libp2p::PeerId::random();
+        let (ok, released) = run_dispatch(vec![vec![target], vec![target]], false, target).await;
+        assert!(!ok);
+        assert!(!released);
     }
 
     #[test]

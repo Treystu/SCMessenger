@@ -10,6 +10,7 @@ pub mod ble_ids;
 mod ble_mesh;
 mod bootstrap;
 mod config;
+mod inbound_receipts;
 mod invite;
 mod ledger;
 mod platform_signals;
@@ -26,8 +27,9 @@ mod ble_windows;
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 use colored::*;
+use inbound_receipts::{envelope_sender_public_key_hex, should_ack_inbound};
 use libp2p::{Multiaddr, PeerId};
-use scmessenger_core::message::{decode_envelope, MessageType};
+use scmessenger_core::message::MessageType;
 use scmessenger_core::store::{Contact, ContactManager, MessageDirection, Outbox, QueuedMessage};
 use scmessenger_core::transport::abstraction::TransportType;
 use scmessenger_core::transport::{self, SwarmEvent, SwarmHandle};
@@ -2646,7 +2648,9 @@ async fn cmd_start(
         Some(Arc::downgrade(&core)),
         false,
         Some(discovery_config),
-        transport::default_routing_engine_handle(),
+        // Share the core's engine Arc so identify-time peer_seen lands in the
+        // engine the swarm reads (matches the mobile_bridge path).
+        core.routing_engine_handle(),
     )
     .await?;
 
@@ -3291,9 +3295,8 @@ async fn cmd_start(
                             SwarmEvent::MessageReceived { peer_id, envelope_data } => {
                                 // Extract sender's Ed25519 public key from the envelope before decryption.
                                 // We need it to encrypt the delivery receipt back to them.
-                                let sender_public_key_hex = decode_envelope(&envelope_data)
-                                    .ok()
-                                    .map(|env| hex::encode(&env.sender_public_key));
+                                let sender_public_key_hex =
+                                    envelope_sender_public_key_hex(&envelope_data);
 
                                 if let Ok(msg) = core_rx.receive_message(envelope_data) {
                                     match msg.message_type {
@@ -3384,16 +3387,15 @@ async fn cmd_start(
                                             // "text" are treated as metadata -- acking those produced
                                             // the receiver's "[RECEIPT-RX] IGNORING ...
                                             // direction=missing" stampede.
-                                            let is_identity_metadata = decoded_envelope
-                                                .as_ref()
-                                                .map(|d| d.kind.as_str() != "text")
-                                                .unwrap_or(false);
+                                            // Runs for duplicates too: receive_message returns
+                                            // Ok for a repeat id, and re-ACKing is what lets a
+                                            // sender whose first receipt was lost stop retrying.
                                             let local_pk = core_rx.get_identity_info().public_key_hex;
-                                            let is_self_loop = local_pk
-                                                .as_deref()
-                                                .map(|pk| sender_public_key_hex.as_deref() == Some(pk))
-                                                .unwrap_or(false);
-                                            if !is_identity_metadata && !is_self_loop {
+                                            if should_ack_inbound(
+                                                decoded_envelope.as_ref().map(|d| d.kind.as_str()),
+                                                sender_public_key_hex.as_deref(),
+                                                local_pk.as_deref(),
+                                            ) {
                                                 if let Some(ref pk_hex) = sender_public_key_hex {
                                                     match core_rx.prepare_receipt(pk_hex.clone(), msg.id.clone()) {
                                                         Ok(ack_bytes) => {
@@ -3631,13 +3633,18 @@ async fn cmd_start(
                                          let wire_message = crate::api::build_identity_wrapped_text(&core_rx, &swarm_handle, &message).await;
                                           if let Ok(prep) = core_rx.prepare_message_with_id(pk.clone(), wire_message, scmessenger_core::MessageType::Text, None) {
                                                let ble_ok = ble_mesh::send_ble_message(&target.to_string(), &prep.envelope_data).await.is_ok();
-                                               let swarm_ok = swarm_handle.send_message(target, prep.envelope_data, None, None).await.is_ok();
-                                               if swarm_ok {
-                                                   // True transport ACK (R2): release the outbox entry without a
-                                                   // Delivered receipt. BLE gatt is fire-and-forget, so only the
-                                                   // swarm path marks sent.
-                                                   core_rx.mark_message_sent(prep.message_id.clone());
-                                               }
+                                               // True transport ACK (R2): releases the outbox entry
+                                               // only on a direct-link ACK. BLE gatt is fire-and-forget.
+                                               let swarm_ok = crate::api::swarm_send_releasing_on_direct_ack(
+                                                   &swarm_handle,
+                                                   &core_rx,
+                                                   target,
+                                                   prep.envelope_data,
+                                                   None,
+                                                   prep.message_id.clone(),
+                                               )
+                                               .await
+                                               .is_ok();
                                                let sent = ble_ok || swarm_ok;
 
                                                if sent {
@@ -3818,13 +3825,20 @@ async fn cmd_start(
                                         let wire_message = crate::api::build_identity_wrapped_text(&core_rx, &swarm_handle, &message).await;
         match core_rx.prepare_message_with_id(pk.clone(), wire_message, scmessenger_core::MessageType::Text, None) {
                                             Ok(prep) => {
-                                                if swarm_handle
-                                                    .send_message(target, prep.envelope_data, None, None)
-                                                    .await
-                                                    .is_ok()
+                                                // True transport ACK (R2): the helper releases the
+                                                // outbox entry only for a direct link (relay Ok =
+                                                // custody only).
+                                                if crate::api::swarm_send_releasing_on_direct_ack(
+                                                    &swarm_handle,
+                                                    &core_rx,
+                                                    target,
+                                                    prep.envelope_data,
+                                                    None,
+                                                    prep.message_id.clone(),
+                                                )
+                                                .await
+                                                .is_ok()
                                                 {
-                                                    // True transport ACK (R2): release the outbox entry.
-                                                    core_rx.mark_message_sent(prep.message_id.clone());
                                                     let mid = msg_id.clone().unwrap_or_default();
                                                     let mut m = serde_json::Map::new();
                                                     m.insert("status".to_string(), "sent".into());
@@ -4247,7 +4261,7 @@ async fn cmd_relay(
         Some(Arc::downgrade(&core)),
         true,
         Some(discovery_config),
-        transport::default_routing_engine_handle(),
+        core.routing_engine_handle(),
     )
     .await?;
     println!("{} P2P swarm started on {}", "[OK]".green(), listen_addr);
@@ -4575,9 +4589,7 @@ async fn cmd_relay(
                     }
                     SwarmEvent::MessageReceived { peer_id, envelope_data } => {
                         let sender_public_key_hex =
-                            decode_envelope(&envelope_data)
-                                .ok()
-                                .map(|e| hex::encode(e.sender_public_key));
+                            envelope_sender_public_key_hex(&envelope_data);
 
                         // In node mode, we automatically peel and forward onion layers or handle text/receipts
                         if let Ok(msg) = core_arc.receive_message(envelope_data.clone()) {
@@ -4639,16 +4651,12 @@ async fn cmd_relay(
                                         let _ = ui_broadcast.send(server::UiOutbound::JsonRpc(v));
                                     }
 
-                                    let is_identity_metadata = decoded_envelope
-                                        .as_ref()
-                                        .map(|d| d.kind.as_str() != "text")
-                                        .unwrap_or(false);
                                     let local_pk = core_arc.get_identity_info().public_key_hex;
-                                    let is_self_loop = local_pk
-                                        .as_deref()
-                                        .map(|pk| sender_public_key_hex.as_deref() == Some(pk))
-                                        .unwrap_or(false);
-                                    if !is_identity_metadata && !is_self_loop {
+                                    if should_ack_inbound(
+                                        decoded_envelope.as_ref().map(|d| d.kind.as_str()),
+                                        sender_public_key_hex.as_deref(),
+                                        local_pk.as_deref(),
+                                    ) {
                                         if let Some(ref pk_hex) = sender_public_key_hex {
                                             match core_arc.prepare_receipt(pk_hex.clone(), msg.id.clone()) {
                                                 Ok(ack_bytes) => {
@@ -4784,7 +4792,7 @@ async fn cmd_send_offline(recipient: String, message: String) -> Result<()> {
             }
         }
     });
-    let routing_handle = scmessenger_core::transport::default_routing_engine_handle();
+    let routing_handle = core.routing_engine_handle();
 
     let swarm_handle = match scmessenger_core::transport::start_swarm(
         network_keypair,
@@ -4844,15 +4852,20 @@ async fn cmd_send_offline(recipient: String, message: String) -> Result<()> {
 
     loop {
         attempts += 1;
-        match swarm_handle
-            .send_message(recipient_peer_id, envelope_bytes.clone(), None, None)
-            .await
+        // True transport ACK (R2): the helper releases the outbox entry only
+        // for a direct link; a relayed Ok is custody acceptance and the entry
+        // must await a receipt.
+        match crate::api::swarm_send_releasing_on_direct_ack(
+            &swarm_handle,
+            &core,
+            recipient_peer_id,
+            envelope_bytes.clone(),
+            None,
+            prepared_message_id.clone(),
+        )
+        .await
         {
             Ok(_) => {
-                // True transport ACK (R2): release the outbox entry without a
-                // Delivered receipt. send_message() awaits the actual delivery,
-                // not a buffer enqueue.
-                core.mark_message_sent(prepared_message_id.clone());
                 println!(
                     "{} Message sent successfully to {} (attempt {}/{})",
                     "[OK]".green(),
