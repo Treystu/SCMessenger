@@ -29,6 +29,11 @@ except ImportError:
         resolve_source,
     )
 
+try:
+    from .jev_key_resolution import describe_rows, resolve_key
+except ImportError:
+    from jev_key_resolution import describe_rows, resolve_key
+
 OPENROUTER_CHAT_URL = "https://openrouter.ai/api/v1/chat/completions"
 # Operator 2026-09-21: ~typesafe/jev-latest is an OpenRouter **decisions** model
 # — it must use the alpha decisions API, not chat/completions.
@@ -56,6 +61,15 @@ def import_harness():
         key = mod["resolve_jev_key"]() or None
     except Exception:  # noqa: BLE001
         key = None
+    key_location: Optional[str] = "harness:resolve_jev_key" if key else None
+    key_tried: list = []
+    if key is None:
+        # #622 key half: the Harness covers two env files and three variables, and
+        # requires a bare `KEY=value` line. The lane's doctrine also names
+        # ~/.typesafe_key, and operators keep shell-sourced key files whose lines
+        # read `export KEY=...`. Resolving those here is what stops a present key
+        # from being reported absent; the location name is the only thing printed.
+        key, key_location, key_tried = resolve_key()
     try:
         or_key = mod["resolve_api_key"]() or None
     except Exception:  # noqa: BLE001
@@ -64,6 +78,8 @@ def import_harness():
         "root": mod["root"],
         "source": mod["source"],
         "key": key,
+        "key_location": key_location,
+        "key_tried": describe_rows(key_tried),
         "openrouter_key": or_key,
         "JevEvaluator": mod["JevEvaluator"],
         "JevPolicy": mod["JevPolicy"],
