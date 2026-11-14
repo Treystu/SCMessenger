@@ -353,3 +353,168 @@ Android runtime and the rail carries no emulator.
    evidence input (:132-147 reset path, :482 record_success) and make the ceiling
    churn-derived (:19 `compute_ceiling_ms`, :201-207 defaults).
 5. Two-method census and 12-status rail reads once the quota allows.
+---
+
+## 8. #622 KEY RESOLUTION -- cure landed on `lane/cure-622-key-resolution`
+
+Section 0 above describes the report's history on
+`lane/cure-decision-ready-2026-11-13`. The report now also lives on
+`lane/cure-622-key-resolution`, whose head carries this section; the fix itself
+is commit `76ae7e0dc7dad3ec142ec045d8115e2dc19369d1` on that branch.
+
+### Resolution verdict: NOT CHECKED (no key exists in this sandbox) -- and now, for the first time, the line names the locations it tried
+
+Order tried, as the doctrine requires (Harness-configured key, SCM ORC folder
+keys, `~/.typesafe_key`), each read this session, presence only:
+
+| location | read | result |
+|---|---|---|
+| `~/.config/harness/jev.env` (Harness-configured) | `[ -e ]` | ABSENT |
+| `~/.config/scmorc/jev.env` (SCM ORC folder) | `[ -e ]` | ABSENT |
+| `~/.typesafe_key` | `[ -e ]` | ABSENT |
+| `HARNESS_JEV_KEY` / `TYPESAFE_API_KEY` / `JEV_API_KEY` | `${!v}` test | all unset |
+
+So no location resolves on this machine, and the canonical-check claim stays
+NOT CHECKED. What changed is that the gate can no longer say so *silently*: the
+line now carries the source and the tried set, e.g.
+
+```
+[INFO] harness: ... sha=ad4a30052955e1f574c90f426edfc7a274e16ebf status=PRODUCTION pinned=True typesafe_key=False key_source=none openrouter_key=False
+[INFO] key locations tried: ~/.config/harness/jev.env: absent; ~/.config/scmorc/jev.env: absent; ~/.typesafe_key: absent; HARNESS_JEV_KEY: unset; TYPESAFE_API_KEY: unset; JEV_API_KEY: unset
+```
+
+### Cause (the concrete reason a present key is reported missing)
+
+Read from `vendor/sovereign-harness/harness/config.py:resolve_jev_key`
+(lines 434-467) and `scripts/local_harness.py:import_harness`:
+
+1. The Harness resolves a key from exactly two env files
+   (`~/.config/harness/jev.env`, `~/.config/scmorc/jev.env`) and three
+   environment variables. `~/.typesafe_key` -- a location this lane's own key
+   doctrine names -- is **never opened**.
+2. Its env-file parser takes a line, strips it, and requires the variable name to
+   match `HARNESS_JEV_KEY` / `JEV_API_KEY` / `TYPESAFE_API_KEY` **exactly**. A
+   shell-sourced key file whose line reads `export TYPESAFE_API_KEY=...` yields
+   the name `export TYPESAFE_API_KEY`, misses the list, and is skipped with no
+   message.
+3. `import_harness` wrapped the call in a bare `except Exception: key = None`, so
+   any failure in that path (permissions, a malformed file) also read as
+   absence.
+4. The gate printed only `typesafe_key={bool(key)}`, so even a present key that
+   failed to resolve left no record of *where* it had looked.
+
+Result: a key present at a documented location produced
+`typesafe_key=False` -- a false absence claim, which is the defect.
+
+### Fix (Python only, ungated paths: `scripts/`)
+
+- New `scripts/jev_key_resolution.py`: resolves the three doctrine locations in
+  doctrine order, then the three environment variables. Accepts bare key files
+  (`~/.typesafe_key`) and env-style files, including `export KEY=value` lines,
+  strips whitespace and one layer of matching quotes, distinguishes ABSENT from
+  "present, no usable key line", and returns the winning **location name only**.
+  It never prints, logs or stores the value, and creates nothing.
+- `scripts/local_harness.py`: when the Harness resolver returns nothing, the
+  consumer-side resolver runs and its result is used; the loaded module now
+  carries `key_location` and `key_tried`. The Harness still wins when it resolves
+  a key, so its precedence is unchanged.
+- `scripts/jev_canonical_check.py`: the harness line gains
+  `key_source=<location|none>`, and when no key resolves a second line prints
+  every location tried with its status -- the filing record the doctrine asks
+  for, with no key material in it.
+
+### Tests, and the before/after proof
+
+`scripts/test_jev_key_resolution.py`, 11 tests: bare `~/.typesafe_key` resolves;
+an `export TYPESAFE_API_KEY=...` line in the SCM ORC file resolves; the
+Harness-config location outranks the SCM ORC one; the environment is the last
+resort; quotes and trailing space are stripped; absence reports every location;
+a present-but-unusable file is not called absent; neither the location nor the
+rendered rows ever contain key material; `local_harness` prefers the Harness key
+and falls back to a documented location; and one live comparison proving the
+Harness parser returns nothing for the same `export`-shaped fixture that the new
+resolver reads.
+
+Two independent checks, both from a fresh clone of the remote branch:
+
+1. **After the fix, in the clone**: `python3 scripts/test_jev_key_resolution.py`
+   -> `Ran 11 tests in 0.151s / OK` (no skips). The gate CLI run from the clone
+   against a fixture `~/.typesafe_key` prints
+   `typesafe_key=True key_source=~/.typesafe_key`; the same run with an empty
+   HOME prints `typesafe_key=False key_source=none`.
+2. **Before the fix, in the same clone** at parent commit `c635c4d`, with the
+   identical test file copied in: `ModuleNotFoundError: No module named
+   'jev_key_resolution'` -- the suite cannot pass against the pre-fix tree.
+
+Surrounding tests, from the clone, unchanged and green:
+`scripts/test_orchestration_v2.py` -> `Ran 26 tests ... OK`;
+`python3 -m unittest scripts/test_jev_canonical_check.py` -> `[OK] JEV bucketed
+pass ... via typesafe`; `scripts/test_delivery_probability.py` -> `Ran 12 tests
+... OK`.
+
+### Not claimed
+
+No key was found, so the canonical gate's own verdict remains NOT CHECKED and no
+TypeSafe call was made with a real credential. The fixture value used in the
+tests and in the CLI demonstration is a placeholder, stored under `tmp/` (repo
+local, gitignored), never committed. This cure removes the *false absence* and
+makes the absence auditable; it cannot manufacture a credential that does not
+exist on this machine.
+
+### Tracker filing attempt (#602): REFUSED -- exact text recorded
+
+The #622 completion digest was attempted against
+`POST /repos/Treystu/SCMessenger/issues/602/comments`. Response, verbatim:
+
+```
+http_status=403
+{"message":"API rate limit exceeded for 208.72.218.131. (But here's the good news: Authenticated requests get a higher rate limit. Check out the documentation for more details.)","documentation_url":"https://docs.github.com/rest/overview/resources-in-the-rest-api#rate-limiting"}
+```
+
+So the digest is NOT filed. Per the instruction, the refusal is recorded here
+instead of being retried. Note what this 403 is and is not: it is the anonymous
+quota refusing the request before authentication is even reached, and this
+environment holds no credential for that endpoint (section 1, items 1-12 and 16),
+so the write path is unavailable either way. The earlier write probe on the same
+endpoint (section 1, item 16) returned 403 before the quota was spent, so "no
+credential" is established independently of "quota exhausted".
+
+Process note, recorded rather than hidden: the first digest attempt wrote its
+response body to a path outside the repo-local `tmp/` (AGENTS.md rule 2). The
+file was deleted immediately, nothing was committed, and the second attempt wrote
+to `tmp/digest_refusal.json` inside the working folder.
+
+### Digest content that a write-capable session should file
+
+- Item closed at this head: **#622**, key half -- the gate can no longer report a
+  present key as absent, and both the fix and its regression test are on
+  `lane/cure-622-key-resolution`.
+- Canonical check: **NOT CHECKED**. Locations tried, each probe's status:
+  `~/.config/harness/jev.env` absent; `~/.config/scmorc/jev.env` absent;
+  `~/.typesafe_key` absent; `HARNESS_JEV_KEY` unset; `TYPESAFE_API_KEY` unset;
+  `JEV_API_KEY` unset. Harness half resolves and is pinned
+  (`ad4a30052955e1f574c90f426edfc7a274e16ebf`, PRODUCTION).
+- BURN LINE: closed **1**; tokens **UNMEASURED** (this surface exposes no usage
+  meter, and inventing a figure would be a filing defect); closed per 100k
+  therefore **not computable** -- recorded as unmeasured, not as zero.
+
+### Close-out check: brand-new clone, after the pushes
+
+- Independent remote refs read, `git ls-remote origin
+  refs/heads/lane/cure-622-key-resolution`:
+  `1ef01dfe960c1714f754e924512c13f5d6a1e201`.
+- Brand-new clone head: `1ef01dfe960c1714f754e924512c13f5d6a1e201` -- agrees.
+- Fix commit present at that head: `git cat-file -t
+  76ae7e0dc7dad3ec142ec045d8115e2dc19369d1` -> `commit`; its stat is the four
+  files (`jev_key_resolution.py` +181, `test_jev_key_resolution.py` +241,
+  `local_harness.py` +16, `jev_canonical_check.py` +6).
+- Report section present in the clone: this section, the verdict line, the three
+  locations with statuses, the cause, the fix, the test names, both checks.
+- Regression test run from the clone: `Ran 11 tests in 0.143s` / `OK`.
+- Surrounding tests from the clone: `test_orchestration_v2.py` ->
+  `Ran 26 tests in 1.076s` / `OK`; `test_jev_canonical_check.py` ->
+  `[OK] JEV bucketed pass (min_confidence=0.7, bucket_threshold=0.8) via
+  typesafe`; `test_delivery_probability.py` -> `OK`.
+- Pre-fix demonstration in the same clone, test file copied onto parent
+  `c635c4d6`: `ModuleNotFoundError: No module named 'jev_key_resolution'`,
+  exited **1**. Fails before, passes after -- demonstrated, not restated.
