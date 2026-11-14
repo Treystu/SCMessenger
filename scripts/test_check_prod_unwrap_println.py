@@ -49,6 +49,48 @@ class ScanSourceTests(unittest.TestCase):
         )
         self.assertEqual(kinds(src), [])
 
+    def test_cfg_all_with_a_negated_atom_still_requires_test(self):
+        # #565: the gate's old substring test returned "production" for any cfg containing `not(`,
+        # so this test-only module was checked as production code and its `.unwrap()` flagged.
+        src = (
+            '#[cfg(all(test, not(target_arch = "wasm32")))]\n'
+            "mod tests { fn t() { a.unwrap(); } }\n"
+            "fn prod() { b.unwrap(); }\n"
+        )
+        self.assertEqual(kinds(src), [(3, "unwrap")])
+
+    def test_cfg_any_with_test_is_still_production(self):
+        # any(test, ..) holds when `test` is absent, so the item can be compiled into production.
+        src = '#[cfg(any(test, feature = "x"))]\nfn f() { a.unwrap(); }\n'
+        self.assertEqual(kinds(src), [(2, "unwrap")])
+
+    def test_cfg_predicate_classification(self):
+        requires = [
+            "test",
+            'all(test, feature = "x")',
+            'all(test, not(target_arch = "wasm32"))',
+            'all(not(target_arch = "wasm32"), test)',
+            "all(test, all(unix, test))",
+        ]
+        production = [
+            "not(test)",
+            'any(test, feature = "x")',
+            'not(all(test, feature = "x"))',
+            'unix',
+            'target_arch = "wasm32"',
+            'all(unix, not(test))',
+        ]
+        for expr in requires:
+            self.assertTrue(c._cfg_requires_test(expr), expr)
+        for expr in production:
+            self.assertFalse(c._cfg_requires_test(expr), expr)
+
+    def test_unparsable_cfg_fails_closed_as_production(self):
+        # A predicate the parser cannot read must not be waved through as test-only: skipping code
+        # is the unrecoverable error for this gate, a false positive is a visible one.
+        for expr in ("all(test,", "", "all(test", "test)", "all(test,,feature)", "not("):
+            self.assertFalse(c._cfg_requires_test(expr), expr)
+
     def test_inner_cfg_test_excludes_whole_file(self):
         self.assertEqual(kinds("#![cfg(test)]\nfn f() { a.unwrap(); }\n"), [])
 
