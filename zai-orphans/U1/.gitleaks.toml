@@ -1,0 +1,140 @@
+title = "SCMessenger Secret Scanning Configuration"
+
+# Generic API Key Detection
+[[rules]]
+id = "generic-api-key"
+description = "Generic API Key"
+regex = '''(?i)(api[_-]?key|apikey)['":\s]*[=:]\s*['"][a-zA-Z0-9]{20,}['"]'''
+tags = ["key", "API", "secret"]
+
+# AWS Access Key
+[[rules]]
+id = "aws-access-key"
+description = "AWS Access Key"
+regex = '''AKIA[0-9A-Z]{16}'''
+tags = ["key", "AWS"]
+
+# AWS Secret Key
+[[rules]]
+id = "aws-secret-key"
+description = "AWS Secret Key"
+regex = '''(?i)aws(.{0,20})?['\"][0-9a-zA-Z/+]{40}['\"]'''
+tags = ["key", "AWS"]
+
+# Private Key (RSA, EC, OpenSSH)
+[[rules]]
+id = "private-key"
+description = "Private Key"
+regex = '''-----BEGIN (RSA|EC|OPENSSH|DSA|PGP) PRIVATE KEY-----'''
+tags = ["key", "private"]
+
+# GitHub Personal Access Token
+[[rules]]
+id = "github-token"
+description = "GitHub Personal Access Token"
+regex = '''ghp_[a-zA-Z0-9]{36}'''
+tags = ["key", "GitHub"]
+
+# GitHub OAuth Token
+[[rules]]
+id = "github-oauth"
+description = "GitHub OAuth Token"
+regex = '''gho_[a-zA-Z0-9]{36}'''
+tags = ["key", "GitHub"]
+
+# GitHub App Token
+[[rules]]
+id = "github-app-token"
+description = "GitHub App Token"
+regex = '''(ghu|ghs)_[a-zA-Z0-9]{36}'''
+tags = ["key", "GitHub"]
+
+# Generic Password in Code
+[[rules]]
+id = "generic-password"
+description = "Generic Password in Code"
+regex = '''(?i)(password|passwd|pwd)['":\s]*[=:]\s*['"][^'"\s]{8,}['"]'''
+tags = ["password", "secret"]
+
+# Slack Token
+[[rules]]
+id = "slack-token"
+description = "Slack Token"
+regex = '''xox[baprs]-[0-9]{10,13}-[0-9]{10,13}-[a-zA-Z0-9]{24,32}'''
+tags = ["key", "Slack"]
+
+# Google API Key
+[[rules]]
+id = "google-api-key"
+description = "Google API Key"
+regex = '''AIza[0-9A-Za-z\\-_]{35}'''
+tags = ["key", "Google"]
+
+# Firebase API Key
+[[rules]]
+id = "firebase-api-key"
+description = "Firebase API Key"
+regex = '''(?i)firebase[_-]?api[_-]?key['":\s]*[=:]\s*['"][a-zA-Z0-9-_]{39}['"]'''
+tags = ["key", "Firebase"]
+
+# JWT Token
+[[rules]]
+id = "jwt-token"
+description = "JWT Token"
+regex = '''eyJ[a-zA-Z0-9_-]{10,}\.eyJ[a-zA-Z0-9_-]{10,}\.[a-zA-Z0-9_-]{10,}'''
+tags = ["token", "JWT"]
+
+# Database Connection String
+[[rules]]
+id = "database-connection"
+description = "Database Connection String"
+regex = '''(?i)(mongodb|mysql|postgres|postgresql)://[^\s'"]+:[^\s'"]+@[^\s'"]+'''
+tags = ["database", "connection-string"]
+
+# Android Keystore Password
+[[rules]]
+id = "android-keystore-password"
+description = "Android Keystore Password"
+regex = '''(?i)(keystore|storePassword|keyPassword)['":\s]*[=:]\s*['"][^'"\s]{6,}['"]'''
+tags = ["android", "keystore", "password"]
+
+# iOS Provisioning Profile
+[[rules]]
+id = "ios-provisioning"
+description = "iOS Provisioning Profile (embedded)"
+regex = '''-----BEGIN CERTIFICATE-----[A-Za-z0-9+/=\s]{100,}-----END CERTIFICATE-----'''
+tags = ["ios", "certificate"]
+
+# Allowlist - Paths to exclude from scanning
+[allowlist]
+description = "Allowlisted paths and patterns"
+paths = [
+    '''\.git/''',
+    '''target/''',
+    '''build/''',
+    '''node_modules/''',
+    '''\.gradle/''',
+    '''DerivedData/''',
+    '''\.idea/''',
+    '''\.vscode/''',
+    '''pkg/''',
+    '''dist/''',
+]
+
+# Allowlist - Specific commits (if needed)
+commits = []
+
+# Allowlist - Specific regexes to ignore
+regexes = [
+    # Example test keys (clearly marked as test/example)
+    '''(?i)(test|example|sample|demo)[_-]?(api[_-]?key|password|secret)''',
+    # Documentation examples
+    '''(?i)your[_-]?(api[_-]?key|password|token|secret)''',
+]
+
+# Allowlist - Specific files
+files = [
+    '''.gitleaks.toml''',
+    '''README.md''',
+    '''SECURITY.md''',
+]

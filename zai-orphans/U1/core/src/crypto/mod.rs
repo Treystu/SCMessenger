@@ -1,0 +1,26 @@
+// Cryptography module — message encryption and key exchange
+
+pub mod backup;
+pub mod encrypt;
+pub mod negotiation;
+pub mod pq;
+pub mod ratchet;
+pub mod session_manager;
+
+#[cfg(test)]
+mod proptest_harness;
+
+#[cfg(feature = "kani-proofs")]
+mod kani_proofs;
+
+pub use encrypt::{
+    decrypt_message, decrypt_message_ratcheted, decrypt_with_ratchet_fallback,
+    ed25519_public_to_x25519, ed25519_to_x25519_secret, encrypt_message, encrypt_message_ratcheted,
+    encrypt_with_ratchet_fallback, is_ratcheted_envelope, sign_envelope, sign_envelope_v2,
+    validate_ed25519_public_key, verify_envelope, verify_envelope_v2,
+};
+pub use ratchet::{RatchetEncryptResult, RatchetKey, RatchetSession};
+pub use session_manager::{RatchetSessionManager, SerializableRatchetSession};
+
+// Re-export DSPy signature functions for crypto signature verification integration
+pub use crate::dspy::signatures::{blake3_hash, get_signature, signature_fingerprint};

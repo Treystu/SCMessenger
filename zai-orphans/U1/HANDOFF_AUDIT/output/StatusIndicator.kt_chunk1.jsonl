@@ -1,0 +1,40 @@
+﻿{
+  "file": "StatusIndicator.kt",
+  "chunk": 1,
+  "summary": "A composable function that displays a status indicator dot for peer online/offline status and transport type. It includes animated pulse for active connections.",
+  "structs_or_classes": [],
+  "imports": [
+    "androidx.compose.animation.core.*",
+    "androidx.compose.foundation.background",
+    "androidx.compose.foundation.layout.Box",
+    "androidx.compose.foundation.layout.size",
+    "androidx.compose.foundation.shape.CircleShape",
+    "androidx.compose.runtime.Composable",
+    "androidx.compose.runtime.getValue",
+    "androidx.compose.ui.Modifier",
+    "androidx.compose.ui.draw.clip",
+    "androidx.compose.ui.draw.scale",
+    "androidx.compose.ui.graphics.Color",
+    "androidx.compose.ui.unit.Dp",
+    "androidx.compose.ui.unit.dp",
+    "com.scmessenger.android.service.TransportType",
+    "com.scmessenger.android.ui.theme.*"
+  ],
+  "funcs": [
+    {
+      "name": "StatusIndicator",
+      "line": 31,
+      "calls_out_to": ["StaticDot", "PulsingDot"]
+    },
+    {
+      "name": "StaticDot",
+      "line": 63,
+      "calls_out_to": []
+    },
+    {
+      "name": "PulsingDot",
+      "line": 81,
+      "calls_out_to": ["rememberInfiniteTransition", "animateFloat"]
+    }
+  ]
+}

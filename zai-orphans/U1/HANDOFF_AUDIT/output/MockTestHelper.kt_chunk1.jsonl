@@ -1,0 +1,29 @@
+﻿{
+  "file": "MockTestHelper.kt",
+  "chunk": 1,
+  "summary": "This file contains helper functions for setting up mocks in tests. It provides common mock configurations for UniFFI objects.",
+  "structs_or_classes": ["MeshSettings", "Contact", "IronCore", "MeshSettingsManager"],
+  "imports": ["io.mockk.*", "uniffi.api.*"],
+  "funcs": [
+    {
+      "name": "createMockMeshSettings",
+      "line": 15,
+      "calls_out_to": []
+    },
+    {
+      "name": "createMockContact",
+      "line": 43,
+      "calls_out_to": []
+    },
+    {
+      "name": "createMockIronCore",
+      "line": 78,
+      "calls_out_to": []
+    },
+    {
+      "name": "createMockSettingsManager",
+      "line": 102,
+      "calls_out_to": []
+    }
+  ]
+}

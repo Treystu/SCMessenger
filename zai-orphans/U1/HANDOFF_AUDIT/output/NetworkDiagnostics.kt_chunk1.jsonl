@@ -1,0 +1,70 @@
+﻿{
+  "file": "NetworkDiagnostics.kt",
+  "chunk": 1,
+  "summary": "This class provides comprehensive network diagnostics to identify and troubleshoot connectivity issues.",
+  "structs_or_classes": [
+    {
+      "name": "NetworkTestResults",
+      "line": 32
+    }
+  ],
+  "imports": [
+    "android.content.Context",
+    "android.net.ConnectivityManager",
+    "android.net.NetworkCapabilities",
+    "com.scmessenger.android.transport.NetworkType",
+    "kotlinx.coroutines.Dispatchers",
+    "kotlinx.coroutines.withContext",
+    "timber.log.Timber",
+    "java.net.HttpURLConnection",
+    "java.net.InetAddress",
+    "java.net.InetSocketAddress",
+    "java.net.Socket",
+    "java.net.URL",
+    "dagger.hilt.android.qualifiers.ApplicationContext",
+    "javax.inject.Inject",
+    "javax.inject.Singleton"
+  ],
+  "funcs": [
+    {
+      "name": "testNetworkConnectivity",
+      "line": 41,
+      "calls_out_to": ["testInternetConnectivity", "testDnsResolution", "testCommonPorts", "testRelaySpecificConnectivity", "detectNetworkType", "detectNetworkRestrictions"]
+    },
+    {
+      "name": "testInternetConnectivity",
+      "line": 60,
+      "calls_out_to": []
+    },
+    {
+      "name": "testDnsResolution",
+      "line": 77,
+      "calls_out_to": []
+    },
+    {
+      "name": "testCommonPorts",
+      "line": 94,
+      "calls_out_to": []
+    },
+    {
+      "name": "testRelaySpecificConnectivity",
+      "line": 109,
+      "calls_out_to": []
+    },
+    {
+      "name": "detectNetworkType",
+      "line": 125,
+      "calls_out_to": ["connectivityManager.activeNetwork", "connectivityManager.getNetworkCapabilities"]
+    },
+    {
+      "name": "detectNetworkRestrictions",
+      "line": 137,
+      "calls_out_to": ["connectivityManager.activeNetwork", "connectivityManager.getNetworkCapabilities"]
+    },
+    {
+      "name": "isPortOpen",
+      "line": 157,
+      "calls_out_to": []
+    }
+  ]
+}

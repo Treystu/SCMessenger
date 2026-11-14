@@ -1,0 +1,48 @@
+﻿{
+  "file": "websocket.rs",
+  "chunk": 1,
+  "summary": "WebSocket Transport Implementation",
+  "structs_or_classes": ["WebSocketTransport", "InternetTransportError"],
+  "imports": [
+    "libp2p::multiaddr::Protocol",
+    "tokio_tungstenite::{connect_async, tungstenite::client::IntoClientRequest}",
+    "std::time::Duration"
+  ],
+  "funcs": [
+    {
+      "name": "new",
+      "line": 48,
+      "calls_out_to": ["WebSocketTransport"]
+    },
+    {
+      "name": "from_multiaddr",
+      "line": 60,
+      "calls_out_to": ["multiaddr_to_websocket_url", "WebSocketTransport"]
+    },
+    {
+      "name": "connect",
+      "line": 84,
+      "calls_out_to": ["tokio::time::timeout", "connect_async", "WebSocketTransport"]
+    },
+    {
+      "name": "send",
+      "line": 108,
+      "calls_out_to": ["tokio_tungstenite::tungstenite::Message::Binary", "tokio::time::timeout", "ws_stream.send", "WebSocketTransport"]
+    },
+    {
+      "name": "recv",
+      "line": 132,
+      "calls_out_to": ["tokio::time::timeout", "ws_stream.next", "WebSocketTransport"]
+    },
+    {
+      "name": "close",
+      "line": 156,
+      "calls_out_to": ["ws_stream.close", "WebSocketTransport"]
+    },
+    {
+      "name": "is_connected",
+      "line": 148,
+      "calls_out_to": []
+    }
+  ]
+}

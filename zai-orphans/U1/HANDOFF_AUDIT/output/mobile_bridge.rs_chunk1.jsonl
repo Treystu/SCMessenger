@@ -1,0 +1,57 @@
+﻿{
+  "file": "mobile_bridge.rs",
+  "chunk": 1,
+  "summary": "Mobile mesh service wrapper integrating IronCore with mobile lifecycle.",
+  "structs_or_classes": ["MeshService", "MeshServiceConfig", "BehaviorAdjustment", "DeviceState"],
+  "imports": [
+    "std::collections::HashSet",
+    "std::str::FromStr",
+    "std::sync::Arc",
+    "parking_lot::{Mutex, RwLock}",
+    "serde::{Deserialize, Serialize}",
+    "crate::settings::MeshSettings",
+    "crate::transport::SwarmHandle"
+  ],
+  "funcs": [
+    {
+      "name": "new",
+      "line": 158,
+      "calls_out_to": ["MeshServiceConfig"]
+    },
+    {
+      "name": "with_storage",
+      "line": 179,
+      "calls_out_to": ["MeshServiceConfig", "storage_path"]
+    },
+    {
+      "name": "with_storage_and_logs",
+      "line": 202,
+      "calls_out_to": ["MeshServiceConfig", "storage_path", "log_directory"]
+    },
+    {
+      "name": "start",
+      "line": 301,
+      "calls_out_to": ["core"]
+    },
+    {
+      "name": "set_delegate",
+      "line": 307,
+      "calls_out_to": ["delegate"]
+    },
+    {
+      "name": "stop",
+      "line": 311,
+      "calls_out_to": []
+    },
+    {
+      "name": "pause",
+      "line": 339,
+      "calls_out_to": []
+    },
+    {
+      "name": "resume",
+      "line": 346,
+      "calls_out_to": []
+    }
+  ]
+}

@@ -1,0 +1,255 @@
+name: Repository Hygiene
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  hygiene-checks:
+    name: Repository Hygiene Checks
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      
+      - name: Check for tracked files matching .gitignore patterns
+        run: |
+          echo "Checking for tracked files that should be ignored..."
+          
+          # Check for keystore files
+          if git ls-files | grep -E '\.(keystore|jks|p12|mobileprovision)$'; then
+            echo "[ERROR] ERROR: Keystore or certificate files found in repository"
+            echo "These files should never be committed:"
+            git ls-files | grep -E '\.(keystore|jks|p12|mobileprovision)$'
+            exit 1
+          fi
+          
+          # Check for base64 encoded secrets
+          if git ls-files | grep -E '(keystore|certificate|profile)_base64\.txt$'; then
+            echo "[ERROR] ERROR: Base64-encoded secret files found in repository"
+            git ls-files | grep -E '(keystore|certificate|profile)_base64\.txt$'
+            exit 1
+          fi
+          
+          # Check for backup instruction files (contain sensitive info)
+          if git ls-files | grep -E 'BACKUP_INSTRUCTIONS\.md$'; then
+            echo "[ERROR] ERROR: Backup instruction files found in repository"
+            git ls-files | grep -E 'BACKUP_INSTRUCTIONS\.md$'
+            exit 1
+          fi
+          
+          # Check for build artifacts
+          if git ls-files | grep -E '^target/|^build/|^\.gradle/|^DerivedData/'; then
+            echo "[ERROR] ERROR: Build artifacts found in repository"
+            git ls-files | grep -E '^target/|^build/|^\.gradle/|^DerivedData/'
+            exit 1
+          fi
+          
+          # Check for IDE files
+          if git ls-files | grep -E '\.(swp|swo|DS_Store)$|^\.idea/|^\.vscode/'; then
+            echo "[ERROR] ERROR: IDE or OS files found in repository"
+            git ls-files | grep -E '\.(swp|swo|DS_Store)$|^\.idea/|^\.vscode/'
+            exit 1
+          fi
+          
+          echo "[OK] No ignored files found in repository"
+      
+      - name: Check for trailing whitespace
+        run: |
+          echo "Checking for trailing whitespace..."
+          
+          # Generated UniFFI sources preserve upstream generator formatting.
+          # Check authored files while excluding deterministic generated output.
+          if git diff --check HEAD^ HEAD -- . \
+            ':(exclude)iOS/SCMessenger/SCMessenger/Generated/**' \
+            ':(exclude)iOS/SCMessengerCore.xcframework/**/Headers/**' \
+            2>&1 | grep -v "warning: CRLF will be replaced"; then
+            echo "[ERROR] ERROR: Trailing whitespace found"
+            echo "Run: git diff --check to see details"
+            exit 1
+          fi
+          
+          echo "[OK] No trailing whitespace found"
+      
+      - name: Check for case-colliding paths
+        run: |
+          echo "Checking for case-colliding paths..."
+          
+          # Get all tracked files
+          files=$(git ls-files)
+          
+          # Convert to lowercase and check for duplicates
+          duplicates=$(echo "$files" | tr '[:upper:]' '[:lower:]' | sort | uniq -d)
+          
+          if [ -n "$duplicates" ]; then
+            echo "[ERROR] ERROR: Case-colliding paths found"
+            echo "These paths differ only in case:"
+            echo "$duplicates"
+            echo ""
+            echo "This causes issues on case-insensitive filesystems (macOS, Windows)"
+            exit 1
+          fi
+          
+          echo "[OK] No case-colliding paths found"
+      
+      - name: Check for nested .git directories
+        run: |
+          echo "Checking for nested .git directories..."
+          
+          # Find .git directories (excluding the root one)
+          nested_git=$(find . -mindepth 2 -name .git -type d)
+          
+          if [ -n "$nested_git" ]; then
+            echo "[ERROR] ERROR: Nested .git directories found"
+            echo "$nested_git"
+            echo ""
+            echo "These should be proper submodules or removed"
+            exit 1
+          fi
+          
+          echo "[OK] No nested .git directories found"
+      
+      - name: Check for hardcoded secrets (basic patterns)
+        run: |
+          echo "Checking for potential hardcoded secrets..."
+          
+          # Basic patterns for common secrets (not comprehensive, use gitleaks for full scan)
+          patterns=(
+            "password\s*=\s*['\"][^'\"]{8,}"
+            "api[_-]?key\s*=\s*['\"][^'\"]{16,}"
+            "secret\s*=\s*['\"][^'\"]{16,}"
+            "token\s*=\s*['\"][^'\"]{16,}"
+            "-----BEGIN (RSA |DSA |EC )?PRIVATE KEY-----"
+          )
+          
+          found_secrets=0
+          
+          for pattern in "${patterns[@]}"; do
+            if git grep -iE "$pattern" -- '*.rs' '*.kt' '*.swift' '*.js' '*.ts' '*.toml' '*.yaml' '*.yml' 2>/dev/null; then
+              echo "[WARNING]  WARNING: Potential secret pattern found: $pattern"
+              found_secrets=1
+            fi
+          done
+          
+          if [ $found_secrets -eq 1 ]; then
+            echo ""
+            echo "[WARNING]  WARNING: Potential secrets detected"
+            echo "Review the matches above to ensure no real secrets are committed"
+            echo "For comprehensive secret scanning, use gitleaks in the security workflow"
+            # Don't fail the build, just warn
+          else
+            echo "[OK] No obvious secret patterns found"
+          fi
+      
+      - name: Check for consistent line endings
+        run: |
+          echo "Checking for consistent line endings..."
+          
+          # Check if .gitattributes exists
+          if [ ! -f .gitattributes ]; then
+            echo "[WARNING]  WARNING: .gitattributes not found"
+            echo "Consider adding .gitattributes to enforce consistent line endings"
+          else
+            echo "[OK] .gitattributes found"
+          fi
+          
+          # Check for mixed line endings in text files
+          mixed_endings=$(git ls-files -z '*.rs' '*.kt' '*.swift' '*.js' '*.ts' '*.md' '*.toml' '*.yaml' '*.yml' | \
+            xargs -0 file | grep -E 'CRLF.*LF|LF.*CRLF' || true)
+          
+          if [ -n "$mixed_endings" ]; then
+            echo "[WARNING]  WARNING: Files with mixed line endings found"
+            echo "$mixed_endings"
+            echo ""
+            echo "Consider normalizing line endings"
+          else
+            echo "[OK] No mixed line endings detected"
+          fi
+      
+      - name: Verify path governance rules
+        run: |
+          echo "Checking path governance rules..."
+          
+          # Check for lowercase 'ios' directory (should be 'iOS')
+          if git ls-files | grep -E '^ios/'; then
+            echo "[ERROR] ERROR: Lowercase 'ios/' directory found"
+            echo "Should be 'iOS/' for consistency"
+            git ls-files | grep -E '^ios/'
+            exit 1
+          fi
+          
+          # Check for inconsistent casing in platform directories
+          if git ls-files | grep -iE '^(android|ios|wasm)/' | grep -vE '^(android|iOS|wasm)/'; then
+            echo "[ERROR] ERROR: Inconsistent platform directory casing"
+            git ls-files | grep -iE '^(android|ios|wasm)/' | grep -vE '^(android|iOS|wasm)/'
+            exit 1
+          fi
+          
+          echo "[OK] Path governance rules satisfied"
+      
+      - name: Verify root directory layout
+        run: |
+          echo "Checking root directory layout rules..."
+          fail=0
+
+          # No .py scripts at the repo root - they belong in scripts/
+          root_py=$(git ls-files '*.py' | grep -v '/' || true)
+          if [ -n "$root_py" ]; then
+            echo "[ERROR] Python scripts found at repo root (move them to scripts/):"
+            echo "$root_py"
+            fail=1
+          fi
+
+          # No build artifacts committed
+          artifacts=$(git ls-files '*.log' '*.pid' '*.logcat' || true)
+          if [ -n "$artifacts" ]; then
+            echo "[ERROR] Build artifacts are tracked in git:"
+            echo "$artifacts"
+            fail=1
+          fi
+
+          if [ "$fail" -eq 1 ]; then
+            exit 1
+          fi
+          echo "[OK] Root directory layout rules satisfied"
+
+      - name: Check tracked file sizes (2 MB limit)
+        run: |
+          echo "Checking for oversized tracked files (2 MB limit)..."
+
+          # Find all tracked files exceeding 2 MB (2097152 bytes)
+          # Exclude: .lock files (Cargo.lock, etc), generated bindings, and xcframework headers
+          oversized=$(git ls-files -z | xargs -0 du -b 2>/dev/null | \
+            awk -v limit=2097152 '$1 > limit {print $0}' | \
+            grep -v -E '(Cargo.lock|\.lock$|Generated/|xcframework)' || true)
+
+          if [ -n "$oversized" ]; then
+            echo "[WARNING] WARNING: Tracked files exceed 2 MB threshold:"
+            echo "$oversized"
+            echo ""
+            echo "If these are essential (documentation, source, or generated bindings),"
+            echo "add a documented exclusion above. Otherwise, regenerate or remove."
+            # Don't fail; warn only for now
+          else
+            echo "[OK] No oversized tracked files detected"
+          fi
+
+      - name: Summary
+        if: always()
+        run: |
+          echo ""
+          echo "------------------------------------------------------------------"
+          echo "Repository Hygiene Check Complete"
+          echo "------------------------------------------------------------------"
+          echo ""
+          echo "For comprehensive security scanning, see the 'Security Scan' workflow"
+          echo "For code quality checks, see the 'Lint' workflow"
+          echo ""

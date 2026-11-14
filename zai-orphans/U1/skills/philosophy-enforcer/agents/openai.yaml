@@ -1,0 +1,4 @@
+interface:
+  display_name: "Philosophy Enforcer"
+  short_description: "Capture and enforce repo philosophy."
+  default_prompt: "Interview the user to capture SCMessenger philosophy, update the philosophy canon, and enforce it against requested changes with clear pass/fail gates and remediation steps."

@@ -1,0 +1,92 @@
+﻿{
+  "file": "MeshForegroundService.kt",
+  "chunk": 1,
+  "summary": "A foreground service that manages mesh network connectivity.",
+  "structs_or_classes": [],
+  "imports": [
+    "android.app.Notification",
+    "android.app.NotificationChannel",
+    "android.app.NotificationManager",
+    "android.app.PendingIntent",
+    "android.app.Service",
+    "android.content.Context",
+    "android.content.Intent",
+    "android.content.pm.ServiceInfo",
+    "android.os.Build",
+    "android.os.IBinder",
+    "android.os.PowerManager",
+    "android.os.SystemClock",
+    "androidx.core.app.NotificationCompat",
+    "androidx.core.app.ServiceCompat",
+    "com.scmessenger.android.R",
+    "com.scmessenger.android.ui.MainActivity",
+    "com.scmessenger.android.utils.NotificationHelper",
+    "dagger.hilt.android.AndroidEntryPoint",
+    "kotlinx.coroutines.CoroutineScope",
+    "kotlinx.coroutines.Dispatchers",
+    "kotlinx.coroutines.SupervisorJob",
+    "kotlinx.coroutines.cancel",
+    "kotlinx.coroutines.delay",
+    "kotlinx.coroutines.isActive",
+    "kotlinx.coroutines.launch",
+    "kotlinx.coroutines.withContext",
+    "timber.log.Timber",
+    "java.util.Collections",
+    "java.util.concurrent.atomic.AtomicInteger",
+    "javax.inject.Inject"
+  ],
+  "funcs": [
+    {
+      "name": "onCreate",
+      "line": 70,
+      "calls_out_to": []
+    },
+    {
+      "name": "onStartCommand",
+      "line": 91,
+      "calls_out_to": ["tryStartForeground", "decideCommand"]
+    },
+    {
+      "name": "startMeshService",
+      "line": 121,
+      "calls_out_to": [
+        "withContext(Dispatchers.Default)",
+        "meshRepository.getServiceState() == uniffi.api.ServiceState.RUNNING",
+        "wireCoreDelegate",
+        "launch { meshRepository.incomingMessages.collect { message -> showMessageNotificationWithClassification(message) } }",
+        "launch { MeshEventBus.peerEvents.collect { event -> when (event) { is PeerEvent.Connected -> { connectedPeers.add(event.peerId); updateNotification(); NotificationHelper.showPeerDiscoveredNotification(context = this@MeshForegroundService, peerId = event.peerId, transport = \"Connected\") } is PeerEvent.Disconnected -> { connectedPeers.remove(event.peerId); updateNotification() } else -> {} } } }",
+        "launch { MeshEventBus.statusEvents.collect { event -> when (event) { is StatusEvent.StatsUpdated -> { messagesRelayed.set(event.stats.messagesRelayed.toInt()); updateNotification() } else -> {} } } }",
+        "startPeriodicAdjustments"
+      ]
+    },
+    {
+      "name": "wireCoreDelegate",
+      "line": 257,
+      "calls_out_to": []
+    },
+    {
+      "name": "startPeriodicAdjustments",
+      "line": 263,
+      "calls_out_to": ["delay(30000L)", "platformBridge.checkBatteryState()", "platformBridge.checkNetworkState()", "serviceHealthMonitor.updateHeartbeat()"]
+    },
+    {
+      "name": "acquireWakeLock",
+      "line": 293,
+      "calls_out_to": []
+    },
+    {
+      "name": "releaseWakeLock",
+      "line": 306,
+      "calls_out_to": []
+    },
+    {
+      "name": "stopMeshService",
+      "line": 317,
+      "calls_out_to": [
+        "withContext(Dispatchers.Default)",
+        "kotlin.runCatching { meshRepository.stopMeshService() }",
+        "serviceHealthMonitor.stopMonitoring()"
+      ]
+    }
+  ]
+}

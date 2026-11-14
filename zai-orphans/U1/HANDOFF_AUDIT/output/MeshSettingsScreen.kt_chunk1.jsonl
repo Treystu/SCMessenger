@@ -1,0 +1,30 @@
+﻿{
+  "file": "MeshSettingsScreen.kt",
+  "chunk": 1,
+  "summary": "A Composable function that displays the mesh settings screen for a messaging application. It includes sections for network participation, transport settings, and discovery settings.",
+  "structs_or_classes": [],
+  "imports": [
+    "androidx.compose.foundation.layout.*",
+    "androidx.compose.foundation.rememberScrollState",
+    "androidx.compose.foundation.verticalScroll",
+    "androidx.compose.material.icons.Icons",
+    "androidx.compose.material.icons.automirrored.filled.ArrowBack",
+    "androidx.compose.material3.*",
+    "androidx.compose.runtime.*",
+    "androidx.compose.ui.Alignment",
+    "androidx.compose.ui.Modifier",
+    "androidx.compose.ui.text.font.FontWeight",
+    "androidx.compose.ui.unit.dp",
+    "androidx.hilt.navigation.compose.hiltViewModel",
+    "com.scmessenger.android.ui.components.ErrorBanner",
+    "com.scmessenger.android.ui.components.WarningBanner",
+    "com.scmessenger.android.ui.viewmodels.SettingsViewModel"
+  ],
+  "funcs": [
+    {
+      "name": "MeshSettingsScreen",
+      "line": 33,
+      "calls_out_to": ["hiltViewModel", "collectAsState", "loadSettings", "Scaffold", "TopAppBar", "Column", "ErrorBanner", "WarningBanner", "Card", "SwitchSetting", "SliderSetting", "DiscoveryModeSetting"]
+    }
+  ]
+}

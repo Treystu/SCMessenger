@@ -1,0 +1,107 @@
+﻿{
+  "file": "DashboardScreen.kt",
+  "chunk": 1,
+  "summary": "A composable function that displays the dashboard screen of a mesh network, showing service status, quick stats, connection methods, detailed stats, and navigation to peer list and topology screens.",
+  "structs_or_classes": [],
+  "imports": [
+    "androidx.compose.foundation.background",
+    "androidx.compose.foundation.layout.*",
+    "androidx.compose.foundation.lazy.LazyColumn",
+    "androidx.compose.foundation.lazy.items",
+    "androidx.compose.foundation.shape.CircleShape",
+    "androidx.compose.foundation.shape.RoundedCornerShape",
+    "androidx.compose.material.icons.Icons",
+    "androidx.compose.material.icons.automirrored.filled.ArrowBack",
+    "androidx.compose.material.icons.filled.Bluetooth",
+    "androidx.compose.material.icons.filled.Bolt",
+    "androidx.compose.material.icons.filled.NetworkWifi",
+    "androidx.compose.material.icons.filled.People",
+    "androidx.compose.material.icons.filled.Person",
+    "androidx.compose.material.icons.filled.Router",
+    "androidx.compose.material.icons.filled.Settings",
+    "androidx.compose.material.icons.filled.Wifi",
+    "androidx.compose.material3.*",
+    "androidx.compose.runtime.Composable",
+    "androidx.compose.runtime.collectAsState",
+    "androidx.compose.runtime.getValue",
+    "androidx.compose.ui.Alignment",
+    "androidx.compose.ui.Modifier",
+    "androidx.compose.ui.graphics.Color",
+    "androidx.compose.ui.text.font.FontWeight",
+    "androidx.compose.ui.unit.sp",
+    "androidx.compose.ui.unit.dp",
+    "androidx.hilt.navigation.compose.hiltViewModel",
+    "androidx.navigation.NavHostController",
+    "com.scmessenger.android.ui.dashboard.PeerListScreen",
+    "com.scmessenger.android.ui.dashboard.TopologyScreen",
+    "com.scmessenger.android.ui.viewmodels.MeshServiceViewModel",
+    "com.scmessenger.android.ui.viewmodels.DashboardViewModel",
+    "com.scmessenger.android.ui.viewmodels.SettingsViewModel",
+    "com.scmessenger.android.ui.settings.MeshSettingsScreen",
+    "com.scmessenger.android.ui.settings.PowerSettingsScreen"
+  ],
+  "funcs": [
+    {
+      "name": "DashboardScreen",
+      "line": 41,
+      "calls_out_to": [
+        "serviceState.collectAsState",
+        "isRunning.collectAsState",
+        "stats.collectAsState",
+        "fullPeersCount.collectAsState",
+        "headlessPeersCount.collectAsState",
+        "totalPeersCount.collectAsState",
+        "settings.collectAsState"
+      ]
+    },
+    {
+      "name": "PeerItem",
+      "line": 191,
+      "calls_out_to": [
+        "peer.isOnline",
+        "peer.localNickname",
+        "peer.nickname",
+        "peer.peerId",
+        "peer.transport"
+      ]
+    },
+    {
+      "name": "StatusCard",
+      "line": 267,
+      "calls_out_to": [
+        "isRunning.collectAsState",
+        "stateName.collectAsState"
+      ]
+    },
+    {
+      "name": "StatCard",
+      "line": 302,
+      "calls_out_to": [
+        "peer.isOnline",
+        "peer.localNickname",
+        "peer.nickname",
+        "peer.peerId",
+        "peer.transport"
+      ]
+    },
+    {
+      "name": "ConnectionStatusCard",
+      "line": 340,
+      "calls_out_to": [
+        "meshSettings.collectAsState"
+      ]
+    },
+    {
+      "name": "TransportItem",
+      "line": 365,
+      "calls_out_to": []
+    },
+    {
+      "name": "TextDetailRow",
+      "line": 378,
+      "calls_out_to": [
+        "peer.isOnline"
+      ]
+    }
+  ]
+}

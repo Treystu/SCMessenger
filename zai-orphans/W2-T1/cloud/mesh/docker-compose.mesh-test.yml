@@ -1,0 +1,289 @@
+# ==============================================================================
+# SCMessenger Proximity Mesh Network Emulation
+# ==============================================================================
+#
+# Emulates a 5-node proximity mesh network using Docker containers and Linux
+# tc/netem for realistic wireless link simulation. Each node has different
+# network characteristics matching real-world wireless transports:
+#
+#   node1: BLE nearby      (50ms ± 20ms delay, 5% loss)
+#   node2: WiFi Direct     (30ms ± 10ms delay, 3% loss)
+#   node3: BLE edge range  (120ms ± 50ms delay, 15% loss, 5% reorder)
+#   node4: Moderate link   (80ms ± 30ms delay, 10% loss)
+#   node5: WiFi Aware      (40ms ± 15ms delay, 4% loss)
+#
+# Topology (partial mesh — NOT all-to-all):
+#
+#   node1 ↔ node2 ↔ node3 ↔ node4 ↔ node5
+#                 ↔ node5 (shortcut)
+#
+# Usage:
+#   docker compose -f docker-compose.mesh-test.yml up --build
+#   docker compose -f docker-compose.mesh-test.yml down -v
+#
+# ==============================================================================
+
+version: "3.8"
+
+networks:
+  scm-mesh:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 10.0.1.0/24
+
+services:
+  # ============================================================================
+  # Node 1 — BLE Nearby Link Profile
+  # ============================================================================
+  # Peers: node2
+  # Simulates a device within close BLE range (~1-3m)
+  node1:
+    build:
+      context: .
+      dockerfile: Dockerfile.cli
+    container_name: scm-node1
+    hostname: node1
+    networks:
+      scm-mesh:
+        ipv4_address: 10.0.1.1
+    environment:
+      - NODE_ID=node1
+      - PEERS=10.0.1.2:9000
+      - TRANSPORT=tcp
+      - LOG_LEVEL=debug
+    cap_add:
+      - NET_ADMIN
+    command: >
+      sh -c "
+        echo '[node1] Applying BLE nearby link profile...' &&
+        tc qdisc add dev eth0 root netem delay 50ms 20ms loss 5% &&
+        echo '[node1] tc netem configured: delay 50ms 20ms loss 5%' &&
+        exec /app/scmessenger-cli
+      "
+
+  # ============================================================================
+  # Node 2 — WiFi Direct Link Profile
+  # ============================================================================
+  # Peers: node1, node3, node5 (hub node with shortcut to node5)
+  # Simulates WiFi Direct with good connectivity
+  node2:
+    build:
+      context: .
+      dockerfile: Dockerfile.cli
+    container_name: scm-node2
+    hostname: node2
+    networks:
+      scm-mesh:
+        ipv4_address: 10.0.1.2
+    environment:
+      - NODE_ID=node2
+      - PEERS=10.0.1.1:9000,10.0.1.3:9000,10.0.1.5:9000
+      - TRANSPORT=tcp
+      - LOG_LEVEL=debug
+    cap_add:
+      - NET_ADMIN
+    command: >
+      sh -c "
+        echo '[node2] Applying WiFi Direct link profile...' &&
+        tc qdisc add dev eth0 root netem delay 30ms 10ms loss 3% &&
+        echo '[node2] tc netem configured: delay 30ms 10ms loss 3%' &&
+        exec /app/scmessenger-cli
+      "
+
+  # ============================================================================
+  # Node 3 — BLE Edge-of-Range Link Profile
+  # ============================================================================
+  # Peers: node2, node4
+  # Simulates a device at the edge of BLE range (~10-15m) with packet reordering
+  node3:
+    build:
+      context: .
+      dockerfile: Dockerfile.cli
+    container_name: scm-node3
+    hostname: node3
+    networks:
+      scm-mesh:
+        ipv4_address: 10.0.1.3
+    environment:
+      - NODE_ID=node3
+      - PEERS=10.0.1.2:9000,10.0.1.4:9000
+      - TRANSPORT=tcp
+      - LOG_LEVEL=debug
+    cap_add:
+      - NET_ADMIN
+    command: >
+      sh -c "
+        echo '[node3] Applying BLE edge-of-range link profile...' &&
+        tc qdisc add dev eth0 root netem delay 120ms 50ms loss 15% reorder 5% &&
+        echo '[node3] tc netem configured: delay 120ms 50ms loss 15% reorder 5%' &&
+        exec /app/scmessenger-cli
+      "
+
+  # ============================================================================
+  # Node 4 — Moderate Wireless Link Profile
+  # ============================================================================
+  # Peers: node3, node5
+  # Simulates a moderate quality wireless link
+  node4:
+    build:
+      context: .
+      dockerfile: Dockerfile.cli
+    container_name: scm-node4
+    hostname: node4
+    networks:
+      scm-mesh:
+        ipv4_address: 10.0.1.4
+    environment:
+      - NODE_ID=node4
+      - PEERS=10.0.1.3:9000,10.0.1.5:9000
+      - TRANSPORT=tcp
+      - LOG_LEVEL=debug
+    cap_add:
+      - NET_ADMIN
+    command: >
+      sh -c "
+        echo '[node4] Applying moderate link profile...' &&
+        tc qdisc add dev eth0 root netem delay 80ms 30ms loss 10% &&
+        echo '[node4] tc netem configured: delay 80ms 30ms loss 10%' &&
+        exec /app/scmessenger-cli
+      "
+
+  # ============================================================================
+  # Node 5 — WiFi Aware Link Profile
+  # ============================================================================
+  # Peers: node2, node4
+  # Simulates WiFi Aware (NAN) with decent throughput
+  node5:
+    build:
+      context: .
+      dockerfile: Dockerfile.cli
+    container_name: scm-node5
+    hostname: node5
+    networks:
+      scm-mesh:
+        ipv4_address: 10.0.1.5
+    environment:
+      - NODE_ID=node5
+      - PEERS=10.0.1.2:9000,10.0.1.4:9000
+      - TRANSPORT=tcp
+      - LOG_LEVEL=debug
+    cap_add:
+      - NET_ADMIN
+    command: >
+      sh -c "
+        echo '[node5] Applying WiFi Aware link profile...' &&
+        tc qdisc add dev eth0 root netem delay 40ms 15ms loss 4% &&
+        echo '[node5] tc netem configured: delay 40ms 15ms loss 4%' &&
+        exec /app/scmessenger-cli
+      "
+
+  # ============================================================================
+  # Test Runner
+  # ============================================================================
+  # Waits for all mesh nodes to stabilize, then executes mesh integration tests.
+  test-runner:
+    build:
+      context: .
+      dockerfile: Dockerfile.cli
+    container_name: scm-test-runner
+    hostname: test-runner
+    networks:
+      scm-mesh:
+        ipv4_address: 10.0.1.254
+    depends_on:
+      - node1
+      - node2
+      - node3
+      - node4
+      - node5
+    environment:
+      - NODE_ID=test-runner
+      - LOG_LEVEL=debug
+      - MESH_NODES=10.0.1.1,10.0.1.2,10.0.1.3,10.0.1.4,10.0.1.5
+    cap_add:
+      - NET_ADMIN
+    command: >
+      sh -c "
+        echo '========================================' &&
+        echo '[test-runner] Waiting 10s for mesh nodes to stabilize...' &&
+        echo '========================================' &&
+        sleep 10 &&
+        echo '' &&
+        echo '[test-runner] Starting mesh integration tests...' &&
+        echo '========================================' &&
+        echo '' &&
+
+        PASS=0 &&
+        FAIL=0 &&
+        TOTAL=0 &&
+
+        echo '--- Test 1: Node reachability (ping) ---' &&
+        for ip in 10.0.1.1 10.0.1.2 10.0.1.3 10.0.1.4 10.0.1.5; do
+          TOTAL=\$$((TOTAL + 1))
+          if ping -c 3 -W 2 \$$ip > /dev/null 2>&1; then
+            echo \"  PASS: \$$ip reachable\"
+            PASS=\$$((PASS + 1))
+          else
+            echo \"  FAIL: \$$ip unreachable\"
+            FAIL=\$$((FAIL + 1))
+          fi
+        done &&
+
+        echo '' &&
+        echo '--- Test 2: CLI health endpoint ---' &&
+        for ip in 10.0.1.1 10.0.1.2 10.0.1.3 10.0.1.4 10.0.1.5; do
+          TOTAL=\$$((TOTAL + 1))
+          if curl -sf http://\$$ip:9001/health > /dev/null 2>&1; then
+            echo \"  PASS: \$$ip CLI health OK\"
+            PASS=\$$((PASS + 1))
+          else
+            echo \"  FAIL: \$$ip CLI health check failed\"
+            FAIL=\$$((FAIL + 1))
+          fi
+        done &&
+
+        echo '' &&
+        echo '--- Test 3: Peer discovery (direct peers only) ---' &&
+        for ip in 10.0.1.1 10.0.1.2 10.0.1.3 10.0.1.4 10.0.1.5; do
+          TOTAL=\$$((TOTAL + 1))
+          PEERS=\$$(curl -sf http://\$$ip:9001/peers 2>/dev/null | jq -r '.peers | length' 2>/dev/null || echo 0)
+          if [ \"\$$PEERS\" -gt 0 ] 2>/dev/null; then
+            echo \"  PASS: \$$ip has \$$PEERS peer(s)\"
+            PASS=\$$((PASS + 1))
+          else
+            echo \"  FAIL: \$$ip has no peers\"
+            FAIL=\$$((FAIL + 1))
+          fi
+        done &&
+
+        echo '' &&
+        echo '--- Test 4: Multi-hop message relay (node1 → node5 via mesh) ---' &&
+        TOTAL=\$$((TOTAL + 1)) &&
+        MSG_ID=\$$(curl -sf -X POST http://10.0.1.1:9001/send \
+          -H 'Content-Type: application/json' \
+          -d '{\"to\": \"node5\", \"body\": \"mesh-test-ping\"}' 2>/dev/null | jq -r '.msg_id' 2>/dev/null || echo '') &&
+        if [ -n \"\$$MSG_ID\" ] && [ \"\$$MSG_ID\" != 'null' ]; then
+          sleep 5
+          RECEIVED=\$$(curl -sf http://10.0.1.5:9001/messages 2>/dev/null | jq -r \".messages[] | select(.id == \\\"\$$MSG_ID\\\") | .body\" 2>/dev/null || echo '')
+          if [ \"\$$RECEIVED\" = 'mesh-test-ping' ]; then
+            echo '  PASS: Multi-hop relay node1 → node5 succeeded'
+            PASS=\$$((PASS + 1))
+          else
+            echo '  FAIL: Message not received at node5 (may need DTN store-and-forward)'
+            FAIL=\$$((FAIL + 1))
+          fi
+        else
+          echo '  FAIL: Could not send message from node1'
+          FAIL=\$$((FAIL + 1))
+        fi &&
+
+        echo '' &&
+        echo '========================================' &&
+        echo \"Mesh Test Results: \$$PASS/\$$TOTAL passed, \$$FAIL failed\" &&
+        echo '========================================' &&
+
+        if [ \$$FAIL -gt 0 ]; then
+          exit 1
+        fi
+      "

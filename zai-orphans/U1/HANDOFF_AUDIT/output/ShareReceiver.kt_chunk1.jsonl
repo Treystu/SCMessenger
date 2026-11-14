@@ -1,0 +1,50 @@
+﻿{
+  "file": "ShareReceiver.kt",
+  "chunk": 1,
+  "summary": "BroadcastReceiver for handling share intents. Receives Intent.ACTION_SEND and presents a contact picker to encrypt and queue the shared content as a mesh message.",
+  "structs_or_classes": [],
+  "imports": [
+    "android.content.BroadcastReceiver",
+    "android.content.Context",
+    "android.content.Intent",
+    "android.net.Uri",
+    "android.widget.Toast",
+    "androidx.appcompat.app.AlertDialog",
+    "androidx.core.content.IntentCompat",
+    "com.scmessenger.android.R",
+    "com.scmessenger.android.data.MeshRepository",
+    "kotlinx.coroutines.CoroutineScope",
+    "kotlinx.coroutines.Dispatchers",
+    "kotlinx.coroutines.SupervisorJob",
+    "kotlinx.coroutines.cancel",
+    "kotlinx.coroutines.launch",
+    "timber.log.Timber"
+  ],
+  "funcs": [
+    {
+      "name": "onReceive",
+      "line": 33,
+      "calls_out_to": ["handleSingleShare", "handleMultipleShare"]
+    },
+    {
+      "name": "handleSingleShare",
+      "line": 44,
+      "calls_out_to": ["showContactPicker"]
+    },
+    {
+      "name": "handleMultipleShare",
+      "line": 73,
+      "calls_out_to": ["showContactPicker"]
+    },
+    {
+      "name": "showContactPicker",
+      "line": 112,
+      "calls_out_to": ["MeshRepository", "listContacts", "sendMessageToContact"]
+    },
+    {
+      "name": "sendMessageToContact",
+      "line": 160,
+      "calls_out_to": ["MeshRepository.sendMessage"]
+    }
+  ]
+}

@@ -1,0 +1,6 @@
+[target.x86_64-linux-android]
+codegen-units = 1
+linker = "x86_64-linux-android21-clang"
+
+[build]
+rustflags = ["-C", "opt-level=s"]

@@ -1,0 +1,53 @@
+﻿{
+  "file": "MeshVpnService.kt",
+  "chunk": 1,
+  "summary": "A background service that creates a dummy VPN tunnel to ensure the app stays alive even under aggressive battery optimization.",
+  "structs_or_classes": [],
+  "imports": [
+    "android.content.Intent",
+    "android.net.VpnService",
+    "android.os.Build",
+    "android.os.ParcelFileDescriptor",
+    "timber.log.Timber",
+    "java.io.FileInputStream",
+    "java.nio.ByteBuffer"
+  ],
+  "funcs": [
+    {
+      "name": "onCreate",
+      "line": 26,
+      "calls_out_to": []
+    },
+    {
+      "name": "onStartCommand",
+      "line": 31,
+      "calls_out_to": ["startVpn", "stopVpn"]
+    },
+    {
+      "name": "startVpn",
+      "line": 39,
+      "calls_out_to": [
+        "Builder",
+        "setSession",
+        "addAddress",
+        "establish",
+        "Thread"
+      ]
+    },
+    {
+      "name": "stopVpn",
+      "line": 100,
+      "calls_out_to": ["close"]
+    },
+    {
+      "name": "onDestroy",
+      "line": 118,
+      "calls_out_to": ["stopVpn"]
+    },
+    {
+      "name": "onRevoke",
+      "line": 124,
+      "calls_out_to": ["stopVpn"]
+    }
+  ]
+}

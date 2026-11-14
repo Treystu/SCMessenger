@@ -1,0 +1,14 @@
+#!/bin/sh
+# Versioned pre-commit hook (activated via: git config core.hooksPath .githooks)
+# Tool-agnostic enforcement of the mechanical repo rules in AGENTS.md --
+# applies to commits from Claude Code, Cowork sandboxes, Gemini/agy, and humans
+# alike. Do NOT bypass with --no-verify (operator-only exception).
+
+python scripts/rules_check.py --staged
+status=$?
+if [ $status -ne 0 ]; then
+  echo "" >&2
+  echo "pre-commit: blocked by scripts/rules_check.py (see [FAIL] lines above)." >&2
+  echo "Fix the violations and re-commit. Rules: AGENTS.md / .claude/rules/." >&2
+fi
+exit $status

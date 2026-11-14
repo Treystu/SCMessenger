@@ -1,0 +1,20 @@
+{
+  "name": "model_check",
+  "description": "Verify ollama cloud model availability before launching agents. Checks https://ollama.com/api/tags and compares against the agent_pool.json roster.",
+  "script": ".claude/skills/model_check.sh",
+  "commands": [
+    {
+      "name": "all",
+      "description": "Check availability of all models in the agent pool"
+    },
+    {
+      "name": "required",
+      "description": "Check only the primary and fallback models for all agent roles"
+    },
+    {
+      "name": "agent",
+      "description": "Check models for a specific agent role",
+      "args": ["agent_name"]
+    }
+  ]
+}

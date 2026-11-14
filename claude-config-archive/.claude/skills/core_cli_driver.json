@@ -1,0 +1,39 @@
+{
+  "name": "core_cli_driver",
+  "description": "Cross-platform Python driver for the SCMessenger CLI daemon. Start/stop nodes, query identity/contacts, send mesh messages, and inspect daemon logs. Output is machine-readable JSON.",
+  "driver": "scripts/core_cli_driver.py",
+  "prompt": ".claude/prompts/skill_cli_driver.txt",
+  "commands": [
+    {
+      "name": "start",
+      "description": "Launch the CLI daemon in the background, redirect output to tmp/daemon.log, write PID to tmp/daemon.pid"
+    },
+    {
+      "name": "stop",
+      "description": "Kill the daemon via OS-appropriate mechanism (taskkill on Windows, kill -9 on Unix), delete PID file"
+    },
+    {
+      "name": "status",
+      "description": "Check whether the daemon is running by verifying process liveness"
+    },
+    {
+      "name": "identity",
+      "description": "Run 'scm identity show' and return node identity as JSON"
+    },
+    {
+      "name": "contact",
+      "description": "Manage contacts. Subcommands: list",
+      "args": ["subcommand"]
+    },
+    {
+      "name": "send",
+      "description": "Send a message through the live daemon to a peer",
+      "args": ["recipient", "message"]
+    },
+    {
+      "name": "daemon-log",
+      "description": "Tail N lines from tmp/daemon.log (default 100). Cross-platform.",
+      "args": ["lines?"]
+    }
+  ]
+}

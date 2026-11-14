@@ -1,0 +1,19 @@
+﻿{
+  "file": "ledger.rs",
+  "chunk": 1,
+  "summary": "The provided code chunk defines a `ConnectionLedger` struct that manages a persistent storage for known peers. It includes methods to load and save the ledger, add or update peer entries based on various events such as successful connections, failed attempts, and topic observations.",
+  "structs_or_classes": ["ConnectionLedger", "LedgerEntry"],
+  "imports": ["anyhow", "serde", "std::collections::HashMap", "std::path::Path", "std::time::SystemTime", "tracing"],
+  "funcs": [
+    {
+      "name": "load",
+      "line": 177,
+      "calls_out_to": ["ConnectionLedger"]
+    },
+    {
+      "name": "save",
+      "line": 298,
+      "calls_out_to": ["ConnectionLedger"]
+    }
+  ]
+}

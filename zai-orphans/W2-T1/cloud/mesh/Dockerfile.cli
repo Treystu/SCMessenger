@@ -1,0 +1,77 @@
+# ==============================================================================
+# SCMessenger CLI Mesh Node — Multi-stage Docker Build
+# ==============================================================================
+#
+# Builds the scmessenger-cli binary from the Rust workspace and packages it
+# into a slim Debian image with networking tools for mesh emulation.
+#
+# Runtime includes:
+#   - iproute2: tc/netem for network impairment simulation
+#   - curl: health checks and API interaction
+#   - jq: JSON processing for test scripts
+#
+# Ports:
+#   9000 — Mesh transport (peer-to-peer communication)
+#   9001 — HTTP API (health, peers, messages)
+#
+# Usage:
+#   docker build -f Dockerfile.cli -t scm-cli-node .
+#   docker run --cap-add NET_ADMIN scm-cli-node
+#
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# Stage 1: Build the CLI binary
+# ------------------------------------------------------------------------------
+FROM rust:1.95-slim AS builder
+
+# Install build dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    pkg-config \
+    libssl-dev \
+    protobuf-compiler \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set up the build directory
+WORKDIR /build
+
+# Copy the entire workspace (Cargo.toml files first for layer caching)
+COPY Cargo.toml Cargo.lock ./
+COPY core/ core/
+COPY cli/ cli/
+COPY wasm/ wasm/
+
+# Build only the CLI package in release mode
+RUN cargo build --release -p scmessenger-cli \
+    && strip /build/target/release/scmessenger-cli
+
+# ------------------------------------------------------------------------------
+# Stage 2: Runtime image
+# ------------------------------------------------------------------------------
+FROM debian:bookworm-slim
+
+# Install runtime dependencies:
+#   iproute2 — tc/netem for network emulation (delay, loss, reorder, rate)
+#   curl     — health checks, API calls from test scripts
+#   jq       — JSON processing for test output parsing
+#   iputils-ping — ping for reachability tests
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    iproute2 \
+    curl \
+    jq \
+    iputils-ping \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy the built binary from the builder stage
+COPY --from=builder /build/target/release/scmessenger-cli /app/scmessenger-cli
+
+# Ensure binary is executable
+RUN chmod +x /app/scmessenger-cli
+
+# Mesh transport port + HTTP API port
+EXPOSE 9000 9001
+
+# Default entrypoint — overridden by docker-compose command for tc setup
+ENTRYPOINT ["/app/scmessenger-cli"]

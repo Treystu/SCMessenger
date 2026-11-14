@@ -1,0 +1,24 @@
+﻿{
+  "file": "dedup.rs",
+  "chunk": 1,
+  "summary": "This Rust module provides a `DedupStatsTracker` that records per-message dedup statistics. It includes methods to record received messages, get dedup stats for specific message IDs, and aggregate statistics across all tracked entries.",
+  "structs_or_classes": ["DedupStats", "DedupStatsTracker"],
+  "imports": ["serde", "web_time::SystemTime", "std::collections::HashMap"],
+  "funcs": [
+    {
+      "name": "new",
+      "line": 26,
+      "calls_out_to": []
+    },
+    {
+      "name": "record_duplicate",
+      "line": 35,
+      "calls_out_to": ["self"]
+    },
+    {
+      "name": "record_received",
+      "line": 71,
+      "calls_out_to": ["self", "web_time::SystemTime"]
+    }
+  ]
+}

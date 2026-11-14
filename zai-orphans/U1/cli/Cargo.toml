@@ -1,0 +1,70 @@
+[package]
+name = "scmessenger-cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+name = "scmessenger_cli"
+path = "src/lib.rs"
+
+[[bin]]
+name = "scmessenger-cli"
+path = "src/main.rs"
+test = false
+
+[dependencies]
+scmessenger-core = { path = "../core" }
+clap = { workspace = true }
+tokio = { workspace = true, features = ["full"] }
+libp2p = { workspace = true, features = [
+  "tcp",
+  "quic",
+  "dns",
+  "mdns",
+  "noise",
+  "yamux",
+  "tokio",
+] }
+anyhow = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+tracing-appender = { workspace = true }
+futures = { workspace = true }
+hex = { workspace = true }
+bincode = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+colored = "2.1"
+dirs = "5.0"
+chrono = "0.4"
+uuid = { workspace = true }
+lazy_static = "1.4"
+warp = { version = "0.4.2", features = ["websocket", "server", "multipart"] }
+tokio-stream = "0.1.18"
+futures-util = "0.3.31"
+axum = { version = "0.7", features = ["macros"] }
+tower = "0.4"
+tower-http = { version = "0.5", features = ["cors", "trace"] }
+http-body-util = "0.1"
+hyper = { version = "1", features = ["client", "http1"] }
+hyper-util = { version = "0.1", features = ["client-legacy", "http1", "tokio"] }
+btleplug = { version = "0.11", default-features = false }
+
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.61.3", features = [
+    "Devices_Bluetooth",
+    "Devices_Bluetooth_Advertisement",
+    "Devices_Bluetooth_GenericAttributeProfile",
+    "Foundation",
+    "Storage_Streams",
+] }
+
+[lints]
+workspace = true
+
+[dev-dependencies]
+tempfile = "3.8"
+
+[build-dependencies]
+chrono = "0.4"

@@ -1,0 +1,20 @@
+﻿{
+  "file": "DeliveryStateMapperTest.kt",
+  "chunk": 1,
+  "summary": "This class contains unit tests for the DeliveryStateMapper class.",
+  "structs_or_classes": [],
+  "imports": [
+    "com.scmessenger.android.ui.chat.DeliveryStateMapper",
+    "com.scmessenger.android.ui.chat.DeliveryStateSurface",
+    "com.scmessenger.android.ui.chat.PendingDeliverySnapshot",
+    "org.junit.Assert.assertEquals",
+    "org.junit.Test"
+  ],
+  "funcs": [
+    {
+      "name": "DeliveryStateMapperTest",
+      "line": 9,
+      "calls_out_to": []
+    }
+  ]
+}

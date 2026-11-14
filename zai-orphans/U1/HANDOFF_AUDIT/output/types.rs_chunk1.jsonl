@@ -1,0 +1,19 @@
+﻿{
+  "file": "types.rs",
+  "chunk": 1,
+  "summary": "This chunk defines the message types and structures used in a messaging application. It includes enums for different types of messages, such as `MessageType`, `DeliveryStatus`, and `Envelope`. The `Message` struct represents a plaintext message before encryption, while the `Receipt` struct represents a delivery receipt. The `Envelope` struct contains all the necessary information to decrypt the message, including the sender's public key, ephemeral public key, nonce, ciphertext, and optional ratchet DH public and message number. The `SignedEnvelope` struct adds an Ed25519 signature for relay verification.",
+  "structs_or_classes": ["Message", "Receipt", "Envelope", "SignedEnvelope"],
+  "imports": [],
+  "funcs": [
+    {
+      "name": "text",
+      "line": 108,
+      "calls_out_to": []
+    },
+    {
+      "name": "receipt",
+      "line": 124,
+      "calls_out_to": []
+    }
+  ]
+}

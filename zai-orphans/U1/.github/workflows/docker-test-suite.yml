@@ -1,0 +1,537 @@
+# ==============================================================================
+# SCMessenger Docker Integration Suite
+# ==============================================================================
+#
+# Runs the docker/docker-compose.test.yml suite (Rust workspace tests, Android
+# unit tests, cross-container integration tests, NAT simulation) on CI.
+#
+# WHY THIS FILE LOOKS THE WAY IT DOES
+# -----------------------------------
+# Every run before 2026-07-25 was cancelled by its own timeout-minutes, never
+# by a test failure. Measured from run 30155401544:
+#   Rust Core Tests    - "Build Rust test image" still running at 30.1min (cap 30)
+#   Android Unit Tests - image built in ~7min, "Run Android tests" killed at 90.4min (cap 90),
+#                        measured run 30228240960 on f010a0f1
+#   Integration Tests  - "Build test images" 16.6min (it built EVERY service in
+#                        the compose file), "Run integration tests" killed at 28.3min
+#
+# Three concrete causes, all addressed below:
+#   1. No build cache of any kind. `docker compose build` on a fresh runner has
+#      an empty layer cache, so Dockerfile.rust-test re-ran apt, four rustup
+#      android targets, `cargo install cargo-tarpaulin`, `cargo install
+#      cargo-audit` (both compiled from source) and a full
+#      `cargo build --workspace --all-features --tests` on every single run.
+#      Each image is now built with docker/build-push-action and a persistent
+#      type=gha layer cache, so everything up to `COPY . .` is restored.
+#   2. Redundant image builds. The integration job built the Android SDK/NDK
+#      image and the wasm image it never runs, and rebuilt the mock-node image
+#      that docker-publish.yml already publishes as testbotz/scmessenger:latest.
+#      It now builds only the integration image and pulls the published node
+#      image (same trick used to escape the 16h farm-sim build), with a cached
+#      local build as fallback.
+#   3. Timeouts below the real work. Raised to fit measured durations - only in
+#      combination with the caching above, never as a standalone "fix".
+#
+# All compilation inside these containers still happens at container RUN time
+# against a fresh named volume, which GitHub-hosted runners cannot persist.
+# Making these jobs fast (rather than merely able to finish) requires changes
+# inside docker/ - see the notes at the bottom of this file.
+# ==============================================================================
+
+name: Docker Integration Suite
+
+on:
+  push:
+    branches: [ main ]
+  schedule:
+    - cron: '17 6 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# A push train on main previously left several ~46min runs racing each other.
+concurrency:
+  group: docker-test-suite-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  RUST_BACKTRACE: 1
+  CARGO_TERM_COLOR: always
+  # Pin the Compose project name so the image names Compose derives for
+  # services that declare `build:` without `image:` are deterministic
+  # (<project>-<service>). The jobs below pre-build exactly those tags with a
+  # cached builder and assert the tag exists before invoking Compose, so Compose
+  # reuses the cached image instead of rebuilding it.
+  COMPOSE_PROJECT_NAME: scmtest
+  # Published by docker-publish.yml on every push to main (that workflow is
+  # green). docker/Dockerfile is the mock relay/client node image.
+  NODE_IMAGE_PUBLISHED: docker.io/testbotz/scmessenger:latest
+  NODE_IMAGE_LOCAL: scmessenger:latest
+
+jobs:
+  # ============================================================================
+  # Rust workspace tests (docker/Dockerfile.rust-test)
+  # ============================================================================
+  rust-tests:
+    name: Rust Core Tests
+    runs-on: ubuntu-latest
+    # Cold cache: ~12min of toolchain/cargo-install layers + ~25min for the
+    # image's `cargo build --workspace --all-features --tests` layer (which
+    # `COPY . .` invalidates on every commit) + the single-threaded test run
+    # itself (11.4min for the equivalent `cargo test --workspace` in ci.yml
+    # with a warm cache, materially longer with --test-threads=1).
+    timeout-minutes: 90
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Free up disk space
+        run: |
+          set -euo pipefail
+          echo "[INFO] Disk usage before cleanup:"
+          df -h
+          echo "[INFO] Removing unnecessary files..."
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/share/boost "$AGENT_TOOLSDIRECTORY" || true
+          sudo apt-get clean || true
+          docker system prune -af || true
+          echo "[INFO] Disk usage after cleanup:"
+          df -h
+
+      - name: Resolve Compose image name
+        id: image
+        working-directory: docker
+        run: |
+          set -euo pipefail
+          NAME="$(docker compose -f docker-compose.test.yml --profile test config --images rust-core-test 2>/dev/null | head -n1 || true)"
+          if [ -z "$NAME" ]; then
+            NAME="${COMPOSE_PROJECT_NAME}-rust-core-test"
+          fi
+          echo "[INFO] Compose expects image: $NAME"
+          echo "name=$NAME" >> "$GITHUB_OUTPUT"
+
+      - name: Build Rust test image (cached)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/Dockerfile.rust-test
+          tags: ${{ steps.image.outputs.name }}
+          load: true
+          push: false
+          # Shared with the integration job: identical Dockerfile + context, so
+          # the layer cache is reusable across both.
+          cache-from: type=gha,scope=rust-test-image
+          cache-to: type=gha,mode=max,scope=rust-test-image
+
+      - name: Run Rust tests
+        working-directory: docker
+        # Compose only builds a service's image when that image is absent, so
+        # asserting it is present first guarantees the cached image is used and
+        # fails loudly instead of silently re-running the 30min build.
+        run: |
+          set -euo pipefail
+          docker image inspect "${{ steps.image.outputs.name }}" > /dev/null
+          docker compose -f docker-compose.test.yml --profile test \
+            run --rm rust-core-test
+
+      - name: Upload Rust test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: rust-test-results
+          path: docker/test-results/rust/
+          retention-days: 7
+          if-no-files-found: ignore
+
+  # ============================================================================
+  # Android unit tests (docker/Dockerfile.android-test)
+  # ============================================================================
+  android-tests:
+    name: Android Unit Tests
+    runs-on: ubuntu-latest
+    # A 10-minute Gradle test-task timeout plus per-test "started" logging bounds
+    # any hang and names the test that caused it. The earlier Robolectric
+    # pre-fetch was removed: the pinned jar URLs 404'd and nothing in the project
+    # uses Robolectric. Root cause of the original hang is still unconfirmed;
+    # the Kotlin compiler daemon (now in-process) is the leading suspect.
+    # Steady-state runs take 15-25 minutes.
+    timeout-minutes: 90
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Free up disk space
+        run: |
+          set -euo pipefail
+          echo "[INFO] Disk usage before cleanup:"
+          df -h
+          echo "[INFO] Removing unnecessary files..."
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/share/boost "$AGENT_TOOLSDIRECTORY" || true
+          sudo apt-get clean || true
+          docker system prune -af || true
+          echo "[INFO] Disk usage after cleanup:"
+          df -h
+
+      - name: Resolve Compose image name
+        id: image
+        working-directory: docker
+        run: |
+          set -euo pipefail
+          NAME="$(docker compose -f docker-compose.test.yml --profile test config --images android-unit-test 2>/dev/null | head -n1 || true)"
+          if [ -z "$NAME" ]; then
+            NAME="${COMPOSE_PROJECT_NAME}-android-unit-test"
+          fi
+          echo "[INFO] Compose expects image: $NAME"
+          echo "name=$NAME" >> "$GITHUB_OUTPUT"
+
+      - name: Build Android test image (cached)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/Dockerfile.android-test
+          tags: ${{ steps.image.outputs.name }}
+          load: true
+          push: false
+          cache-from: type=gha,scope=android-test-image
+          cache-to: type=gha,mode=max,scope=android-test-image
+
+      - name: Restore Gradle and Cargo dependencies cache
+        id: gradle-cargo-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            docker/android-gradle-cache
+            docker/cargo-registry-cache
+            docker/cargo-git-cache
+          key: android-gradle-cargo-${{ runner.os }}-${{ hashFiles('**/Cargo.lock', 'android/build.gradle', 'android/app/build.gradle') }}
+          restore-keys: |
+            android-gradle-cargo-${{ runner.os }}-
+
+      - name: Run Android tests
+        working-directory: docker
+        run: |
+          set -euo pipefail
+          docker image inspect "${{ steps.image.outputs.name }}" > /dev/null
+          docker compose -f docker-compose.test.yml --profile test \
+            run --rm android-unit-test
+
+      - name: Save Gradle and Cargo dependencies cache
+        uses: actions/cache/save@v4
+        if: always()
+        with:
+          path: |
+            docker/android-gradle-cache
+            docker/cargo-registry-cache
+            docker/cargo-git-cache
+          key: ${{ steps.gradle-cargo-cache.outputs.cache-primary-key }}
+
+      - name: Upload Android test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: android-test-results
+          path: docker/test-results/android/
+          retention-days: 7
+          if-no-files-found: ignore
+
+  # ============================================================================
+  # Cross-container integration tests (mock relay + two mock clients)
+  # ============================================================================
+  integration-tests:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    # Previously: 16.6min building every image in the compose file, then the
+    # test run killed at 28.3min. Only the integration image and the node image
+    # are needed here, and the node image is pulled rather than built.
+    timeout-minutes: 90
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Free up disk space
+        run: |
+          set -euo pipefail
+          echo "[INFO] Disk usage before cleanup:"
+          df -h
+          echo "[INFO] Removing unnecessary files..."
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/share/boost "$AGENT_TOOLSDIRECTORY" || true
+          sudo apt-get clean || true
+          docker system prune -af || true
+          echo "[INFO] Disk usage after cleanup:"
+          df -h
+
+      - name: Resolve Compose image name
+        id: image
+        working-directory: docker
+        run: |
+          set -euo pipefail
+          NAME="$(docker compose -f docker-compose.test.yml --profile test config --images integration-test 2>/dev/null | head -n1 || true)"
+          if [ -z "$NAME" ]; then
+            NAME="${COMPOSE_PROJECT_NAME}-integration-test"
+          fi
+          echo "[INFO] Compose expects image: $NAME"
+          echo "name=$NAME" >> "$GITHUB_OUTPUT"
+
+      - name: Build integration test image (cached)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/Dockerfile.rust-test
+          tags: ${{ steps.image.outputs.name }}
+          load: true
+          push: false
+          cache-from: type=gha,scope=rust-test-image
+          cache-to: type=gha,mode=max,scope=rust-test-image
+
+      - name: Pull published mock node image
+        id: pull_node
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          echo "[INFO] Pulling ${NODE_IMAGE_PUBLISHED}"
+          docker pull "${NODE_IMAGE_PUBLISHED}"
+          docker tag "${NODE_IMAGE_PUBLISHED}" "${NODE_IMAGE_LOCAL}"
+          echo "[OK] Tagged ${NODE_IMAGE_PUBLISHED} as ${NODE_IMAGE_LOCAL}"
+
+      - name: Build mock node image (fallback when the pull fails)
+        if: steps.pull_node.outcome != 'success'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/Dockerfile
+          tags: ${{ env.NODE_IMAGE_LOCAL }}
+          load: true
+          push: false
+          # docker/Dockerfile defaults CARGO_BUILD_JOBS=1 so it can build on a
+          # 1GiB farm-sim node; a CI runner has no such constraint.
+          build-args: |
+            CARGO_BUILD_JOBS=4
+          cache-from: type=gha,scope=node-image
+          cache-to: type=gha,mode=max,scope=node-image
+
+      - name: Start mock infrastructure
+        working-directory: docker
+        run: |
+          set -euo pipefail
+          docker image inspect "${NODE_IMAGE_LOCAL}" > /dev/null
+          docker compose -f docker-compose.test.yml --profile test \
+            up -d --no-build mock-relay mock-client-a mock-client-b
+
+      - name: Wait for infrastructure to be ready
+        working-directory: docker
+        run: |
+          echo "Waiting for mock relay to be healthy..."
+          for i in {1..30}; do
+            if docker compose -f docker-compose.test.yml ps mock-relay | grep -q "healthy"; then
+              echo "[OK] Mock relay is healthy"
+              break
+            fi
+            if [ $i -eq 30 ]; then
+              echo "[ERROR] Mock relay failed to become healthy"
+              docker compose -f docker-compose.test.yml logs mock-relay
+              exit 1
+            fi
+            sleep 2
+          done
+
+      - name: Run integration tests
+        working-directory: docker
+        run: |
+          set -euo pipefail
+          docker image inspect "${{ steps.image.outputs.name }}" > /dev/null
+          docker compose -f docker-compose.test.yml --profile test \
+            run --rm integration-test
+
+      - name: Show mock infrastructure logs
+        if: failure()
+        working-directory: docker
+        run: |
+          docker compose -f docker-compose.test.yml logs mock-relay mock-client-a mock-client-b
+
+      - name: Stop infrastructure
+        if: always()
+        working-directory: docker
+        run: |
+          docker compose -f docker-compose.test.yml --profile test down
+
+      - name: Upload integration test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: integration-test-results
+          path: docker/test-results/integration/
+          retention-days: 7
+          if-no-files-found: ignore
+
+  # ============================================================================
+  # Full Test Suite (docker/run-all-tests.sh)
+  # ============================================================================
+  # run-all-tests.sh with no flags runs rust + lint + audit + bindings + wasm +
+  # android + integration, and starts with `docker compose build` for every
+  # service. It is a strict superset of the three jobs above, so on a push to
+  # main it re-does 100% of the work that already ran in parallel - roughly
+  # 2.5-4h of runner time for zero additional coverage.
+  #
+  # It is therefore gated to schedule/workflow_dispatch instead of every push
+  # to main. Nothing is removed: the aggregate run still happens weekly (and on
+  # demand), and the individual suites still gate every push. Revert the `if:`
+  # below to `github.event_name == 'push' && github.ref == 'refs/heads/main'` if
+  # the aggregate run is wanted per-commit.
+  full-suite:
+    name: Full Test Suite
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    needs: [rust-tests, android-tests, integration-tests]
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # run-all-tests.sh always calls `docker compose build`. Seeding the
+      # builder from the GHA layer cache first means that build is mostly cache
+      # hits instead of a from-scratch rebuild of every image.
+      - name: Seed layer cache for Rust test image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/Dockerfile.rust-test
+          tags: ${{ env.COMPOSE_PROJECT_NAME }}-rust-core-test
+          load: true
+          push: false
+          cache-from: type=gha,scope=rust-test-image
+          cache-to: type=gha,mode=max,scope=rust-test-image
+
+      - name: Seed layer cache for Android test image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/Dockerfile.android-test
+          tags: ${{ env.COMPOSE_PROJECT_NAME }}-android-unit-test
+          load: true
+          push: false
+          cache-from: type=gha,scope=android-test-image
+          cache-to: type=gha,mode=max,scope=android-test-image
+
+      - name: Pull published mock node image
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          docker pull "${NODE_IMAGE_PUBLISHED}"
+          docker tag "${NODE_IMAGE_PUBLISHED}" "${NODE_IMAGE_LOCAL}"
+
+      - name: Run all tests
+        working-directory: docker
+        run: |
+          chmod +x run-all-tests.sh
+          ./run-all-tests.sh --verbose
+
+      - name: Upload all test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: full-test-results
+          path: docker/test-results/
+          retention-days: 14
+          if-no-files-found: ignore
+
+      - name: Test Summary
+        if: always()
+        run: |
+          echo "## Test Results Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Test results are available in the artifacts section." >> $GITHUB_STEP_SUMMARY
+          if [ -d docker/test-results ]; then
+            echo "### Files Generated:" >> $GITHUB_STEP_SUMMARY
+            find docker/test-results -type f | sort >> $GITHUB_STEP_SUMMARY
+          fi
+
+  # ============================================================================
+  # NAT Simulation Tests (schedule + manual dispatch)
+  # ============================================================================
+  nat-tests:
+    name: NAT Simulation Tests
+    runs-on: ubuntu-latest
+    # run-all-tests.sh --integration-only still runs `docker compose build` for
+    # every service (16.6min uncached) before the NAT topology comes up, so the
+    # old 30min cap could not fit the actual NAT test run.
+    timeout-minutes: 120
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Seed layer cache for Rust test image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/Dockerfile.rust-test
+          tags: ${{ env.COMPOSE_PROJECT_NAME }}-integration-test
+          load: true
+          push: false
+          cache-from: type=gha,scope=rust-test-image
+          cache-to: type=gha,mode=max,scope=rust-test-image
+
+      - name: Pull published mock node image
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          docker pull "${NODE_IMAGE_PUBLISHED}"
+          docker tag "${NODE_IMAGE_PUBLISHED}" "${NODE_IMAGE_LOCAL}"
+
+      - name: Run tests with NAT simulation
+        working-directory: docker
+        run: |
+          chmod +x run-all-tests.sh
+          ./run-all-tests.sh --integration-only --with-nat --verbose
+
+      - name: Upload NAT test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: nat-test-results
+          path: docker/test-results/
+          retention-days: 7
+          if-no-files-found: ignore
+
+# ==============================================================================
+# FOLLOW-UP WORK THAT MUST HAPPEN IN docker/ (out of scope for this file)
+# ==============================================================================
+# The layer cache above cannot help the layers that depend on the source tree,
+# and nothing here can cache work done at container RUN time. To make these
+# jobs fast rather than merely able to finish:
+#
+# 1. docker/Dockerfile.rust-test: move `COPY . .` to the end and drop (or move
+#    to the coverage/audit services) `cargo install cargo-tarpaulin` and
+#    `cargo install cargo-audit` - together roughly 10min of from-source
+#    compilation that rust-core-test never uses. Its prewarm layer also builds
+#    `--all-features --tests` while rust-core-test then runs the default
+#    feature set, so the whole workspace is effectively compiled twice; align
+#    the feature sets or delete the prewarm.
+# 2. docker-compose.test.yml: add `build.cache_from`/`build.cache_to` entries
+#    (type=gha) so `docker compose build` is cached natively and the
+#    resolve-image-name dance in this workflow becomes unnecessary.
+# 3. docker-compose.test.yml: bind-mount the cargo registry and the Gradle
+#    caches from the host instead of using anonymous named volumes, so
+#    actions/cache can persist them across runners. That is the only way the
+#    container-RUN-time compilation gets cached on GitHub-hosted runners.
+# ==============================================================================

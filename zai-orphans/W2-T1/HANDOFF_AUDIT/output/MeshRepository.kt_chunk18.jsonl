@@ -1,0 +1,71 @@
+﻿{
+  "file": "MeshRepository.kt",
+  "chunk": 18,
+  "summary": "This class manages the pending outbound envelopes in a repository and provides methods to load, save, and resolve peer IDs.",
+  "structs_or_classes": [],
+  "imports": [
+    "org.json.JSONArray",
+    "org.json.JSONObject",
+    "java.util.UUID",
+    "com.example.ironcore.IronCore",
+    "com.example.contactmanager.ContactManager",
+    "com.example.peeridvalidator.PeerIdValidator"
+  ],
+  "funcs": [
+    {
+      "name": "loadPendingOutboxAsync",
+      "line": 5970,
+      "calls_out_to": ["pendingOutboxFile.exists()", "org.json.JSONArray", "buildList", "optJSONObject", "optString", "optLong", "optInt", "parseRoutingHints", "normalizePublicKey", "resolveCanonicalPeerId"]
+    },
+    {
+      "name": "loadPendingOutboxSync",
+      "line": 6029,
+      "calls_out_to": ["pendingOutboxFile.exists()", "org.json.JSONArray", "buildList", "optJSONObject", "optString", "optLong", "optInt", "parseRoutingHints", "normalizePublicKey"]
+    },
+    {
+      "name": "loadPendingOutbox",
+      "line": 6074,
+      "calls_out_to": ["loadPendingOutboxSync"]
+    },
+    {
+      "name": "savePendingOutbox",
+      "line": 6078,
+      "calls_out_to": ["org.json.JSONArray", "buildList", "optJSONObject", "put", "writeText"]
+    },
+    {
+      "name": "pendingOutboxExpiryReason",
+      "line": 6107,
+      "calls_out_to": []
+    },
+    {
+      "name": "resolveCanonicalPeerId",
+      "line": 6117,
+      "calls_out_to": ["normalizePublicKey", "ironCore?.resolveIdentity", "contactManager?.list", "PeerIdValidator.isSame", "parseRoutingHints"]
+    },
+    {
+      "name": "resolveCanonicalPeerIdFromMessageHints",
+      "line": 6201,
+      "calls_out_to": ["trim", "normalizeNickname", "isBootstrapRelayPeer", "normalizePublicKey", "contactManager?.list", "PeerIdValidator.isSame"]
+    },
+    {
+      "name": "encodeMessageWithIdentityHints",
+      "line": 6238,
+      "calls_out_to": ["encodeMeshMessagePayload"]
+    },
+    {
+      "name": "encodeIdentitySyncPayload",
+      "line": 6243,
+      "calls_out_to": ["encodeMeshMessagePayload"]
+    },
+    {
+      "name": "encodeMeshMessagePayload",
+      "line": 6250,
+      "calls_out_to": ["ironCore?.getIdentityInfo", "normalizePublicKey", "identity.identityId", "identity.deviceId", "normalizeNickname", "getListeningAddresses", "getExternalAddresses"]
+    },
+    {
+      "name": "decodeMessageWithIdentityHints",
+      "line": 6281,
+      "calls_out_to": ["trim", "org.json.JSONObject", "optString", "parseRoutingHints", "normalizePublicKey"]
+    }
+  ]
+}

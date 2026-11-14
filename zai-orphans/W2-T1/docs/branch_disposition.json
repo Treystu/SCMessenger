@@ -1,0 +1,562 @@
+[
+  {
+    "branch": "origin/dependabot/github_actions/docker/build-push-action-7",
+    "unique_patches": 1,
+    "would_add": 1,
+    "would_remove": 1,
+    "open_pr": "67",
+    "last_commit": "2026-03-07",
+    "disposition": "KEEP",
+    "reason": "bot-managed"
+  },
+  {
+    "branch": "origin/dependabot/github_actions/docker/setup-buildx-action-4",
+    "unique_patches": 1,
+    "would_add": 6,
+    "would_remove": 6,
+    "open_pr": "64",
+    "last_commit": "2026-03-07",
+    "disposition": "KEEP",
+    "reason": "bot-managed"
+  },
+  {
+    "branch": "origin/dependabot/gradle/android/hilt_version-2.59.2",
+    "unique_patches": 1,
+    "would_add": 1,
+    "would_remove": 1,
+    "open_pr": "65",
+    "last_commit": "2026-03-07",
+    "disposition": "KEEP",
+    "reason": "bot-managed"
+  },
+  {
+    "branch": "origin/dependabot/cargo/thiserror-2.0.18",
+    "unique_patches": 1,
+    "would_add": 2,
+    "would_remove": 2,
+    "open_pr": "69",
+    "last_commit": "2026-03-25",
+    "disposition": "KEEP",
+    "reason": "bot-managed"
+  },
+  {
+    "branch": "origin/dependabot/gradle/android/androidx.navigation-navigation-compose-2.9.8",
+    "unique_patches": 1,
+    "would_add": 1,
+    "would_remove": 1,
+    "open_pr": "99",
+    "last_commit": "2026-04-29",
+    "disposition": "KEEP",
+    "reason": "bot-managed"
+  },
+  {
+    "branch": "origin/dependabot/gradle/android/androidx.work-work-runtime-ktx-2.11.2",
+    "unique_patches": 1,
+    "would_add": 1,
+    "would_remove": 1,
+    "open_pr": "100",
+    "last_commit": "2026-04-29",
+    "disposition": "KEEP",
+    "reason": "bot-managed"
+  },
+  {
+    "branch": "origin/dependabot/cargo/rustc-hash-2.1.2",
+    "unique_patches": 1,
+    "would_add": 5,
+    "would_remove": 11,
+    "open_pr": "102",
+    "last_commit": "2026-05-20",
+    "disposition": "KEEP",
+    "reason": "bot-managed"
+  },
+  {
+    "branch": "origin/dependabot/github_actions/github/gh-aw-0.81.6",
+    "unique_patches": 1,
+    "would_add": 6,
+    "would_remove": 6,
+    "open_pr": "104",
+    "last_commit": "2026-07-12",
+    "disposition": "KEEP",
+    "reason": "bot-managed"
+  },
+  {
+    "branch": "origin/dependabot/gradle/android/androidx.core-core-ktx-1.19.0",
+    "unique_patches": 1,
+    "would_add": 1,
+    "would_remove": 1,
+    "open_pr": "108",
+    "last_commit": "2026-07-12",
+    "disposition": "KEEP",
+    "reason": "bot-managed"
+  },
+  {
+    "branch": "origin/dependabot/gradle/android/androidx.lifecycle-lifecycle-service-2.11.0",
+    "unique_patches": 1,
+    "would_add": 4,
+    "would_remove": 4,
+    "open_pr": "106",
+    "last_commit": "2026-07-12",
+    "disposition": "KEEP",
+    "reason": "bot-managed"
+  },
+  {
+    "branch": "origin/dependabot/gradle/android/io.mockk-mockk-android-1.14.11",
+    "unique_patches": 1,
+    "would_add": 3,
+    "would_remove": 3,
+    "open_pr": "107",
+    "last_commit": "2026-07-18",
+    "disposition": "KEEP",
+    "reason": "bot-managed"
+  },
+  {
+    "branch": "origin/dependabot/github_actions/actions/cache-6",
+    "unique_patches": 1,
+    "would_add": 6,
+    "would_remove": 6,
+    "open_pr": "103",
+    "last_commit": "2026-07-26",
+    "disposition": "KEEP",
+    "reason": "bot-managed"
+  },
+  {
+    "branch": "origin/fix/parity-critical-core",
+    "unique_patches": 1,
+    "would_add": 225,
+    "would_remove": 22,
+    "open_pr": "132",
+    "last_commit": "2026-08-03",
+    "disposition": "KEEP",
+    "reason": "canonical branch or active lane"
+  },
+  {
+    "branch": "origin/main",
+    "unique_patches": 0,
+    "would_add": 0,
+    "would_remove": 0,
+    "open_pr": null,
+    "last_commit": "2026-08-03",
+    "disposition": "KEEP",
+    "reason": "canonical branch or active lane"
+  },
+  {
+    "branch": "origin/claude/fix-github-build-tests-bgVk8",
+    "unique_patches": 1,
+    "would_add": 9,
+    "would_remove": 5,
+    "open_pr": null,
+    "last_commit": "2026-02-10",
+    "disposition": "REVIEW",
+    "reason": "1 unique patches, +9/-5 -- needs a human read"
+  },
+  {
+    "branch": "origin/claude/setup-scmessenger-gcp-hOHGN",
+    "unique_patches": 2,
+    "would_add": 572,
+    "would_remove": 353,
+    "open_pr": null,
+    "last_commit": "2026-02-10",
+    "disposition": "REVIEW",
+    "reason": "2 unique patches, +572/-353 -- needs a human read"
+  },
+  {
+    "branch": "origin/copilot/sub-pr-16",
+    "unique_patches": 2,
+    "would_add": 572,
+    "would_remove": 353,
+    "open_pr": null,
+    "last_commit": "2026-02-11",
+    "disposition": "REVIEW",
+    "reason": "2 unique patches, +572/-353 -- needs a human read"
+  },
+  {
+    "branch": "origin/copilot/create-ios-guide-for-scmessenger",
+    "unique_patches": 1,
+    "would_add": 1,
+    "would_remove": 0,
+    "open_pr": null,
+    "last_commit": "2026-02-13",
+    "disposition": "REVIEW",
+    "reason": "1 unique patches, +1/-0 -- needs a human read"
+  },
+  {
+    "branch": "origin/main-c8ed158a7d801a95",
+    "unique_patches": 1,
+    "would_add": 12,
+    "would_remove": 5,
+    "open_pr": null,
+    "last_commit": "2026-02-16",
+    "disposition": "REVIEW",
+    "reason": "1 unique patches, +12/-5 -- needs a human read"
+  },
+  {
+    "branch": "origin/main-46089b1e02a518fd",
+    "unique_patches": 1,
+    "would_add": 33,
+    "would_remove": 18,
+    "open_pr": null,
+    "last_commit": "2026-02-17",
+    "disposition": "REVIEW",
+    "reason": "1 unique patches, +33/-18 -- needs a human read"
+  },
+  {
+    "branch": "origin/claude/swarm-optimizer-budget-WNMEB",
+    "unique_patches": 3,
+    "would_add": 236,
+    "would_remove": 58,
+    "open_pr": null,
+    "last_commit": "2026-02-21",
+    "disposition": "REVIEW",
+    "reason": "3 unique patches, +236/-58 -- needs a human read"
+  },
+  {
+    "branch": "origin/copilot/sub-pr-44",
+    "unique_patches": 3,
+    "would_add": 236,
+    "would_remove": 58,
+    "open_pr": null,
+    "last_commit": "2026-02-22",
+    "disposition": "REVIEW",
+    "reason": "3 unique patches, +236/-58 -- needs a human read"
+  },
+  {
+    "branch": "origin/codex/merge-ready-identity-relay-hardening",
+    "unique_patches": 1,
+    "would_add": 70,
+    "would_remove": 91,
+    "open_pr": null,
+    "last_commit": "2026-02-24",
+    "disposition": "REVIEW",
+    "reason": "1 unique patches, +70/-91 -- needs a human read"
+  },
+  {
+    "branch": "origin/claude/audit-alpha-release-plan-bq4sA",
+    "unique_patches": 1,
+    "would_add": 11,
+    "would_remove": 4,
+    "open_pr": null,
+    "last_commit": "2026-02-26",
+    "disposition": "REVIEW",
+    "reason": "1 unique patches, +11/-4 -- needs a human read"
+  },
+  {
+    "branch": "origin/copilot/sub-pr-51",
+    "unique_patches": 1,
+    "would_add": 11,
+    "would_remove": 4,
+    "open_pr": null,
+    "last_commit": "2026-02-26",
+    "disposition": "REVIEW",
+    "reason": "1 unique patches, +11/-4 -- needs a human read"
+  },
+  {
+    "branch": "origin/claude/continue-scmessenger-dev-BF9nj",
+    "unique_patches": 5,
+    "would_add": 79,
+    "would_remove": 32,
+    "open_pr": null,
+    "last_commit": "2026-03-01",
+    "disposition": "REVIEW",
+    "reason": "5 unique patches, +79/-32 -- needs a human read"
+  },
+  {
+    "branch": "origin/copilot/sub-pr-53",
+    "unique_patches": 5,
+    "would_add": 79,
+    "would_remove": 32,
+    "open_pr": null,
+    "last_commit": "2026-03-01",
+    "disposition": "REVIEW",
+    "reason": "5 unique patches, +79/-32 -- needs a human read"
+  },
+  {
+    "branch": "origin/codex/ws13-ws14-consolidated-20260313-1245",
+    "unique_patches": 6,
+    "would_add": 1066,
+    "would_remove": 75,
+    "open_pr": null,
+    "last_commit": "2026-03-13",
+    "disposition": "REVIEW",
+    "reason": "6 unique patches, +1066/-75 -- needs a human read"
+  },
+  {
+    "branch": "origin/copilot/fix-networking-stack-bugs",
+    "unique_patches": 5,
+    "would_add": 19,
+    "would_remove": 15,
+    "open_pr": null,
+    "last_commit": "2026-04-10",
+    "disposition": "REVIEW",
+    "reason": "5 unique patches, +19/-15 -- needs a human read"
+  },
+  {
+    "branch": "origin/copilot/sub-pr-89",
+    "unique_patches": 5,
+    "would_add": 19,
+    "would_remove": 15,
+    "open_pr": null,
+    "last_commit": "2026-04-10",
+    "disposition": "REVIEW",
+    "reason": "5 unique patches, +19/-15 -- needs a human read"
+  },
+  {
+    "branch": "origin/codex/locate-potential-security-issues",
+    "unique_patches": 1,
+    "would_add": 0,
+    "would_remove": 0,
+    "open_pr": null,
+    "last_commit": "2026-04-20",
+    "disposition": "REVIEW",
+    "reason": "1 unique patches, +0/-0 -- needs a human read"
+  },
+  {
+    "branch": "origin/codex/implement-full-priority-fix-plan",
+    "unique_patches": 2,
+    "would_add": 361,
+    "would_remove": 294,
+    "open_pr": null,
+    "last_commit": "2026-05-05",
+    "disposition": "REVIEW",
+    "reason": "2 unique patches, +361/-294 -- needs a human read"
+  },
+  {
+    "branch": "origin/integration/v0.2.2-pre-android-push-2026-06-05",
+    "unique_patches": 1,
+    "would_add": 0,
+    "would_remove": 0,
+    "open_pr": null,
+    "last_commit": "2026-06-08",
+    "disposition": "REVIEW",
+    "reason": "1 unique patches, +0/-0 -- needs a human read"
+  },
+  {
+    "branch": "origin/codex/ios-updates-dependency-audit",
+    "unique_patches": 2,
+    "would_add": 78,
+    "would_remove": 61,
+    "open_pr": null,
+    "last_commit": "2026-07-24",
+    "disposition": "REVIEW",
+    "reason": "2 unique patches, +78/-61 -- needs a human read"
+  },
+  {
+    "branch": "origin/gpt/pr111-safe-device-resolution",
+    "unique_patches": 1,
+    "would_add": 384,
+    "would_remove": 49,
+    "open_pr": null,
+    "last_commit": "2026-07-28",
+    "disposition": "REVIEW",
+    "reason": "1 unique patches, +384/-49 -- needs a human read"
+  },
+  {
+    "branch": "origin/gpt/ios-test-truth",
+    "unique_patches": 5,
+    "would_add": 78,
+    "would_remove": 80,
+    "open_pr": null,
+    "last_commit": "2026-07-29",
+    "disposition": "REVIEW",
+    "reason": "5 unique patches, +78/-80 -- needs a human read"
+  },
+  {
+    "branch": "origin/gpt/npm-security-remediation",
+    "unique_patches": 2,
+    "would_add": 74,
+    "would_remove": 41,
+    "open_pr": null,
+    "last_commit": "2026-07-29",
+    "disposition": "REVIEW",
+    "reason": "2 unique patches, +74/-41 -- needs a human read"
+  },
+  {
+    "branch": "origin/gpt/release-version-truth",
+    "unique_patches": 3,
+    "would_add": 272,
+    "would_remove": 425,
+    "open_pr": null,
+    "last_commit": "2026-07-29",
+    "disposition": "REVIEW",
+    "reason": "3 unique patches, +272/-425 -- needs a human read"
+  },
+  {
+    "branch": "origin/gpt/seeding-f10-remediation",
+    "unique_patches": 20,
+    "would_add": 1855,
+    "would_remove": 226,
+    "open_pr": null,
+    "last_commit": "2026-07-29",
+    "disposition": "REVIEW",
+    "reason": "20 unique patches, +1855/-226 -- needs a human read"
+  },
+  {
+    "branch": "origin/gpt/seeding-review",
+    "unique_patches": 3,
+    "would_add": 0,
+    "would_remove": 0,
+    "open_pr": null,
+    "last_commit": "2026-07-29",
+    "disposition": "REVIEW",
+    "reason": "3 unique patches, +0/-0 -- needs a human read"
+  },
+  {
+    "branch": "origin/gpt/v050-ios-device-install",
+    "unique_patches": 10,
+    "would_add": 970,
+    "would_remove": 342,
+    "open_pr": null,
+    "last_commit": "2026-07-29",
+    "disposition": "REVIEW",
+    "reason": "10 unique patches, +970/-342 -- needs a human read"
+  },
+  {
+    "branch": "origin/gpt/v050-ios-readiness",
+    "unique_patches": 6,
+    "would_add": 74,
+    "would_remove": 80,
+    "open_pr": null,
+    "last_commit": "2026-07-29",
+    "disposition": "REVIEW",
+    "reason": "6 unique patches, +74/-80 -- needs a human read"
+  },
+  {
+    "branch": "origin/gpt/workflow-least-privilege",
+    "unique_patches": 1,
+    "would_add": 21,
+    "would_remove": 1,
+    "open_pr": null,
+    "last_commit": "2026-07-29",
+    "disposition": "REVIEW",
+    "reason": "1 unique patches, +21/-1 -- needs a human read"
+  },
+  {
+    "branch": "origin/wip/v040-seeding-fixes",
+    "unique_patches": 19,
+    "would_add": 1200,
+    "would_remove": 194,
+    "open_pr": null,
+    "last_commit": "2026-07-29",
+    "disposition": "REVIEW",
+    "reason": "19 unique patches, +1200/-194 -- needs a human read"
+  },
+  {
+    "branch": "origin/fix/seeding-security-remediation-v040",
+    "unique_patches": 22,
+    "would_add": 33,
+    "would_remove": 8,
+    "open_pr": null,
+    "last_commit": "2026-07-30",
+    "disposition": "REVIEW",
+    "reason": "22 unique patches, +33/-8 -- needs a human read"
+  },
+  {
+    "branch": "origin/gpt/v050-ios-release-ready",
+    "unique_patches": 15,
+    "would_add": 642,
+    "would_remove": 320,
+    "open_pr": null,
+    "last_commit": "2026-08-01",
+    "disposition": "REVIEW",
+    "reason": "15 unique patches, +642/-320 -- needs a human read"
+  },
+  {
+    "branch": "origin/integration/unify-2026-08-01",
+    "unique_patches": 54,
+    "would_add": 1982,
+    "would_remove": 800,
+    "open_pr": null,
+    "last_commit": "2026-08-01",
+    "disposition": "REVIEW",
+    "reason": "54 unique patches, +1982/-800 -- needs a human read"
+  },
+  {
+    "branch": "origin/fix/core-lock-serialization",
+    "unique_patches": 8,
+    "would_add": 225,
+    "would_remove": 22,
+    "open_pr": null,
+    "last_commit": "2026-08-03",
+    "disposition": "REVIEW",
+    "reason": "8 unique patches, +225/-22 -- needs a human read"
+  },
+  {
+    "branch": "origin/gpt/branch-unification-response-2026-08-03",
+    "unique_patches": 1,
+    "would_add": 0,
+    "would_remove": 0,
+    "open_pr": null,
+    "last_commit": "2026-08-03",
+    "disposition": "REVIEW",
+    "reason": "1 unique patches, +0/-0 -- needs a human read"
+  },
+  {
+    "branch": "origin/gpt/ios-delivery-audit-share-2026-08-03",
+    "unique_patches": 1,
+    "would_add": 0,
+    "would_remove": 0,
+    "open_pr": null,
+    "last_commit": "2026-08-03",
+    "disposition": "REVIEW",
+    "reason": "1 unique patches, +0/-0 -- needs a human read"
+  },
+  {
+    "branch": "origin/feature/v040-v050-completion-sprint",
+    "unique_patches": 17,
+    "would_add": 1903,
+    "would_remove": 12374,
+    "open_pr": null,
+    "last_commit": "2026-07-29",
+    "disposition": "CHERRY-PICK",
+    "reason": "has 17 unique patches but merging would REMOVE 12374 lines from main"
+  },
+  {
+    "branch": "origin/audit_system",
+    "unique_patches": 9,
+    "would_add": 65794,
+    "would_remove": 0,
+    "open_pr": null,
+    "last_commit": "2026-08-01",
+    "disposition": "ARCHIVE",
+    "reason": "net-additive 65794 lines, preserve as tag not merge"
+  },
+  {
+    "branch": "origin/codex/ios-path-canonicalization",
+    "unique_patches": 0,
+    "would_add": 2435,
+    "would_remove": 838,
+    "open_pr": null,
+    "last_commit": "2026-02-24",
+    "disposition": "DELETE",
+    "reason": "no unique patches (--cherry-pick) and no open PR"
+  },
+  {
+    "branch": "origin/gpt/ios-lane-1",
+    "unique_patches": 0,
+    "would_add": 795,
+    "would_remove": 104,
+    "open_pr": null,
+    "last_commit": "2026-07-28",
+    "disposition": "DELETE",
+    "reason": "no unique patches (--cherry-pick) and no open PR"
+  },
+  {
+    "branch": "origin/gpt/codeql-regex-remediation",
+    "unique_patches": 0,
+    "would_add": 28,
+    "would_remove": 24,
+    "open_pr": null,
+    "last_commit": "2026-07-29",
+    "disposition": "DELETE",
+    "reason": "no unique patches (--cherry-pick) and no open PR"
+  },
+  {
+    "branch": "origin/gpt/security-dom-hardening",
+    "unique_patches": 0,
+    "would_add": 193,
+    "would_remove": 64,
+    "open_pr": null,
+    "last_commit": "2026-07-29",
+    "disposition": "DELETE",
+    "reason": "no unique patches (--cherry-pick) and no open PR"
+  }
+]

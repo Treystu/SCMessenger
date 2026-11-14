@@ -1,0 +1,25 @@
+﻿{
+  "file": "MeshRepository.kt",
+  "chunk": 16,
+  "summary": "Handles delivery attempts for messages using various transport methods.",
+  "structs_or_classes": [],
+  "imports": [
+    "com.scmessenger.android.transport.SmartTransportRouter.TransportDeliveryResult",
+    "com.scmessenger.android.transport.SmartTransportRouter.TransportType",
+    "com.scmessenger.android.util.PeerIdValidator"
+  ],
+  "funcs": [
+    {
+      "name": "attemptDirectSwarmDelivery",
+      "line": 5249,
+      "calls_out_to": [
+        "logDeliveryAttempt",
+        "discoverRoutePeersForPublicKey",
+        "getDialHintsForRoutePeer",
+        "buildDialCandidatesForPeer",
+        "connectToPeer",
+        "awaitPeerConnection"
+      ]
+    }
+  ]
+}

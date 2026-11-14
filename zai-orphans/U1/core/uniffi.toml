@@ -1,0 +1,12 @@
+# UniFFI configuration for SCMessenger Core bindings generation
+# Fixes: https://github.com/Sovereign-Communication/SCMessenger/issues/42 (Domain 5)
+
+[bindings.kotlin]
+package_name = "uniffi.api"
+cdylib_name = "scmessenger_core"
+android = true
+android_cleaner = true
+
+[bindings.swift]
+module_name = "SCMessengerCore"
+ffi_module_name = "scmessenger_core"

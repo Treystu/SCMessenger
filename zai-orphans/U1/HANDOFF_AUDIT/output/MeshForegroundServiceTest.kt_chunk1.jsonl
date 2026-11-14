@@ -1,0 +1,14 @@
+﻿{
+  "file": "MeshForegroundServiceTest.kt",
+  "chunk": 1,
+  "summary": "This test class contains various scenarios to verify the behavior of the `MeshForegroundService` class. It tests different actions such as starting, pausing, resuming, stopping, and handling unknown actions.",
+  "structs_or_classes": ["MeshForegroundService", "StartDecision"],
+  "imports": ["Assert.assertEquals", "Test"],
+  "funcs": [
+    {
+      "name": "decideCommand",
+      "line": 9,
+      "calls_out_to": ["action", "serviceRunning", "repositoryRunning"]
+    }
+  ]
+}

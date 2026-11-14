@@ -1,0 +1,68 @@
+﻿{
+  "file": "BleL2capManager.kt",
+  "chunk": 1,
+  "summary": "Manages L2CAP connections for high-throughput BLE communication.",
+  "structs_or_classes": [
+    {
+      "name": "BleL2capManager",
+      "line": 24
+    },
+    {
+      "name": "L2capConnection",
+      "line": 218
+    }
+  ],
+  "imports": [
+    "android.annotation.TargetApi",
+    "android.bluetooth.*",
+    "android.content.Context",
+    "android.os.Build",
+    "timber.log.Timber",
+    "java.io.InputStream",
+    "java.io.OutputStream",
+    "java.util.concurrent.ConcurrentHashMap",
+    "kotlinx.coroutines.*"
+  ],
+  "funcs": [
+    {
+      "name": "isSupported",
+      "line": 45,
+      "calls_out_to": []
+    },
+    {
+      "name": "startListening",
+      "line": 52,
+      "calls_out_to": ["serverSocket?.psm", "handleIncomingConnection(socket)"]
+    },
+    {
+      "name": "stopListening",
+      "line": 103,
+      "calls_out_to": []
+    },
+    {
+      "name": "connect",
+      "line": 123,
+      "calls_out_to": ["device?.createInsecureL2capChannel(psm)", "socket.connect()"]
+    },
+    {
+      "name": "disconnect",
+      "line": 170,
+      "calls_out_to": []
+    },
+    {
+      "name": "sendData",
+      "line": 179,
+      "calls_out_to": ["connection.send(data)"]
+    },
+    {
+      "name": "shutdown",
+      "line": 191,
+      "calls_out_to": ["stopListening()", "disconnect(it)"]
+    },
+    {
+      "name": "handleIncomingConnection",
+      "line": 200,
+      "calls_out_to": []
+    }
+  ]
+}

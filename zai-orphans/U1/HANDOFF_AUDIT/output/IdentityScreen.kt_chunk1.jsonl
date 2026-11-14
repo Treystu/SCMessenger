@@ -1,0 +1,47 @@
+﻿{
+  "file": "IdentityScreen.kt",
+  "chunk": 1,
+  "summary": "Displays the user's identity information including peer ID, public key, and a scannable QR code for easy contact sharing.",
+  "structs_or_classes": [],
+  "imports": [
+    "android.graphics.Bitmap",
+    "androidx.compose.foundation.Image",
+    "androidx.compose.foundation.layout.*",
+    "androidx.compose.foundation.rememberScrollState",
+    "androidx.compose.foundation.verticalScroll",
+    "androidx.compose.material.icons.Icons",
+    "androidx.compose.material.icons.automirrored.filled.ArrowBack",
+    "androidx.compose.material.icons.filled.Refresh",
+    "androidx.compose.material3.*",
+    "androidx.compose.runtime.*",
+    "androidx.compose.ui.Alignment",
+    "androidx.compose.ui.Modifier",
+    "androidx.compose.ui.graphics.asImageBitmap",
+    "androidx.compose.ui.platform.LocalContext",
+    "androidx.compose.ui.res.stringResource",
+    "androidx.compose.ui.text.font.FontFamily",
+    "androidx.compose.ui.text.font.FontWeight",
+    "androidx.compose.ui.unit.dp",
+    "androidx.hilt.navigation.compose.hiltViewModel",
+    "com.google.zxing.BarcodeFormat",
+    "com.google.zxing.qrcode.QRCodeWriter",
+    "com.scmessenger.android.R",
+    "com.scmessenger.android.ui.components.CopyableText",
+    "com.scm messenger.android.ui.components.ErrorBanner",
+    "com.scmessenger.android.ui.components.IdenticonFromPeerId",
+    "com.scmessenger.android.ui.viewmodels.IdentityViewModel",
+    "timber.log.Timber"
+  ],
+  "funcs": [
+    {
+      "name": "IdentityScreen",
+      "line": 39,
+      "calls_out_to": ["hiltViewModel", "collectAsState"]
+    },
+    {
+      "name": "generateQRCode",
+      "line": 292,
+      "calls_out_to": []
+    }
+  ]
+}

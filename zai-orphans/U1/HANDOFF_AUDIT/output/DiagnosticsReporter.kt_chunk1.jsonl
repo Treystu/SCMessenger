@@ -1,0 +1,32 @@
+﻿{
+  "file": "DiagnosticsReporter.kt",
+  "chunk": 1,
+  "summary": "Aggregates network diagnostics into a user-facing report.",
+  "structs_or_classes": [
+    {
+      "name": "NetworkDiagnosticsReport",
+      "line": 25
+    }
+  ],
+  "imports": [
+    "android.content.Context",
+    "com.scmessenger.android.transport.NetworkType",
+    "com.scmessenger.android.utils.NetworkFailureMetrics",
+    "timber.log.Timber",
+    "dagger.hilt.android.qualifiers.ApplicationContext",
+    "javax.inject.Inject",
+    "javax.inject.Singleton"
+  ],
+  "funcs": [
+    {
+      "name": "generateReport",
+      "line": 35,
+      "calls_out_to": ["networkDiagnostics.testNetworkConnectivity", "networkTypeDetector.detectNetworkType", "failureMetrics.getSummary"]
+    },
+    {
+      "name": "generateRecommendations",
+      "line": 63,
+      "calls_out_to": ["testResults.internetConnectivity", "testResults.dnsResolution", "testResults.portReachability", "report.relayResults"]
+    }
+  ]
+}

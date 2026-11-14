@@ -1,0 +1,29 @@
+# WASM Test Dockerfile
+# Provides environment for testing SCMessenger WASM components
+# Includes: Rust toolchain, wasm-pack, Node.js
+
+FROM rust:latest
+
+# Install Node.js and other dependencies
+RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
+    apt-get update && apt-get install -y \
+    nodejs \
+    build-essential \
+    libssl-dev \
+    pkg-config \
+    && rm -rf /var/lib/apt/lists/*
+
+# Add wasm target
+RUN rustup target add wasm32-unknown-unknown
+
+# Install wasm-pack
+RUN curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
+
+WORKDIR /workspace
+
+# Copy workspace
+COPY . .
+
+# Run WASM tests with wasm-pack (headless Chrome or Node.js)
+# Note: In CI/Docker, --node is easiest for unit tests
+CMD ["bash", "-c", "cd wasm && wasm-pack test --node"]

@@ -1,0 +1,10 @@
+*.rs text eol=lf
+docker/Dockerfile* text eol=lf
+*.swift text eol=lf
+*.sh text eol=lf
+*.py text eol=lf
+*.kt text eol=lf
+*.kts text eol=lf
+*.md text eol=lf
+log-visualizer/package.json whitespace=cr-at-eol
+log-visualizer/package-lock.json whitespace=cr-at-eol

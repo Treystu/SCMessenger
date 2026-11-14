@@ -1,0 +1,31 @@
+# Clippy configuration for SCMessenger
+# This file configures clippy linting rules for the entire workspace
+
+# Cognitive complexity threshold - maximum allowed complexity for a function
+# Default is 25, we set it to 15 for better maintainability
+cognitive-complexity-threshold = 15
+
+# Maximum number of arguments a function can have
+# Default is 7, we keep it at 7 for reasonable function signatures
+too-many-arguments-threshold = 7
+
+# Type complexity threshold - maximum allowed type complexity
+# Default is 250, we keep it reasonable
+type-complexity-threshold = 250
+
+# Disallowed methods - methods that should not be used in the codebase
+# These will trigger clippy warnings when used
+disallowed-methods = [
+    # Discourage direct environment variable manipulation
+    # Use config structs instead for better testability and clarity
+    { path = "std::env::set_var", reason = "Use config structs instead of direct env var manipulation" },
+    
+    # Discourage unwrap in production code (enforced separately via ripgrep)
+    # This is a backup check in case the ripgrep check is bypassed
+    { path = "std::option::Option::unwrap", reason = "Use ? or expect() with context instead" },
+    { path = "std::result::Result::unwrap", reason = "Use ? or expect() with context instead" },
+]
+
+# Additional lint configuration
+# Note: Most lints are configured via command-line flags in CI
+# This file focuses on thresholds and disallowed patterns

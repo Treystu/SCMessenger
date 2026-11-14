@@ -1,0 +1,14 @@
+﻿{
+  "file": "server.rs",
+  "chunk": 1,
+  "summary": "This chunk defines the `WebContext` struct and related types used in a web server for SCMessenger. It includes structs for UI events, outbound messages, and commands, as well as functions to handle WebSocket connections and JSON-RPC requests.",
+  "structs_or_classes": ["WebContext", "UiEvent", "UiOutbound", "UiCommand"],
+  "imports": ["libp2p::PeerId", "serde::{Deserialize, Serialize}", "std::collections::HashMap", "std::sync::Arc", "std::time::Instant", "tokio::sync::{broadcast, mpsc, Mutex}"],
+  "funcs": [
+    {
+      "name": "start",
+      "line": 169,
+      "calls_out_to": ["warp::serve"]
+    }
+  ]
+}

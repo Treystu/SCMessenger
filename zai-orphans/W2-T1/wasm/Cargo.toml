@@ -1,0 +1,43 @@
+[package]
+name = "scmessenger-wasm"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+scmessenger-core = { path = "../core", features = ["wasm"] }
+wasm-bindgen = { workspace = true }
+wasm-bindgen-futures = { workspace = true }
+js-sys = { workspace = true }
+web-sys = { workspace = true }
+serde-wasm-bindgen = "0.6"
+serde = { workspace = true }
+serde_json = { workspace = true }
+tracing = { workspace = true }
+tracing-wasm = "0.2"
+futures = { workspace = true }
+libp2p = { workspace = true }
+tokio = { workspace = true }
+anyhow = { workspace = true }
+# UniFFI with wasm single-threaded feature for wasm32 target
+uniffi = { workspace = true, features = ["wasm-unstable-single-threaded"] }
+# getrandom 0.4+ requires this feature explicitly for wasm32-unknown-unknown
+# (pulled in transitively; listed directly here just to set its feature flag)
+getrandom = { version = "0.4", features = ["wasm_js"] }
+
+# WASM-specific dependencies
+console_error_panic_hook = "0.1"
+web-time = "1.1"
+gloo-timers = { version = "0.3", features = ["futures"] }
+
+[lints]
+workspace = true
+
+[dev-dependencies]
+wasm-bindgen-test = "0.3"
+
+[package.metadata.wasm-pack.profile.release]
+wasm-opt = false

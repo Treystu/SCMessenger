@@ -1,0 +1,224 @@
+//
+//  CoreDelegateImpl.swift
+//  SCMessenger
+//
+//  Implements Rust CoreDelegate callback interface
+//  Receives events FROM Rust core and publishes to MeshEventBus
+//
+
+import Combine
+import Foundation
+import os
+
+/// Implements Rust CoreDelegate callback interface
+///
+/// This class receives callbacks FROM the Rust core (UniFFI)
+/// and publishes them to the MeshEventBus for Swift/SwiftUI consumption.
+///
+/// Flow: Rust Core → CoreDelegate → MeshEventBus → SwiftUI Views
+final class CoreDelegateImpl: CoreDelegate {
+    private let logger: Logger = Logger(subsystem: "com.scmessenger", category: "CoreDelegate")
+    private let eventBus: MeshEventBus = MeshEventBus.shared
+    private weak var meshRepository: MeshRepository?
+
+    // P1: Dedup disconnect events — Rust fires one per substream (254+ in 1s).
+    // Only emit one disconnect per peer per 1-second window.
+    private var disconnectDedupCache: [String: Date] = [:]
+    private let disconnectDedupInterval: TimeInterval = 1.0
+
+    init(meshRepository: MeshRepository?) {
+        self.meshRepository = meshRepository
+    }
+
+    // MARK: - CoreDelegate Protocol (called FROM Rust)
+
+    // P1: Dedup discover events — Rust fires one per substream (5+ in 14ms).
+    // Only process one discovery per peer per 1-second window.
+    private var discoveryDedupCache: [String: Date] = [:]
+    private let discoveryDedupInterval: TimeInterval = 1.0
+
+    func onPeerDiscovered(peerId: String) {
+        let trimmed: String = PeerIdValidator.normalize(peerId)
+        let now: Date = Date()
+        if let lastDiscovery = discoveryDedupCache[trimmed],
+           now.timeIntervalSince(lastDiscovery) < discoveryDedupInterval {
+            return // Already processed this discovery within the window
+        }
+        discoveryDedupCache[trimmed] = now
+
+        logger.info("Peer discovered: \(peerId)")
+        let repo: MeshRepository? = meshRepository
+        DispatchQueue.main.async {
+            if let repo {
+                repo.handleTransportPeerDiscovered(peerId: peerId)
+            } else {
+                self.eventBus.peerEvents.send(.discovered(peerId: peerId))
+            }
+        }
+    }
+
+    // P1: Dedup connect events — Rust fires one per substream.
+    private var connectDedupCache: [String: Date] = [:]
+    private let connectDedupInterval: TimeInterval = 2.0
+
+    func onPeerConnected(peerId: String) {
+        let trimmed: String = PeerIdValidator.normalize(peerId)
+        let now: Date = Date()
+        if let last = connectDedupCache[trimmed],
+           now.timeIntervalSince(last) < connectDedupInterval {
+            return
+        }
+        connectDedupCache[trimmed] = now
+
+        logger.info("Peer connected: \(peerId)")
+        DispatchQueue.main.async {
+            self.eventBus.peerEvents.send(.connected(peerId: peerId))
+        }
+    }
+
+    func onPeerDisconnected(peerId: String) {
+        // P1: Deduplicate disconnect events at callback layer
+        let trimmed: String = PeerIdValidator.normalize(peerId)
+        let now: Date = Date()
+        if let lastDisconnect = disconnectDedupCache[trimmed],
+           now.timeIntervalSince(lastDisconnect) < disconnectDedupInterval {
+            return // Already processed this disconnect within the window
+        }
+        disconnectDedupCache[trimmed] = now
+
+        logger.info("Peer disconnected: \(peerId)")
+        let repo: MeshRepository? = meshRepository
+        DispatchQueue.main.async {
+            repo?.handleTransportPeerDisconnected(peerId: peerId)
+            self.eventBus.peerEvents.send(.disconnected(peerId: peerId))
+        }
+    }
+
+    // P1: Dedup identify events — Rust fires one per substream.
+    private var identifyDedupCache: [String: (signature: String, observedAt: Date)] = [:]
+    private let identifyDedupInterval: TimeInterval = 2.0
+
+    func onPeerIdentified(peerId: String, agentVersion: String, listenAddrs: [String]) {
+        let trimmed: String = PeerIdValidator.normalize(peerId)
+        let identifySignature: String = ([agentVersion.trimmingCharacters(in: .whitespacesAndNewlines)] +
+            listenAddrs
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+            .sorted()).joined(separator: "|")
+        let now: Date = Date()
+        if let last = identifyDedupCache[trimmed],
+           last.signature == identifySignature,
+           now.timeIntervalSince(last.observedAt) < identifyDedupInterval {
+            return
+        }
+        identifyDedupCache[trimmed] = (identifySignature, now)
+
+        logger.info("Peer identified: \(peerId) (agent: \(agentVersion)) with \(listenAddrs.count) addresses")
+        let repo: MeshRepository? = meshRepository
+        DispatchQueue.main.async {
+            repo?.handleTransportPeerIdentified(peerId: peerId, agentVersion: agentVersion, listenAddrs: listenAddrs)
+        }
+    }
+
+    func onMessageReceived(
+        senderId: String,
+        senderPublicKeyHex: String,
+        messageId: String,
+        senderTimestamp: UInt64,
+        data: Data
+    ) {
+        logger.info("Message received: \(messageId) from \(senderId) ts=\(senderTimestamp) (\(data.count) bytes)")
+
+        // UniFFI callbacks arrive on a Rust thread; MeshRepository is @MainActor.
+        // Capture values before the dispatch to avoid capturing self or mutable state.
+        let repo: MeshRepository? = meshRepository
+        DispatchQueue.main.async {
+            repo?.onMessageReceived(
+                senderId: senderId,
+                senderPublicKeyHex: senderPublicKeyHex,
+                messageId: messageId,
+                senderTimestamp: senderTimestamp,
+                data: data
+            )
+        }
+
+        // Publish event (PassthroughSubject is thread-safe for send())
+        DispatchQueue.main.async {
+            self.eventBus.messageEvents.send(.received(
+                senderId: senderId,
+                messageId: messageId,
+                data: data
+            ))
+        }
+    }
+
+    func onMessageSent(messageId: String) {
+        logger.info("Message sent: \(messageId)")
+        DispatchQueue.main.async {
+            self.eventBus.messageEvents.send(.sent(messageId: messageId))
+        }
+    }
+
+    func onMessageDelivered(messageId: String) {
+        logger.info("Message delivered: \(messageId)")
+        DispatchQueue.main.async {
+            self.eventBus.messageEvents.send(.delivered(messageId: messageId))
+        }
+    }
+
+    func onMessageFailed(messageId: String, error: String) {
+        logger.error("Message failed: \(messageId) - \(error)")
+        DispatchQueue.main.async {
+            self.eventBus.messageEvents.send(.failed(messageId: messageId, error: error))
+        }
+    }
+
+    func onReceiptReceived(messageId: String, status: String) {
+        logger.info("Receipt received: \(messageId) status=\(status)")
+
+        // Keep repository delivery state aligned with receipt callbacks.
+        let repo: MeshRepository? = meshRepository
+        DispatchQueue.main.async {
+            repo?.onDeliveryReceipt(messageId: messageId, status: status)
+        }
+
+        // Map receipt status to message events
+        DispatchQueue.main.async {
+            switch status.lowercased() {
+            case "delivered":
+                self.eventBus.messageEvents.send(.delivered(messageId: messageId))
+            case "failed":
+                self.eventBus.messageEvents.send(.failed(messageId: messageId, error: "Receipt indicated failure"))
+            default:
+                self.logger.debug("Unknown receipt status: \(status)")
+            }
+        }
+    }
+
+    func onServiceStateChanged(state: ServiceState) {
+        logger.info("Service state changed: \(String(describing: state))")
+        DispatchQueue.main.async {
+            self.eventBus.statusEvents.send(.serviceStateChanged(state))
+        }
+    }
+
+    func onStatsUpdated(stats: ServiceStats) {
+        logger.debug("Stats updated: \(stats.peersDiscovered) peers, \(stats.messagesRelayed) messages")
+        DispatchQueue.main.async {
+            self.eventBus.statusEvents.send(.statsUpdated(stats))
+        }
+    }
+}
+
+// MARK: - ServiceState Description
+
+extension ServiceState: CustomStringConvertible {
+    public var description: String {
+        switch self {
+        case .stopped: return "stopped"
+        case .starting: return "starting"
+        case .running: return "running"
+        case .stopping: return "stopping"
+        }
+    }
+}

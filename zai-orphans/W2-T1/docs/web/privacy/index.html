@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Privacy Policy | SCMessenger</title>
+    <style>
+      :root {
+        --bg-color: #0d1117;
+        --text-color: #c9d1d9;
+        --heading-color: #ffffff;
+        --accent-color: #58a6ff;
+        --border-color: #30363d;
+      }
+
+      @media (prefers-color-scheme: light) {
+        :root {
+          --bg-color: #ffffff;
+          --text-color: #24292f;
+          --heading-color: #000000;
+          --accent-color: #0969da;
+          --border-color: #d0d7de;
+        }
+      }
+
+      body {
+        font-family:
+          -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial,
+          sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
+        background-color: var(--bg-color);
+        color: var(--text-color);
+        line-height: 1.6;
+        margin: 0;
+        padding: 2rem 1rem;
+        display: flex;
+        justify-content: center;
+        min-height: 100vh;
+      }
+
+      main {
+        max-width: 680px;
+        width: 100%;
+      }
+
+      h1 {
+        color: var(--heading-color);
+        font-size: 2.5rem;
+        margin-bottom: 2rem;
+        border-bottom: 1px solid var(--border-color);
+        padding-bottom: 0.5rem;
+      }
+
+      h2 {
+        color: var(--heading-color);
+        font-size: 1.5rem;
+        margin-top: 2rem;
+        margin-bottom: 1rem;
+      }
+
+      p {
+        margin-bottom: 1rem;
+      }
+
+      .unlicense-box {
+        background: rgba(128, 128, 128, 0.05);
+        border: 1px solid var(--border-color);
+        border-radius: 6px;
+        padding: 1.5rem;
+        margin: 2rem 0;
+        font-family:
+          ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
+          "Liberation Mono", monospace;
+        font-size: 0.9em;
+        white-space: pre-wrap;
+      }
+
+      .highlight {
+        color: var(--accent-color);
+        font-weight: 600;
+      }
+
+      footer {
+        margin-top: 4rem;
+        padding-top: 1rem;
+        border-top: 1px solid var(--border-color);
+        font-size: 0.85rem;
+        color: #8b949e;
+      }
+
+      @media (prefers-color-scheme: light) {
+        footer {
+          color: #57606a;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Privacy Policy</h1>
+
+      <p>
+        This is the official privacy policy for the
+        <span class="highlight">SCMessenger</span> communication application,
+        provided by Sovereign Communications.
+      </p>
+
+      <h2>The Short Version</h2>
+      <p><strong>We collect absolutely nothing.</strong></p>
+      <p>
+        We do not track you. We do not store your data. We do not have servers
+        capable of intercepting, analyzing, or storing your messages.
+        SCMessenger is a true peer-to-peer (P2P) protocol executing exclusively
+        on your local device.
+      </p>
+
+      <h2>Data We "Collect"</h2>
+      <p>
+        None. Our infrastructure has zero insight into your identity, contacts,
+        messages, network routing, or location.
+      </p>
+
+      <h2>How Your Data Is Handled</h2>
+      <p>
+        Everything related to your SCMessenger identity—including your
+        cryptographic keys, message history, connection proofs, and relay
+        routing configurations—is stored strictly on your device.
+      </p>
+      <p>
+        When you transmit a message over Bluetooth (BLE), Local Wi-Fi (mDNS), or
+        the Internet via libp2p relays:
+      </p>
+      <ul>
+        <li>
+          Your message is fully End-to-End Encrypted (E2EE) using modern
+          cryptographic standards (X25519 & XChaCha20-Poly1305) before
+          transmission.
+        </li>
+        <li>
+          No intermediary node, relay, or network provider (including us) can
+          decrypt the payload or read its contents.
+        </li>
+      </ul>
+
+      <h2>Device Permissions</h2>
+      <p>
+        SCMessenger requires certain device permissions purely to facilitate
+        local peer network discovery and delivery:
+      </p>
+      <ul>
+        <li>
+          <strong>Bluetooth:</strong> Required to locate, pair with, and
+          transmit messages to nearby offline peers via BLE.
+        </li>
+        <li>
+          <strong>Local Network / Wi-Fi:</strong> Required to discover and
+          connect with local peers via mDNS.
+        </li>
+        <li>
+          <strong>Location (Android only):</strong> Historically mandated by the
+          Android operating system to scan for Bluetooth devices. We do not read
+          or use your GPS coordinates.
+        </li>
+        <li>
+          <strong>Camera:</strong> Required only for scanning a peer's identity
+          QR code to initiate a secure connection.
+        </li>
+        <li>
+          <strong>Internet:</strong> Required to route encrypted message packets
+          through libp2p internet relays when peers are out of physical range.
+        </li>
+      </ul>
+
+      <h2>Sovereignty Declaration</h2>
+      <p>
+        Consistent with our code philosophy, the app's approach to your data
+        operates in the spirit of the Unlicense:
+      </p>
+
+      <div class="unlicense-box">
+        This is a free and unencumbered application built for true digital
+        sovereignty. Anyone is free to use, audit, compile, or distribute this
+        software privately or commercially. We disclaim all dominion over your
+        data. Your keys, your messages, your relationships, and your network
+        graph belong exclusively to you. The software is provided "as is",
+        without warranty of any kind, but strictly dedicated to preserving your
+        absolute privacy.
+      </div>
+
+      <h2>Contact</h2>
+      <p>
+        If you have any questions regarding how the peer-to-peer implementation
+        works, we encourage you to audit the fully open-source Rust, Kotlin, and
+        Swift codebases directly at the Sovereign Communications repositories.
+      </p>
+
+      <footer>
+        <p>Last updated: March 8, 2026</p>
+      </footer>
+    </main>
+  </body>
+</html>

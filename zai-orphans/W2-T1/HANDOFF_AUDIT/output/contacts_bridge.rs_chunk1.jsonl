@@ -1,0 +1,90 @@
+﻿{
+  "file": "contacts_bridge.rs",
+  "chunk": 1,
+  "summary": "A Rust module for managing contacts on mobile platforms using UniFFI and sled.",
+  "structs_or_classes": ["ContactManager", "Contact"],
+  "imports": [
+    "std::path::PathBuf",
+    "std::sync::Arc",
+    "serde::{Deserialize, Serialize}",
+    "sled::Db",
+    "web_time::SystemTime"
+  ],
+  "funcs": [
+    {
+      "name": "new",
+      "line": 70,
+      "calls_out_to": ["ContactManager"]
+    },
+    {
+      "name": "add",
+      "line": 96,
+      "calls_out_to": ["ContactManager"]
+    },
+    {
+      "name": "get",
+      "line": 110,
+      "calls_out_to": ["ContactManager"]
+    },
+    {
+      "name": "remove",
+      "line": 124,
+      "calls_out_to": ["ContactManager"]
+    },
+    {
+      "name": "list",
+      "line": 138,
+      "calls_out_to": ["ContactManager"]
+    },
+    {
+      "name": "search",
+      "line": 152,
+      "calls_out_to": ["ContactManager"]
+    },
+    {
+      "name": "set_nickname",
+      "line": 176,
+      "calls_out_to": ["ContactManager"]
+    },
+    {
+      "name": "set_local_nickname",
+      "line": 190,
+      "calls_out_to": ["ContactManager"]
+    },
+    {
+      "name": "update_last_seen",
+      "line": 206,
+      "calls_out_to": ["ContactManager"]
+    },
+    {
+      "name": "update_device_id",
+      "line": 222,
+      "calls_out_to": ["ContactManager"]
+    },
+    {
+      "name": "reconcile_from_history",
+      "line": 238,
+      "calls_out_to": ["HistoryManager", "ContactManager"]
+    },
+    {
+      "name": "count",
+      "line": 260,
+      "calls_out_to": ["ContactManager"]
+    },
+    {
+      "name": "flush",
+      "line": 264,
+      "calls_out_to": ["ContactManager"]
+    },
+    {
+      "name": "verify_integrity",
+      "line": 270,
+      "calls_out_to": ["ContactManager"]
+    },
+    {
+      "name": "emergency_recover",
+      "line": 286,
+      "calls_out_to": ["HistoryManager", "ContactManager"]
+    }
+  ]
+}

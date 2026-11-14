@@ -1,0 +1,45 @@
+﻿{
+    "funcs": [
+        {
+            "name": "test_any_valid_hex_hash_passes_validation",
+            "line": 328,
+            "is_stub": true
+        },
+        {
+            "name": "test_display_always_starts_with_relay_trace",
+            "line": 346,
+            "is_stub": false
+        },
+        {
+            "name": "test_display_contains_all_field_values",
+            "line": 368,
+            "is_stub": false
+        },
+        {
+            "name": "test_clone_creates_equal_payload",
+            "line": 384,
+            "is_stub": false
+        },
+        {
+            "name": "test_partial_eq_works_correctly",
+            "line": 391,
+            "is_stub": false
+        },
+        {
+            "name": "test_error_display_messages",
+            "line": 418,
+            "is_stub": false
+        },
+        {
+            "name": "test_error_implements_error_trait",
+            "line": 430,
+            "is_stub": false
+        },
+        {
+            "name": "test_error_debug_display",
+            "line": 441,
+            "is_stub": false
+        }
+    ],
+    "classes": []
+}

@@ -1,0 +1,1567 @@
+#!/bin/bash
+# Orchestrator State Management (v3.3)
+# Handles activation, deactivation, multi-agent slot management (MAX=1)
+# Now supports native Agent tool subagents + CLI-based Ollama agents
+# v3.3: STRICT OS-LEVEL PROCESS GATING — fixes pool_stop arg bug, adds assert_process_limit
+# v3.2: PowerShell-based process checking for Windows, self-preservation PID guard
+
+# Source cross-platform process helpers
+
+# Python detection: prefer python3, then python, then py -3 (Windows launcher)
+# macOS port (2026-06-10): py -3 is kept as last-resort fallback only.
+detect_python() {
+    if command -v python3 &>/dev/null && python3 --version &>/dev/null; then
+        echo "python3"
+    elif command -v python &>/dev/null && python --version &>/dev/null; then
+        echo "python"
+    elif command -v py &>/dev/null && py -3 --version &>/dev/null; then
+        echo "py -3"
+    else
+        echo ""
+    fi
+}
+if [ -z "${PYTHON:-}" ]; then
+    PYTHON="$(detect_python)"
+fi
+if [ -z "$PYTHON" ]; then
+    echo "ERROR: No Python interpreter found. Install Python 3 or the py launcher."
+    exit 1
+fi
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/scripts/process_alive.sh"
+source "$SCRIPT_DIR/scripts/quota_lib.sh"
+
+trap 'echo "[TRAP] Script exiting with code $? at line $LINENO"' EXIT
+
+# Reliable cross-platform process kill.
+# macOS port (2026-06-10): walk the process tree via ps, kill children first,
+# then the parent. No PowerShell/Taskkill needed.
+force_kill_pid() {
+    local pid="$1"
+    [ -z "$pid" ] && return 0
+    # Find all descendants of $pid (process tree) and kill them, then kill $pid.
+    # ps -axo pid,ppid gives us parent->child links; we recurse to find the full tree.
+    local descendants
+    descendants=$(ps -axo pid,ppid 2>/dev/null \
+        | awk -v root="$pid" '
+            function walk(p,    line) {
+                for (key in children) {
+                    split(key, arr, SUBSEP)
+                    if (arr[1] == p) {
+                        child = arr[2]
+                        if (!seen[child]++) {
+                            print child
+                            walk(child)
+                        }
+                    }
+                }
+            }
+            $1 != "" && $2 != "" { children[$2, $1] = 1 }
+            END { walk(root) }
+        ')
+    # Kill descendants in reverse order (deepest first)
+    for cpid in $descendants; do
+        kill -9 "$cpid" 2>/dev/null || true
+    done
+    # Kill the root
+    kill -9 "$pid" 2>/dev/null || true
+}
+
+STATE_FILE=".claude/orchestrator_state.json"
+AGENT_ROOT=".claude/agents"
+POOL_CONFIG=".claude/agent_pool.json"
+MAX_OS_PROCESSES=3
+ORCHESTRATOR_PID_FILE=".claude/orchestrator.pid"
+
+# ─── STRICT OS-LEVEL PROCESS GATING ────────────────────────────────────────
+# Two-Tier Topology: Max 3 OS processes (Lead Orchestrator + 2 Workers)
+# This MUST be checked BEFORE every agent launch.
+
+count_os_claude_processes() {
+    # Windows Host Support
+    if [[ "$(uname -s)" == *MINGW* || "$(uname -s)" == *MSYS* || "$(uname -s)" == *CYGWIN* ]]; then
+        local count
+        count=$(tasklist.exe 2>/dev/null | grep -i "claude.exe" | wc -l | tr -d ' ')
+        if [ -z "$count" ] || ! [[ "$count" =~ ^[0-9]+$ ]]; then
+            count=0
+        fi
+        echo "$count"
+        return
+    fi
+
+    # 2026-06-11 macOS port fix: `pgrep -f` silently returns 0 lines on this
+    # host even when a `claude` process is alive (sandbox/PID-namespace issue
+    # in the shell context that runs the script), which made MAX_SUBAGENTS
+    # always evaluate to MAX_OS_PROCESSES and report 3 free slots even when
+    # Claude Code + Hermes were already occupying 2 of them.
+    #
+    # Strategy: enumerate via `ps -axo pid,args` (which works reliably on
+    # macOS for processes visible to the current shell), then count processes
+    # that fall into the LLM-worker category:
+    #
+    #   1. Claude CLI binary — basename of $2 == "claude" (catches any install
+    #      path: ~/.local/bin/claude, /usr/local/bin/claude, ollama-launched
+    #      wrappers that exec the same binary).
+    #   2. Hermes slash worker — argv contains "tui_gateway.slash_worker"
+    #      AND a "--model" flag (proves it's holding an LLM session, not a
+    #      dashboard or background helper).
+    #   3. ollama launch wrappers with a --model flag pointing to a :cloud
+    #      model (catches ollama-launched child processes that proxy to the
+    #      cloud API and consume the same quota budget).
+    #
+    # Why basename for claude, substring for Hermes/ollama:
+    #   - `comm` is BSD-truncated to 15 chars on macOS, so the full path
+    #     never appears. `args` is the full command line.
+    #   - For `claude` we want the binary path's basename, excluding
+    #     `ollama launch claude ...` (the parent wrapper, whose basename is
+    #     `ollama` not `claude`).
+    #   - For Hermes/ollama we look at the full argv since their relevant
+    #     tokens are flags, not the binary name.
+    #
+    # Fallback: if `ps` returns nothing for total processes (extremely
+    # restricted shell), return MAX_OS_PROCESSES to fail CLOSED — never
+    # inflate the free-slot count on a blind counter.
+    local count
+    count=$(ps -axo pid,etime,args 2>/dev/null | awk '
+        function parse_etime(s,    n, parts, i, total) {
+            # ps etime formats: "MM:SS", "HH:MM:SS", or "DD-HH:MM:SS".
+            # Convert to total seconds; missing prefix defaults to 0.
+            if (index(s, "-") > 0) {
+                n = split(s, parts, "-")
+                total = parts[1] * 86400
+                s = parts[2]
+            } else {
+                total = 0
+            }
+            n = split(s, parts, ":")
+            if (n == 2) {
+                total += parts[1] * 60 + parts[2]
+            } else if (n == 3) {
+                total += parts[1] * 3600 + parts[2] * 60 + parts[3]
+            }
+            return total
+        }
+        {
+            # ps -axo pid,etime,args: $1=PID, $2=etime, $3+=args
+            age = parse_etime($2)
+
+            # Skip transient one-shots (claude --print, eval-from-shell, etc).
+            # A long-running quota consumer has been alive for minutes-to-hours;
+            # a one-shot CLI call is typically <60s. Threshold of 5 minutes
+            # gives a generous margin while excluding ad-hoc `claude --print`
+            # invocations and quick evaluation calls.
+            if (age < 300) next
+
+            bin = $3
+            n = split(bin, parts, "/")
+            base = parts[n]
+            full = $0
+
+            # 1. Claude CLI binary — counts as one slot regardless of
+            #    whether it was launched by ollama, a shell, or directly.
+            if (base == "claude") { c++; next }
+
+            # 2. Hermes slash worker: must be a python process running
+            #    tui_gateway.slash_worker with --model set. Requiring the
+            #    binary basename to be "python" excludes zsh/awk wrappers
+            #    whose argv happens to contain those tokens (which would
+            #    otherwise self-match this very script).
+            if ((base == "python" || base == "python3") \
+                && index(full, "tui_gateway.slash_worker") > 0 \
+                && index(full, "--model") > 0) { c++; next }
+
+            # NOTE: We deliberately do NOT count the `ollama launch claude
+            # --model ...` parent wrapper. It is a transit process; the
+            # actual quota consumer is the claude child, which rule 1
+            # already counts. Including the parent would double-count
+            # every Claude Code session that was launched via ollama.
+        }
+        END { print c+0 }
+    ')
+    if [ -z "$count" ] || ! [[ "$count" =~ ^[0-9]+$ ]]; then
+        count=0
+    fi
+
+    # Verification: if `ps` itself returned 0 processes total, something is
+    # wrong with the environment. Fail closed.
+    local total
+    total=$(ps -axo pid 2>/dev/null | wc -l | tr -d ' ')
+    if [ -z "$total" ] || ! [[ "$total" =~ ^[0-9]+$ ]] || [ "$total" -lt 5 ]; then
+        echo "$MAX_OS_PROCESSES"  # fail closed: assume full
+        return
+    fi
+
+    echo "$count"
+}
+
+# Dynamic slot calculation: reserve slots for non-swarm claude.exe processes.
+# MAX_SUBAGENTS is computed at runtime so the swarm never overcommit OS capacity.
+# Formula: MAX_OS_PROCESSES - current_claude_exe_count.
+# Examples:
+#   1 claude.exe (orchestrator only) -> 3 - 1 = 2 swarm slots
+#   2 claude.exe (orchestrator + 1 other) -> 3 - 2 = 1 swarm slot
+#   3 claude.exe (full) -> 3 - 3 = 0 swarm slots (HARDLOCK)
+MAX_SUBAGENTS=$((MAX_OS_PROCESSES - $(count_os_claude_processes)))
+
+assert_process_limit() {
+    # Count actual OS claude.exe processes as the primary gate.
+    # This is the most reliable indicator because PID files can go stale
+    # while child claude.exe processes survive.
+    local os_count=$(count_os_claude_processes)
+    if [ "$os_count" -ge "$MAX_OS_PROCESSES" ]; then
+        echo "CRITICAL: OS process limit reached ($os_count/$MAX_OS_PROCESSES claude.exe processes)."
+        echo "Refusing to launch agent. Stop an existing agent first."
+        return 1
+    fi
+
+    # Also check tracked agent count for consistency
+    local agent_count=$(count_cli_agents)
+    if [ "$agent_count" -ge "$MAX_SUBAGENTS" ]; then
+        echo "CRITICAL: Tracked agent slot limit reached ($agent_count/$MAX_SUBAGENTS agents alive)."
+        echo "Refusing to launch agent. Stop an existing agent first."
+        return 1
+    fi
+
+    # Sanity-check: if total OS claude.exe exceeds MAX_OS_PROCESSES + 2 buffer,
+    # something else is spawning claude processes; warn but don't block.
+    local max_buffer=$((MAX_OS_PROCESSES + 2))
+    if [ "$os_count" -gt "$max_buffer" ]; then
+        echo "WARNING: $os_count claude.exe processes detected (expected max ~$max_buffer)."
+        echo "Non-agent Claude processes (IDE, desktop) may be consuming slots."
+    fi
+    return 0
+}
+
+# Get orchestrator PID from file (stored during activation)
+get_orchestrator_pid() {
+    if [ -f "$ORCHESTRATOR_PID_FILE" ]; then
+        local pid=$(cat "$ORCHESTRATOR_PID_FILE")
+        if [ -n "$pid" ]; then
+            echo "$pid"
+            return
+        fi
+    fi
+    echo ""
+}
+
+store_orchestrator_pid() {
+    # Multi-strategy PID discovery for the orchestrator's claude.exe process.
+    # Strategy 1: Walk the parent chain from current bash process to find claude.exe.
+    # Strategy 2: Find the oldest claude.exe (orchestrator always starts first).
+    # Strategy 3: Fallback — mark unknown rather than storing garbage PID 0/1.
+
+    local found_pid=""
+
+    # Strategy 1: Parent-chain walk via ps.
+    # macOS port (2026-06-10): walk ppid chain up to (but not past) PID 1.
+    local ppid="$PPID"
+    if [ -n "$ppid" ] && [ "$ppid" != "1" ] && [ "$ppid" != "0" ]; then
+        found_pid=$(bash -c "
+            p=$ppid
+            while [ -n \"\$p\" ] && [ \"\$p\" != \"1\" ] && [ \"\$p\" != \"0\" ]; do
+                comm=\$(ps -p \"\$p\" -o comm= 2>/dev/null)
+                if [ \"\$comm\" = \"claude\" ]; then
+                    echo \"\$p\"
+                    exit 0
+                fi
+                p=\$(ps -p \"\$p\" -o ppid= 2>/dev/null | tr -d ' ')
+            done
+            exit 1
+        " 2>/dev/null)
+    fi
+
+    # Strategy 2: Oldest claude (orchestrator is always the first Claude process)
+    if [ -z "$found_pid" ]; then
+        # On macOS, ps -o lstart= gives start time; sort and take the oldest
+        found_pid=$(ps -axo pid,comm,lstart 2>/dev/null \
+            | awk '$2 == "claude" { print $1, $5, $6, $7, $8, $9 }' \
+            | sort -k2,5 \
+            | head -1 \
+            | awk '{ print $1 }')
+    fi
+
+    # Strategy 3: Mark unknown — NEVER store PID 0, 1, or empty
+    if [ -z "$found_pid" ] || [ "$found_pid" = "0" ] || [ "$found_pid" = "1" ]; then
+        echo "WARNING: Could not determine orchestrator PID. Self-preservation guards disabled."
+        found_pid="unknown"
+    fi
+
+    echo "$found_pid" > "$ORCHESTRATOR_PID_FILE"
+    echo "Orchestrator PID stored: $found_pid"
+}
+
+remove_orchestrator_pid() {
+    rm -f "$ORCHESTRATOR_PID_FILE"
+}
+
+# Clean up stale PID files (agents whose processes have died)
+clean_stale_pids() {
+    if [ ! -d "$AGENT_ROOT" ]; then
+        return
+    fi
+    local orch_pid=$(get_orchestrator_pid)
+    for pidfile in "$AGENT_ROOT"/*/pid; do
+        if [ -f "$pidfile" ]; then
+            local pid=$(cat "$pidfile")
+            local dir=$(dirname "$pidfile")
+            local id=$(basename "$dir")
+            # Skip if this is the orchestrator
+            if [ -n "$orch_pid" ] && [ "$pid" = "$orch_pid" ]; then
+                echo "Cleaning orchestrator PID from agent tracking: $id"
+                rm -rf "$dir"
+                continue
+            fi
+            # Check if the process is still alive AND is actually a claude process.
+            # On Windows PIDs are aggressively reused; a reused svchost PID must not
+            # be treated as a live agent.
+            local is_claude=1
+            if process_alive "$pid"; then
+                if process_is_claude "$pid"; then
+                    is_claude=0
+                fi
+            fi
+            if [ "$is_claude" -ne 0 ]; then
+                echo "Cleaning stale agent: $id (PID $pid no longer a claude process)"
+                # Only kill if it is actually a claude process (not a reused system PID)
+                if [ "$is_claude" -eq 0 ]; then
+                    force_kill_pid "$pid"
+                fi
+                rm -rf "$dir"
+            fi
+        fi
+    done
+}
+
+# Clean orphaned agent directories when no agents are active.
+# Prevents stale directories from causing domain conflicts.
+cleanup_orphaned_agent_dirs() {
+    local active=$(count_active_agents)
+    if [ "$active" -ne 0 ]; then
+        return 0
+    fi
+
+    if [ ! -d "$AGENT_ROOT" ]; then
+        return 0
+    fi
+
+    local orphan_count=0
+    for dir in "$AGENT_ROOT"/*/; do
+        [ -d "$dir" ] || continue
+        local agent_id=$(basename "$dir")
+        # Skip if PID file has a live process
+        if [ -f "$dir/pid" ]; then
+            local pid=$(cat "$dir/pid" 2>/dev/null)
+            if [ -n "$pid" ] && process_alive "$pid"; then
+                continue
+            fi
+        fi
+        echo "CLEANUP: Removing orphaned agent directory: $agent_id"
+        rm -rf "$dir"
+        ((orphan_count++))
+    done
+
+    if [ "$orphan_count" -gt 0 ]; then
+        echo "CLEANUP: Removed $orphan_count orphaned agent directories"
+    fi
+}
+
+# Quota scraper with 5-minute lazy-refresh cache.
+# Delegates to shared quota_lib.sh for staleness check and scraping.
+# Uses quota_state.json timestamp as the cache key (no separate cache file).
+run_quota_scraper() {
+    lazy_quota_refresh
+}
+
+count_active_agents() {
+    # CLI-launched agents (ollama spawn) are the only source of truth.
+    # Native sub-agents (internal Agent tool) are not tracked separately.
+    count_cli_agents
+}
+
+count_cli_agents() {
+    local count=0
+    if [ -d "$AGENT_ROOT" ]; then
+        for pidfile in "$AGENT_ROOT"/*/pid; do
+            if [ -f "$pidfile" ]; then
+                pid=$(cat "$pidfile")
+                if process_alive "$pid" && process_is_claude "$pid"; then
+                    ((count++))
+                fi
+            fi
+        done
+    fi
+    echo $count
+}
+
+list_agents() {
+    echo "=== SCMessenger Active Sub-Agents ==="
+    active_count=$(count_active_agents)
+    echo "Slots: $active_count/$MAX_SUBAGENTS"
+    echo "------------------------------------"
+    if [ "$active_count" -eq 0 ]; then
+        echo "No sub-agents currently running."
+        return
+    fi
+    local orch_pid=$(get_orchestrator_pid)
+    printf "%-25s %-15s %-10s %-10s %-10s\n" "AGENT_ID" "TYPE" "MODEL" "PID" "STATUS"
+    # List CLI agents (check tracked PIDs, skip orchestrator)
+    for dir in "$AGENT_ROOT"/*; do
+        if [ -d "$dir" ] && [ -f "$dir/pid" ]; then
+            id=$(basename "$dir")
+            pid=$(cat "$dir/pid")
+            model=$(grep "AGENT_MODEL" "$dir/config" 2>/dev/null | cut -d'=' -f2)
+            # Self-preservation: never list the orchestrator as an agent
+            if [ -n "$orch_pid" ] && [ "$pid" = "$orch_pid" ]; then
+                printf "%-25s %-15s %-10s %-10s %-10s\n" "$id" "CLI" "$model" "$pid" "ORCHESTRATOR"
+                continue
+            fi
+            if process_alive "$pid" && process_is_claude "$pid"; then
+                printf "%-25s %-15s %-10s %-10s %-10s\n" "$id" "CLI" "$model" "$pid" "RUNNING"
+            else
+                printf "%-25s %-15s %-10s %-10s %-10s\n" "$id" "CLI" "$model" "$pid" "STALE"
+            fi
+        fi
+    done
+    # List native agents
+    for dir in "$AGENT_ROOT"/*; do
+        if [ -d "$dir" ] && [ -f "$dir/native_marker" ]; then
+            id=$(basename "$dir")
+            agent_type=$(grep "SUBAGENT_TYPE" "$dir/native_marker" 2>/dev/null | cut -d'=' -f2)
+            agent_model=$(grep "MODEL" "$dir/native_marker" 2>/dev/null | cut -d'=' -f2)
+            task=$(grep "TASK" "$dir/native_marker" 2>/dev/null | cut -d'=' -f2-)
+            printf "%-25s %-15s %-10s %-10s %-10s\n" "$id" "NATIVE:$agent_type" "$agent_model" "-" "ACTIVE"
+        fi
+    done
+}
+
+# ─── Pool Commands ───────────────────────────────────────────────────────────
+
+pool_list() {
+    if [ ! -f "$POOL_CONFIG" ]; then
+        echo "Error: Agent pool config not found at $POOL_CONFIG"
+        return 1
+    fi
+    echo "=== SCMessenger Agent Pool ==="
+    active_count=$(count_active_agents)
+    echo "Active Slots: $active_count/$MAX_SUBAGENTS"
+    echo ""
+    printf "%-20s %-10s %-30s %-40s\n" "NAME" "LAUNCH" "MODEL" "PURPOSE"
+    echo "--------------------------------------------------------------------------------------------------------"
+    $PYTHON -c "
+import json, sys
+with open('$POOL_CONFIG') as f:
+    cfg = json.load(f)
+for a in cfg.get('agents', []):
+    name = a.get('name','')
+    lt = a.get('launch_type','')
+    model = a.get('model','')
+    purpose = a.get('purpose','')
+    if lt == 'native':
+        st = a.get('subagent_type','')
+        model = f'{st}/{model}'
+        lt = 'NATIVE'
+    else:
+        lt = 'CLI'
+    print(f'{name:<20s} {lt:<10s} {model:<30s} {purpose:<40s}')
+"
+    echo ""
+    echo "Default agent: $($PYTHON -c "import json; print(json.load(open('$POOL_CONFIG')).get('default_agent','implementer'))")"
+    echo "Usage: .claude/orchestrator_manager.sh pool launch <agent_name> [task_file]"
+}
+
+pool_launch() {
+    local agent_name="${1:-}"
+    local task_file="${2:-}"
+    local model_override="${3:-}"
+
+    if [ -z "$agent_name" ]; then
+        echo "Usage: pool launch <agent_name> [task_file]"
+        echo "Run 'pool list' to see available agents."
+        return 1
+    fi
+
+    # Check slot availability
+    active=$(count_active_agents)
+    if [ "$active" -ge "$MAX_SUBAGENTS" ]; then
+        echo "Error: Sub-agent limit reached ($MAX_SUBAGENTS slots). Stop an agent first."
+        return 1
+    fi
+
+    # Clean orphaned agent dirs BEFORE domain conflict check
+    cleanup_orphaned_agent_dirs
+
+    # ─── TASK VALIDATION GATE ────────────────────────────────────────────────
+    if [ -n "$task_file" ] && [ -f "$task_file" ]; then
+        local validation_result
+        validation_result=$(validate_task_before_launch "$task_file")
+        local validation_exit=$?
+
+        case $validation_exit in
+            1)  # FALSE_POSITIVE
+                echo "TASK VALIDATION: $validation_result"
+                echo "Moving false-positive task to done/ with note."
+                local task_basename=$(basename "$task_file")
+                echo "" >> "$task_file"
+                echo "## VALIDATION GATE: FALSE_POSITIVE" >> "$task_file"
+                echo "Reason: $validation_result" >> "$task_file"
+                echo "Date: $(date -u '+%Y-%m-%dT%H:%M:%SZ')" >> "$task_file"
+                mv "$task_file" "HANDOFF/done/$task_basename" 2>/dev/null || true
+                return 1
+                ;;
+            2)  # ALREADY_WIRED
+                echo "TASK VALIDATION: $validation_result"
+                echo "Moving already-wired task to done/ with note."
+                local task_basename=$(basename "$task_file")
+                echo "" >> "$task_file"
+                echo "## VALIDATION GATE: ALREADY_WIRED" >> "$task_file"
+                echo "Reason: $validation_result" >> "$task_file"
+                echo "Date: $(date -u '+%Y-%m-%dT%H:%M:%SZ')" >> "$task_file"
+                mv "$task_file" "HANDOFF/done/$task_basename" 2>/dev/null || true
+                return 1
+                ;;
+            3)  # NEEDS_REVIEW
+                echo "TASK VALIDATION: $validation_result — needs human review, skipping."
+                return 1
+                ;;
+        esac
+        echo "TASK VALIDATION: PASS ($validation_result)"
+    fi
+
+    # ─── BATCH SIZE ENFORCEMENT ─────────────────────────────────────────────
+    if [ -n "$task_file" ] && [ -f "$task_file" ]; then
+        enforce_batch_size_limit "$task_file"
+    fi
+
+    # STRICT GATE: Check actual OS process count (Two-Tier Topology: max 3)
+    if ! assert_process_limit; then
+        return 1
+    fi
+
+    # Check file domain conflict with active agents
+    if ! check_file_domain_conflict "$agent_name"; then
+        echo "Error: File domain conflict with active agent. Choose a different agent or stop the conflicting agent."
+        return 1
+    fi
+
+    # Find agent profile in pool config
+    if [ ! -f "$POOL_CONFIG" ]; then
+        echo "Error: Agent pool config not found at $POOL_CONFIG"
+        return 1
+    fi
+
+    # Extract agent config via Python
+    local agent_info
+    agent_info=$($PYTHON -c "
+import json, sys
+with open('$POOL_CONFIG') as f:
+    cfg = json.load(f)
+for a in cfg.get('agents', []):
+    if a.get('name') == '$agent_name':
+        print(a.get('launch_type',''))
+        print(a.get('model',''))
+        print(a.get('subagent_type',''))
+        print(a.get('isolation','') or '')
+        print(a.get('fallback_model',''))
+        sys.exit(0)
+sys.exit(1)
+" 2>/dev/null)
+
+    if [ $? -ne 0 ] || [ -z "$agent_info" ]; then
+        echo "Error: Agent '$agent_name' not found in pool. Run 'pool list' to see available agents."
+        return 1
+    fi
+
+    local launch_type=$(echo "$agent_info" | sed -n '1p')
+    local model=$(echo "$agent_info" | sed -n '2p')
+    local subagent_type=$(echo "$agent_info" | sed -n '3p')
+    local isolation=$(echo "$agent_info" | sed -n '4p')
+
+    # Get fallback model for CLI agents
+    local fallback_model
+    if [ "$launch_type" = "cli" ]; then
+        fallback_model=$($PYTHON -c "
+import json
+with open('$POOL_CONFIG') as f:
+    cfg = json.load(f)
+for a in cfg.get('agents', []):
+    if a.get('name') == '$agent_name':
+        print(a.get('fallback_model', ''))
+        break
+" 2>/dev/null)
+    fi
+
+    # Model override: 3rd arg replaces the agent pool default
+    if [ -n "$model_override" ]; then
+        echo "MODEL OVERRIDE: Using $model_override instead of default $model (fallback: $fallback_model)"
+        fallback_model="$model"
+        model="$model_override"
+    fi
+
+    local agent_id="${agent_name}_$(date +%s)"
+
+    # === REPO_MAP: JIT micro-update only ===
+    # Full rebuild removed - the Freshness Gate below handles per-task
+    # targeted re-indexing of ONLY the files referenced in the task file.
+    # This prevents the orchestrator from blocking on a full repo scan.
+
+    # === REPO_MAP Freshness Gate ===
+    if [ -n "$task_file" ] && [ -f "$task_file" ]; then
+        # ─── Pre-launch cartography: update REPO_MAP for the TARGET file ───
+        # Extract TARGET line from task file and run structural cartographer
+        # on that specific file. This ensures the REPO_MAP is fresh for the
+        # agent's context injection step. Uses structural (no LLM) cartographer
+        # for speed — local models are reserved for full repo reindexing.
+        local target_line=$(grep "^TARGET:" "$task_file" | head -1)
+        if [ -n "$target_line" ]; then
+            local target_file_path=$(echo "$target_line" | sed 's/^TARGET:[[:space:]]*//' | tr '\\' '/')
+            if [ -f "$target_file_path" ]; then
+                echo "CARTOGRAPHY: Updating REPO_MAP for $target_file_path..."
+                $PYTHON .claude/scripts/structural_cartographer.py \
+                    --files "$target_file_path" --update-index --append 2>/dev/null
+                if [ $? -eq 0 ]; then
+                    echo "CARTOGRAPHY: $target_file_path indexed successfully"
+                else
+                    echo "CARTOGRAPHY: Warning — failed to index $target_file_path (continuing)"
+                fi
+            else
+                echo "CARTOGRAPHY: Target file not found: $target_file_path (skipping)"
+            fi
+        fi
+
+        # Determine if this is a micro-task that doesn't need full context
+        local is_micro_task=false
+        local task_file_lower=$(echo "$task_file" | tr '[:upper:]' '[:lower:]')
+        if [[ "$task_file_lower" == *"triage"* ]] || [[ "$task_file_lower" == *"quick"* ]] || [[ "$task_file_lower" == *"lint"* ]] || [[ "$task_file_lower" == *"fmt"* ]] || [[ "$task_file_lower" == *"_micro_"* ]] || [[ "$task_file_lower" == *"micro_"* ]]; then
+            is_micro_task=true
+        fi
+
+        # For non-micro tasks, run full context injection
+        if [ "$is_micro_task" = "false" ]; then
+            echo "Running REPO_MAP Freshness Gate..."
+            local freshness_result
+            freshness_result=$($PYTHON .claude/scripts/freshness_gate.py --task-file "$task_file" 2>&1) || true
+            echo "DEBUG A: assignment done"
+            local freshness_exit=$?
+            echo "DEBUG B: freshness_exit=$freshness_exit"
+
+            if [ "$freshness_exit" -eq 2 ]; then
+                echo "DEBUG C: stale branch entered"
+                # STALE files detected — trigger targeted re-index
+                local stale_files=$($PYTHON -c "
+import json, sys
+try:
+    result = json.loads(sys.argv[1])
+    stale = [f.get('path', '') for f in result.get('stale_files', [])]
+    missing = result.get('missing_files', [])
+    print(','.join(stale + missing))
+except Exception as e:
+    pass
+" "$freshness_result")
+                echo "DEBUG D: stale_files=$stale_files"
+
+                if [ -n "$stale_files" ]; then
+                    echo "FRESHNESS GATE: Stale files detected. Triggering targeted re-index..."
+                    echo "Files: $stale_files"
+
+                    # macOS port (2026-06-10): no PowerShell reindex script available.
+                    # The freshness gate already did its check; we log and continue.
+                    # If we ever need a targeted reindex on macOS, it can be ported
+                    # to repo_map_health_check.sh (the existing bash version).
+                    echo "FRESHNESS GATE: $stale_files marked stale; skipping reindex (no macOS equivalent of targeted_reindex.ps1)"
+
+                    echo "DEBUG E: reindex done"
+                fi
+            fi
+
+            # Inject context for all FRESH files
+            echo "Injecting REPO_MAP context into task..."
+            # Extract function name for per-function extraction (saves ~28-32K tokens vs module-level)
+            local inject_func_name=$(basename "$task_file" | sed 's/^task_wire_//' | sed 's/\.md$//')
+            $PYTHON .claude/scripts/context_extractor.py --task-file "$task_file" --function "$inject_func_name" || true
+            echo "DEBUG F: context injection done"
+        else
+            echo "Skipping full REPO_MAP context injection for micro-task: $task_file"
+        fi
+    fi
+
+    if [ "$launch_type" = "native" ]; then
+        # Native agent: validate model before creating marker
+        echo "Validating model $model before launch..."
+
+        # Source the model validation template
+        if [ -f "$PWD/.claude/model_validation_template.sh" ]; then
+            source "$PWD/.claude/model_validation_template.sh"
+            validated_model=$(validate_model_before_launch "$model" "$subagent_type")
+            echo "Using validated model: $validated_model"
+            model="$validated_model"
+        else
+            echo "Model validation template not found, proceeding with $model"
+        fi
+
+        # Native agent: create marker file for tracking
+        mkdir -p "$AGENT_ROOT/$agent_id"
+        cat > "$AGENT_ROOT/$agent_id/native_marker" <<EOF
+SUBAGENT_TYPE=$subagent_type
+MODEL=$model
+ISOLATION=$isolation
+TASK=${task_file:-none}
+START_TIME=$(date +%s)
+EOF
+        # Record start time for timeout tracking
+        mkdir -p "$AGENT_ROOT/$agent_id"
+        echo "$(date +%s)" > "$AGENT_ROOT/$agent_id/start_time"
+        echo "Launched native agent: $agent_id"
+        echo "  Type: $subagent_type (model: $model)"
+        echo "  Isolation: ${isolation:-none}"
+        echo "  Task: ${task_file:-none}"
+        echo ""
+        echo "NOTE: Native agents are launched via Claude Code's Agent tool."
+        echo "The Lead Orchestrator should invoke Agent({subagent_type: \"$subagent_type\", model: \"$model\"$([ -n "$isolation" ] && echo ", isolation: \"$isolation\"" )}) with the task prompt."
+    else
+        # CLI agent: validate model before launch
+        echo "Validating model $model before launch..."
+
+        # Source the model validation template
+        if [ -f "$PWD/.claude/model_validation_template.sh" ]; then
+            source "$PWD/.claude/model_validation_template.sh"
+            validated_model=$(validate_model_before_launch "$model" "$subagent_type")
+            echo "Using validated model: $validated_model"
+            model="$validated_model"
+        else
+            echo "Model validation template not found, proceeding with $model"
+        fi
+
+        echo "Launching CLI agent: $agent_id with model $model"
+        export CARGO_INCREMENTAL=0
+
+        # Record start time for timeout tracking
+        mkdir -p "$AGENT_ROOT/$agent_id"
+        echo "$(date +%s)" > "$AGENT_ROOT/$agent_id/start_time"
+
+        # Ensure quota state is fresh before CLI agent dispatch.
+        # launch_agent.sh also calls lazy_quota_refresh internally (no-op if fresh).
+        lazy_quota_refresh
+        if [ -f ".claude/quota_state.json" ]; then
+            eval $(get_quota_context)
+            echo "QUOTA at launch: 5hr=${QUOTA_FIVE_HOUR}% 7d=${QUOTA_SEVEN_DAY}% reset=${QUOTA_RESET_MINUTES}min status=${QUOTA_STATUS}"
+        fi
+
+        if ! ./scripts/launch_agent.sh "$model" "$agent_id" "$task_file" start; then
+            if [ -n "$fallback_model" ]; then
+                echo "Primary model $model unavailable, falling back to $fallback_model"
+                ./scripts/launch_agent.sh "$fallback_model" "$agent_id" "$task_file" start
+            else
+                echo "Error: Primary model $model unavailable and no fallback configured."
+                return 1
+            fi
+        fi
+    fi
+}
+
+pool_stop() {
+    local agent_id="${1:-}"
+
+    if [ -z "$agent_id" ]; then
+        echo "Usage: pool stop <agent_id>"
+        return 1
+    fi
+
+    if [ ! -d "$AGENT_ROOT/$agent_id" ]; then
+        echo "Error: Agent '$agent_id' not found."
+        return 1
+    fi
+
+    local orch_pid=$(get_orchestrator_pid)
+
+    # Check if native or CLI agent
+    if [ -f "$AGENT_ROOT/$agent_id/native_marker" ]; then
+        rm -f "$AGENT_ROOT/$agent_id/native_marker"
+        echo "Stopped native agent: $agent_id"
+    elif [ -f "$AGENT_ROOT/$agent_id/pid" ]; then
+        local agent_pid=$(cat "$AGENT_ROOT/$agent_id/pid")
+        # Self-preservation: never kill the orchestrator process
+        if [ -n "$orch_pid" ] && [ "$agent_pid" = "$orch_pid" ]; then
+            echo "CRITICAL: Agent PID $agent_pid matches orchestrator PID. Refusing to kill."
+            echo "Removing stale tracking file instead."
+            rm -rf "$AGENT_ROOT/$agent_id"
+            return 1
+        fi
+        ./scripts/launch_agent.sh "dummy" "$agent_id" "" stop
+        process_cache_invalidate "$agent_pid"
+        rm -rf "$AGENT_ROOT/$agent_id"
+        # Run stale-PID cleanup to catch orphaned claude.exe processes
+        clean_stale_pids
+        echo "Stopped CLI agent: $agent_id"
+    else
+        echo "Error: Agent '$agent_id' has no valid marker or PID file."
+        return 1
+    fi
+}
+
+# ─── Compile Lock Protocol ──────────────────────────────────────────────────
+
+COMPILE_LOCK=".claude/compile.lock"
+COMPILE_LOCK_TIMEOUT=900  # 15 minutes max hold time (accommodates slow Windows cargo builds)
+
+acquire_compile_lock() {
+    local agent_id="$1"
+    local scope="${2:-workspace}"
+    local now=$(date +%s)
+
+    if [ -f "$COMPILE_LOCK" ]; then
+        local holder=$(grep "^HOLDER=" "$COMPILE_LOCK" | cut -d'=' -f2)
+        local acquired=$(grep "^ACQUIRED_AT=" "$COMPILE_LOCK" | cut -d'=' -f2)
+        local lock_pid=$(grep "^PID=" "$COMPILE_LOCK" | cut -d'=' -f2)
+
+        if [ -n "$lock_pid" ] && process_alive "$lock_pid"; then
+            local elapsed=$((now - acquired))
+            if [ "$elapsed" -lt "$COMPILE_LOCK_TIMEOUT" ]; then
+                echo "COMPILE_LOCKED:$holder"
+                return 1
+            fi
+        fi
+        rm -f "$COMPILE_LOCK"
+    fi
+
+    cat > "$COMPILE_LOCK" <<EOF
+HOLDER=$agent_id
+ACQUIRED_AT=$now
+SCOPE=$scope
+PID=$$
+EOF
+    return 0
+}
+
+release_compile_lock() {
+    local agent_id="$1"
+    if [ -f "$COMPILE_LOCK" ]; then
+        local holder=$(grep "^HOLDER=" "$COMPILE_LOCK" | cut -d'=' -f2)
+        if [ "$holder" = "$agent_id" ]; then
+            rm -f "$COMPILE_LOCK"
+        fi
+    fi
+}
+
+# ─── File Domain Conflict Check ─────────────────────────────────────────────
+
+check_file_domain_conflict() {
+    local new_agent_name="$1"
+    local new_domains=$($PYTHON -c "
+import json
+with open('$POOL_CONFIG') as f:
+    cfg = json.load(f)
+for a in cfg.get('agents', []):
+    if a.get('name') == '$new_agent_name':
+        print(','.join(a.get('file_domains', [])))
+        break
+" 2>/dev/null)
+
+    if [ -z "$new_domains" ]; then
+        return 0
+    fi
+
+    for dir in "$AGENT_ROOT"/*/; do
+        [ -d "$dir" ] || continue
+        local active_id=$(basename "$dir")
+        local active_name=$(echo "$active_id" | sed 's/_[0-9]*$//')
+
+        local active_domains=$($PYTHON -c "
+import json
+with open('$POOL_CONFIG') as f:
+    cfg = json.load(f)
+for a in cfg.get('agents', []):
+    if a.get('name') == '$active_name':
+        print(','.join(a.get('file_domains', [])))
+        break
+" 2>/dev/null)
+
+        if [ -z "$active_domains" ]; then
+            continue
+        fi
+
+        local overlap=$($PYTHON -c "
+new = set('${new_domains}'.split(','))
+active = set('${active_domains}'.split(','))
+overlap = new & active
+if overlap:
+    print(','.join(overlap))
+" 2>/dev/null)
+
+        if [ -n "$overlap" ]; then
+            echo "CONFLICT: File domain overlap with active agent $active_id: $overlap"
+            return 1
+        fi
+    done
+    return 0
+}
+
+# ─── Pre-Dispatch Task Validation Gate ─────────────────────────────────────────
+# Validates that a task file targets a real production-callable function,
+# not a false positive (test, kani proof, proptest harness, string constant).
+# Delegates to .claude/scripts/task_validator.py for pattern detection.
+# Return codes: 0=VALID, 1=FALSE_POSITIVE, 2=ALREADY_WIRED, 3=NEEDS_REVIEW
+
+validate_task_before_launch() {
+    local task_file="$1"
+
+    if [ -z "$task_file" ] || [ ! -f "$task_file" ]; then
+        echo "VALID"
+        return 0
+    fi
+
+    # Only validate task_wire_* files (skip BATCH_, ORCHESTRATOR_, etc.)
+    local basename=$(basename "$task_file")
+    if [[ "$basename" != task_wire_* ]]; then
+        echo "VALID"
+        return 0
+    fi
+
+    # Extract TARGET line and function name
+    local target_line=$(grep "^TARGET:" "$task_file" | head -1)
+    if [ -z "$target_line" ]; then
+        echo "VALID"
+        return 0
+    fi
+
+    local target_file=$(echo "$target_line" | sed 's/^TARGET:[[:space:]]*//' | tr '\' '/')
+    local func_name=$(echo "$basename" | sed 's/^task_wire_micro_//' | sed 's/^task_wire_//' | sed 's/\.md$//')
+
+    if [ ! -f "$target_file" ]; then
+        echo "NEEDS_REVIEW:target_file_missing:$target_file"
+        return 3
+    fi
+
+    # Delegate to standalone Python validation script
+    local validation
+    validation=$($PYTHON "$SCRIPT_DIR/scripts/task_validator.py" \
+        "$task_file" "$target_file" "$func_name" 2>/dev/null)
+    local validation_exit=$?
+
+    case $validation_exit in
+        1)  echo "FALSE_POSITIVE:$validation"
+            return 1
+            ;;
+        2)  echo "ALREADY_WIRED:$validation"
+            return 2
+            ;;
+        3)  echo "NEEDS_REVIEW:$validation"
+            return 3
+            ;;
+        *)  echo "VALID"
+            return 0
+            ;;
+    esac
+}
+
+# ─── Post-Completion Verification ──────────────────────────────────────────────
+# Verifies that a completed agent actually made code changes, not just moved files.
+# Return codes: 0=VERIFIED, 1=NO_CODE_CHANGES, 2=MISSING_CLOSEOUT
+
+verify_agent_completion() {
+    local agent_id="$1"
+
+    if [ -z "$agent_id" ]; then
+        return 0
+    fi
+
+    local completion_file="$AGENT_ROOT/$agent_id/COMPLETION"
+
+    # Check 1: COMPLETION marker must exist
+    if [ ! -f "$completion_file" ]; then
+        echo "NO_CLOSEOUT:no COMPLETION marker for $agent_id"
+        return 2
+    fi
+
+    # Check 2: CHANGED_FILES must list source files (not just HANDOFF moves)
+    local changed_files=$(grep "^CHANGED_FILES=" "$completion_file" | cut -d'=' -f2-)
+    local has_source_files=false
+    if [ -n "$changed_files" ]; then
+        # Check if any .rs, .kt, .swift, .java, .ts files are listed
+        if echo "$changed_files" | grep -qE '\.(rs|kt|swift|java|ts)'; then
+            has_source_files=true
+        fi
+    fi
+
+    # Check 3: Verify git diff has actual code changes
+    local code_change_count=$(git diff HEAD --name-only -- '*.rs' '*.kt' '*.swift' '*.java' '*.ts' 2>/dev/null | wc -l)
+
+    if [ "$code_change_count" -eq 0 ] && [ "$has_source_files" = false ]; then
+        echo "NO_CODE_CHANGES:agent $agent_id completed but git shows 0 code diffs"
+        return 1
+    fi
+
+    echo "VERIFIED:$code_change_count code files changed by $agent_id"
+    return 0
+}
+
+# ─── Batch Size Enforcer ────────────────────────────────────────────────────────
+# Prevents oversized batch files from being dispatched to a single agent.
+BATCH_SIZE_LIMIT=15
+
+enforce_batch_size_limit() {
+    local task_file="$1"
+
+    if [ -z "$task_file" ] || [ ! -f "$task_file" ]; then
+        return 0
+    fi
+
+    # Only process BATCH_ files
+    local basename=$(basename "$task_file")
+    if [[ "$basename" != BATCH_* ]]; then
+        return 0
+    fi
+
+    # Count numbered task items
+    local task_count=$(grep -cP '^\d+\.\s+\*\*' "$task_file" 2>/dev/null || echo "0")
+
+    if [ "$task_count" -le "$BATCH_SIZE_LIMIT" ]; then
+        echo "BATCH SIZE: $task_count tasks (within limit of $BATCH_SIZE_LIMIT)"
+        return 0
+    fi
+
+    echo "BATCH SIZE VIOLATION: $task_count tasks exceeds limit of $BATCH_SIZE_LIMIT"
+    echo "Splitting batch into sub-batches of $BATCH_SIZE_LIMIT..."
+
+    $PYTHON "$SCRIPT_DIR/scripts/batch_splitter.py" "$task_file" "$BATCH_SIZE_LIMIT" 2>/dev/null
+
+    if [ $? -eq 0 ]; then
+        # Move original oversized batch to done/
+        mv "$task_file" "HANDOFF/done/$basename" 2>/dev/null || true
+        echo "Original batch moved to done/. Sub-batches created in todo/."
+    else
+        echo "WARNING: Batch splitter failed. Proceeding with oversized batch."
+    fi
+
+    return 0
+}
+
+# ─── Pre-Launch Hygiene ──────────────────────────────────────────────────────
+
+pool_launch_clean() {
+    local agent_name="${1:-}"
+    local task_file="${2:-}"
+
+    echo "=== Pre-Launch Hygiene Check ==="
+
+    # Phase 1: Determine tracked PIDs (orchestrator + agents)
+    local orch_pid=$(get_orchestrator_pid)
+    local tracked_pids=""
+
+    # Add orchestrator PID if known (not "unknown")
+    if [ -n "$orch_pid" ] && [ "$orch_pid" != "unknown" ]; then
+        tracked_pids=" $orch_pid"
+    fi
+
+    # Add all known agent PIDs
+    for pidfile in "$AGENT_ROOT"/*/pid; do
+        if [ -f "$pidfile" ]; then
+            tracked_pids="$tracked_pids $(cat "$pidfile")"
+        fi
+    done
+
+    # Self-preservation: discover ALL claude processes that host our infrastructure.
+    # Add the parent-chain ancestor AND the oldest claude to the tracked set.
+    # macOS port (2026-06-10): use ps for parent-chain walk and oldest-by-lstart.
+    local host_claude_pid=""
+    local ppid="$PPID"
+    if [ -n "$ppid" ] && [ "$ppid" != "1" ] && [ "$ppid" != "0" ]; then
+        host_claude_pid=$(bash -c "
+            p=$ppid
+            while [ -n \"\$p\" ] && [ \"\$p\" != \"1\" ] && [ \"\$p\" != \"0\" ]; do
+                comm=\$(ps -p \"\$p\" -o comm= 2>/dev/null)
+                if [ \"\$comm\" = \"claude\" ]; then
+                    echo \"\$p\"
+                    exit 0
+                fi
+                p=\$(ps -p \"\$p\" -o ppid= 2>/dev/null | tr -d ' ')
+            done
+            exit 1
+        " 2>/dev/null)
+    fi
+    if [ -n "$host_claude_pid" ]; then
+        tracked_pids="$tracked_pids $host_claude_pid"
+    fi
+
+    # Also add the oldest claude as a safety net
+    local oldest_claude=$(ps -axo pid,comm,lstart 2>/dev/null \
+        | awk '$2 == "claude" { print $1, $5, $6, $7, $8, $9 }' \
+        | sort -k2,5 \
+        | head -1 \
+        | awk '{ print $1 }')
+    if [ -n "$oldest_claude" ]; then
+        tracked_pids="$tracked_pids $oldest_claude"
+    fi
+
+    # Untracked-process kill: ONLY proceed if we have a valid orchestrator PID.
+    # If orchestrator PID is "unknown", skip this phase entirely to avoid self-kill.
+    if [ "$orch_pid" = "unknown" ] || [ -z "$orch_pid" ]; then
+        echo "HYGIENE: Orchestrator PID unknown — skipping untracked-process cleanup (safety first)."
+    else
+        # Build a list of tracked PIDs (space-separated ints) and a regex alternation
+        local tracked_regex
+        tracked_regex=$(echo "$tracked_pids" | tr ' ' '|' | sed 's/^|//; s/|$//')
+        local untracked
+        if [ -n "$tracked_regex" ]; then
+            untracked=$(ps -axo pid,comm 2>/dev/null \
+                | awk -v re="^($tracked_regex)$" '$2 == "claude" && $1 !~ re { print $1 }')
+        else
+            untracked=$(ps -axo pid,comm 2>/dev/null | awk '$2 == "claude" { print $1 }')
+        fi
+
+        if [ -n "$untracked" ]; then
+            echo "HYGIENE: Untracked claude processes: $untracked"
+            for pid in $untracked; do
+                # FINAL SAFETY CHECK: never kill a PID that is in our tracked set
+                if echo "$tracked_pids" | grep -qw "$pid"; then
+                    echo "HYGIENE: SKIPPING PID $pid (in tracked set — safety guard tripped)"
+                    continue
+                fi
+                echo "HYGIENE: Terminating stale claude PID $pid"
+                force_kill_pid "$pid"
+            done
+        else
+            echo "HYGIENE: No untracked claude processes"
+        fi
+    fi
+
+    # Phase 2: Clean stale IN_PROGRESS claims (expired > 60 min)
+    local now=$(date +%s)
+    for lockfile in HANDOFF/IN_PROGRESS/*.lock; do
+        [ -f "$lockfile" ] || continue
+        local deadline=$(grep "^DEADLINE=" "$lockfile" | cut -d'=' -f2)
+        if [ -n "$deadline" ] && [ "$now" -gt "$deadline" ]; then
+            echo "HYGIENE: Reclaiming stale claim: $lockfile"
+            local task_file_stale="${lockfile%.lock}"
+            local original_name=$(basename "$task_file_stale" | sed 's/^IN_PROGRESS_//')
+            mv "$task_file_stale" "HANDOFF/todo/$original_name" 2>/dev/null || true
+            rm -f "$lockfile"
+        fi
+    done
+
+    # Phase 3: Clean stale compile.lock
+    if [ -f ".claude/compile.lock" ]; then
+        local lock_pid=$(grep "^PID=" ".claude/compile.lock" | cut -d'=' -f2)
+        if [ -n "$lock_pid" ] && ! process_alive "$lock_pid"; then
+            local lock_holder=$(grep "^HOLDER=" ".claude/compile.lock" | cut -d'=' -f2)
+            echo "HYGIENE: Removing stale compile.lock (holder $lock_holder PID $lock_pid dead)"
+            rm -f ".claude/compile.lock"
+        fi
+    fi
+
+    # Phase 4: Clean stale agent directories
+    clean_stale_pids
+    cleanup_orphaned_agent_dirs
+
+    # Phase 5: Check for corrupted build artifacts
+    if [ -d "target" ]; then
+        local corrupt_count=$(find target -name "*.rlib" -size 0 2>/dev/null | wc -l | tr -d ' ')
+        if [ "$corrupt_count" -gt 0 ]; then
+            echo "HYGIENE: Found $corrupt_count zero-byte rlib files -- running cargo clean"
+            cargo clean 2>/dev/null
+        else
+            echo "HYGIENE: Build directory healthy"
+        fi
+    fi
+
+    echo "=== Pre-Launch Hygiene Complete ==="
+    echo ""
+
+    pool_launch "$agent_name" "$task_file"
+}
+
+# ─── Batched Verification ─────────────────────────────────────────────────────
+
+pool_batch_verify() {
+    echo "=== Batched Verification ==="
+
+    local pending_crates=""
+    for agent_dir in "$AGENT_ROOT"/*/; do
+        [ -d "$agent_dir" ] || continue
+        local pv_file="$agent_dir/PENDING_VERIFY"
+        if [ -f "$pv_file" ]; then
+            local scope=$(grep "^SCOPE=" "$pv_file" | cut -d'=' -f2)
+            if [ -n "$scope" ]; then
+                pending_crates="$pending_crates $scope"
+            fi
+            rm -f "$pv_file"
+        fi
+    done
+
+    if [ -z "$pending_crates" ]; then
+        echo "No pending verifications. Running full workspace check."
+        export PATH="/c/msys64/ucrt64/bin:$PATH"
+        cargo check --workspace 2>&1
+        return $?
+    fi
+
+    local check_args=""
+    for crate in $(echo "$pending_crates" | tr ' ' '\n' | sort -u); do
+        [ -n "$crate" ] && check_args="$check_args -p $crate"
+    done
+
+    echo "Running targeted check:$check_args"
+    export PATH="/c/msys64/ucrt64/bin:$PATH"
+    cargo check $check_args 2>&1
+    local check_result=$?
+
+    echo "Running full workspace verification..."
+    cargo check --workspace 2>&1
+    local ws_result=$?
+
+    if [ $ws_result -eq 0 ]; then
+        echo "BATCH VERIFY: PASS"
+    else
+        echo "BATCH VERIFY: FAIL"
+    fi
+
+    return $ws_result
+}
+
+pool_status() {
+    echo "=== Agent Pool Status ==="
+    active_count=$(count_active_agents)
+    os_count=$(count_os_claude_processes)
+    echo "Slots:  $active_count/$MAX_SUBAGENTS"
+    echo "OS Processes (claude.exe): $os_count/$MAX_OS_PROCESSES"
+    echo ""
+    if [ "$active_count" -eq 0 ]; then
+        echo "No agents active. Use 'pool launch <name>' to start one."
+    else
+        list_agents
+    fi
+}
+
+# ─── Patrol: Check completions, free slots, launch next tasks ──────────────
+
+pool_patrol() {
+    local actions_taken=0
+
+    echo "=== Patrol Scan ==="
+
+    # Phase 1: Check for completion markers AND zombie detection
+    for agent_dir in "$AGENT_ROOT"/*/; do
+        [ -d "$agent_dir" ] || continue
+        local agent_id=$(basename "$agent_dir")
+        local completion_file="$agent_dir/COMPLETION"
+        local task_file_marker="$agent_dir/task_file"
+        local pid_file="$agent_dir/pid"
+        local start_time_file="$agent_dir/start_time"
+
+        # ── TIMEOUT DETECTION ──
+        # Aggressively timeout agents that have been running too long
+        if [ -f "$start_time_file" ]; then
+            local start_time=$(cat "$start_time_file")
+            local current_time=$(date +%s)
+            local elapsed=$((current_time - start_time))
+            local timeout_limit=5400  # 90 minutes timeout for most tasks
+
+            # Check if this is a micro-task that should have shorter timeout
+            if [ -f "$task_file_marker" ]; then
+                local assigned_task=$(cat "$task_file_marker")
+                # If task is a triage or quick fix, use shorter timeout
+                if [[ "$assigned_task" == *"TRIAGE"* ]] || [[ "$assigned_task" == *"QUICK"* ]] || [[ "$assigned_task" == *"LINT"* ]]; then
+                    timeout_limit=1200  # 20 minutes for micro-tasks
+                fi
+            fi
+
+            if [ "$elapsed" -gt "$timeout_limit" ]; then
+                echo "PATROL: Agent $agent_id timed out after $elapsed seconds. Stopping."
+                echo "STATUS=timeout" > "$completion_file"
+                echo "ERROR=Agent exceeded timeout limit of $timeout_limit seconds" >> "$completion_file"
+                echo "BUILD_STATUS=unknown" >> "$completion_file"
+                echo "NEXT_TASK_REQUESTED=false" >> "$completion_file"
+                pool_stop "$agent_id"
+                ((actions_taken++))
+                continue
+            fi
+        fi
+
+        # ── COMPLETION MARKER DETECTION ──
+        if [ -f "$completion_file" ]; then
+            local status=$(grep "^STATUS=" "$completion_file" | cut -d'=' -f2)
+            local next_requested=$(grep "^NEXT_TASK_REQUESTED=" "$completion_file" | cut -d'=' -f2)
+            local task_file=$(grep "^TASK_FILE=" "$completion_file" | cut -d'=' -f2-)
+            local build_status=$(grep "^BUILD_STATUS=" "$completion_file" | cut -d'=' -f2)
+
+            case "$status" in
+                "completed")
+                    # Verify actual code changes before accepting completion
+                    local verify_result
+                    set +e
+                    verify_result=$(verify_agent_completion "$agent_id")
+                    local verify_exit=$?
+                    set -e
+
+                    if [ $verify_exit -eq 1 ]; then
+                        # NO_CODE_CHANGES: re-queue the task
+                        echo "PATROL: Agent $agent_id COMPLETED but $verify_result. Re-queuing task."
+                        if [ -n "$task_file" ] && [ -f "$task_file" ]; then
+                            local task_name=$(basename "$task_file" | sed 's/^IN_PROGRESS_//')
+                            mv "$task_file" "HANDOFF/todo/$task_name" 2>/dev/null || true
+                        fi
+                        pool_stop "$agent_id"
+                        ((actions_taken++))
+                        continue
+                    elif [ $verify_exit -eq 2 ]; then
+                        echo "PATROL: Agent $agent_id COMPLETED but missing closeout: $verify_result"
+                    fi
+
+                    if [ "$next_requested" = "false" ]; then
+                        echo "PATROL: Agent $agent_id COMPLETED (build: $build_status, $verify_result). Freeing slot."
+                        pool_stop "$agent_id"
+                        ((actions_taken++))
+                    else
+                        echo "PATROL: Agent $agent_id COMPLETED and requesting next task. Clearing marker."
+                        rm -f "$completion_file"
+                        ((actions_taken++))
+                    fi
+                    ;;
+                "timeout"|"crashed")
+                    echo "PATROL: Agent $agent_id $status (build: $build_status). Freeing slot."
+                    pool_stop "$agent_id"
+                    ((actions_taken++))
+                    ;;
+                "failed")
+                    echo "PATROL: Agent $agent_id FAILED. Stopping and re-queuing."
+                    local error=$(grep "^ERROR=" "$completion_file" | cut -d'=' -f2-)
+                    echo "  Error: $error"
+                    pool_stop "$agent_id"
+                    # Re-queue task if found
+                    if [ -n "$task_file" ] && [ -f "$task_file" ]; then
+                        local task_name=$(basename "$task_file" | sed 's/^IN_PROGRESS_//')
+                        mv "$task_file" "HANDOFF/todo/$task_name" 2>/dev/null || true
+                    fi
+                    ((actions_taken++))
+                    ;;
+            esac
+            continue
+        fi
+
+        # ── ZOMBIE DETECTION (agent alive but task file moved to done/ without COMPLETION) ──
+        # A zombie is an agent whose task is in done/ (work completed), has NO COMPLETION
+        # marker (protocol violation), AND has been idle (no log output) for 10+ minutes.
+        # All three conditions must hold — this prevents false-positive kills during races.
+        if [ -f "$task_file_marker" ] && [ ! -f "$completion_file" ]; then
+            local assigned_task=$(cat "$task_file_marker")
+            local task_basename=$(basename "$assigned_task" | sed 's/^IN_PROGRESS_//')
+            # Condition 1: Task file must actually be in done/ (agent genuinely finished work)
+            if [ -f "HANDOFF/done/$task_basename" ]; then
+                # Condition 2: Check agent log idle time (last modification)
+                local log_file="$agent_dir/agent.log"
+                local idle_minutes=0
+                if [ -f "$log_file" ]; then
+                    local log_mtime=$(stat -c %Y "$log_file" 2>/dev/null || echo "0")
+                    if [ -n "$log_mtime" ] && [ "$log_mtime" != "0" ]; then
+                        idle_minutes=$(( (current_time - log_mtime) / 60 ))
+                    fi
+                fi
+                # Condition 3: Agent must have been idle for 10+ minutes
+                if [ "$idle_minutes" -ge 10 ]; then
+                    echo "PATROL: Agent $agent_id is a zombie — task '$task_basename' in done/, no COMPLETION marker, idle ${idle_minutes}m"
+                    # Kill the zombie process if still alive
+                    if [ -f "$pid_file" ]; then
+                        local pid=$(cat "$pid_file")
+                        if process_alive "$pid" && process_is_claude "$pid"; then
+                            echo "PATROL: Agent $agent_id process $pid still alive — terminating zombie"
+                            force_kill_pid "$pid"
+                        fi
+                    fi
+                    # Write completion marker on behalf of the agent
+                    echo "STATUS=completed" > "$completion_file"
+                    echo "COMPLETED_AT=$(date +%s)" >> "$completion_file"
+                    echo "BUILD_STATUS=unknown" >> "$completion_file"
+                    echo "NEXT_TASK_REQUESTED=false" >> "$completion_file"
+                    echo "NOTE=Auto-detected by patrol (zombie: task in done/, no marker, idle ${idle_minutes}m)" >> "$completion_file"
+                    pool_stop "$agent_id"
+                    ((actions_taken++))
+                fi
+            fi
+        fi
+    done
+
+    # Phase 2: Clean stale PIDs and orphaned directories
+    clean_stale_pids
+    cleanup_orphaned_agent_dirs
+
+    # Phase 3: Check for stale claims (IN_PROGRESS older than 60 min)
+    local now=$(date +%s)
+    local stale_threshold=3600
+    for lockfile in HANDOFF/IN_PROGRESS/*.lock; do
+        [ -f "$lockfile" ] || continue
+        local deadline=$(grep "^DEADLINE=" "$lockfile" | cut -d'=' -f2)
+        if [ -n "$deadline" ] && [ "$now" -gt "$deadline" ]; then
+            echo "PATROL: Stale claim detected: $lockfile"
+            local task_file="${lockfile%.lock}"
+            local agent_id=$(grep "^AGENT_ID=" "$lockfile" | cut -d'=' -f2)
+            # Check if agent is still alive
+            if [ -n "$agent_id" ] && [ -f "$AGENT_ROOT/$agent_id/pid" ]; then
+                local agent_pid=$(cat "$AGENT_ROOT/$agent_id/pid")
+                if process_alive "$agent_pid" && process_is_claude "$agent_pid"; then
+                    echo "  Agent $agent_id still alive past deadline. Consider stopping."
+                else
+                    echo "  Agent $agent_id dead or PID reused. Reclaiming task."
+                    local original_name=$(basename "$task_file" | sed 's/^IN_PROGRESS_//')
+                    mv "$task_file" "HANDOFF/todo/$original_name" 2>/dev/null || true
+                    rm -f "$lockfile"
+                    ((actions_taken++))
+                fi
+            fi
+        fi
+    done
+
+    # Phase 4: Launch new agents if slots available
+    local active=$(count_active_agents)
+    if [ "$active" -lt "$MAX_SUBAGENTS" ]; then
+        local available=$((MAX_SUBAGENTS - active))
+        local todo_count=$(find HANDOFF/todo/ -maxdepth 1 -name '*.md' -not -name '*IN_PROGRESS*' | wc -l)
+        if [ "$todo_count" -gt 0 ]; then
+            echo "PATROL: $available slot(s) available, $todo_count task(s) in todo queue."
+        else
+            echo "PATROL: $available slot(s) available but no tasks in todo."
+        fi
+    fi
+
+    # Phase 5: Batch micro-tasks if in conservation mode
+    eval $(get_quota_context) 2>/dev/null
+    local five_hour_usage="${QUOTA_FIVE_HOUR:-0}"
+    if [ -n "$five_hour_usage" ] && [ "$five_hour_usage" != "?" ] && [ "$(echo "$five_hour_usage > 75" | bc -l 2>/dev/null || echo "0")" -eq 1 ]; then
+        echo "PATROL: High quota usage detected (${five_hour_usage}%). Consolidating micro-tasks..."
+        python3 .claude/scripts/batch_micro_tasks.py 2>/dev/null || python .claude/scripts/batch_micro_tasks.py 2>/dev/null || py -3 .claude/scripts/batch_micro_tasks.py 2>/dev/null || true
+    fi
+
+    # Phase 6: Summary
+    active=$(count_active_agents)
+    local done_count=$(find HANDOFF/done/ -maxdepth 1 -name '*.md' | wc -l)
+    local todo_count=$(find HANDOFF/todo/ -maxdepth 1 -name '*.md' | wc -l)
+    local in_progress_count=$(find HANDOFF/IN_PROGRESS/ -maxdepth 1 -name '*.md' | wc -l)
+    local batch_count=$(find HANDOFF/batches/ -maxdepth 1 -name '*.md' | wc -l)
+    echo ""
+    echo "PATROL COMPLETE: $actions_taken action(s) taken"
+    echo "Slots: $active/$MAX_SUBAGENTS | Tasks: $todo_count todo | $in_progress_count in-progress | $done_count done | $batch_count batches"
+}
+
+# ─── Main Command Router ─────────────────────────────────────────────────────
+
+case "$1" in
+    "activate")
+        touch ".claude/orchestrator_active"
+        store_orchestrator_pid
+        clean_stale_pids
+        echo "Orchestrator Gatekeeper activated."
+        ;;
+    "list")
+        list_agents
+        ;;
+    "launch")
+        active=$(count_active_agents)
+        if [ "$active" -ge "$MAX_SUBAGENTS" ]; then
+            echo "Error: Sub-agent limit reached ($MAX_SUBAGENTS slots)."
+            echo "Stop an existing agent before launching a new one."
+            exit 1
+        fi
+        model="${2:-qwen3-coder-next:cloud}"
+        id="${3:-agent_$(date +%s)}"
+        echo "Launching sub-agent [$id] with model [$model]..."
+        export CARGO_INCREMENTAL=0
+        ./scripts/launch_agent.sh "$model" "$id" start
+        ;;
+    "stop")
+        if [ -z "$2" ]; then
+            echo "Usage: $0 stop <agent_id>"
+            exit 1
+        fi
+        id="$2"
+        if [ -d "$AGENT_ROOT/$id" ]; then
+            # Self-preservation: never kill the orchestrator process
+            local orch_pid=$(get_orchestrator_pid)
+            if [ -f "$AGENT_ROOT/$id/pid" ] && [ -n "$orch_pid" ]; then
+                local agent_pid=$(cat "$AGENT_ROOT/$id/pid")
+                if [ "$agent_pid" = "$orch_pid" ]; then
+                    echo "CRITICAL: Agent PID $agent_pid matches orchestrator PID. Refusing to kill."
+                    rm -rf "$AGENT_ROOT/$id"
+                    exit 1
+                fi
+            fi
+            ./scripts/launch_agent.sh "dummy" "$id" "" stop
+            if [ -f "$AGENT_ROOT/$id/pid" ]; then
+                local agent_pid=$(cat "$AGENT_ROOT/$id/pid" 2>/dev/null)
+                [ -n "$agent_pid" ] && process_cache_invalidate "$agent_pid"
+            fi
+            rm -rf "$AGENT_ROOT/$id"
+        else
+            echo "Error: Agent [$id] not found."
+        fi
+        ;;
+    "pool")
+        case "${2:-}" in
+            "list")
+                pool_list
+                ;;
+            "launch")
+                pool_launch "$3" "$4" "${5:-}"
+                ;;
+            "stop")
+                pool_stop "$3"
+                ;;
+            "status")
+                pool_status
+                ;;
+            "patrol")
+                pool_patrol
+                ;;
+            "launch-clean")
+                pool_launch_clean "$3" "$4"
+                ;;
+            "batch-verify")
+                pool_batch_verify
+                ;;
+            *)
+                echo "Pool Commands:"
+                echo "  pool list              Show all agent profiles"
+                echo "  pool launch <name>     Spin up an agent from the pool"
+                echo "  pool launch-clean <n>  Spin up with hygiene check first"
+                echo "  pool stop <agent_id>   Spin down an agent"
+                echo "  pool status            Show active agents and slot usage"
+                echo "  pool patrol            Check completions, free slots"
+                echo "  pool batch-verify      Run batched verification"
+                echo "  pool patrol            Check completions, free slots, launch next tasks"
+                ;;
+        esac
+        ;;
+    "deactivate")
+        rm -f ".claude/orchestrator_active"
+        remove_orchestrator_pid
+        clean_stale_pids
+        echo "Orchestrator Gatekeeper deactivated."
+        ;;
+    "quota-scraper")
+        run_quota_scraper
+        ;;
+    "status")
+        if [ -f ".claude/orchestrator_active" ]; then
+            echo "Orchestrator Status: ACTIVE (Gatekeeper Mode)"
+            list_agents
+        else
+            echo "Orchestrator Status: INACTIVE (Monitoring Only)"
+        fi
+        ;;
+    *)
+        echo "Usage: $0 {activate|launch|stop|pool|list|status|deactivate|quota-scraper}"
+        echo ""
+        echo "Commands:"
+        echo "  activate               Activate Gatekeeper mode"
+        echo "  launch [model] [id]    Launch CLI sub-agent"
+        echo "  stop <agent_id>        Stop CLI sub-agent"
+        echo "  list                   List active sub-agents"
+        echo "  status                 Show orchestrator status"
+        echo "  deactivate             Deactivate Gatekeeper mode"
+        echo "  quota-scraper           Run quota scraper (5-min cache)"
+        echo ""
+        echo "Pool Commands:"
+        echo "  pool list              Show all agent pool profiles"
+        echo "  pool launch <name>     Spin up agent from pool config"
+        echo "  pool stop <agent_id>   Spin down an active agent"
+        echo "  pool status            Show pool slot usage"
+        exit 1
+        ;;
+esac

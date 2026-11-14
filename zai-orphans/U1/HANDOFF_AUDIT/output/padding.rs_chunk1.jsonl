@@ -1,0 +1,32 @@
+﻿{
+  "file": "padding.rs",
+  "chunk": 1,
+  "summary": "This Rust module provides functions for padding and unpadding messages to standard sizes, with options for different padding schemes.",
+  "structs_or_classes": ["None"],
+  "imports": [
+    "serde::{Deserialize, Serialize}",
+    "thiserror::Error"
+  ],
+  "funcs": [
+    {
+      "name": "pad_message",
+      "line": 36,
+      "calls_out_to": ["None"]
+    },
+    {
+      "name": "unpad_message",
+      "line": 75,
+      "calls_out_to": ["None"]
+    },
+    {
+      "name": "pad_to_next_standard_size",
+      "line": 110,
+      "calls_out_to": ["None"]
+    },
+    {
+      "name": "apply_padding_scheme",
+      "line": 147,
+      "calls_out_to": ["None"]
+    }
+  ]
+}

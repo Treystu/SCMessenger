@@ -1,0 +1,19 @@
+﻿{
+  "file": "AppModule.kt",
+  "chunk": 1,
+  "summary": "This module provides application-level dependencies using Dagger Hilt.",
+  "structs_or_classes": ["MeshRepository", "PreferencesRepository"],
+  "imports": ["Context", "UniFFI", "SingletonComponent", "ApplicationContext"],
+  "funcs": [
+    {
+      "name": "provideMeshRepository",
+      "line": 25,
+      "calls_out_to": ["context"]
+    },
+    {
+      "name": "providePreferencesRepository",
+      "line": 31,
+      "calls_out_to": ["context"]
+    }
+  ]
+}

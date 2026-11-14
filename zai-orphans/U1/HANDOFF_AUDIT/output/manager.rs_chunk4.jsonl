@@ -1,0 +1,49 @@
+﻿{
+  "file": "manager.rs",
+  "chunk": 4,
+  "summary": "This chunk contains tests for the `TransportManager` struct, which manages peer connections and reconnections in a BLE environment.",
+  "structs_or_classes": ["TransportManager", "ReconnectionState"],
+  "imports": ["TransportEvent", "TransportCapabilities", "SendResult", "HashSet"],
+  "funcs": [
+    {
+      "name": "handle_event",
+      "line": 1052,
+      "calls_out_to": ["manager.handle_event"]
+    },
+    {
+      "name": "connected_peers",
+      "line": 1060,
+      "calls_out_to": ["manager.connected_peers"]
+    },
+    {
+      "name": "add_target_peer",
+      "line": 1073,
+      "calls_out_to": ["manager.add_target_peer"]
+    },
+    {
+      "name": "record_failure",
+      "line": 1121,
+      "calls_out_to": ["state.record_failure"]
+    },
+    {
+      "name": "is_exhausted",
+      "line": 1145,
+      "calls_out_to": ["state.is_exhausted"]
+    },
+    {
+      "name": "record_reconnect_success",
+      "line": 1180,
+      "calls_out_to": ["manager.record_reconnect_success"]
+    },
+    {
+      "name": "remove_target_peer",
+      "line": 1205,
+      "calls_out_to": ["manager.remove_target_peer"]
+    },
+    {
+      "name": "send_to_peer",
+      "line": 1224,
+      "calls_out_to": ["manager.send_to_peer"]
+    }
+  ]
+}

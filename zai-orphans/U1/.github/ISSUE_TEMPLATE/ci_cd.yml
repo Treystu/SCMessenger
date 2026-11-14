@@ -1,0 +1,44 @@
+name: CI / workflow issue
+description: Report GitHub Actions, workflow, or validation-gate problems
+title: "[ci] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this template for CI drift, workflow failures, required-check confusion, or GitHub Actions operating-model issues.
+  - type: dropdown
+    id: workflow
+    attributes:
+      label: Workflow or surface
+      options:
+        - CI
+        - Docker Integration Suite
+        - Docker Publish
+        - Release CLI Binaries
+        - docs sync / repo hygiene
+        - branch protection / required checks
+        - other
+    validations:
+      required: true
+  - type: input
+    id: run_link
+    attributes:
+      label: Workflow run link or run ID
+      placeholder: "https://github.com/.../actions/runs/... or 123456789"
+  - type: textarea
+    id: problem
+    attributes:
+      label: What failed or is misaligned?
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect instead?
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs or notes
+      render: shell

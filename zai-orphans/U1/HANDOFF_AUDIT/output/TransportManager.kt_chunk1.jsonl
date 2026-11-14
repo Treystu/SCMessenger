@@ -1,0 +1,54 @@
+﻿{
+  "file": "TransportManager.kt",
+  "chunk": 1,
+  "summary": "The TransportManager class orchestrates all local transports for SCMessenger. It manages BLE, WiFi Aware, and WiFi Direct transports, implements transport priority, auto-escalation when BLE discovers a peer, reports available transports to Rust AutoAdjustEngine, and coordinates peer discovery across all transports.",
+  "structs_or_classes": ["TransportType", "BleScanner", "BleAdvertiser", "BleGattServer", "BleGattClient", "BleL2capManager", "WifiAwareTransport", "MdnsServiceDiscovery"],
+  "imports": ["android.content.Context", "com.scmessenger.android.service.TransportType", "com.scmessenger.android.transport.ble.*", "timber.log.Timber", "java.util.concurrent.ConcurrentHashMap", "kotlin.coroutines.CoroutineScope", "uniffi.api.BleAdjustment", "uniffi.api.AdjustmentProfile"],
+  "funcs": [
+    {
+      "name": "initialize",
+      "line": 61,
+      "calls_out_to": ["bleEnabled", "wifiAwareEnabled", "wifiDirectEnabled"]
+    },
+    {
+      "name": "startAll",
+      "line": 93,
+      "calls_out_to": ["bleScanner?.startScanning()", "bleAdvertiser?.startAdvertising()", "bleGattServer?.start()", "bleL2capManager?.startListening()"]
+    },
+    {
+      "name": "stopAll",
+      "line": 137,
+      "calls_out_to": ["bleScanner?.stopScanning()", "bleAdvertiser?.stopAdvertising()", "bleGattServer?.stop()", "bleL2capManager?.stopListening()"]
+    },
+    {
+      "name": "sendData",
+      "line": 162,
+      "calls_out_to": ["preferredTransport", "sendViaTransport"]
+    },
+    {
+      "name": "attemptEscalation",
+      "line": 244,
+      "calls_out_to": ["wifiAware?.isAvailable()", "activeTransports[TransportType.WIFI_DIRECT] != true"]
+    },
+    {
+      "name": "getActiveTransports",
+      "line": 267,
+      "calls_out_to": []
+    },
+    {
+      "name": "getAvailableTransports",
+      "line": 274,
+      "calls_out_to": []
+    },
+    {
+      "name": "initializeBle",
+      "line": 309,
+      "calls_out_to": ["bleScanner", "bleAdvertiser", "bleGattServer", "bleGattClient", "bleL2capManager"]
+    },
+    {
+      "name": "initializeWifiAware",
+      "line": 411,
+      "calls_out_to": ["wifiAware"]
+    }
+  ]
+}

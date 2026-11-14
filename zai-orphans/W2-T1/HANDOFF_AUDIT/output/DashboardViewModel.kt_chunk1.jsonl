@@ -1,0 +1,14 @@
+﻿{
+  "file": "DashboardViewModel.kt",
+  "chunk": 1,
+  "summary": "The DashboardViewModel class in the com.scmessenger.android.ui.viewmodels package handles the data and logic for displaying various aspects of a mesh network, including service statistics, peer list, topology data, and real-time network health metrics.",
+  "structs_or_classes": ["DashboardViewModel", "PeerInfo"],
+  "imports": ["List", "MutableStateFlow", "StateFlow", "Dispatchers", "flow", "launch", "withContext", "Timber", "MeshRepository", "@HiltViewModel", "@ApplicationContext", "kotlin.coroutines.Dispatchers", "kotlin.coroutines.flow.SharingStarted", "uniffi.api.ServiceStats", "com.scmessenger.android.R", "com.scmessenger.android.data.MeshRepository", "com.scmessenger.android.service.MeshEventBus", "com.scmessenger.android.service.PeerEvent", "com.scmessenger.android.service.StatusEvent", "com.scmessenger.android.utils.toEpochSeconds"],
+  "funcs": [
+    {
+      "name": "refreshData",
+      "line": 79,
+      "calls_out_to": ["meshRepository.serviceStats.value", "loadPeers", "buildTopology"]
+    }
+  ]
+}

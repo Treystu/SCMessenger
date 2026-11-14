@@ -1,0 +1,49 @@
+﻿{
+  "file": "ChatViewModelTest.kt",
+  "chunk": 1,
+  "summary": "This test class is a unit test for the ChatViewModel in the SCMessenger Android application. It covers various functionalities such as setting a peer, sending messages, handling delivery status events, and updating online status.",
+  "structs_or_classes": ["ChatViewModel", "MeshRepository", "MessageEventBus", "PeerEvent", "TransportType", "uniffi.api.MessageRecord"],
+  "imports": ["io.mockk.coEvery", "io.mockk.coVerify", "io.mockk.every", "io.mockk.mockk", "io.mockk.verify", "kotlinx.coroutines.Dispatchers", "kotlinx.coroutines.ExperimentalCoroutinesApi", "kotlinx.coroutines.flow.MutableSharedFlow", "kotlinx.coroutines.launch", "kotlinx.coroutines.test.StandardTestDispatcher", "kotlinx.coroutines.test.advanceUntilIdle", "kotlinx.coroutines.test.resetMain", "kotlinx.coroutines.test.runTest", "kotlinx.coroutines.test.setMain"],
+  "funcs": [
+    {
+      "name": "setup",
+      "line": 53,
+      "calls_out_to": ["Dispatchers.setMain", "repository", "incoming"]
+    },
+    {
+      "name": "tearDown",
+      "line": 64,
+      "calls_out_to": ["Dispatchers.resetMain"]
+    },
+    {
+      "name": "setPeer",
+      "line": 70,
+      "calls_out_to": ["viewModel", "repository"]
+    },
+    {
+      "name": "updateInputText",
+      "line": 80,
+      "calls_out_to": ["viewModel"]
+    },
+    {
+      "name": "sendMessage",
+      "line": 90,
+      "calls_out_to": ["viewModel", "repository"]
+    },
+    {
+      "name": "deliveryStatusEventMarksMessageDelivered",
+      "line": 104,
+      "calls_out_to": ["viewModel", "repository"]
+    },
+    {
+      "name": "peerEventsUpdateOnlineStatus",
+      "line": 113,
+      "calls_out_to": ["viewModel", "repository"]
+    },
+    {
+      "name": "loadMoreMessages",
+      "line": 125,
+      "calls_out_to": ["viewModel", "repository"]
+    }
+  ]
+}

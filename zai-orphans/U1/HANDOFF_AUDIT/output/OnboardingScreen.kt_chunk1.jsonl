@@ -1,0 +1,70 @@
+﻿{
+  "file": "OnboardingScreen.kt",
+  "chunk": 1,
+  "summary": "This is the main screen for the onboarding process in the SCMessenger app. It handles user consent, identity creation, and contact import.",
+  "structs_or_classes": [],
+  "imports": [
+    "androidx.compose.foundation.layout.*",
+    "androidx.compose.foundation.rememberScrollState",
+    "androidx.compose.foundation.text.KeyboardActions",
+    "androidx.compose.foundation.text.KeyboardOptions",
+    "androidx.compose.foundation.verticalScroll",
+    "androidx.compose.material.icons.Icons",
+    "androidx.compose.material.icons.filled.Lock",
+    "androidx.compose.material.icons.filled.CheckCircle",
+    "androidx.compose.material.icons.filled.Shield",
+    "androidx.compose.material.icons.filled.Warning",
+    "androidx.compose.material3.*",
+    "androidx.compose.runtime.*",
+    "androidx.compose.ui.Alignment",
+    "androidx.compose.ui.Modifier",
+    "androidx.compose.ui.platform.LocalFocusManager",
+    "androidx.compose.ui.text.font.FontFamily",
+    "androidx.compose.ui.text.input.ImeAction",
+    "androidx.compose.ui.text.style.TextAlign",
+    "androidx.compose.ui.unit.dp",
+    "androidx.hilt.navigation.compose.hiltViewModel",
+    "com.scmessenger.android.ui.viewmodels.MainViewModel",
+    "com.google.accompanist.permissions.ExperimentalPermissionsApi",
+    "com.google.accompanist.permissions.rememberMultiplePermissionsState"
+  ],
+  "funcs": [
+    {
+      "name": "OnboardingScreen",
+      "line": 27,
+      "calls_out_to": [
+        "remember",
+        "hiltViewModel",
+        "collectAsState",
+        "LaunchedEffect",
+        "Icon",
+        "Text",
+        "Card",
+        "Checkbox",
+        "Button",
+        "OutlinedTextField",
+        "OutlinedButton",
+        "AlertDialog"
+      ]
+    },
+    {
+      "name": "ConsentInfoItem",
+      "line": 299,
+      "calls_out_to": [
+        "Row",
+        "Icon",
+        "Column",
+        "Text"
+      ]
+    },
+    {
+      "name": "ImportContactDialog",
+      "line": 329,
+      "calls_out_to": [
+        "AlertDialog",
+        "OutlinedTextField",
+        "Button"
+      ]
+    }
+  ]
+}

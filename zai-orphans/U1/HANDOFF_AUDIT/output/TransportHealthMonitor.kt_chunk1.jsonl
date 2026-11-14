@@ -1,0 +1,46 @@
+﻿{
+  "file": "TransportHealthMonitor.kt",
+  "chunk": 1,
+  "summary": "Monitors transport health metrics to inform routing decisions.",
+  "structs_or_classes": [
+    {
+      "name": "TransportHealth",
+      "line": 15
+    }
+  ],
+  "imports": [
+    "timber.log.Timber"
+  ],
+  "funcs": [
+    {
+      "name": "recordSuccess",
+      "line": 23,
+      "calls_out_to": ["System.currentTimeMillis()"]
+    },
+    {
+      "name": "recordFailure",
+      "line": 31,
+      "calls_out_to": ["System.currentTimeMillis()"]
+    },
+    {
+      "name": "getHealth",
+      "line": 42,
+      "calls_out_to": []
+    },
+    {
+      "name": "shouldUseTransport",
+      "line": 50,
+      "calls_out_to": ["MIN_SAMPLES", "MIN_SUCCESS_RATE"]
+    },
+    {
+      "name": "isDegraded",
+      "line": 61,
+      "calls_out_to": []
+    },
+    {
+      "name": "getSummary",
+      "line": 66,
+      "calls_out_to": []
+    }
+  ]
+}

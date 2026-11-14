@@ -1,0 +1,471 @@
+﻿{
+    "source":  ".claude plus CLAUDE.md",
+    "copied_file_count":  92,
+    "logical_bytes":  545171,
+    "excluded_credentials":  [
+                                 ".claude/alibaba_cloud_config.env",
+                                 ".claude/alibaba_cloud_config.env.bak-20260927T111450Z"
+                             ],
+    "files":  [
+                  {
+                      "path":  "CLAUDE.md",
+                      "bytes":  3545,
+                      "sha256":  "d8210f73514aebaa91774ee077bc13d99c6c0bedfbee160edfcc8d6da9cc0b2e"
+                  },
+                  {
+                      "path":  ".claude/agent_pool.json",
+                      "bytes":  7561,
+                      "sha256":  "6504ec6576ca84d55727efca3afaf07662d2ce2989cb53a0f0b83c2ef9722d86"
+                  },
+                  {
+                      "path":  ".claude/API_CONSUMPTION_OPTIMIZATION_AUDIT.md",
+                      "bytes":  1834,
+                      "sha256":  "250c9f489362ecc67c71bbe191c33d12e69db143a137efd22b1c8ec09beeefe6"
+                  },
+                  {
+                      "path":  ".claude/local_orchestrator_config.sh",
+                      "bytes":  10688,
+                      "sha256":  "cea3cd705dc131f8ff2da950c43331be22c4eb44275be8a343c9517bef8347c5"
+                  },
+                  {
+                      "path":  ".claude/model_capability_mapping.json",
+                      "bytes":  17500,
+                      "sha256":  "0901509d849d6c483b0d30e0524b6e1efa51f46aed1ac35911d45884845f3760"
+                  },
+                  {
+                      "path":  ".claude/model_validation_template.sh",
+                      "bytes":  4425,
+                      "sha256":  "67cfe6903340340a60a87b53ef91a697a461ea6cce6b781880290eadf88ee7d0"
+                  },
+                  {
+                      "path":  ".claude/orchestration_config.json",
+                      "bytes":  1935,
+                      "sha256":  "7a03e999663c7c24e31dae8e7717e2d84d2902315f80e01da2fd6d65ad80efa4"
+                  },
+                  {
+                      "path":  ".claude/orchestrator_active",
+                      "bytes":  0,
+                      "sha256":  "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+                  },
+                  {
+                      "path":  ".claude/orchestrator_manager.sh",
+                      "bytes":  63333,
+                      "sha256":  "332a9fc39e552ae53423bab07db36b78b97f6fe91350388a9d7f78026832381f"
+                  },
+                  {
+                      "path":  ".claude/orchestrator_state.json",
+                      "bytes":  815,
+                      "sha256":  "ea78407ddd4c67ba1c6328fdc7cbb1c4780e595ffad9c6b85e1d43011e88b4ce"
+                  },
+                  {
+                      "path":  ".claude/quota_cache_timestamp",
+                      "bytes":  11,
+                      "sha256":  "ea293517135a41e16b021b3459ca0722d56efa8ff453b5af29bb89978da055d9"
+                  },
+                  {
+                      "path":  ".claude/quota_state.json",
+                      "bytes":  144,
+                      "sha256":  "82e85fa943f5ba6f2f3cece58ac406ff0706f7cf7bbef8003455debfacbab162"
+                  },
+                  {
+                      "path":  ".claude/settings.json",
+                      "bytes":  1371,
+                      "sha256":  "8f59cad5caf100eb164beeeef8355c9f4467e67f96842265736148267b304a00"
+                  },
+                  {
+                      "path":  ".claude/settings.local.json",
+                      "bytes":  13123,
+                      "sha256":  "ef613dd1fabb42ad2dc364161ff8a6806fa3ad7777eef0bcbc4430347ca9e48e"
+                  },
+                  {
+                      "path":  ".claude/agents/android-qa.md",
+                      "bytes":  2632,
+                      "sha256":  "f87e8cc921b4f6ca2b5c6c8725709a36d14f34130b631cbd068b34f86f408e92"
+                  },
+                  {
+                      "path":  ".claude/agents/crypto-security-auditor.md",
+                      "bytes":  3001,
+                      "sha256":  "e28e3b14c6b6737ade34aeda325ea6f354bb0f4769d8d8e7b7e339992dd2d572"
+                  },
+                  {
+                      "path":  ".claude/agents/docs-sync-auditor.md",
+                      "bytes":  2902,
+                      "sha256":  "4001c7bb18ea743439052235cc91f14ba623ad76f43d42fcb76c1c4ca5b684b0"
+                  },
+                  {
+                      "path":  ".claude/agents/release-gatekeeper.md",
+                      "bytes":  3163,
+                      "sha256":  "4a3812e9fec9fd334a3918c6950b53fbb12b1b07bda16360736bd63795251653"
+                  },
+                  {
+                      "path":  ".claude/agents/rust-implementer.md",
+                      "bytes":  3701,
+                      "sha256":  "cf9238795c5110ea15cad2d8d3f0ffb91e492595b49f4df23ea249db11af6325"
+                  },
+                  {
+                      "path":  ".claude/agents/rust-coder_1783753391/start_time",
+                      "bytes":  11,
+                      "sha256":  "981b224b2c1396eb24b71e8a0a7a5e54abd300d4669d14724d72b71104cb2097"
+                  },
+                  {
+                      "path":  ".claude/archive/commands/gemini-orchestrator.md",
+                      "bytes":  13458,
+                      "sha256":  "60083a60524a9019b96a440e450be82ada246d9da7c896414d59ac8ea9aee40f"
+                  },
+                  {
+                      "path":  ".claude/archive/commands/orchestrate-swarm-legacy.md",
+                      "bytes":  12234,
+                      "sha256":  "7e439a928155af333da3c9e7d005528fa0212f7c2442d4dcb26a6b542a8986b0"
+                  },
+                  {
+                      "path":  ".claude/archive/commands/README.md",
+                      "bytes":  2560,
+                      "sha256":  "701ea0afc6f63e7f83dee0775433bdcdfff374625720b23ea45a672146505b70"
+                  },
+                  {
+                      "path":  ".claude/archive/commands/scm.md",
+                      "bytes":  6230,
+                      "sha256":  "6a5d459e5320a5f98c3ec7ccce9fb78dba3c51499668f2f88b183570231ce11e"
+                  },
+                  {
+                      "path":  ".claude/archive/commands/scmorc.md",
+                      "bytes":  18380,
+                      "sha256":  "924ccbf770b6aaa3074f2d1c81743bb7eadecfc50311a6d289ad654fbd85af96"
+                  },
+                  {
+                      "path":  ".claude/archive/commands/scmqwen.md",
+                      "bytes":  12651,
+                      "sha256":  "5c6deb8024772202089e3d7d2f89c3f93a96e0694f8ab65823599bfa6e554ce6"
+                  },
+                  {
+                      "path":  ".claude/archive/commands/swarm.md",
+                      "bytes":  652,
+                      "sha256":  "590b396df2adb64c1b0ab965f33084d084a5689d33a473d6f699dd7040087520"
+                  },
+                  {
+                      "path":  ".claude/commands/BOD.md",
+                      "bytes":  895,
+                      "sha256":  "4892af8824f56659b3e90482d6aafea6118396e958c688e97387a673e852cadc"
+                  },
+                  {
+                      "path":  ".claude/commands/CEO.md",
+                      "bytes":  2695,
+                      "sha256":  "d6b275a75813c7d3f1e278c2a6f105f07b2a4d32b13083609ea396ead6f526ee"
+                  },
+                  {
+                      "path":  ".claude/commands/CTO.md",
+                      "bytes":  3996,
+                      "sha256":  "7604b80e1bc60275eaad0709eedb746627f57b7b984ba63a850f60e96edab849"
+                  },
+                  {
+                      "path":  ".claude/commands/drive.md",
+                      "bytes":  1660,
+                      "sha256":  "6917a9d4217d05226c2c9efb5a4aba020858661e33388a81e2a8d607aa32ef34"
+                  },
+                  {
+                      "path":  ".claude/commands/orchestrate.md",
+                      "bytes":  777,
+                      "sha256":  "d4428c3243368e8c88c36db53783ce0c00f954a983538b55a7633badb5e61239"
+                  },
+                  {
+                      "path":  ".claude/hooks/check_no_emoji.py",
+                      "bytes":  2182,
+                      "sha256":  "6a4b4aa0c2fa97a16d353f305e4cbb51fbc749daac02c7dd8e564b21bee3f3c2"
+                  },
+                  {
+                      "path":  ".claude/hooks/model_gate.sh",
+                      "bytes":  2412,
+                      "sha256":  "e16119f04d6fc50d0e078c3ba6ec5a0a61d37ad00c5e2e8b9db7678a75fd4100"
+                  },
+                  {
+                      "path":  ".claude/hooks/preflight_guard.py",
+                      "bytes":  46664,
+                      "sha256":  "673c41a4017ad1d0c836c0217983ec2d2c48691ca7cefa59319c04e979a497f2"
+                  },
+                  {
+                      "path":  ".claude/hooks/session_orientation.sh",
+                      "bytes":  3191,
+                      "sha256":  "8beed34f8729bb1c822a6a3ab45a043f4912e871e880947a09bf76834ce91435"
+                  },
+                  {
+                      "path":  ".claude/hooks/test_preflight_guard.py",
+                      "bytes":  25680,
+                      "sha256":  "e5821f9613ed10703a00f925f478c06a3106bbfdf60767c93b409916106237ec"
+                  },
+                  {
+                      "path":  ".claude/hooks/__pycache__/check_no_emoji.cpython-314.pyc",
+                      "bytes":  3269,
+                      "sha256":  "c1e5daa8f62b3fb9d9f04aed4e563ff2dcd1bfe8d879f6fb8b344f91d7408402"
+                  },
+                  {
+                      "path":  ".claude/plans/bootstrap-wiring-qr-ip-bluetooth-plan.md",
+                      "bytes":  19624,
+                      "sha256":  "b8fd052d43eb9500e41862064dc3a61dfc15c4a269af2e3c54fc66e7c2c97099"
+                  },
+                  {
+                      "path":  ".claude/plans/snazzy-spinning-dongarra.md",
+                      "bytes":  5129,
+                      "sha256":  "e72f586b8a6c0a5f25879217a70bbea5f5b5db9ee23c12df9df0e549cd5aaff7"
+                  },
+                  {
+                      "path":  ".claude/plans/bootstrap-wiring-qr-ip-bluetooth-plan/tasks.md",
+                      "bytes":  2992,
+                      "sha256":  "1528bf5574671a5b14b0fcd549dc34e7184a581f941a465d8ef138eb0b98098c"
+                  },
+                  {
+                      "path":  ".claude/projects/C--Users-kanal-Documents-Github-SCMessenger/memory/MEMORY.md",
+                      "bytes":  113,
+                      "sha256":  "9058170d2ec14c646d25aa92c88d53ade29dc97ee11c33f956605783b863b71b"
+                  },
+                  {
+                      "path":  ".claude/projects/C--Users-kanal-Documents-Github-SCMessenger/memory/micro_agent_benchmark.md",
+                      "bytes":  1189,
+                      "sha256":  "a0e02f01a16605dd793c15bd86a7ee6d92f7b35331d080098244eefc12b380f9"
+                  },
+                  {
+                      "path":  ".claude/prompts/adversarial-reviewer.md",
+                      "bytes":  2015,
+                      "sha256":  "7619d7026f045a209866acf597fc4ee5b02aaede22d9f7c27fede30f30963308"
+                  },
+                  {
+                      "path":  ".claude/prompts/architect.md",
+                      "bytes":  1618,
+                      "sha256":  "5c52a55f780caa11b099a7123b0114d6897e8659cd069202e501662d02d017b2"
+                  },
+                  {
+                      "path":  ".claude/prompts/coordinator.md",
+                      "bytes":  5747,
+                      "sha256":  "575f46e896c05031a9cac287f2824152cef80581c1ffc6c0e08602ef78b9b4cd"
+                  },
+                  {
+                      "path":  ".claude/prompts/gatekeeper.md",
+                      "bytes":  2118,
+                      "sha256":  "7d418604ad902102791cdb19c5301ddec0d325aff7afba3878e0b0e2e4461215"
+                  },
+                  {
+                      "path":  ".claude/prompts/implementer.md",
+                      "bytes":  1525,
+                      "sha256":  "67f85f185b8ba214f9be6dabbdb972f065a62453ee2b039510447835b11eff13"
+                  },
+                  {
+                      "path":  ".claude/prompts/ollama_expert.md",
+                      "bytes":  2278,
+                      "sha256":  "50d67dccb5d9fead3effadd60cb0afea1d8ea2c6020178a9b0c81f4a8aad92e1"
+                  },
+                  {
+                      "path":  ".claude/rules/android.md",
+                      "bytes":  123,
+                      "sha256":  "4169b8d2559c9e3d06d4f674cc2db0db589902fcd44645b5eca8c375c0888dc5"
+                  },
+                  {
+                      "path":  ".claude/rules/build.md",
+                      "bytes":  118,
+                      "sha256":  "3c317493c8ab007b69dc47508871811bf0e5bd86c60b6393a2bae1060ece39bb"
+                  },
+                  {
+                      "path":  ".claude/rules/no-emojis.md",
+                      "bytes":  200,
+                      "sha256":  "7c2a385be5e31eec0f9b1cf8154a9e2ba92d52ae43a539e7a49ce9ac3dc630b6"
+                  },
+                  {
+                      "path":  ".claude/rules/rust.md",
+                      "bytes":  116,
+                      "sha256":  "c19274f517b8c71d1d240e202c0ccedf040e729cdc6c3ee89ef94315c602b69d"
+                  },
+                  {
+                      "path":  ".claude/rules/security.md",
+                      "bytes":  220,
+                      "sha256":  "8e934893dd3cd9ed6437f477a1d853b08ab844f5007240d39db9c311dfc2f957"
+                  },
+                  {
+                      "path":  ".claude/scripts/audit_models.py",
+                      "bytes":  1768,
+                      "sha256":  "4549f636cc73231330080c11ac70456d929424ba07f938cb665249c2478913e4"
+                  },
+                  {
+                      "path":  ".claude/scripts/batch_micro_tasks.py",
+                      "bytes":  3375,
+                      "sha256":  "b489d8cc8c8094cf466e973cc5489b5f8b0221a7b1e044894631a432f4647117"
+                  },
+                  {
+                      "path":  ".claude/scripts/batch_splitter.py",
+                      "bytes":  2592,
+                      "sha256":  "48f5dbefe3f9e6d03a6d71c51a5a9a75535ee557df30824905106145a7e7dcc6"
+                  },
+                  {
+                      "path":  ".claude/scripts/build_repo_index.py",
+                      "bytes":  4461,
+                      "sha256":  "d0cbf44a335fd8bd60421940eb2ecec3d3eb0f940bf18ee700bea541c1701044"
+                  },
+                  {
+                      "path":  ".claude/scripts/cartographer_optimization.py",
+                      "bytes":  13065,
+                      "sha256":  "141b138f4b9e650ae53d33c00c3c1101e2d631766259849970f4a706a2dcb563"
+                  },
+                  {
+                      "path":  ".claude/scripts/context_extractor.py",
+                      "bytes":  12319,
+                      "sha256":  "f6e3b374b916960eea84eabe0e3f73a4639901ec31f10b75a68ec2613e651024"
+                  },
+                  {
+                      "path":  ".claude/scripts/detailed_mapping_update.py",
+                      "bytes":  5678,
+                      "sha256":  "239f471691545f82a1dfa842c66bd86201c604b9df5ec1afd7256558c1c3c4a4"
+                  },
+                  {
+                      "path":  ".claude/scripts/enforce_local_priority.sh",
+                      "bytes":  3816,
+                      "sha256":  "960f09c94b58a5bee05398662eba1ca33b1e4cbe9f05c5a38dffae16353c509f"
+                  },
+                  {
+                      "path":  ".claude/scripts/freshness_gate.py",
+                      "bytes":  3661,
+                      "sha256":  "d015d8325380c9e2dc1758f0ccd17ab6dbe2cbba60183fc3a00d0edefd000dd7"
+                  },
+                  {
+                      "path":  ".claude/scripts/gemini-orchestrator-launcher.sh",
+                      "bytes":  8234,
+                      "sha256":  "6b1698064f0e73cd59be6cf644a095878926679ca48a3bd057ca94ce00b2e190"
+                  },
+                  {
+                      "path":  ".claude/scripts/local_cartographer.py",
+                      "bytes":  11757,
+                      "sha256":  "9b8b2c4b6af822c2e4a54e1adee3abd973242e27fb9af9504c9ca8a2ac5a5d83"
+                  },
+                  {
+                      "path":  ".claude/scripts/merge_models.py",
+                      "bytes":  1810,
+                      "sha256":  "9579cf9b95d165c0a9477e090a20fed8f670911297065ae7d0be6257936ad91d"
+                  },
+                  {
+                      "path":  ".claude/scripts/micro_agent.py",
+                      "bytes":  21339,
+                      "sha256":  "8750bd1221c0500d133230c085d838029611a0a6605eb3690b841ed2a1d59090"
+                  },
+                  {
+                      "path":  ".claude/scripts/model_dispatch.sh",
+                      "bytes":  5961,
+                      "sha256":  "beb9b00eff14eead2ef690a053ff9d1928586eb03e15eaff04cdcfb9e0457125"
+                  },
+                  {
+                      "path":  ".claude/scripts/process_alive.sh",
+                      "bytes":  2750,
+                      "sha256":  "7a950099b99cc5e2dd35d47df6d42c2a30c2e5e963de4764ea30e52e1b9eac7b"
+                  },
+                  {
+                      "path":  ".claude/scripts/quota_lib.sh",
+                      "bytes":  4975,
+                      "sha256":  "b14a9a2ab150aa1eba88b56d67d6ca0dce51f9cf2dc48b279d1de642ca2407fe"
+                  },
+                  {
+                      "path":  ".claude/scripts/repo_map_health_check.ps1",
+                      "bytes":  2646,
+                      "sha256":  "3035f806d301c156183a0d19484224635d34e9eb8cebfcfcff1f60b34ed559bf"
+                  },
+                  {
+                      "path":  ".claude/scripts/repo_map_health_check.sh",
+                      "bytes":  2582,
+                      "sha256":  "2a0e11f27cec5e4a963c185645abfaa180bae4c58118f42b26afa0b3f06b23fa"
+                  },
+                  {
+                      "path":  ".claude/scripts/structural_cartographer.py",
+                      "bytes":  13241,
+                      "sha256":  "c7d87de6331c9dac0e4fb78cfa1ee09db5ac2c7fc993a74e95bf67477a75eaf1"
+                  },
+                  {
+                      "path":  ".claude/scripts/sync_pool.py",
+                      "bytes":  1273,
+                      "sha256":  "1c5b4fe7855d12f7fff7f0353370db735e236432505d865df2eb58c368e973cb"
+                  },
+                  {
+                      "path":  ".claude/scripts/targeted_reindex.ps1",
+                      "bytes":  11608,
+                      "sha256":  "da575ad8dadf3495e8c239ea8c027c773ccf24429b11d0af6b9366c16bf3bf06"
+                  },
+                  {
+                      "path":  ".claude/scripts/task_validator.py",
+                      "bytes":  5776,
+                      "sha256":  "9d2e620a9b3a52cf53659f92abfde6fa74f51ff6cd74ac8ff8a8e425d0f767b5"
+                  },
+                  {
+                      "path":  ".claude/scripts/verify_and_fix_repo_map.py",
+                      "bytes":  11525,
+                      "sha256":  "39cd0fbe27c1e9f2694c5c7dbe3e000c467fc5baa1c8b5ce202551de96039e05"
+                  },
+                  {
+                      "path":  ".claude/scripts/__pycache__/context_extractor.cpython-312.pyc",
+                      "bytes":  15384,
+                      "sha256":  "a309a7d7af431e10da8046e65321f0e734172ce247981d15c49ef72db5df503b"
+                  },
+                  {
+                      "path":  ".claude/skills/adversarial_review.json",
+                      "bytes":  1230,
+                      "sha256":  "c332583bdc1854f965d501de2de8f0091df8871f632b8cf8f2dfb4a0fefe41b2"
+                  },
+                  {
+                      "path":  ".claude/skills/adversarial_review.sh",
+                      "bytes":  2659,
+                      "sha256":  "f7f61c8db66a499bb00fc28b091e14b2464da16d027734a6aedf4964b4353f14"
+                  },
+                  {
+                      "path":  ".claude/skills/build_verify.json",
+                      "bytes":  917,
+                      "sha256":  "39402296b6642df12adae658b942d1a91a7ce5b355eb039c149c66c160a879ac"
+                  },
+                  {
+                      "path":  ".claude/skills/build_verify.sh",
+                      "bytes":  1594,
+                      "sha256":  "382c999e184acf67bea325fd99c7a12cfc87c8f8e376111296009674ee2e3a39"
+                  },
+                  {
+                      "path":  ".claude/skills/core_cli_driver.json",
+                      "bytes":  1342,
+                      "sha256":  "f43a5ba55d92104747aeda1aa0a131f147bbbada2196154a714c54d3b60d1d9b"
+                  },
+                  {
+                      "path":  ".claude/skills/core_cli_driver.sh",
+                      "bytes":  4265,
+                      "sha256":  "f1ef28782bbf89ba097656d83e9aa3dddd57d3fbcc22a50b777d8866d431a73b"
+                  },
+                  {
+                      "path":  ".claude/skills/model_check.json",
+                      "bytes":  622,
+                      "sha256":  "47c11cb157ec786c6b8dbd45b80f2c9528d035868c4203757a07b33a4cd3bb2f"
+                  },
+                  {
+                      "path":  ".claude/skills/model_check.sh",
+                      "bytes":  2450,
+                      "sha256":  "eb1207b546d4f1dfbcb4b17a106f4a5cb0e91233e582fbb584d52c8c4955e9d7"
+                  },
+                  {
+                      "path":  ".claude/skills/build-verify/SKILL.md",
+                      "bytes":  1124,
+                      "sha256":  "2172ee055c2d87f83cf684b0b596691268e059b78336ad97e1a5a74310cb196b"
+                  },
+                  {
+                      "path":  ".claude/skills/delegate/SKILL.md",
+                      "bytes":  4555,
+                      "sha256":  "3666487be5f2ca939afa83d4a1c81f83e684c915de84538ff4276b04c144f14d"
+                  },
+                  {
+                      "path":  ".claude/skills/docs-sync/SKILL.md",
+                      "bytes":  856,
+                      "sha256":  "d810f2f838525df462552850d8a8f998914b1cc724f64ce7a1b5f4bda5f13348"
+                  },
+                  {
+                      "path":  ".claude/skills/finalize-checklist/SKILL.md",
+                      "bytes":  2093,
+                      "sha256":  "f2f5e2c53348494140bcff7ad49e9b1ca2b574e656fa54a31df245222a1b1214"
+                  },
+                  {
+                      "path":  ".claude/skills/onboard/SKILL.md",
+                      "bytes":  3337,
+                      "sha256":  "26b6aba84207c87521e9e6ae248a6e15b74551304f31158ce91f9698c99ea081"
+                  },
+                  {
+                      "path":  ".claude/state/circuit_breaker_test_service.json",
+                      "bytes":  125,
+                      "sha256":  "11a2c977a4071f3827fdf052aef61569374c333542aa1aaab7f3898270f3bbd4"
+                  }
+              ]
+}

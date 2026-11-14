@@ -1,0 +1,14 @@
+﻿{
+  "file": "MessageInput.kt",
+  "chunk": 1,
+  "summary": "This Kotlin function `MessageInput` is a composable function that creates a UI component for inputting messages in a chat application. It includes an outlined text field and a floating action button to send the message.",
+  "structs_or_classes": ["Surface", "Row", "OutlinedTextField", "FloatingActionButton"],
+  "imports": [],
+  "funcs": [
+    {
+      "name": "MessageInput",
+      "line": 20,
+      "calls_out_to": []
+    }
+  ]
+}

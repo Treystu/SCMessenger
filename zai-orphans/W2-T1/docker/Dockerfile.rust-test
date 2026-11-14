@@ -1,0 +1,35 @@
+# Rust Test Dockerfile
+# Provides environment for running Rust core library tests
+# Includes: Rust toolchain with all required targets and tools
+
+FROM rust:latest
+
+WORKDIR /workspace
+
+# Install additional dependencies
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    libdbus-1-dev \
+    libssl-dev \
+    pkg-config \
+    protobuf-compiler \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install additional Rust components
+RUN rustup component add clippy rustfmt
+
+# Add Android targets (for cross-compilation testing)
+RUN rustup target add \
+    aarch64-linux-android \
+    armv7-linux-androideabi \
+    i686-linux-android \
+    x86_64-linux-android
+
+# Copy workspace
+COPY . .
+
+# Default command runs all tests with default features
+# (The pre-compile layer has been removed; cargo will build dependencies as needed.
+#  Redundant pre-compile with --all-features was compiling the workspace twice since
+#  the actual test run uses default features, causing significant disk/time waste.)
+CMD ["cargo", "test", "--workspace", "--", "--nocapture"]

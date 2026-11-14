@@ -1,0 +1,191 @@
+[package]
+name = "scmessenger-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+crate-type = ["lib", "cdylib", "staticlib"]
+
+[dependencies]
+# Workspace dependencies
+tokio = { workspace = true }
+async-trait = { workspace = true }
+futures = { workspace = true }
+libp2p = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+bincode = { workspace = true }
+uuid = { workspace = true }
+ed25519-dalek = { workspace = true }
+x25519-dalek = { workspace = true }
+curve25519-dalek = { workspace = true }
+chacha20poly1305 = { workspace = true }
+sha2 = { workspace = true }
+blake3 = { workspace = true }
+hex = { workspace = true }
+rand = { workspace = true }
+zeroize = { workspace = true }
+libcrux-ml-kem = { workspace = true }
+ml-dsa = { version = "0.1.1", features = ["getrandom"] }
+bs58 = "0.5"
+# Invite QR payloads: base64 only, no compression (seed entries are bare
+# multiaddrs and fit the QR budget uncompressed). Pure Rust and already in the
+# workspace lockfile transitively, so this adds no new crates.
+base64 = "0.22"
+uniffi = { workspace = true, features = ["wasm-unstable-single-threaded"] }
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+uniffi_bindgen = { version = "0.31", optional = true }
+camino = { version = "1", optional = true }
+
+# Additional dependencies
+rustc-hash = "1.1.0"
+parking_lot = "0.12"
+web-time = "1.1"
+crc32fast = "1.3"
+lz4_flex = { version = "0.11", default-features = false, features = ["std"] }
+pbkdf2 = { version = "0.12.2", features = ["sha2"] }
+argon2 = "0.5"
+sled = { workspace = true }
+dirs = "5.0"
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+tracing-appender = { workspace = true }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+uuid = { workspace = true, features = ["js"] }
+getrandom = { version = "0.3", features = ["wasm_js"] }
+getrandom_02 = { package = "getrandom", version = "0.2", features = ["js"] }
+wasm-bindgen-futures = { workspace = true }
+js-sys = { workspace = true }
+rexie = "0.6"
+
+[target.'cfg(all(not(target_arch = "wasm32"), not(target_os = "android")))'.dependencies]
+tokio = { workspace = true, features = ["full"] }
+libp2p = { workspace = true, features = [
+  "tcp",
+  "quic",
+  "dns",
+  "mdns",
+  "tokio",
+  "websocket",
+] }
+quinn = "0.11"
+ureq = "2"
+tokio-tungstenite = { workspace = true, features = ["rustls-tls-webpki-roots"] }
+libc = "0.2"
+
+[target.'cfg(all(not(target_arch = "wasm32"), target_os = "android"))'.dependencies]
+tokio = { workspace = true, features = ["full"] }
+libp2p = { workspace = true, features = [
+  "tcp",
+  "quic",
+  "dns",
+  "tokio",
+  "websocket",
+  "noise",
+  "yamux",
+  "gossipsub",
+  "kad",
+  "autonat",
+  "dcutr",
+  "relay",
+  "identify",
+  "ping",
+  "macros",
+  "request-response",
+  "cbor",
+ ] }
+ureq = "2"
+libc = "0.2"
+tokio-tungstenite = { workspace = true, features = ["handshake", "rustls-tls-webpki-roots"] }
+
+[dev-dependencies]
+mockall = { workspace = true }
+tokio-test = "0.4"
+tempfile = "3.8"
+libp2p = { workspace = true }
+proptest = "1.5"
+anyhow = { workspace = true }
+bincode = { workspace = true }
+tokio = { workspace = true, features = ["sync", "macros", "rt", "time"] }
+rand = { workspace = true }
+
+[build-dependencies]
+uniffi = { workspace = true, features = ["build"] }
+
+[lints]
+workspace = true
+
+[features]
+default = []
+gen-bindings = ["dep:uniffi_bindgen", "dep:camino"]
+wasm = ["uniffi/wasm-unstable-single-threaded"]
+kani-proofs = []
+test-utils = []
+
+[[bin]]
+name = "gen_kotlin"
+path = "src/bin/gen_kotlin.rs"
+required-features = ["gen-bindings"]
+
+[[bin]]
+name = "gen_swift"
+path = "src/bin/gen_swift.rs"
+required-features = ["gen-bindings"]
+
+# Integration test crates
+[[test]]
+name = "integration_contact_block"
+path = "tests/integration_contact_block.rs"
+[[test]]
+name = "integration_e2e"
+path = "tests/integration_e2e.rs"
+[[test]]
+name = "integration_nat_reflection"
+path = "tests/integration_nat_reflection.rs"
+[[test]]
+name = "integration_offline_partition_matrix"
+path = "tests/integration_offline_partition_matrix.rs"
+[[test]]
+name = "integration_ironcore_roundtrip"
+path = "tests/integration_ironcore_roundtrip.rs"
+[[test]]
+name = "integration_registration_protocol"
+path = "tests/integration_registration_protocol.rs"
+[[test]]
+name = "integration_relay_custody"
+path = "tests/integration_relay_custody.rs"
+[[test]]
+name = "integration_retry_lifecycle"
+path = "tests/integration_retry_lifecycle.rs"
+[[test]]
+name = "integration_receipt_convergence"
+path = "tests/integration_receipt_convergence.rs"
+[[test]]
+name = "integration_all_phases"
+path = "tests/integration_all_phases.rs"
+[[test]]
+name = "test_address_observation"
+path = "tests/test_address_observation.rs"
+[[test]]
+name = "test_multiport"
+path = "tests/test_multiport.rs"
+[[test]]
+name = "test_persistence_restart"
+path = "tests/test_persistence_restart.rs"
+[[test]]
+name = "test_mesh_routing"
+path = "tests/test_mesh_routing.rs"
+[[test]]
+name = "integration_pq_session"
+path = "tests/integration_pq_session.rs"
+required-features = ["test-utils"]
+
+[[test]]
+name = "integration_pq_verification_suite"
+path = "tests/integration_pq_verification_suite.rs"
+required-features = ["test-utils"]

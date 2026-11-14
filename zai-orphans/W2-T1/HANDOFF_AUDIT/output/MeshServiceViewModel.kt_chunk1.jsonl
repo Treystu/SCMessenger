@@ -1,0 +1,64 @@
+﻿{
+  "file": "MeshServiceViewModel.kt",
+  "chunk": 1,
+  "summary": "This is a ViewModel class that manages the lifecycle and state of the mesh service in an Android application. It uses Hilt for dependency injection, LiveData for reactive data streams, and Timber for logging.",
+  "structs_or_classes": [],
+  "imports": [
+    "android.annotation.SuppressLint",
+    "android.content.Context",
+    "android.content.Intent",
+    "androidx.lifecycle.ViewModel",
+    "androidx.lifecycle.viewModelScope",
+    "com.scmessenger.android.data.MeshRepository",
+    "com.scmessenger.android.data.PreferencesRepository",
+    "com.scmessenger.android.service.MeshForegroundService",
+    "dagger.hilt.android.lifecycle.HiltViewModel",
+    "dagger.hilt.android.qualifiers.ApplicationContext",
+    "kotlinx.coroutines.flow.*",
+    "kotlinx.coroutines.launch",
+    "timber.log.Timber",
+    "javax.inject.Inject"
+  ],
+  "funcs": [
+    {
+      "name": "startService",
+      "line": 71,
+      "calls_out_to": ["context.startForegroundService(intent)"]
+    },
+    {
+      "name": "stopService",
+      "line": 95,
+      "calls_out_to": ["context.startService(intent)", "context.stopService(Intent(context, MeshForegroundService::class.java))"]
+    },
+    {
+      "name": "toggleService",
+      "line": 118,
+      "calls_out_to": []
+    },
+    {
+      "name": "setAutoStart",
+      "line": 131,
+      "calls_out_to": ["preferencesRepository.setServiceAutoStart(enabled)"]
+    },
+    {
+      "name": "applyTransportSettings",
+      "line": 142,
+      "calls_out_to": ["meshRepository.applyTransportSettings(settings)"]
+    },
+    {
+      "name": "getStatsText",
+      "line": 155,
+      "calls_out_to": []
+    },
+    {
+      "name": "formatBytes",
+      "line": 166,
+      "calls_out_to": []
+    },
+    {
+      "name": "formatDuration",
+      "line": 175,
+      "calls_out_to": []
+    }
+  ]
+}

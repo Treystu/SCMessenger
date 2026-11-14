@@ -1,0 +1,665 @@
+plugins {
+    id 'com.android.application'
+    id 'org.jetbrains.kotlin.android'
+    id 'com.google.devtools.ksp'
+    id 'dagger.hilt.android.plugin'
+    id 'org.jlleitschuh.gradle.ktlint' version '12.1.0'
+}
+
+// Load keystore.properties if it exists (don't fail CI if it's missing, just fallback)
+def keystorePropertiesFile = rootProject.file("keystore.properties")
+def keystoreProperties = new Properties()
+if (keystorePropertiesFile.canRead()) {
+    keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
+}
+
+def releaseSigningReady = {
+    def envStoreFile = System.getenv("SCMESSENGER_KEYSTORE_PATH") ?: System.getenv("KEYSTORE_FILE")
+    def envStorePass = System.getenv("SCMESSENGER_KEYSTORE_PASSWORD") ?: System.getenv("KEYSTORE_PASSWORD")
+    def envKeyAlias = System.getenv("SCMESSENGER_KEY_ALIAS") ?: System.getenv("KEYSTORE_ALIAS")
+    def envKeyPass = System.getenv("SCMESSENGER_KEY_PASSWORD") ?: System.getenv("KEY_PASSWORD")
+    def environmentSigning = envStoreFile && envStorePass && envKeyAlias && envKeyPass && file(envStoreFile).isFile()
+    def propertiesSigning = keystorePropertiesFile.canRead() &&
+        ['storeFile', 'storePassword', 'keyAlias', 'keyPassword'].every {
+            keystoreProperties.containsKey(it) && keystoreProperties[it]?.toString()?.trim()
+        } &&
+        file(keystoreProperties['storeFile']).isFile()
+    return environmentSigning || propertiesSigning
+}()
+
+def getGitHash = { ->
+    def configuredHash = System.getenv('SCM_GIT_HASH')?.trim()
+    if (configuredHash) {
+        return configuredHash
+    }
+
+    def stdout = new ByteArrayOutputStream()
+    try {
+        exec {
+            commandLine 'git', 'rev-parse', '--short', 'HEAD'
+            standardOutput = stdout
+        }
+        def result = stdout.toString().trim()
+        return result.isEmpty() ? "unknown" : result
+    } catch (Exception e) {
+        return "unknown"
+    }
+}
+
+def getGitRef = { ->
+    def configuredRef = System.getenv('SCM_GIT_REF')?.trim()
+    if (configuredRef) {
+        return configuredRef
+    }
+
+    def stdout = new ByteArrayOutputStream()
+    try {
+        exec {
+            commandLine 'git', 'rev-parse', '--abbrev-ref', 'HEAD'
+            standardOutput = stdout
+        }
+        def result = stdout.toString().trim()
+        return result.isEmpty() ? "unknown" : result
+    } catch (Exception e) {
+        return "unknown"
+    }
+}
+
+gradle.taskGraph.whenReady { graph ->
+    // Source-set lint and test tasks also contain "Release" in their names.
+    // Gate only tasks that can actually assemble, package, publish, or install
+    // a release artifact.
+    def releaseRequested = graph.allTasks.any {
+        it.name ==~ /(?i)(assemble|bundle|package|publish|install)Release$/
+    }
+    if (releaseRequested && !releaseSigningReady) {
+        throw new GradleException("Release signing is required. Configure a real release keystore; debug signing is never valid for release artifacts.")
+    }
+}
+
+def getBuildTime = { ->
+    def configuredTime = System.getenv('SCM_BUILD_TIME')?.trim()
+    if (configuredTime) {
+        return configuredTime
+    }
+
+    return new Date().format("yyyy-MM-dd'T'HH:mm:ss'Z'", TimeZone.getTimeZone("UTC"))
+}
+
+android {
+    namespace = 'com.scmessenger.android'
+    compileSdk = rootProject.ext.compileSdk
+    
+    // Pinned NDK version for build reproducibility (Requirement 7.3)
+    // NDK r26b (26.1.10909125) or NDK r30 (30.0.14904198)
+    ndkVersion = '26.1.10909125'
+
+    signingConfigs {
+        release {
+            // Priority order:
+            //   1. SCMESSENGER_KEYSTORE_PATH / _PASSWORD / _ALIAS / _PASSWORD (env-driven)
+            //   2. KEYSTORE_FILE / KEYSTORE_PASSWORD / KEYSTORE_ALIAS / KEY_PASSWORD (legacy)
+            //   3. keystore.properties file (do not commit — see keystore.properties.template)
+            def envStoreFile = System.getenv("SCMESSENGER_KEYSTORE_PATH") ?: System.getenv("KEYSTORE_FILE")
+            def envStorePass = System.getenv("SCMESSENGER_KEYSTORE_PASSWORD") ?: System.getenv("KEYSTORE_PASSWORD")
+            def envKeyAlias  = System.getenv("SCMESSENGER_KEY_ALIAS") ?: System.getenv("KEYSTORE_ALIAS")
+            def envKeyPass   = System.getenv("SCMESSENGER_KEY_PASSWORD") ?: System.getenv("KEY_PASSWORD")
+
+            if (envStoreFile != null && envStorePass != null && envKeyAlias != null && envKeyPass != null) {
+                storeFile file(envStoreFile)
+                storePassword envStorePass
+                keyAlias envKeyAlias
+                keyPassword envKeyPass
+                println "Signing: Using SCMESSENGER_KEYSTORE_PATH (env-driven release signing)"
+            } else if (keystorePropertiesFile.canRead() &&
+                       keystoreProperties.containsKey('storeFile') &&
+                       keystoreProperties.containsKey('storePassword') &&
+                       keystoreProperties.containsKey('keyAlias') &&
+                       keystoreProperties.containsKey('keyPassword')) {
+                storeFile file(keystoreProperties['storeFile'])
+                storePassword keystoreProperties['storePassword']
+                keyAlias keystoreProperties['keyAlias']
+                keyPassword keystoreProperties['keyPassword']
+                println "Signing: Using keystore.properties (file-driven release signing)"
+            } else {
+                // Never substitute the debug key for a release artifact. AGP
+                // will reject a release task with this incomplete config.
+                println "Release signing is not configured; release tasks must fail."
+            }
+        }
+    }
+    
+    defaultConfig {
+        applicationId = 'com.scmessenger.android'
+        minSdk = rootProject.ext.minSdk
+        targetSdk = rootProject.ext.targetSdk
+        versionCode = rootProject.ext.versionCode
+        versionName = rootProject.ext.versionName
+        
+        buildConfigField "String", "SCM_GIT_HASH", "\"${getGitHash()}\""
+        buildConfigField "String", "SCM_GIT_REF", "\"${getGitRef()}\""
+        buildConfigField "String", "SCM_BUILD_TIME", "\"${getBuildTime()}\""
+        
+        testInstrumentationRunner = 'androidx.test.runner.AndroidJUnitRunner'
+        
+        // Specify ABIs we're building for (devices and simulators)
+        ndk {
+            abiFilters 'arm64-v8a', 'armeabi-v7a', 'x86_64', 'x86'
+        }
+    }
+    
+    buildTypes {
+        release {
+            // Shrinking + obfuscation (R8). proguard-rules.pro contains the
+            // keep-rules for UniFFI, Hilt, Compose, Serialization, etc.
+            minifyEnabled = true
+            shrinkResources = true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            signingConfig = signingConfigs.release
+            // Hardening: do not allow debug build of release artifact.
+            debuggable = false
+            jniDebuggable = false
+            // Keep native symbols at FULL so R8 does not strip stack traces
+            // needed for crash deobfuscation (it does not change the APK
+            // surface — symbols stay in the .so files).
+            ndk {
+                debugSymbolLevel = 'FULL'
+            }
+        }
+        debug {
+            minifyEnabled = false
+            debuggable = true
+        }
+    }
+    
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+    
+    kotlinOptions {
+        jvmTarget = '17'
+        freeCompilerArgs += [
+            '-opt-in=kotlin.RequiresOptIn',
+            '-opt-in=kotlinx.coroutines.ExperimentalCoroutinesApi',
+            '-opt-in=androidx.compose.material3.ExperimentalMaterial3Api'
+        ]
+    }
+    
+    // Kapt block removed in favor of KSP
+    
+    buildFeatures {
+        compose = true
+        buildConfig = true
+    }
+    
+    composeOptions {
+        kotlinCompilerExtensionVersion = rootProject.ext.compose_compiler_version
+    }
+    
+    packaging {
+        resources {
+            excludes.add('/META-INF/{AL2.0,LGPL2.1}')
+            excludes.add('META-INF/LICENSE.md')
+            excludes.add('META-INF/LICENSE-notice.md')
+            excludes.add('META-INF/LICENSE.txt')
+            excludes.add('META-INF/NOTICE.txt')
+        }
+        
+        // JNI libraries from Rust
+        jniLibs {
+            useLegacyPackaging = true
+        }
+    }
+    
+    sourceSets {
+        main {
+            // Include generated UniFFI Kotlin bindings
+            // The UniFFI bindings are KOTLIN (uniffi/api/api.kt), so register
+            // the directory on the Kotlin source set as well as the Java one.
+            // java.srcDirs alone relies on the Kotlin plugin folding it in,
+            // which is not a contract we should be depending on for the one
+            // source file the whole Hilt graph needs to resolve.
+            java.srcDirs += '../../core/target/generated-sources/uniffi/kotlin'
+            kotlin.srcDirs += '../../core/target/generated-sources/uniffi/kotlin'
+
+            // JNI libraries from cargo-ndk build
+            jniLibs.srcDirs = ['../../core/target/android-libs']
+        }
+    }
+
+    testOptions {
+        unitTests {
+            includeAndroidResources = true
+            returnDefaultValues = true
+            all {
+                // Fail fast on a hang instead of burning the whole CI job budget.
+                // :app:testDebugUnitTest previously ran until the job timeout killed
+                // it (90 min twice, 151 min once) while passing locally in 54s.
+                timeout = java.time.Duration.ofMinutes(10)
+
+                // Print each test as it STARTS. The cause of the container hang is
+                // still unknown, and this is the diagnostic: the last "started" line
+                // before the timeout names the test that blocks. Without it the log
+                // ends mid-task with no indication of where.
+                testLogging {
+                    events 'started', 'passed', 'failed', 'skipped'
+                    showStandardStreams = true
+                    exceptionFormat = 'full'
+                }
+            }
+        }
+    }
+}
+
+dependencies {
+    // Kotlin
+    implementation "org.jetbrains.kotlin:kotlin-stdlib:$kotlin_version"
+    implementation "org.jetbrains.kotlinx:kotlinx-coroutines-android:$coroutines_version"
+    
+    // AndroidX Core
+    implementation 'androidx.core:core-ktx:1.12.0'
+    implementation 'androidx.lifecycle:lifecycle-runtime-ktx:2.6.2'
+    implementation 'androidx.lifecycle:lifecycle-viewmodel-ktx:2.6.2'
+    implementation 'androidx.lifecycle:lifecycle-viewmodel-compose:2.6.2'
+    implementation 'androidx.lifecycle:lifecycle-service:2.6.2'
+    implementation 'androidx.activity:activity-compose:1.8.0'
+    implementation 'androidx.work:work-runtime-ktx:2.8.1'
+    implementation 'androidx.appcompat:appcompat:1.6.1'
+    
+    // Jetpack Compose
+    implementation platform('androidx.compose:compose-bom:2024.12.01')
+    implementation 'androidx.compose.ui:ui'
+    implementation 'androidx.compose.ui:ui-graphics'
+    implementation 'androidx.compose.ui:ui-tooling-preview'
+    implementation 'androidx.compose.material:material'
+    implementation 'androidx.compose.material3:material3'
+    implementation 'androidx.compose.material:material-icons-extended'
+    implementation 'androidx.navigation:navigation-compose:2.7.5'
+    
+    // Hilt Dependency Injection
+    implementation "com.google.dagger:hilt-android:$hilt_version"
+    implementation "com.google.zxing:core:3.5.2"
+    implementation 'com.google.android.gms:play-services-code-scanner:16.1.0'
+    implementation 'com.google.android.gms:play-services-base:18.2.0'
+    ksp "com.google.dagger:hilt-android-compiler:$hilt_version"
+    implementation 'androidx.hilt:hilt-navigation-compose:1.1.0'
+    
+    // DataStore for preferences
+    implementation 'androidx.datastore:datastore-preferences:1.0.0'
+    implementation 'androidx.security:security-crypto:1.1.0-alpha06'
+    
+    // Timber logging
+    implementation 'com.jakewharton.timber:timber:5.0.1'
+    
+    // UniFFI runtime (JNA for FFI)
+    implementation 'net.java.dev.jna:jna:5.16.0@aar'
+    // Host-JVM JNA (with native dispatch resources) so UniFFI-backed classes
+    // can load in local JVM unit tests; the @aar variant ships device ABIs only.
+    testImplementation 'net.java.dev.jna:jna:5.16.0'
+    
+    // Permissions
+    implementation 'com.google.accompanist:accompanist-permissions:0.32.0'
+    implementation 'androidx.core:core-splashscreen:1.0.1'
+
+    // Testing
+    testImplementation 'junit:junit:4.13.2'
+    // Real org.json for JVM unit tests: the android.jar stubs no-op under
+    // returnDefaultValues, which silently empties any JSON round-trip.
+    testImplementation 'org.json:json:20240303'
+    testImplementation 'org.jetbrains.kotlinx:kotlinx-coroutines-test:1.7.3'
+    testImplementation 'io.mockk:mockk:1.13.10'
+    testImplementation 'io.mockk:mockk-agent-jvm:1.13.10'
+    androidTestImplementation 'io.mockk:mockk-android:1.13.10'
+    testImplementation 'androidx.arch.core:core-testing:2.2.0'
+    // org.robolectric removed 2026-07-27: declared but never used. No test under
+    // app/src/test references it (no @RunWith(RobolectricTestRunner), no @Config).
+    // Its presence caused the :app:testDebugUnitTest hang to be misdiagnosed as a
+    // Robolectric jar fetch, which it cannot have been -- Robolectric only fetches
+    // android-all jars when RobolectricTestRunner actually runs.
+    testImplementation 'androidx.test:core:1.6.1'
+    testImplementation 'androidx.test.ext:junit:1.2.1'
+
+    androidTestImplementation 'androidx.test.ext:junit:1.1.5'
+    androidTestImplementation 'androidx.test.espresso:espresso-core:3.5.1'
+    androidTestImplementation platform('androidx.compose:compose-bom:2024.12.01')
+    androidTestImplementation 'androidx.compose.ui:ui-test-junit4'
+
+    // Debug
+    debugImplementation 'androidx.compose.ui:ui-tooling'
+    debugImplementation 'androidx.compose.ui:ui-test-manifest'
+}
+
+// Detect MSYS2/MinGW toolchain path for GNU builds on Windows.
+// The GNU toolchain requires dlltool.exe on PATH, which lives in MSYS2.
+def msysUcrtBin = file('C:/msys64/ucrt64/bin').exists() ? 'C:/msys64/ucrt64/bin' : null
+
+// Read properties from local.properties if it exists
+def localPropsFile = rootProject.file("local.properties")
+def localProps = new Properties()
+if (localPropsFile.exists()) {
+    localProps.load(new FileInputStream(localPropsFile))
+}
+
+// Helper function to invoke cargo ndk for a target architecture
+def runCargoNdkBuild(String target, String sdkDir, String ndkDir, String rustProfile, String rustDir, boolean isWindows, String msysUcrtBin) {
+    exec {
+        workingDir project.file('../../')
+        // Ensure 16KB page alignment for Android 15+ compatibility and lightweight debug info
+        environment "RUSTFLAGS", "-C link-arg=-Wl,-z,max-page-size=16384 -C debuginfo=0"
+        environment "CARGO_INCREMENTAL", "0"
+        
+        // Auto-detect and use sccache if available
+        def sccacheExists = false
+        def sccacheName = isWindows ? "sccache.exe" : "sccache"
+        def pathEnv = System.getenv("PATH")
+        if (pathEnv != null) {
+            def separator = isWindows ? ";" : ":"
+            sccacheExists = pathEnv.split(separator).any { pathDir ->
+                if (pathDir.trim().isEmpty()) return false
+                try {
+                    return file("${pathDir}/${sccacheName}").exists()
+                } catch (Exception e) {
+                    return false
+                }
+            }
+        }
+        if (!sccacheExists && isWindows) {
+            sccacheExists = file("C:/ProgramData/chocolatey/bin/sccache.exe").exists() ||
+                            file("C:/Program Data/chocolatey/bin/sccache.exe").exists()
+        }
+        if (sccacheExists) {
+            environment "RUSTC_WRAPPER", "sccache"
+            println "sccache detected and configured as RUSTC_WRAPPER for $target"
+        }
+
+        // Check for incremental compilation toggle
+        def cargoIncrementalVal = project.hasProperty('cargoIncremental') ? project.property('cargoIncremental').toString() : System.getenv('CARGO_INCREMENTAL')
+        if (cargoIncrementalVal != null) {
+            environment "CARGO_INCREMENTAL", cargoIncrementalVal
+        }
+
+        // Explicitly pass SDK and NDK paths to cargo-ndk
+        environment "ANDROID_HOME", sdkDir
+        environment "ANDROID_NDK_HOME", ndkDir
+
+        // Keep the native core's build stamp aligned with the APK metadata.
+        // CI and the Windows lane provide the exact anchor through these
+        // variables; local builds fall back to the checkout in core/build.rs.
+        ['SCM_GIT_HASH', 'SCM_GIT_REF', 'SCM_BUILD_TIME'].each { key ->
+            def value = System.getenv(key)?.trim()
+            if (value) {
+                environment key, value
+            }
+        }
+
+        if (isWindows && msysUcrtBin) {
+            environment "PATH", "${msysUcrtBin};${System.getenv('PATH')}"
+        }
+
+        def cargoCmd = isWindows ? 'cargo' : (file("${System.getProperty('user.home')}/.cargo/bin/cargo").exists() ? "${System.getProperty('user.home')}/.cargo/bin/cargo" : 'cargo')
+        def effectiveProfile = rustProfile ?: '--release'
+        if (isWindows) {
+            commandLine 'cmd', '/c', "cargo ndk -t $target build $effectiveProfile -p scmessenger-core"
+        } else {
+            def cmd = [cargoCmd, 'ndk', '-t', target, 'build', effectiveProfile, '-p', 'scmessenger-core']
+            commandLine cmd
+        }
+    }
+}
+
+def abiFilterProp = project.findProperty('abiFilters') ?: System.getenv('ANDROID_ABI_FILTERS')
+def abiFilterList = abiFilterProp ? abiFilterProp.split(',').collect { it.trim() } : null
+
+def targetList = [
+    [name: 'Arm64', target: 'aarch64-linux-android', abi: 'arm64-v8a'],
+    [name: 'Armv7', target: 'armv7-linux-androideabi', abi: 'armeabi-v7a'],
+    [name: 'X86_64', target: 'x86_64-linux-android', abi: 'x86_64'],
+    [name: 'X86', target: 'i686-linux-android', abi: 'x86']
+].findAll { arch -> abiFilterList == null || abiFilterList.contains(arch.abi) }
+
+targetList.each { arch ->
+    task "buildRustAndroid${arch.name}" {
+        description = "Build Rust library for ${arch.target} using cargo-ndk"
+        group = 'rust'
+
+        inputs.dir('../../core/src')
+        inputs.file('../../core/Cargo.toml')
+
+        doLast {
+            def sdkDir = localProps.getProperty('sdk.dir') ?: System.getenv('ANDROID_SDK_ROOT') ?: System.getenv('ANDROID_HOME') ?: android.sdkDirectory.absolutePath
+            def ndkDir = localProps.getProperty('ndk.dir') ?: System.getenv('ANDROID_NDK_HOME') ?: System.getenv('ANDROID_NDK_ROOT') ?: android.ndkDirectory?.absolutePath
+            if (ndkDir == null || !file(ndkDir).exists()) {
+                ndkDir = "${sdkDir}/ndk/${android.ndkVersion}"
+            }
+            if (!file(ndkDir).exists()) {
+                throw new GradleException("Could not find NDK version ${android.ndkVersion} at $ndkDir.")
+            }
+            
+            def isWindows = System.getProperty('os.name').toLowerCase().contains('windows')
+            def taskNames = project.gradle.startParameter.taskNames.join(",")
+            def isRelease = taskNames.contains("Release") || taskNames.contains("Bundle")
+
+            def rustProfile = isRelease ? "--release" : ""
+            def rustDir = isRelease ? "release" : "debug"
+
+            println "Starting buildRustAndroid${arch.name} task (Profile: ${rustDir})..."
+            println "Using NDK: $ndkDir"
+
+            runCargoNdkBuild(arch.target, sdkDir, ndkDir, rustProfile, rustDir, isWindows, msysUcrtBin)
+
+            // Copy output to destination if built
+            def sourceFile = file("../../target/${arch.target}/${rustDir}/libscmessenger_core.so")
+            def destDir = file("../../core/target/android-libs/${arch.abi}")
+            if (sourceFile.exists()) {
+                destDir.mkdirs()
+                copy {
+                    from sourceFile
+                    into destDir
+                }
+            }
+        }
+    }
+}
+
+task buildRustAndroid {
+    description = 'Aggregated task to build target architectures in parallel'
+    group = 'rust'
+    dependsOn targetList.collect { "buildRustAndroid${it.name}" }
+}
+
+
+// Task to generate UniFFI Kotlin bindings
+//
+// Lifecycle (the order MATTERS — see comment on each step):
+//   1. cargo build -p scmessenger-core (host target) → cdylib for binding gen
+//   2. STAGE the cdylib to a stable path outside the cargo target dir, so
+//      step 3's cargo invocation (which re-compiles scmessenger-core with the
+//      gen-bindings feature) cannot invalidate or move it
+//   3. cargo build -p scmessenger-core --bin gen_kotlin --features gen-bindings
+//      → produces the gen_kotlin binary at a known path
+//   4. Run the gen_kotlin binary directly with the staged cdylib path passed
+//      via env var, so its hardcoded relative-path search is bypassed
+task generateUniFFIBindings {
+    description = 'Generate bindings using custom binary from core crate'
+    group = 'rust'
+
+    // Inputs relative to project dir
+    inputs.dir('../../core/src')
+    inputs.file('../../core/Cargo.toml')
+    outputs.dir('../../core/target/generated-sources/uniffi/kotlin')
+
+    doFirst {
+        file('../../core/target/generated-sources/uniffi/kotlin').mkdirs()
+    }
+
+    doLast {
+        def isWindows = System.getProperty('os.name').toLowerCase().contains('windows')
+        def isLinux = System.getProperty('os.name').toLowerCase().contains('linux')
+        def isMac = System.getProperty('os.name').toLowerCase().contains('mac')
+
+        // Resolve the host cdylib name
+        def cdylibName = isWindows ? 'scmessenger_core.dll' : (isMac ? 'libscmessenger_core.dylib' : 'libscmessenger_core.so')
+
+        def cargoCmd = isWindows ? 'cargo' : (file("${System.getProperty('user.home')}/.cargo/bin/cargo").exists() ? "${System.getProperty('user.home')}/.cargo/bin/cargo" : 'cargo')
+
+        // Step 1: build the host cdylib.
+        //
+        // MUST stay a DEBUG build. uniffi library-mode bindgen recovers the
+        // interface by reading UNIFFI metadata symbols out of the compiled
+        // cdylib. A release build strips/GCs those symbols, so bindgen finds no
+        // metadata, emits nothing, and still exits 0 -- generation "succeeds"
+        // and produces an empty output tree.
+        //
+        // ebf5411b flipped this to `--release ... -C debuginfo=0` and the Mobile
+        // lane went from green (feb89335, 2026-08-13) to red on the very next
+        // run. The symptom surfaced a minute later and two tasks downstream as
+        // `e: [ksp] ... error.NonExistentClass` on AndroidPlatformBridge's
+        // supertype, which sent two rounds of diagnosis after task ordering and
+        // source-set registration. Neither was the cause. Step 5 below now
+        // fails here instead, at the real site.
+        exec {
+            workingDir project.file('../../')
+            environment "RUSTFLAGS", ""
+            environment "CARGO_INCREMENTAL", "0"
+            ['SCM_GIT_HASH', 'SCM_GIT_REF', 'SCM_BUILD_TIME'].each { key ->
+                def value = System.getenv(key)?.trim()
+                if (value) {
+                    environment key, value
+                }
+            }
+            if (isWindows) {
+                commandLine 'cmd', '/c', 'cargo build -p scmessenger-core'
+            } else {
+                commandLine cargoCmd, 'build', '-p', 'scmessenger-core'
+            }
+        }
+
+        // Step 2: stage the cdylib to a stable location outside cargo's target
+        // dir. This survives subsequent cargo invocations that re-compile
+        // scmessenger-core with different feature flags (which can otherwise
+        // delete or move the cdylib in the incremental target dir).
+        def cargoTargetDirStr = System.getenv('CARGO_TARGET_DIR') ?: '../../target'
+        def cargoTargetDir = project.file(cargoTargetDirStr)
+        def stagedDir = file('../../core/target/staged-cdylib')
+        stagedDir.mkdirs()
+        def cdylibSrc = new File(cargoTargetDir, "debug/${cdylibName}")
+        def cdylibStaged = new File(stagedDir, cdylibName)
+        if (cdylibSrc.exists()) {
+            ant.copy(file: cdylibSrc.absolutePath, tofile: cdylibStaged.absolutePath, overwrite: true)
+            println "Staged cdylib: ${cdylibStaged.absolutePath}"
+        } else {
+            throw new GradleException("cdylib not found at ${cdylibSrc.absolutePath} after cargo build")
+        }
+
+        // Step 3: build (do NOT run) the gen_kotlin binary
+        exec {
+            workingDir project.file('../../core')
+            environment "RUSTFLAGS", "-C debuginfo=0"
+            environment "CARGO_INCREMENTAL", "0"
+            ['SCM_GIT_HASH', 'SCM_GIT_REF', 'SCM_BUILD_TIME'].each { key ->
+                def value = System.getenv(key)?.trim()
+                if (value) {
+                    environment key, value
+                }
+            }
+            if (isWindows) {
+                commandLine 'cmd', '/c', 'cargo build --bin gen_kotlin --features gen-bindings'
+            } else {
+                commandLine cargoCmd, 'build', '--bin', 'gen_kotlin', '--features', 'gen-bindings'
+            }
+        }
+
+        // Step 4: invoke the gen_kotlin binary directly with the staged cdylib
+        // path. The binary now also honours SCMESSENGER_CDYLIB_PATH env var as
+        // a primary lookup, falling back to CARGO_TARGET_DIR + relative paths.
+        def genKotlinBin = new File(cargoTargetDir, "debug/gen_kotlin${isWindows ? '.exe' : ''}")
+        if (!genKotlinBin.exists()) {
+            throw new GradleException("gen_kotlin binary not found at ${genKotlinBin.absolutePath}")
+        }
+        exec {
+            workingDir project.file('../../core')
+            environment "CARGO_MANIFEST_DIR", project.file('../../core').absolutePath
+            environment "SCMESSENGER_CDYLIB_PATH", cdylibStaged.absolutePath
+            environment "CARGO_INCREMENTAL", "0"
+            if (isWindows) {
+                commandLine 'cmd', '/c', genKotlinBin.absolutePath
+            } else {
+                commandLine genKotlinBin.absolutePath
+            }
+        }
+
+        // Step 5: prove the bindings actually landed.
+        //
+        // Without this the task "succeeds" whether or not it produced anything,
+        // and the only symptom is a KSP error 60 seconds later complaining that
+        // an unrelated supertype is error.NonExistentClass. That failure mode
+        // cost a full diagnosis cycle on 2026-08-15 because the log gave no
+        // evidence either way about whether api.kt existed.
+        def apiKt = file('../../core/target/generated-sources/uniffi/kotlin/uniffi/api/api.kt')
+        if (!apiKt.isFile() || apiKt.length() == 0) {
+            def root = file('../../core/target/generated-sources')
+            def listing = root.exists()
+                ? root.traverse(maxDepth: 4).collect { "    ${it}" }.join('\n')
+                : "    (${root} does not exist)"
+            throw new GradleException(
+                "UniFFI generation produced no usable bindings.\n" +
+                "  expected: ${apiKt}\n" +
+                "  exists:   ${apiKt.isFile()}, size: ${apiKt.isFile() ? apiKt.length() : 0}\n" +
+                "  tree under core/target/generated-sources:\n${listing}"
+            )
+        }
+        println "UniFFI bindings OK: ${apiKt} (${apiKt.length()} bytes)"
+    }
+}
+
+
+// Ensure tasks run before build
+afterEvaluate {
+    // Hook into preBuild
+    tasks.named("preBuild").configure {
+        dependsOn buildRustAndroid
+        dependsOn generateUniFFIBindings
+    }
+
+    // KSP must not run before the UniFFI bindings exist.
+    //
+    // AndroidPlatformBridge implements `uniffi.api.PlatformBridge`, which is
+    // GENERATED by generateUniFFIBindings into core/target/. Hilt's KSP
+    // processor has to resolve that supertype to build the injection graph.
+    //
+    // Depending on preBuild is NOT sufficient under AGP 8: kspDebugKotlin is
+    // not ordered behind preBuild's dependencies, so on a cold checkout (CI,
+    // or any tree where core/target/ has been cleaned) KSP runs first, the
+    // supertype resolves to error.NonExistentClass, and the build fails with:
+    //
+    //   e: [ksp] InjectProcessingStep was unable to process
+    //      'AndroidPlatformBridge(...)' because 'error.NonExistentClass'
+    //      could not be resolved.
+    //
+    // This passes locally on a warm tree and fails only in CI, which is why it
+    // survived: the generated api.kt is gitignored, so nothing verifies it.
+    // Matching by task name rather than KspTask.class keeps this working across
+    // KSP plugin versions without a buildscript classpath import.
+    tasks.matching {
+        it.name.startsWith("ksp") && it.name.endsWith("Kotlin")
+    }.configureEach {
+        dependsOn generateUniFFIBindings
+    }
+}
+
+
+// ktlint configuration
+ktlint {
+    version = "1.0.1"
+    android = true
+    ignoreFailures = true
+    reporters {
+        reporter "plain"
+        reporter "checkstyle"
+    }
+    filter {
+        exclude("**/generated/**")
+        exclude("**/build/**")
+    }
+}

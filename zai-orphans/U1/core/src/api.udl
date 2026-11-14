@@ -1,0 +1,459 @@
+namespace api {
+    string get_build_provenance();
+};
+
+// ============================================================================
+// MESSAGE TYPES
+// ============================================================================
+
+/// Type of message content
+enum MessageType {
+    "Text",
+    "Receipt",
+    "OnionRelay",
+};
+
+dictionary PeelResult {
+    bytes? next_hop;
+    bytes remaining_data;
+};
+
+/// Delivery status of a message (for receipt encoding/decoding)
+enum DeliveryStatus {
+    "Sent",
+    "Delivered",
+    "Read",
+    "Failed",
+};
+
+/// A delivery receipt — canonical wire format for delivery confirmations.
+/// All platforms use these functions to encode/decode receipts to/from JSON bytes.
+dictionary Receipt {
+    string message_id;
+    DeliveryStatus status;
+    u64 timestamp;
+};
+
+// ============================================================================
+// IDENTITY
+// ============================================================================
+
+// IdentityInfo — canonical identity = public_key_hex (Ed25519 hex).
+// identity_id (Blake3 hash) and libp2p_peer_id are derived/operational metadata.
+// Always use public_key_hex for persistence, exchange, and cross-platform resolution.
+dictionary IdentityInfo {
+    string? identity_id;
+    string? public_key_hex;
+    string? device_id;
+    u64? seniority_timestamp;
+    boolean initialized;
+    string? nickname;
+    string? libp2p_peer_id;
+};
+
+dictionary SignatureResult {
+    bytes signature;
+    string public_key_hex;
+};
+
+dictionary TtlConfig {
+    u64 expires_in_seconds;
+};
+
+dictionary PreparedMessage {
+    string message_id;
+    bytes envelope_data;
+};
+
+enum NotificationKind {
+    "DirectMessage",
+    "DirectMessageRequest",
+    "None",
+};
+
+dictionary NotificationMessageContext {
+    string? conversation_id;
+    string sender_peer_id;
+    string message_id;
+    boolean? explicit_dm_request;
+    boolean sender_is_known_contact;
+    boolean has_existing_conversation;
+    boolean is_self_originated;
+    boolean is_duplicate;
+    boolean already_seen;
+    boolean is_blocked;
+};
+
+dictionary NotificationUiState {
+    boolean app_in_foreground;
+    string? active_conversation_id;
+};
+
+dictionary NotificationDecision {
+    NotificationKind kind;
+    string conversation_id;
+    string sender_peer_id;
+    string message_id;
+    boolean should_alert;
+    string? suppression_reason;
+};
+
+dictionary RegistrationStateInfo {
+    string state;
+    string? device_id;
+    u64? seniority_timestamp;
+};
+
+// ============================================================================
+// MAIN INTERFACE
+// ============================================================================
+
+
+// ============================================================================
+// CALLBACKS
+// ============================================================================
+
+callback interface CoreDelegate {
+    void on_peer_discovered(string peer_id);
+    void on_peer_disconnected(string peer_id);
+    void on_peer_identified(string peer_id, string agent_version, sequence<string> listen_addrs);
+    // sender_public_key_hex: Ed25519 hex (64 chars) — use this with prepare_receipt()
+    // sender_id: peer's Ed25519 public key (64 hex chars) — used for identity resolution / display keying
+    void on_message_received(string sender_id, string sender_public_key_hex, string message_id, u64 sender_timestamp, bytes data);
+    void on_receipt_received(string message_id, string status);
+};
+
+// ============================================================================
+// ERROR HANDLING
+// ============================================================================
+
+[Error]
+enum IronCoreError {
+    "NotInitialized",
+    "AlreadyRunning",
+    "StorageError",
+    "CryptoError",
+    "NetworkError",
+    "InvalidInput",
+    "Blocked",
+    "ConsentRequired",
+    "Internal",
+    "CorruptionDetected",
+    "DialSelf",
+    "NoAddresses",
+    "ConnectionLimit",
+    "MultiaddrNotSupported",
+    "IoError",
+    "OnionRoutingDisabled",
+};
+
+// ============================================================================
+// MOBILE SERVICE
+// ============================================================================
+
+dictionary MeshServiceConfig {
+    u32 discovery_interval_ms;
+    u8 battery_floor_pct;
+};
+
+enum ServiceState {
+    "Stopped",
+    "Starting",
+    "Running",
+    "Stopping",
+};
+
+/// Canonical connection-path state contract for all clients.
+enum ConnectionPathState {
+    "Disconnected",
+    "Bootstrapping",
+    "DirectPreferred",
+    "RelayFallback",
+    "RelayOnly",
+};
+
+enum MotionState {
+    "Still",
+    "Walking",
+    "Running",
+    "Automotive",
+    "Unknown",
+};
+
+/// Proximity transport types for the unified data plane
+enum ProximityTransport {
+    "Ble",
+    "WifiAware",
+    "WifiDirect",
+    "Multipeer",
+};
+
+dictionary ServiceStats {
+    u32 peers_discovered;
+    u32 messages_relayed;
+    u64 bytes_transferred;
+    u64 uptime_secs;
+};
+
+
+callback interface PlatformBridge {
+    void on_battery_changed(u8 battery_pct, boolean is_charging);
+    void on_network_changed(boolean has_wifi, boolean has_cellular);
+    void on_motion_changed(MotionState motion);
+    void on_ble_data_received(string peer_id, bytes data);
+    void on_entering_background();
+    void on_entering_foreground();
+    void send_ble_packet(string peer_id, bytes data);
+    void on_proximity_data_received(string peer_id, ProximityTransport transport, bytes data);
+    void send_proximity_packet(string peer_id, ProximityTransport transport, bytes data);
+    boolean wifi_aware_publish(string service_name, bytes service_info);
+    boolean wifi_aware_subscribe(string service_name);
+    boolean wifi_aware_create_data_path(string peer_id, bytes pmk);
+    void wifi_aware_stop();
+    boolean wifi_direct_discover_peers();
+    void wifi_direct_stop_discovery();
+    boolean wifi_direct_connect(string device_address);
+    boolean wifi_direct_create_group(string group_name);
+    void wifi_direct_remove_group();
+};
+
+// ============================================================================
+// AUTO-ADJUST ENGINE
+// ============================================================================
+
+dictionary DeviceProfile {
+    string? peer_id;
+    string? device_id;
+    u8 battery_pct;
+    boolean is_charging;
+    boolean has_wifi;
+    MotionState motion_state;
+};
+
+enum AdjustmentProfile {
+    "Maximum",
+    "High",
+    "Standard",
+    "Reduced",
+    "Minimal",
+};
+
+dictionary BleAdjustment {
+    u32 scan_interval_ms;
+    u32 advertise_interval_ms;
+    i8 tx_power_dbm;
+};
+
+dictionary RelayAdjustment {
+    u32 max_per_hour;
+    u8 priority_threshold;
+    u32 max_payload_bytes;
+};
+
+
+// ============================================================================
+// MESH SETTINGS
+// ============================================================================
+
+enum DiscoveryMode {
+    "Normal",
+    "Cautious",
+    "Paranoid",
+};
+
+dictionary MeshSettings {
+    boolean relay_enabled;
+    u32 max_relay_budget;
+    u8 battery_floor;
+    boolean ble_enabled;
+    boolean wifi_aware_enabled;
+    boolean wifi_direct_enabled;
+    boolean internet_enabled;
+    DiscoveryMode discovery_mode;
+    boolean onion_routing;
+    boolean cover_traffic_enabled;
+    boolean message_padding_enabled;
+    boolean timing_obfuscation_enabled;
+    boolean notifications_enabled;
+    boolean notify_dm_enabled;
+    boolean notify_dm_request_enabled;
+    boolean notify_dm_in_foreground;
+    boolean notify_dm_request_in_foreground;
+    boolean sound_enabled;
+    boolean badge_enabled;
+    boolean require_pq;
+};
+
+
+// ============================================================================
+// CONTACTS
+// ============================================================================
+
+dictionary Contact {
+    string peer_id;
+    string? nickname;
+    string? local_nickname;
+    string public_key;
+    u64 added_at;
+    u64? last_seen;
+    string? notes;
+    string? last_known_device_id;
+    u64? verified_at;
+    boolean is_tombstone;
+};
+
+
+// ============================================================================
+// MESSAGE HISTORY
+// ============================================================================
+
+enum MessageDirection {
+    "Sent",
+    "Received",
+};
+
+/// Canonical message status for UI rendering.
+/// Progress is monotone: Queued → InCustody/Sent → Delivered. Never regresses.
+enum MessageStatus {
+    "Queued",
+    "InCustody",
+    "Sent",
+    "Delivered",
+};
+
+dictionary MessageRecord {
+    string id;
+    MessageDirection direction;
+    string peer_id;
+    string content;
+    u64 timestamp;
+    u64 sender_timestamp;
+    boolean delivered;
+    MessageStatus status;
+    boolean hidden;
+};
+
+dictionary HistoryStats {
+    u32 total_messages;
+    u32 sent_count;
+    u32 received_count;
+    u32 undelivered_count;
+};
+
+// ============================================================================
+// CONNECTION LEDGER
+// ============================================================================
+
+dictionary LedgerEntry {
+    string multiaddr;
+    string? peer_id;
+    string? public_key;
+    string? nickname;
+    u32 success_count;
+    u32 failure_count;
+    u64? last_seen;
+    sequence<string> topics;
+};
+
+
+// ============================================================================
+// SWARM BRIDGE
+// ============================================================================
+
+
+// ============================================================================
+// AUDIT LOG
+// ============================================================================
+
+/// Type of audit event for categorization and policy enforcement
+enum AuditEventType {
+    "IdentityCreated",
+    "IdentityDeleted",
+    "MessageSent",
+    "MessageReceived",
+    "RelayEnabled",
+    "RelayDisabled",
+    "ContactAdded",
+    "ContactBlocked",
+    "ContactRemoved",
+    "BackupExported",
+    "BackupImported",
+    "ConsentGranted",
+    "StorageCompacted",
+    "LegacyStaticEcdhSend",
+};
+
+/// Individual auditable event with cryptographic chaining
+dictionary AuditEvent {
+    string event_id;
+    AuditEventType event_type;
+    u64 timestamp_unix_secs;
+    string? identity_id;
+    string? peer_id;
+    string? details;
+    string prev_hash;
+};
+
+// ============================================================================
+// BLOCKED IDENTITIES
+// ============================================================================
+
+dictionary BlockedIdentity {
+    string peer_id;
+    string? device_id;
+    u64 blocked_at;
+    string? reason;
+    string? notes;
+    boolean is_deleted;
+};
+
+dictionary MessageRequest {
+    string peer_id;
+    string? nickname;
+    string message_preview;
+    u64 message_timestamp;
+    u32 message_count;
+};
+
+namespace api {
+    BlockedIdentity blocked_identity_new(string peer_id);
+    BlockedIdentity blocked_identity_with_device_id(BlockedIdentity blocked, string device_id);
+    BlockedIdentity blocked_identity_with_reason(BlockedIdentity blocked, string reason);
+    BlockedIdentity blocked_identity_with_notes(BlockedIdentity blocked, string notes);
+
+    // ============================================================================
+    // RECEIPT ENCODING/DECODING
+    // ============================================================================
+    // Canonical receipt wire format: JSON bytes, used by all platforms.
+    // These are the ONLY functions for receipt serialization across CLI, Android, iOS, WASM.
+
+    /// Encode a Receipt struct to JSON bytes (canonical wire format).
+    /// Used by all platforms before sending delivery confirmations over transport.
+    [Throws=IronCoreError]
+    bytes encode_receipt(Receipt receipt);
+
+    /// Decode a Receipt struct from JSON bytes (canonical wire format).
+    /// Used by all platforms after receiving delivery confirmations.
+    /// Throws IronCoreError::CryptoError if deserialization fails.
+    [Throws=IronCoreError]
+    Receipt decode_receipt(bytes data);
+
+    // ============================================================================
+    // ESCALATION SINGLE AUTHORITY (chunk U1) — string-typed on purpose
+    // ============================================================================
+    // PHIL-012: the core EscalationEngine is the one decision-maker for
+    // transport ordering. Platforms report delivery outcomes and ask for
+    // order; they do not keep rival ordering policy. Transport strings are
+    // the TransportType Display names: "BLE", "WiFiAware", "WiFiDirect",
+    // "Internet", "Local". Unknown names are preserved, never dropped.
+
+    /// Record a live delivery outcome for (peer_id, transport) into the
+    /// authoritative escalation engine. peer_id is 64 hex chars.
+    void escalation_record_outcome(string peer_id, string transport, boolean success, u64 latency_ms);
+
+    /// Order the given available transports best-first for a peer per the
+    /// authoritative engine (policy score weighted by recorded health).
+    /// Returns a subset of the input; unknown transport names keep input
+    /// order at the end.
+    sequence<string> escalation_preferred_order(string peer_id, sequence<string> available);
+};

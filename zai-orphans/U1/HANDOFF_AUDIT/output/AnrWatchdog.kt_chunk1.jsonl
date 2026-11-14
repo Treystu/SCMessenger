@@ -1,0 +1,95 @@
+﻿{
+  "file": "AnrWatchdog.kt",
+  "chunk": 1,
+  "summary": "ANR watchdog that detects main thread freezes and triggers recovery.",
+  "structs_or_classes": [
+    {
+      "name": "AnrWatchdog",
+      "line": 29
+    },
+    {
+      "name": "OnAnrDetected",
+      "line": 37
+    }
+  ],
+  "imports": [
+    "android.content.Context",
+    "android.content.Intent",
+    "android.os.Build",
+    "android.os.Handler",
+    "android.os.Looper",
+    "android.os.SystemClock",
+    "timber.log.Timber",
+    "java.io.File",
+    "java.util.concurrent.atomic.AtomicBoolean",
+    "java.util.concurrent.atomic.AtomicLong",
+    "java.util.concurrent.atomic.AtomicInteger"
+  ],
+  "funcs": [
+    {
+      "name": "onAnrDetected",
+      "line": 38,
+      "calls_out_to": []
+    },
+    {
+      "name": "watchdogLoop",
+      "line": 54,
+      "calls_out_to": ["SystemClock.uptimeMillis()", "Thread.sleep(checkIntervalMs)", "Timber.e(...)", "handleAnrWarning(blockedMs, currentConsecutive)", "reduceSystemLoad()", "showBusyIndicator(message: String = \"App not responding\")", "recordRecoveryEvent(consecutiveBlocks: Int)", "triggerAnrRecovery(blockedMs: Long)", "buildAnrDiagnostics(blockedMs: Long)", "writeAnrDiagnostics(anrInfo: String)", "context.startService(intent)", "Timber.d(...)", "anrDir.mkdirs()", "anrFile.writeText(anrInfo)", "Timber.i(...)", "anrFiles.size > 10", "anrFiles[i].delete()", "Timber.d(...)", "watchdogThread.interrupt()", "handler.removeCallbacksAndMessages(null)", "Timber.i(...)", "totalAnrEvents.get()"]
+    },
+    {
+      "name": "handleAnrWarning",
+      "line": 102,
+      "calls_out_to": ["Timber.e(...)", "consecutiveBlocks.incrementAndGet()", "totalAnrEvents.incrementAndGet()", "when (consecutiveCount) { ... }", "onAnrDetected?.invoke(blockedMs, consecutiveCount)"]
+    },
+    {
+      "name": "reduceSystemLoad",
+      "line": 131,
+      "calls_out_to": ["context.getSystemService(Context.ACTIVITY_SERVICE) as android.app.ActivityManager", "activityManager.getMemoryInfo(memoryInfo)", "Timber.d(...)", "context.startService(intent)", "Timber.w(...)", "e.printStackTrace()"]
+    },
+    {
+      "name": "showBusyIndicator",
+      "line": 148,
+      "calls_out_to": ["android.widget.Toast.makeText(context, message, android.widget.Toast.LENGTH_LONG).show()", "Timber.w(...)", "e.printStackTrace()"]
+    },
+    {
+      "name": "recordRecoveryEvent",
+      "line": 162,
+      "calls_out_to": ["Timber.i(...)"]
+    },
+    {
+      "name": "triggerAnrRecovery",
+      "line": 167,
+      "calls_out_to": ["Timber.e(...)", "buildAnrDiagnostics(blockedMs)", "consecutiveBlocks.set(0)", "writeAnrDiagnostics(anrInfo)", "context.startService(intent)", "Timber.e(...)", "e.printStackTrace()"]
+    },
+    {
+      "name": "buildAnrDiagnostics",
+      "line": 197,
+      "calls_out_to": ["System.currentTimeMillis()", "blockedMs", "consecutiveBlocks.get()", "totalAnrEvents.get()", "Build.VERSION.SDK_INT", "Build.BRAND", "Build.MODEL", "activityManager.getMemoryInfo(memoryInfo)", "memoryInfo.availMem / 1024 / 1024", "memoryInfo.lowMemory", "memoryInfo.threshold / 1024 / 1024", "e.printStackTrace()"]
+    },
+    {
+      "name": "writeAnrDiagnostics",
+      "line": 226,
+      "calls_out_to": ["anrDir.mkdirs()", "timestamp", "anrFile.writeText(anrInfo)", "Timber.i(...)", "anrFiles.size > 10", "anrFiles[i].delete()", "Timber.d(...)", "e.printStackTrace()"]
+    },
+    {
+      "name": "start",
+      "line": 247,
+      "calls_out_to": ["isRunning.compareAndSet(false, true)", "lastPingTime = SystemClock.uptimeMillis()", "consecutiveBlocks.set(0)", "watchdogThread.start()", "Timber.i(...)"]
+    },
+    {
+      "name": "stop",
+      "line": 256,
+      "calls_out_to": ["isRunning.compareAndSet(true, false)", "watchdogThread.interrupt()", "handler.removeCallbacksAndMessages(null)", "Timber.i(...)"]
+    },
+    {
+      "name": "getTotalAnrEvents",
+      "line": 264,
+      "calls_out_to": []
+    },
+    {
+      "name": "isMainThreadResponsive",
+      "line": 266,
+      "calls_out_to": ["consecutiveBlocks.get()"]
+    }
+  ]
+}

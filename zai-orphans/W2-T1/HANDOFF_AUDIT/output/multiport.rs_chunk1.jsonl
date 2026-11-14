@@ -1,0 +1,24 @@
+﻿{
+  "file": "multiport.rs",
+  "chunk": 1,
+  "summary": "This Rust module provides functionality for multi-port adaptive listening in a network environment. It includes configuration options, methods to generate listen addresses based on the provided configurations, and a method to analyze the results of attempting to bind to ports.",
+  "structs_or_classes": ["MultiPortConfig", "BindResult", "ConnectivityStatus"],
+  "imports": ["libp2p::Multiaddr", "std::net::{IpAddr, Ipv4Addr, Ipv6Addr}", "tracing::{info, warn}"],
+  "funcs": [
+    {
+      "name": "generate_listen_addresses",
+      "line": 58,
+      "calls_out_to": ["add_port"]
+    },
+    {
+      "name": "requires_elevated_privileges",
+      "line": 100,
+      "calls_out_to": []
+    },
+    {
+      "name": "analyze_bind_results",
+      "line": 149,
+      "calls_out_to": ["generate_listen_addresses", "requires_elevated_privileges"]
+    }
+  ]
+}

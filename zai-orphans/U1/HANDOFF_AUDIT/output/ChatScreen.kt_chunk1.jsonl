@@ -1,0 +1,74 @@
+﻿{
+  "file": "ChatScreen.kt",
+  "chunk": 1,
+  "summary": "A composable function that displays a chat screen for a given conversation ID. It handles loading messages, displaying them in a list, and providing input functionality to send new messages.",
+  "structs_or_classes": [],
+  "imports": [
+    "androidx.compose.foundation.background",
+    "androidx.compose.foundation.layout.*",
+    "androidx.compose.foundation.lazy.LazyColumn",
+    "androidx.compose.foundation.lazy.items",
+    "androidx.compose.foundation.lazy.rememberLazyListState",
+    "androidx.compose.foundation.shape.CircleShape",
+    "androidx.compose.foundation.shape.RoundedCornerShape",
+    "androidx.compose.material.icons.Icons",
+    "androidx.compose.material.icons.automirrored.filled.ArrowBack",
+    "androidx.compose.material.icons.filled.Block",
+    "androidx.compose.material.icons.filled.CheckCircle",
+    "androidx.compose.material.icons.automirrored.filled.Send",
+    "androidx.compose.material.icons.outlined.ChatBubbleOutline",
+    "androidx.compose.material3.*",
+    "androidx.compose.runtime.*",
+    "androidx.compose.ui.Alignment",
+    "androidx.compose.ui.Modifier",
+    "androidx.compose.ui.draw.clip",
+    "androidx.compose.ui.graphics.Color",
+    "androidx.compose.ui.text.font.FontWeight",
+    "androidx.compose.ui.unit.dp",
+    "androidx.compose.ui.unit.sp",
+    "androidx.hilt.navigation.compose.hiltViewModel",
+    "com.scmessenger.android.utils.toEpochMillis",
+    "com.scmessenger.android.ui.viewmodels.ConversationsViewModel",
+    "com.scmessenger.android.ui.viewmodels.ContactsViewModel",
+    "com.scmessenger.android.ui.viewmodels.ChatViewModel",
+    "com.scmessenger.android.ui.chat.MessageInput",
+    "kotlinx.coroutines.launch",
+    "timber.log.Timber",
+    "java.text.SimpleDateFormat",
+    "java.util.*"
+  ],
+  "funcs": [
+    {
+      "name": "ChatScreen",
+      "line": 38,
+      "calls_out_to": [
+        "LaunchedEffect(conversationId)",
+        "chatViewModel.setPeer(conversationId)",
+        "viewModel.loadConversation(conversationId).collect { messages -> }",
+        "rememberLazyListState()",
+        "rememberCoroutineScope()",
+        "LaunchedEffect(shouldLoadMore)",
+        "LaunchedEffect(chatMessages.size)",
+        "Scaffold(topBar = {...})",
+        "Column(modifier = Modifier.fillMaxSize().padding(paddingValues))",
+        "Box(modifier = Modifier.fillMaxWidth().imePadding().padding(16.dp).contentAlignment = Alignment.Center)",
+        "Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer))",
+        "AlertDialog(onDismissRequest = {...})",
+        "CoroutineScope.launch { ... }"
+      ]
+    },
+    {
+      "name": "MessageBubble",
+      "line": 430,
+      "calls_out_to": [
+        "Box(modifier = Modifier.clip(shape).background(bubbleColor).padding(horizontal = 16.dp, vertical = 10.dp))",
+        "Text(text = message.content, color = textColor, style = MaterialTheme.typography.bodyLarge)"
+      ]
+    },
+    {
+      "name": "formatTimestamp",
+      "line": 465,
+      "calls_out_to": []
+    }
+  ]
+}

@@ -1,0 +1,26 @@
+﻿{
+  "file": "NotificationHelper.kt",
+  "chunk": 1,
+  "summary": "This file contains the NotificationHelper class, which is responsible for managing notifications in a mesh messaging application. It includes methods to create notification channels, build foreground service notifications, and show new message notifications based on various criteria.",
+  "structs_or_classes": ["NotificationHelper", "NotificationChannel", "NotificationChannelGroup", "NotificationCompat.Builder", "PendingIntent", "Person", "RemoteInput", "NotificationMessage"],
+  "imports": ["android.Manifest", "android.app.Notification", "android.app.NotificationChannel", "android.app.NotificationChannelGroup", "android.app.NotificationManager", "android.content.Context", "android.content.Intent", "android.content.pm.PackageManager", "android.os.Build", "androidx.core.app.NotificationCompat", "androidx.core.app.NotificationManagerCompat", "androidx.core.app.Person", "androidx.core.app.RemoteInput", "androidx.core.content.ContextCompat", "androidx.core.graphics.drawable.IconCompat", "com.scmessenger.android.R", "com.scmessenger.android.ui.components.generateIdenticonBitmap", "timber.log.Timber"],
+  "funcs": [
+    {
+      "name": "createNotificationChannels",
+      "line": 93,
+      "calls_out_to": ["notificationManager.createNotificationChannelGroup(channelGroup)", "messagesChannel", "messageRequestsChannel", "meshStatusChannel", "peerEventsChannel", "systemChannel"]
+    },
+    {
+      "name": "buildForegroundServiceNotification",
+      "line": 175,
+      "calls_out_to": ["context.packageManager.getLaunchIntentForPackage(context.packageName)", "pendingIntent"]
+    },
+    {
+      "name": "showMessageNotification",
+      "line": 221,
+      "calls_out_to": [
+        "trackNotificationEvent", "isDndEnabled", "classifyAsDmRequest", "generateIdenticonBitmap", "createReplyIntent", "createMarkReadIntent"
+      ]
+    }
+  ]
+}

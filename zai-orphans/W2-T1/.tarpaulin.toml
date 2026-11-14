@@ -1,0 +1,106 @@
+# Tarpaulin configuration for code coverage tracking
+# Validates: Requirements 3.1 (80% line coverage threshold)
+
+[default]
+# Coverage threshold - fail if below 80%
+fail-under = 80.0
+
+# Output formats
+out = ["Html", "Lcov"]
+
+# Output directory
+output-dir = "target/coverage"
+
+# Exclude patterns
+exclude = [
+    # Test files
+    "*/tests/*",
+    "*/benches/*",
+    
+    # Generated code
+    "*/target/*",
+    "*/build.rs",
+    
+    # Platform-specific code that can't be tested on all platforms
+    "*/platform/android/*",
+    "*/platform/ios/*",
+    
+    # WASM bindings (tested separately)
+    "wasm/*",
+    
+    # CLI binary (integration tested separately)
+    "cli/src/main.rs",
+]
+
+# Exclude lines with these patterns
+exclude-lines = [
+    # Unreachable code
+    "unreachable!",
+    "unimplemented!",
+    "todo!",
+    
+    # Debug/logging
+    "tracing::",
+    "println!",
+    "eprintln!",
+    
+    # Panic messages
+    "panic!",
+]
+
+# Run tests with all features enabled
+all-features = true
+
+# Timeout for test execution (seconds)
+timeout = 600
+
+# Number of parallel jobs (0 = number of CPUs)
+jobs = 0
+
+# Follow symbolic links
+follow-exec = true
+
+# Include doc tests
+run-types = ["Tests", "Doctests"]
+
+# Verbose output
+verbose = true
+
+# Count hits (not just covered/not covered)
+count = true
+
+# Ignore panics in tests
+ignore-panics = true
+
+# Workspace coverage (aggregate all packages)
+workspace = true
+
+# Packages to include (all workspace members)
+packages = [
+    "scmessenger-core",
+]
+
+# Exclude specific packages
+# exclude-packages = []
+
+# Target directory
+target-dir = "target"
+
+# Release mode (faster but less accurate)
+# release = false
+
+# Forward signals to test process
+forward = true
+
+# No default features
+# no-default-features = false
+
+# Specific features to enable
+# features = []
+
+# Rustflags to pass to cargo
+# rustflags = ""
+
+# Environment variables
+# [env]
+# RUST_BACKTRACE = "1"

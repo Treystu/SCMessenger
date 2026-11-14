@@ -1,0 +1,84 @@
+﻿{
+  "file": "history.rs",
+  "chunk": 1,
+  "summary": "This chunk defines a `MessageHistory` struct that manages a database of message records. It includes methods for adding, retrieving, and searching messages based on various criteria.",
+  "structs_or_classes": ["MessageRecord", "MessageHistory"],
+  "imports": ["anyhow", "chrono", "serde", "sled", "std::path::PathBuf", "uuid"],
+  "funcs": [
+    {
+      "name": "new_sent",
+      "line": 43,
+      "calls_out_to": []
+    },
+    {
+      "name": "new_received",
+      "line": 54,
+      "calls_out_to": []
+    },
+    {
+      "name": "formatted_time",
+      "line": 67,
+      "calls_out_to": []
+    },
+    {
+      "name": "peer",
+      "line": 72,
+      "calls_out_to": []
+    },
+    {
+      "name": "add",
+      "line": 96,
+      "calls_out_to": ["db.insert"]
+    },
+    {
+      "name": "get",
+      "line": 110,
+      "calls_out_to": ["db.iter"]
+    },
+    {
+      "name": "recent",
+      "line": 123,
+      "calls_out_to": ["db.iter", "rev"]
+    },
+    {
+      "name": "conversation",
+      "line": 150,
+      "calls_out_to": ["get"]
+    },
+    {
+      "name": "search",
+      "line": 154,
+      "calls_out_to": ["db.iter", "rev"]
+    },
+    {
+      "name": "count",
+      "line": 175,
+      "calls_out_to": []
+    },
+    {
+      "name": "count_with_peer",
+      "line": 182,
+      "calls_out_to": ["get"]
+    },
+    {
+      "name": "mark_delivered",
+      "line": 199,
+      "calls_out_to": ["get", "add"]
+    },
+    {
+      "name": "clear",
+      "line": 207,
+      "calls_out_to": []
+    },
+    {
+      "name": "clear_conversation",
+      "line": 216,
+      "calls_out_to": ["db.iter", "rev", "remove"]
+    },
+    {
+      "name": "stats",
+      "line": 237,
+      "calls_out_to": []
+    }
+  ]
+}

@@ -1,0 +1,24 @@
+﻿{
+  "file": "findmy.rs",
+  "chunk": 1,
+  "summary": "This chunk defines the `FindMyConfig` struct for configuring Find My beacon settings and provides methods to encode and decode wake-up payloads.",
+  "structs_or_classes": ["FindMyConfig", "WakeUpPayload"],
+  "imports": [],
+  "funcs": [
+    {
+      "name": "new",
+      "line": 24,
+      "calls_out_to": []
+    },
+    {
+      "name": "with_key",
+      "line": 43,
+      "calls_out_to": ["self"]
+    },
+    {
+      "name": "with_interval",
+      "line": 50,
+      "calls_out_to": ["self"]
+    }
+  ]
+}

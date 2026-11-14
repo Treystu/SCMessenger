@@ -1,0 +1,94 @@
+﻿{
+  "file": "BleAdvertiser.kt",
+  "chunk": 1,
+  "summary": "Handles Bluetooth Low Energy advertising to announce presence to the mesh.",
+  "structs_or_classes": [],
+  "imports": [
+    "android.annotation.SuppressLint",
+    "android.Manifest",
+    "android.content.pm.PackageManager",
+    "android.bluetooth.BluetoothManager",
+    "android.bluetooth.le.AdvertiseCallback",
+    "android.bluetooth.le.AdvertiseData",
+    "android.bluetooth.le.AdvertiseSettings",
+    "android.content.Context",
+    "android.os.Build",
+    "android.os.Handler",
+    "android.os.Looper",
+    "android.os.ParcelUuid",
+    "androidx.core.content.ContextCompat",
+    "timber.log.Timber"
+  ],
+  "funcs": [
+    {
+      "name": "onStartSuccess",
+      "line": 55,
+      "calls_out_to": ["Timber.i"]
+    },
+    {
+      "name": "onStartFailure",
+      "line": 67,
+      "calls_out_to": ["Timber.e", "handler.postDelayed"]
+    },
+    {
+      "name": "applyAdvertiseSettings",
+      "line": 111,
+      "calls_out_to": ["Timber.d"]
+    },
+    {
+      "name": "setIdentityData",
+      "line": 151,
+      "calls_out_to": ["Timber.d", "handler.postDelayed"]
+    },
+    {
+      "name": "updateIdentityBeacon",
+      "line": 176,
+      "calls_out_to": []
+    },
+    {
+      "name": "setRotationInterval",
+      "line": 182,
+      "calls_out_to": ["Timber.d", "handler.postDelayed"]
+    },
+    {
+      "name": "startAdvertising",
+      "line": 192,
+      "calls_out_to": [
+        "Timber.w",
+        "hasAdvertisePermission",
+        "advertiser.startAdvertising",
+        "handler.postDelayed"
+      ]
+    },
+    {
+      "name": "startRotation",
+      "line": 239,
+      "calls_out_to": ["Timber.d", "handler.postDelayed"]
+    },
+    {
+      "name": "run",
+      "line": 244,
+      "calls_out_to": []
+    },
+    {
+      "name": "stopRotation",
+      "line": 295,
+      "calls_out_to": ["handler.removeCallbacks"]
+    },
+    {
+      "name": "stopAdvertising",
+      "line": 301,
+      "calls_out_to": [
+        "Timber.w",
+        "hasAdvertisePermission",
+        "advertiser.stopAdvertising",
+        "handler.postDelayed"
+      ]
+    },
+    {
+      "name": "sendData",
+      "line": 327,
+      "calls_out_to": ["Timber.w", "stopAdvertising"]
+    }
+  ]
+}

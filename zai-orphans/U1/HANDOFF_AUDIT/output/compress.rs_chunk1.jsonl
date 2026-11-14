@@ -1,0 +1,19 @@
+﻿{
+  "file": "compress.rs",
+  "chunk": 1,
+  "summary": "This chunk defines a Rust function `compress` that uses the LZ4 compression algorithm with size prepending. It also includes a test module for verifying the correctness of the compression and decompression functions.",
+  "structs_or_classes": [],
+  "imports": ["super::DriftError", "lz4_flex"],
+  "funcs": [
+    {
+      "name": "compress",
+      "line": 5,
+      "calls_out_to": ["lz4_flex::compress_prepend_size"]
+    },
+    {
+      "name": "decompress",
+      "line": 13,
+      "calls_out_to": ["lz4_flex::decompress_size_prepended", "DriftError::DecompressionFailed"]
+    }
+  ]
+}

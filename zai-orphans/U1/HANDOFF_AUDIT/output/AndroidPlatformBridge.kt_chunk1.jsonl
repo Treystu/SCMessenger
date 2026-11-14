@@ -1,0 +1,124 @@
+﻿{
+  "file": "AndroidPlatformBridge.kt",
+  "chunk": 1,
+  "summary": "This class implements the PlatformBridge UniFFI callback interface for Android. It monitors system state and reports changes to the Rust core via the PlatformBridge interface.",
+  "structs_or_classes": [],
+  "imports": [
+    "android.content.BroadcastReceiver",
+    "android.content.Context",
+    "android.content.Intent",
+    "android.content.IntentFilter",
+    "android.net.ConnectivityManager",
+    "android.net.Network",
+    "android.net.NetworkCapabilities",
+    "android.net.NetworkRequest",
+    "android.os.BatteryManager",
+    "android.os.Build",
+    "android.os.PowerManager",
+    "com.scmessenger.android.data.MeshRepository",
+    "com.scmessenger.android.transport.ble.BleAdvertiser",
+    "com.scmessenger.android.transport.ble.BleGattClient",
+    "com.scmessenger.android.transport.ble.BleGattServer",
+    "com.scmessenger.android.transport.ble.BleScanner",
+    "@ApplicationContext",
+    "kotlinx.coroutines.CoroutineScope",
+    "kotlinx.coroutines.Dispatchers",
+    "kotlinx.coroutines.SupervisorJob",
+    "kotlinx.coroutines.launch",
+    "timber.log.Timber",
+    "javax.inject.Inject",
+    "javax.inject.Singleton"
+  ],
+  "funcs": [
+    {
+      "name": "initialize",
+      "line": 77,
+      "calls_out_to": ["registerBatteryMonitor", "registerNetworkMonitor", "initializeMotionDetection"]
+    },
+    {
+      "name": "setBleComponents",
+      "line": 92,
+      "calls_out_to": []
+    },
+    {
+      "name": "setTransportManager",
+      "line": 108,
+      "calls_out_to": []
+    },
+    {
+      "name": "cleanup",
+      "line": 116,
+      "calls_out_to": ["context.unregisterReceiver(batteryReceiver)", "context.unregisterReceiver(networkCallback)", "context.unregisterReceiver(motionReceiver)"]
+    },
+    {
+      "name": "registerBatteryMonitor",
+      "line": 133,
+      "calls_out_to": []
+    },
+    {
+      "name": "onReceive",
+      "line": 135,
+      "calls_out_to": ["updateBatteryState"]
+    },
+    {
+      "name": "updateBatteryState",
+      "line": 149,
+      "calls_out_to": ["context.registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))", "meshRepository.updateDeviceState(deviceProfile)", "meshRepository.computeAdjustmentProfile(deviceProfile)", "meshRepository.computeBleAdjustment(profile)", "meshRepository.computeRelayAdjustment(profile)", "applyAdjustments(bleAdjustment, relayAdjustment)"]
+    },
+    {
+      "name": "registerNetworkMonitor",
+      "line": 178,
+      "calls_out_to": []
+    },
+    {
+      "name": "onAvailable",
+      "line": 184,
+      "calls_out_to": ["updateNetworkState"]
+    },
+    {
+      "name": "onLost",
+      "line": 188,
+      "calls_out_to": ["updateNetworkState"]
+    },
+    {
+      "name": "onCapabilitiesChanged",
+      "line": 192,
+      "calls_out_to": ["updateNetworkState"]
+    },
+    {
+      "name": "updateNetworkState",
+      "line": 204,
+      "calls_out_to": ["connectivityManager.activeNetwork", "connectivityManager.getNetworkCapabilities(it)", "meshRepository.updateDeviceState(deviceProfile)", "meshRepository.computeAdjustmentProfile(deviceProfile)", "meshRepository.computeBleAdjustment(profile)", "meshRepository.computeRelayAdjustment(profile)", "applyAdjustments(bleAdjustment, relayAdjustment)"]
+    },
+    {
+      "name": "initializeMotionDetection",
+      "line": 224,
+      "calls_out_to": []
+    },
+    {
+      "name": "onReceive",
+      "line": 234,
+      "calls_out_to": ["currentMotionState = uniffi.api.MotionState.WALKING", "onMotionChanged(currentMotionState)", "currentMotionState = uniffi.api.MotionState.STILL", "onMotionChanged(currentMotionState)"]
+    },
+    {
+      "name": "onBatteryChanged",
+      "line": 256,
+      "calls_out_to": ["meshRepository.updateDeviceState(deviceProfile)", "meshRepository.computeAdjustmentProfile(deviceProfile)", "meshRepository.computeBleAdjustment(profile)", "meshRepository.computeRelayAdjustment(profile)", "applyAdjustments(bleAdjustment, relayAdjustment)"]
+    },
+    {
+      "name": "onNetworkChanged",
+      "line": 281,
+      "calls_out_to": ["previousWifi = this.hasWifi", "meshRepository.updateDeviceState(deviceProfile)", "meshRepository.computeAdjustmentProfile(deviceProfile)", "meshRepository.computeBleAdjustment(profile)", "meshRepository.computeRelayAdjustment(profile)", "applyAdjustments(bleAdjustment, relayAdjustment)"]
+    },
+    {
+      "name": "onMotionChanged",
+      "line": 311,
+      "calls_out_to": ["meshRepository.updateDeviceState(deviceProfile)", "meshRepository.computeAdjustmentProfile(deviceProfile)", "meshRepository.computeBleAdjustment(profile)", "meshRepository.computeRelayAdjustment(profile)", "applyAdjustments(bleAdjustment, relayAdjustment)"]
+    },
+    {
+      "name": "onBleDataReceived",
+      "line": 335,
+      "calls_out_to": ["MeshEventBus.emitNetworkEvent(NetworkEvent.ConnectionQualityChanged(peerId = peerId, quality = ConnectionQuality.GOOD))", "meshRepository.notifyNetworkRecovered()"]
+    }
+  ]
+}

@@ -1,0 +1,49 @@
+﻿{
+  "file": "SettingsViewModelTest.kt",
+  "chunk": 1,
+  "summary": "This test class contains various tests for the SettingsViewModel in the SCMessenger Android application. It sets up mock dependencies, defines test scenarios, and verifies the behavior of the ViewModel.",
+  "structs_or_classes": ["List", "of", "classes", "or", "structs"],
+  "imports": ["List", "of", "imports"],
+  "funcs": [
+    {
+      "name": "setup",
+      "line": 59,
+      "calls_out_to": ["Dispatchers.setMain(testDispatcher)", "repository = mockk(relaxed = true)", "preferences = mockk(relaxed = true)"]
+    },
+    {
+      "name": "tearDown",
+      "line": 84,
+      "calls_out_to": ["Dispatchers.resetMain()"]
+    },
+    {
+      "name": "loadSettings populates UI state",
+      "line": 90,
+      "calls_out_to": ["viewModel.settings.value?.relayEnabled", "viewModel.error.value"]
+    },
+    {
+      "name": "updateSettings saves when valid",
+      "line": 100,
+      "calls_out_to": ["repository.saveSettings(updated)", "viewModel.settings.value?.relayEnabled"]
+    },
+    {
+      "name": "updateSettings rejects invalid configuration",
+      "line": 112,
+      "calls_out_to": ["every { repository.validateSettings(any()) } returns false", "viewModel.updateSettings(settings(relayEnabled = false))", "viewModel.error.value"]
+    },
+    {
+      "name": "setAutoAdjust true clears overrides",
+      "line": 121,
+      "calls_out_to": ["coEvery { preferences.setAutoAdjustEnabled(true) } returns Unit", "viewModel.setAutoAdjust(true)", "repository.clearAdjustmentOverrides()"]
+    },
+    {
+      "name": "setManualProfile persists preference",
+      "line": 130,
+      "calls_out_to": ["coEvery { preferences.setManualAdjustmentProfile(any()) } returns Unit", "viewModel.setManualProfile(uniffi.api.AdjustmentProfile.MINIMAL)", "repository.clearAdjustmentOverrides()"]
+    },
+    {
+      "name": "clearAdjustmentOverrides delegates to repository",
+      "line": 140,
+      "calls_out_to": ["viewModel.clearAdjustmentOverrides()", "verify(exactly = 1) { repository.clearAdjustmentOverrides() }"]
+    }
+  ]
+}

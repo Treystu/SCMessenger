@@ -1,0 +1,40 @@
+name: Audit follow-up
+description: Track a concrete follow-up from an audit or realignment review
+title: "[audit] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this to track a concrete follow-up item from an audit, security review, or realignment pass, when the work is still current and actionable. Cite the audit artifact you are working from and check that it has not been superseded (`docs/DOCUMENT_STATUS_INDEX.md` records document status; superseded artifacts live under `docs/historical/`).
+  - type: input
+    id: source_doc
+    attributes:
+      label: Source document/section
+      placeholder: "path/to/audit-or-review-doc.md, section reference"
+    validations:
+      required: true
+  - type: textarea
+    id: action
+    attributes:
+      label: Action to take
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: Why this still matters
+    validations:
+      required: true
+  - type: dropdown
+    id: scope
+    attributes:
+      label: Scope
+      options:
+        - repo hygiene / docs
+        - github configuration
+        - ci / workflows
+        - release process
+        - security / privacy
+        - other
+    validations:
+      required: true

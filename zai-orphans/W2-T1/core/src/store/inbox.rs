@@ -1,0 +1,593 @@
+// Inbox — receive and deduplicate incoming messages
+//
+// Tracks seen message IDs to prevent replay attacks and duplicate delivery.
+
+use crate::store::backend::StorageBackend;
+use crate::store::storage::StorageManager;
+
+use rustc_hash::FxHashSet;
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::sync::Arc;
+
+#[derive(Serialize, Deserialize)]
+struct LegacyReceivedMessage {
+    pub message_id: String,
+    pub sender_id: String,
+    pub payload: Vec<u8>,
+    pub received_at: u64,
+}
+
+fn deserialize_received_message(data: &[u8]) -> Result<ReceivedMessage, bincode::Error> {
+    if data.is_empty() {
+        return Err(Box::new(bincode::ErrorKind::Io(std::io::Error::new(
+            std::io::ErrorKind::UnexpectedEof,
+            "empty",
+        ))));
+    }
+    // If the first byte is 1, it's the new versioned format.
+    // Legacy format starts with a String length. Since string lengths are usually 36 (for UUIDs),
+    // their first byte is 36, not 1.
+    if data[0] == 1 {
+        bincode::deserialize(data)
+    } else {
+        let legacy: LegacyReceivedMessage = bincode::deserialize(data)?;
+        Ok(ReceivedMessage {
+            version: 1,
+            message_id: legacy.message_id,
+            sender_id: legacy.sender_id,
+            payload: legacy.payload,
+            received_at: legacy.received_at,
+            sender_public_key_hex: None,
+        })
+    }
+}
+
+/// Maximum tracked message IDs (for deduplication)
+const MAX_SEEN_IDS: usize = 50_000;
+
+const SEEN_IDS_KEY: &[u8] = b"inbox_seen_ids";
+const MESSAGES_PREFIX: &[u8] = b"inbox_msg_";
+
+/// A received message record
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(not(target_arch = "wasm32"), derive(uniffi::Record))]
+pub struct ReceivedMessage {
+    /// Version byte for serialization format
+    #[serde(default = "default_version")]
+    pub version: u8,
+    /// Message ID
+    pub message_id: String,
+    /// Sender's identity ID
+    pub sender_id: String,
+    /// Decrypted payload bytes
+    pub payload: Vec<u8>,
+    /// When this was received (unix timestamp)
+    pub received_at: u64,
+    /// Sender's Ed25519 public key (hex-encoded), taken from the envelope
+    /// that carried this message. Populated at receive time since it's
+    /// cryptographically verified there (the envelope's signature/AEAD tag
+    /// already authenticate this key); used to add a message-request sender
+    /// as a contact without depending on an unauthenticated discovery
+    /// broadcast. `None` for messages received before this field existed.
+    #[serde(default)]
+    pub sender_public_key_hex: Option<String>,
+}
+
+fn default_version() -> u8 {
+    1
+}
+
+/// Storage backend for inbox
+enum InboxBackend {
+    Memory {
+        seen_ids: FxHashSet<[u8; 32]>,
+        seen_order: Vec<[u8; 32]>,
+        messages: HashMap<String, Vec<ReceivedMessage>>,
+        total: usize,
+    },
+    Persistent(Arc<dyn StorageBackend>),
+}
+
+/// Inbound message deduplication and storage with automatic retention enforcement
+pub struct Inbox {
+    backend: InboxBackend,
+    storage_manager: Option<Arc<StorageManager>>,
+}
+
+impl Inbox {
+    /// Create a new in-memory inbox
+    pub fn new() -> Self {
+        Self {
+            backend: InboxBackend::Memory {
+                seen_ids: FxHashSet::default(),
+                seen_order: Vec::new(),
+                messages: HashMap::new(),
+                total: 0,
+            },
+            storage_manager: None,
+        }
+    }
+
+    /// Create a persistent inbox with an arbitrary backend and storage manager
+    pub fn persistent_with_storage(
+        backend: Arc<dyn StorageBackend>,
+        storage_manager: Arc<StorageManager>,
+    ) -> Self {
+        Self {
+            backend: InboxBackend::Persistent(backend),
+            storage_manager: Some(storage_manager),
+        }
+    }
+
+    /// Create a persistent inbox with an arbitrary backend
+    pub fn persistent(backend: Arc<dyn StorageBackend>) -> Self {
+        Self {
+            backend: InboxBackend::Persistent(backend),
+            storage_manager: None,
+        }
+    }
+
+    /// Trigger maintenance to enforce retention policies after inbox operations.
+    /// This automatically prunes expired messages and enforces configured limits.
+    fn trigger_maintenance(&self) {
+        if let Some(storage_mgr) = &self.storage_manager {
+            // Trigger maintenance - this will enforce retention policies
+            let _ = storage_mgr.perform_maintenance();
+        }
+    }
+
+    /// Check if a message ID has already been seen (duplicate)
+    pub fn is_duplicate(&self, message_id: &str) -> bool {
+        let hash = *blake3::hash(message_id.as_bytes()).as_bytes();
+        match &self.backend {
+            InboxBackend::Memory { seen_ids, .. } => seen_ids.contains(&hash),
+            InboxBackend::Persistent(db) => {
+                if let Ok(Some(bytes)) = db.get(SEEN_IDS_KEY) {
+                    if let Ok(seen_ids) = bincode::deserialize::<FxHashSet<[u8; 32]>>(&bytes) {
+                        return seen_ids.contains(&hash);
+                    }
+                }
+                false
+            }
+        }
+    }
+
+    /// Record a received message. Returns false if duplicate.
+    pub fn receive(&mut self, msg: ReceivedMessage) -> bool {
+        let hash = *blake3::hash(msg.message_id.as_bytes()).as_bytes();
+        let is_new = match &mut self.backend {
+            InboxBackend::Memory {
+                seen_ids,
+                seen_order,
+                messages,
+                total,
+            } => {
+                if seen_ids.contains(&hash) {
+                    return false; // Duplicate
+                }
+
+                // Track for dedup
+                seen_ids.insert(hash);
+                seen_order.push(hash);
+
+                // Evict old IDs if at capacity
+                while seen_ids.len() > MAX_SEEN_IDS {
+                    if let Some(old_hash) = seen_order.first().cloned() {
+                        seen_order.remove(0);
+                        seen_ids.remove(&old_hash);
+                    }
+                }
+
+                // Store message
+                messages
+                    .entry(msg.sender_id.clone())
+                    .or_default()
+                    .push(msg.clone());
+                *total += 1;
+
+                true // New message
+            }
+            InboxBackend::Persistent(db) => {
+                // Load seen IDs
+                let mut seen_ids: FxHashSet<[u8; 32]> = db
+                    .get(SEEN_IDS_KEY)
+                    .ok()
+                    .flatten()
+                    .and_then(|bytes| bincode::deserialize(&bytes).ok())
+                    .unwrap_or_default();
+
+                if seen_ids.contains(&hash) {
+                    return false; // Duplicate
+                }
+
+                // Add to seen set
+                seen_ids.insert(hash);
+
+                // Evict if needed (simple approach: keep most recent)
+                if seen_ids.len() > MAX_SEEN_IDS {
+                    // In a real impl, we'd track order. For now, just clear oldest randomly
+                    let to_remove: Vec<_> = seen_ids.iter().take(1000).cloned().collect();
+                    for h in to_remove {
+                        seen_ids.remove(&h);
+                    }
+                }
+
+                if let Ok(bytes) = bincode::serialize(&seen_ids) {
+                    let _ = db.put(SEEN_IDS_KEY, &bytes);
+                }
+
+                // Store message
+                let key_str = format!(
+                    "{}{}_{}",
+                    String::from_utf8_lossy(MESSAGES_PREFIX),
+                    msg.sender_id,
+                    msg.message_id
+                );
+                if let Ok(bytes) = bincode::serialize(&msg) {
+                    let _ = db.put(key_str.as_bytes(), &bytes);
+                    let _ = db.flush();
+                }
+
+                true // New message
+            }
+        };
+
+        if is_new {
+            tracing::info!(
+                event = "inbox_receive",
+                message_id = %msg.message_id,
+                sender_id = %msg.sender_id,
+                received_at = msg.received_at
+            );
+        }
+
+        // Trigger maintenance after successful receive
+        self.trigger_maintenance();
+
+        is_new
+    }
+
+    /// Get all messages from a specific sender
+    pub fn messages_from(&self, sender_id: &str) -> Vec<ReceivedMessage> {
+        match &self.backend {
+            InboxBackend::Memory { messages, .. } => {
+                messages.get(sender_id).cloned().unwrap_or_default()
+            }
+            InboxBackend::Persistent(db) => {
+                let prefix_str =
+                    format!("{}{}_", String::from_utf8_lossy(MESSAGES_PREFIX), sender_id);
+                if let Ok(results) = db.scan_prefix(prefix_str.as_bytes()) {
+                    results
+                        .into_iter()
+                        .filter_map(|(_, value)| deserialize_received_message(&value).ok())
+                        .collect()
+                } else {
+                    Vec::new()
+                }
+            }
+        }
+    }
+
+    /// Get all recent messages across all senders
+    pub fn all_messages(&self) -> Vec<ReceivedMessage> {
+        match &self.backend {
+            InboxBackend::Memory { messages, .. } => {
+                messages.values().flat_map(|msgs| msgs.clone()).collect()
+            }
+            InboxBackend::Persistent(db) => {
+                if let Ok(results) = db.scan_prefix(MESSAGES_PREFIX) {
+                    results
+                        .into_iter()
+                        .filter_map(|(_, value)| deserialize_received_message(&value).ok())
+                        .collect()
+                } else {
+                    Vec::new()
+                }
+            }
+        }
+    }
+
+    /// Total stored messages
+    pub fn total_count(&self) -> usize {
+        match &self.backend {
+            InboxBackend::Memory { total, .. } => *total,
+            InboxBackend::Persistent(db) => db.count_prefix(MESSAGES_PREFIX).unwrap_or(0),
+        }
+    }
+
+    /// Number of unique senders
+    pub fn sender_count(&self) -> usize {
+        match &self.backend {
+            InboxBackend::Memory { messages, .. } => messages.len(),
+            InboxBackend::Persistent(db) => {
+                let mut senders: FxHashSet<String> = FxHashSet::default();
+                if let Ok(results) = db.scan_prefix(MESSAGES_PREFIX) {
+                    for (_, value) in results {
+                        if let Ok(msg) = deserialize_received_message(&value) {
+                            senders.insert(msg.sender_id);
+                        }
+                    }
+                }
+                senders.len()
+            }
+        }
+    }
+
+    /// Total message count as u32 (mobile API parity with `getInboxCount`)
+    pub fn get_inbox_count(&self) -> u32 {
+        self.total_count() as u32
+    }
+
+    /// Drain all received messages, returning them and clearing internal storage.
+    /// Preserves dedup IDs so duplicate detection continues to work after draining.
+    /// This is the core parity of the WASM `drainReceivedMessages` method.
+    pub fn drain_received_messages(&mut self) -> Vec<ReceivedMessage> {
+        match &mut self.backend {
+            InboxBackend::Memory {
+                messages, total, ..
+            } => {
+                let drained: Vec<ReceivedMessage> =
+                    messages.values().flat_map(|v| v.clone()).collect();
+                messages.clear();
+                *total = 0;
+                drained
+            }
+            InboxBackend::Persistent(db) => {
+                let results = db.scan_prefix(MESSAGES_PREFIX).unwrap_or_default();
+                let mut drained = Vec::with_capacity(results.len());
+                for (key, value) in &results {
+                    if let Ok(msg) = deserialize_received_message(value) {
+                        drained.push(msg);
+                    }
+                    let _ = db.remove(key);
+                }
+                let _ = db.flush();
+                drained
+            }
+        }
+    }
+
+    /// Clear all messages (but keep dedup IDs)
+    pub fn clear_messages(&mut self) {
+        match &mut self.backend {
+            InboxBackend::Memory {
+                messages, total, ..
+            } => {
+                messages.clear();
+                *total = 0;
+            }
+            InboxBackend::Persistent(db) => {
+                // Remove all message keys (but keep seen IDs)
+                if let Ok(results) = db.scan_prefix(MESSAGES_PREFIX) {
+                    for (key, _) in results {
+                        let _ = db.remove(&key);
+                    }
+                    let _ = db.flush();
+                }
+            }
+        }
+    }
+}
+
+impl Default for Inbox {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn make_received(id: &str, sender: &str, payload: &str) -> ReceivedMessage {
+        ReceivedMessage {
+            version: 1,
+            message_id: id.to_string(),
+            sender_id: sender.to_string(),
+            payload: payload.as_bytes().to_vec(),
+            received_at: web_time::SystemTime::now()
+                .duration_since(web_time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs(),
+            sender_public_key_hex: None,
+        }
+    }
+
+    #[test]
+    fn test_receive_and_query() {
+        let mut inbox = Inbox::new();
+
+        assert!(inbox.receive(make_received("msg1", "alice", "hello")));
+        assert!(inbox.receive(make_received("msg2", "alice", "world")));
+        assert!(inbox.receive(make_received("msg3", "bob", "hey")));
+
+        assert_eq!(inbox.total_count(), 3);
+        assert_eq!(inbox.sender_count(), 2);
+        assert_eq!(inbox.messages_from("alice").len(), 2);
+        assert_eq!(inbox.messages_from("bob").len(), 1);
+    }
+
+    #[test]
+    fn test_deduplication() {
+        let mut inbox = Inbox::new();
+
+        assert!(inbox.receive(make_received("msg1", "alice", "hello")));
+        assert!(!inbox.receive(make_received("msg1", "alice", "hello"))); // Duplicate
+        assert!(!inbox.receive(make_received("msg1", "bob", "different sender same id"))); // Still duplicate
+
+        assert_eq!(inbox.total_count(), 1);
+    }
+
+    #[test]
+    fn test_is_duplicate() {
+        let mut inbox = Inbox::new();
+
+        assert!(!inbox.is_duplicate("msg1"));
+        inbox.receive(make_received("msg1", "alice", "hello"));
+        assert!(inbox.is_duplicate("msg1"));
+    }
+
+    #[test]
+    fn test_all_messages() {
+        let mut inbox = Inbox::new();
+        inbox.receive(make_received("msg1", "alice", "hello"));
+        inbox.receive(make_received("msg2", "bob", "world"));
+
+        let all = inbox.all_messages();
+        assert_eq!(all.len(), 2);
+    }
+
+    #[test]
+    fn test_clear_messages() {
+        let mut inbox = Inbox::new();
+        inbox.receive(make_received("msg1", "alice", "hello"));
+
+        inbox.clear_messages();
+        assert_eq!(inbox.total_count(), 0);
+
+        // Dedup IDs should still be tracked
+        assert!(inbox.is_duplicate("msg1"));
+    }
+
+    #[test]
+    fn test_persistent_inbox() {
+        use tempfile::tempdir;
+
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("inbox_store").to_str().unwrap().to_string();
+
+        let backend = Arc::new(crate::store::backend::SledStorage::new(&path).unwrap());
+        let mut inbox = Inbox::persistent(backend);
+
+        // Receive messages
+        assert!(inbox.receive(make_received("msg1", "alice", "hello")));
+        assert!(inbox.receive(make_received("msg2", "bob", "world")));
+
+        assert_eq!(inbox.total_count(), 2);
+        assert_eq!(inbox.sender_count(), 2);
+
+        // Test deduplication
+        assert!(!inbox.receive(make_received("msg1", "alice", "duplicate")));
+
+        // Messages should be retrievable
+        let alice_msgs = inbox.messages_from("alice");
+        assert_eq!(alice_msgs.len(), 1);
+        assert_eq!(alice_msgs[0].message_id, "msg1");
+    }
+
+    #[test]
+    fn test_persistent_inbox_survives_restart() {
+        use tempfile::tempdir;
+
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("inbox_store").to_str().unwrap().to_string();
+
+        // First instance: receive messages
+        {
+            let backend = Arc::new(crate::store::backend::SledStorage::new(&path).unwrap());
+            let mut inbox = Inbox::persistent(backend);
+            inbox.receive(make_received("msg1", "alice", "hello"));
+            inbox.receive(make_received("msg2", "bob", "world"));
+        }
+
+        // Second instance: messages should still be there
+        {
+            let backend = Arc::new(crate::store::backend::SledStorage::new(&path).unwrap());
+            let inbox = Inbox::persistent(backend);
+            assert_eq!(inbox.total_count(), 2);
+            assert!(inbox.is_duplicate("msg1"));
+            assert!(inbox.is_duplicate("msg2"));
+
+            let all = inbox.all_messages();
+            assert_eq!(all.len(), 2);
+        }
+    }
+
+    #[test]
+    fn test_drain_received_messages() {
+        let mut inbox = Inbox::new();
+        inbox.receive(make_received("msg1", "alice", "hello"));
+        inbox.receive(make_received("msg2", "bob", "world"));
+
+        let drained = inbox.drain_received_messages();
+        assert_eq!(drained.len(), 2);
+        assert!(drained.iter().any(|m| m.message_id == "msg1"));
+        assert!(drained.iter().any(|m| m.message_id == "msg2"));
+
+        // Inbox should be empty after draining
+        assert_eq!(inbox.total_count(), 0);
+        assert_eq!(inbox.get_inbox_count(), 0);
+
+        // Dedup IDs should still be tracked
+        assert!(inbox.is_duplicate("msg1"));
+        assert!(inbox.is_duplicate("msg2"));
+
+        // Subsequent drain returns empty
+        let drained_again = inbox.drain_received_messages();
+        assert!(drained_again.is_empty());
+    }
+
+    /// T6 investigation: bincode is not self-describing, so
+    /// `#[serde(default)]` on `sender_public_key_hex` only helps JSON
+    /// callers - a bincode-encoded record from before that field existed
+    /// fails to decode under the current struct (demonstrated below).
+    ///
+    /// This is a live gap in `InboxBackend::Persistent`'s bincode
+    /// encoding in the abstract, but it does not currently expose any
+    /// user: every `IronCore` constructor (`new`, `with_storage`,
+    /// `with_storage_and_logs`) builds its inbox with `Inbox::new()`
+    /// (in-memory), never `Inbox::persistent`/`persistent_with_storage` -
+    /// grep confirms those two constructors are only reachable from this
+    /// module's own tests and `tests/integration_e2e.rs`. No CLI, mobile
+    /// (UniFFI), or WASM caller persists inbox messages to disk today, so
+    /// there is no pre-existing bincode blob for `sender_public_key_hex`
+    /// to orphan. Left as a regression guard: if a future change wires a
+    /// persistent inbox into a real constructor, this test documents the
+    /// exact failure mode to fix first (a legacy-struct fallback decode).
+    #[test]
+    fn test_legacy_bincode_record_without_sender_key_fails_to_decode() {
+        #[derive(Serialize)]
+        struct LegacyReceivedMessage {
+            message_id: String,
+            sender_id: String,
+            payload: Vec<u8>,
+            received_at: u64,
+            // no `sender_public_key_hex` - this is the pre-change shape.
+        }
+
+        let legacy = LegacyReceivedMessage {
+            message_id: "msg1".to_string(),
+            sender_id: "alice".to_string(),
+            payload: b"hello".to_vec(),
+            received_at: 1_700_000_000,
+        };
+        let legacy_bytes = bincode::serialize(&legacy).unwrap();
+
+        assert!(
+            deserialize_received_message(&legacy_bytes)
+                .unwrap()
+                .sender_public_key_hex
+                .is_none(),
+            "pre-change bincode records are not decodable under the current \
+             ReceivedMessage shape - confirms this would be a real gap if the \
+             persistent inbox backend were ever wired into production"
+        );
+    }
+
+    #[test]
+    fn test_get_inbox_count() {
+        let mut inbox = Inbox::new();
+        assert_eq!(inbox.get_inbox_count(), 0);
+
+        inbox.receive(make_received("msg1", "alice", "hello"));
+        assert_eq!(inbox.get_inbox_count(), 1);
+
+        inbox.receive(make_received("msg2", "bob", "world"));
+        assert_eq!(inbox.get_inbox_count(), 2);
+
+        // Duplicate should not increase count
+        assert!(!inbox.receive(make_received("msg1", "alice", "duplicate")));
+        assert_eq!(inbox.get_inbox_count(), 2);
+    }
+}

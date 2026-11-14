@@ -1,0 +1,14 @@
+﻿{
+  "file": "timing.rs",
+  "chunk": 1,
+  "summary": "This chunk defines a timing jitter generator for relay operations in Rust. It includes structs, enums, and functions to manage jitter configurations, compute random delays based on the configuration, and validate the configuration.",
+  "structs_or_classes": ["JitterConfig", "MessagePriority", "RelayTimingPolicy"],
+  "imports": ["serde", "web_time::Duration", "rand::Rng"],
+  "funcs": [
+    {
+      "name": "compute_jitter",
+      "line": 146,
+      "calls_out_to": ["bincode::serialize", "bincode::deserialize"]
+    }
+  ]
+}

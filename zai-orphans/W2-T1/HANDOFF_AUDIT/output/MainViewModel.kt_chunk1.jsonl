@@ -1,0 +1,90 @@
+﻿{
+  "file": "MainViewModel.kt",
+  "chunk": 1,
+  "summary": "A ViewModel class for managing the state and logic of the main application.",
+  "structs_or_classes": [],
+  "imports": [
+    "android.content.Context",
+    "android.net.Uri",
+    "androidx.lifecycle.ViewModel",
+    "androidx.lifecycle.viewModelScope",
+    "com.scmessenger.android.data.MeshRepository",
+    "com.scmessenger.android.data.PreferencesRepository",
+    "dagger.hilt.android.lifecycle.HiltViewModel",
+    "dagger.hilt.android.qualifiers.ApplicationContext",
+    "kotlinx.coroutines.flow.MutableStateFlow",
+    "kotlinx.coroutines.flow.StateFlow",
+    "kotlinx.coroutines.flow.asStateFlow",
+    "kotlinx.coroutines.flow.*",
+    "kotlinx.coroutines.Dispatchers",
+    "kotlinx.coroutines.launch",
+    "kotlinx.coroutines.withContext",
+    "timber.log.Timber",
+    "com.scmessenger.android.utils.StorageManager",
+    "java.util.concurrent.atomic.AtomicBoolean",
+    "javax.inject.Inject"
+  ],
+  "funcs": [
+    {
+      "name": "grantConsent",
+      "line": 125,
+      "calls_out_to": []
+    },
+    {
+      "name": "refreshIdentityState",
+      "line": 136,
+      "calls_out_to": []
+    },
+    {
+      "name": "createIdentity",
+      "line": 172,
+      "calls_out_to": [
+        "meshRepository.createIdentity",
+        "meshRepository.setNickname"
+      ]
+    },
+    {
+      "name": "clearIdentityError",
+      "line": 229,
+      "calls_out_to": []
+    },
+    {
+      "name": "refreshStorageStatus",
+      "line": 233,
+      "calls_out_to": [
+        "meshRepository.getAvailableStorageMB"
+      ]
+    },
+    {
+      "name": "importContact",
+      "line": 242,
+      "calls_out_to": [
+        "meshRepository.addContact",
+        "meshRepository.connectToPeer"
+      ]
+    },
+    {
+      "name": "clearImportState",
+      "line": 294,
+      "calls_out_to": []
+    },
+    {
+      "name": "skipOnboardingForRelayOnlyInstall",
+      "line": 299,
+      "calls_out_to": [
+        "preferencesRepository.setInstallChoiceCompleted",
+        "preferencesRepository.setOnboardingCompleted"
+      ]
+    },
+    {
+      "name": "handleDeepLink",
+      "line": 307,
+      "calls_out_to": []
+    },
+    {
+      "name": "consumeDeepLink",
+      "line": 323,
+      "calls_out_to": []
+    }
+  ]
+}

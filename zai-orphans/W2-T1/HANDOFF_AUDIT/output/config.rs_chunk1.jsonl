@@ -1,0 +1,64 @@
+﻿{
+  "file": "config.rs",
+  "chunk": 1,
+  "summary": "Configuration management for SCMessenger CLI",
+  "structs_or_classes": ["Config", "NetworkConfig"],
+  "imports": ["anyhow", "serde", "std::path::PathBuf"],
+  "funcs": [
+    {
+      "name": "config_dir",
+      "line": 95,
+      "calls_out_to": []
+    },
+    {
+      "name": "data_dir",
+      "line": 103,
+      "calls_out_to": []
+    },
+    {
+      "name": "config_file",
+      "line": 110,
+      "calls_out_to": []
+    },
+    {
+      "name": "load",
+      "line": 115,
+      "calls_out_to": ["Config::default"]
+    },
+    {
+      "name": "save",
+      "line": 134,
+      "calls_out_to": []
+    },
+    {
+      "name": "set",
+      "line": 142,
+      "calls_out_to": ["serde_json::from_str", "self.save"]
+    },
+    {
+      "name": "get",
+      "line": 190,
+      "calls_out_to": []
+    },
+    {
+      "name": "list",
+      "line": 206,
+      "calls_out_to": []
+    },
+    {
+      "name": "strip_peer_id",
+      "line": 238,
+      "calls_out_to": []
+    },
+    {
+      "name": "add_bootstrap_node",
+      "line": 247,
+      "calls_out_to": ["self.save"]
+    },
+    {
+      "name": "remove_bootstrap_node",
+      "line": 263,
+      "calls_out_to": ["self.save"]
+    }
+  ]
+}

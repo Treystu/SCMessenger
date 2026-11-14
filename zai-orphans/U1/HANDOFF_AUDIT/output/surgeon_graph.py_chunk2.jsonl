@@ -1,0 +1,38 @@
+﻿{
+  "funcs": [
+    {
+      "name": "route_from_applier",
+      "parameters": ["state"],
+      "return_type": "str"
+    },
+    {
+      "name": "workflow.add_conditional_edges",
+      "parameters": ["source", "condition_function", "edge_map"]
+    },
+    {
+      "name": "workflow.add_edge",
+      "parameters": ["source", "target"]
+    },
+    {
+      "name": "workflow.set_entry_point",
+      "parameters": ["entry_point"]
+    }
+  ],
+  "classes": [
+    {
+      "name": "GraphState",
+      "attributes": [
+        "task_description",
+        "target_file",
+        "search_block",
+        "replace_block",
+        "error_message",
+        "file_context",
+        "retry_count",
+        "philosophy_veto"
+      ]
+    }
+  ],
+  "imports": [],
+  "calls": []
+}

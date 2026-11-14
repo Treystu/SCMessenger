@@ -1,0 +1,34 @@
+﻿{
+  "file": "BackoffStrategy.kt",
+  "chunk": 1,
+  "summary": "This class implements an exponential backoff strategy with jitter for retry operations. It includes methods to calculate the next delay, get the current delay without incrementing, reset the backoff state, and check if we've exceeded the max delay.",
+  "structs_or_classes": ["BackoffStrategy", "FixedDelayBackoff"],
+  "imports": [" timber.log.Timber", "java.util.concurrent.atomic.AtomicInteger", "kotlin.math.min", "kotlin.random.Random"],
+  "funcs": [
+    {
+      "name": "nextDelay",
+      "line": 28,
+      "calls_out_to": []
+    },
+    {
+      "name": "getCurrentDelay",
+      "line": 54,
+      "calls_out_to": []
+    },
+    {
+      "name": "reset",
+      "line": 70,
+      "calls_out_to": []
+    },
+    {
+      "name": "getAttemptCount",
+      "line": 73,
+      "calls_out_to": []
+    },
+    {
+      "name": "isAtMaxDelay",
+      "line": 80,
+      "calls_out_to": []
+    }
+  ]
+}

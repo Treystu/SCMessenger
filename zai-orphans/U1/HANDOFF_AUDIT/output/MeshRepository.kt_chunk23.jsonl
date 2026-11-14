@@ -1,0 +1,83 @@
+﻿{
+  "file": "MeshRepository.kt",
+  "chunk": 23,
+  "summary": "This class manages the mesh repository for a peer-to-peer communication system. It handles bootstraping, network changes, and identity export.",
+  "structs_or_classes": [
+    {
+      "name": "BootstrapAttempt",
+      "line": 7708
+    },
+    {
+      "name": "BootstrapResult",
+      "line": 7714
+    }
+  ],
+  "imports": [],
+  "funcs": [
+    {
+      "name": "bootstrapWithFallbackStrategy",
+      "line": 7724,
+      "calls_out_to": []
+    },
+    {
+      "name": "startNetworkChangeWatch",
+      "line": 7748,
+      "calls_out_to": ["networkDetector.networkType.collect"]
+    },
+    {
+      "name": "stopNetworkChangeWatch",
+      "line": 7792,
+      "calls_out_to": []
+    },
+    {
+      "name": "classifyBootstrapError",
+      "line": 7801,
+      "calls_out_to": ["extractPortFromMultiaddr"]
+    },
+    {
+      "name": "shouldAttemptDial",
+      "line": 7848,
+      "calls_out_to": []
+    },
+    {
+      "name": "startStorageMaintenance",
+      "line": 7895,
+      "calls_out_to": ["android.os.StatFs", "ironCore?.updateDiskStats", "ironCore?.performMaintenance"]
+    },
+    {
+      "name": "getExternalAddresses",
+      "line": 7927,
+      "calls_out_to": ["swarmBridge?.getExternalAddresses"]
+    },
+    {
+      "name": "getListeningAddresses",
+      "line": 7931,
+      "calls_out_to": ["swarmBridge?.getListeners"]
+    },
+    {
+      "name": "getLocalIpAddress",
+      "line": 7942,
+      "calls_out_to": ["java.net.NetworkInterface.getNetworkInterfaces", "java.net.Inet4Address.isLoopbackAddress", "java.net.Inet4Address.isLinkLocalAddress"]
+    },
+    {
+      "name": "getIdentityExportString",
+      "line": 7985,
+      "calls_out_to": ["getIdentityInfo", "normalizeOutboundListenerHints", "normalizeExternalAddressHints", "getPreferredRelay", "getLocalIpAddress"]
+    },
+    {
+      "name": "observeIncomingMessages",
+      "line": 8018,
+      "calls_out_to": ["com.scmessenger.android.service.MeshEventBus.messageEvents"]
+    },
+    {
+      "name": "observePeers",
+      "line": 8025,
+      "calls_out_to": ["com.scmessenger.android.service.MeshEventBus.peerEvents.collect", "ledgerManager?.dialableAddresses()?.mapNotNull"]
+    },
+    {
+      "name": "observeNetworkStats",
+      "line": 8043,
+      "calls_out_to": ["meshService?.getStats"]
+    }
+  ]
+}

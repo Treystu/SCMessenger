@@ -1,0 +1,39 @@
+﻿{
+  "file": "observation.rs",
+  "chunk": 1,
+  "summary": "This file contains the implementation of an address observer and tracker in Rust. It tracks observations from multiple peers to determine our actual external addresses using a consensus-based approach without relying on external STUN servers.",
+  "structs_or_classes": ["AddressObservation", "AddressObserver", "ConnectionEndpoint", "ConnectionTracker"],
+  "imports": ["libp2p::Multiaddr", "std::collections::HashMap", "std::net::SocketAddr", "web_time::{SystemTime, UNIX_EPOCH}"],
+  "funcs": [
+    {
+      "name": "record_observation",
+      "line": 49,
+      "calls_out_to": ["AddressObserver"]
+    },
+    {
+      "name": "external_addresses",
+      "line": 81,
+      "calls_out_to": ["AddressObserver"]
+    },
+    {
+      "name": "primary_external_address",
+      "line": 86,
+      "calls_out_to": ["AddressObserver"]
+    },
+    {
+      "name": "all_observations",
+      "line": 90,
+      "calls_out_to": ["AddressObserver"]
+    },
+    {
+      "name": "expire_old_observations",
+      "line": 105,
+      "calls_out_to": ["AddressObserver"]
+    },
+    {
+      "name": "recalculate_consensus",
+      "line": 110,
+      "calls_out_to": ["AddressObserver"]
+    }
+  ]
+}

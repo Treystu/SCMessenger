@@ -1,0 +1,64 @@
+﻿{
+  "file": "internet.rs",
+  "chunk": 3,
+  "summary": "This chunk contains several test functions for the `InternetRelay` struct, which is responsible for managing and interacting with internet relays. The tests cover various scenarios such as relay creation, peer registration, statistics retrieval, and more.",
+  "structs_or_classes": ["InternetRelay", "PeerId"],
+  "imports": ["std::net::SocketAddr", "tokio::test"],
+  "funcs": [
+    {
+      "name": "test_relay_peer_not_found",
+      "line": 706,
+      "calls_out_to": ["relay.relay_for_peer(peer, message).await.is_err()"]
+    },
+    {
+      "name": "test_client_mode_relay_fails",
+      "line": 717,
+      "calls_out_to": ["relay.relay_for_peer(peer, message).await.is_err()"]
+    },
+    {
+      "name": "test_relay_stats",
+      "line": 732,
+      "calls_out_to": ["relay.get_relay_stats(&peer)"]
+    },
+    {
+      "name": "test_get_relay_peers",
+      "line": 750,
+      "calls_out_to": ["relay.get_relay_peers()"]
+    },
+    {
+      "name": "test_can_accept_relay",
+      "line": 772,
+      "calls_out_to": ["relay.can_accept_relay()"]
+    },
+    {
+      "name": "test_cleanup_stale_relays",
+      "line": 816,
+      "calls_out_to": ["relay.cleanup_stale_relays()"]
+    },
+    {
+      "name": "test_relay_mode_config",
+      "line": 821,
+      "calls_out_to": ["config.relay_mode"]
+    },
+    {
+      "name": "test_nat_traversal_hole_punch",
+      "line": 839,
+      "calls_out_to": ["relay_inst.attempt_hole_punch(local, remote, relay)"]
+    },
+    {
+      "name": "test_nat_traversal_relay_circuit",
+      "line": 851,
+      "calls_out_to": ["relay_inst.establish_relay_circuit(initiator, target, relay)"]
+    },
+    {
+      "name": "test_invalid_relay_addresses",
+      "line": 884,
+      "calls_out_to": ["relay.register_relay_peer(peer, empty_addrs, true).is_err()"]
+    },
+    {
+      "name": "test_shutdown",
+      "line": 902,
+      "calls_out_to": ["relay.shutdown().await.unwrap()"]
+    }
+  ]
+}

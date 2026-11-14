@@ -1,0 +1,27 @@
+﻿{
+  "file": "RoleNavigationPolicyTest.kt",
+  "chunk": 1,
+  "summary": "This class contains tests for the RoleNavigationPolicy, which determines the navigation routes and start destination based on user roles.",
+  "structs_or_classes": [],
+  "imports": [
+    "com.scmessenger.android.ui.roleBasedBottomNavItems",
+    "com.scmessenger.android.ui.startDestinationForRole"
+  ],
+  "funcs": [
+    {
+      "name": "relay only role hides conversations and contacts",
+      "line": 12,
+      "calls_out_to": ["roleBasedBottomNavItems", "map", "assertEquals", "assertFalse"]
+    },
+    {
+      "name": "full role exposes conversations and contacts",
+      "line": 21,
+      "calls_out_to": ["roleBasedBottomNavItems", "map", "assertTrue", "assertFalse", "assertEquals"]
+    },
+    {
+      "name": "start destination follows role",
+      "line": 30,
+      "calls_out_to": ["startDestinationForRole"]
+    }
+  ]
+}

@@ -1,0 +1,69 @@
+﻿{
+  "file": "mesh.rs",
+  "chunk": 1,
+  "summary": "This chunk defines a WASM mesh node implementation in Rust. It includes structs, enums, and functions to manage the state, storage, and communication of the mesh node.",
+  "structs_or_classes": ["WasmMeshNode", "WasmMeshConfig", "WasmStore"],
+  "imports": ["libp2p::identity::Keypair", "parking_lot::RwLock", "serde::{Deserialize, Serialize}", "std::sync::Arc", "thiserror::Error"],
+  "funcs": [
+    {
+      "name": "new",
+      "line": 70,
+      "calls_out_to": ["WasmMeshConfig"]
+    },
+    {
+      "name": "default",
+      "line": 90,
+      "calls_out_to": []
+    },
+    {
+      "name": "start",
+      "line": 93,
+      "calls_out_to": []
+    },
+    {
+      "name": "stop",
+      "line": 100,
+      "calls_out_to": []
+    },
+    {
+      "name": "state",
+      "line": 106,
+      "calls_out_to": []
+    },
+    {
+      "name": "get_identity_info",
+      "line": 111,
+      "calls_out_to": []
+    },
+    {
+      "name": "set_nickname",
+      "line": 120,
+      "calls_out_to": []
+    },
+    {
+      "name": "store_message",
+      "line": 124,
+      "calls_out_to": ["WasmStore"]
+    },
+    {
+      "name": "get_messages_for_hint",
+      "line": 160,
+      "calls_out_to": ["WasmStore"]
+    },
+    {
+      "name": "message_count",
+      "line": 164,
+      "calls_out_to": []
+    },
+    {
+      "name": "relay_incoming",
+      "line": 170,
+      "calls_out_to": ["WasmStore"]
+    },
+    {
+      "name": "tick",
+      "line": 201,
+      "calls_out_to": ["WasmMeshState", "WasmStore"]
+    }
+  ]
+}

@@ -1,0 +1,39 @@
+﻿{
+  "file": "logs.rs",
+  "chunk": 1,
+  "summary": "This chunk defines a `LogManager` struct that manages log summaries using a storage backend. It includes methods for recording logs, flushing the cache to the backend, pruning the oldest logs, and exporting all logs.",
+  "structs_or_classes": ["LogSummary", "LogManager"],
+  "imports": ["std::collections::HashMap", "std::sync::Arc", "serde::{Deserialize, Serialize}", "web_time::SystemTime", "parking_lot::RwLock", "crate::store::backend::StorageBackend", "IronCoreError"],
+  "funcs": [
+    {
+      "name": "new",
+      "line": 26,
+      "calls_out_to": ["Arc<dyn StorageBackend>"]
+    },
+    {
+      "name": "init_install_time",
+      "line": 43,
+      "calls_out_to": ["backend.get", "serde_json::from_slice"]
+    },
+    {
+      "name": "record_log",
+      "line": 52,
+      "calls_out_to": ["web_time::SystemTime", "serde_json::to_vec"]
+    },
+    {
+      "name": "flush",
+      "line": 101,
+      "calls_out_to": ["backend.flush"]
+    },
+    {
+      "name": "prune_oldest",
+      "line": 116,
+      "calls_out_to": ["backend.scan_prefix", "serde_json::from_slice"]
+    },
+    {
+      "name": "export_all",
+      "line": 145,
+      "calls_out_to": ["flush", "serde_json::to_string_pretty"]
+    }
+  ]
+}

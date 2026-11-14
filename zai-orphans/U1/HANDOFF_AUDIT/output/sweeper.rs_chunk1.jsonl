@@ -1,0 +1,14 @@
+﻿{
+  "file": "sweeper.rs",
+  "chunk": 1,
+  "summary": "This chunk defines a function `sweep_expired_messages` in the `sweeper.rs` file, which iterates through all messages in an inbox store and counts how many of them have expired based on their TTL configuration. The function does not remove the expired messages from the inbox but simply counts them.",
+  "structs_or_classes": ["Inbox"],
+  "imports": ["message::ephemeral::{is_expired, TtlConfig}", "store::Inbox", "web_time"],
+  "funcs": [
+    {
+      "name": "sweep_expired_messages",
+      "line": 7,
+      "calls_out_to": ["inbox.all_messages"]
+    }
+  ]
+}

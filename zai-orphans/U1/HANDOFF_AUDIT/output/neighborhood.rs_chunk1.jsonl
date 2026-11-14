@@ -1,0 +1,19 @@
+﻿{
+  "file": "neighborhood.rs",
+  "chunk": 1,
+  "summary": "Layer 2 â€” Rhizomorphs (Neighborhood Gossip)",
+  "structs_or_classes": ["GatewayInfo", "NeighborhoodSummary", "NeighborhoodGossip", "NeighborhoodTable"],
+  "imports": ["super::local::{CellSummary, PeerId, TransportType}", "std::collections::HashMap", "web_time::SystemTime"],
+  "funcs": [
+    {
+      "name": "update_gateway",
+      "line": 94,
+      "calls_out_to": ["self.gateways.insert"]
+    },
+    {
+      "name": "process_gossip",
+      "line": 160,
+      "calls_out_to": ["self.summaries.iter_mut().find", "self.generate_gossip"]
+    }
+  ]
+}

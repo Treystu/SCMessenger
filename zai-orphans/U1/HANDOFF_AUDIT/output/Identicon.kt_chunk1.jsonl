@@ -1,0 +1,53 @@
+﻿{
+  "file": "Identicon.kt",
+  "chunk": 1,
+  "summary": "Generates a deterministic identicon from a public key or identity hash.",
+  "structs_or_classes": [],
+  "imports": [
+    "androidx.compose.foundation.Canvas",
+    "androidx.compose.foundation.background",
+    "androidx.compose.foundation.layout.Box",
+    "androidx.compose.foundation.layout.size",
+    "androidx.compose.foundation.shape.CircleShape",
+    "androidx.compose.runtime.Composable",
+    "androidx.compose.ui.Modifier",
+    "androidx.compose.ui.draw.clip",
+    "androidx.compose.ui.geometry.Offset",
+    "androidx.compose.ui.graphics.Color",
+    "androidx.compose.ui.unit.Dp",
+    "androidx.compose.ui.unit.dp",
+    "kotlin.math.absoluteValue"
+  ],
+  "funcs": [
+    {
+      "name": "Identicon",
+      "line": 29,
+      "calls_out_to": ["generateColors", "generatePattern"]
+    },
+    {
+      "name": "generateColors",
+      "line": 77,
+      "calls_out_to": []
+    },
+    {
+      "name": "generatePattern",
+      "line": 100,
+      "calls_out_to": []
+    },
+    {
+      "name": "IdenticonFromHex",
+      "line": 115,
+      "calls_out_to": ["hexString.chunked", "map", "toInt", "toByteArray"]
+    },
+    {
+      "name": "IdenticonFromPeerId",
+      "line": 135,
+      "calls_out_to": ["peerId.toByteArray"]
+    },
+    {
+      "name": "generateIdenticonBitmap",
+      "line": 148,
+      "calls_out_to": ["generateColors", "generatePattern", "android.graphics.Bitmap.createBitmap", "android.graphics.Canvas", "android.graphics.Paint"]
+    }
+  ]
+}

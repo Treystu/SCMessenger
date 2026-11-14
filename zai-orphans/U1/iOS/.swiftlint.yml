@@ -1,0 +1,123 @@
+# SwiftLint configuration for SCMessenger iOS
+
+# Disabled rules - rules we don't want to enforce
+disabled_rules:
+  - trailing_whitespace  # Handled by editor config
+  # Style rules that don't match this codebase's conventions
+  - explicit_type_interface         # Requires explicit type on every local var; excessive noise
+  - multiline_arguments             # SwiftUI call sites commonly mix inline/multiline
+  - multiline_parameters            # Same
+  - vertical_parameter_alignment_on_call  # Conflicts with multiline_arguments disable
+  - implicit_optional_initialization      # Style preference; @State var x: Type? = nil is fine
+  - multiple_closures_with_trailing_closure  # Common SwiftUI pattern (e.g. Button { } label: {})
+  - large_tuple                     # Used in transport routing return types; refactor deferred
+  - function_parameter_count        # Several internal functions intentionally take many params
+  - blanket_disable_command         # Test files use file-level disables for test-only rules
+
+# Opt-in rules - additional rules to enable
+# Note: force_unwrapping (AST-based) is the correct way to catch real force
+# unwraps; it replaced a custom regex rule (force_unwrap_production) that
+# matched any bare "!" -- including boolean negation ("!isEmpty") and even
+# string literals ("Hello, world!") -- producing ~460 false positives across
+# the source tree with zero true positives caught that this rule doesn't
+# already catch correctly.
+opt_in_rules:
+  - empty_count
+  - explicit_init
+  - force_unwrapping
+  - closure_spacing
+  - contains_over_first_not_nil
+  - empty_string
+  - fatal_error_message
+  - first_where
+  - joined_default_parameter
+  - literal_expression_end_indentation
+  - operator_usage_whitespace
+  - overridden_super_call
+  - redundant_nil_coalescing
+  - sorted_first_last
+  - unneeded_parentheses_in_closure_argument
+
+# Line length - maximum characters per line
+line_length:
+  warning: 250
+  error: 250
+  ignores_function_declarations: true
+  ignores_comments: true
+  ignores_urls: true
+
+# Function body length - maximum lines in a function
+function_body_length:
+  warning: 600
+  error: 600
+
+# Type body length - maximum lines in a type (class, struct, enum)
+type_body_length:
+  warning: 6000
+  error: 6000
+
+# File length - maximum lines in a file
+file_length:
+  warning: 7000
+  error: 7000
+  ignore_comment_only_lines: true
+
+# Cyclomatic complexity - maximum complexity for a function
+cyclomatic_complexity:
+  warning: 60
+  error: 60
+  ignores_case_statements: true
+
+# Nesting - maximum nesting depth
+nesting:
+  type_level:
+    warning: 2
+
+# Identifier name rules
+identifier_name:
+  min_length:
+    warning: 2
+    error: 1
+  max_length:
+    warning: 50
+    error: 60
+  excluded:
+    - id
+    - x
+    - y
+    - z
+    - i
+    - a
+    - b
+    - s
+    - v
+    - f
+
+# Type name rules
+type_name:
+  min_length:
+    warning: 3
+    error: 2
+  max_length:
+    warning: 50
+    error: 60
+  excluded:
+    - mDNSServiceDiscovery  # Legacy name, changing breaks existing references
+
+# Excluded paths - don't lint these directories
+# Note: "Generated" alone doesn't match the nested
+# SCMessenger/SCMessenger/Generated/ path (confirmed: api.swift, a
+# 10634-line UniFFI-generated file, was still being linted) -- swiftlint's
+# excluded-path matching needs the fuller relative path to catch it.
+excluded:
+  - Pods
+  - Build
+  - DerivedData
+  - Generated
+  - SCMessenger/SCMessenger/Generated
+  - .build
+  - vendor
+  - SCMessengerCore.xcframework
+
+# Reporter type - how to output results
+reporter: "xcode"

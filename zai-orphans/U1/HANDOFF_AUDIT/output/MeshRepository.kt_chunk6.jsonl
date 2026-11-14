@@ -1,0 +1,49 @@
+﻿{
+  "file": "MeshRepository.kt",
+  "chunk": 6,
+  "summary": "This code defines a class that handles incoming messages and updates the mesh service state.",
+  "structs_or_classes": [],
+  "imports": [
+    "com.scmessenger.android.service.MeshEventBus",
+    "com.scmessenger.android.service.TransportType"
+  ],
+  "funcs": [
+    {
+      "name": "onMessageReceived",
+      "line": 1,
+      "calls_out_to": [
+        "logDeliveryAttempt",
+        "removePendingOutbound",
+        "markDeliveredReceiptSeen",
+        "historyManager?.get",
+        "historyManager?.add",
+        "repoScope.launch",
+        "com.scmessenger.android.service.MeshEventBus.emitMessageEvent"
+      ]
+    },
+    {
+      "name": "onReceiptReceived",
+      "line": 1942,
+      "calls_out_to": [
+        "logDeliveryState",
+        "removePendingOutbound",
+        "historyManager?.get",
+        "repoScope.launch",
+        "com.scmessenger.android.service.MeshEventBus.emitMessageEvent"
+      ]
+    },
+    {
+      "name": "startMeshService",
+      "line": 2074,
+      "calls_out_to": [
+        "logDeliveryAttempt",
+        "removePendingOutbound",
+        "markDeliveredReceiptSeen",
+        "historyManager?.get",
+        "historyManager?.add",
+        "repoScope.launch",
+        "com.scmessenger.android.service.MeshEventBus.emitMessageEvent"
+      ]
+    }
+  ]
+}

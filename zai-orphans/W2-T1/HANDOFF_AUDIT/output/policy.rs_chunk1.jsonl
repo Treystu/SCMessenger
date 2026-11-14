@@ -1,0 +1,29 @@
+﻿{
+  "file": "policy.rs",
+  "chunk": 1,
+  "summary": "The code chunk defines a policy engine for managing relay aggressiveness based on device state. It includes structs, imports, and functions to handle device state updates, profile computation, and configuration settings.",
+  "structs_or_classes": ["DeviceState", "RelayProfile", "PolicyEngine"],
+  "imports": ["super::relay::RelayConfig", "thiserror::Error"],
+  "funcs": [
+    {
+      "name": "update_device_state",
+      "line": 60,
+      "calls_out_to": ["compute_profile"]
+    },
+    {
+      "name": "scan_interval_ms",
+      "line": 81,
+      "calls_out_to": []
+    },
+    {
+      "name": "relay_budget_per_hour",
+      "line": 94,
+      "calls_out_to": []
+    },
+    {
+      "name": "to_relay_config",
+      "line": 107,
+      "calls_out_to": []
+    }
+  ]
+}

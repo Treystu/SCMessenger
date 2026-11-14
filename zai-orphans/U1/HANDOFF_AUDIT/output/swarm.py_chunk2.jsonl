@@ -1,0 +1,32 @@
+﻿{
+    "funcs": [
+        {
+            "name": "parse_args",
+            "parameters": [],
+            "return_type": "argparse.Namespace"
+        },
+        {
+            "name": "build_crew",
+            "parameters": ["list_tasks"],
+            "return_type": "ScmessengerCrew"
+        }
+    ],
+    "classes": [
+        {
+            "name": "Task",
+            "attributes": [
+                "agent",
+                "description",
+                "expected_output"
+            ]
+        },
+        {
+            "name": "ScmessengerCrew",
+            "methods": [
+                "kickoff"
+            ]
+        }
+    ],
+    "imports": [],
+    "calls": []
+}

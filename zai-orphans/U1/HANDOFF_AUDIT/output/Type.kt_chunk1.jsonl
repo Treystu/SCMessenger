@@ -1,0 +1,8 @@
+﻿{
+  "file": "Type.kt",
+  "chunk": 1,
+  "summary": "This file defines the Typography object in the com.scmessenger.android.ui.theme package, which is used to configure the appearance of text components in a Material 3 theme.",
+  "structs_or_classes": ["Typography"],
+  "imports": [],
+  "funcs": []
+}

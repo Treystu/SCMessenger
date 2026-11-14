@@ -1,0 +1,19 @@
+﻿{
+  "file": "PeerListScreen.kt",
+  "chunk": 1,
+  "summary": "This Kotlin composable function `PeerListScreen` is a part of the Android UI for displaying connected peers in a mesh network. It includes components such as a topAppBar, a loading indicator, and a list of peer cards.",
+  "structs_or_classes": ["PeerInfo", "DashboardViewModel"],
+  "imports": ["androidx.compose.foundation.layout.*", "androidx.compose.material.icons.Icons", "androidx.compose.material.icons.automirrored.filled.ArrowBack", "androidx.compose.material.icons.filled.Refresh", "androidx.compose.material3.*", "androidx.compose.runtime.*", "androidx.compose.ui.Alignment", "androidx.compose.ui.Modifier", "androidx.compose.ui.text.font.FontFamily", "androidx.compose.ui.text.font.FontWeight", "androidx.compose.ui.res.stringResource", "androidx.compose.ui.unit.dp", "androidx.hilt.navigation.compose.hiltViewModel", "com.scmessenger.android.R", "com.scmessenger.android.ui.components.ErrorBanner", "com.scmessenger.android.ui.components.IdenticonFromPeerId", "com.scmessenger.android.service.ConnectionQuality", "com.scmessenger.android.ui.components.ConnectionQualityIndicator", "com.scmessenger.android.ui.components.StatusIndicator", "com.scmessenger.android.ui.theme.*", "com.scmessenger.android.ui.viewmodels.DashboardViewModel", "java.text.SimpleDateFormat", "java.util.*"],
+  "funcs": [
+    {
+      "name": "PeerListScreen",
+      "line": 38,
+      "calls_out_to": ["viewModel"]
+    },
+    {
+      "name": "LaunchedEffect",
+      "line": 49,
+      "calls_out_to": ["viewModel.refreshData()"]
+    }
+  ]
+}

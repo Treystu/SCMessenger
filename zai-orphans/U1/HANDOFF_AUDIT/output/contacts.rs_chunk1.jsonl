@@ -1,0 +1,69 @@
+﻿{
+  "file": "contacts.rs",
+  "chunk": 1,
+  "summary": "This file contains the implementation of a contact list management system for an SCMessenger CLI. It uses the `sled` database to store and retrieve contact information.",
+  "structs_or_classes": ["Contact", "ContactList"],
+  "imports": ["anyhow", "serde", "sled", "std::path::PathBuf", "current_timestamp"],
+  "funcs": [
+    {
+      "name": "open",
+      "line": 62,
+      "calls_out_to": ["db"]
+    },
+    {
+      "name": "add",
+      "line": 84,
+      "calls_out_to": ["db"]
+    },
+    {
+      "name": "get",
+      "line": 105,
+      "calls_out_to": ["db"]
+    },
+    {
+      "name": "remove",
+      "line": 127,
+      "calls_out_to": ["db"]
+    },
+    {
+      "name": "list",
+      "line": 143,
+      "calls_out_to": ["db"]
+    },
+    {
+      "name": "find_by_nickname",
+      "line": 160,
+      "calls_out_to": ["db"]
+    },
+    {
+      "name": "find_by_public_key",
+      "line": 172,
+      "calls_out_to": ["db"]
+    },
+    {
+      "name": "update_last_seen",
+      "line": 184,
+      "calls_out_to": ["get", "add"]
+    },
+    {
+      "name": "set_nickname",
+      "line": 152,
+      "calls_out_to": ["get", "add"]
+    },
+    {
+      "name": "set_notes",
+      "line": 164,
+      "calls_out_to": ["get", "add"]
+    },
+    {
+      "name": "count",
+      "line": 176,
+      "calls_out_to": []
+    },
+    {
+      "name": "search",
+      "line": 208,
+      "calls_out_to": ["db"]
+    }
+  ]
+}

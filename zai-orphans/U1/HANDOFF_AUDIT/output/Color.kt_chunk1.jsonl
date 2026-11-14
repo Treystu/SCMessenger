@@ -1,0 +1,10 @@
+﻿{
+  "file": "Color.kt",
+  "chunk": 1,
+  "summary": "This file defines various color constants used in the SCMessenger Android application's theme.",
+  "structs_or_classes": [],
+  "imports": [
+    "androidx.compose.ui.graphics.Color"
+  ],
+  "funcs": []
+}

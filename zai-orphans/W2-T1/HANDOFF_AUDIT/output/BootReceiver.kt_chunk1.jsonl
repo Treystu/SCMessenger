@@ -1,0 +1,14 @@
+﻿{
+  "file": "BootReceiver.kt",
+  "chunk": 1,
+  "summary": "This Kotlin class is a BroadcastReceiver that listens for the ACTION_BOOT_COMPLETED broadcast and starts a mesh service if auto-start is enabled in preferences.",
+  "structs_or_classes": ["BroadcastReceiver", "CoroutineScope", "Dispatchers", "SupervisorJob", "CoroutineException"],
+  "imports": ["com.scmessenger.android.service.PreferencesRepository", "dagger.hilt.android.AndroidEntryPoint", "kotlinx.coroutines.CoroutineScope", "kotlinx.coroutines.Dispatchers", "kotlinx.coroutines.SupervisorJob", "kotlinx.coroutines.launch", "timber.log.Timber"],
+  "funcs": [
+    {
+      "name": "onReceive",
+      "line": 25,
+      "calls_out_to": ["startMeshService"]
+    }
+  ]
+}

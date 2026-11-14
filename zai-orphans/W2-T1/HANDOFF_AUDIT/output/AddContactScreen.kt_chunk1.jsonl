@@ -1,0 +1,86 @@
+﻿{
+  "file": "AddContactScreen.kt",
+  "chunk": 1,
+  "summary": "Add Contact screen - QR scan, manual entry, nearby discovery.",
+  "structs_or_classes": [],
+  "imports": [
+    "androidx.compose.foundation.layout.*",
+    "androidx.compose.foundation.rememberScrollState",
+    "androidx.compose.foundation.verticalScroll",
+    "androidx.compose.material.icons.Icons",
+    "androidx.compose.material.icons.filled.*",
+    "androidx.compose.material.icons.automirrored.filled.ArrowBack",
+    "androidx.compose.material3.*",
+    "androidx.compose.runtime.*",
+    "androidx.compose.ui.Alignment",
+    "androidx.compose.ui.Modifier",
+    "androidx.compose.ui.platform.LocalContext",
+    "androidx.compose.ui.text.font.FontFamily",
+    "androidx.compose.ui.text.font.FontWeight",
+    "androidx.compose.ui.unit.dp",
+    "androidx.hilt.navigation.compose.hiltViewModel",
+    "com.google.android.gms.common.ConnectionResult",
+    "com.google.android.gms.common.GoogleApiAvailability",
+    "com.google.android.gms.common.api.CommonStatusCodes",
+    "com.google.mlkit.common.MlKitException",
+    "com.google.mlkit.vision.codescanner.GmsBarcodeScannerOptions",
+    "com.google.mlkit.vision.codescanner.GmsBarcodeScanning",
+    "com.google.mlkit.vision.barcode.common.Barcode",
+    "androidx.compose.ui.res.stringResource",
+    "com.scmessenger.android.R",
+    "com.scmessenger.android.ui.components.ErrorBanner",
+    "com.scmessenger.android.ui.components.IdenticonFromPeerId",
+    "com.scmessenger.android.ui.viewmodels.ContactsViewModel",
+    "com.scmessenger.android.utils.ContactImportParseResult",
+    "com.scmessenger.android.utils.parseContactImportPayload",
+    "timber.log.Timber"
+  ],
+  "funcs": [
+    {
+      "name": "AddContactScreen",
+      "line": 42,
+      "calls_out_to": [
+        "hiltViewModel",
+        "collectAsState",
+        "rememberScrollState",
+        "TopAppBar",
+        "Scaffold",
+        "Column",
+        "TabRow",
+        "Tab",
+        "ErrorBanner",
+        "QRScanTab",
+        "NearbyDiscoveryTab"
+      ]
+    },
+    {
+      "name": "ManualEntryTab",
+      "line": 176,
+      "calls_out_to": [
+        "OutlinedTextField",
+        "Card",
+        "Row",
+        "IdenticonFromPeerId",
+        "Text",
+        "Button"
+      ]
+    },
+    {
+      "name": "QRScanTab",
+      "line": 285,
+      "calls_out_to": [
+        "GoogleApiAvailability.getInstance().isGooglePlayServicesAvailable",
+        "GmsBarcodeScannerOptions.Builder",
+        "GmsBarcodeScanning.getClient",
+        "startScan",
+        "addOnSuccessListener",
+        "addOnFailureListener"
+      ]
+    },
+    {
+      "name": "NearbyDiscoveryTab",
+      "line": 371,
+      "calls_out_to": []
+    }
+  ]
+}

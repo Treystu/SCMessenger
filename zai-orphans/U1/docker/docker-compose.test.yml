@@ -1,0 +1,333 @@
+version: "3.8"
+
+# Comprehensive testing infrastructure for SCMessenger
+# Includes: Android tests, Rust tests, integration tests, and mock infrastructure
+
+services:
+  # Rust Core Library Tests
+  rust-core-test:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.rust-test
+    container_name: scm-rust-test
+    working_dir: /workspace
+    volumes:
+      - rust-test-cache:/workspace/target
+    environment:
+      - RUST_LOG=debug
+      - RUST_BACKTRACE=1
+    command: >
+      bash -c "
+        echo '=== Running Rust Workspace Tests ===' &&
+        cargo test --workspace --exclude scmessenger-wasm -- --nocapture --test-threads=1 &&
+        echo '=== Rust Workspace Tests Complete ==='
+      "
+    profiles:
+      - test
+
+  # Rust Code Quality (Clippy & Fmt)
+  rust-lint:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.rust-test
+    container_name: scm-lint
+    working_dir: /workspace
+    volumes:
+      - rust-test-cache:/workspace/target
+    command: >
+      bash -c "
+        echo '=== Running Rustfmt Check ===' &&
+        cargo fmt --all -- --check &&
+        echo '=== Running Clippy Lints ===' &&
+        cargo clippy --workspace --all-features -- -D warnings &&
+        echo '=== Linting Complete ==='
+      "
+    profiles:
+      - test
+      - lint
+
+  # Rust Security Audit
+  rust-audit:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.rust-test
+    container_name: scm-audit
+    working_dir: /workspace
+    command: >
+      bash -c "
+        echo '=== Running Security Audit ===' &&
+        cargo audit &&
+        echo '=== Audit Complete ==='
+      "
+    profiles:
+      - test
+      - audit
+
+  # Rust Code Coverage
+  rust-coverage:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.rust-test
+    container_name: scm-coverage
+    working_dir: /workspace
+    volumes:
+      - rust-test-cache:/workspace/target
+      - ./test-results:/workspace/test-results:rw
+    command: >
+      bash -c "
+        echo '=== Generating Code Coverage Report ===' &&
+        mkdir -p test-results/coverage &&
+        cargo tarpaulin --workspace --all-features --out Xml --output-dir test-results/coverage &&
+        echo '=== Coverage Report Generated ==='
+      "
+    profiles:
+      - test
+      - coverage
+
+  # WASM Component Tests
+  wasm-test:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.wasm-test
+    container_name: scm-wasm-test
+    working_dir: /workspace
+    volumes:
+      - rust-test-cache:/workspace/target
+    command: >
+      bash -c "
+        echo '=== Running WASM Tests ===' &&
+        cd wasm && wasm-pack test --node &&
+        echo '=== WASM Tests Complete ==='
+      "
+    profiles:
+      - test
+      - wasm
+
+  # UniFFI Bindings Verification (Swift & Kotlin Parity)
+  uniffi-bindings-check:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.rust-test
+    container_name: scm-bindings-check
+    working_dir: /workspace
+    volumes:
+      - rust-test-cache:/workspace/target
+    command: >
+      bash -c "
+        echo '=== Generating Kotlin Bindings ===' &&
+        cargo run --manifest-path core/Cargo.toml --bin gen_kotlin --features gen-bindings &&
+        echo '=== Generating Swift Bindings ===' &&
+        cargo run --manifest-path core/Cargo.toml --bin gen_swift --features gen-bindings &&
+        echo '=== Bindings Parity Check Complete ==='
+      "
+    profiles:
+      - test
+      - bindings
+
+  # Android Unit Tests
+  android-unit-test:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.android-test
+    container_name: scm-android-test
+    working_dir: /workspace
+    volumes:
+      - ./android-gradle-cache:/root/.gradle:rw
+      - ./cargo-registry-cache:/root/.cargo/registry:rw
+      - ./cargo-git-cache:/root/.cargo/git:rw
+      - ./test-results:/workspace/test-results:rw
+    environment:
+      - ANDROID_HOME=/opt/android-sdk
+      - ANDROID_NDK_HOME=/opt/android-sdk/ndk/26.1.10909125
+      - RUSTFLAGS=-C link-arg=-Wl,-z,max-page-size=16384
+    command: |
+      bash -c "
+        echo '=== Building Native Library for Host (Linux) ===' &&
+        cargo build --manifest-path core/Cargo.toml --release &&
+        echo '=== Generating UniFFI Bindings ===' &&
+        cargo run --manifest-path core/Cargo.toml --bin gen_kotlin --features gen-bindings &&
+        mkdir -p core/target/android-libs/host &&
+        cp target/release/libscmessenger_core.so core/target/android-libs/host/libuniffi_api.so &&
+        echo '=== Running Android Unit Tests ===' &&
+        cd android && ./gradlew test --no-daemon -Pkotlin.compiler.execution.strategy=\"in-process\" --stacktrace &&
+        cd .. &&
+        mkdir -p /workspace/test-results/android &&
+        find android -name '*.xml' -path '*/test-results/*' -exec cp {} /workspace/test-results/android/ \\; &&
+        echo '=== Android Unit Tests Complete ==='
+      "
+    profiles:
+      - test
+
+  # Mock Relay Node for Testing
+  mock-relay:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    image: scmessenger:latest
+    container_name: scm-mock-relay
+    hostname: mock-relay
+    environment:
+      - RUST_LOG=debug,scmessenger=trace
+      - LISTEN_PORT=4001
+      - NODE_NAME=mock-relay
+      - ENABLE_RELAY=true
+    ports:
+      - 14001:4001
+    networks:
+      test-network-a:
+        ipv4_address: 172.30.0.10
+      test-network-b:
+        ipv4_address: 172.31.0.10
+    healthcheck:
+      test: [CMD-SHELL, ss -tunlp | grep 4001 || exit 1]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+
+  # Mock Client Node A
+  mock-client-a:
+    image: scmessenger:latest
+    container_name: scm-mock-client-a
+    hostname: client-a
+    environment:
+      - RUST_LOG=info,scmessenger=debug
+      - LISTEN_PORT=0
+      - SC_BOOTSTRAP_NODES=/ip4/172.30.0.10/tcp/4001
+      - NODE_NAME=client-a
+    depends_on:
+      mock-relay:
+        condition: service_healthy
+    networks:
+      - test-network-a
+    tty: true
+    stdin_open: true
+
+  # Mock Client Node B (different network)
+  mock-client-b:
+    image: scmessenger:latest
+    container_name: scm-mock-client-b
+    hostname: client-b
+    environment:
+      - RUST_LOG=info,scmessenger=debug
+      - LISTEN_PORT=0
+      - SC_BOOTSTRAP_NODES=/ip4/172.31.0.10/tcp/4001
+      - NODE_NAME=client-b
+    depends_on:
+      mock-relay:
+        condition: service_healthy
+    networks:
+      - test-network-b
+    tty: true
+    stdin_open: true
+
+  # Integration Test Runner
+  integration-test:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.rust-test
+    container_name: scm-integration-test
+    hostname: integration-test
+    working_dir: /workspace
+    volumes:
+      - ./test-results:/workspace/test-results:rw
+    environment:
+      - RUST_LOG=debug
+      - RUST_BACKTRACE=1
+      - TEST_MODE=integration
+    depends_on:
+      mock-relay:
+        condition: service_healthy
+      mock-client-a:
+        condition: service_started
+      mock-client-b:
+        condition: service_started
+    networks:
+      - test-network-a
+      - test-network-b
+    command: >
+      bash -c "
+        echo '=== Running Integration Tests ===' &&
+        cargo test --package scmessenger-core --test '*' --all-features -- --nocapture --test-threads=1 &&
+        echo '=== Integration Tests Complete ==='
+      "
+    profiles:
+      - test
+
+  # NAT Simulation Gateway A (Cone NAT)
+  nat-gateway-a:
+    image: alpine:latest
+    container_name: scm-nat-test-a
+    hostname: nat-test-a
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    sysctls:
+      - net.ipv4.ip_forward=1
+    networks:
+      test-network-a:
+        ipv4_address: 172.30.0.1
+      test-public:
+        ipv4_address: 172.32.0.100
+    command: >
+      sh -c "
+        apk add --no-cache iptables iproute2 &&
+        echo 1 > /proc/sys/net/ipv4/ip_forward &&
+        iptables -t nat -A POSTROUTING -o eth0 -j MASQUERADE &&
+        iptables -A FORWARD -i eth1 -o eth0 -j ACCEPT &&
+        iptables -A FORWARD -i eth0 -o eth1 -m state --state RELATED,ESTABLISHED -j ACCEPT &&
+        echo 'Cone NAT Gateway A ready' &&
+        tail -f /dev/null
+      "
+    profiles:
+      - test
+      - nat-test
+
+  # NAT Simulation Gateway B (Symmetric NAT)
+  nat-gateway-b:
+    image: alpine:latest
+    container_name: scm-nat-test-b
+    hostname: nat-test-b
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    sysctls:
+      - net.ipv4.ip_forward=1
+    networks:
+      test-network-b:
+        ipv4_address: 172.31.0.1
+      test-public:
+        ipv4_address: 172.32.0.200
+    command: >
+      sh -c "
+        apk add --no-cache iptables iproute2 &&
+        echo 1 > /proc/sys/net/ipv4/ip_forward &&
+        iptables -t nat -A POSTROUTING -o eth0 -j MASQUERADE &&
+        iptables -A FORWARD -i eth1 -o eth0 -j ACCEPT &&
+        iptables -A FORWARD -i eth0 -o eth1 -m state --state RELATED,ESTABLISHED -j ACCEPT &&
+        echo 'Symmetric NAT Gateway B ready' &&
+        tail -f /dev/null
+      "
+    profiles:
+      - test
+      - nat-test
+
+networks:
+  test-network-a:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.30.0.0/24
+  test-network-b:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.31.0.0/24
+  test-public:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.32.0.0/24
+
+volumes:
+  rust-test-cache:

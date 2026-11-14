@@ -1,0 +1,473 @@
+iOS/XCODE_SETUP.md:10:- Run `./iOS/verify-build-setup.sh` to verify prerequisites
+iOS/XCODE_SETUP.md:25:5. Save location: Choose `iOS/` directory (this directory)
+iOS/XCODE_SETUP.md:181:- Run `./iOS/verify-build-setup.sh` to check Rust toolchain
+iOS/XCODE_SETUP.md:220:xcodebuild -project iOS/SCMessenger/SCMessenger.xcodeproj -scheme SCMessenger -destination 'platform=iOS Simulator,name=iPhone 17' build
+iOS/XCODE_SETUP.md:230:iOS/
+iOS/XCODE_SETUP.md:256:1. Install to a physical iPhone: `APPLE_TEAM_ID=<YOUR_TEAM_ID> DEVICE_UDID=<YOUR_DEVICE_UDID> ./iOS/install-device.sh`
+iOS/XCODE_SETUP.md:267:1. Check `iOS/verify-build-setup.sh` output
+iOS/XCODE_SETUP.md:270:4. Verify UniFFI bindings: `./iOS/copy-bindings.sh`
+iOS/XCODE_SETUP.md:284:./iOS/copy-bindings.sh
+iOS/XCODE_SETUP.md:289:- **Full iOS Plan**: `iOS/iosdesign.md`
+iOS/XCODE_SETUP.md:290:- **Plan Review**: `iOS/PLAN_REVIEW.md`
+iOS/XCODE_SETUP.md:291:- **Build Scripts**: `iOS/README.md`
+DOCUMENTATION.md:30:- [iOS App](iOS/README.md)
+DOCUMENTATION.md:74:- `iOS/IMPLEMENTATION_STATUS.md`
+DOCUMENTATION.md:75:- `iOS/IMPLEMENTATION_SUMMARY.md`
+DOCUMENTATION.md:76:- `iOS/FINAL_STATUS.md`
+DOCUMENTATION.md:77:- `iOS/COMPLETE_STATUS.md`
+DOCUMENTATION.md:78:- `iOS/PHASE4_IMPLEMENTATION.md`
+DOCUMENTATION.md:79:- `iOS/PHASES_4-15_GUIDE.md`
+DOCUMENTATION.md:80:- `iOS/PLAN_REVIEW.md`
+DOCUMENTATION.md:85:- Package-specific usage docs belong in local module READMEs (`core/`, `cli/`, `mobile/`, `wasm/`, `android/`, `iOS/`), with active iOS app code under `iOS/SCMessenger/`.
+REMAINING_WORK_TRACKING.md:72:- Target: consent acknowledgment gate on Android/iOS/Web before first messaging actions.
+REMAINING_WORK_TRACKING.md:114:   - Active app lives in `iOS/SCMessenger/SCMessenger/`.
+REMAINING_WORK_TRACKING.md:115:   - `iOS/SCMessenger-Existing/` should be explicitly retained as archive/reference or removed once migration confidence is complete.
+REMAINING_WORK_TRACKING.md:152:- Current: `iOS/verify-test.sh` now performs simulator build verification.
+REMAINING_WORK_TRACKING.md:154:- Outcome: `iOS/verify-test.sh` now uses strict shell flags, deterministic `generic/platform=iOS Simulator` destination, explicit failure handling, and an explicit warning count policy.
+REMAINING_WORK_TRACKING.md:158:- Current: `iOS/SCMessenger/SCMessenger/Info.plist` declares a broad background mode set.
+REMAINING_WORK_TRACKING.md:169:- Current: `iOS/copy-bindings.sh` wrote generated files into both `iOS/SCMessenger/SCMessenger/Generated/` and `iOS/SCMessenger/Generated/`.
+REMAINING_WORK_TRACKING.md:171:- Outcome: `iOS/copy-bindings.sh` now writes only to `iOS/SCMessenger/SCMessenger/Generated/`, which matches active Xcode target paths.
+REMAINING_WORK_TRACKING.md:175:- Current: `iOS/iosdesign.md` and `iOS/SCMessenger/build_*.txt` mix design/historical/runtime evidence in active tree.
+REMAINING_WORK_TRACKING.md:210:4. Resolve `iOS/` vs `iOS/` path-case split in tracked docs vs app source
+REMAINING_WORK_TRACKING.md:211:   - Current: markdown docs are tracked under `iOS/`, active app source is under `iOS/SCMessenger/`.
+README.md:52:iOS/       iOS app              SwiftUI client integrating UniFFI surface
+docs/CHECKED_FILES.md:283:- `iOS/COMPLETE_STATUS.md — validated`
+docs/CHECKED_FILES.md:284:- `iOS/FINAL_STATUS.md — validated`
+docs/CHECKED_FILES.md:285:- `iOS/IMPLEMENTATION_STATUS.md — validated`
+docs/CHECKED_FILES.md:286:- `iOS/IMPLEMENTATION_SUMMARY.md — validated`
+docs/CHECKED_FILES.md:287:- `iOS/PHASE4_IMPLEMENTATION.md — validated`
+docs/CHECKED_FILES.md:288:- `iOS/PHASES_4-15_GUIDE.md — validated`
+docs/CHECKED_FILES.md:289:- `iOS/PLAN_REVIEW.md — validated`
+docs/CHECKED_FILES.md:290:- `iOS/README.md — validated`
+docs/CHECKED_FILES.md:291:- `iOS/SCMessenger/SCMessenger.xcodeproj/project.pbxproj — followup`
+docs/CHECKED_FILES.md:292:- `iOS/SCMessenger/SCMessenger.xcodeproj/project.xcworkspace/contents.xcworkspacedata — followup`
+docs/CHECKED_FILES.md:293:- `iOS/SCMessenger/SCMessenger.xcodeproj/xcuserdata/christymaxwell.xcuserdatad/xcschemes/xcschememanagement.plist — followup`
+docs/CHECKED_FILES.md:294:- `iOS/SCMessenger/SCMessenger/Assets.xcassets/AccentColor.colorset/Contents.json — followup`
+docs/CHECKED_FILES.md:295:- `iOS/SCMessenger/SCMessenger/Assets.xcassets/AppIcon.appiconset/Contents.json — followup`
+docs/CHECKED_FILES.md:296:- `iOS/SCMessenger/SCMessenger/Assets.xcassets/Contents.json — followup`
+docs/CHECKED_FILES.md:297:- `iOS/SCMessenger/SCMessenger/Bridging-Header.h — followup`
+docs/CHECKED_FILES.md:298:- `iOS/SCMessenger/SCMessenger/ContentView.swift — followup`
+docs/CHECKED_FILES.md:299:- `iOS/SCMessenger/SCMessenger/Data/MeshRepository.swift — followup`
+docs/CHECKED_FILES.md:300:- `iOS/SCMessenger/SCMessenger/Data/TopicManager.swift — followup`
+docs/CHECKED_FILES.md:301:- `iOS/SCMessenger/SCMessenger/Generated/api.swift — followup`
+docs/CHECKED_FILES.md:302:- `iOS/SCMessenger/SCMessenger/Generated/apiFFI.h — followup`
+docs/CHECKED_FILES.md:303:- `iOS/SCMessenger/SCMessenger/Generated/apiFFI.modulemap — followup`
+docs/CHECKED_FILES.md:304:- `iOS/SCMessenger/SCMessenger/Info.plist — followup`
+docs/CHECKED_FILES.md:305:- `iOS/SCMessenger/SCMessenger/Models/Models.swift — followup`
+docs/CHECKED_FILES.md:306:- `iOS/SCMessenger/SCMessenger/SCMessengerApp.swift — followup`
+docs/CHECKED_FILES.md:307:- `iOS/SCMessenger/SCMessenger/Services/CoreDelegateImpl.swift — followup`
+docs/CHECKED_FILES.md:308:- `iOS/SCMessenger/SCMessenger/Services/IosPlatformBridge.swift — followup`
+docs/CHECKED_FILES.md:309:- `iOS/SCMessenger/SCMessenger/Services/MeshBackgroundService.swift — followup`
+docs/CHECKED_FILES.md:310:- `iOS/SCMessenger/SCMessenger/Services/MeshEventBus.swift — followup`
+docs/CHECKED_FILES.md:311:- `iOS/SCMessenger/SCMessenger/Services/NotificationManager.swift — followup`
+docs/CHECKED_FILES.md:312:- `iOS/SCMessenger/SCMessenger/Transport/BLECentralManager.swift — followup`
+docs/CHECKED_FILES.md:313:- `iOS/SCMessenger/SCMessenger/Transport/BLEL2CAPManager.swift — followup`
+docs/CHECKED_FILES.md:314:- `iOS/SCMessenger/SCMessenger/Transport/BLEPeripheralManager.swift — followup`
+docs/CHECKED_FILES.md:315:- `iOS/SCMessenger/SCMessenger/Transport/MeshBLEConstants.swift — followup`
+docs/CHECKED_FILES.md:316:- `iOS/SCMessenger/SCMessenger/Transport/MultipeerTransport.swift — followup`
+docs/CHECKED_FILES.md:317:- `iOS/SCMessenger/SCMessenger/Utils/Theme.swift — followup`
+docs/CHECKED_FILES.md:318:- `iOS/SCMessenger/SCMessenger/ViewModels/ChatViewModel.swift — followup`
+docs/CHECKED_FILES.md:319:- `iOS/SCMessenger/SCMessenger/ViewModels/ContactsViewModel.swift — followup`
+docs/CHECKED_FILES.md:320:- `iOS/SCMessenger/SCMessenger/ViewModels/OnboardingViewModel.swift — followup`
+docs/CHECKED_FILES.md:321:- `iOS/SCMessenger/SCMessenger/ViewModels/SettingsViewModel.swift — followup`
+docs/CHECKED_FILES.md:322:- `iOS/SCMessenger/SCMessenger/Views/Contacts/ContactsListView.swift — followup`
+docs/CHECKED_FILES.md:323:- `iOS/SCMessenger/SCMessenger/Views/Dashboard/MeshDashboardView.swift — followup`
+docs/CHECKED_FILES.md:324:- `iOS/SCMessenger/SCMessenger/Views/Navigation/MainTabView.swift — followup`
+docs/CHECKED_FILES.md:325:- `iOS/SCMessenger/SCMessenger/Views/Onboarding/OnboardingFlow.swift — followup`
+docs/CHECKED_FILES.md:326:- `iOS/SCMessenger/SCMessenger/Views/Settings/SettingsView.swift — followup`
+docs/CHECKED_FILES.md:327:- `iOS/SCMessenger/SCMessenger/Views/Topics/JoinMeshView.swift — followup`
+docs/CHECKED_FILES.md:328:- `iOS/SCMessengerCore.xcframework/Info.plist — followup`
+docs/CHECKED_FILES.md:329:- `iOS/SCMessengerCore.xcframework/ios-arm64/Headers — followup`
+docs/CHECKED_FILES.md:330:- `iOS/XCODE_SETUP.md — validated`
+docs/CHECKED_FILES.md:331:- `iOS/build-device.sh — followup`
+docs/CHECKED_FILES.md:332:- `iOS/build-rust.sh — followup`
+docs/CHECKED_FILES.md:333:- `iOS/copy-bindings.sh — followup`
+docs/CHECKED_FILES.md:334:- `iOS/install-device.sh — followup`
+docs/CHECKED_FILES.md:335:- `iOS/iosdesign.md — validated`
+docs/CHECKED_FILES.md:336:- `iOS/verify-build-setup.sh — followup`
+docs/CHECKED_FILES.md:337:- `iOS/verify-test.sh — followup`
+docs/CURRENT_STATE.md:30:- `./iOS/verify-build-setup.sh`
+docs/CURRENT_STATE.md:40:  - `xcodebuild -project iOS/SCMessenger/SCMessenger.xcodeproj -scheme SCMessenger -destination 'platform=iOS Simulator,name=iPhone 17' build`
+docs/CURRENT_STATE.md:42:  - `xcodebuild -project iOS/SCMessenger/SCMessenger.xcodeproj -scheme SCMessenger -destination 'generic/platform=iOS' CODE_SIGNING_ALLOWED=NO build`
+docs/CURRENT_STATE.md:73:  - iOS: `iOS/SCMessenger/SCMessenger/Data/TopicManager.swift`
+docs/CURRENT_STATE.md:76:  - iOS: `iOS/SCMessenger/SCMessenger/ViewModels/SettingsViewModel.swift`
+docs/CURRENT_STATE.md:81:  - iOS join: `iOS/SCMessenger/SCMessenger/Views/Topics/JoinMeshView.swift`
+docs/CURRENT_STATE.md:82:  - iOS contacts: `iOS/SCMessenger/SCMessenger/Views/Contacts/ContactsListView.swift`
+docs/CURRENT_STATE.md:87:  - iOS identity QR: `iOS/SCMessenger/SCMessenger/Views/Settings/SettingsView.swift`
+docs/CURRENT_STATE.md:88:  - iOS export source: `iOS/SCMessenger/SCMessenger/Data/MeshRepository.swift`
+docs/CURRENT_STATE.md:90:  - Build signed device artifact: `iOS/build-device.sh`
+docs/CURRENT_STATE.md:91:  - Build + install on connected iPhone: `iOS/install-device.sh`
+docs/CURRENT_STATE.md:110:- `iOS/verify-test.sh` is now an actual build verification script (simulator workspace build), not a placeholder.
+docs/CURRENT_STATE.md:113:- `iOS/copy-bindings.sh` is normalized to the active generated path only: `iOS/SCMessenger/SCMessenger/Generated/`.
+docs/CURRENT_STATE.md:118:  - `iOS/SCMessenger/SCMessenger.xcodeproj`
+docs/CURRENT_STATE.md:119:  - `iOS/SCMessenger/SCMessenger/`
+docs/CURRENT_STATE.md:120:- `iOS/SCMessenger-Existing/` is a legacy/reference tree and is not part of the active Xcode target.
+iOS/XCODE_SETUP.md:10:- Run `./iOS/verify-build-setup.sh` to verify prerequisites
+iOS/XCODE_SETUP.md:25:5. Save location: Choose `iOS/` directory (this directory)
+iOS/XCODE_SETUP.md:181:- Run `./iOS/verify-build-setup.sh` to check Rust toolchain
+iOS/XCODE_SETUP.md:220:xcodebuild -project iOS/SCMessenger/SCMessenger.xcodeproj -scheme SCMessenger -destination 'platform=iOS Simulator,name=iPhone 17' build
+iOS/XCODE_SETUP.md:230:iOS/
+iOS/XCODE_SETUP.md:256:1. Install to a physical iPhone: `APPLE_TEAM_ID=<YOUR_TEAM_ID> DEVICE_UDID=<YOUR_DEVICE_UDID> ./iOS/install-device.sh`
+iOS/XCODE_SETUP.md:267:1. Check `iOS/verify-build-setup.sh` output
+iOS/XCODE_SETUP.md:270:4. Verify UniFFI bindings: `./iOS/copy-bindings.sh`
+iOS/XCODE_SETUP.md:284:./iOS/copy-bindings.sh
+iOS/XCODE_SETUP.md:289:- **Full iOS Plan**: `iOS/iosdesign.md`
+iOS/XCODE_SETUP.md:290:- **Plan Review**: `iOS/PLAN_REVIEW.md`
+iOS/XCODE_SETUP.md:291:- **Build Scripts**: `iOS/README.md`
+iOS/PLAN_REVIEW.md:9:The iOS design document (`iOS/iosdesign.md`, 4523 lines) provides a comprehensive, well-structured blueprint for implementing the SCMessenger iOS app with complete Android parity.
+iOS/README.md:17:./iOS/verify-build-setup.sh
+iOS/README.md:31:./iOS/copy-bindings.sh
+iOS/README.md:34:xcodebuild -project iOS/SCMessenger/SCMessenger.xcodeproj -scheme SCMessenger -destination 'platform=iOS Simulator,name=iPhone 17' build
+iOS/README.md:39:- `iOS/SCMessenger/SCMessenger.xcodeproj`
+iOS/README.md:41:The app project and source tree are already present under `iOS/SCMessenger/SCMessenger/`.
+iOS/README.md:57:APPLE_TEAM_ID=<YOUR_TEAM_ID> ./iOS/build-device.sh
+iOS/README.md:60:APPLE_TEAM_ID=<YOUR_TEAM_ID> DEVICE_UDID=<YOUR_DEVICE_UDID> ./iOS/install-device.sh
+iOS/README.md:73:- SwiftUI app and view models live in `iOS/SCMessenger/SCMessenger/`.
+iOS/README.md:75:  - `iOS/SCMessenger/SCMessenger/Generated/`
+iOS/README.md:81:  - `iOS/SCMessenger/SCMessenger/Views/Settings/SettingsView.swift`
+iOS/README.md:82:  - `iOS/SCMessenger/SCMessenger/ViewModels/SettingsViewModel.swift`
+iOS/PLAN_REVIEW.md:9:The iOS design document (`iOS/iosdesign.md`, 4523 lines) provides a comprehensive, well-structured blueprint for implementing the SCMessenger iOS app with complete Android parity.
+iOS/IMPLEMENTATION_SUMMARY.md:7:- `delete/replace`: this file is not a source of current launch readiness; use `docs/CURRENT_STATE.md` and `iOS/README.md`.
+iOS/IMPLEMENTATION_SUMMARY.md:101:2. Follow `iOS/XCODE_SETUP.md` to create project
+iOS/IMPLEMENTATION_SUMMARY.md:102:3. Add all source files from `iOS/SCMessenger/`
+iOS/IMPLEMENTATION_SUMMARY.md:121:- Design doc: `iOS/iosdesign.md`
+iOS/COMPLETE_STATUS.md:7:- `delete/replace`: do not treat this file as current truth for completion/readiness; use `docs/CURRENT_STATE.md` and `iOS/README.md`.
+iOS/COMPLETE_STATUS.md:222:1. Open Xcode project (follow iOS/XCODE_SETUP.md)
+iOS/build-device.sh:5:PROJECT_PATH="$ROOT_DIR/iOS/SCMessenger/SCMessenger.xcodeproj"
+iOS/build-device.sh:14:  echo "usage: APPLE_TEAM_ID=<YOUR_TEAM_ID> ./iOS/build-device.sh"
+iOS/build-device.sh:25:"$ROOT_DIR/iOS/copy-bindings.sh"
+iOS/copy-bindings.sh:19:mkdir -p ../iOS/SCMessenger/SCMessenger/Generated
+iOS/copy-bindings.sh:20:mkdir -p ../iOS/SCMessenger/Generated
+iOS/copy-bindings.sh:24:cp target/generated-sources/uniffi/swift/api.swift ../iOS/SCMessenger/SCMessenger/Generated/api.swift
+iOS/copy-bindings.sh:25:cp target/generated-sources/uniffi/swift/apiFFI.h ../iOS/SCMessenger/SCMessenger/Generated/apiFFI.h
+iOS/copy-bindings.sh:26:cp target/generated-sources/uniffi/swift/apiFFI.modulemap ../iOS/SCMessenger/SCMessenger/Generated/apiFFI.modulemap
+iOS/copy-bindings.sh:27:cp target/generated-sources/uniffi/swift/api.swift ../iOS/SCMessenger/Generated/api.swift
+iOS/copy-bindings.sh:28:cp target/generated-sources/uniffi/swift/apiFFI.h ../iOS/SCMessenger/Generated/apiFFI.h
+iOS/copy-bindings.sh:29:cp target/generated-sources/uniffi/swift/apiFFI.modulemap ../iOS/SCMessenger/Generated/apiFFI.modulemap
+iOS/copy-bindings.sh:34:echo "  - iOS/SCMessenger/SCMessenger/Generated/"
+iOS/copy-bindings.sh:35:echo "  - iOS/SCMessenger/Generated/"
+iOS/copy-bindings.sh:19:mkdir -p ../iOS/SCMessenger/SCMessenger/Generated
+iOS/copy-bindings.sh:20:mkdir -p ../iOS/SCMessenger/Generated
+iOS/copy-bindings.sh:24:cp target/generated-sources/uniffi/swift/api.swift ../iOS/SCMessenger/SCMessenger/Generated/api.swift
+iOS/copy-bindings.sh:25:cp target/generated-sources/uniffi/swift/apiFFI.h ../iOS/SCMessenger/SCMessenger/Generated/apiFFI.h
+iOS/copy-bindings.sh:26:cp target/generated-sources/uniffi/swift/apiFFI.modulemap ../iOS/SCMessenger/SCMessenger/Generated/apiFFI.modulemap
+iOS/copy-bindings.sh:27:cp target/generated-sources/uniffi/swift/api.swift ../iOS/SCMessenger/Generated/api.swift
+iOS/copy-bindings.sh:28:cp target/generated-sources/uniffi/swift/apiFFI.h ../iOS/SCMessenger/Generated/apiFFI.h
+iOS/copy-bindings.sh:29:cp target/generated-sources/uniffi/swift/apiFFI.modulemap ../iOS/SCMessenger/Generated/apiFFI.modulemap
+iOS/copy-bindings.sh:34:echo "  - iOS/SCMessenger/SCMessenger/Generated/"
+iOS/copy-bindings.sh:35:echo "  - iOS/SCMessenger/Generated/"
+iOS/IMPLEMENTATION_SUMMARY.md:7:- `delete/replace`: this file is not a source of current launch readiness; use `docs/CURRENT_STATE.md` and `iOS/README.md`.
+iOS/IMPLEMENTATION_SUMMARY.md:101:2. Follow `iOS/XCODE_SETUP.md` to create project
+iOS/IMPLEMENTATION_SUMMARY.md:102:3. Add all source files from `iOS/SCMessenger/`
+iOS/IMPLEMENTATION_SUMMARY.md:121:- Design doc: `iOS/iosdesign.md`
+iOS/install-device.sh:5:PROJECT_PATH="$ROOT_DIR/iOS/SCMessenger/SCMessenger.xcodeproj"
+iOS/install-device.sh:18:  echo "usage: APPLE_TEAM_ID=<YOUR_TEAM_ID> DEVICE_UDID=<YOUR_DEVICE_UDID> ./iOS/install-device.sh"
+iOS/install-device.sh:25:  echo "usage: APPLE_TEAM_ID=<YOUR_TEAM_ID> DEVICE_UDID=<YOUR_DEVICE_UDID> ./iOS/install-device.sh"
+iOS/install-device.sh:39:"$ROOT_DIR/iOS/copy-bindings.sh"
+docs/_ios_migration_pre_status.txt:22: M iOS/SCMessenger/SCMessenger.xcodeproj/project.xcworkspace/xcuserdata/christymaxwell.xcuserdatad/UserInterfaceState.xcuserstate
+docs/_ios_migration_pre_status.txt:23: M iOS/SCMessenger/SCMessenger/Data/MeshRepository.swift
+docs/_ios_migration_pre_status.txt:24: M iOS/SCMessenger/SCMessenger/Generated/api.swift
+docs/_ios_migration_pre_status.txt:25: M iOS/SCMessenger/SCMessenger/Generated/apiFFI.h
+docs/_ios_migration_pre_status.txt:26: M iOS/SCMessenger/SCMessenger/Info.plist
+docs/_ios_migration_pre_status.txt:27: M iOS/SCMessenger/SCMessenger/Views/Contacts/ContactsListView.swift
+docs/_ios_migration_pre_status.txt:28: M iOS/SCMessenger/SCMessenger/Views/Navigation/MainTabView.swift
+docs/_ios_migration_pre_status.txt:29: M iOS/SCMessenger/SCMessenger/Views/Onboarding/OnboardingFlow.swift
+docs/_ios_migration_pre_status.txt:30: M iOS/verify-test.sh
+iOS/iosdesign.md:184:  -library target/aarch64-apple-iOS/release/libscmessenger_mobile.a \
+iOS/iosdesign.md:189:Verify Build Script (iOS/verify-build-setup.sh)
+iOS/iosdesign.md:253:iOS/
+iOS/iosdesign.md:357:cp core/target/generated-sources/uniffi/swift/api.swift iOS/SCMessenger/Generated/api.swift
+iOS/iosdesign.md:358:cp core/target/generated-sources/uniffi/swift/apiFFI.h iOS/SCMessenger/Generated/apiFFI.h
+iOS/verify-build-setup.sh:158:    if [ -f "../target/aarch64-apple-iOS/debug/libscmessenger_mobile.a" ]; then
+iOS/verify-build-setup.sh:160:        LIB_SIZE=$(du -h "../target/aarch64-apple-iOS/debug/libscmessenger_mobile.a" | cut -f1)
+iOS/verify-build-setup.sh:164:        if [ -f "target/aarch64-apple-iOS/debug/libscmessenger_mobile.a" ]; then
+iOS/verify-build-setup.sh:166:            LIB_SIZE=$(du -h "target/aarch64-apple-iOS/debug/libscmessenger_mobile.a" | cut -f1)
+iOS/verify-build-setup.sh:170:            echo "   Tried: ../target/aarch64-apple-iOS/debug/libscmessenger_mobile.a"
+iOS/verify-build-setup.sh:188:    echo "  1. Run: ./iOS/copy-bindings.sh"
+iOS/verify-build-setup.sh:189:    echo "  2. Open Xcode project in iOS/"
+iOS/iosdesign.md:184:  -library target/aarch64-apple-iOS/release/libscmessenger_mobile.a \
+iOS/iosdesign.md:189:Verify Build Script (iOS/verify-build-setup.sh)
+iOS/iosdesign.md:253:iOS/
+iOS/iosdesign.md:357:cp core/target/generated-sources/uniffi/swift/api.swift iOS/SCMessenger/Generated/api.swift
+iOS/iosdesign.md:358:cp core/target/generated-sources/uniffi/swift/apiFFI.h iOS/SCMessenger/Generated/apiFFI.h
+iOS/IMPLEMENTATION_STATUS.md:157:1. Follow `iOS/XCODE_SETUP.md` guide
+iOS/IMPLEMENTATION_STATUS.md:192:- `iOS/SCMessenger/Info.plist`
+iOS/IMPLEMENTATION_STATUS.md:193:- `iOS/SCMessenger/Bridging-Header.h`
+iOS/IMPLEMENTATION_STATUS.md:194:- `iOS/SCMessenger/SCMessengerApp.swift`
+iOS/IMPLEMENTATION_STATUS.md:195:- `iOS/XCODE_SETUP.md`
+iOS/IMPLEMENTATION_STATUS.md:199:- `iOS/SCMessenger/Services/MeshBackgroundService.swift`
+iOS/IMPLEMENTATION_STATUS.md:200:- `iOS/SCMessenger/Services/IosPlatformBridge.swift`
+iOS/IMPLEMENTATION_STATUS.md:201:- `iOS/SCMessenger/Services/CoreDelegateImpl.swift`
+iOS/IMPLEMENTATION_STATUS.md:202:- `iOS/SCMessenger/Services/MeshEventBus.swift`
+iOS/IMPLEMENTATION_STATUS.md:203:- `iOS/SCMessenger/Data/MeshRepository.swift`
+iOS/IMPLEMENTATION_STATUS.md:204:- `iOS/XCODE_SETUP.md`
+iOS/IMPLEMENTATION_STATUS.md:209:- `iOS/build-rust.sh`
+iOS/IMPLEMENTATION_STATUS.md:210:- `iOS/copy-bindings.sh`
+iOS/IMPLEMENTATION_STATUS.md:211:- `iOS/verify-build-setup.sh`
+iOS/IMPLEMENTATION_STATUS.md:212:- `iOS/README.md`
+iOS/IMPLEMENTATION_STATUS.md:213:- `iOS/PLAN_REVIEW.md`
+iOS/IMPLEMENTATION_STATUS.md:216:- `iOS/SCMessenger/Generated/api.swift` (4200 lines)
+iOS/IMPLEMENTATION_STATUS.md:217:- `iOS/SCMessenger/Generated/apiFFI.h`
+iOS/IMPLEMENTATION_STATUS.md:218:- `iOS/SCMessenger/Generated/apiFFI.modulemap`
+iOS/COMPLETE_STATUS.md:7:- `delete/replace`: do not treat this file as current truth for completion/readiness; use `docs/CURRENT_STATE.md` and `iOS/README.md`.
+iOS/COMPLETE_STATUS.md:222:1. Open Xcode project (follow iOS/XCODE_SETUP.md)
+docs/NON_MD_FOLLOWUP_CLASSIFICATION.md:211:| `iOS/SCMessenger/SCMessenger.xcodeproj/project.pbxproj` | `keep` | implementation/runtime source or required config |
+docs/NON_MD_FOLLOWUP_CLASSIFICATION.md:212:| `iOS/SCMessenger/SCMessenger.xcodeproj/project.xcworkspace/contents.xcworkspacedata` | `keep` | implementation/runtime source or required config |
+docs/NON_MD_FOLLOWUP_CLASSIFICATION.md:213:| `iOS/SCMessenger/SCMessenger.xcodeproj/xcuserdata/christymaxwell.xcuserdatad/xcschemes/xcschememanagement.plist` | `keep` | implementation/runtime source or required config |
+docs/NON_MD_FOLLOWUP_CLASSIFICATION.md:214:| `iOS/SCMessenger/SCMessenger/Assets.xcassets/AccentColor.colorset/Contents.json` | `extract+keep` | operational policy/commands useful for canonical docs |
+docs/NON_MD_FOLLOWUP_CLASSIFICATION.md:215:| `iOS/SCMessenger/SCMessenger/Assets.xcassets/AppIcon.appiconset/Contents.json` | `extract+keep` | operational policy/commands useful for canonical docs |
+docs/NON_MD_FOLLOWUP_CLASSIFICATION.md:216:| `iOS/SCMessenger/SCMessenger/Assets.xcassets/Contents.json` | `extract+keep` | operational policy/commands useful for canonical docs |
+docs/NON_MD_FOLLOWUP_CLASSIFICATION.md:217:| `iOS/SCMessenger/SCMessenger/Bridging-Header.h` | `keep` | implementation/runtime source or required config |
+docs/NON_MD_FOLLOWUP_CLASSIFICATION.md:218:| `iOS/SCMessenger/SCMessenger/ContentView.swift` | `keep` | implementation/runtime source or required config |
+docs/NON_MD_FOLLOWUP_CLASSIFICATION.md:219:| `iOS/SCMessenger/SCMessenger/Data/MeshRepository.swift` | `keep` | implementation/runtime source or required config |
+docs/NON_MD_FOLLOWUP_CLASSIFICATION.md:220:| `iOS/SCMessenger/SCMessenger/Data/TopicManager.swift` | `keep` | implementation/runtime source or required config |
+docs/NON_MD_FOLLOWUP_CLASSIFICATION.md:221:| `iOS/SCMessenger/SCMessenger/Generated/api.swift` | `keep` | implementation/runtime source or required config |
+docs/NON_MD_FOLLOWUP_CLASSIFICATION.md:222:| `iOS/SCMessenger/SCMessenger/Generated/apiFFI.h` | `keep` | implementation/runtime source or required config |
+docs/NON_MD_FOLLOWUP_CLASSIFICATION.md:223:| `iOS/SCMessenger/SCMessenger/Generated/apiFFI.modulemap` | `keep` | implementation/runtime source or required config |
+docs/NON_MD_FOLLOWUP_CLASSIFICATION.md:224:| `iOS/SCMessenger/SCMessenger/Info.plist` | `keep` | implementation/runtime source or required config |
+docs/NON_MD_FOLLOWUP_CLASSIFICATION.md:225:| `iOS/SCMessenger/SCMessenger/Models/Models.swift` | `keep` | implementation/runtime source or required config |
+docs/NON_MD_FOLLOWUP_CLASSIFICATION.md:226:| `iOS/SCMessenger/SCMessenger/SCMessengerApp.swift` | `keep` | implementation/runtime source or required config |
+docs/NON_MD_FOLLOWUP_CLASSIFICATION.md:227:| `iOS/SCMessenger/SCMessenger/Services/CoreDelegateImpl.swift` | `keep` | implementation/runtime source or required config |
+docs/NON_MD_FOLLOWUP_CLASSIFICATION.md:228:| `iOS/SCMessenger/SCMessenger/Services/IosPlatformBridge.swift` | `keep` | implementation/runtime source or required config |
+docs/NON_MD_FOLLOWUP_CLASSIFICATION.md:229:| `iOS/SCMessenger/SCMessenger/Services/MeshBackgroundService.swift` | `keep` | implementation/runtime source or required config |
+docs/NON_MD_FOLLOWUP_CLASSIFICATION.md:230:| `iOS/SCMessenger/SCMessenger/Services/MeshEventBus.swift` | `keep` | implementation/runtime source or required config |
+docs/NON_MD_FOLLOWUP_CLASSIFICATION.md:231:| `iOS/SCMessenger/SCMessenger/Services/NotificationManager.swift` | `keep` | implementation/runtime source or required config |
+docs/NON_MD_FOLLOWUP_CLASSIFICATION.md:232:| `iOS/SCMessenger/SCMessenger/Transport/BLECentralManager.swift` | `keep` | implementation/runtime source or required config |
+docs/NON_MD_FOLLOWUP_CLASSIFICATION.md:233:| `iOS/SCMessenger/SCMessenger/Transport/BLEL2CAPManager.swift` | `keep` | implementation/runtime source or required config |
+docs/NON_MD_FOLLOWUP_CLASSIFICATION.md:234:| `iOS/SCMessenger/SCMessenger/Transport/BLEPeripheralManager.swift` | `keep` | implementation/runtime source or required config |
+docs/NON_MD_FOLLOWUP_CLASSIFICATION.md:235:| `iOS/SCMessenger/SCMessenger/Transport/MeshBLEConstants.swift` | `keep` | implementation/runtime source or required config |
+docs/NON_MD_FOLLOWUP_CLASSIFICATION.md:236:| `iOS/SCMessenger/SCMessenger/Transport/MultipeerTransport.swift` | `keep` | implementation/runtime source or required config |
+docs/NON_MD_FOLLOWUP_CLASSIFICATION.md:237:| `iOS/SCMessenger/SCMessenger/Utils/Theme.swift` | `keep` | implementation/runtime source or required config |
+docs/NON_MD_FOLLOWUP_CLASSIFICATION.md:238:| `iOS/SCMessenger/SCMessenger/ViewModels/ChatViewModel.swift` | `keep` | implementation/runtime source or required config |
+docs/NON_MD_FOLLOWUP_CLASSIFICATION.md:239:| `iOS/SCMessenger/SCMessenger/ViewModels/ContactsViewModel.swift` | `keep` | implementation/runtime source or required config |
+docs/NON_MD_FOLLOWUP_CLASSIFICATION.md:240:| `iOS/SCMessenger/SCMessenger/ViewModels/OnboardingViewModel.swift` | `keep` | implementation/runtime source or required config |
+docs/NON_MD_FOLLOWUP_CLASSIFICATION.md:241:| `iOS/SCMessenger/SCMessenger/ViewModels/SettingsViewModel.swift` | `keep` | implementation/runtime source or required config |
+docs/NON_MD_FOLLOWUP_CLASSIFICATION.md:242:| `iOS/SCMessenger/SCMessenger/Views/Contacts/ContactsListView.swift` | `keep` | implementation/runtime source or required config |
+docs/NON_MD_FOLLOWUP_CLASSIFICATION.md:243:| `iOS/SCMessenger/SCMessenger/Views/Dashboard/MeshDashboardView.swift` | `keep` | implementation/runtime source or required config |
+docs/NON_MD_FOLLOWUP_CLASSIFICATION.md:244:| `iOS/SCMessenger/SCMessenger/Views/Navigation/MainTabView.swift` | `keep` | implementation/runtime source or required config |
+docs/NON_MD_FOLLOWUP_CLASSIFICATION.md:245:| `iOS/SCMessenger/SCMessenger/Views/Onboarding/OnboardingFlow.swift` | `keep` | implementation/runtime source or required config |
+docs/NON_MD_FOLLOWUP_CLASSIFICATION.md:246:| `iOS/SCMessenger/SCMessenger/Views/Settings/SettingsView.swift` | `keep` | implementation/runtime source or required config |
+docs/NON_MD_FOLLOWUP_CLASSIFICATION.md:247:| `iOS/SCMessenger/SCMessenger/Views/Topics/JoinMeshView.swift` | `keep` | implementation/runtime source or required config |
+docs/NON_MD_FOLLOWUP_CLASSIFICATION.md:248:| `iOS/SCMessengerCore.xcframework/Info.plist` | `keep` | implementation/runtime source or required config |
+docs/NON_MD_FOLLOWUP_CLASSIFICATION.md:249:| `iOS/SCMessengerCore.xcframework/ios-arm64/Headers` | `keep` | implementation/runtime source or required config |
+docs/NON_MD_FOLLOWUP_CLASSIFICATION.md:250:| `iOS/build-device.sh` | `extract+keep` | operational policy/commands useful for canonical docs |
+docs/NON_MD_FOLLOWUP_CLASSIFICATION.md:251:| `iOS/build-rust.sh` | `extract+keep` | operational policy/commands useful for canonical docs |
+docs/NON_MD_FOLLOWUP_CLASSIFICATION.md:252:| `iOS/copy-bindings.sh` | `extract+keep` | operational policy/commands useful for canonical docs |
+docs/NON_MD_FOLLOWUP_CLASSIFICATION.md:253:| `iOS/install-device.sh` | `extract+keep` | operational policy/commands useful for canonical docs |
+docs/NON_MD_FOLLOWUP_CLASSIFICATION.md:254:| `iOS/verify-build-setup.sh` | `extract+keep` | operational policy/commands useful for canonical docs |
+docs/NON_MD_FOLLOWUP_CLASSIFICATION.md:255:| `iOS/verify-test.sh` | `extract+keep` | operational policy/commands useful for canonical docs |
+iOS/install-device.sh:5:PROJECT_PATH="$ROOT_DIR/iOS/SCMessenger/SCMessenger.xcodeproj"
+iOS/install-device.sh:18:  echo "usage: APPLE_TEAM_ID=<YOUR_TEAM_ID> DEVICE_UDID=<YOUR_DEVICE_UDID> ./iOS/install-device.sh"
+iOS/install-device.sh:25:  echo "usage: APPLE_TEAM_ID=<YOUR_TEAM_ID> DEVICE_UDID=<YOUR_DEVICE_UDID> ./iOS/install-device.sh"
+iOS/install-device.sh:39:"$ROOT_DIR/iOS/copy-bindings.sh"
+iOS/build-device.sh:5:PROJECT_PATH="$ROOT_DIR/iOS/SCMessenger/SCMessenger.xcodeproj"
+iOS/build-device.sh:14:  echo "usage: APPLE_TEAM_ID=<YOUR_TEAM_ID> ./iOS/build-device.sh"
+iOS/build-device.sh:25:"$ROOT_DIR/iOS/copy-bindings.sh"
+iOS/README.md:17:./iOS/verify-build-setup.sh
+iOS/README.md:31:./iOS/copy-bindings.sh
+iOS/README.md:34:xcodebuild -project iOS/SCMessenger/SCMessenger.xcodeproj -scheme SCMessenger -destination 'platform=iOS Simulator,name=iPhone 17' build
+iOS/README.md:39:- `iOS/SCMessenger/SCMessenger.xcodeproj`
+iOS/README.md:41:The app project and source tree are already present under `iOS/SCMessenger/SCMessenger/`.
+iOS/README.md:57:APPLE_TEAM_ID=<YOUR_TEAM_ID> ./iOS/build-device.sh
+iOS/README.md:60:APPLE_TEAM_ID=<YOUR_TEAM_ID> DEVICE_UDID=<YOUR_DEVICE_UDID> ./iOS/install-device.sh
+iOS/README.md:73:- SwiftUI app and view models live in `iOS/SCMessenger/SCMessenger/`.
+iOS/README.md:75:  - `iOS/SCMessenger/SCMessenger/Generated/`
+iOS/README.md:81:  - `iOS/SCMessenger/SCMessenger/Views/Settings/SettingsView.swift`
+iOS/README.md:82:  - `iOS/SCMessenger/SCMessenger/ViewModels/SettingsViewModel.swift`
+iOS/verify-build-setup.sh:158:    if [ -f "../target/aarch64-apple-iOS/debug/libscmessenger_mobile.a" ]; then
+iOS/verify-build-setup.sh:160:        LIB_SIZE=$(du -h "../target/aarch64-apple-iOS/debug/libscmessenger_mobile.a" | cut -f1)
+iOS/verify-build-setup.sh:164:        if [ -f "target/aarch64-apple-iOS/debug/libscmessenger_mobile.a" ]; then
+iOS/verify-build-setup.sh:166:            LIB_SIZE=$(du -h "target/aarch64-apple-iOS/debug/libscmessenger_mobile.a" | cut -f1)
+iOS/verify-build-setup.sh:170:            echo "   Tried: ../target/aarch64-apple-iOS/debug/libscmessenger_mobile.a"
+iOS/verify-build-setup.sh:188:    echo "  1. Run: ./iOS/copy-bindings.sh"
+iOS/verify-build-setup.sh:189:    echo "  2. Open Xcode project in iOS/"
+iOS/FINAL_STATUS.md:346:- iOS/SCMessenger/Info.plist
+iOS/FINAL_STATUS.md:347:- iOS/SCMessenger/Bridging-Header.h
+iOS/FINAL_STATUS.md:348:- iOS/SCMessenger/SCMessengerApp.swift
+iOS/FINAL_STATUS.md:349:- iOS/build-rust.sh
+iOS/FINAL_STATUS.md:350:- iOS/copy-bindings.sh
+iOS/FINAL_STATUS.md:351:- iOS/verify-build-setup.sh
+iOS/FINAL_STATUS.md:354:- iOS/SCMessenger/Services/MeshBackgroundService.swift
+iOS/FINAL_STATUS.md:355:- iOS/SCMessenger/Services/IosPlatformBridge.swift
+iOS/FINAL_STATUS.md:356:- iOS/SCMessenger/Services/CoreDelegateImpl.swift
+iOS/FINAL_STATUS.md:357:- iOS/SCMessenger/Services/MeshEventBus.swift
+iOS/FINAL_STATUS.md:358:- iOS/SCMessenger/Data/MeshRepository.swift
+iOS/FINAL_STATUS.md:361:- iOS/SCMessenger/Transport/MeshBLEConstants.swift
+iOS/FINAL_STATUS.md:362:- iOS/SCMessenger/Transport/BLECentralManager.swift
+iOS/FINAL_STATUS.md:365:- iOS/README.md
+iOS/FINAL_STATUS.md:366:- iOS/PLAN_REVIEW.md
+iOS/FINAL_STATUS.md:367:- iOS/XCODE_SETUP.md
+iOS/FINAL_STATUS.md:368:- iOS/IMPLEMENTATION_STATUS.md
+iOS/FINAL_STATUS.md:369:- iOS/PHASE4_IMPLEMENTATION.md
+iOS/FINAL_STATUS.md:370:- iOS/PHASES_4-15_GUIDE.md
+iOS/FINAL_STATUS.md:373:- iOS/SCMessenger/Generated/api.swift (4,200 lines)
+iOS/FINAL_STATUS.md:374:- iOS/SCMessenger/Generated/apiFFI.h
+iOS/FINAL_STATUS.md:375:- iOS/SCMessenger/Generated/apiFFI.modulemap
+iOS/FINAL_STATUS.md:407:   - Follow iOS/XCODE_SETUP.md step-by-step
+docs/ARCHITECTURE.md:24:iOS/       iOS client app
+docs/ARCHITECTURE.md:74:| iOS / Android | UniFFI + native app layers | `scmessenger-mobile`, `iOS/`, `android/` |
+docs/TRIPLE_CHECK_REPORT.md:20:- `iOS/`: 55
+iOS/FINAL_STATUS.md:346:- iOS/SCMessenger/Info.plist
+iOS/FINAL_STATUS.md:347:- iOS/SCMessenger/Bridging-Header.h
+iOS/FINAL_STATUS.md:348:- iOS/SCMessenger/SCMessengerApp.swift
+iOS/FINAL_STATUS.md:349:- iOS/build-rust.sh
+iOS/FINAL_STATUS.md:350:- iOS/copy-bindings.sh
+iOS/FINAL_STATUS.md:351:- iOS/verify-build-setup.sh
+iOS/FINAL_STATUS.md:354:- iOS/SCMessenger/Services/MeshBackgroundService.swift
+iOS/FINAL_STATUS.md:355:- iOS/SCMessenger/Services/IosPlatformBridge.swift
+iOS/FINAL_STATUS.md:356:- iOS/SCMessenger/Services/CoreDelegateImpl.swift
+iOS/FINAL_STATUS.md:357:- iOS/SCMessenger/Services/MeshEventBus.swift
+iOS/FINAL_STATUS.md:358:- iOS/SCMessenger/Data/MeshRepository.swift
+iOS/FINAL_STATUS.md:361:- iOS/SCMessenger/Transport/MeshBLEConstants.swift
+iOS/FINAL_STATUS.md:362:- iOS/SCMessenger/Transport/BLECentralManager.swift
+iOS/FINAL_STATUS.md:365:- iOS/README.md
+iOS/FINAL_STATUS.md:366:- iOS/PLAN_REVIEW.md
+iOS/FINAL_STATUS.md:367:- iOS/XCODE_SETUP.md
+iOS/FINAL_STATUS.md:368:- iOS/IMPLEMENTATION_STATUS.md
+iOS/FINAL_STATUS.md:369:- iOS/PHASE4_IMPLEMENTATION.md
+iOS/FINAL_STATUS.md:370:- iOS/PHASES_4-15_GUIDE.md
+iOS/FINAL_STATUS.md:373:- iOS/SCMessenger/Generated/api.swift (4,200 lines)
+iOS/FINAL_STATUS.md:374:- iOS/SCMessenger/Generated/apiFFI.h
+iOS/FINAL_STATUS.md:375:- iOS/SCMessenger/Generated/apiFFI.modulemap
+iOS/FINAL_STATUS.md:407:   - Follow iOS/XCODE_SETUP.md step-by-step
+docs/HIGH_IMPACT_SECTION_ACTIONS.md:20:| `iOS/IMPLEMENTATION_SUMMARY.md` | untagged snapshot sections | `delete/replace` (usage) | `docs/CURRENT_STATE.md`, `iOS/README.md` | done |
+docs/HIGH_IMPACT_SECTION_ACTIONS.md:21:| `iOS/FINAL_STATUS.md` | untagged snapshot sections | `delete/replace` (usage) | `docs/CURRENT_STATE.md`, `iOS/README.md` | done |
+docs/HIGH_IMPACT_SECTION_ACTIONS.md:22:| `iOS/COMPLETE_STATUS.md` | untagged snapshot sections | `delete/replace` (usage) | `docs/CURRENT_STATE.md`, `iOS/README.md` | done |
+docs/HIGH_IMPACT_SECTION_ACTIONS.md:23:| `iOS/IMPLEMENTATION_STATUS.md` | untagged snapshot sections | `delete/replace` (usage) | `docs/CURRENT_STATE.md`, `iOS/README.md` | done |
+docs/UNIFIED_GLOBAL_APP_PLAN.md:50:   - same mental model and critical controls on Android/iOS/Web
+docs/UNIFIED_GLOBAL_APP_PLAN.md:66:- Android/iOS/Web adapters implement platform mechanics only:
+docs/UNIFIED_GLOBAL_APP_PLAN.md:142:- Alpha language scope: English-only across Android/iOS/Web.
+docs/UNIFIED_GLOBAL_APP_PLAN.md:174:- Unified telemetry model (privacy-preserving) across Android/iOS/Web.
+docs/UNIFIED_GLOBAL_APP_PLAN.md:226:- Android/iOS/Web parity for core user journeys and controls
+docs/STUBS_AND_UNIMPLEMENTED.md:185:- **Files:** `iOS/SCMessenger/SCMessenger/Generated/api.swift`,
+docs/STUBS_AND_UNIMPLEMENTED.md:186:  `iOS/SCMessenger/Generated/api.swift`,
+docs/SWARMBRIDGE_INTEGRATION.md:114:#### [Needs Revalidation] iOS/Swift Example
+docs/IMPLEMENTATION_PATH_BUCKETS.md:39:- `iOS/SCMessenger/SCMessenger/Data/MeshRepository.swift`
+docs/IMPLEMENTATION_PATH_BUCKETS.md:40:- `iOS/SCMessenger/SCMessenger/ViewModels/SettingsViewModel.swift`
+docs/IMPLEMENTATION_PATH_BUCKETS.md:51:- `iOS/SCMessengerCore.xcframework/ios-arm64/Headers`
+docs/IMPLEMENTATION_PATH_BUCKETS.md:230:- `iOS/SCMessenger/SCMessenger.xcodeproj/project.pbxproj`
+docs/IMPLEMENTATION_PATH_BUCKETS.md:231:- `iOS/SCMessenger/SCMessenger.xcodeproj/project.xcworkspace/contents.xcworkspacedata`
+docs/IMPLEMENTATION_PATH_BUCKETS.md:232:- `iOS/SCMessenger/SCMessenger.xcodeproj/xcuserdata/christymaxwell.xcuserdatad/xcschemes/xcschememanagement.plist`
+docs/IMPLEMENTATION_PATH_BUCKETS.md:233:- `iOS/SCMessenger/SCMessenger/Assets.xcassets/AccentColor.colorset/Contents.json`
+docs/IMPLEMENTATION_PATH_BUCKETS.md:234:- `iOS/SCMessenger/SCMessenger/Assets.xcassets/AppIcon.appiconset/Contents.json`
+docs/IMPLEMENTATION_PATH_BUCKETS.md:235:- `iOS/SCMessenger/SCMessenger/Assets.xcassets/Contents.json`
+docs/IMPLEMENTATION_PATH_BUCKETS.md:236:- `iOS/SCMessenger/SCMessenger/Bridging-Header.h`
+docs/IMPLEMENTATION_PATH_BUCKETS.md:237:- `iOS/SCMessenger/SCMessenger/ContentView.swift`
+docs/IMPLEMENTATION_PATH_BUCKETS.md:238:- `iOS/SCMessenger/SCMessenger/Data/TopicManager.swift`
+docs/IMPLEMENTATION_PATH_BUCKETS.md:239:- `iOS/SCMessenger/SCMessenger/Generated/api.swift`
+docs/IMPLEMENTATION_PATH_BUCKETS.md:240:- `iOS/SCMessenger/SCMessenger/Generated/apiFFI.h`
+docs/IMPLEMENTATION_PATH_BUCKETS.md:241:- `iOS/SCMessenger/SCMessenger/Generated/apiFFI.modulemap`
+docs/IMPLEMENTATION_PATH_BUCKETS.md:242:- `iOS/SCMessenger/SCMessenger/Models/Models.swift`
+docs/IMPLEMENTATION_PATH_BUCKETS.md:243:- `iOS/SCMessenger/SCMessenger/SCMessengerApp.swift`
+docs/IMPLEMENTATION_PATH_BUCKETS.md:244:- `iOS/SCMessenger/SCMessenger/Services/CoreDelegateImpl.swift`
+docs/IMPLEMENTATION_PATH_BUCKETS.md:245:- `iOS/SCMessenger/SCMessenger/Services/IosPlatformBridge.swift`
+docs/IMPLEMENTATION_PATH_BUCKETS.md:246:- `iOS/SCMessenger/SCMessenger/Services/MeshBackgroundService.swift`
+docs/IMPLEMENTATION_PATH_BUCKETS.md:247:- `iOS/SCMessenger/SCMessenger/Services/MeshEventBus.swift`
+docs/IMPLEMENTATION_PATH_BUCKETS.md:248:- `iOS/SCMessenger/SCMessenger/Services/NotificationManager.swift`
+docs/IMPLEMENTATION_PATH_BUCKETS.md:249:- `iOS/SCMessenger/SCMessenger/Transport/BLECentralManager.swift`
+docs/IMPLEMENTATION_PATH_BUCKETS.md:250:- `iOS/SCMessenger/SCMessenger/Transport/BLEL2CAPManager.swift`
+docs/IMPLEMENTATION_PATH_BUCKETS.md:251:- `iOS/SCMessenger/SCMessenger/Transport/BLEPeripheralManager.swift`
+docs/IMPLEMENTATION_PATH_BUCKETS.md:252:- `iOS/SCMessenger/SCMessenger/Transport/MeshBLEConstants.swift`
+docs/IMPLEMENTATION_PATH_BUCKETS.md:253:- `iOS/SCMessenger/SCMessenger/Transport/MultipeerTransport.swift`
+docs/IMPLEMENTATION_PATH_BUCKETS.md:254:- `iOS/SCMessenger/SCMessenger/Utils/Theme.swift`
+docs/IMPLEMENTATION_PATH_BUCKETS.md:255:- `iOS/SCMessenger/SCMessenger/ViewModels/ChatViewModel.swift`
+docs/IMPLEMENTATION_PATH_BUCKETS.md:256:- `iOS/SCMessenger/SCMessenger/ViewModels/ContactsViewModel.swift`
+docs/IMPLEMENTATION_PATH_BUCKETS.md:257:- `iOS/SCMessenger/SCMessenger/ViewModels/OnboardingViewModel.swift`
+docs/IMPLEMENTATION_PATH_BUCKETS.md:258:- `iOS/SCMessenger/SCMessenger/Views/Contacts/ContactsListView.swift`
+docs/IMPLEMENTATION_PATH_BUCKETS.md:259:- `iOS/SCMessenger/SCMessenger/Views/Dashboard/MeshDashboardView.swift`
+docs/IMPLEMENTATION_PATH_BUCKETS.md:260:- `iOS/SCMessenger/SCMessenger/Views/Navigation/MainTabView.swift`
+docs/IMPLEMENTATION_PATH_BUCKETS.md:261:- `iOS/SCMessenger/SCMessenger/Views/Onboarding/OnboardingFlow.swift`
+docs/IMPLEMENTATION_PATH_BUCKETS.md:262:- `iOS/SCMessenger/SCMessenger/Views/Settings/SettingsView.swift`
+docs/IMPLEMENTATION_PATH_BUCKETS.md:263:- `iOS/SCMessenger/SCMessenger/Views/Topics/JoinMeshView.swift`
+docs/IMPLEMENTATION_PATH_BUCKETS.md:264:- `iOS/SCMessengerCore.xcframework/Info.plist`
+docs/IMPLEMENTATION_PATH_BUCKETS.md:265:- `iOS/build-device.sh`
+docs/IMPLEMENTATION_PATH_BUCKETS.md:266:- `iOS/build-rust.sh`
+docs/IMPLEMENTATION_PATH_BUCKETS.md:267:- `iOS/install-device.sh`
+docs/IMPLEMENTATION_PATH_BUCKETS.md:268:- `iOS/verify-build-setup.sh`
+docs/DOC_PASS_TRACKER.md:303:- [x] `iOS/COMPLETE_STATUS.md` — validated
+docs/DOC_PASS_TRACKER.md:304:- [x] `iOS/FINAL_STATUS.md` — validated
+docs/DOC_PASS_TRACKER.md:305:- [x] `iOS/IMPLEMENTATION_STATUS.md` — validated
+docs/DOC_PASS_TRACKER.md:306:- [x] `iOS/IMPLEMENTATION_SUMMARY.md` — validated
+docs/DOC_PASS_TRACKER.md:307:- [x] `iOS/PHASE4_IMPLEMENTATION.md` — validated
+docs/DOC_PASS_TRACKER.md:308:- [x] `iOS/PHASES_4-15_GUIDE.md` — validated
+docs/DOC_PASS_TRACKER.md:309:- [x] `iOS/PLAN_REVIEW.md` — validated
+docs/DOC_PASS_TRACKER.md:310:- [x] `iOS/README.md` — validated
+docs/DOC_PASS_TRACKER.md:311:- [x] `iOS/SCMessenger/SCMessenger.xcodeproj/project.pbxproj` — followup
+docs/DOC_PASS_TRACKER.md:312:- [x] `iOS/SCMessenger/SCMessenger.xcodeproj/project.xcworkspace/contents.xcworkspacedata` — followup
+docs/DOC_PASS_TRACKER.md:313:- [x] `iOS/SCMessenger/SCMessenger.xcodeproj/xcuserdata/christymaxwell.xcuserdatad/xcschemes/xcschememanagement.plist` — followup
+docs/DOC_PASS_TRACKER.md:314:- [x] `iOS/SCMessenger/SCMessenger/Assets.xcassets/AccentColor.colorset/Contents.json` — followup
+docs/DOC_PASS_TRACKER.md:315:- [x] `iOS/SCMessenger/SCMessenger/Assets.xcassets/AppIcon.appiconset/Contents.json` — followup
+docs/DOC_PASS_TRACKER.md:316:- [x] `iOS/SCMessenger/SCMessenger/Assets.xcassets/Contents.json` — followup
+docs/DOC_PASS_TRACKER.md:317:- [x] `iOS/SCMessenger/SCMessenger/Bridging-Header.h` — followup
+docs/DOC_PASS_TRACKER.md:318:- [x] `iOS/SCMessenger/SCMessenger/ContentView.swift` — followup
+docs/DOC_PASS_TRACKER.md:319:- [x] `iOS/SCMessenger/SCMessenger/Data/MeshRepository.swift` — followup
+docs/DOC_PASS_TRACKER.md:320:- [x] `iOS/SCMessenger/SCMessenger/Data/TopicManager.swift` — followup
+docs/DOC_PASS_TRACKER.md:321:- [x] `iOS/SCMessenger/SCMessenger/Generated/api.swift` — followup
+docs/DOC_PASS_TRACKER.md:322:- [x] `iOS/SCMessenger/SCMessenger/Generated/apiFFI.h` — followup
+docs/DOC_PASS_TRACKER.md:323:- [x] `iOS/SCMessenger/SCMessenger/Generated/apiFFI.modulemap` — followup
+docs/DOC_PASS_TRACKER.md:324:- [x] `iOS/SCMessenger/SCMessenger/Info.plist` — followup
+docs/DOC_PASS_TRACKER.md:325:- [x] `iOS/SCMessenger/SCMessenger/Models/Models.swift` — followup
+docs/DOC_PASS_TRACKER.md:326:- [x] `iOS/SCMessenger/SCMessenger/SCMessengerApp.swift` — followup
+docs/DOC_PASS_TRACKER.md:327:- [x] `iOS/SCMessenger/SCMessenger/Services/CoreDelegateImpl.swift` — followup
+docs/DOC_PASS_TRACKER.md:328:- [x] `iOS/SCMessenger/SCMessenger/Services/IosPlatformBridge.swift` — followup
+docs/DOC_PASS_TRACKER.md:329:- [x] `iOS/SCMessenger/SCMessenger/Services/MeshBackgroundService.swift` — followup
+docs/DOC_PASS_TRACKER.md:330:- [x] `iOS/SCMessenger/SCMessenger/Services/MeshEventBus.swift` — followup
+docs/DOC_PASS_TRACKER.md:331:- [x] `iOS/SCMessenger/SCMessenger/Services/NotificationManager.swift` — followup
+docs/DOC_PASS_TRACKER.md:332:- [x] `iOS/SCMessenger/SCMessenger/Transport/BLECentralManager.swift` — followup
+docs/DOC_PASS_TRACKER.md:333:- [x] `iOS/SCMessenger/SCMessenger/Transport/BLEL2CAPManager.swift` — followup
+docs/DOC_PASS_TRACKER.md:334:- [x] `iOS/SCMessenger/SCMessenger/Transport/BLEPeripheralManager.swift` — followup
+docs/DOC_PASS_TRACKER.md:335:- [x] `iOS/SCMessenger/SCMessenger/Transport/MeshBLEConstants.swift` — followup
+docs/DOC_PASS_TRACKER.md:336:- [x] `iOS/SCMessenger/SCMessenger/Transport/MultipeerTransport.swift` — followup
+docs/DOC_PASS_TRACKER.md:337:- [x] `iOS/SCMessenger/SCMessenger/Utils/Theme.swift` — followup
+docs/DOC_PASS_TRACKER.md:338:- [x] `iOS/SCMessenger/SCMessenger/ViewModels/ChatViewModel.swift` — followup
+docs/DOC_PASS_TRACKER.md:339:- [x] `iOS/SCMessenger/SCMessenger/ViewModels/ContactsViewModel.swift` — followup
+docs/DOC_PASS_TRACKER.md:340:- [x] `iOS/SCMessenger/SCMessenger/ViewModels/OnboardingViewModel.swift` — followup
+docs/DOC_PASS_TRACKER.md:341:- [x] `iOS/SCMessenger/SCMessenger/ViewModels/SettingsViewModel.swift` — followup
+docs/DOC_PASS_TRACKER.md:342:- [x] `iOS/SCMessenger/SCMessenger/Views/Contacts/ContactsListView.swift` — followup
+docs/DOC_PASS_TRACKER.md:343:- [x] `iOS/SCMessenger/SCMessenger/Views/Dashboard/MeshDashboardView.swift` — followup
+docs/DOC_PASS_TRACKER.md:344:- [x] `iOS/SCMessenger/SCMessenger/Views/Navigation/MainTabView.swift` — followup
+docs/DOC_PASS_TRACKER.md:345:- [x] `iOS/SCMessenger/SCMessenger/Views/Onboarding/OnboardingFlow.swift` — followup
+docs/DOC_PASS_TRACKER.md:346:- [x] `iOS/SCMessenger/SCMessenger/Views/Settings/SettingsView.swift` — followup
+docs/DOC_PASS_TRACKER.md:347:- [x] `iOS/SCMessenger/SCMessenger/Views/Topics/JoinMeshView.swift` — followup
+docs/DOC_PASS_TRACKER.md:348:- [x] `iOS/SCMessengerCore.xcframework/Info.plist` — followup
+docs/DOC_PASS_TRACKER.md:349:- [x] `iOS/SCMessengerCore.xcframework/ios-arm64/Headers` — followup
+docs/DOC_PASS_TRACKER.md:350:- [x] `iOS/XCODE_SETUP.md` — validated
+docs/DOC_PASS_TRACKER.md:351:- [x] `iOS/build-device.sh` — followup
+docs/DOC_PASS_TRACKER.md:352:- [x] `iOS/build-rust.sh` — followup
+docs/DOC_PASS_TRACKER.md:353:- [x] `iOS/copy-bindings.sh` — followup
+docs/DOC_PASS_TRACKER.md:354:- [x] `iOS/install-device.sh` — followup
+docs/DOC_PASS_TRACKER.md:355:- [x] `iOS/iosdesign.md` — validated
+docs/DOC_PASS_TRACKER.md:356:- [x] `iOS/verify-build-setup.sh` — followup
+docs/DOC_PASS_TRACKER.md:357:- [x] `iOS/verify-test.sh` — followup
+docs/REPO_CONTEXT.md:23:- iOS app (`iOS/`)
+docs/REPO_CONTEXT.md:63:- It minimizes ambiguity across Android/iOS/CLI/WASM surfaces.
+docs/REPO_CONTEXT.md:93:- iOS: `iOS/SCMessenger/SCMessenger/Data/MeshRepository.swift`
+docs/REPO_CONTEXT.md:105:- Active app project/code: `iOS/SCMessenger/SCMessenger.xcodeproj` and `iOS/SCMessenger/SCMessenger/`
+docs/REPO_CONTEXT.md:106:- Legacy reference tree (not part of active Xcode target): `iOS/SCMessenger-Existing/`
+iOS/IMPLEMENTATION_STATUS.md:157:1. Follow `iOS/XCODE_SETUP.md` guide
+iOS/IMPLEMENTATION_STATUS.md:192:- `iOS/SCMessenger/Info.plist`
+iOS/IMPLEMENTATION_STATUS.md:193:- `iOS/SCMessenger/Bridging-Header.h`
+iOS/IMPLEMENTATION_STATUS.md:194:- `iOS/SCMessenger/SCMessengerApp.swift`
+iOS/IMPLEMENTATION_STATUS.md:195:- `iOS/XCODE_SETUP.md`
+iOS/IMPLEMENTATION_STATUS.md:199:- `iOS/SCMessenger/Services/MeshBackgroundService.swift`
+iOS/IMPLEMENTATION_STATUS.md:200:- `iOS/SCMessenger/Services/IosPlatformBridge.swift`
+iOS/IMPLEMENTATION_STATUS.md:201:- `iOS/SCMessenger/Services/CoreDelegateImpl.swift`
+iOS/IMPLEMENTATION_STATUS.md:202:- `iOS/SCMessenger/Services/MeshEventBus.swift`
+iOS/IMPLEMENTATION_STATUS.md:203:- `iOS/SCMessenger/Data/MeshRepository.swift`
+iOS/IMPLEMENTATION_STATUS.md:204:- `iOS/XCODE_SETUP.md`
+iOS/IMPLEMENTATION_STATUS.md:209:- `iOS/build-rust.sh`
+iOS/IMPLEMENTATION_STATUS.md:210:- `iOS/copy-bindings.sh`
+iOS/IMPLEMENTATION_STATUS.md:211:- `iOS/verify-build-setup.sh`
+iOS/IMPLEMENTATION_STATUS.md:212:- `iOS/README.md`
+iOS/IMPLEMENTATION_STATUS.md:213:- `iOS/PLAN_REVIEW.md`
+iOS/IMPLEMENTATION_STATUS.md:216:- `iOS/SCMessenger/Generated/api.swift` (4200 lines)
+iOS/IMPLEMENTATION_STATUS.md:217:- `iOS/SCMessenger/Generated/apiFFI.h`
+iOS/IMPLEMENTATION_STATUS.md:218:- `iOS/SCMessenger/Generated/apiFFI.modulemap`
+docs/TESTING_GUIDE.md:62:./iOS/verify-build-setup.sh
+docs/GLOBAL_ROLLOUT_PLAN.md:39:  - `iOS/` (55)
+docs/GLOBAL_ROLLOUT_PLAN.md:70:3. `android/`, `iOS/`, and `wasm/` tri-platform parity documentation pass
+docs/GLOBAL_ROLLOUT_PLAN.md:86:  - `android/`, `iOS/`, and `wasm/` pending reduced to 0
+docs/GLOBAL_ROLLOUT_PLAN.md:102:   - Android/iOS/Web parity requirements
+docs/GLOBAL_ROLLOUT_PLAN.md:126:- `iOS/README.md` updated with authoritative path mapping:
+docs/GLOBAL_ROLLOUT_PLAN.md:263:   - toggles mapped and behaviorally equivalent across Android/iOS/Web
+docs/GLOBAL_ROLLOUT_PLAN.md:267:   - first-run consent gate implemented on Android/iOS/Web

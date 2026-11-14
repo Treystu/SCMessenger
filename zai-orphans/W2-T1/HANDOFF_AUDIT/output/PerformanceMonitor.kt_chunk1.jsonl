@@ -1,0 +1,82 @@
+﻿{
+  "file": "PerformanceMonitor.kt",
+  "chunk": 1,
+  "summary": "A performance monitoring class for tracking ANR events, service uptime, and UI timing.",
+  "structs_or_classes": [
+    {
+      "name": "AnrEvent",
+      "line": 214
+    },
+    {
+      "name": "UITimingEvent",
+      "line": 228
+    }
+  ],
+  "imports": [
+    "android.os.Build",
+    "android.content.Context",
+    "android.os.SystemClock",
+    "android.util.SparseArray",
+    "timber.log.Timber",
+    "java.io.File",
+    "java.util.concurrent.ConcurrentHashMap",
+    "java.util.concurrent.TimeUnit"
+  ],
+  "funcs": [
+    {
+      "name": "recordAnrEvent",
+      "line": 53,
+      "calls_out_to": ["Timber.e", "writeAnrEvent"]
+    },
+    {
+      "name": "recordUiTiming",
+      "line": 88,
+      "calls_out_to": ["Timber.w"]
+    },
+    {
+      "name": "getServiceUptimeMs",
+      "line": 111,
+      "calls_out_to": []
+    },
+    {
+      "name": "getServiceUptimeString",
+      "line": 123,
+      "calls_out_to": []
+    },
+    {
+      "name": "getAnrStats",
+      "line": 134,
+      "calls_out_to": []
+    },
+    {
+      "name": "getHealthStatus",
+      "line": 141,
+      "calls_out_to": ["Timber.i"]
+    },
+    {
+      "name": "getAllAnrEvents",
+      "line": 152,
+      "calls_out_to": []
+    },
+    {
+      "name": "writeAnrEvent",
+      "line": 159,
+      "calls_out_to": ["File.writeText", "Timber.i"]
+    },
+    {
+      "name": "recordServiceStart",
+      "line": 183,
+      "calls_out_to": []
+    },
+    {
+      "name": "recordServiceStop",
+      "line": 191,
+      "calls_out_to": ["Timber.i"]
+    },
+    {
+      "name": "clearAnrEvents",
+      "line": 199,
+      "calls_out_to": ["File.delete", "Timber.i"]
+    }
+  ]
+}

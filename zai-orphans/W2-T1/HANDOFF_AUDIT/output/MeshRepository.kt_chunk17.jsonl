@@ -1,0 +1,23 @@
+﻿{
+  "file": "MeshRepository.kt",
+  "chunk": 17,
+  "summary": "This function handles the delivery of messages in a mesh network. It attempts to deliver a message directly, then retries using relay circuits if necessary.",
+  "structs_or_classes": [],
+  "imports": [
+    "android.util.Base64",
+    "com.example.swarm.SwarmBridge",
+    "com.example.contact.ContactManager"
+  ],
+  "funcs": [
+    {
+      "name": "deliverMessage",
+      "line": 5597,
+      "calls_out_to": ["awaitPeerConnection", "logDeliveryAttempt", "bridge.sendMessageStatus", "loadPendingOutbox", "savePendingOutbox", "incrementAttemptCount", "storeLastKnownRoutePeerId", "isTerminalIdentityFailure"]
+    },
+    {
+      "name": "awaitPeerConnection",
+      "line": 5696,
+      "calls_out_to": ["bridge.getPeers()"]
+    }
+  ]
+}

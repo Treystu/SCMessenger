@@ -1,0 +1,16 @@
+namespace desktop_bridge;
+
+interface DesktopBridge {
+    // Tray status update
+    void update_tray_status(string status);
+
+    // Notification trigger
+    void show_notification(string title, string body);
+
+    // XDG path resolution
+    string get_xdg_data_dir();
+    string get_xdg_config_dir();
+
+    // Power state
+    bool is_on_battery_power();
+};

@@ -1,0 +1,14 @@
+﻿{
+  "file": "adaptive_ttl.rs",
+  "chunk": 1,
+  "summary": "This Rust module implements an adaptive TTL-based routing system for network peers. It tracks the activity of each peer, calculates their adaptive TTL based on message frequency and other factors, and manages the lifecycle of these TTLs.",
+  "structs_or_classes": ["ActivityHistory", "AdaptiveTTLManager"],
+  "imports": ["std::collections::HashMap", "web_time::{Duration, Instant}"],
+  "funcs": [
+    {
+      "name": "calculate_ttl",
+      "line": 106,
+      "calls_out_to": ["peer_activity"]
+    }
+  ]
+}

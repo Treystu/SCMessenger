@@ -1,0 +1,22 @@
+﻿{
+  "file": "Permissions.kt",
+  "chunk": 1,
+  "summary": "Manages permissions required by SCMessenger, providing user-friendly names and rationale explanations.",
+  "structs_or_classes": [],
+  "imports": [
+    "android.Manifest",
+    "android.os.Build"
+  ],
+  "funcs": [
+    {
+      "name": "getPermissionName",
+      "line": 77,
+      "calls_out_to": []
+    },
+    {
+      "name": "getRationale",
+      "line": 97,
+      "calls_out_to": []
+    }
+  ]
+}

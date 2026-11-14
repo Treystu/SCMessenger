@@ -1,0 +1,11 @@
+#!/bin/sh
+
+APP_HOME=$( cd "${APP_HOME:-./}" > /dev/null && pwd -P )
+
+CLASSPATH=$APP_HOME/gradle/wrapper/gradle-wrapper.jar
+
+# Use the system Java
+JAVACMD=java
+
+# Direct invocation of Gradle wrapper main with --no-daemon
+exec "$JAVACMD" -Xmx512m -cp "$CLASSPATH" org.gradle.wrapper.GradleWrapperMain --no-daemon "$@"

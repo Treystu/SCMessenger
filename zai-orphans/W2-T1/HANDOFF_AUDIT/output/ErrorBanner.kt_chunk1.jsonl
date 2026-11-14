@@ -1,0 +1,14 @@
+﻿{
+  "file": "ErrorBanner.kt",
+  "chunk": 1,
+  "summary": "This Kotlin composable function `ErrorBanner` is designed to display error messages in a dismissible banner. It supports different severity levels such as ERROR, WARNING, and INFO. The banner includes an icon, message text, and optional retry action.",
+  "structs_or_classes": ["Surface", "Row", "Icon", "TextButton", "IconButton"],
+  "imports": ["androidx.compose.animation.AnimatedVisibility", "androidx.compose.animation.expandVertically", "androidx.compose.animation.fadeIn", "androidx.compose.animation.fadeOut", "androidx.compose.animation.shrinkVertically", "androidx.compose.foundation.background", "androidx.compose.foundation.layout.*", "androidx.compose.material.icons.Icons", "androidx.compose.material.icons.filled.Close", "androidx.compose.material.icons.filled.Error", "androidx.compose.material.icons.filled.Info", "androidx.compose.material.icons.filled.Warning", "androidx.compose.material3.MaterialTheme.typography.bodyMedium"],
+  "funcs": [
+    {
+      "name": "ErrorBanner",
+      "line": 44,
+      "calls_out_to": ["Surface", "Row", "Icon", "TextButton", "IconButton"]
+    }
+  ]
+}

@@ -1,0 +1,64 @@
+﻿{
+  "file": "ble_daemon.rs",
+  "chunk": 1,
+  "summary": "The provided code chunk is a Rust implementation of a Bluetooth daemon for Windows CLI. It includes functions to probe and log Bluetooth adapters, handle BLE errors, and manage the status of the BLE daemon.",
+  "structs_or_classes": ["BleError", "BleResult", "BleStatus", "BleAdapterInfo"],
+  "imports": ["btleplug::api::Manager as _", "tracing::info", "tracing::warn", "chrono::DateTime", "std::process::Command"],
+  "funcs": [
+    {
+      "name": "probe_and_log",
+      "line": 9,
+      "calls_out_to": ["manager"]
+    },
+    {
+      "name": "initialize",
+      "line": 154,
+      "calls_out_to": ["manager", "adapters"]
+    },
+    {
+      "name": "get_adapter_info",
+      "line": 213,
+      "calls_out_to": []
+    },
+    {
+      "name": "is_available",
+      "line": 225,
+      "calls_out_to": []
+    },
+    {
+      "name": "scan_for_advertisements",
+      "line": 235,
+      "calls_out_to": ["adapters"]
+    },
+    {
+      "name": "advertise_service",
+      "line": 261,
+      "calls_out_to": ["adapters"]
+    },
+    {
+      "name": "shutdown",
+      "line": 287,
+      "calls_out_to": []
+    },
+    {
+      "name": "is_ble_available",
+      "line": 301,
+      "calls_out_to": []
+    },
+    {
+      "name": "format_bytes",
+      "line": 324,
+      "calls_out_to": []
+    },
+    {
+      "name": "format_timestamp",
+      "line": 336,
+      "calls_out_to": []
+    },
+    {
+      "name": "try_enable_bluetooth",
+      "line": 345,
+      "calls_out_to": ["sc"]
+    }
+  ]
+}

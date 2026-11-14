@@ -1,0 +1,29 @@
+﻿{
+  "file": "mobile_bridge.rs",
+  "chunk": 4,
+  "summary": "The `MeshService` struct and its associated methods are defined in the `mobile_bridge.rs` file. The struct contains various functionalities related to mesh networking, including handling BLE data received, managing core instances, checking service status, and dispatching packets via BLE bridge.",
+  "structs_or_classes": ["MeshService", "MeshServiceCoreDelegate", "AutoAdjustEngine", "DeviceProfile", "AdjustmentProfile", "BleAdjustment", "RelayAdjustment"],
+  "imports": ["std::sync::Arc", "libp2p::identity::Keypair", "std::path::PathBuf", "std::fs", "std::os::unix::fs::PermissionsExt", "uniffi::Object", "uniffi::export"],
+  "funcs": [
+    {
+      "name": "on_ble_data_received",
+      "line": 1052,
+      "calls_out_to": ["dispatch_ble_packet"]
+    },
+    {
+      "name": "get_core",
+      "line": 1060,
+      "calls_out_to": []
+    },
+    {
+      "name": "is_running",
+      "line": 1064,
+      "calls_out_to": []
+    },
+    {
+      "name": "dispatch_ble_packet",
+      "line": 1069,
+      "calls_out_to": ["bridge"]
+    }
+  ]
+}

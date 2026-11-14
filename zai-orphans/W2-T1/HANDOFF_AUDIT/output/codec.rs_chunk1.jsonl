@@ -1,0 +1,34 @@
+﻿{
+  "file": "codec.rs",
+  "chunk": 1,
+  "summary": "This chunk defines a message codec with functions for encoding and decoding messages, including validation of payload sizes against the messaging contract.",
+  "structs_or_classes": ["Message", "Envelope"],
+  "imports": ["super::types::{Envelope, Message}", "anyhow::{bail, Result}"],
+  "funcs": [
+    {
+      "name": "validate_payload_size",
+      "line": 14,
+      "calls_out_to": []
+    },
+    {
+      "name": "encode_message",
+      "line": 30,
+      "calls_out_to": ["bincode::serialize"]
+    },
+    {
+      "name": "decode_message",
+      "line": 52,
+      "calls_out_to": ["bincode::deserialize"]
+    },
+    {
+      "name": "encode_envelope",
+      "line": 68,
+      "calls_out_to": ["bincode::serialize"]
+    },
+    {
+      "name": "decode_envelope",
+      "line": 90,
+      "calls_out_to": ["bincode::deserialize"]
+    }
+  ]
+}

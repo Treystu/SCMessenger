@@ -1,0 +1,44 @@
+﻿{
+  "file": "protocol.rs",
+  "chunk": 1,
+  "summary": "This chunk defines the Relay Protocol in Rust. It includes structs for message types and capabilities, as well as functions for serialization and deserialization.",
+  "structs_or_classes": ["RelayCapability", "RelayMessage", "RelayPeerInfoMessage"],
+  "imports": [],
+  "funcs": [
+    {
+      "name": "full_relay",
+      "line": 21,
+      "calls_out_to": []
+    },
+    {
+      "name": "mobile",
+      "line": 31,
+      "calls_out_to": []
+    },
+    {
+      "name": "is_relay",
+      "line": 41,
+      "calls_out_to": []
+    },
+    {
+      "name": "is_store",
+      "line": 46,
+      "calls_out_to": []
+    },
+    {
+      "name": "to_bytes",
+      "line": 165,
+      "calls_out_to": ["bincode"]
+    },
+    {
+      "name": "from_bytes",
+      "line": 171,
+      "calls_out_to": ["bincode"]
+    },
+    {
+      "name": "message_type",
+      "line": 177,
+      "calls_out_to": []
+    }
+  ]
+}

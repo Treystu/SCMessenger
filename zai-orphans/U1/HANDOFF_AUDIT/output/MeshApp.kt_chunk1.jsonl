@@ -1,0 +1,88 @@
+﻿{
+  "file": "MeshApp.kt",
+  "chunk": 1,
+  "summary": "Root composable for the SCMessenger app. Sets up the navigation graph and bottom navigation bar.",
+  "structs_or_classes": [],
+  "imports": [
+    "androidx.compose.foundation.layout.*",
+    "androidx.compose.material.icons.filled.Add",
+    "androidx.compose.material.icons.filled.Block",
+    "androidx.compose.material.icons.automirrored.filled.Chat",
+    "androidx.compose.material.icons.Default.People",
+    "androidx.compose.material.icons.Filled.Router",
+    "androidx.compose.material.icons.Default.Settings",
+    "androidx.compose.material3.*",
+    "androidx.compose.runtime.Composable",
+    "androidx.compose.runtime.LaunchedEffect",
+    "androidx.compose.runtime.collectAsState",
+    "androidx.compose.runtime.getValue",
+    "androidx.compose.runtime.mutableStateOf",
+    "androidx.compose.runtime.remember",
+    "androidx.compose.runtime.setValue",
+    "androidx.compose.ui.Modifier",
+    "androidx.hilt.navigation.compose.hiltViewModel",
+    "androidx.navigation.NavHostController",
+    "androidx.navigation.compose.NavHost",
+    "androidx.navigation.compose.composable",
+    "androidx.navigation.compose.currentBackStackEntryAsState",
+    "androidx.navigation.compose.rememberNavController",
+    "com.scmessenger.android.ui.contacts.AddContactScreen",
+    "com.scmessenger.android.ui.contacts.ContactDetailScreen",
+    "com.scm messenger.android.ui.dashboard.PeerListScreen",
+    "com.scmessenger.android.ui.dashboard.TopologyScreen",
+    "com.scmessenger.android.ui.identity.IdentityScreen",
+    "com.scmessenger.android.ui.screens.*",
+    "com.scmessenger.android.ui.viewmodels.MainViewModel",
+    "com.scmessenger.android.ui.viewmodels.DeepLinkData",
+    "com.scmessenger.android.ui.settings.MeshSettingsScreen",
+    "com.scmessenger.android.ui.settings.PowerSettingsScreen"
+  ],
+  "funcs": [
+    {
+      "name": "MeshApp",
+      "line": 42,
+      "calls_out_to": [
+        "hiltViewModel",
+        "collectAsState",
+        "LaunchedEffect",
+        "rememberNavController",
+        "consumeDeepLink",
+        "Box"
+      ]
+    },
+    {
+      "name": "MeshNavHost",
+      "line": 123,
+      "calls_out_to": [
+        "NavHost",
+        "startDestinationForRole",
+        "composable",
+        "popBackStack",
+        "navigate",
+        "consumeDeepLink"
+      ]
+    },
+    {
+      "name": "MeshBottomBar",
+      "line": 288,
+      "calls_out_to": [
+        "currentBackStackEntryAsState",
+        "NavigationBar",
+        "roleBasedBottomNavItems",
+        "NavigationItem",
+        "navigate",
+        "popUpTo"
+      ]
+    },
+    {
+      "name": "roleBasedBottomNavItems",
+      "line": 334,
+      "calls_out_to": []
+    },
+    {
+      "name": "startDestinationForRole",
+      "line": 337,
+      "calls_out_to": []
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+﻿{
+  "file": "server.rs",
+  "chunk": 3,
+  "summary": "This chunk contains the implementation of a function that handles different scenarios based on the input data.",
+  "structs_or_classes": [],
+  "imports": ["JsonRpcErrorBody"],
+  "funcs": [
+    {
+      "name": "rpc_error",
+      "line": 705,
+      "calls_out_to": []
+    }
+  ]
+}

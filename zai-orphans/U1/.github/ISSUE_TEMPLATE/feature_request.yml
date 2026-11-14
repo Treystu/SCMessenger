@@ -1,0 +1,43 @@
+name: Feature request
+description: Suggest a new feature or planned follow-up
+title: "[feature] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this template for new work proposals. The current baseline is `v0.3.5`; planned work toward `v1.0.0` is sequenced in `HANDOFF/V1_0_0_EXECUTION_PLAN.md`.
+  - type: dropdown
+    id: release_scope
+    attributes:
+      label: Requested release scope
+      options:
+        - v0.3.x alpha line
+        - v1.0.0 scope
+        - Post-v1.0.0
+        - Later / not sure
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem it solves
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+  - type: textarea
+    id: impact
+    attributes:
+      label: Impact
+      placeholder: |
+        Users:
+        Developers:
+        Performance/privacy:

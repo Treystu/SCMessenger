@@ -1,0 +1,23 @@
+﻿{
+  "file": "backup.rs",
+  "chunk": 1,
+  "summary": "This chunk defines the `encrypt_backup` and `decrypt_backup` functions for encrypting and decrypting backup payloads using XChaCha20-Poly1305 with a PBKDF2-derived key. It includes helper functions like `derive_key` to generate encryption keys from passphrases.",
+  "structs_or_classes": [],
+  "imports": [
+    "chacha20poly1305",
+    "pbkdf2",
+    "sha2"
+  ],
+  "funcs": [
+    {
+      "name": "encrypt_backup",
+      "line": 48,
+      "calls_out_to": ["derive_key", "XChaCha20Poly1305::new_from_slice", "cipher.encrypt"]
+    },
+    {
+      "name": "decrypt_backup",
+      "line": 98,
+      "calls_out_to": ["derive_key", "XChaCha20Poly1305::new_from_slice", "cipher.decrypt"]
+    }
+  ]
+}

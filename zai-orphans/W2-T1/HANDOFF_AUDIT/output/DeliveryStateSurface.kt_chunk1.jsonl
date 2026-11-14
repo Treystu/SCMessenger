@@ -1,0 +1,14 @@
+﻿{
+  "file": "DeliveryStateSurface.kt",
+  "chunk": 1,
+  "summary": "This Kotlin data class and enum define the state of a delivery attempt in an Android chat application. It includes fields for the attempt count, next attempt time, and terminal failure code. The enum `DeliveryStateSurface` provides labels and details for each state, while the `resolve` function maps the state based on the provided parameters.",
+  "structs_or_classes": ["PendingDeliverySnapshot", "DeliveryStateSurface", "DeliveryStatePresentation"],
+  "imports": [],
+  "funcs": [
+    {
+      "name": "resolve",
+      "line": 40,
+      "calls_out_to": ["DeliveryStateMapper"]
+    }
+  ]
+}

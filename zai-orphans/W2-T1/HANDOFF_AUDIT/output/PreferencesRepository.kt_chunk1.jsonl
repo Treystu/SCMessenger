@@ -1,0 +1,82 @@
+﻿{
+  "file": "PreferencesRepository.kt",
+  "chunk": 1,
+  "summary": "Repository for Android-specific preferences using DataStore.",
+  "structs_or_classes": [],
+  "imports": [
+    "android.content.Context",
+    "androidx.datastore.core.DataStore",
+    "androidx.datastore.preferences.core.*",
+    "androidx.datastore.preferences.preferencesDataStore",
+    "kotlinx.coroutines.flow.Flow",
+    "kotlinx.coroutines.flow.map",
+    "timber.log.Timber"
+  ],
+  "funcs": [
+    {
+      "name": "setServiceAutoStart",
+      "line": 48,
+      "calls_out_to": []
+    },
+    {
+      "name": "setVpnMode",
+      "line": 59,
+      "calls_out_to": []
+    },
+    {
+      "name": "setOnboardingCompleted",
+      "line": 74,
+      "calls_out_to": []
+    },
+    {
+      "name": "setInstallChoiceCompleted",
+      "line": 85,
+      "calls_out_to": []
+    },
+    {
+      "name": "setThemeMode",
+      "line": 108,
+      "calls_out_to": []
+    },
+    {
+      "name": "setNotificationsEnabled",
+      "line": 119,
+      "calls_out_to": []
+    },
+    {
+      "name": "setShowPeerCount",
+      "line": 130,
+      "calls_out_to": []
+    },
+    {
+      "name": "setAutoAdjustEnabled",
+      "line": 145,
+      "calls_out_to": []
+    },
+    {
+      "name": "setManualAdjustmentProfile",
+      "line": 156,
+      "calls_out_to": []
+    },
+    {
+      "name": "clearAll",
+      "line": 167,
+      "calls_out_to": []
+    },
+    {
+      "name": "setBleRotationEnabled",
+      "line": 180,
+      "calls_out_to": []
+    },
+    {
+      "name": "setBleRotationIntervalSec",
+      "line": 192,
+      "calls_out_to": []
+    },
+    {
+      "name": "setIdentityNickname",
+      "line": 207,
+      "calls_out_to": []
+    }
+  ]
+}

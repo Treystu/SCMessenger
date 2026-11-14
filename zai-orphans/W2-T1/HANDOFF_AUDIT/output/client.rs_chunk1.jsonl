@@ -1,0 +1,36 @@
+﻿{
+  "file": "client.rs",
+  "chunk": 1,
+  "summary": "The provided code chunk is a Rust module for a relay client, which connects to relay servers and synchronizes messages. It includes structs, imports, functions, and error handling.",
+  "structs_or_classes": ["RelayClient", "RelayConnection", "RelayMessage"],
+  "imports": [
+    "super::protocol::{RelayCapability, RelayMessage, PROTOCOL_VERSION}",
+    "futures::{SinkExt, StreamExt}",
+    "quinn",
+    "std::collections::HashMap",
+    "std::net::SocketAddr",
+    "std::sync::Arc",
+    "thiserror::Error",
+    "tokio::io::{AsyncReadExt, AsyncWriteExt}",
+    "tokio::net::TcpStream",
+    "tokio::sync::{Mutex, RwLock}",
+    "web_time::{Duration, SystemTime, UNIX_EPOCH}"
+  ],
+  "funcs": [
+    {
+      "name": "connect_tcp",
+      "line": 215,
+      "calls_out_to": ["RelayConnection", "new"]
+    },
+    {
+      "name": "connect_quic",
+      "line": 230,
+      "calls_out_to": ["RelayClient", "with_transport"]
+    },
+    {
+      "name": "connect_websocket",
+      "line": 264,
+      "calls_out_to": ["RelayClient", "with_transport"]
+    }
+  ]
+}

@@ -1,0 +1,52 @@
+{
+  "agents": [
+    {
+      "name": "architect",
+      "model": "qwen3-coder:480b:cloud",
+      "specialization": "Design, planning, multi-file reasoning",
+      "task_patterns": ["design", "plan", "architecture", "refactor"]
+    },
+    {
+      "name": "implementer",
+      "model": "qwen3-coder-next:cloud",
+      "specialization": "Feature landing, bug fixes, code changes",
+      "task_patterns": ["implement", "fix", "feat", "add", "update"]
+    },
+    {
+      "name": "precision-validator",
+      "model": "deepseek-v3.2:cloud",
+      "specialization": "Crypto, math, protocol audit",
+      "task_patterns": ["crypto", "security", "audit", "validate", "protocol"]
+    },
+    {
+      "name": "worker",
+      "model": "gemma4:31b:cloud",
+      "specialization": "Tests, bindings, docs, platform",
+      "task_patterns": ["test", "binding", "doc", "platform", "ci"]
+    },
+    {
+      "name": "triage-router",
+      "model": "gemini-3-flash-preview:cloud",
+      "specialization": "Quick triage, lint, CI",
+      "task_patterns": ["triage", "lint", "format", "quick"]
+    },
+    {
+      "name": "gatekeeper-reviewer",
+      "model": "kimi-k2-thinking:cloud",
+      "specialization": "Pre-merge review, final gate",
+      "task_patterns": ["review", "gate", "verify", "merge"]
+    },
+    {
+      "name": "swarm-orchestrator",
+      "model": "mistral-large-3:675b:cloud",
+      "specialization": "Pipeline coordination",
+      "task_patterns": ["pipeline", "coordination", "swarm"]
+    },
+    {
+      "name": "rust-coder",
+      "model": "glm-5.1:cloud",
+      "specialization": "Rust core, protocol implementation",
+      "task_patterns": ["rust", "core", "protocol", "cargo"]
+    }
+  ]
+}

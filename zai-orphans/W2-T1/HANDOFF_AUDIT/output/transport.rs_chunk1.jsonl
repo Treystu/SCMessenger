@@ -1,0 +1,74 @@
+﻿{
+  "file": "transport.rs",
+  "chunk": 1,
+  "summary": "The code chunk defines a `WebTransportManager` struct that manages WebRTC and WebSocket connections. It includes methods for adding and removing relays, handling incoming messages, queuing outgoing messages, and managing channels.",
+  "structs_or_classes": ["WebTransportManager", "WebSocketRelay", "WebRtcChannel"],
+  "imports": [],
+  "funcs": [
+    {
+      "name": "new",
+      "line": 92,
+      "calls_out_to": []
+    },
+    {
+      "name": "add_relay",
+      "line": 102,
+      "calls_out_to": ["websocket_relays", "write"]
+    },
+    {
+      "name": "remove_relay",
+      "line": 126,
+      "calls_out_to": ["websocket_relays", "write"]
+    },
+    {
+      "name": "handle_message",
+      "line": 130,
+      "calls_out_to": ["pending_outgoing", "drain", "collect"]
+    },
+    {
+      "name": "pending_outgoing",
+      "line": 152,
+      "calls_out_to": []
+    },
+    {
+      "name": "queue_outgoing",
+      "line": 160,
+      "calls_out_to": ["websocket_relays", "write"]
+    },
+    {
+      "name": "connected_relays",
+      "line": 172,
+      "calls_out_to": ["websocket_relays", "read"]
+    },
+    {
+      "name": "active_channels",
+      "line": 182,
+      "calls_out_to": ["webrtc_channels", "read"]
+    },
+    {
+      "name": "add_channel",
+      "line": 193,
+      "calls_out_to": ["webrtc_channels", "write"]
+    },
+    {
+      "name": "remove_channel",
+      "line": 214,
+      "calls_out_to": ["webrtc_channels", "write"]
+    },
+    {
+      "name": "update_channel_state",
+      "line": 230,
+      "calls_out_to": ["webrtc_channels", "write"]
+    },
+    {
+      "name": "relay_state",
+      "line": 236,
+      "calls_out_to": ["websocket_relays", "read"]
+    },
+    {
+      "name": "all_relays",
+      "line": 241,
+      "calls_out_to": ["websocket_relays", "read"]
+    }
+  ]
+}

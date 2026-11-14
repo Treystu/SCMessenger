@@ -1,0 +1,14 @@
+﻿{
+  "file": "relay_custody.rs",
+  "chunk": 7,
+  "summary": "The code snippet defines a test function `test_storage_pressure_state_uses_synthetic_snapshot_when_probe_unavailable` within the `RelayCustodyStore` struct. It tests the behavior of the storage pressure state when the probe is unavailable, specifically by accepting custody and then checking if a synthetic snapshot fallback is used.",
+  "structs_or_classes": ["RelayCustodyStore"],
+  "imports": [],
+  "funcs": [
+    {
+      "name": "test_storage_pressure_state_uses_synthetic_snapshot_when_probe_unavailable",
+      "line": 2101,
+      "calls_out_to": []
+    }
+  ]
+}

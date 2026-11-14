@@ -1,0 +1,42 @@
+﻿{
+  "file": "resume_prefetch.rs",
+  "chunk": 1,
+  "summary": "Detailed summary of the resume prefetch manager implementation.",
+  "structs_or_classes": ["PrefetchManager", "FrequentPeer"],
+  "imports": ["std::collections::{HashMap, VecDeque}", "web_time::{Duration, Instant}"],
+  "funcs": [
+    {
+      "name": "on_app_background",
+      "line": 208,
+      "calls_out_to": ["self.routes.clear()", "for (_peer_id, hint, route) in current_routes { ... }"]
+    },
+    {
+      "name": "on_app_resume",
+      "line": 301,
+      "calls_out_to": [
+        "self.prefetch_in_progress = true;",
+        "self.prefetch_started = Some(Instant::now());",
+        "self.active_refreshes = 0;",
+        "let mut hints: Vec<([u8; 4], u32)> = self.routes.iter().map(|(&hint, route)| (hint, route.priority)).collect();",
+        "hints.sort_by_key(|b| std::cmp::Reverse(b.1));",
+        "self.refresh_queue = hints.iter().map(|(h, _)| *h).collect();",
+        "let immediate_count = self.config.max_concurrent_refreshes.min(hints.len());"
+      ]
+    },
+    {
+      "name": "get_route_early",
+      "line": 261,
+      "calls_out_to": ["self.routes.get(hint).and_then(|prefetched| { ... })"]
+    },
+    {
+      "name": "update_route",
+      "line": 272,
+      "calls_out_to": ["if let Some(prefetched) = self.routes.get_mut(&hint) { ... } else { ... }"]
+    },
+    {
+      "name": "mark_refresh_failed",
+      "line": 283,
+      "calls_out_to": ["if let Some(prefetched) = self.routes.get_mut(hint) { ... }"]
+    }
+  ]
+}

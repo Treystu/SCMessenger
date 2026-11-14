@@ -1,0 +1,14 @@
+﻿{
+  "file": "ephemeral.rs",
+  "chunk": 1,
+  "summary": "Ephemeral message functionality with TTL (Time-To-Live) support.",
+  "structs_or_classes": ["TtlConfig"],
+  "imports": [],
+  "funcs": [
+    {
+      "name": "is_expired",
+      "line": 23,
+      "calls_out_to": []
+    }
+  ]
+}

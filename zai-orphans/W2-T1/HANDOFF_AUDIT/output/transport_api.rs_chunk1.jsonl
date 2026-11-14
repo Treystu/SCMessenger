@@ -1,0 +1,19 @@
+﻿{
+  "file": "transport_api.rs",
+  "chunk": 1,
+  "summary": "Provides transport capability discovery and peer registration types.",
+  "structs_or_classes": ["RegisterPeerRequest", "TransportError"],
+  "imports": [],
+  "funcs": [
+    {
+      "name": "RegisterPeerRequest",
+      "line": 9,
+      "calls_out_to": []
+    },
+    {
+      "name": "TransportError",
+      "line": 15,
+      "calls_out_to": ["Display"]
+    }
+  ]
+}

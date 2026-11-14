@@ -1,0 +1,34 @@
+﻿{
+  "file": "rpc.rs",
+  "chunk": 1,
+  "summary": "This chunk defines the structure and functions for handling JSON-RPC requests and responses in a Rust application. It includes structs for incoming requests, responses, errors, notifications, and constants for error codes.",
+  "structs_or_classes": ["JsonRpcRequest", "JsonRpcResponse", "JsonRpcErrorBody", "ClientIntent"],
+  "imports": [],
+  "funcs": [
+    {
+      "name": "parse_intent",
+      "line": 103,
+      "calls_out_to": []
+    },
+    {
+      "name": "rpc_result",
+      "line": 268,
+      "calls_out_to": []
+    },
+    {
+      "name": "rpc_error",
+      "line": 275,
+      "calls_out_to": []
+    },
+    {
+      "name": "notif_message_received",
+      "line": 340,
+      "calls_out_to": []
+    },
+    {
+      "name": "notif_peer_discovered",
+      "line": 346,
+      "calls_out_to": []
+    }
+  ]
+}

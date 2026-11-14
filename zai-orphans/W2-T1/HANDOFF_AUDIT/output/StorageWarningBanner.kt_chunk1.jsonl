@@ -1,0 +1,14 @@
+﻿{
+  "file": "StorageWarningBanner.kt",
+  "chunk": 1,
+  "summary": "A persistent banner displayed when device storage is critically low.",
+  "structs_or_classes": ["Surface", "Row", "Icon", "Column", "Text"],
+  "imports": ["androidx.compose.foundation.background", "androidx.compose.foundation.layout", "androidx.compose.material.icons.Icons", "androidx.compose.material.icons.filled.Warning", "androidx.compose.material3.", "androidx.compose.runtime.Composable", "androidx.compose.ui.Alignment", "androidx.compose.ui.Modifier", "androidx.compose.ui.unit.dp"],
+  "funcs": [
+    {
+      "name": "StorageWarningBanner",
+      "line": 17,
+      "calls_out_to": ["Surface", "Row", "Icon", "Column", "Text"]
+    }
+  ]
+}

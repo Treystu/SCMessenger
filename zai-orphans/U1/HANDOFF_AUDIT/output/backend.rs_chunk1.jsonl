@@ -1,0 +1,39 @@
+﻿{
+  "file": "backend.rs",
+  "chunk": 1,
+  "summary": "This chunk defines a trait `StorageBackend` and several implementations for different storage backends.",
+  "structs_or_classes": ["MemoryStorage", "SledStorage", "IndexedDbStorage"],
+  "imports": ["std::collections::HashMap", "std::sync::{Arc, RwLock}", "js_sys::wasm_bindgen::JsCast", "rexie::*", "futures::channel::oneshot", "futures::executor::block_on", "wasm_bindgen_futures::spawn_local"],
+  "funcs": [
+    {
+      "name": "put",
+      "line": 40,
+      "calls_out_to": ["self.data.write().unwrap().insert(key.to_vec(), value.to_vec())"]
+    },
+    {
+      "name": "get",
+      "line": 48,
+      "calls_out_to": ["Ok(self.data.read().unwrap().get(key).cloned())"]
+    },
+    {
+      "name": "remove",
+      "line": 53,
+      "calls_out_to": ["self.data.write().unwrap().remove(key);"]
+    },
+    {
+      "name": "scan_prefix",
+      "line": 60,
+      "calls_out_to": ["for (k, v) in self.data.read().unwrap().iter() { ... }"]
+    },
+    {
+      "name": "count_prefix",
+      "line": 67,
+      "calls_out_to": ["Ok(self.data.read().unwrap().keys().filter(|k| k.starts_with(prefix)).count())"]
+    },
+    {
+      "name": "flush",
+      "line": 74,
+      "calls_out_to": ["Ok(())"]
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+#!/bin/sh
+# Versioned pre-push hook (activated via: git config core.hooksPath .githooks)
+# Tool-agnostic enforcement of AGENTS.md rule 5 -- blocks non-fast-forward
+# (force) pushes and remote branch deletions from Claude Code, Cowork sandboxes,
+# Gemini/Antigravity, agy, Codex, Copilot and humans alike.
+# Do NOT bypass with --no-verify (operator-only exception).
+
+python scripts/prepush_check.py
+status=$?
+if [ $status -ne 0 ]; then
+  echo "" >&2
+  echo "pre-push: blocked by scripts/prepush_check.py (see [FAIL] lines above)." >&2
+fi
+exit $status

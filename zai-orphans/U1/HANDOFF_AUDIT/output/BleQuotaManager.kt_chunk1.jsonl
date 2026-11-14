@@ -1,0 +1,31 @@
+﻿{
+  "file": "BleQuotaManager.kt",
+  "chunk": 1,
+  "summary": "Enforces Android 12+ BLE scan quota by tracking and enforcing the maximum number of scan starts within a 30-second window.",
+  "structs_or_classes": [
+    {
+      "name": "BleQuotaManager",
+      "line": 11
+    }
+  ],
+  "imports": [
+    "timber.log.Timber"
+  ],
+  "funcs": [
+    {
+      "name": "checkQuota",
+      "line": 22,
+      "calls_out_to": ["pruneOldTimestamps", "System.currentTimeMillis"]
+    },
+    {
+      "name": "recordScanStart",
+      "line": 40,
+      "calls_out_to": ["pruneOldTimestamps", "System.currentTimeMillis"]
+    },
+    {
+      "name": "currentCount",
+      "line": 50,
+      "calls_out_to": ["pruneOldTimestamps", "System.currentTimeMillis"]
+    }
+  ]
+}

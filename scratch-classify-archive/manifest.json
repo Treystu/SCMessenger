@@ -1,0 +1,1535 @@
+﻿{
+    "source":  "repo/tmp/scratch-classify*",
+    "source_folder_count":  10,
+    "source_file_count":  305,
+    "logical_bytes":  232137,
+    "reported_dispatch_estimate":  "~3.3 GB; not reproduced",
+    "observed_discrepancy":  "scratch-classify-0 has configured remotes and 17 status entries; no source repo or remote was changed",
+    "files":  [
+                  {
+                      "path":  "scratch-classify/README.md",
+                      "bytes":  6,
+                      "sha256":  "f8ba93752c42985276cab7de1169609631ed696b04999d05d49d93169ec05c1a"
+                  },
+                  {
+                      "path":  "scratch-classify/.git/COMMIT_EDITMSG",
+                      "bytes":  7,
+                      "sha256":  "8eefdfa35348df2ec75eeed0daf25afe217b15de4c3353eef916744c4e4bc100"
+                  },
+                  {
+                      "path":  "scratch-classify/.git/config",
+                      "bytes":  160,
+                      "sha256":  "6191875d534bbca835a192201e9070d79f5bdcaff33cc5e8d3dbad056713f203"
+                  },
+                  {
+                      "path":  "scratch-classify/.git/description",
+                      "bytes":  73,
+                      "sha256":  "85ab6c163d43a17ea9cf7788308bca1466f1b0a8d1cc92e26e9bf63da4062aee"
+                  },
+                  {
+                      "path":  "scratch-classify/.git/HEAD",
+                      "bytes":  21,
+                      "sha256":  "28d25bf82af4c0e2b72f50959b2beb859e3e60b9630a5e8c603dad4ddb2b6e80"
+                  },
+                  {
+                      "path":  "scratch-classify/.git/index",
+                      "bytes":  289,
+                      "sha256":  "22d69d988b9ba80ef966664e2e371ed973459647359907e3d539ccadd44216e0"
+                  },
+                  {
+                      "path":  "scratch-classify/.git/objects/08/35e4f9714005ed591f68d306eea0d6d2ae8fd7",
+                      "bytes":  22,
+                      "sha256":  "eaaeb3616a7606d0dacfead216a07a3f858772ac733de6161403c32f26ba9399"
+                  },
+                  {
+                      "path":  "scratch-classify/.git/objects/14/82c81c3acd737f466f519ca3e4b4321af7369f",
+                      "bytes":  54,
+                      "sha256":  "1d97a35919ef85733f822bac85645e3270464ef6393c10701f614eea09b06af8"
+                  },
+                  {
+                      "path":  "scratch-classify/.git/objects/54/c0448efd33ee8d3313a9b1ae00ad2fd3ca4e7f",
+                      "bytes":  103,
+                      "sha256":  "9c94ea405821ebe2695c84eba35bd90ea10d0779fb677d29098fadb900bed132"
+                  },
+                  {
+                      "path":  "scratch-classify/.git/objects/72/ad3790c1a4f9da5170bf4b4006e5e2ebb04900",
+                      "bytes":  54,
+                      "sha256":  "6514846df8b7d65ebf1ffa0785a36612f5a3051fc6e4874eecdcd6bce781a854"
+                  },
+                  {
+                      "path":  "scratch-classify/.git/objects/83/425b6e95e642bc55a4afda9c310062fb77e8fb",
+                      "bytes":  136,
+                      "sha256":  "00ffe24a852c0d9a36e2644b30413a0764e8e6d1591c129e33f3a0fe2b6776be"
+                  },
+                  {
+                      "path":  "scratch-classify/.git/objects/c0/99e2e1c69309b15f4ff04fd2bcf023fb89ba2d",
+                      "bytes":  83,
+                      "sha256":  "ebe4a15e2cdb79031995f281f99d117c90bc37a45e5a7a365c2650c1d055ce14"
+                  },
+                  {
+                      "path":  "scratch-classify/.git/objects/cc/1bdfa1894337da8480f5a64a42dbde30c80912",
+                      "bytes":  54,
+                      "sha256":  "5c8351dcd7ddf516037eef443004a9cbb7192ee26a71795d94dc1b7befa06d18"
+                  },
+                  {
+                      "path":  "scratch-classify/.git/objects/df/967b96a579e45a18b8251732d16804b2e56a55",
+                      "bytes":  20,
+                      "sha256":  "a68879a026ee9eaa8c8eeb0826d1bb255a36e9bb38c76b3e42d892b22d0c4728"
+                  },
+                  {
+                      "path":  "scratch-classify/.git/refs/heads/main",
+                      "bytes":  41,
+                      "sha256":  "e7e1c4967800ec2aec3b2ccc9445a3f496c5ac45c34f1dc3cbff0a4cdd2651cc"
+                  },
+                  {
+                      "path":  "scratch-classify/iOS/SCMessenger/Foo.swift",
+                      "bytes":  8,
+                      "sha256":  "4bf3a03a765797e7db7121e2f7197a88e69622bcd117c0551776a6673354d9ab"
+                  },
+                  {
+                      "path":  "scratch-classify-0/.git/objects/08/35e4f9714005ed591f68d306eea0d6d2ae8fd7",
+                      "bytes":  22,
+                      "sha256":  "eaaeb3616a7606d0dacfead216a07a3f858772ac733de6161403c32f26ba9399"
+                  },
+                  {
+                      "path":  "scratch-classify-0/.git/objects/14/82c81c3acd737f466f519ca3e4b4321af7369f",
+                      "bytes":  54,
+                      "sha256":  "1d97a35919ef85733f822bac85645e3270464ef6393c10701f614eea09b06af8"
+                  },
+                  {
+                      "path":  "scratch-classify-0/.git/objects/19/f0621ca0a63b3eaa40db7491b2c7a3e5a99e90",
+                      "bytes":  103,
+                      "sha256":  "302aa578ed9bf432572ed9764d98ba13e5e152eba45501a845b5c11fc58fc1dc"
+                  },
+                  {
+                      "path":  "scratch-classify-0/.git/objects/60/999bfaf36075020da6a057675c22a31d898a4b",
+                      "bytes":  133,
+                      "sha256":  "d731969ec0d1cffebbcc0b2ee04de293dd5df4ac15ff6711564bd83c8c1820c6"
+                  },
+                  {
+                      "path":  "scratch-classify-0/.git/objects/72/ad3790c1a4f9da5170bf4b4006e5e2ebb04900",
+                      "bytes":  54,
+                      "sha256":  "6514846df8b7d65ebf1ffa0785a36612f5a3051fc6e4874eecdcd6bce781a854"
+                  },
+                  {
+                      "path":  "scratch-classify-0/.git/objects/c0/99e2e1c69309b15f4ff04fd2bcf023fb89ba2d",
+                      "bytes":  83,
+                      "sha256":  "ebe4a15e2cdb79031995f281f99d117c90bc37a45e5a7a365c2650c1d055ce14"
+                  },
+                  {
+                      "path":  "scratch-classify-0/.git/objects/cc/1bdfa1894337da8480f5a64a42dbde30c80912",
+                      "bytes":  54,
+                      "sha256":  "5c8351dcd7ddf516037eef443004a9cbb7192ee26a71795d94dc1b7befa06d18"
+                  },
+                  {
+                      "path":  "scratch-classify-0/.git/objects/df/967b96a579e45a18b8251732d16804b2e56a55",
+                      "bytes":  20,
+                      "sha256":  "a68879a026ee9eaa8c8eeb0826d1bb255a36e9bb38c76b3e42d892b22d0c4728"
+                  },
+                  {
+                      "path":  "scratch-classify-1/README.md",
+                      "bytes":  6,
+                      "sha256":  "f8ba93752c42985276cab7de1169609631ed696b04999d05d49d93169ec05c1a"
+                  },
+                  {
+                      "path":  "scratch-classify-1/.git/COMMIT_EDITMSG",
+                      "bytes":  7,
+                      "sha256":  "8eefdfa35348df2ec75eeed0daf25afe217b15de4c3353eef916744c4e4bc100"
+                  },
+                  {
+                      "path":  "scratch-classify-1/.git/config",
+                      "bytes":  160,
+                      "sha256":  "6191875d534bbca835a192201e9070d79f5bdcaff33cc5e8d3dbad056713f203"
+                  },
+                  {
+                      "path":  "scratch-classify-1/.git/description",
+                      "bytes":  73,
+                      "sha256":  "85ab6c163d43a17ea9cf7788308bca1466f1b0a8d1cc92e26e9bf63da4062aee"
+                  },
+                  {
+                      "path":  "scratch-classify-1/.git/HEAD",
+                      "bytes":  21,
+                      "sha256":  "28d25bf82af4c0e2b72f50959b2beb859e3e60b9630a5e8c603dad4ddb2b6e80"
+                  },
+                  {
+                      "path":  "scratch-classify-1/.git/index",
+                      "bytes":  534,
+                      "sha256":  "82f7e76f4e119c122ecd3f28e769b5f442bdcbf7d0b4d63ee3cfe17f89bfd22a"
+                  },
+                  {
+                      "path":  "scratch-classify-1/.git/hooks/applypatch-msg.sample",
+                      "bytes":  478,
+                      "sha256":  "0223497a0b8b033aa58a3a521b8629869386cf7ab0e2f101963d328aa62193f7"
+                  },
+                  {
+                      "path":  "scratch-classify-1/.git/hooks/commit-msg.sample",
+                      "bytes":  1972,
+                      "sha256":  "efc1401b0e99d1ff51494d154d98b46c1e99059bcd8bf9f73cecde19fd3eb23b"
+                  },
+                  {
+                      "path":  "scratch-classify-1/.git/hooks/fsmonitor-watchman.sample",
+                      "bytes":  4611,
+                      "sha256":  "9159720099ad5595b8e66645cbfd47763c1e920f46e0b50ae75e642bbec57ef0"
+                  },
+                  {
+                      "path":  "scratch-classify-1/.git/hooks/post-update.sample",
+                      "bytes":  189,
+                      "sha256":  "81765af2daef323061dcbc5e61fc16481cb74b3bac9ad8a174b186523586f6c5"
+                  },
+                  {
+                      "path":  "scratch-classify-1/.git/hooks/pre-applypatch.sample",
+                      "bytes":  424,
+                      "sha256":  "e15c5b469ea3e0a695bea6f2c82bcf8e62821074939ddd85b77e0007ff165475"
+                  },
+                  {
+                      "path":  "scratch-classify-1/.git/hooks/pre-commit.sample",
+                      "bytes":  1649,
+                      "sha256":  "57185b7b9f05239d7ab52db045f5b89eb31348d7b2177eab214f5eb872e1971b"
+                  },
+                  {
+                      "path":  "scratch-classify-1/.git/hooks/pre-merge-commit.sample",
+                      "bytes":  416,
+                      "sha256":  "d3825a70337940ebbd0a5c072984e13245920cdf8898bd225c8d27a6dfc9cb53"
+                  },
+                  {
+                      "path":  "scratch-classify-1/.git/hooks/pre-push.sample",
+                      "bytes":  1374,
+                      "sha256":  "ecce9c7e04d3f5dd9d8ada81753dd1d549a9634b26770042b58dda00217d086a"
+                  },
+                  {
+                      "path":  "scratch-classify-1/.git/hooks/pre-rebase.sample",
+                      "bytes":  4898,
+                      "sha256":  "4febce867790052338076f4e66cc47efb14879d18097d1d61c8261859eaaa7b3"
+                  },
+                  {
+                      "path":  "scratch-classify-1/.git/hooks/pre-receive.sample",
+                      "bytes":  544,
+                      "sha256":  "a4c3d2b9c7bb3fd8d1441c31bd4ee71a595d66b44fcf49ddb310252320169989"
+                  },
+                  {
+                      "path":  "scratch-classify-1/.git/hooks/prepare-commit-msg.sample",
+                      "bytes":  1492,
+                      "sha256":  "e9ddcaa4189fddd25ed97fc8c789eca7b6ca16390b2392ae3276f0c8e1aa4619"
+                  },
+                  {
+                      "path":  "scratch-classify-1/.git/hooks/push-to-checkout.sample",
+                      "bytes":  2783,
+                      "sha256":  "a53d0741798b287c6dd7afa64aee473f305e65d3f49463bb9d7408ec3b12bf5f"
+                  },
+                  {
+                      "path":  "scratch-classify-1/.git/hooks/sendemail-validate.sample",
+                      "bytes":  2308,
+                      "sha256":  "44ebfc923dc5466bc009602f0ecf067b9c65459abfe8868ddc49b78e6ced7a92"
+                  },
+                  {
+                      "path":  "scratch-classify-1/.git/hooks/update.sample",
+                      "bytes":  3650,
+                      "sha256":  "8d5f2fa83e103cf08b57eaa67521df9194f45cbdbcb37da52ad586097a14d106"
+                  },
+                  {
+                      "path":  "scratch-classify-1/.git/info/exclude",
+                      "bytes":  240,
+                      "sha256":  "6671fe83b7a07c8932ee89164d1f2793b2318058eb8b98dc5c06ee0a5a3b0ec1"
+                  },
+                  {
+                      "path":  "scratch-classify-1/.git/logs/HEAD",
+                      "bytes":  252,
+                      "sha256":  "ad3ad308acf1ca493d0407b40b71faac51780cf16ebba1a9103603bbe2b470e5"
+                  },
+                  {
+                      "path":  "scratch-classify-1/.git/logs/refs/heads/main",
+                      "bytes":  252,
+                      "sha256":  "ad3ad308acf1ca493d0407b40b71faac51780cf16ebba1a9103603bbe2b470e5"
+                  },
+                  {
+                      "path":  "scratch-classify-1/.git/objects/08/35e4f9714005ed591f68d306eea0d6d2ae8fd7",
+                      "bytes":  22,
+                      "sha256":  "eaaeb3616a7606d0dacfead216a07a3f858772ac733de6161403c32f26ba9399"
+                  },
+                  {
+                      "path":  "scratch-classify-1/.git/objects/25/16ad34b89c38cad18cb5fe87b02a2171636579",
+                      "bytes":  46,
+                      "sha256":  "45c011d5550234516288c6430866158032b4ff20e14888645ca03d6d19c79129"
+                  },
+                  {
+                      "path":  "scratch-classify-1/.git/objects/27/0480880e9920c8cb5ed036c3c0ecb1bd26d2ab",
+                      "bytes":  53,
+                      "sha256":  "feb423538fb3b1d97a1e4b59972a1e6566eeb3aa0491dbc821436e653e448f5a"
+                  },
+                  {
+                      "path":  "scratch-classify-1/.git/objects/4a/b89b3afc80d141399653f88115f5e9402a8e6e",
+                      "bytes":  133,
+                      "sha256":  "91abbd526a6a28a2e1e064308ea86703cb54d96b7045422fb3877b3834d9f6ff"
+                  },
+                  {
+                      "path":  "scratch-classify-1/.git/objects/5a/5a4513eca247db1e71304dab77e111b42d6535",
+                      "bytes":  45,
+                      "sha256":  "e34babfaa2e8cbf8d8395047b09387c4273b7cd11c26a14d88563c3d9e087f8b"
+                  },
+                  {
+                      "path":  "scratch-classify-1/.git/objects/5f/f8d70fc2fe59e646a00506781ca934324c392a",
+                      "bytes":  44,
+                      "sha256":  "2e1ef71f39ce865e58f526f76961d9926e0dbc7b23a300d025b8745b6d8da0dd"
+                  },
+                  {
+                      "path":  "scratch-classify-1/.git/objects/77/fea099094cfd2bc66d066d46fcc6794e40abab",
+                      "bytes":  47,
+                      "sha256":  "3282c8fdfec0ed8af09a6fdb15fddc8cf6d66fc9b1a11e8dd072ec5a9464da6d"
+                  },
+                  {
+                      "path":  "scratch-classify-1/.git/objects/7e/96fa202502d52345290fefb8168f409335daa8",
+                      "bytes":  49,
+                      "sha256":  "b6495511bcf702b1956b739dd05e2a09b8d0aeb0fc4fc698d97223d604417420"
+                  },
+                  {
+                      "path":  "scratch-classify-1/.git/objects/81/ad9ff0123d08c70f117257c00472a6592acc10",
+                      "bytes":  104,
+                      "sha256":  "dcb507b15052f7c80045648162e80942b69d72ae6c3512ded35d095d682c26b4"
+                  },
+                  {
+                      "path":  "scratch-classify-1/.git/objects/ca/7e8974e818afb2061dde98349aa95bc3b9897b",
+                      "bytes":  45,
+                      "sha256":  "80f98223221a8021efb60dd96e4f21116aeb91673938fb47da44747bc1ce86e7"
+                  },
+                  {
+                      "path":  "scratch-classify-1/.git/objects/cc/1bdfa1894337da8480f5a64a42dbde30c80912",
+                      "bytes":  54,
+                      "sha256":  "5c8351dcd7ddf516037eef443004a9cbb7192ee26a71795d94dc1b7befa06d18"
+                  },
+                  {
+                      "path":  "scratch-classify-1/.git/objects/d0/7e1b13b71d3b1d574baa1b9ab8c79dafe88316",
+                      "bytes":  87,
+                      "sha256":  "a36ea3fbcbd9e5bdaca962b51ee9d57838f68ab8e5d03890481827de493ef6a7"
+                  },
+                  {
+                      "path":  "scratch-classify-1/.git/objects/d5/769e3ed307650b423c872af834e37de6f07c38",
+                      "bytes":  51,
+                      "sha256":  "150d49d506fac1701009e29d366d6dcb97990b9a5d3e81e69bc650804ade39ba"
+                  },
+                  {
+                      "path":  "scratch-classify-1/.git/objects/df/967b96a579e45a18b8251732d16804b2e56a55",
+                      "bytes":  20,
+                      "sha256":  "a68879a026ee9eaa8c8eeb0826d1bb255a36e9bb38c76b3e42d892b22d0c4728"
+                  },
+                  {
+                      "path":  "scratch-classify-1/.git/objects/ee/96cfe8a036bd2c6178e0c89a5b98c2a9ae9a86",
+                      "bytes":  46,
+                      "sha256":  "e57c330f70b633f68c29e7f9e65b2337530d6402c5c0ab4df9cdfa923262bba1"
+                  },
+                  {
+                      "path":  "scratch-classify-1/.git/refs/heads/main",
+                      "bytes":  41,
+                      "sha256":  "27401b20b15b54c0355990cb29a803c52e13078cc25962ad6ba49d1320508b8f"
+                  },
+                  {
+                      "path":  "scratch-classify-1/android/app/src/main/java/com/scmessenger/android/ui/Foo.kt",
+                      "bytes":  8,
+                      "sha256":  "4bf3a03a765797e7db7121e2f7197a88e69622bcd117c0551776a6673354d9ab"
+                  },
+                  {
+                      "path":  "scratch-classify-9jp8s_8u/gh_output",
+                      "bytes":  61,
+                      "sha256":  "a6562d5042eaa00b59c3bd5eefd82bc2a9738e5268e4b5d3d7683c1510678246"
+                  },
+                  {
+                      "path":  "scratch-classify-9jp8s_8u/README.md",
+                      "bytes":  6,
+                      "sha256":  "f8ba93752c42985276cab7de1169609631ed696b04999d05d49d93169ec05c1a"
+                  },
+                  {
+                      "path":  "scratch-classify-9jp8s_8u/.git/COMMIT_EDITMSG",
+                      "bytes":  7,
+                      "sha256":  "8eefdfa35348df2ec75eeed0daf25afe217b15de4c3353eef916744c4e4bc100"
+                  },
+                  {
+                      "path":  "scratch-classify-9jp8s_8u/.git/config",
+                      "bytes":  160,
+                      "sha256":  "6191875d534bbca835a192201e9070d79f5bdcaff33cc5e8d3dbad056713f203"
+                  },
+                  {
+                      "path":  "scratch-classify-9jp8s_8u/.git/description",
+                      "bytes":  73,
+                      "sha256":  "85ab6c163d43a17ea9cf7788308bca1466f1b0a8d1cc92e26e9bf63da4062aee"
+                  },
+                  {
+                      "path":  "scratch-classify-9jp8s_8u/.git/HEAD",
+                      "bytes":  21,
+                      "sha256":  "28d25bf82af4c0e2b72f50959b2beb859e3e60b9630a5e8c603dad4ddb2b6e80"
+                  },
+                  {
+                      "path":  "scratch-classify-9jp8s_8u/.git/index",
+                      "bytes":  534,
+                      "sha256":  "54db907c1fa657e2b2e5efb9b381ec13dc93631b517350a8c7cc7383b6b443c4"
+                  },
+                  {
+                      "path":  "scratch-classify-9jp8s_8u/.git/hooks/applypatch-msg.sample",
+                      "bytes":  478,
+                      "sha256":  "0223497a0b8b033aa58a3a521b8629869386cf7ab0e2f101963d328aa62193f7"
+                  },
+                  {
+                      "path":  "scratch-classify-9jp8s_8u/.git/hooks/commit-msg.sample",
+                      "bytes":  1972,
+                      "sha256":  "efc1401b0e99d1ff51494d154d98b46c1e99059bcd8bf9f73cecde19fd3eb23b"
+                  },
+                  {
+                      "path":  "scratch-classify-9jp8s_8u/.git/hooks/fsmonitor-watchman.sample",
+                      "bytes":  4611,
+                      "sha256":  "9159720099ad5595b8e66645cbfd47763c1e920f46e0b50ae75e642bbec57ef0"
+                  },
+                  {
+                      "path":  "scratch-classify-9jp8s_8u/.git/hooks/post-update.sample",
+                      "bytes":  189,
+                      "sha256":  "81765af2daef323061dcbc5e61fc16481cb74b3bac9ad8a174b186523586f6c5"
+                  },
+                  {
+                      "path":  "scratch-classify-9jp8s_8u/.git/hooks/pre-applypatch.sample",
+                      "bytes":  424,
+                      "sha256":  "e15c5b469ea3e0a695bea6f2c82bcf8e62821074939ddd85b77e0007ff165475"
+                  },
+                  {
+                      "path":  "scratch-classify-9jp8s_8u/.git/hooks/pre-commit.sample",
+                      "bytes":  1649,
+                      "sha256":  "57185b7b9f05239d7ab52db045f5b89eb31348d7b2177eab214f5eb872e1971b"
+                  },
+                  {
+                      "path":  "scratch-classify-9jp8s_8u/.git/hooks/pre-merge-commit.sample",
+                      "bytes":  416,
+                      "sha256":  "d3825a70337940ebbd0a5c072984e13245920cdf8898bd225c8d27a6dfc9cb53"
+                  },
+                  {
+                      "path":  "scratch-classify-9jp8s_8u/.git/hooks/pre-push.sample",
+                      "bytes":  1374,
+                      "sha256":  "ecce9c7e04d3f5dd9d8ada81753dd1d549a9634b26770042b58dda00217d086a"
+                  },
+                  {
+                      "path":  "scratch-classify-9jp8s_8u/.git/hooks/pre-rebase.sample",
+                      "bytes":  4898,
+                      "sha256":  "4febce867790052338076f4e66cc47efb14879d18097d1d61c8261859eaaa7b3"
+                  },
+                  {
+                      "path":  "scratch-classify-9jp8s_8u/.git/hooks/pre-receive.sample",
+                      "bytes":  544,
+                      "sha256":  "a4c3d2b9c7bb3fd8d1441c31bd4ee71a595d66b44fcf49ddb310252320169989"
+                  },
+                  {
+                      "path":  "scratch-classify-9jp8s_8u/.git/hooks/prepare-commit-msg.sample",
+                      "bytes":  1492,
+                      "sha256":  "e9ddcaa4189fddd25ed97fc8c789eca7b6ca16390b2392ae3276f0c8e1aa4619"
+                  },
+                  {
+                      "path":  "scratch-classify-9jp8s_8u/.git/hooks/push-to-checkout.sample",
+                      "bytes":  2783,
+                      "sha256":  "a53d0741798b287c6dd7afa64aee473f305e65d3f49463bb9d7408ec3b12bf5f"
+                  },
+                  {
+                      "path":  "scratch-classify-9jp8s_8u/.git/hooks/sendemail-validate.sample",
+                      "bytes":  2308,
+                      "sha256":  "44ebfc923dc5466bc009602f0ecf067b9c65459abfe8868ddc49b78e6ced7a92"
+                  },
+                  {
+                      "path":  "scratch-classify-9jp8s_8u/.git/hooks/update.sample",
+                      "bytes":  3650,
+                      "sha256":  "8d5f2fa83e103cf08b57eaa67521df9194f45cbdbcb37da52ad586097a14d106"
+                  },
+                  {
+                      "path":  "scratch-classify-9jp8s_8u/.git/info/exclude",
+                      "bytes":  240,
+                      "sha256":  "6671fe83b7a07c8932ee89164d1f2793b2318058eb8b98dc5c06ee0a5a3b0ec1"
+                  },
+                  {
+                      "path":  "scratch-classify-9jp8s_8u/.git/logs/HEAD",
+                      "bytes":  252,
+                      "sha256":  "b386f43691f851ccf409546df398c70ed03c4f7dc1d2ecdac850ec8e8296fed6"
+                  },
+                  {
+                      "path":  "scratch-classify-9jp8s_8u/.git/logs/refs/heads/main",
+                      "bytes":  252,
+                      "sha256":  "b386f43691f851ccf409546df398c70ed03c4f7dc1d2ecdac850ec8e8296fed6"
+                  },
+                  {
+                      "path":  "scratch-classify-9jp8s_8u/.git/objects/08/35e4f9714005ed591f68d306eea0d6d2ae8fd7",
+                      "bytes":  22,
+                      "sha256":  "eaaeb3616a7606d0dacfead216a07a3f858772ac733de6161403c32f26ba9399"
+                  },
+                  {
+                      "path":  "scratch-classify-9jp8s_8u/.git/objects/25/16ad34b89c38cad18cb5fe87b02a2171636579",
+                      "bytes":  46,
+                      "sha256":  "45c011d5550234516288c6430866158032b4ff20e14888645ca03d6d19c79129"
+                  },
+                  {
+                      "path":  "scratch-classify-9jp8s_8u/.git/objects/27/0480880e9920c8cb5ed036c3c0ecb1bd26d2ab",
+                      "bytes":  53,
+                      "sha256":  "feb423538fb3b1d97a1e4b59972a1e6566eeb3aa0491dbc821436e653e448f5a"
+                  },
+                  {
+                      "path":  "scratch-classify-9jp8s_8u/.git/objects/5a/5a4513eca247db1e71304dab77e111b42d6535",
+                      "bytes":  45,
+                      "sha256":  "e34babfaa2e8cbf8d8395047b09387c4273b7cd11c26a14d88563c3d9e087f8b"
+                  },
+                  {
+                      "path":  "scratch-classify-9jp8s_8u/.git/objects/5f/f8d70fc2fe59e646a00506781ca934324c392a",
+                      "bytes":  44,
+                      "sha256":  "2e1ef71f39ce865e58f526f76961d9926e0dbc7b23a300d025b8745b6d8da0dd"
+                  },
+                  {
+                      "path":  "scratch-classify-9jp8s_8u/.git/objects/77/fea099094cfd2bc66d066d46fcc6794e40abab",
+                      "bytes":  47,
+                      "sha256":  "3282c8fdfec0ed8af09a6fdb15fddc8cf6d66fc9b1a11e8dd072ec5a9464da6d"
+                  },
+                  {
+                      "path":  "scratch-classify-9jp8s_8u/.git/objects/7e/96fa202502d52345290fefb8168f409335daa8",
+                      "bytes":  49,
+                      "sha256":  "b6495511bcf702b1956b739dd05e2a09b8d0aeb0fc4fc698d97223d604417420"
+                  },
+                  {
+                      "path":  "scratch-classify-9jp8s_8u/.git/objects/ca/7e8974e818afb2061dde98349aa95bc3b9897b",
+                      "bytes":  45,
+                      "sha256":  "80f98223221a8021efb60dd96e4f21116aeb91673938fb47da44747bc1ce86e7"
+                  },
+                  {
+                      "path":  "scratch-classify-9jp8s_8u/.git/objects/cc/1bdfa1894337da8480f5a64a42dbde30c80912",
+                      "bytes":  54,
+                      "sha256":  "5c8351dcd7ddf516037eef443004a9cbb7192ee26a71795d94dc1b7befa06d18"
+                  },
+                  {
+                      "path":  "scratch-classify-9jp8s_8u/.git/objects/d0/7e1b13b71d3b1d574baa1b9ab8c79dafe88316",
+                      "bytes":  87,
+                      "sha256":  "a36ea3fbcbd9e5bdaca962b51ee9d57838f68ab8e5d03890481827de493ef6a7"
+                  },
+                  {
+                      "path":  "scratch-classify-9jp8s_8u/.git/objects/d5/769e3ed307650b423c872af834e37de6f07c38",
+                      "bytes":  51,
+                      "sha256":  "150d49d506fac1701009e29d366d6dcb97990b9a5d3e81e69bc650804ade39ba"
+                  },
+                  {
+                      "path":  "scratch-classify-9jp8s_8u/.git/objects/dd/0a8148f1e8432865c4aac9ee09a20dbf5f1f28",
+                      "bytes":  104,
+                      "sha256":  "33ac4b08c8809f7f8e5d7d90ce01210276dd438938a77effbffe7bda3ee896ba"
+                  },
+                  {
+                      "path":  "scratch-classify-9jp8s_8u/.git/objects/df/967b96a579e45a18b8251732d16804b2e56a55",
+                      "bytes":  20,
+                      "sha256":  "a68879a026ee9eaa8c8eeb0826d1bb255a36e9bb38c76b3e42d892b22d0c4728"
+                  },
+                  {
+                      "path":  "scratch-classify-9jp8s_8u/.git/objects/e4/d4396418e49c3171c4305254a8a27fc7d9765e",
+                      "bytes":  135,
+                      "sha256":  "81d67f5f5ab5f3d8ce77a225c2075449ce6cce7d054a459dbedc6c6df87ee7a2"
+                  },
+                  {
+                      "path":  "scratch-classify-9jp8s_8u/.git/objects/ee/96cfe8a036bd2c6178e0c89a5b98c2a9ae9a86",
+                      "bytes":  46,
+                      "sha256":  "e57c330f70b633f68c29e7f9e65b2337530d6402c5c0ab4df9cdfa923262bba1"
+                  },
+                  {
+                      "path":  "scratch-classify-9jp8s_8u/.git/refs/heads/main",
+                      "bytes":  41,
+                      "sha256":  "65f8e3ecf87be010ebf224f0d3c9219372697e0fefbb7884eb068771923a4d49"
+                  },
+                  {
+                      "path":  "scratch-classify-9jp8s_8u/android/app/src/main/java/com/scmessenger/android/ui/Foo.kt",
+                      "bytes":  8,
+                      "sha256":  "4bf3a03a765797e7db7121e2f7197a88e69622bcd117c0551776a6673354d9ab"
+                  },
+                  {
+                      "path":  "scratch-classify-gd6cbqsl/gh_output",
+                      "bytes":  59,
+                      "sha256":  "4755e1e5e5f6d8b3fefe0898acc599d17240c387527be6a0b07f644e318fb1ee"
+                  },
+                  {
+                      "path":  "scratch-classify-gd6cbqsl/README.md",
+                      "bytes":  6,
+                      "sha256":  "f8ba93752c42985276cab7de1169609631ed696b04999d05d49d93169ec05c1a"
+                  },
+                  {
+                      "path":  "scratch-classify-gd6cbqsl/.git/COMMIT_EDITMSG",
+                      "bytes":  7,
+                      "sha256":  "8eefdfa35348df2ec75eeed0daf25afe217b15de4c3353eef916744c4e4bc100"
+                  },
+                  {
+                      "path":  "scratch-classify-gd6cbqsl/.git/config",
+                      "bytes":  160,
+                      "sha256":  "6191875d534bbca835a192201e9070d79f5bdcaff33cc5e8d3dbad056713f203"
+                  },
+                  {
+                      "path":  "scratch-classify-gd6cbqsl/.git/description",
+                      "bytes":  73,
+                      "sha256":  "85ab6c163d43a17ea9cf7788308bca1466f1b0a8d1cc92e26e9bf63da4062aee"
+                  },
+                  {
+                      "path":  "scratch-classify-gd6cbqsl/.git/HEAD",
+                      "bytes":  21,
+                      "sha256":  "28d25bf82af4c0e2b72f50959b2beb859e3e60b9630a5e8c603dad4ddb2b6e80"
+                  },
+                  {
+                      "path":  "scratch-classify-gd6cbqsl/.git/index",
+                      "bytes":  299,
+                      "sha256":  "1b5f909419c758070fc28f8897712a0b6ba687c59e1a508a852d0a52bbdb52f5"
+                  },
+                  {
+                      "path":  "scratch-classify-gd6cbqsl/.git/hooks/applypatch-msg.sample",
+                      "bytes":  478,
+                      "sha256":  "0223497a0b8b033aa58a3a521b8629869386cf7ab0e2f101963d328aa62193f7"
+                  },
+                  {
+                      "path":  "scratch-classify-gd6cbqsl/.git/hooks/commit-msg.sample",
+                      "bytes":  1972,
+                      "sha256":  "efc1401b0e99d1ff51494d154d98b46c1e99059bcd8bf9f73cecde19fd3eb23b"
+                  },
+                  {
+                      "path":  "scratch-classify-gd6cbqsl/.git/hooks/fsmonitor-watchman.sample",
+                      "bytes":  4611,
+                      "sha256":  "9159720099ad5595b8e66645cbfd47763c1e920f46e0b50ae75e642bbec57ef0"
+                  },
+                  {
+                      "path":  "scratch-classify-gd6cbqsl/.git/hooks/post-update.sample",
+                      "bytes":  189,
+                      "sha256":  "81765af2daef323061dcbc5e61fc16481cb74b3bac9ad8a174b186523586f6c5"
+                  },
+                  {
+                      "path":  "scratch-classify-gd6cbqsl/.git/hooks/pre-applypatch.sample",
+                      "bytes":  424,
+                      "sha256":  "e15c5b469ea3e0a695bea6f2c82bcf8e62821074939ddd85b77e0007ff165475"
+                  },
+                  {
+                      "path":  "scratch-classify-gd6cbqsl/.git/hooks/pre-commit.sample",
+                      "bytes":  1649,
+                      "sha256":  "57185b7b9f05239d7ab52db045f5b89eb31348d7b2177eab214f5eb872e1971b"
+                  },
+                  {
+                      "path":  "scratch-classify-gd6cbqsl/.git/hooks/pre-merge-commit.sample",
+                      "bytes":  416,
+                      "sha256":  "d3825a70337940ebbd0a5c072984e13245920cdf8898bd225c8d27a6dfc9cb53"
+                  },
+                  {
+                      "path":  "scratch-classify-gd6cbqsl/.git/hooks/pre-push.sample",
+                      "bytes":  1374,
+                      "sha256":  "ecce9c7e04d3f5dd9d8ada81753dd1d549a9634b26770042b58dda00217d086a"
+                  },
+                  {
+                      "path":  "scratch-classify-gd6cbqsl/.git/hooks/pre-rebase.sample",
+                      "bytes":  4898,
+                      "sha256":  "4febce867790052338076f4e66cc47efb14879d18097d1d61c8261859eaaa7b3"
+                  },
+                  {
+                      "path":  "scratch-classify-gd6cbqsl/.git/hooks/pre-receive.sample",
+                      "bytes":  544,
+                      "sha256":  "a4c3d2b9c7bb3fd8d1441c31bd4ee71a595d66b44fcf49ddb310252320169989"
+                  },
+                  {
+                      "path":  "scratch-classify-gd6cbqsl/.git/hooks/prepare-commit-msg.sample",
+                      "bytes":  1492,
+                      "sha256":  "e9ddcaa4189fddd25ed97fc8c789eca7b6ca16390b2392ae3276f0c8e1aa4619"
+                  },
+                  {
+                      "path":  "scratch-classify-gd6cbqsl/.git/hooks/push-to-checkout.sample",
+                      "bytes":  2783,
+                      "sha256":  "a53d0741798b287c6dd7afa64aee473f305e65d3f49463bb9d7408ec3b12bf5f"
+                  },
+                  {
+                      "path":  "scratch-classify-gd6cbqsl/.git/hooks/sendemail-validate.sample",
+                      "bytes":  2308,
+                      "sha256":  "44ebfc923dc5466bc009602f0ecf067b9c65459abfe8868ddc49b78e6ced7a92"
+                  },
+                  {
+                      "path":  "scratch-classify-gd6cbqsl/.git/hooks/update.sample",
+                      "bytes":  3650,
+                      "sha256":  "8d5f2fa83e103cf08b57eaa67521df9194f45cbdbcb37da52ad586097a14d106"
+                  },
+                  {
+                      "path":  "scratch-classify-gd6cbqsl/.git/info/exclude",
+                      "bytes":  240,
+                      "sha256":  "6671fe83b7a07c8932ee89164d1f2793b2318058eb8b98dc5c06ee0a5a3b0ec1"
+                  },
+                  {
+                      "path":  "scratch-classify-gd6cbqsl/.git/logs/HEAD",
+                      "bytes":  252,
+                      "sha256":  "028a9527a95e94cb3bf97063507f86298ec78b60b16699a31e0304769430fcd1"
+                  },
+                  {
+                      "path":  "scratch-classify-gd6cbqsl/.git/logs/refs/heads/main",
+                      "bytes":  252,
+                      "sha256":  "028a9527a95e94cb3bf97063507f86298ec78b60b16699a31e0304769430fcd1"
+                  },
+                  {
+                      "path":  "scratch-classify-gd6cbqsl/.git/objects/08/35e4f9714005ed591f68d306eea0d6d2ae8fd7",
+                      "bytes":  22,
+                      "sha256":  "eaaeb3616a7606d0dacfead216a07a3f858772ac733de6161403c32f26ba9399"
+                  },
+                  {
+                      "path":  "scratch-classify-gd6cbqsl/.git/objects/15/710d545a27e5e420b9057bcf46ccb3078af42f",
+                      "bytes":  87,
+                      "sha256":  "7f10d574f16b927070ca832c58255766802b1de4a189d3b23aeed0081fa4a407"
+                  },
+                  {
+                      "path":  "scratch-classify-gd6cbqsl/.git/objects/16/4a879475b041dc4910be21051ac3af34d475b7",
+                      "bytes":  51,
+                      "sha256":  "11c1cd2d86133a914c86867fcea89816c52147cfb8487e2d9ce0cd1d1d6da4eb"
+                  },
+                  {
+                      "path":  "scratch-classify-gd6cbqsl/.git/objects/c0/1b08c68c8689ecdf290174896e60c1b48759a1",
+                      "bytes":  133,
+                      "sha256":  "cd7b390c958346e14b5c0eb61cdab1291b0fbe26f2d7a6b5aafbde4fbc165fe1"
+                  },
+                  {
+                      "path":  "scratch-classify-gd6cbqsl/.git/objects/cc/1bdfa1894337da8480f5a64a42dbde30c80912",
+                      "bytes":  54,
+                      "sha256":  "5c8351dcd7ddf516037eef443004a9cbb7192ee26a71795d94dc1b7befa06d18"
+                  },
+                  {
+                      "path":  "scratch-classify-gd6cbqsl/.git/objects/de/c034e35398d042ebfb14bc2d744e27dcc221ab",
+                      "bytes":  103,
+                      "sha256":  "39577e3ab7e3e703d0f1d2be7317356c3990af509029a7cdb1e0b6fb6033209a"
+                  },
+                  {
+                      "path":  "scratch-classify-gd6cbqsl/.git/objects/df/967b96a579e45a18b8251732d16804b2e56a55",
+                      "bytes":  20,
+                      "sha256":  "a68879a026ee9eaa8c8eeb0826d1bb255a36e9bb38c76b3e42d892b22d0c4728"
+                  },
+                  {
+                      "path":  "scratch-classify-gd6cbqsl/.git/objects/e4/4edffe0d2543350bb1d07f0784c468c76f7988",
+                      "bytes":  55,
+                      "sha256":  "e8e7e786cf8234ef4d7401a1ab390b73697392c51bd66b7aa58d630fad948ae5"
+                  },
+                  {
+                      "path":  "scratch-classify-gd6cbqsl/.git/refs/heads/main",
+                      "bytes":  41,
+                      "sha256":  "5eb98988a24ee37fbbe91148a7dacde7f92d5071243c441b6a4abcca14ab83bb"
+                  },
+                  {
+                      "path":  "scratch-classify-gd6cbqsl/.github/workflows/mobile.yml",
+                      "bytes":  8,
+                      "sha256":  "4bf3a03a765797e7db7121e2f7197a88e69622bcd117c0551776a6673354d9ab"
+                  },
+                  {
+                      "path":  "scratch-classify-jz_b4yda/gh_output",
+                      "bytes":  59,
+                      "sha256":  "4755e1e5e5f6d8b3fefe0898acc599d17240c387527be6a0b07f644e318fb1ee"
+                  },
+                  {
+                      "path":  "scratch-classify-jz_b4yda/README.md",
+                      "bytes":  6,
+                      "sha256":  "f8ba93752c42985276cab7de1169609631ed696b04999d05d49d93169ec05c1a"
+                  },
+                  {
+                      "path":  "scratch-classify-jz_b4yda/.git/COMMIT_EDITMSG",
+                      "bytes":  7,
+                      "sha256":  "8eefdfa35348df2ec75eeed0daf25afe217b15de4c3353eef916744c4e4bc100"
+                  },
+                  {
+                      "path":  "scratch-classify-jz_b4yda/.git/config",
+                      "bytes":  160,
+                      "sha256":  "6191875d534bbca835a192201e9070d79f5bdcaff33cc5e8d3dbad056713f203"
+                  },
+                  {
+                      "path":  "scratch-classify-jz_b4yda/.git/description",
+                      "bytes":  73,
+                      "sha256":  "85ab6c163d43a17ea9cf7788308bca1466f1b0a8d1cc92e26e9bf63da4062aee"
+                  },
+                  {
+                      "path":  "scratch-classify-jz_b4yda/.git/HEAD",
+                      "bytes":  21,
+                      "sha256":  "28d25bf82af4c0e2b72f50959b2beb859e3e60b9630a5e8c603dad4ddb2b6e80"
+                  },
+                  {
+                      "path":  "scratch-classify-jz_b4yda/.git/index",
+                      "bytes":  282,
+                      "sha256":  "60eb42d8536ce0b8a6f4738b941da6628e24fcfa43e822e3914425acdf159efc"
+                  },
+                  {
+                      "path":  "scratch-classify-jz_b4yda/.git/hooks/applypatch-msg.sample",
+                      "bytes":  478,
+                      "sha256":  "0223497a0b8b033aa58a3a521b8629869386cf7ab0e2f101963d328aa62193f7"
+                  },
+                  {
+                      "path":  "scratch-classify-jz_b4yda/.git/hooks/commit-msg.sample",
+                      "bytes":  1972,
+                      "sha256":  "efc1401b0e99d1ff51494d154d98b46c1e99059bcd8bf9f73cecde19fd3eb23b"
+                  },
+                  {
+                      "path":  "scratch-classify-jz_b4yda/.git/hooks/fsmonitor-watchman.sample",
+                      "bytes":  4611,
+                      "sha256":  "9159720099ad5595b8e66645cbfd47763c1e920f46e0b50ae75e642bbec57ef0"
+                  },
+                  {
+                      "path":  "scratch-classify-jz_b4yda/.git/hooks/post-update.sample",
+                      "bytes":  189,
+                      "sha256":  "81765af2daef323061dcbc5e61fc16481cb74b3bac9ad8a174b186523586f6c5"
+                  },
+                  {
+                      "path":  "scratch-classify-jz_b4yda/.git/hooks/pre-applypatch.sample",
+                      "bytes":  424,
+                      "sha256":  "e15c5b469ea3e0a695bea6f2c82bcf8e62821074939ddd85b77e0007ff165475"
+                  },
+                  {
+                      "path":  "scratch-classify-jz_b4yda/.git/hooks/pre-commit.sample",
+                      "bytes":  1649,
+                      "sha256":  "57185b7b9f05239d7ab52db045f5b89eb31348d7b2177eab214f5eb872e1971b"
+                  },
+                  {
+                      "path":  "scratch-classify-jz_b4yda/.git/hooks/pre-merge-commit.sample",
+                      "bytes":  416,
+                      "sha256":  "d3825a70337940ebbd0a5c072984e13245920cdf8898bd225c8d27a6dfc9cb53"
+                  },
+                  {
+                      "path":  "scratch-classify-jz_b4yda/.git/hooks/pre-push.sample",
+                      "bytes":  1374,
+                      "sha256":  "ecce9c7e04d3f5dd9d8ada81753dd1d549a9634b26770042b58dda00217d086a"
+                  },
+                  {
+                      "path":  "scratch-classify-jz_b4yda/.git/hooks/pre-rebase.sample",
+                      "bytes":  4898,
+                      "sha256":  "4febce867790052338076f4e66cc47efb14879d18097d1d61c8261859eaaa7b3"
+                  },
+                  {
+                      "path":  "scratch-classify-jz_b4yda/.git/hooks/pre-receive.sample",
+                      "bytes":  544,
+                      "sha256":  "a4c3d2b9c7bb3fd8d1441c31bd4ee71a595d66b44fcf49ddb310252320169989"
+                  },
+                  {
+                      "path":  "scratch-classify-jz_b4yda/.git/hooks/prepare-commit-msg.sample",
+                      "bytes":  1492,
+                      "sha256":  "e9ddcaa4189fddd25ed97fc8c789eca7b6ca16390b2392ae3276f0c8e1aa4619"
+                  },
+                  {
+                      "path":  "scratch-classify-jz_b4yda/.git/hooks/push-to-checkout.sample",
+                      "bytes":  2783,
+                      "sha256":  "a53d0741798b287c6dd7afa64aee473f305e65d3f49463bb9d7408ec3b12bf5f"
+                  },
+                  {
+                      "path":  "scratch-classify-jz_b4yda/.git/hooks/sendemail-validate.sample",
+                      "bytes":  2308,
+                      "sha256":  "44ebfc923dc5466bc009602f0ecf067b9c65459abfe8868ddc49b78e6ced7a92"
+                  },
+                  {
+                      "path":  "scratch-classify-jz_b4yda/.git/hooks/update.sample",
+                      "bytes":  3650,
+                      "sha256":  "8d5f2fa83e103cf08b57eaa67521df9194f45cbdbcb37da52ad586097a14d106"
+                  },
+                  {
+                      "path":  "scratch-classify-jz_b4yda/.git/info/exclude",
+                      "bytes":  240,
+                      "sha256":  "6671fe83b7a07c8932ee89164d1f2793b2318058eb8b98dc5c06ee0a5a3b0ec1"
+                  },
+                  {
+                      "path":  "scratch-classify-jz_b4yda/.git/logs/HEAD",
+                      "bytes":  252,
+                      "sha256":  "abc5c7b1f3ba1bb6d843ce11ff3454bac7dfb137422c5d6bdbfef09c9556ed10"
+                  },
+                  {
+                      "path":  "scratch-classify-jz_b4yda/.git/logs/refs/heads/main",
+                      "bytes":  252,
+                      "sha256":  "abc5c7b1f3ba1bb6d843ce11ff3454bac7dfb137422c5d6bdbfef09c9556ed10"
+                  },
+                  {
+                      "path":  "scratch-classify-jz_b4yda/.git/objects/08/35e4f9714005ed591f68d306eea0d6d2ae8fd7",
+                      "bytes":  22,
+                      "sha256":  "eaaeb3616a7606d0dacfead216a07a3f858772ac733de6161403c32f26ba9399"
+                  },
+                  {
+                      "path":  "scratch-classify-jz_b4yda/.git/objects/27/93d7f45693d851aa69c7ace02756d2d46d8f21",
+                      "bytes":  57,
+                      "sha256":  "e6b5f4df0cd8d3f07714d392d10a3387cb315931e71d2cf9f956b88c3f418196"
+                  },
+                  {
+                      "path":  "scratch-classify-jz_b4yda/.git/objects/34/0dc82c5f4b234c6532377a56d405af68d70be2",
+                      "bytes":  105,
+                      "sha256":  "1b1677baf9cd85f8b05f6ee3d2a458bff1a60eb21929cee477eba100236d834c"
+                  },
+                  {
+                      "path":  "scratch-classify-jz_b4yda/.git/objects/4b/50f81dd41bb8c31fed655d3320b9ce8c2dfa16",
+                      "bytes":  84,
+                      "sha256":  "899e04b2155b9caa9e113bfce4483a2caa07f1dabab6365ac92b81986561c298"
+                  },
+                  {
+                      "path":  "scratch-classify-jz_b4yda/.git/objects/c5/5475c3c86e532c9614c34bbf99330f608ce44d",
+                      "bytes":  135,
+                      "sha256":  "d5889ea3d49d31f9d3ef2ef972a98ea709208548175f860ec3f9d98824d65cb9"
+                  },
+                  {
+                      "path":  "scratch-classify-jz_b4yda/.git/objects/cc/1bdfa1894337da8480f5a64a42dbde30c80912",
+                      "bytes":  54,
+                      "sha256":  "5c8351dcd7ddf516037eef443004a9cbb7192ee26a71795d94dc1b7befa06d18"
+                  },
+                  {
+                      "path":  "scratch-classify-jz_b4yda/.git/objects/d0/8db30b1f87cb0a0de3e40c170347cfb294ba37",
+                      "bytes":  46,
+                      "sha256":  "e27af2b9bc25cc56fd46560e2824cd758bc7b65fc3db99e873e4864c7e9a85ed"
+                  },
+                  {
+                      "path":  "scratch-classify-jz_b4yda/.git/objects/df/967b96a579e45a18b8251732d16804b2e56a55",
+                      "bytes":  20,
+                      "sha256":  "a68879a026ee9eaa8c8eeb0826d1bb255a36e9bb38c76b3e42d892b22d0c4728"
+                  },
+                  {
+                      "path":  "scratch-classify-jz_b4yda/.git/refs/heads/main",
+                      "bytes":  41,
+                      "sha256":  "61545326b8f4dbe5ae2acdd39307603ccbec8390a5e70371dc2fff95d4004d97"
+                  },
+                  {
+                      "path":  "scratch-classify-jz_b4yda/core/src/iron_core.rs",
+                      "bytes":  8,
+                      "sha256":  "4bf3a03a765797e7db7121e2f7197a88e69622bcd117c0551776a6673354d9ab"
+                  },
+                  {
+                      "path":  "scratch-classify-rhrt5zkl/gh_output",
+                      "bytes":  62,
+                      "sha256":  "31a5d84b5ed8e1129ed7a1dcf8a28b642fb0f9a14688c696cc64bd67d7243903"
+                  },
+                  {
+                      "path":  "scratch-classify-rhrt5zkl/README.md",
+                      "bytes":  6,
+                      "sha256":  "f8ba93752c42985276cab7de1169609631ed696b04999d05d49d93169ec05c1a"
+                  },
+                  {
+                      "path":  "scratch-classify-rhrt5zkl/.git/COMMIT_EDITMSG",
+                      "bytes":  7,
+                      "sha256":  "8eefdfa35348df2ec75eeed0daf25afe217b15de4c3353eef916744c4e4bc100"
+                  },
+                  {
+                      "path":  "scratch-classify-rhrt5zkl/.git/config",
+                      "bytes":  160,
+                      "sha256":  "6191875d534bbca835a192201e9070d79f5bdcaff33cc5e8d3dbad056713f203"
+                  },
+                  {
+                      "path":  "scratch-classify-rhrt5zkl/.git/description",
+                      "bytes":  73,
+                      "sha256":  "85ab6c163d43a17ea9cf7788308bca1466f1b0a8d1cc92e26e9bf63da4062aee"
+                  },
+                  {
+                      "path":  "scratch-classify-rhrt5zkl/.git/HEAD",
+                      "bytes":  21,
+                      "sha256":  "28d25bf82af4c0e2b72f50959b2beb859e3e60b9630a5e8c603dad4ddb2b6e80"
+                  },
+                  {
+                      "path":  "scratch-classify-rhrt5zkl/.git/index",
+                      "bytes":  246,
+                      "sha256":  "e4a7f572eb135b5bc207ba70c428185508d7e35e2cf9b8371ad5ee04ce40fca1"
+                  },
+                  {
+                      "path":  "scratch-classify-rhrt5zkl/.git/hooks/applypatch-msg.sample",
+                      "bytes":  478,
+                      "sha256":  "0223497a0b8b033aa58a3a521b8629869386cf7ab0e2f101963d328aa62193f7"
+                  },
+                  {
+                      "path":  "scratch-classify-rhrt5zkl/.git/hooks/commit-msg.sample",
+                      "bytes":  1972,
+                      "sha256":  "efc1401b0e99d1ff51494d154d98b46c1e99059bcd8bf9f73cecde19fd3eb23b"
+                  },
+                  {
+                      "path":  "scratch-classify-rhrt5zkl/.git/hooks/fsmonitor-watchman.sample",
+                      "bytes":  4611,
+                      "sha256":  "9159720099ad5595b8e66645cbfd47763c1e920f46e0b50ae75e642bbec57ef0"
+                  },
+                  {
+                      "path":  "scratch-classify-rhrt5zkl/.git/hooks/post-update.sample",
+                      "bytes":  189,
+                      "sha256":  "81765af2daef323061dcbc5e61fc16481cb74b3bac9ad8a174b186523586f6c5"
+                  },
+                  {
+                      "path":  "scratch-classify-rhrt5zkl/.git/hooks/pre-applypatch.sample",
+                      "bytes":  424,
+                      "sha256":  "e15c5b469ea3e0a695bea6f2c82bcf8e62821074939ddd85b77e0007ff165475"
+                  },
+                  {
+                      "path":  "scratch-classify-rhrt5zkl/.git/hooks/pre-commit.sample",
+                      "bytes":  1649,
+                      "sha256":  "57185b7b9f05239d7ab52db045f5b89eb31348d7b2177eab214f5eb872e1971b"
+                  },
+                  {
+                      "path":  "scratch-classify-rhrt5zkl/.git/hooks/pre-merge-commit.sample",
+                      "bytes":  416,
+                      "sha256":  "d3825a70337940ebbd0a5c072984e13245920cdf8898bd225c8d27a6dfc9cb53"
+                  },
+                  {
+                      "path":  "scratch-classify-rhrt5zkl/.git/hooks/pre-push.sample",
+                      "bytes":  1374,
+                      "sha256":  "ecce9c7e04d3f5dd9d8ada81753dd1d549a9634b26770042b58dda00217d086a"
+                  },
+                  {
+                      "path":  "scratch-classify-rhrt5zkl/.git/hooks/pre-rebase.sample",
+                      "bytes":  4898,
+                      "sha256":  "4febce867790052338076f4e66cc47efb14879d18097d1d61c8261859eaaa7b3"
+                  },
+                  {
+                      "path":  "scratch-classify-rhrt5zkl/.git/hooks/pre-receive.sample",
+                      "bytes":  544,
+                      "sha256":  "a4c3d2b9c7bb3fd8d1441c31bd4ee71a595d66b44fcf49ddb310252320169989"
+                  },
+                  {
+                      "path":  "scratch-classify-rhrt5zkl/.git/hooks/prepare-commit-msg.sample",
+                      "bytes":  1492,
+                      "sha256":  "e9ddcaa4189fddd25ed97fc8c789eca7b6ca16390b2392ae3276f0c8e1aa4619"
+                  },
+                  {
+                      "path":  "scratch-classify-rhrt5zkl/.git/hooks/push-to-checkout.sample",
+                      "bytes":  2783,
+                      "sha256":  "a53d0741798b287c6dd7afa64aee473f305e65d3f49463bb9d7408ec3b12bf5f"
+                  },
+                  {
+                      "path":  "scratch-classify-rhrt5zkl/.git/hooks/sendemail-validate.sample",
+                      "bytes":  2308,
+                      "sha256":  "44ebfc923dc5466bc009602f0ecf067b9c65459abfe8868ddc49b78e6ced7a92"
+                  },
+                  {
+                      "path":  "scratch-classify-rhrt5zkl/.git/hooks/update.sample",
+                      "bytes":  3650,
+                      "sha256":  "8d5f2fa83e103cf08b57eaa67521df9194f45cbdbcb37da52ad586097a14d106"
+                  },
+                  {
+                      "path":  "scratch-classify-rhrt5zkl/.git/info/exclude",
+                      "bytes":  240,
+                      "sha256":  "6671fe83b7a07c8932ee89164d1f2793b2318058eb8b98dc5c06ee0a5a3b0ec1"
+                  },
+                  {
+                      "path":  "scratch-classify-rhrt5zkl/.git/logs/HEAD",
+                      "bytes":  252,
+                      "sha256":  "3e889c8d6cb6cc63867765bd2981bedbfc8bf2ed9ae9e82b684dd721fda7efda"
+                  },
+                  {
+                      "path":  "scratch-classify-rhrt5zkl/.git/logs/refs/heads/main",
+                      "bytes":  252,
+                      "sha256":  "3e889c8d6cb6cc63867765bd2981bedbfc8bf2ed9ae9e82b684dd721fda7efda"
+                  },
+                  {
+                      "path":  "scratch-classify-rhrt5zkl/.git/objects/08/35e4f9714005ed591f68d306eea0d6d2ae8fd7",
+                      "bytes":  22,
+                      "sha256":  "eaaeb3616a7606d0dacfead216a07a3f858772ac733de6161403c32f26ba9399"
+                  },
+                  {
+                      "path":  "scratch-classify-rhrt5zkl/.git/objects/32/ff2bf924c660271b85806db7e31bc254c44b47",
+                      "bytes":  53,
+                      "sha256":  "f83c3ba9ccb58993e61b783da5286c73bf95c713bc863e9a8ab9aa31f9f9d1fe"
+                  },
+                  {
+                      "path":  "scratch-classify-rhrt5zkl/.git/objects/34/0391e836fb4788058ce2ade9c14aad5324a43e",
+                      "bytes":  104,
+                      "sha256":  "fbd4826c7a164ecbe1cf20983bf25e8d20f7be66bd5471fde1bdf4279d70f94b"
+                  },
+                  {
+                      "path":  "scratch-classify-rhrt5zkl/.git/objects/42/e26ae1bd5dd6b4f3a0a7b1c5e7f1b71ec7c7cc",
+                      "bytes":  84,
+                      "sha256":  "788d715c961292aa4e3bbc2482ee212b4d6779f2dad748254cc9ce5ff3d5275a"
+                  },
+                  {
+                      "path":  "scratch-classify-rhrt5zkl/.git/objects/cc/1bdfa1894337da8480f5a64a42dbde30c80912",
+                      "bytes":  54,
+                      "sha256":  "5c8351dcd7ddf516037eef443004a9cbb7192ee26a71795d94dc1b7befa06d18"
+                  },
+                  {
+                      "path":  "scratch-classify-rhrt5zkl/.git/objects/df/967b96a579e45a18b8251732d16804b2e56a55",
+                      "bytes":  20,
+                      "sha256":  "a68879a026ee9eaa8c8eeb0826d1bb255a36e9bb38c76b3e42d892b22d0c4728"
+                  },
+                  {
+                      "path":  "scratch-classify-rhrt5zkl/.git/objects/fa/121a3a282838416662c9114cd4d297e645a0b4",
+                      "bytes":  135,
+                      "sha256":  "d00e9cd216603a4ac83145b722257bee93528fb5151375cd40d4fc3f613e3ad6"
+                  },
+                  {
+                      "path":  "scratch-classify-rhrt5zkl/.git/refs/heads/main",
+                      "bytes":  41,
+                      "sha256":  "7b49c669a35281d819e4b2a60848bc999c8b9af970da4cd376463d898339f1ad"
+                  },
+                  {
+                      "path":  "scratch-classify-rhrt5zkl/docs/THING.md",
+                      "bytes":  8,
+                      "sha256":  "4bf3a03a765797e7db7121e2f7197a88e69622bcd117c0551776a6673354d9ab"
+                  },
+                  {
+                      "path":  "scratch-classify-vytafdxk/gh_output",
+                      "bytes":  59,
+                      "sha256":  "4755e1e5e5f6d8b3fefe0898acc599d17240c387527be6a0b07f644e318fb1ee"
+                  },
+                  {
+                      "path":  "scratch-classify-vytafdxk/README.md",
+                      "bytes":  6,
+                      "sha256":  "f8ba93752c42985276cab7de1169609631ed696b04999d05d49d93169ec05c1a"
+                  },
+                  {
+                      "path":  "scratch-classify-vytafdxk/.git/COMMIT_EDITMSG",
+                      "bytes":  7,
+                      "sha256":  "8eefdfa35348df2ec75eeed0daf25afe217b15de4c3353eef916744c4e4bc100"
+                  },
+                  {
+                      "path":  "scratch-classify-vytafdxk/.git/config",
+                      "bytes":  160,
+                      "sha256":  "6191875d534bbca835a192201e9070d79f5bdcaff33cc5e8d3dbad056713f203"
+                  },
+                  {
+                      "path":  "scratch-classify-vytafdxk/.git/description",
+                      "bytes":  73,
+                      "sha256":  "85ab6c163d43a17ea9cf7788308bca1466f1b0a8d1cc92e26e9bf63da4062aee"
+                  },
+                  {
+                      "path":  "scratch-classify-vytafdxk/.git/HEAD",
+                      "bytes":  21,
+                      "sha256":  "28d25bf82af4c0e2b72f50959b2beb859e3e60b9630a5e8c603dad4ddb2b6e80"
+                  },
+                  {
+                      "path":  "scratch-classify-vytafdxk/.git/index",
+                      "bytes":  245,
+                      "sha256":  "389274ede19b9e04a6131d2cf4b76fce9da728a0d12abd67369c3f6e3be452a7"
+                  },
+                  {
+                      "path":  "scratch-classify-vytafdxk/.git/hooks/applypatch-msg.sample",
+                      "bytes":  478,
+                      "sha256":  "0223497a0b8b033aa58a3a521b8629869386cf7ab0e2f101963d328aa62193f7"
+                  },
+                  {
+                      "path":  "scratch-classify-vytafdxk/.git/hooks/commit-msg.sample",
+                      "bytes":  1972,
+                      "sha256":  "efc1401b0e99d1ff51494d154d98b46c1e99059bcd8bf9f73cecde19fd3eb23b"
+                  },
+                  {
+                      "path":  "scratch-classify-vytafdxk/.git/hooks/fsmonitor-watchman.sample",
+                      "bytes":  4611,
+                      "sha256":  "9159720099ad5595b8e66645cbfd47763c1e920f46e0b50ae75e642bbec57ef0"
+                  },
+                  {
+                      "path":  "scratch-classify-vytafdxk/.git/hooks/post-update.sample",
+                      "bytes":  189,
+                      "sha256":  "81765af2daef323061dcbc5e61fc16481cb74b3bac9ad8a174b186523586f6c5"
+                  },
+                  {
+                      "path":  "scratch-classify-vytafdxk/.git/hooks/pre-applypatch.sample",
+                      "bytes":  424,
+                      "sha256":  "e15c5b469ea3e0a695bea6f2c82bcf8e62821074939ddd85b77e0007ff165475"
+                  },
+                  {
+                      "path":  "scratch-classify-vytafdxk/.git/hooks/pre-commit.sample",
+                      "bytes":  1649,
+                      "sha256":  "57185b7b9f05239d7ab52db045f5b89eb31348d7b2177eab214f5eb872e1971b"
+                  },
+                  {
+                      "path":  "scratch-classify-vytafdxk/.git/hooks/pre-merge-commit.sample",
+                      "bytes":  416,
+                      "sha256":  "d3825a70337940ebbd0a5c072984e13245920cdf8898bd225c8d27a6dfc9cb53"
+                  },
+                  {
+                      "path":  "scratch-classify-vytafdxk/.git/hooks/pre-push.sample",
+                      "bytes":  1374,
+                      "sha256":  "ecce9c7e04d3f5dd9d8ada81753dd1d549a9634b26770042b58dda00217d086a"
+                  },
+                  {
+                      "path":  "scratch-classify-vytafdxk/.git/hooks/pre-rebase.sample",
+                      "bytes":  4898,
+                      "sha256":  "4febce867790052338076f4e66cc47efb14879d18097d1d61c8261859eaaa7b3"
+                  },
+                  {
+                      "path":  "scratch-classify-vytafdxk/.git/hooks/pre-receive.sample",
+                      "bytes":  544,
+                      "sha256":  "a4c3d2b9c7bb3fd8d1441c31bd4ee71a595d66b44fcf49ddb310252320169989"
+                  },
+                  {
+                      "path":  "scratch-classify-vytafdxk/.git/hooks/prepare-commit-msg.sample",
+                      "bytes":  1492,
+                      "sha256":  "e9ddcaa4189fddd25ed97fc8c789eca7b6ca16390b2392ae3276f0c8e1aa4619"
+                  },
+                  {
+                      "path":  "scratch-classify-vytafdxk/.git/hooks/push-to-checkout.sample",
+                      "bytes":  2783,
+                      "sha256":  "a53d0741798b287c6dd7afa64aee473f305e65d3f49463bb9d7408ec3b12bf5f"
+                  },
+                  {
+                      "path":  "scratch-classify-vytafdxk/.git/hooks/sendemail-validate.sample",
+                      "bytes":  2308,
+                      "sha256":  "44ebfc923dc5466bc009602f0ecf067b9c65459abfe8868ddc49b78e6ced7a92"
+                  },
+                  {
+                      "path":  "scratch-classify-vytafdxk/.git/hooks/update.sample",
+                      "bytes":  3650,
+                      "sha256":  "8d5f2fa83e103cf08b57eaa67521df9194f45cbdbcb37da52ad586097a14d106"
+                  },
+                  {
+                      "path":  "scratch-classify-vytafdxk/.git/info/exclude",
+                      "bytes":  240,
+                      "sha256":  "6671fe83b7a07c8932ee89164d1f2793b2318058eb8b98dc5c06ee0a5a3b0ec1"
+                  },
+                  {
+                      "path":  "scratch-classify-vytafdxk/.git/logs/HEAD",
+                      "bytes":  252,
+                      "sha256":  "59cf29a69834466ea91651f251c87ed53b206997099a5b15718d1323ad9b342b"
+                  },
+                  {
+                      "path":  "scratch-classify-vytafdxk/.git/logs/refs/heads/main",
+                      "bytes":  252,
+                      "sha256":  "59cf29a69834466ea91651f251c87ed53b206997099a5b15718d1323ad9b342b"
+                  },
+                  {
+                      "path":  "scratch-classify-vytafdxk/.git/objects/08/35e4f9714005ed591f68d306eea0d6d2ae8fd7",
+                      "bytes":  22,
+                      "sha256":  "eaaeb3616a7606d0dacfead216a07a3f858772ac733de6161403c32f26ba9399"
+                  },
+                  {
+                      "path":  "scratch-classify-vytafdxk/.git/objects/59/1e1c09c69e72f542c52917589d741522b07be8",
+                      "bytes":  55,
+                      "sha256":  "9df9808f8ed3db40176ac06f56bc1a024cb8c06020a597097ce860c2040834d0"
+                  },
+                  {
+                      "path":  "scratch-classify-vytafdxk/.git/objects/69/c5c6a0cac606264ed0ce86ac34ed1ea8999d00",
+                      "bytes":  83,
+                      "sha256":  "ace06b16477566ac9ba9910de46e034a3a8db0de281fe7fa289ddd129d30699a"
+                  },
+                  {
+                      "path":  "scratch-classify-vytafdxk/.git/objects/cc/1bdfa1894337da8480f5a64a42dbde30c80912",
+                      "bytes":  54,
+                      "sha256":  "5c8351dcd7ddf516037eef443004a9cbb7192ee26a71795d94dc1b7befa06d18"
+                  },
+                  {
+                      "path":  "scratch-classify-vytafdxk/.git/objects/cd/f1628613b43236e235052cd4cbeba4321b4cba",
+                      "bytes":  103,
+                      "sha256":  "8972c692d0b86672f04fc797d12e483671664885e8797eb906ec5c8063847716"
+                  },
+                  {
+                      "path":  "scratch-classify-vytafdxk/.git/objects/df/967b96a579e45a18b8251732d16804b2e56a55",
+                      "bytes":  20,
+                      "sha256":  "a68879a026ee9eaa8c8eeb0826d1bb255a36e9bb38c76b3e42d892b22d0c4728"
+                  },
+                  {
+                      "path":  "scratch-classify-vytafdxk/.git/objects/fc/91f47992c1600372ed5ea057fb27f5ea23f5f6",
+                      "bytes":  134,
+                      "sha256":  "2b16e967994699d61f1190ad19b5807dbf18e97f9eb20eb73f4c7629b958c1b1"
+                  },
+                  {
+                      "path":  "scratch-classify-vytafdxk/.git/refs/heads/main",
+                      "bytes":  41,
+                      "sha256":  "c1b7d1adade784cf6c9caf0082cd13a683b65e852c570b643a272e8c8b845b7b"
+                  },
+                  {
+                      "path":  "scratch-classify-vytafdxk/iOS/Only.swift",
+                      "bytes":  8,
+                      "sha256":  "4bf3a03a765797e7db7121e2f7197a88e69622bcd117c0551776a6673354d9ab"
+                  },
+                  {
+                      "path":  "scratch-classify-_ld_2i45/gh_output",
+                      "bytes":  59,
+                      "sha256":  "4755e1e5e5f6d8b3fefe0898acc599d17240c387527be6a0b07f644e318fb1ee"
+                  },
+                  {
+                      "path":  "scratch-classify-_ld_2i45/newfile.txt",
+                      "bytes":  8,
+                      "sha256":  "4bf3a03a765797e7db7121e2f7197a88e69622bcd117c0551776a6673354d9ab"
+                  },
+                  {
+                      "path":  "scratch-classify-_ld_2i45/README.md",
+                      "bytes":  6,
+                      "sha256":  "f8ba93752c42985276cab7de1169609631ed696b04999d05d49d93169ec05c1a"
+                  },
+                  {
+                      "path":  "scratch-classify-_ld_2i45/.git/COMMIT_EDITMSG",
+                      "bytes":  7,
+                      "sha256":  "8eefdfa35348df2ec75eeed0daf25afe217b15de4c3353eef916744c4e4bc100"
+                  },
+                  {
+                      "path":  "scratch-classify-_ld_2i45/.git/config",
+                      "bytes":  160,
+                      "sha256":  "6191875d534bbca835a192201e9070d79f5bdcaff33cc5e8d3dbad056713f203"
+                  },
+                  {
+                      "path":  "scratch-classify-_ld_2i45/.git/description",
+                      "bytes":  73,
+                      "sha256":  "85ab6c163d43a17ea9cf7788308bca1466f1b0a8d1cc92e26e9bf63da4062aee"
+                  },
+                  {
+                      "path":  "scratch-classify-_ld_2i45/.git/HEAD",
+                      "bytes":  21,
+                      "sha256":  "28d25bf82af4c0e2b72f50959b2beb859e3e60b9630a5e8c603dad4ddb2b6e80"
+                  },
+                  {
+                      "path":  "scratch-classify-_ld_2i45/.git/index",
+                      "bytes":  217,
+                      "sha256":  "209d54bae2863c7f4f352d098234e396aa2d376296f94a185694357bb08b529c"
+                  },
+                  {
+                      "path":  "scratch-classify-_ld_2i45/.git/hooks/applypatch-msg.sample",
+                      "bytes":  478,
+                      "sha256":  "0223497a0b8b033aa58a3a521b8629869386cf7ab0e2f101963d328aa62193f7"
+                  },
+                  {
+                      "path":  "scratch-classify-_ld_2i45/.git/hooks/commit-msg.sample",
+                      "bytes":  1972,
+                      "sha256":  "efc1401b0e99d1ff51494d154d98b46c1e99059bcd8bf9f73cecde19fd3eb23b"
+                  },
+                  {
+                      "path":  "scratch-classify-_ld_2i45/.git/hooks/fsmonitor-watchman.sample",
+                      "bytes":  4611,
+                      "sha256":  "9159720099ad5595b8e66645cbfd47763c1e920f46e0b50ae75e642bbec57ef0"
+                  },
+                  {
+                      "path":  "scratch-classify-_ld_2i45/.git/hooks/post-update.sample",
+                      "bytes":  189,
+                      "sha256":  "81765af2daef323061dcbc5e61fc16481cb74b3bac9ad8a174b186523586f6c5"
+                  },
+                  {
+                      "path":  "scratch-classify-_ld_2i45/.git/hooks/pre-applypatch.sample",
+                      "bytes":  424,
+                      "sha256":  "e15c5b469ea3e0a695bea6f2c82bcf8e62821074939ddd85b77e0007ff165475"
+                  },
+                  {
+                      "path":  "scratch-classify-_ld_2i45/.git/hooks/pre-commit.sample",
+                      "bytes":  1649,
+                      "sha256":  "57185b7b9f05239d7ab52db045f5b89eb31348d7b2177eab214f5eb872e1971b"
+                  },
+                  {
+                      "path":  "scratch-classify-_ld_2i45/.git/hooks/pre-merge-commit.sample",
+                      "bytes":  416,
+                      "sha256":  "d3825a70337940ebbd0a5c072984e13245920cdf8898bd225c8d27a6dfc9cb53"
+                  },
+                  {
+                      "path":  "scratch-classify-_ld_2i45/.git/hooks/pre-push.sample",
+                      "bytes":  1374,
+                      "sha256":  "ecce9c7e04d3f5dd9d8ada81753dd1d549a9634b26770042b58dda00217d086a"
+                  },
+                  {
+                      "path":  "scratch-classify-_ld_2i45/.git/hooks/pre-rebase.sample",
+                      "bytes":  4898,
+                      "sha256":  "4febce867790052338076f4e66cc47efb14879d18097d1d61c8261859eaaa7b3"
+                  },
+                  {
+                      "path":  "scratch-classify-_ld_2i45/.git/hooks/pre-receive.sample",
+                      "bytes":  544,
+                      "sha256":  "a4c3d2b9c7bb3fd8d1441c31bd4ee71a595d66b44fcf49ddb310252320169989"
+                  },
+                  {
+                      "path":  "scratch-classify-_ld_2i45/.git/hooks/prepare-commit-msg.sample",
+                      "bytes":  1492,
+                      "sha256":  "e9ddcaa4189fddd25ed97fc8c789eca7b6ca16390b2392ae3276f0c8e1aa4619"
+                  },
+                  {
+                      "path":  "scratch-classify-_ld_2i45/.git/hooks/push-to-checkout.sample",
+                      "bytes":  2783,
+                      "sha256":  "a53d0741798b287c6dd7afa64aee473f305e65d3f49463bb9d7408ec3b12bf5f"
+                  },
+                  {
+                      "path":  "scratch-classify-_ld_2i45/.git/hooks/sendemail-validate.sample",
+                      "bytes":  2308,
+                      "sha256":  "44ebfc923dc5466bc009602f0ecf067b9c65459abfe8868ddc49b78e6ced7a92"
+                  },
+                  {
+                      "path":  "scratch-classify-_ld_2i45/.git/hooks/update.sample",
+                      "bytes":  3650,
+                      "sha256":  "8d5f2fa83e103cf08b57eaa67521df9194f45cbdbcb37da52ad586097a14d106"
+                  },
+                  {
+                      "path":  "scratch-classify-_ld_2i45/.git/info/exclude",
+                      "bytes":  240,
+                      "sha256":  "6671fe83b7a07c8932ee89164d1f2793b2318058eb8b98dc5c06ee0a5a3b0ec1"
+                  },
+                  {
+                      "path":  "scratch-classify-_ld_2i45/.git/logs/HEAD",
+                      "bytes":  252,
+                      "sha256":  "37147f4cac859c3e9ebfb8ba776606dcb7b9850e9d11bcc5c96462b71278885f"
+                  },
+                  {
+                      "path":  "scratch-classify-_ld_2i45/.git/logs/refs/heads/main",
+                      "bytes":  252,
+                      "sha256":  "37147f4cac859c3e9ebfb8ba776606dcb7b9850e9d11bcc5c96462b71278885f"
+                  },
+                  {
+                      "path":  "scratch-classify-_ld_2i45/.git/objects/08/35e4f9714005ed591f68d306eea0d6d2ae8fd7",
+                      "bytes":  22,
+                      "sha256":  "eaaeb3616a7606d0dacfead216a07a3f858772ac733de6161403c32f26ba9399"
+                  },
+                  {
+                      "path":  "scratch-classify-_ld_2i45/.git/objects/39/846f49bda2fa56e4c9a9ebecf2d461b09e12dc",
+                      "bytes":  133,
+                      "sha256":  "c76fab036fcf310b59eaef56f5135f41f35200a00d5c10dd8c3aba6de81bb280"
+                  },
+                  {
+                      "path":  "scratch-classify-_ld_2i45/.git/objects/64/61f9467b203e6176cb76ef614bbee8435ed3a0",
+                      "bytes":  103,
+                      "sha256":  "42fae6223d79b20c952103927a17eb28d4d3cd5b0c3c10d0d881c125bc7f0dbb"
+                  },
+                  {
+                      "path":  "scratch-classify-_ld_2i45/.git/objects/9b/bb949dfd77310a43bbdeaa7c465fcaa9056259",
+                      "bytes":  89,
+                      "sha256":  "862832a53594e8386e1b4be9902ea910e11a5c4b5238020ae180586fa2496bfc"
+                  },
+                  {
+                      "path":  "scratch-classify-_ld_2i45/.git/objects/cc/1bdfa1894337da8480f5a64a42dbde30c80912",
+                      "bytes":  54,
+                      "sha256":  "5c8351dcd7ddf516037eef443004a9cbb7192ee26a71795d94dc1b7befa06d18"
+                  },
+                  {
+                      "path":  "scratch-classify-_ld_2i45/.git/objects/df/967b96a579e45a18b8251732d16804b2e56a55",
+                      "bytes":  20,
+                      "sha256":  "a68879a026ee9eaa8c8eeb0826d1bb255a36e9bb38c76b3e42d892b22d0c4728"
+                  },
+                  {
+                      "path":  "scratch-classify-_ld_2i45/.git/refs/heads/main",
+                      "bytes":  41,
+                      "sha256":  "5746afce69de8d615522868e8ee43b1af2428cb28047890e13ecdd53867b8e2f"
+                  },
+                  {
+                      "path":  "scratch-classify-_rnfif7n/gh_output",
+                      "bytes":  61,
+                      "sha256":  "443037ed410d6c074475c3dea22a01e5d2a809dd7c11528d8aeb8f8f95a230a0"
+                  },
+                  {
+                      "path":  "scratch-classify-_rnfif7n/README.md",
+                      "bytes":  6,
+                      "sha256":  "f8ba93752c42985276cab7de1169609631ed696b04999d05d49d93169ec05c1a"
+                  },
+                  {
+                      "path":  "scratch-classify-_rnfif7n/.git/COMMIT_EDITMSG",
+                      "bytes":  7,
+                      "sha256":  "8eefdfa35348df2ec75eeed0daf25afe217b15de4c3353eef916744c4e4bc100"
+                  },
+                  {
+                      "path":  "scratch-classify-_rnfif7n/.git/config",
+                      "bytes":  160,
+                      "sha256":  "6191875d534bbca835a192201e9070d79f5bdcaff33cc5e8d3dbad056713f203"
+                  },
+                  {
+                      "path":  "scratch-classify-_rnfif7n/.git/description",
+                      "bytes":  73,
+                      "sha256":  "85ab6c163d43a17ea9cf7788308bca1466f1b0a8d1cc92e26e9bf63da4062aee"
+                  },
+                  {
+                      "path":  "scratch-classify-_rnfif7n/.git/HEAD",
+                      "bytes":  21,
+                      "sha256":  "28d25bf82af4c0e2b72f50959b2beb859e3e60b9630a5e8c603dad4ddb2b6e80"
+                  },
+                  {
+                      "path":  "scratch-classify-_rnfif7n/.git/index",
+                      "bytes":  289,
+                      "sha256":  "8c4dcf6044a24a5bae59bb60024deaedcb725cb6b601d0bf85aa76a6acedd8df"
+                  },
+                  {
+                      "path":  "scratch-classify-_rnfif7n/.git/hooks/applypatch-msg.sample",
+                      "bytes":  478,
+                      "sha256":  "0223497a0b8b033aa58a3a521b8629869386cf7ab0e2f101963d328aa62193f7"
+                  },
+                  {
+                      "path":  "scratch-classify-_rnfif7n/.git/hooks/commit-msg.sample",
+                      "bytes":  1972,
+                      "sha256":  "efc1401b0e99d1ff51494d154d98b46c1e99059bcd8bf9f73cecde19fd3eb23b"
+                  },
+                  {
+                      "path":  "scratch-classify-_rnfif7n/.git/hooks/fsmonitor-watchman.sample",
+                      "bytes":  4611,
+                      "sha256":  "9159720099ad5595b8e66645cbfd47763c1e920f46e0b50ae75e642bbec57ef0"
+                  },
+                  {
+                      "path":  "scratch-classify-_rnfif7n/.git/hooks/post-update.sample",
+                      "bytes":  189,
+                      "sha256":  "81765af2daef323061dcbc5e61fc16481cb74b3bac9ad8a174b186523586f6c5"
+                  },
+                  {
+                      "path":  "scratch-classify-_rnfif7n/.git/hooks/pre-applypatch.sample",
+                      "bytes":  424,
+                      "sha256":  "e15c5b469ea3e0a695bea6f2c82bcf8e62821074939ddd85b77e0007ff165475"
+                  },
+                  {
+                      "path":  "scratch-classify-_rnfif7n/.git/hooks/pre-commit.sample",
+                      "bytes":  1649,
+                      "sha256":  "57185b7b9f05239d7ab52db045f5b89eb31348d7b2177eab214f5eb872e1971b"
+                  },
+                  {
+                      "path":  "scratch-classify-_rnfif7n/.git/hooks/pre-merge-commit.sample",
+                      "bytes":  416,
+                      "sha256":  "d3825a70337940ebbd0a5c072984e13245920cdf8898bd225c8d27a6dfc9cb53"
+                  },
+                  {
+                      "path":  "scratch-classify-_rnfif7n/.git/hooks/pre-push.sample",
+                      "bytes":  1374,
+                      "sha256":  "ecce9c7e04d3f5dd9d8ada81753dd1d549a9634b26770042b58dda00217d086a"
+                  },
+                  {
+                      "path":  "scratch-classify-_rnfif7n/.git/hooks/pre-rebase.sample",
+                      "bytes":  4898,
+                      "sha256":  "4febce867790052338076f4e66cc47efb14879d18097d1d61c8261859eaaa7b3"
+                  },
+                  {
+                      "path":  "scratch-classify-_rnfif7n/.git/hooks/pre-receive.sample",
+                      "bytes":  544,
+                      "sha256":  "a4c3d2b9c7bb3fd8d1441c31bd4ee71a595d66b44fcf49ddb310252320169989"
+                  },
+                  {
+                      "path":  "scratch-classify-_rnfif7n/.git/hooks/prepare-commit-msg.sample",
+                      "bytes":  1492,
+                      "sha256":  "e9ddcaa4189fddd25ed97fc8c789eca7b6ca16390b2392ae3276f0c8e1aa4619"
+                  },
+                  {
+                      "path":  "scratch-classify-_rnfif7n/.git/hooks/push-to-checkout.sample",
+                      "bytes":  2783,
+                      "sha256":  "a53d0741798b287c6dd7afa64aee473f305e65d3f49463bb9d7408ec3b12bf5f"
+                  },
+                  {
+                      "path":  "scratch-classify-_rnfif7n/.git/hooks/sendemail-validate.sample",
+                      "bytes":  2308,
+                      "sha256":  "44ebfc923dc5466bc009602f0ecf067b9c65459abfe8868ddc49b78e6ced7a92"
+                  },
+                  {
+                      "path":  "scratch-classify-_rnfif7n/.git/hooks/update.sample",
+                      "bytes":  3650,
+                      "sha256":  "8d5f2fa83e103cf08b57eaa67521df9194f45cbdbcb37da52ad586097a14d106"
+                  },
+                  {
+                      "path":  "scratch-classify-_rnfif7n/.git/info/exclude",
+                      "bytes":  240,
+                      "sha256":  "6671fe83b7a07c8932ee89164d1f2793b2318058eb8b98dc5c06ee0a5a3b0ec1"
+                  },
+                  {
+                      "path":  "scratch-classify-_rnfif7n/.git/logs/HEAD",
+                      "bytes":  252,
+                      "sha256":  "7bf56bff68cb2cd24bb0018f03cb994a632ee58de4311ecd5f69e461eaddb59d"
+                  },
+                  {
+                      "path":  "scratch-classify-_rnfif7n/.git/logs/refs/heads/main",
+                      "bytes":  252,
+                      "sha256":  "7bf56bff68cb2cd24bb0018f03cb994a632ee58de4311ecd5f69e461eaddb59d"
+                  },
+                  {
+                      "path":  "scratch-classify-_rnfif7n/.git/objects/08/35e4f9714005ed591f68d306eea0d6d2ae8fd7",
+                      "bytes":  22,
+                      "sha256":  "eaaeb3616a7606d0dacfead216a07a3f858772ac733de6161403c32f26ba9399"
+                  },
+                  {
+                      "path":  "scratch-classify-_rnfif7n/.git/objects/14/82c81c3acd737f466f519ca3e4b4321af7369f",
+                      "bytes":  54,
+                      "sha256":  "1d97a35919ef85733f822bac85645e3270464ef6393c10701f614eea09b06af8"
+                  },
+                  {
+                      "path":  "scratch-classify-_rnfif7n/.git/objects/26/31ec84ceef9636f2b7c6a196485cc4c00171ca",
+                      "bytes":  135,
+                      "sha256":  "be9f7caddd2ca97eee2aa50e4db17ed3441b9c9efb80ddf41205f03da168bee0"
+                  },
+                  {
+                      "path":  "scratch-classify-_rnfif7n/.git/objects/72/ad3790c1a4f9da5170bf4b4006e5e2ebb04900",
+                      "bytes":  54,
+                      "sha256":  "6514846df8b7d65ebf1ffa0785a36612f5a3051fc6e4874eecdcd6bce781a854"
+                  },
+                  {
+                      "path":  "scratch-classify-_rnfif7n/.git/objects/c0/99e2e1c69309b15f4ff04fd2bcf023fb89ba2d",
+                      "bytes":  83,
+                      "sha256":  "ebe4a15e2cdb79031995f281f99d117c90bc37a45e5a7a365c2650c1d055ce14"
+                  },
+                  {
+                      "path":  "scratch-classify-_rnfif7n/.git/objects/cc/1bdfa1894337da8480f5a64a42dbde30c80912",
+                      "bytes":  54,
+                      "sha256":  "5c8351dcd7ddf516037eef443004a9cbb7192ee26a71795d94dc1b7befa06d18"
+                  },
+                  {
+                      "path":  "scratch-classify-_rnfif7n/.git/objects/df/967b96a579e45a18b8251732d16804b2e56a55",
+                      "bytes":  20,
+                      "sha256":  "a68879a026ee9eaa8c8eeb0826d1bb255a36e9bb38c76b3e42d892b22d0c4728"
+                  },
+                  {
+                      "path":  "scratch-classify-_rnfif7n/.git/objects/eb/33f186eb0c53fee1a82c224e5ed5a0fce98895",
+                      "bytes":  105,
+                      "sha256":  "e580a45ff525f7f389c00ac7dd0edf3b175a66f22c78ac344b02b9afb8329187"
+                  },
+                  {
+                      "path":  "scratch-classify-_rnfif7n/.git/refs/heads/main",
+                      "bytes":  41,
+                      "sha256":  "e35a54f22f8ccbd4988778d378591a03b8995aa488ca0a7896dfa363ec633f89"
+                  },
+                  {
+                      "path":  "scratch-classify-_rnfif7n/iOS/SCMessenger/Foo.swift",
+                      "bytes":  8,
+                      "sha256":  "4bf3a03a765797e7db7121e2f7197a88e69622bcd117c0551776a6673354d9ab"
+                  }
+              ]
+}

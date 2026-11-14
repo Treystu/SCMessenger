@@ -1,0 +1,21 @@
+﻿{
+  "file": "MeshRepository.kt",
+  "chunk": 8,
+  "summary": "This class manages the BLE identity beacon and handles peer identity reads.",
+  "structs_or_classes": [],
+  "imports": [
+    "org.json.JSONObject"
+  ],
+  "funcs": [
+    {
+      "name": "setIdentityBeaconInternal",
+      "line": 2458,
+      "calls_out_to": []
+    },
+    {
+      "name": "onPeerIdentityRead",
+      "line": 2555,
+      "calls_out_to": ["normalizePublicKey", "noteBleRouteObservation", "updateDiscoveredPeer", "connectToPeer", "sendHistorySyncIfNeeded", "upsertFederatedContact"]
+    }
+  ]
+}

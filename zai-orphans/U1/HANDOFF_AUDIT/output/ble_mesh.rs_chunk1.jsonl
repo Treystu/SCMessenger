@@ -1,0 +1,70 @@
+﻿{
+  "file": "ble_mesh.rs",
+  "chunk": 1,
+  "summary": "This module contains functions for BLE mesh communication. It includes functions to discover and subscribe to notify events from SCM messenger peripherals, decode and forward decrypted payloads to the local Web UI as JSON-RPC messages.",
+  "structs_or_classes": [],
+  "imports": [
+    "use btleplug::api::bleuuid::uuid_from_u16;",
+    "use btleplug::api::{Central, CentralEvent, CharPropFlags, Manager as _, Peripheral as PeripheralApi, ScanFilter,}",
+    "use btleplug::platform::{Manager, Peripheral};",
+    "use futures_util::StreamExt;",
+    "use scmessenger_core::drift::frame::{DriftFrame, FrameType};",
+    "use scmessenger_core::wasm_support::rpc::{notif_message_received, MessageReceivedParams};",
+    "use scmessenger_core::IronCore;",
+    "use std::collections::HashSet;",
+    "use std::sync::Arc;",
+    "use tokio::sync::Mutex;",
+    "use uuid::Uuid;",
+    "use crate::server::{UiEvent, UiOutbound};"
+  ],
+  "funcs": [
+    {
+      "name": "scm_service_uuid",
+      "line": 27,
+      "calls_out_to": []
+    },
+    {
+      "name": "scm_notify_uuid",
+      "line": 31,
+      "calls_out_to": []
+    },
+    {
+      "name": "decode_ble_payload_for_ui",
+      "line": 36,
+      "calls_out_to": ["DriftFrame::from_bytes", "core.receive_message"]
+    },
+    {
+      "name": "push_message_to_ui",
+      "line": 59,
+      "calls_out_to": ["serde_json::to_value"]
+    },
+    {
+      "name": "subscribe_ingress_for_peripheral",
+      "line": 76,
+      "calls_out_to": [
+        "peripheral.connect",
+        "peripheral.discover_services",
+        "peripheral.characteristics",
+        "peripheral.subscribe",
+        "stream.next"
+      ]
+    },
+    {
+      "name": "run_ble_central_ingress",
+      "line": 128,
+      "calls_out_to": [
+        "Manager::new",
+        "adapter.adapters",
+        "adapter.start_scan",
+        "events.next",
+        "peripheral.peripheral",
+        "subscribe_ingress_for_peripheral"
+      ]
+    },
+    {
+      "name": "run_ble_peripheral_advertising",
+      "line": 225,
+      "calls_out_to": []
+    }
+  ]
+}

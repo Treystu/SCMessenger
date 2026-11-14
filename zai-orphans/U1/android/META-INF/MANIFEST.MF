@@ -1,0 +1,6 @@
+Manifest-Version: 1.0
+Implementation-Title: Gradle
+Implementation-Version: 8.13
+Class-Path-Source: manifestClasspath
+Class-Path: gradle-gradle-cli-main-8.13.jar
+

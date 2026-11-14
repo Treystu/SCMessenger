@@ -1,0 +1,102 @@
+﻿{
+  "file": "MeshRepository.kt",
+  "chunk": 21,
+  "summary": "This function builds a list of peer candidates for routing based on various sources including discovery, notes, and cached route peer IDs.",
+  "structs_or_classes": [],
+  "imports": [
+    "com.example.PeerIdValidator",
+    "com.example.IronCore",
+    "com.example.LedgerManager"
+  ],
+  "funcs": [
+    {
+      "name": "buildRoutePeerCandidates",
+      "line": 7014,
+      "calls_out_to": [
+        "discoverRoutePeersForPublicKey",
+        "parseAllRoutingPeerIds",
+        "routeCandidateMatchesRecipient",
+        "parseLastKnownRoute",
+        "getDialHintsForRoutePeer",
+        "buildDialCandidatesForPeer",
+        "isKnownRelay"
+      ]
+    },
+    {
+      "name": "discoverRoutePeersForPublicKey",
+      "line": 7084,
+      "calls_out_to": [
+        "normalizePublicKey",
+        "_discoveredPeers.value.values",
+        "filter",
+        "mapNotNull",
+        "toList"
+      ]
+    },
+    {
+      "name": "routeCandidateMatchesRecipient",
+      "line": 7119,
+      "calls_out_to": [
+        "extractIpv4FromMultiaddr",
+        "isPrivateIpv4",
+        "isSameLanAddress",
+        "_discoveredPeers.value.entries.any",
+        "ledgerManager?.dialableAddresses()",
+        "filter"
+      ]
+    },
+    {
+      "name": "parseLastKnownRoute",
+      "line": 7003,
+      "calls_out_to": [
+        "notes.isNullOrBlank",
+        "split",
+        "trim",
+        "removePrefix",
+        "isEmpty",
+        "contains",
+        "removeSuffix"
+      ]
+    },
+    {
+      "name": "getDialHintsForRoutePeer",
+      "line": 7173,
+      "calls_out_to": [
+        "ledgerManager?.dialableAddresses()",
+        "filter",
+        "buildDialCandidatesForPeer"
+      ]
+    },
+    {
+      "name": "buildDialCandidatesForPeer",
+      "line": 7153,
+      "calls_out_to": [
+        "normalizeAddressHint",
+        "mapNotNull",
+        "distinct",
+        "prioritizeAddressesForCurrentNetwork",
+        "relayCircuitAddressesForPeer"
+      ]
+    },
+    {
+      "name": "isKnownRelay",
+      "line": 7282,
+      "calls_out_to": [
+        "_discoveredPeers.value.entries.firstOrNull",
+        "parseBootstrapRelay",
+        "getHealthyRelays",
+        "relayCircuitBreaker.isCircuitOpen",
+        "relayCircuitBreaker.getFailureCount"
+      ]
+    },
+    {
+      "name": "relayCircuitAddressesForPeer",
+      "line": 7291,
+      "calls_out_to": [
+        "parseBootstrapRelay",
+        "_discoveredPeers.value.entries.filter",
+        "getDialHintsForRoutePeer"
+      ]
+    }
+  ]
+}
