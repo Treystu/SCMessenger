@@ -41,10 +41,10 @@ from typing import Any, Callable
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 try:
-    from jev_canonical_check import CANON_QUESTIONS
+    from jev_canonical_check import BUCKETS, CANON_QUESTIONS
 except ImportError:  # imported by path from another working directory
     sys.path.insert(0, str(SCRIPT_DIR))
-    from jev_canonical_check import CANON_QUESTIONS
+    from jev_canonical_check import BUCKETS, CANON_QUESTIONS
 
 EVIDENCE_SCHEMA_VERSION = "1.0.0"
 DEFAULT_TIMEOUT_SECONDS = 900
@@ -220,6 +220,34 @@ def _unit_number(value: Any, label: str) -> float:
     return float(value)
 
 
+def _pack_answer_keys() -> set[str]:
+    """Every key a genuine `jev_canonical_check` result can carry, in both pack shapes.
+
+    The bucketed rewrite (2026-10-07, `dd36e61d`) merges selected buckets into one pack whose
+    question ids are `bucket.qid`; the bare three-key shape predates it and is still accepted so
+    older evidence validates. Anything outside both sets is not a question this gate can check and
+    stays a fail-closed error rather than being silently ignored.
+    """
+    keys = set(CANON_QUESTIONS)
+    for bucket, spec in BUCKETS.items():
+        for qid in spec.get("questions", ()):
+            keys.add(f"{bucket}.{qid}")
+    return keys
+
+
+def _resolve_canonical(answers: dict[str, Any], qid: str) -> tuple[str | None, Any]:
+    """Find a canonical question's answer under its bare key or its single `bucket.qid` key.
+
+    Exactly one bucket may carry a canonical question; two would be ambiguous, so no guess is made.
+    """
+    if qid in answers:
+        return qid, answers[qid]
+    matches = sorted(key for key in answers if key.count(".") == 1 and key.endswith("." + qid))
+    if len(matches) == 1:
+        return matches[0], answers[matches[0]]
+    return None, None
+
+
 def _derive_signals(answers: dict[str, Any]) -> tuple[float, float, bool]:
     """Recompute (supported, confidence, has_action_confidence) from the answers, as harness/jev.py does.
 
@@ -229,24 +257,45 @@ def _derive_signals(answers: dict[str, Any]) -> tuple[float, float, bool]:
     confidence 0.0: a floor on ``confidence`` would reject every one. Recomputing both signals means
     the threshold is applied to the evidence, not to numbers the helper reports about itself.
     """
-    missing = sorted(set(CANON_QUESTIONS) - set(answers))
-    unexpected = sorted(set(answers) - set(CANON_QUESTIONS))
+    accepted = _pack_answer_keys()
+    unexpected = sorted(set(answers) - accepted)
+    resolved: dict[str, tuple[str, Any]] = {}
+    missing: list[str] = []
+    for qid in CANON_QUESTIONS:
+        key, answer = _resolve_canonical(answers, qid)
+        if key is None:
+            missing.append(qid)
+        else:
+            resolved[qid] = (key, answer)
     if missing or unexpected:
         raise CompletionGateError(
-            f"JEV result answers do not match the canonical questions (missing: {missing}; unexpected: {unexpected})")
+            f"JEV result answers do not match the canonical questions (missing: {sorted(missing)}; unexpected: {unexpected})")
+    for qid, (key, answer) in resolved.items():
+        if not isinstance(answer, dict):
+            raise CompletionGateError(f"JEV result answer {key} is not a question answer")
+        kind = answer.get("type")
+        declared = CANON_QUESTIONS[qid]["type"]
+        # A bare key is the pre-bucket shape and must be exactly what the canonical pack declares.
+        # A bucket-qualified key is the merged pack, where `_canon_as_ynq` asks the canonical
+        # questions as Choice; that shape is legitimate and its confidence is a real signal.
+        allowed = {declared} if key == qid else {"noul", "choice", "score"}
+        if kind not in allowed:
+            raise CompletionGateError(
+                f"JEV result answer {key} is not a {declared if key == qid else 'noul/choice/score'} answer")
+    # Aggregate over every answer in the pack, which is what harness/jev.py does: `supported` is the
+    # smallest noul probability and `confidence` the smallest Choice/Score confidence, or 0.0 when
+    # the pack asks no Choice/Score question. Restricting this to the canonical three would
+    # misreport a merged pack whose weakest answer sits in another bucket.
     nouls: list[float] = []
     action_confidences: list[float] = []
-    for key, question in CANON_QUESTIONS.items():
-        kind = question["type"]
-        answer = answers[key]
-        if not isinstance(answer, dict) or answer.get("type") != kind:
-            raise CompletionGateError(f"JEV result answer {key} is not a {kind} answer")
+    for key, answer in answers.items():
+        if not isinstance(answer, dict):
+            raise CompletionGateError(f"JEV result answer {key} is not a question answer")
+        kind = answer.get("type")
         if kind == "noul":
             nouls.append(_unit_number(answer.get("noul"), f"answer {key} probability"))
         elif kind in ("choice", "score"):
             action_confidences.append(_unit_number(answer.get("confidence"), f"answer {key} confidence"))
-        else:
-            raise CompletionGateError(f"canonical question {key} has type {kind}, which this gate cannot check")
     supported = min(nouls) if nouls else 1.0
     confidence = min(action_confidences) if action_confidences else 0.0
     return supported, confidence, bool(action_confidences)
