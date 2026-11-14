@@ -23,7 +23,7 @@ jobs:
   # runner is never acquired just to learn it has nothing to do.
   changes:
     name: Detect changed areas
-    runs-on: ubuntu-latest
+    runs-on: ${{ (github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)) && vars.USE_OCI_RUNNER != 'false' && (vars.CI_RUNNER == 'oci' || vars.CI_RUNNER == '') && fromJSON('["self-hosted","oci"]') || 'ubuntu-latest' }}
     timeout-minutes: 5
     outputs:
       rust_relevant: ${{ steps.platform.outputs.rust_relevant }}
@@ -36,7 +36,7 @@ jobs:
   handoff-scope:
     name: Handoff ownership scope
     # Python/git only (about 10s of work): hosted. OCI queue waits for this job reached 2 hours.
-    runs-on: ubuntu-latest
+    runs-on: ${{ (github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)) && vars.USE_OCI_RUNNER != 'false' && (vars.CI_RUNNER == 'oci' || vars.CI_RUNNER == '') && fromJSON('["self-hosted","oci"]') || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -75,7 +75,7 @@ jobs:
   naming-policy:
     name: Naming policy
     # Python/git only (about 10s of work): hosted. OCI queue waits for this job reached 2 hours.
-    runs-on: ubuntu-latest
+    runs-on: ${{ (github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)) && vars.USE_OCI_RUNNER != 'false' && (vars.CI_RUNNER == 'oci' || vars.CI_RUNNER == '') && fromJSON('["self-hosted","oci"]') || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -125,7 +125,7 @@ jobs:
     # Required check: always run so it reports a real result; a failed `changes`
     # job must fail this check, not skip it (a skipped required check is green).
     if: ${{ !cancelled() }}
-    runs-on: ubuntu-latest
+    runs-on: ${{ (github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)) && vars.USE_OCI_RUNNER != 'false' && (vars.CI_RUNNER == 'oci' || vars.CI_RUNNER == '') && fromJSON('["self-hosted","oci"]') || 'ubuntu-latest' }}
     timeout-minutes: 30
     steps:
       - name: Fail closed if change detection failed
@@ -169,7 +169,7 @@ jobs:
   orchestration:
     name: Orchestration control plane
     # Python only (about 10s of work): hosted. OCI queue waits for this job reached 2 hours.
-    runs-on: ubuntu-latest
+    runs-on: ${{ (github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)) && vars.USE_OCI_RUNNER != 'false' && (vars.CI_RUNNER == 'oci' || vars.CI_RUNNER == '') && fromJSON('["self-hosted","oci"]') || 'ubuntu-latest' }}
     timeout-minutes: 10
     steps:
       # Runs on every pull request and every push, on the default merge checkout.
@@ -211,7 +211,12 @@ jobs:
     # github, needs, strategy, matrix, vars, inputs). The matrix stays STATIC on
     # purpose: a dynamic matrix would not create 'Test (ubuntu-latest)' until
     # `changes` finished, and that delay is the required check reporting late.
-    runs-on: ${{ matrix.os == 'ubuntu-latest' && needs.changes.outputs.rust_relevant == 'true' && (github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)) && vars.CI_RUNNER == 'oci' && fromJSON('["self-hosted","oci"]') || matrix.os }}
+    # Dependabot carve-out (adopted from #643, carve-out half only): a dependency
+    # re-head executes third-party code with a read-only token, so it must not
+    # occupy one of the two ARM OCI slots that car and main waves depend on. It
+    # changes neither the #661 rollback switch nor the required-leg
+    # guard. #643's pool re-scope is deliberately NOT adopted here.
+    runs-on: ${{ matrix.os == 'ubuntu-latest' && needs.changes.outputs.rust_relevant == 'true' && (github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.user.login != 'dependabot[bot]')) && vars.USE_OCI_RUNNER != 'false' && vars.CI_RUNNER == 'oci' && fromJSON('["self-hosted","oci"]') || matrix.os }}
     strategy:
       fail-fast: false
       matrix:
@@ -263,18 +268,20 @@ jobs:
         run: |
           echo "SCCACHE_GHA_ENABLED=true" >> $GITHUB_ENV
           echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
+      - name: Install cargo-nextest
+        uses: taiki-e/install-action@nextest
       - name: Run workspace tests (Windows serialized)
         if: matrix.os == 'windows-latest' && needs.changes.outputs.rust_relevant == 'true'
-        run: cargo test --workspace --features test-utils -- --test-threads=1
+        run: cargo nextest run --workspace --features test-utils --test-threads 1
       - name: Run workspace tests
         if: matrix.os != 'windows-latest' && needs.changes.outputs.rust_relevant == 'true'
-        run: cargo test --workspace --features test-utils
+        run: cargo nextest run --workspace --features test-utils
 
   docs:
     name: Docs
     needs: changes
     if: needs.changes.outputs.rust_relevant == 'true'
-    runs-on: ${{ (github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)) && (vars.CI_RUNNER == 'oci' || (vars.CI_RUNNER == '' && vars.USE_OCI_RUNNER != 'false')) && fromJSON('["self-hosted","oci"]') || 'ubuntu-latest' }}
+    runs-on: ${{ (github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)) && vars.USE_OCI_RUNNER != 'false' && (vars.CI_RUNNER == 'oci' || vars.CI_RUNNER == '') && fromJSON('["self-hosted","oci"]') || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@v7
       - name: Use preinstalled Rust (self-hosted)
@@ -295,7 +302,7 @@ jobs:
     name: FFI Surface Contract
     needs: changes
     if: needs.changes.outputs.rust_relevant == 'true'
-    runs-on: ${{ (github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)) && (vars.CI_RUNNER == 'oci' || (vars.CI_RUNNER == '' && vars.USE_OCI_RUNNER != 'false')) && fromJSON('["self-hosted","oci"]') || 'ubuntu-latest' }}
+    runs-on: ${{ (github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)) && vars.USE_OCI_RUNNER != 'false' && (vars.CI_RUNNER == 'oci' || vars.CI_RUNNER == '') && fromJSON('["self-hosted","oci"]') || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@v7
       - name: Use preinstalled Rust (self-hosted)
