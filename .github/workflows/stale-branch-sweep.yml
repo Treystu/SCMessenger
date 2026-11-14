@@ -11,7 +11,17 @@ on:
 jobs:
   sweep:
     name: List stale branches
-    runs-on: ubuntu-latest
+    # Hosted ubuntu-latest jobs on this repository die within 1-3 seconds of
+    # starting (run 43548409974: created 02:49:42Z, job finished 02:49:45Z,
+    # conclusion failure) while the same Actions infrastructure succeeds on the
+    # self-hosted OCI pool (run 43541804461: Repository Hygiene Checks on
+    # labels self-hosted,oci, success 01:43:06Z). Route the sweep the way the
+    # required gate jobs are already routed, keeping the documented rollback. The
+    # event test is the oci-probe form rather than the ci.yml form: this workflow
+    # runs on workflow_dispatch and schedule, which ci.yml's push-or-PR guard
+    # sends straight to ubuntu-latest (verified: run 43548583621 still requested
+    # ubuntu-latest and failed in two seconds).
+    runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && vars.USE_OCI_RUNNER != 'false' && (vars.CI_RUNNER == 'oci' || vars.CI_RUNNER == '') && fromJSON('["self-hosted","oci"]') || 'ubuntu-latest' }}
     permissions:
       contents: read
       issues: write

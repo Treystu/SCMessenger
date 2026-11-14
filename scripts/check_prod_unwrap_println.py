@@ -28,6 +28,7 @@ import argparse
 import re
 import sys
 from pathlib import Path
+from typing import Any, List
 
 DEFAULT_ROOTS = ["core/src", "mobile/src"]
 DEFAULT_ALLOWLIST = "scripts/prod_unwrap_allowlist.cfg"
@@ -126,6 +127,95 @@ def _attr_end(s: str, start: int) -> int:
     return len(s)
 
 
+# Three-valued cfg evaluation. `None` means "not decidable from the predicate alone": an atom such
+# as `feature = "x"` or `target_arch = "wasm32"` may hold or not, so the gate must not assume.
+_CFG_TOKEN = re.compile(r'\s*(?:(?P<ident>[A-Za-z_][A-Za-z0-9_]*)|(?P<literal>"[^"]*")|(?P<punct>[(),=]))')
+
+
+def _cfg_and(values: List[Any]) -> Any:
+    if any(v is False for v in values):
+        return False
+    return True if all(v is True for v in values) else None
+
+
+def _cfg_or(values: List[Any]) -> Any:
+    if any(v is True for v in values):
+        return True
+    return False if all(v is False for v in values) else None
+
+
+def _cfg_eval(expr: str, test_value: bool) -> Any:
+    """Evaluate a cfg predicate with `test` pinned, other atoms unknown.
+
+    Returns True/False when the predicate is decided under that assignment and None when it depends
+    on an atom the gate cannot know. Raises ValueError for a predicate it cannot parse.
+    """
+    tokens: List[str] = []
+    pos = 0
+    while pos < len(expr):
+        m = _CFG_TOKEN.match(expr, pos)
+        if not m:
+            if not expr[pos:].strip():
+                break
+            raise ValueError(expr)
+        tokens.append(m.group(m.lastgroup))
+        pos = m.end()
+    if not tokens:
+        raise ValueError(expr)
+    index = 0
+
+    def parse() -> Any:
+        nonlocal index
+        if index >= len(tokens):
+            raise ValueError(expr)
+        token = tokens[index]
+        index += 1
+        if token in ("all", "any", "not"):
+            if index >= len(tokens) or tokens[index] != "(":
+                raise ValueError(expr)
+            index += 1
+            args = [parse()]
+            while index < len(tokens) and tokens[index] == ",":
+                index += 1
+                args.append(parse())
+            if index >= len(tokens) or tokens[index] != ")":
+                raise ValueError(expr)
+            index += 1
+            if token == "not":
+                if len(args) != 1:
+                    raise ValueError(expr)
+                return None if args[0] is None else (not args[0])
+            return _cfg_and(args) if token == "all" else _cfg_or(args)
+        if index < len(tokens) and tokens[index] == "=":
+            index += 2  # `key = "value"`: unknown, and it consumes its literal
+            if index > len(tokens):
+                raise ValueError(expr)
+            return None
+        return test_value if token == "test" else None
+
+    result = parse()
+    if index != len(tokens):
+        raise ValueError(expr)
+    return result
+
+
+def _cfg_requires_test(expr: str) -> bool:
+    """True only when the predicate holds with `test` set and cannot hold without it.
+
+    This is what distinguishes the three shapes the old substring test conflated:
+    `cfg(test)` and `cfg(all(test, not(target_arch = "wasm32")))` require test, while
+    `cfg(any(test, feature = "x"))` and `cfg(not(test))` do not (#565).
+    """
+    try:
+        without_test = _cfg_eval(expr, False)
+        with_test = _cfg_eval(expr, True)
+    except ValueError:
+        # Unparsable: fail closed by treating the item as production code. Skipping code is the
+        # unrecoverable error here, a false positive is a visible one.
+        return False
+    return without_test is False and with_test is not False
+
+
 def _is_test_attr(body: str) -> bool:
     b = re.sub(r"\s+", "", body)
     if re.fullmatch(r"#!?\[(?:[\w:]*::)?test\]", b):
@@ -133,10 +223,7 @@ def _is_test_attr(body: str) -> bool:
     m = re.match(r"#!?\[cfg\((.*)\)\]$", b)
     if not m:
         return False
-    expr = m.group(1)
-    if "not(" in expr:
-        return False  # cfg(not(test)) is production
-    return re.search(r"(?<![\w])test(?![\w])", expr) is not None
+    return _cfg_requires_test(m.group(1))
 
 
 def test_ranges(clean: str):
