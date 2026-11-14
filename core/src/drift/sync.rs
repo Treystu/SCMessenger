@@ -935,14 +935,14 @@ mod tests {
             cells: DIFF_DRIVEN_MIN_CELLS,
         });
         let _ = session.initiate(&store).unwrap();
-        let mut last = Ok(());
+        let mut failed = false;
         for _ in 0..13 {
-            last = session.handle_retry(&store, RETRY_MAX_CELLS);
-            if last.is_err() {
+            if session.handle_retry(&store, RETRY_MAX_CELLS).is_err() {
+                failed = true;
                 break;
             }
         }
-        assert!(last.is_err(), "the ladder must stop at its ceiling");
+        assert!(failed, "the ladder must stop at its ceiling");
         assert_eq!(session.state(), SyncState::Failed);
     }
 }
