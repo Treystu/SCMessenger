@@ -2840,3 +2840,6 @@ Treat older status and audit report docs as historical snapshots unless they are
   - Android BLE telemetry still needs unification so requested target and actual transport target match in logs
   - "installed in simulator" must not be treated as proof of a valid simulator artifact
   - iOS send-path parity with Android store-and-forward semantics still requires final confirmation across all code paths
+
+<!-- docs-only proof probe for #656: this PR changes documentation only, so the
+     heavy workflows must be skipped by their path filters while the docs jobs run. -->
