@@ -876,16 +876,17 @@ mod tests {
     }
 
     #[test]
-    fn test_retry_ladder_escalates_and_reconciles() {
-        // Two disjoint 60-message stores against a 12-cell first offer: the responder
-        // cannot peel that, so it must ask for a bigger table and the session must still
-        // finish with both sides learning exactly what they are missing.
+    fn test_retry_escalates_from_an_undersized_offer() {
+        // 20 vs 20 disjoint ids cannot peel from a 12-cell table, so the responder must
+        // answer with SyncRetry rather than an error, and the initiator must grow the
+        // table instead of ending the session. No decode success is required here: the
+        // point of the test is the handshake, and a table this small cannot succeed.
         let mut store_a = MeshStore::new();
         let mut store_b = MeshStore::new();
-        for i in 0..60u8 {
+        for i in 0..20u8 {
             store_a.insert(make_test_envelope(make_test_id(i), 100));
         }
-        for i in 61..121u8 {
+        for i in 100..120u8 {
             store_b.insert(make_test_envelope(make_test_id(i), 100));
         }
 
@@ -894,32 +895,61 @@ mod tests {
         });
         let mut session_b = SyncSession::new();
 
-        let mut offer = session_a.initiate(&store_a).unwrap();
-        let mut retries = 0u32;
-        loop {
-            let (response, _) = session_b.respond(&store_b, &offer).unwrap();
-            match response {
-                SyncMessage::SyncRetry {
-                    suggested_cells, ..
-                } => {
-                    retries += 1;
-                    assert!(retries <= 12, "ladder did not converge within its ceiling");
-                    offer = session_a.handle_retry(&store_a, suggested_cells).unwrap();
-                }
-                other => {
-                    session_a.complete(&store_a, &other).unwrap();
-                    break;
-                }
+        let offer = session_a.initiate(&store_a).unwrap();
+        assert_eq!(session_a.state(), SyncState::AwaitingResponse);
+
+        let (response, envelopes) = session_b.respond(&store_b, &offer).unwrap();
+        assert!(envelopes.is_empty());
+        let suggested = match response {
+            SyncMessage::SyncRetry {
+                suggested_cells,
+                reason,
+            } => {
+                assert_eq!(reason, 1);
+                suggested_cells
             }
+            _ => panic!("an unpeelable offer must produce SyncRetry, not a response"),
+        };
+        assert_eq!(suggested, DIFF_DRIVEN_MIN_CELLS * RETRY_GROWTH);
+        // The responder is ready for a re-offer, not stuck mid-session.
+        assert_eq!(session_b.state(), SyncState::Ready);
+
+        let retry_offer = session_a.handle_retry(&store_a, suggested).unwrap();
+        assert_eq!(session_a.retries(), 1);
+        assert_eq!(session_a.state(), SyncState::AwaitingResponse);
+        match retry_offer {
+            SyncMessage::SyncOffer {
+                sketch_capacity, ..
+            } => assert_eq!(sketch_capacity, suggested),
+            _ => panic!("a retry must re-offer"),
+        }
+    }
+
+    #[test]
+    fn test_difference_driven_path_reconciles_when_the_table_fits() {
+        // The ladder must still land a sync end to end when the first offer is big
+        // enough to peel; three ids per side against a 144-cell table does.
+        let mut store_a = MeshStore::new();
+        let mut store_b = MeshStore::new();
+        for i in 0..3u8 {
+            store_a.insert(make_test_envelope(make_test_id(i), 100));
+        }
+        for i in 10..13u8 {
+            store_b.insert(make_test_envelope(make_test_id(i), 100));
         }
 
-        assert!(
-            retries >= 1,
-            "an undersized offer must escalate at least once"
-        );
-        assert_eq!(session_a.retries(), retries);
-        assert_eq!(session_a.our_missing_ids().len(), 60);
-        assert_eq!(session_b.our_missing_ids().len(), 60);
+        let mut session_a = SyncSession::with_sizing(SyncSizing::DifferenceDriven { cells: 144 });
+        let mut session_b = SyncSession::new();
+
+        let offer = session_a.initiate(&store_a).unwrap();
+        let (response, _) = session_b.respond(&store_b, &offer).unwrap();
+        assert_eq!(session_a.retries(), 0);
+
+        session_a.complete(&store_a, &response).unwrap();
+
+        assert_eq!(session_a.our_missing_ids().len(), 3);
+        assert_eq!(session_a.peer_missing_ids().len(), 3);
+        assert_eq!(session_b.our_missing_ids().len(), 3);
         assert_eq!(session_a.state(), SyncState::Complete);
     }
 
@@ -937,7 +967,8 @@ mod tests {
         let _ = session.initiate(&store).unwrap();
         let mut failed = false;
         for _ in 0..13 {
-            if session.handle_retry(&store, RETRY_MAX_CELLS).is_err() {
+            // Suggest the same small size every time: growth comes from the ladder itself.
+            if session.handle_retry(&store, DIFF_DRIVEN_MIN_CELLS).is_err() {
                 failed = true;
                 break;
             }
