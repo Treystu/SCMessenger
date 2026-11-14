@@ -980,6 +980,40 @@ jobs:
             set -euo pipefail
             python3 scripts/check_naming.py --repo-root . --self-test
 
+  stale_branch_sweep:
+    executor: python-linux
+    steps:
+      - checkout
+      - fetch_full_history
+      - run:
+          name: Report already-landed branches (report only, deletes nothing)
+          command: |
+            set -euo pipefail
+            # The proof is ancestry, and it needs no API token: a branch has
+            # landed when it is an ancestor of origin/main. This is the CI form
+            # of the #658 sweep - it reports, it never deletes, because the
+            # 100-percent-import-before-purge rule keeps deletions manual.
+            git fetch --prune origin '+refs/heads/*:refs/remotes/origin/*' --quiet
+            main_sha=$(git rev-parse origin/main)
+            total=$(git for-each-ref --format='%(refname)' refs/remotes/origin \
+              | grep -v -E 'refs/remotes/origin/(main|HEAD)$' | wc -l | tr -d ' ')
+            landed=$(git branch -r --merged origin/main \
+              | sed 's/^[ *]*//' \
+              | grep -E '^origin/' \
+              | grep -v -E '^origin/(main|HEAD)$' | wc -l | tr -d ' ')
+            echo "[INFO] main: $main_sha"
+            echo "[INFO] remote branches (excluding main): $total"
+            echo "[INFO] proven landed (ancestor of origin/main): $landed"
+            echo '--- landed branches ---'
+            git branch -r --merged origin/main \
+              | sed 's/^[ *]*//' \
+              | grep -E '^origin/' \
+              | grep -v -E '^origin/(main|HEAD)$' || true
+            echo '--- not landed ---'
+            git branch -r --no-merged origin/main \
+              | sed 's/^[ *]*//' \
+              | grep -E '^origin/' | grep -v -E '^origin/(main|HEAD)$' || true
+            echo "[OK] report complete: $landed of $total branches are proven landed. Nothing was deleted."
 workflows:
   ci:
     jobs:
@@ -1014,3 +1048,8 @@ workflows:
       # the two wave-2 contexts above.
       - naming_policy:
           name: Naming policy
+      # Report-only: proves which remote branches are ancestors of main so the
+      # #658 sweep has a CI verdict that does not depend on a laptop or on a
+      # GitHub-hosted runner that cannot start. Deletes nothing by design.
+      - stale_branch_sweep:
+          name: Stale branch sweep (report only)
