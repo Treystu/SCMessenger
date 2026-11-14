@@ -522,9 +522,27 @@ def build_questions(selected: Iterable[str]) -> Dict[str, Dict[str, Any]]:
 
 
 def evidence_index(state: Dict[str, Any]) -> Dict[str, Any]:
-    """Map evidence id -> entry. Entries may be strings or dicts with an "id"."""
+    """Map evidence id -> entry.
+
+    Two shapes are accepted, because both are in the repo:
+
+    * a LIST, where each entry is a string or a dict carrying an optional "id"
+      (positional `E1`, `E2`, ... ids are assigned when there is none);
+    * a MAPPING of id -> evidence text, which is how the checked-in reference
+      states under `HANDOFF/freebuff/jev/` are written. There the key IS the id
+      and the value is the command/output text, so both must survive verbatim.
+
+    Iterating a mapping with `enumerate` would yield its keys, replacing every
+    evidence string with a bare name -- the evaluator would then be asked to
+    confirm acceptance rows while holding only labels like `diff_stat`.
+    """
+    block = state.get("evidence") or {}
     out: Dict[str, Any] = {}
-    for i, entry in enumerate(state.get("evidence") or [], start=1):
+    if isinstance(block, dict):
+        for raw_id, value in block.items():
+            out[str(raw_id)] = value
+        return out
+    for i, entry in enumerate(block, start=1):
         eid = str(entry["id"]) if isinstance(entry, dict) and entry.get("id") else f"E{i}"
         out[eid] = entry
     return out
@@ -1314,6 +1332,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         "input_tokens": result.input_tokens,
         "output_tokens": getattr(result, "output_tokens", 0),
         "buckets_selected": gate["buckets_selected"],
+        "evidence_ids": sorted(ev_idx),
         "buckets_na": gate["buckets_na"],
         "na_overrides": gate["na_overrides"],
         "buckets": {
