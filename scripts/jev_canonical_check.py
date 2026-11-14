@@ -1248,8 +1248,14 @@ def main(argv: Optional[List[str]] = None) -> int:
         f"[INFO] harness: {source.root} sha={source.sha} "
         f"status={source.status} pinned={source.pinned} "
         f"typesafe_key={bool(mod['key'])} "
+        f"key_source={mod.get('key_location') or 'none'} "
         f"openrouter_key={bool(mod.get('openrouter_key'))}"
     )
+    if not mod["key"]:
+        # The doctrine that governs the stand-up requires the locations tried to be
+        # recorded, not just the absence: a location that holds a key which cannot
+        # be read is a defect, and this line is how it becomes visible.
+        print(f"[INFO] key locations tried: {mod.get('key_tried') or 'none'}")
     _policy, _ = make_policy()
     evaluator = _policy.evaluator
     recorder: Optional[RecordingTransport] = None
