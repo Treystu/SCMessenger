@@ -103,6 +103,18 @@ R-20 dependabot group (#528 rust-toolchain, #529 setup-java, #530 cache/restore,
 
 `scripts/orchestrate_strict.py` defaults `--queue` to repo-root `scm_v1_farm_queue.jsonl` (line 738), and `orchestration/manifest.yaml` names no queue or release target. That jsonl is the older farm-wave ticket queue (Z/A/... tickets; statuses done/open/blocked/frozen/retired) and does NOT hold these cars. Gap: until a follow-up adds these cars to a jsonl (or the manifest names this file), run the kernel with an explicit `--queue` pointing at a purpose-built file, and treat this document as the execution authority. No script or jsonl change is made by the commit that introduced this file.
 
+**Update 2026-11-13 (cure for #579):** the gap above is closed, and this document
+remains the execution authority. `orchestration/manifest.yaml` now carries a
+`queue` block naming `orchestration/v051_cars.jsonl` as the kernel's queue, the
+release target (`v0.5.1`), and this file as its `source_document`. The jsonl is
+generated from sections 3, 4 and 5 of this document by
+`scripts/v051_queue_sync.py`; `--check` fails when the two drift, so the queue
+cannot silently diverge from the car tables. `scripts/orchestrate_strict.py`
+takes `--queue` as an override and otherwise reads the declared queue, and its
+`--dry-run` lists every car with its status, review gate and dependencies. The
+correct update order after editing a car table is: edit the table, then
+`python3 scripts/v051_queue_sync.py`, then commit both files together.
+
 ## 7. Authority
 
 Execution pointer: `SHIP_PLAN.md` (2026-10-14 entry). `HANDOFF/todo/_QUEUE.md` is backlog reference only. Update this file's table (status column, Last-updated) as cars land; live per-PR state is on #452.
