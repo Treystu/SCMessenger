@@ -242,6 +242,11 @@ android {
                 // still unknown, and this is the diagnostic: the last "started" line
                 // before the timeout names the test that blocks. Without it the log
                 // ends mid-task with no indication of where.
+                // Pass staged native cdylib location to JNA so JVM unit tests find scmessenger_core.dll / .so / .dylib
+                def stagedDir = file('../../core/target/staged-cdylib').absolutePath
+                def targetReleaseDir = file('../../target/release').absolutePath
+                systemProperty 'jna.library.path', [stagedDir, targetReleaseDir].join(File.pathSeparator)
+
                 testLogging {
                     events 'started', 'passed', 'failed', 'skipped'
                     showStandardStreams = true
@@ -294,7 +299,7 @@ dependencies {
     
     // DataStore for preferences
     implementation 'androidx.datastore:datastore-preferences:1.0.0'
-    implementation 'androidx.security:security-crypto:1.1.0-alpha06'
+    implementation 'androidx.security:security-crypto:1.1.0'
     
     // Timber logging
     implementation 'com.jakewharton.timber:timber:5.0.1'
@@ -307,7 +312,7 @@ dependencies {
     
     // Permissions
     implementation 'com.google.accompanist:accompanist-permissions:0.32.0'
-    implementation 'androidx.core:core-splashscreen:1.0.1'
+    implementation 'androidx.core:core-splashscreen:1.2.0'
 
     // Testing
     testImplementation 'junit:junit:4.13.2'

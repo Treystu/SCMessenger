@@ -3,6 +3,12 @@
   "protocol_version": "2.0.0",
   "canonical_document": "docs/ORCHESTRATION.md",
   "kernel": "scripts/orchestrate_strict.py",
+  "queue": {
+    "path": "orchestration/v051_cars.jsonl",
+    "release_target": "v0.5.1",
+    "source_document": "HANDOFF/freebuff/queue/V051_UNIFIED_MERGE_TRAIN_2026-10-14.md",
+    "generator": "scripts/v051_queue_sync.py"
+  },
   "state_schema_version": "1.0.0",
   "semantic_roles": {
     "CONTROLLER": {"authority": "coordinate", "writes": ["HANDOFF/", "tmp/orchestration/", "tmp/tasks/"], "forbidden": ["application_source", "test_implementation", "generated_source", "compile_fix", "architecture_adjudication"]},
