@@ -15,6 +15,7 @@ mod invite;
 mod ledger;
 mod platform_signals;
 mod seed_dial;
+mod selftest;
 mod server;
 mod transport_api;
 mod transport_bridge;
@@ -5454,67 +5455,42 @@ async fn cmd_test() -> Result<()> {
     println!("{}", "Running self-tests...".bold());
     println!();
 
-    let alice = IronCore::new();
-    let bob = IronCore::new();
+    // The probe itself lives in `selftest` so it can be tested from the library
+    // (this binary target sets `test = false`, so unit tests here never run).
+    // #651: the security stage used to build a third identity with no consent
+    // grant, which aborted the self-test with a bare "Consent required" and exit
+    // 1 - no stage name, no remediation. The probe now grants consent for every
+    // core it creates and reports which stage failed.
+    match selftest::run() {
+        Ok(stages) => {
+            for outcome in &stages {
+                if outcome.detail.is_empty() {
+                    println!("{} {}", "[OK]".green(), outcome.stage.label());
+                } else {
+                    println!(
+                        "{} {} ({})",
+                        "[OK]".green(),
+                        outcome.stage.label(),
+                        outcome.detail
+                    );
+                }
+            }
 
-    // Self-tests run non-interactively: grant consent programmatically, the
-    // same as every other CLI command path does before initializing.
-    alice.grant_consent();
-    bob.grant_consent();
+            println!();
+            println!("{}", "All tests passed!".green().bold());
 
-    alice.initialize_identity()?;
-    bob.initialize_identity()?;
-
-    let _alice_info = alice.get_identity_info();
-    let bob_info = bob.get_identity_info();
-
-    println!("{} Identity generation", "[OK]".green());
-
-    let envelope = alice.prepare_message(
-        bob_info
-            .public_key_hex
-            .clone()
-            .expect("Bob's public key should be available"),
-        "Test message".to_string(),
-        scmessenger_core::MessageType::Text,
-        None,
-    )?;
-
-    println!(
-        "{} Message encryption ({} bytes)",
-        "[OK]".green(),
-        envelope.envelope_data.len()
-    );
-
-    let msg = bob.receive_message(envelope.envelope_data)?;
-    assert_eq!(
-        msg.text_content()
-            .expect("Message text should be available"),
-        "Test message"
-    );
-
-    println!("{} Message decryption", "[OK]".green());
-
-    let eve = IronCore::new();
-    eve.initialize_identity()?;
-
-    let envelope = alice.prepare_message(
-        bob_info
-            .public_key_hex
-            .clone()
-            .expect("Bob's public key should be available"),
-        "Secret".to_string(),
-        scmessenger_core::MessageType::Text,
-        None,
-    )?;
-
-    assert!(eve.receive_message(envelope.envelope_data).is_err());
-    println!("{} Encryption security", "[OK]".green());
-
-    println!();
-    println!("{}", "All tests passed!".green().bold());
-
-    Ok(())
+            Ok(())
+        }
+        Err(failure) => {
+            eprintln!("{} {}", "[FAIL]".red(), failure);
+            eprintln!(
+                "[INFO] stage '{}': {}",
+                failure.stage.label(),
+                failure.stage.remediation()
+            );
+            Err(anyhow::anyhow!("{}", failure))
+        }
+    }
 }
 
 /// Returns true if `s` is exactly 64 hex characters — the shape of a

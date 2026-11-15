@@ -16,6 +16,7 @@ pub mod invite;
 pub mod ledger;
 pub mod platform_signals;
 pub mod seed_dial;
+pub mod selftest;
 pub mod server;
 pub mod transport_api;
 pub mod transport_bridge;
