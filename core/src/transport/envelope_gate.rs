@@ -41,6 +41,14 @@ const AUTHENTICATED_PARSES_PER_SEC: u32 = 8;
 /// Model parameter: most peers the parse-budget table tracks. Entries older than
 /// the current second are dropped when it fills; peers beyond it are not parsed.
 const PARSE_BUDGET_PEERS_CAP: usize = 1_024;
+/// Model parameter: envelope parses plus signature verifications the swarm event
+/// loop accepts per second across every authenticated peer, for traffic a peer's
+/// own share refused. The per-peer budget is fairness; this is the loop's real
+/// capacity, and it exists so a peer past its share is still parsed and recorded
+/// rather than skipped: an unparsed authenticated envelope leaves no replay ID,
+/// and a copy of it replayed on stranger ingress would then earn the traffic bit
+/// for the replayer (#574 reviewer finding 1).
+const GLOBAL_PARSES_PER_SEC: u32 = 128;
 
 type SignerKey = [u8; 32];
 
@@ -59,6 +67,9 @@ pub(super) struct RecentEnvelopeIds {
     by_signer: HashMap<SignerKey, BTreeSet<(u32, [u8; 16])>>,
     /// Peer -> (unix second of the current window, parses used in it).
     parse_budget: HashMap<libp2p::PeerId, (u32, u32)>,
+    /// (Unix second of the current window, parses used in it) across every peer,
+    /// charged only for traffic a peer's own budget refused.
+    global_parse_budget: (u32, u32),
 }
 
 impl RecentEnvelopeIds {
@@ -116,6 +127,21 @@ impl RecentEnvelopeIds {
             return false;
         }
         entry.1 += 1;
+        true
+    }
+
+    /// Charges one envelope parse to the shared loop budget for second `now`;
+    /// false when the loop has no parse headroom left this second. Charged only
+    /// for traffic a peer's own budget refused, so one peer cannot spend it alone
+    /// while its share has room.
+    fn charge_global_parse(&mut self, now: u32) -> bool {
+        if self.global_parse_budget.0 != now {
+            self.global_parse_budget = (now, 0);
+        }
+        if self.global_parse_budget.1 >= GLOBAL_PARSES_PER_SEC {
+            return false;
+        }
+        self.global_parse_budget.1 += 1;
         true
     }
 
@@ -201,12 +227,18 @@ fn unix_now_secs() -> u32 {
 }
 
 /// Whether an authenticated peer may have this message parsed and verified now.
-/// Rate-limits the event-loop cost an authenticated peer can impose per second.
+/// A peer under its own per-second share is always parsed. A peer past that share
+/// is parsed while the swarm event loop has global headroom, because skipping the
+/// parse also skips the replay record, which leaves a copy of the envelope able to
+/// earn the traffic bit on stranger ingress (#574 reviewer finding 1). Only when
+/// both budgets are spent does this return false, and the caller then withholds
+/// the traffic bit rather than crediting an envelope it never recorded.
 pub(super) fn authenticated_parse_allowed(
     recent: &mut RecentEnvelopeIds,
     peer: libp2p::PeerId,
 ) -> bool {
-    recent.charge_parse(peer, unix_now_secs())
+    let now = unix_now_secs();
+    recent.charge_parse(peer, now) || recent.charge_global_parse(now)
 }
 
 /// True when the signer of a Drift envelope (signature verified) is a saved
@@ -435,6 +467,42 @@ mod contact_envelope_gate_tests {
         assert!(!recent.charge_parse(peer, NOW));
         assert!(recent.charge_parse(other, NOW));
         assert!(recent.charge_parse(peer, NOW + 1));
+    }
+
+    #[test]
+    fn over_budget_peer_parses_under_the_global_budget_so_its_id_is_recorded() {
+        let mut recent = RecentEnvelopeIds::default();
+        let peer = libp2p::PeerId::random();
+        for _ in 0..AUTHENTICATED_PARSES_PER_SEC {
+            assert!(recent.charge_parse(peer, NOW));
+        }
+        // Past its own share the peer still parses while the loop has headroom,
+        // so the envelope reaches the replay record instead of vanishing from it.
+        assert!(!recent.charge_parse(peer, NOW));
+        assert!(recent.charge_global_parse(NOW));
+        assert!(contact_envelope_earns_traffic(
+            id(99),
+            SIGNER,
+            NOW,
+            0,
+            true,
+            true,
+            NOW,
+            &mut recent
+        ));
+        // The recorded envelope therefore cannot earn the bit again on any other
+        // ingress class: the cross-ingress invariant survives the over-budget path.
+        assert!(!recent.first_seen(id(99), SIGNER, NOW, 0, NOW));
+    }
+
+    #[test]
+    fn global_parse_budget_refuses_past_its_cap_and_resets_next_second() {
+        let mut recent = RecentEnvelopeIds::default();
+        for _ in 0..GLOBAL_PARSES_PER_SEC {
+            assert!(recent.charge_global_parse(NOW));
+        }
+        assert!(!recent.charge_global_parse(NOW));
+        assert!(recent.charge_global_parse(NOW + 1));
     }
 
     #[test]
