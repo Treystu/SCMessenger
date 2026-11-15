@@ -42,6 +42,19 @@ SCMessenger-specific checks.
 ## Never rules for this lane
 
 - Never present a gate-resolvable driving decision as an owner decision.
+- Never classify a next action owner-side without gating the classification
+  itself, and owner-side is the reserved list below only -- not a default when
+  a row feels uncertain. Reserved owner-side: (a) reserved owner decisions (the
+  protection switch, spending/payments, submissions/claims, scope-of-ship);
+  (b) destructive actions; (c) canon or gate-text changes; (d) access changes
+  (naming or granting a reviewer); (e) actual risk surfaced by investigation.
+  Everything else that passes the gate, the lane drives. A genuinely blocked
+  row parks only that row; work continues on the next unblocked item. Before
+  any "every remaining row is owner-side" claim is made, re-test it against the
+  register's own owner cells -- this lane falsified that exact claim once, when
+  A23 was found lane-actionable after being reported blocked. Owner direction:
+  PR #653 comment 2026-11-08T10:07:35Z (oversight, owner-directed), items 2 and
+  4.
 - Never land on a base that fails the GREEN BASE definition (LANE PROTOCOL
   clause 8) without recording that state as the blocker.
 - Never let a schedule-only job failure (Full Test Suite, List stale

@@ -28,6 +28,8 @@ use parking_lot::RwLock;
 use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
+
+use super::structural_quarantine::StructuralQuarantine;
 use tracing::{debug, info};
 use web_time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
@@ -455,6 +457,11 @@ pub struct DialPolicyManager {
     /// Offset added to the monotonic clock. Always zero in production;
     /// tests advance it to simulate hours passing without sleeping.
     clock_skew: Arc<RwLock<Duration>>,
+    /// Pairs proven structurally impossible: the address answers as a peer
+    /// that is not the requested peer, so retrying can never satisfy the
+    /// request (#684 part B). Consulted before a candidate is dialed; entries
+    /// expire on their own TTL so this can never become a peer ban.
+    structural_quarantine: Arc<RwLock<StructuralQuarantine>>,
 }
 
 impl DialPolicyManager {
@@ -464,6 +471,7 @@ impl DialPolicyManager {
             peer_backoff: Arc::new(RwLock::new(HashMap::new())),
             concurrent_dials: Arc::new(RwLock::new(HashMap::new())),
             clock_skew: Arc::new(RwLock::new(Duration::ZERO)),
+            structural_quarantine: Arc::new(RwLock::new(StructuralQuarantine::default())),
         }
     }
 
@@ -476,6 +484,36 @@ impl DialPolicyManager {
     pub fn advance_clock(&self, by: Duration) {
         let mut skew = self.clock_skew.write();
         *skew = skew.saturating_add(by);
+    }
+
+    /// Quarantine a `(requested peer, address)` pair a dial has proven
+    /// structurally impossible: the address answered as a different peer, so
+    /// no retry can satisfy the request (#684 part B). Returns true when this
+    /// is a new verdict. The entry expires on the store's TTL, so this stops a
+    /// restart loop without becoming a permanent peer ban.
+    pub fn quarantine_structural_mismatch(&self, requested: &str, addr_key: &str) -> bool {
+        let now = self.now();
+        let newly = self
+            .structural_quarantine
+            .write()
+            .mark_mismatch(requested, addr_key, now);
+        if newly {
+            debug!(
+                requested=%requested,
+                addr_key=%addr_key,
+                "[DIAL-POLICY] Structurally impossible pair quarantined"
+            );
+        }
+        newly
+    }
+
+    /// Whether the pair is currently quarantined as structurally impossible and
+    /// must be skipped instead of dialed.
+    pub fn is_structurally_quarantined(&self, requested: &str, addr_key: &str) -> bool {
+        let now = self.now();
+        self.structural_quarantine
+            .read()
+            .is_quarantined(requested, addr_key, now)
     }
 
     /// Backoff ceiling for one address, derived from that address's own
