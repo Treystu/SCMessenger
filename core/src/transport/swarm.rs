@@ -241,19 +241,26 @@ fn inbound_message_is_validated(
     // Request-response accepts up to 4 MiB, while receive_message rejects an
     // unwrapped envelope over MAX_MESSAGE_SIZE. Keep oversized input out of
     // frame/envelope parsing here so authenticated peers cannot force an extra
-    // large allocation and signature check on the swarm event loop. Their
-    // authenticated standing still admits the request as before; strangers
-    // cannot earn traffic from an oversized message.
+    // large allocation and signature check on the swarm event loop. The request is
+    // still handled downstream, but it cannot earn the traffic bit: nothing was
+    // parsed, so no replay ID was recorded, and an unrecorded envelope could be
+    // replayed on stranger ingress to earn the bit for the replayer (#574 reviewer
+    // finding 1, the same class as the parse-budget skip below).
     if envelope_data.len() > crate::message::codec::MAX_MESSAGE_SIZE {
-        return authenticated;
+        return false;
     }
     if !authenticated && !may_probe_stranger() {
         return false;
     }
-    // Authenticated peers are admitted regardless; parsing only keeps replay IDs
-    // shared, so it is rate-limited per peer and skipped once over budget.
+    // Authenticated peers are admitted regardless of the budgets below, and the
+    // message is handled downstream either way; the parse exists to keep replay IDs
+    // shared. A peer past its own per-second share is therefore still parsed while
+    // the event loop has global headroom. Only when both budgets are spent is the
+    // parse skipped, and then the traffic bit is withheld rather than granted for an
+    // envelope that left no replay record: a copy of it replayed on stranger ingress
+    // would otherwise earn the bit for the replayer (#574 reviewer finding 1).
     if authenticated && !authenticated_parse_allowed(recent_envelopes, peer_id) {
-        return true;
+        return false;
     }
     let payload = match DriftFrame::from_bytes(envelope_data) {
         Ok(frame) => frame.payload,
@@ -13961,6 +13968,75 @@ mod admission_trust_tests {
             || panic!("authenticated ingress must not request a stranger probe"),
             &mut recent,
         ));
+    }
+
+    #[test]
+    fn over_budget_authenticated_ingress_still_records_so_stranger_replay_earns_nothing() {
+        let core = Arc::new(crate::IronCore::new());
+        core.grant_consent();
+        core.initialize_identity()
+            .expect("test identity initialization must succeed");
+        let local_public_key = core
+            .identity
+            .read()
+            .keys()
+            .expect("test identity keys must exist")
+            .signing_key
+            .verifying_key()
+            .to_bytes();
+        let sender = IdentityKeys::generate();
+        let sender_public_key = sender.signing_key.verifying_key().to_bytes();
+        let sender_peer: PeerId = sender
+            .to_libp2p_peer_id()
+            .expect("sender peer ID must derive")
+            .parse()
+            .expect("sender peer ID must parse");
+        core.contact_manager
+            .read()
+            .add(Contact::new(
+                sender_peer.to_string(),
+                hex::encode(sender_public_key),
+            ))
+            .expect("sender contact must be saved");
+        let core_handle = Some(Arc::downgrade(&core));
+        let mut recent = RecentEnvelopeIds::default();
+
+        // AUTHENTICATED_PARSES_PER_SEC (envelope_gate) is 8: spend the peer's whole
+        // per-second share before measuring the over-budget path.
+        for n in 0..8u8 {
+            let mut message_id = [0u8; 16];
+            message_id[0] = 0x40 + n;
+            let envelope = signed_envelope(&sender.signing_key, &local_public_key, message_id);
+            assert!(inbound_message_is_validated(
+                &core_handle,
+                sender_peer,
+                &envelope,
+                || panic!("authenticated ingress must not request a stranger probe"),
+                &mut recent,
+            ));
+        }
+
+        // Past the share. Whether the second boundary rolls mid-test or not, the
+        // invariant under test is the second assertion: this envelope must not be
+        // replayable on stranger ingress, which can only hold if it was recorded.
+        let over_budget = signed_envelope(&sender.signing_key, &local_public_key, [0x7f; 16]);
+        assert!(inbound_message_is_validated(
+            &core_handle,
+            sender_peer,
+            &over_budget,
+            || panic!("authenticated ingress must not request a stranger probe"),
+            &mut recent,
+        ));
+        assert!(
+            !inbound_message_is_validated(
+                &core_handle,
+                PeerId::random(),
+                &over_budget,
+                || true,
+                &mut recent,
+            ),
+            "an over-budget authenticated envelope must not earn the traffic bit again through a stranger"
+        );
     }
 
     #[test]
