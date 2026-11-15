@@ -5,12 +5,13 @@ import json
 import os
 import shutil
 import subprocess
+import sys
 import unittest
 import uuid
 from pathlib import Path
 from unittest.mock import patch
 
-from orchestration_contract import load_manifest, valid_transition
+from orchestration_contract import ContractError, load_manifest, valid_transition
 from orchestration_completion_gate import CompletionGateError, run_completion_gate
 from orchestration_worktree import create, plan
 from orchestrator_guard import evaluate
@@ -18,9 +19,9 @@ from orchestrate_strict import (
     COMPLETION_JUDGE_FILES, advance_review, capture_worker_diff, complete_integration, has_independent_review_evidence,
     initialize_state, is_in_scope, judge_integrity_violations, load_state, record_review_evidence,
     register_review_assignment, recover_interrupted_dispatch,
-    required_review_roles, state_for_task, write_state,
+    required_review_roles, resolve_queue, state_for_task, write_state,
 )
-from jev_canonical_check import CANON_QUESTIONS
+from jev_canonical_check import CANON_QUESTIONS, build_questions
 from parse_orchestration_footer import parse_footer
 
 
@@ -587,6 +588,63 @@ NOTES: [\"fixture verifies durable assignment binding\"]
             ("confidence as a boolean", honest_jev_payload(confidence=False), "confidence is missing"),
         ), "predicate")
 
+    def test_completion_gate_accepts_the_real_bucketed_pack_it_is_handed_in_production(self):
+        # #622: the gate demanded answers keyed exactly by CANON_QUESTIONS as `noul`, but since the
+        # 2026-10-07 bucketed rewrite the helper emits `bucket.qid` ids and asks identity/routing as
+        # `choice`. The pack below is built by the real helper, not a mock, so this test fails on the
+        # gate as it was written and passes once the key/type resolution matches production.
+        pack = build_questions(["identity", "routing", "instruction"])
+        self.assertNotEqual(set(pack), set(CANON_QUESTIONS),
+                            "the real merged pack must be bucket-qualified for this test to mean anything")
+
+        def real_answers(noul_value=0.95, choice_confidence=0.92, overrides=None):
+            answers = {}
+            for qid, question in pack.items():
+                if question["type"] == "noul":
+                    answers[qid] = {"type": "noul", "noul": noul_value}
+                else:
+                    answers[qid] = {"type": "choice", "choice": "yes",
+                                    "probabilities": {"yes": choice_confidence, "no": 0.03, "na": 0.02},
+                                    "confidence": choice_confidence}
+            answers.update(overrides or {})
+            return answers
+
+        def signals(answers):
+            """The arithmetic harness/jev.py applies, over every answer in the pack."""
+            nouls = [a["noul"] for a in answers.values() if a.get("type") == "noul"]
+            confs = [a["confidence"] for a in answers.values() if a.get("type") in ("choice", "score")]
+            return min(nouls), (min(confs) if confs else 0.0)
+
+        def honest(overrides=None):
+            answers = real_answers(overrides=overrides)
+            supported, confidence = signals(answers)
+            return honest_jev_payload(answers=answers, supported=supported, confidence=confidence)
+
+        weak_recovery = {"identity.recipient_parse_safe": {
+            "type": "choice", "choice": "yes",
+            "probabilities": {"yes": 0.80, "no": 0.15, "na": 0.05}, "confidence": 0.40}}
+        weak_callbacks = {"routing.callbacks_validated": {
+            "type": "choice", "choice": "yes",
+            "probabilities": {"yes": 0.80, "no": 0.15, "na": 0.05}, "confidence": 0.40}}
+        bad_type = {"instruction.instruction_matches": {"type": "verdict", "verdict": "pass"}}
+
+        self.assert_gate_verdicts((
+            ("genuine pass over the real merged pack", honest(), None),
+            # A weak answer outside the canonical three must still be aggregated, not ignored: the
+            # old gate only read the canonical keys and would have passed this.
+            ("weak non-canonical bucket answer lowers the floor",
+             honest(weak_recovery), "below the canonical minimum"),
+            # ...and a helper reporting that same weakness as strong is caught by recomputation.
+            ("weak non-canonical answer reported as strong",
+             honest_jev_payload(answers=real_answers(overrides=weak_callbacks),
+                                supported=0.95, confidence=0.92),
+             "do not match its own answers"),
+            ("bucket-qualified answer with an unusable type",
+             honest_jev_payload(answers=real_answers(overrides=bad_type),
+                                supported=0.95, confidence=0.92),
+             "is not a noul/choice/score answer"),
+        ), "bucketed-pack")
+
     def test_completion_gate_requires_action_confidence_when_the_pack_has_a_choice_or_score_question(self):
         # Confidence 0.0 means "no Choice/Score question was asked". Once one is asked, its confidence
         # is a real signal and must clear the floor; 0.0 is then a failing value like any other.
@@ -831,6 +889,36 @@ print(worker['path'])
         item = plan("V2-ISOLATION")
         self.assertIn("tmp/orchestration/worktrees/V2-ISOLATION", item["path"].replace("\\", "/"))
         self.assertTrue(item["base_sha"])
+
+    def test_kernel_reads_the_declared_v051_queue(self):
+        # #579: the kernel defaulted to the farm-wave jsonl, which holds none of
+        # the V051 cars, and the manifest named no queue. The queue is now
+        # generated from the merge-train document and declared in the manifest, so
+        # a dry run has to list every car rather than report nothing ready.
+        root = Path(__file__).resolve().parent.parent
+        manifest = load_manifest()
+        self.assertEqual(manifest["queue"]["path"], "orchestration/v051_cars.jsonl")
+        self.assertEqual(resolve_queue(None, manifest), "orchestration/v051_cars.jsonl")
+        self.assertEqual(resolve_queue("explicit.jsonl", manifest), "explicit.jsonl")
+        with self.assertRaises(ContractError):
+            resolve_queue(None, {})
+
+        sync = subprocess.run(
+            [sys.executable, "scripts/v051_queue_sync.py", "--check"],
+            cwd=root, capture_output=True, text=True)
+        self.assertEqual(sync.returncode, 0, sync.stdout + sync.stderr)
+
+        dry = subprocess.run(
+            [sys.executable, "scripts/orchestrate_strict.py", "--dry-run"],
+            cwd=root, capture_output=True, text=True, timeout=120)
+        self.assertEqual(dry.returncode, 0, dry.stdout[-2000:] + dry.stderr[-2000:])
+        queue_path = root / "orchestration" / "v051_cars.jsonl"
+        cars = [json.loads(line) for line in
+                queue_path.read_text(encoding="utf-8").splitlines() if line.strip()]
+        self.assertTrue(cars, "the declared queue is not empty")
+        for car in cars:
+            self.assertIn(f"[QUEUE] {car['id']} [{car['status']}]", dry.stdout,
+                          f"{car['id']} is not listed by the dry run")
 
 
 if __name__ == "__main__":

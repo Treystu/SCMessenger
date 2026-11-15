@@ -172,6 +172,30 @@ the adapter must select the declared fallback rather than invent an authority.
 7. Integrate only worker-produced, reviewed output; then mark COMPLETE and
    record provenance. Never claim a worker's self-report is sufficient.
 
+## Queue resolution
+
+The kernel reads one queue. `--queue` overrides it; otherwise `queue.path` from
+`orchestration/manifest.yaml` is used, and a manifest that declares no queue is a
+hard error rather than a fallback to whatever jsonl happens to sit in the repo
+root (`#579`: the old default was `scm_v1_farm_queue.jsonl`, the farm-wave queue,
+which held none of the V051 cars, so `--dry-run` reported no ready task while the
+train had thirty-six).
+
+The declared queue for this train is `orchestration/v051_cars.jsonl`, generated
+from the car tables in
+`HANDOFF/freebuff/queue/V051_UNIFIED_MERGE_TRAIN_2026-10-14.md` by
+`scripts/v051_queue_sync.py`. That document stays the execution authority: edit
+the car table, rerun the generator, commit both. `--check` exits non-zero when the
+jsonl and the tables disagree, so the queue cannot drift silently. A dry run lists
+every car with its status, review gate and dependencies, which is what makes "no
+ready task" a fact rather than an artefact of reading the wrong file.
+
+Statuses come from the document's own words: a DONE row is `done`, an
+operator-gated row is `blocked` (the kernel must not dispatch an operator settings
+action), a superseded row is `retired`, and everything else is `open`, including
+UNVERIFIED and DECIDED rows because both still need work. Only dependencies the
+document states in words are encoded; section order is never treated as one.
+
 ## Live-provider validation status
 
 The deterministic suite verifies ledger shape, isolation separation, patch
