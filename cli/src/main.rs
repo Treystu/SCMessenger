@@ -2926,7 +2926,7 @@ async fn cmd_start(
     println!(
         "{} Control API: {}",
         "[OK]".green(),
-        format!("http://127.0.0.1:{}", api::API_PORT).dimmed()
+        format!("http://127.0.0.1:{}", api::api_port()).dimmed()
     );
 
     let core_rx = core.clone();
@@ -4318,7 +4318,7 @@ async fn cmd_relay(
     println!(
         "{} Control API: {}",
         "[OK]".green(),
-        format!("http://127.0.0.1:{}", api::API_PORT).dimmed()
+        format!("http://127.0.0.1:{}", api::api_port()).dimmed()
     );
 
     // The BLE central task is the sole CoreBluetooth manager owner on macOS;
