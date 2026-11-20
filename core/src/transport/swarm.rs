@@ -241,13 +241,11 @@ fn inbound_message_is_validated(
     // Request-response accepts up to 4 MiB, while receive_message rejects an
     // unwrapped envelope over MAX_MESSAGE_SIZE. Keep oversized input out of
     // frame/envelope parsing here so authenticated peers cannot force an extra
-    // large allocation and signature check on the swarm event loop. The request is
-    // still handled downstream, but it cannot earn the traffic bit: nothing was
-    // parsed, so no replay ID was recorded, and an unrecorded envelope could be
-    // replayed on stranger ingress to earn the bit for the replayer (#574 reviewer
-    // finding 1, the same class as the parse-budget skip below).
+    // large allocation and signature check on the swarm event loop. Their
+    // authenticated standing still admits the request as before; strangers
+    // cannot earn traffic from an oversized message.
     if envelope_data.len() > crate::message::codec::MAX_MESSAGE_SIZE {
-        return false;
+        return authenticated;
     }
     if !authenticated && !may_probe_stranger() {
         return false;
