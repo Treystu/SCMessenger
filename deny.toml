@@ -29,6 +29,16 @@ ignore = [
     # Transitive via askama 0.14 -> uniffi - unmaintained (repo archived
     # 2025-03-02), no safe upgrade available per the advisory itself.
     "RUSTSEC-2026-0374",
+    # RUSTSEC-2026-0543 (2026-11-20): chrono is unmaintained, all versions
+    # affected, and the advisory itself states "No safe upgrade is available".
+    # Direct dependency of scmessenger-cli (Cargo.toml: build-dependencies and
+    # dependencies) and used for wall-clock timestamps in cli/src (api.rs,
+    # api_axum.rs, ble_daemon.rs, config.rs, main.rs, bin/conn-fanout.rs) and
+    # cli/build.rs. This entry suppresses an unmaintained-dependency signal,
+    # not a vulnerability: it is disclosed here and the migration to a
+    # maintained clock crate (time or jiff) is the tracked follow-up. Remove
+    # this line when that migration lands.
+    "RUSTSEC-2026-0543",
 ]
 
 [licenses]
