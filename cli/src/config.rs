@@ -70,6 +70,14 @@ pub struct Config {
     /// peers auto-learn our nickname + route hints (parity with Android/iOS).
     #[serde(default = "default_true")]
     pub identity_envelope: bool,
+
+    /// Control-API port for this instance (#650). Unset keeps the historical
+    /// 9876 default. Two nodes on one host each name their own port here (or
+    /// via `SCM_API_PORT`) so the second node's control API does not collide
+    /// with the first, which used to leave its CLI commands served by the
+    /// wrong node.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub api_port: Option<u16>,
 }
 
 fn default_true() -> bool {
@@ -110,6 +118,7 @@ impl Default for Config {
             legacy_bootstrap_nodes: Vec::new(),
             legacy_bootstrap_nodes_rejected: Vec::new(),
             identity_envelope: true,
+            api_port: None,
         }
     }
 }
@@ -182,19 +191,26 @@ impl Config {
     pub fn load() -> Result<Self> {
         let config_file = Self::config_file()?;
 
-        if config_file.exists() {
+        let config = if config_file.exists() {
             let contents =
                 std::fs::read_to_string(&config_file).context("Failed to read config file")?;
-            let config: Config =
-                serde_json::from_str(&contents).context("Failed to parse config file")?;
-
-            Ok(config)
+            serde_json::from_str::<Config>(&contents).context("Failed to parse config file")?
         } else {
             // Create default config
             let config = Config::default();
             config.save()?;
-            Ok(config)
-        }
+            config
+        };
+
+        // Resolve the per-instance control-API port once, here, so the server
+        // and every client command in this process agree on it (#650).
+        let env_port = std::env::var("SCM_API_PORT").ok();
+        crate::api::set_api_port(crate::api::resolve_api_port(
+            config.api_port,
+            env_port.as_deref(),
+        ));
+
+        Ok(config)
     }
 
     /// Save config to file
