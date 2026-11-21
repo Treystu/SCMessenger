@@ -73,7 +73,29 @@ Not done (blocked, with the action named): independent diff review before any me
 - Anonymous REST refusal captured verbatim once (rate-limit 403); ledger `ls-remote` refusal captured. Nothing was retried into the refusal.
 - No file under `core/`, `android/`, `iOS/` touched; no `tmp/` scratch used outside repo-local `tmp/` rule (none used); no emoji added.
 
-Next (in order, for the credentialed continuation): (1) ledger PROMPT.md + gates read, then DISPATCH entries past last ack; (2) `gh pr comment` filing of the pass-2 verification on #599/#724; (3) oversight rule-8 x2 on the cured head; only then a merge disposition. Session end is not a stop — the work continues there.
+Next (in order, for the credentialed continuation): (1) ledger PROMPT.md + gates read, then DISPATCH entries past last ack; (2) `gh pr comment` filing of the pass-2/3 verifications on #599/#724/#538/#609; (3) oversight rule-8 x2 on the cured head; only then a merge disposition. Session end is not a stop — the work continues there.
+
+---
+
+## PASS 3 — 2026-11-21 ~08:45Z: #609 newly dispositioned, #599 line re-verified
+
+### #609 (CI: five core jobs to Ubicloud standard-2) — REVIEWED, PARKED ALONE RED
+
+- Head `b3ac6d31` (branch `ci/ubicloud-core-runners-20261020`). Diff vs merge-base: 2 files, +38/-15 — `linux-build-deps` gains a `mode` input (`auto` default preserves runner detection, `install` uses apt, `verify` checks; unknown mode fails closed exit 2) because Ubicloud reports managed runners as self-hosted; five `ci.yml` jobs get `runs-on: ${{ vars.USE_UBICLOUD == 'false' && 'ubuntu-latest' || 'ubicloud-standard-2' }}` and the clippy step passes `mode: install`.
+- Review note (non-author, this lane): shape is sound and fail-closed on bad mode; one question for the author/oversight — with `USE_UBICLOUD` unset, `'' == 'false'` is false so the expression defaults to Ubicloud, i.e. the flag is opt-OUT not opt-in. Confirm that default is intended before landing.
+- Rail at exact head (commit statuses, read 2026-11-21): state `error`, total 1 — `CircleCI Pipeline | No configuration was found in your project` (pipeline 414, 2026-11-16T00:01:54Z). The branch (2026-10-20) predates the current CircleCI setup; nothing executable has run on it.
+- Disposition: PARKED ALONE. Named actions in order: rebase onto current main (restores CircleCI config), re-run full rail, answer the opt-out-default question, then credentialed merge execution. No merge claimed, no rule-8 needed (CI/workflow paths only, no gated code).
+- Sibling #643 (ARM OCI runner reservation, head `22887eb2`): same failure class — `CircleCI Pipeline | No configuration was found` (pipeline 194, 2026-11-14). Parked with it: rebase after #609 lands (overlapping runner story — #609 first), then re-run.
+- Ancient pair #220/#216 (2026-08-22 CTO branches): each ±35k/193k lines vs current main, zero CI at head (`92b8ec12`: pending total 0). Untouched beyond this note; named action for their owner/oversight: rebase-or-close decision (close-as-stale candidate, NOT executed here).
+
+### #599 cured line carried forward (re-read 2026-11-21)
+
+- Head `79bbfc00` still current on `fix/521-review-573-574-575` / `origin/pr/599`; rail re-read: state `success`, total 13. LF proof re-verified (`-w --stat` empty, 0 lines). Returns re-quoted: oversized `if envelope_data.len() > ...MAX_MESSAGE_SIZE { return authenticated; }`; parse-budget `if authenticated && !authenticated_parse_allowed(...) { return false; }`. Review PASS (pass 2) stands; merge still solely on oversight rule-8 PASS x2 — outstanding.
+
+### Census update (read 2026-11-21 ~08:38Z)
+
+- Open PRs: 15 (unchanged — same numbers/heads as pass 2, including `79bbfc00` and `bd2e6ec5`). Open issues: 92 (p1: 88/100, p2: 4/7). Total: 107. Prior dispositions carried (#724 RED parked, #538 parked on #545); new: #609/#643 parked as above.
+- Stand-up refresh: disk TIGHT (9.53 GB free, same guard); Jev key rows all absent/unset — NOT CHECKED stands; `adb` absent (unchanged); lane filing head now `2fe31cfc` pre-pass-3. Ledger/DISPATCH/gates still unreachable (private, no token); `gh pr comment` still refused (no auth). HELD SET untouched.
 
 ---
 
@@ -105,5 +127,5 @@ Reviewer is this lane (fresh session); authors of `77189822`/`3cf31315` are the 
 - #724 (test: ledger peer_id migration replay, +73 `core/src/store/ledger_entry.rs`, store path, non-gated): rail RED — Test (ubuntu-latest) `failure` at `bd2e6ec5`, 12/13 success (`target_url: https://app.circleci.com/workflow/742cfa37-.../job/4595c135-...`). PARKED ALONE with named action: credentialed seat reads the Test log at that URL (triage note: the new test sleeps 1100ms on mtime granularity — flake candidate, not a conclusion), fixes, re-runs; no merge/close until green. Diff read: single `second_cold_load_does_not_replay_the_peer_id_migration` test, mtime + content assertions.
 - #538 (x25519-dalek 2.0.0→3.0.0): PARKED ALONE. Reasons read this session: diff touches rule-8-gated `core/src/crypto/encrypt.rs`, `core/src/crypto/pq/hybrid.rs`, `core/src/privacy/onion.rs` (7 files); ZERO commit statuses at `990d7ad2` (CI never ran); open prerequisite #545 (rand 0.8→0.10) still open. Named actions: land #545 first, rebase, run full CI, then adversarial rule-8 review — in that order.
 - #599: verified + independently reviewed (above), rail 13/13 green; merge parked SOLELY on oversight rule-8 PASS x2 at `79bbfc00`.
-- `gh pr comment` attempt on #724 at 2026-11-21T08:37:48Z -> refused (`gh auth login` required, no token in session). Per protocol no `gh pr edit` was used; comment text for the credentialed seat: "Lane triage: Test (ubuntu-latest) failure at bd2e6ec5; parking with named action (read Test log, fix, re-run; flake candidate: 1100ms mtime sleep)." Same filing owed on #599 (13/13 + review PASS, awaiting oversight x2) and #538 (parked per above).
+- `gh pr comment` attempts (2026-11-21T08:37:48Z #724; this pass #609 — same refusal, `gh auth login` required, no token in session) -> refused, never retried into the refusal, never `gh pr edit` (`gh auth login` required, no token in session). Per protocol no `gh pr edit` was used; comment text for the credentialed seat: "Lane triage: Test (ubuntu-latest) failure at bd2e6ec5; parking with named action (read Test log, fix, re-run; flake candidate: 1100ms mtime sleep)." Same filing owed on #599 (13/13 + review PASS, awaiting oversight x2) and #538 (parked per above).
 
