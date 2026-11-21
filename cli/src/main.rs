@@ -5516,7 +5516,14 @@ async fn cmd_test() -> Result<()> {
 
     println!("{} Message decryption", "[OK]".green());
 
+    // #651: this third identity exists only to prove a non-recipient cannot
+    // decrypt, but it is still an identity initialization, and that is the one
+    // operation IronCore gates on consent. Without the grant the self-test
+    // aborted right here with `Error: Consent required` - after the decryption
+    // stage it had just proved, and with no indication of which stage failed.
+    // Every other path in this file grants consent before initializing.
     let eve = IronCore::new();
+    eve.grant_consent();
     eve.initialize_identity()?;
 
     let envelope = alice.prepare_message(
