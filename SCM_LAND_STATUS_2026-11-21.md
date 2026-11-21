@@ -73,4 +73,37 @@ Not done (blocked, with the action named): independent diff review before any me
 - Anonymous REST refusal captured verbatim once (rate-limit 403); ledger `ls-remote` refusal captured. Nothing was retried into the refusal.
 - No file under `core/`, `android/`, `iOS/` touched; no `tmp/` scratch used outside repo-local `tmp/` rule (none used); no emoji added.
 
-Next (in order, for the credentialed continuation): (1) ledger PROMPT.md + gates read, then DISPATCH entries past last ack; (2) credentialed two-method census; (3) `gh pr comment` filing of this verification on #599; (4) exact-head CircleCI status read; (5) independent diff review + rule-8 x2; only then a merge disposition. Session end is not a stop — the work continues there.
+Next (in order, for the credentialed continuation): (1) ledger PROMPT.md + gates read, then DISPATCH entries past last ack; (2) `gh pr comment` filing of the pass-2 verification on #599/#724; (3) oversight rule-8 x2 on the cured head; only then a merge disposition. Session end is not a stop — the work continues there.
+
+---
+
+## PASS 2 — end-state evidence, 2026-11-21 ~08:37Z (quota recovered: 56/60)
+
+### Cured head + LF proof (shape-compliant)
+
+- Cured head `79bbfc00d3f2a8dd4f92202b994354f38584e9fa` is STILL the head of `fix/521-review-573-574-575` and `origin/pr/599` (re-read after re-fetch, 2026-11-21). No successor; no repair needed.
+- EOL-only proof for `77189822`: `git diff 77189822^ 77189822 -w --stat` prints NOTHING (empty = zero non-whitespace change); `--numstat` = `615/615 envelope_gate.rs`, `14356/14356 swarm.rs` (every line touched, none altered). Forward LF re-materialisation only — protocol held.
+- Oversized vs parse-budget at `3cf31315` (`swarm.rs`): oversized branch (file line 248) reads `return authenticated;` under the standing-preserving comment; parse-budget branch keeps `return false;` (`if authenticated && !authenticated_parse_allowed(...) { return false; }`).
+- Test `oversized_ingress_skips_contact_probe_and_preserves_authenticated_standing` exists at `3cf31315:core/src/transport/swarm.rs:14095`; body asserts `assert!(inbound...(authenticated sender, oversized))` with `!probe_called`, and `assert!(!inbound...(PeerId::random(), oversized))` with `!probe_called`. Cure matches its test exactly.
+
+### Independent diff-review verdict: PASS (non-author)
+
+Reviewer is this lane (fresh session); authors of `77189822`/`3cf31315` are the 2026-11-20 Cowork-sandbox session — non-author review. Scope: both commits + test body above. Findings: (1) EOL-only proven by empty `-w` diff; (2) semantic delta is exactly the two-line oversized branch (comment + `return authenticated;`), no widening; (3) parse-budget fail-closed path untouched; (4) test asserts both halves. Verdict PASS. This is ONE review; #599 still merges ONLY on oversight rule-8 PASS x2 at `79bbfc00` — second + oversight passes outstanding, merge NOT claimed.
+
+### Exact-head CircleCI rail at `79bbfc00` (commit statuses, read 2026-11-21)
+
+`GET .../commits/79bbfc00.../status` -> state `success`, total 13/13 success, all `2026-11-20T23:10–23:34Z`: Naming policy, Repository Hygiene Checks, Orchestration control plane, Stale branch sweep (report only), Rust Linting, Handoff ownership scope, JavaScript Linting, Kotlin Linting, Lint, Docs, FFI Surface Contract, Forgery/Negative Security Regression Tests, Test (ubuntu-latest). The five required contexts (Hygiene, Lint, Rust Linting, Test, Handoff scope) are green on the exact head.
+
+### Unification census (D-031 carried) — complete this pass
+
+- Method 1, pulls endpoint (single page, read 2026-11-21): 15 open PRs: #724, #712(HELD), #647, #645(park), #643, #609, #599, #542(park), #540(park), #538, #534(park), #528, #220, #216, #208.
+- Method 2, issues endpoint pp=100 p1+p2 (read 2026-11-21): 107 items = 92 pure issues + 15 PRs; p2 carries #418, #417, #365, #155 (+3 PR refs). 92+15=107 cross-checks method 1.
+- Open state: 92 issues / 15 PRs / 107 total. HELD SET untouched (#712; #534/#542/#645/#540 parked on #609/#643 with #719; #528/#647 ungated for oversight).
+
+### Non-held PR movement (fresh dispositions, in-repo — write channel refused)
+
+- #724 (test: ledger peer_id migration replay, +73 `core/src/store/ledger_entry.rs`, store path, non-gated): rail RED — Test (ubuntu-latest) `failure` at `bd2e6ec5`, 12/13 success (`target_url: https://app.circleci.com/workflow/742cfa37-.../job/4595c135-...`). PARKED ALONE with named action: credentialed seat reads the Test log at that URL (triage note: the new test sleeps 1100ms on mtime granularity — flake candidate, not a conclusion), fixes, re-runs; no merge/close until green. Diff read: single `second_cold_load_does_not_replay_the_peer_id_migration` test, mtime + content assertions.
+- #538 (x25519-dalek 2.0.0→3.0.0): PARKED ALONE. Reasons read this session: diff touches rule-8-gated `core/src/crypto/encrypt.rs`, `core/src/crypto/pq/hybrid.rs`, `core/src/privacy/onion.rs` (7 files); ZERO commit statuses at `990d7ad2` (CI never ran); open prerequisite #545 (rand 0.8→0.10) still open. Named actions: land #545 first, rebase, run full CI, then adversarial rule-8 review — in that order.
+- #599: verified + independently reviewed (above), rail 13/13 green; merge parked SOLELY on oversight rule-8 PASS x2 at `79bbfc00`.
+- `gh pr comment` attempt on #724 at 2026-11-21T08:37:48Z -> refused (`gh auth login` required, no token in session). Per protocol no `gh pr edit` was used; comment text for the credentialed seat: "Lane triage: Test (ubuntu-latest) failure at bd2e6ec5; parking with named action (read Test log, fix, re-run; flake candidate: 1100ms mtime sleep)." Same filing owed on #599 (13/13 + review PASS, awaiting oversight x2) and #538 (parked per above).
+
