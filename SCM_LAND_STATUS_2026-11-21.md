@@ -99,6 +99,25 @@ Next (in order, for the credentialed continuation): (1) ledger PROMPT.md + gates
 
 ---
 
+## PASS 4 — 2026-11-21 ~08:45Z: #208 newly dispositioned, #599 line + census re-verified
+
+### #208 (docs(apple) parity rollout + iOS/CLI code) — REVIEWED, PARKED ALONE
+
+- Head `11f3e5e9` (branch `gpt/v050-parity-burndown`). Base: merge-base `63c99bcd` dated 2026-08-21 — THREE MONTHS stale vs current main. Diff: 16 files, +2008/-164 — a bundle of (a) HANDOFF coordination journals (`CAO_TO_CTO.md` 966 lines, `CTO_TO_CAO.md`, gate/spec docs), (b) real iOS code (`MeshRepository.swift` 282 changed incl. contact-tombstone fix `d0169e46`, BLE central/peripheral managers, `SmartTransportRouter`, mDNS discovery, Info.plist, pbxproj), (c) CLI changes (`api.rs`, `ble_daemon.rs`, `main.rs`), transport racing + tombstones.
+- Rail at exact head (commit statuses, read 2026-11-21): `pending`, total 0 — CI has NEVER run on this head. iOS code is authoritative only on the Mac lane (xcodebuild); this lane cannot verify it, and nothing builds locally by law.
+- Disposition: PARKED ALONE. Docs-journal half is mergeable-by-inspection once rebased; code half (iOS BLE/router, CLI, tombstones) needs rebase + full CI + platform review. Named actions in order: author/owner rebases onto current main (or splits docs vs code), runs full rail (incl. Mac-lane xcodebuild for the Swift), then review/merge decision. No merge claimed here; no rule-8 triggered by this reviewer (no `core/src/{crypto,transport,routing,privacy}` in diff — iOS/CLI/HANDOFF only).
+
+### #599 cured line carried forward (re-read 2026-11-21 ~08:40Z)
+
+- Head `79bbfc00` still current on cure branch / `origin/pr/599`; rail re-read: state `success`, total 13. LF proof, both return lines, and pass-2 review PASS all stand as recorded; merge still solely on oversight rule-8 PASS x2 — outstanding.
+
+### Census update (read 2026-11-21 ~08:40Z)
+
+- Open PRs: 15 (unchanged). Open issues: 92 (pass-2 p1+p2 reads stand; no new issue-page read this pass — counts carried, not re-fetched). Total: 107.
+- Dispositions to date: #599 verified+reviewed (awaiting oversight x2); #724 RED parked; #538 parked on #545; #609 reviewed/parked RED (+#643 with it); #208 parked (stale base) — five non-held PRs with fresh in-repo dispositions, zero merges claimed, HELD SET untouched.
+
+---
+
 ## PASS 2 — end-state evidence, 2026-11-21 ~08:37Z (quota recovered: 56/60)
 
 ### Cured head + LF proof (shape-compliant)
