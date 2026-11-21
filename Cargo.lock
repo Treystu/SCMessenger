@@ -4700,7 +4700,7 @@ dependencies = [
  "anyhow",
  "argon2",
  "async-trait",
- "base64 0.22.1",
+ "base64 0.23.1",
  "bincode",
  "blake3",
  "bs58",
