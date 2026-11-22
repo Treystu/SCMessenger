@@ -127,7 +127,7 @@ $ df -h /workspace    (not read this turn -- not needed for a doc-only filing)
 
 | item | state here | reason, with the read |
 | --- | --- | --- |
-| #704 Pass E re-run | **BLOCKED** | The re-run is `python scripts/jev_repo_insights.py --mode canonical_completion`, which needs the keyed Jev harness. Key resolution reads: `~/.typesafe_key` -> No such file or directory; `~/.config/typesafe*` -> No such file or directory; no token-shaped env var; `vendor/sovereign-harness` -> No such file or directory in this tree. Canonical Jev from this workspace reads **NOT CHECKED**, exactly as the mission pre-states. The probe was run rather than assumed, and its output is filed verbatim: `python3 scripts/jev_repo_insights.py --mode canonical_completion --out tmp/passE_probe.md` -> `[FAIL] Harness checkout missing: /workspace/chats/9caaf975875224d5d0c56970/vendor/sovereign-harness`, no report written. A re-run from this workspace is therefore impossible in both halves -- no harness checkout and no key -- so #704 stays open with its premise intact and unmeasured. |
+| #704 Pass E re-run | **BLOCKED** | The re-run is `python scripts/jev_repo_insights.py --mode canonical_completion`, which needs the keyed Jev harness. Key resolution reads: `~/.typesafe_key` -> No such file or directory; `~/.config/typesafe*` -> No such file or directory; no token-shaped env var; `vendor/sovereign-harness` -> No such file or directory in this tree. Canonical Jev from this workspace reads **NOT CHECKED**, exactly as the mission pre-states. The blocker is now narrowed to the key alone, and the probe produced three findings larger than the blocker -- see 2.2. |
 | #693 cover traffic parameterization | **NOT STARTED -- two independent blockers** | `core/src/privacy/cover.rs` is rule-8 gated (`core/src/privacy/`), so it needs a recorded non-author adversarial APPROVE this workspace cannot produce; and there is no `cargo` here, so no change could be compiled, let alone measured against the issue's 23.5x-bytes claim. |
 | #692 reputation rebalance | **NOT STARTED -- one blocker** | `core/src/abuse/reputation.rs` is not rule-8 gated, but it is Rust and this workspace has no Rust toolchain; an uncompiled change is not a deliverable under the lane's rules. |
 | #691 TTL/route gap + phase timing | **NOT STARTED -- two blockers** | `core/src/routing/negative_cache.rs`, `adaptive_ttl.rs`, `timeout_budget.rs` are all in `core/src/routing/` -- rule-8 gated -- and uncompilable here for the same missing-toolchain reason. |
@@ -156,6 +156,67 @@ So none of the four is premise-refuted: they are open, correctly filed, and
 blocked here purely by environment. That distinction is the point of this
 section -- a later session with a Rust toolchain and a rule-8 reviewer inherits
 four live defects, not four maybe-defects.
+
+### 2.2 #704: the harness half was a bootstrap gap, and the instrument has two silent-failure defects
+
+First probe, filed verbatim, was a refusal rather than a rating:
+
+```
+$ python3 scripts/jev_repo_insights.py --mode canonical_completion --out tmp/passE_probe.md
+[FAIL] Harness checkout missing: /workspace/chats/.../vendor/sovereign-harness
+```
+
+That path is `.gitignore:397-398` ("Local sovereign-harness consumer copy"), and the script's own usage line names the remedy. Running it worked:
+
+```
+$ python3 scripts/update_local_harness.py
+[OK] Harness admission operation complete
+$ git -C vendor/sovereign-harness rev-parse HEAD
+ad4a30052955e1f574c90f426edfc7a274e16ebf   (matches scripts/harness_admission.json: tag v0.4.1, PRODUCTION)
+```
+
+So on a fresh cloud clone the **harness absence is a one-command bootstrap
+step, not a missing dependency** -- record it as friction, not as a blocker.
+The residual blocker for a real Pass E re-run is exactly one thing: the key.
+
+```
+$ python3 scripts/jev_repo_insights.py --mode canonical_completion --out tmp/passE_probe2.md
+[INFO] harness=.../vendor/sovereign-harness sha=ad4a3005... status=PRODUCTION pinned=True keyed=False
+[OK] pack=canonical_completion batches=1 tokens=0 cost=0.0
+  Batch 0 [FALLBACK] verdict=fail supported=0.0 conf=0.0
+  - reason: Empty candidate state returned.
+```
+
+An unkeyed run is `[FALLBACK]`, and the script's own docstring is explicit that
+unkeyed "is_fallback and must not be treated as live canonical judgment". The
+`supported=0.0` above is therefore **not** a re-measurement of #704's 0.11/0.44/
+0.61 and must never be read as one. #704 stays open, unmeasured, and cannot be
+closed from here.
+
+Two defects found while doing it, both of which would corrupt a Pass E run from
+this workspace **even with a key** -- these are the deliverable of this item:
+
+1. **The instrument audits a stale head in a fresh clone.** The first report's
+   header read `Main tip (origin): 19612b76` while the remote head was
+   `16f7171a` -- two merges behind (see 1.1). `git fetch origin main` does not
+   fix it: with no fetch refspec in this clone (`.gitconfig` `remote.origin.fetch`
+   is empty) the fetch writes only `FETCH_HEAD`, and `git rev-parse origin/main`
+   still returned `19612b76` afterwards. It was repaired for evidence with
+   `git update-ref refs/remotes/origin/main $(git rev-parse FETCH_HEAD)`, after
+   which the header read `16f7171a`. A Pass E run in a cloud clone must assert
+   `origin/main == git ls-remote origin refs/heads/main` before it is trusted.
+2. **A failed read becomes a zero.** With `gh` unauthenticated the harvest
+   printed `Open PR count (approx from gh json keys): 0` -- no warning, no
+   failure marker. The true count is 19. That zero is fed to the pack that
+   scores `instruction_matches`, so the failure mode is precisely the one
+   AGENTS.md rule 15 exists to forbid: a tool that cannot see, reporting a
+   number. The fix belongs in the harvest (emit `unavailable` and fail the
+   section, never 0), and it should precede any re-scored Pass E.
+
+No patch to `scripts/jev_repo_insights.py` is filed here: it is a gate
+instrument, this workspace cannot run its test suite against a keyed live pass,
+and an unverified change to the thing that scores the gate is worse than the
+documented defect. Filed for a session with the key and the rail.
 
 ## 3. Actions this workspace CANNOT perform -- for oversight to mirror
 
@@ -187,11 +248,15 @@ DONE    stand-up filed on standup/scm-cure-2026-11-21 (git-write test); census
         taken: main 16f7171a (ls-remote), 91 open issues, 19 open PRs, lists in
         full; single-method status on issue/PR counts declared as such.
 WIP     none.
-NEXT    #704 re-run needs a keyed Jev harness (NOT CHECKED here); #693/#692/#691
-        need a Rust toolchain plus, for #693 and #691, a non-author rule-8
-        review. All four are environment-blocked, not premises-refuted.
+NEXT    #704 re-run needs only the key now (harness bootstrap is a command);
+        fix the harvest's silent zero and the stale-tip read first, or the
+        re-score is measured on wrong inputs. #693/#692/#691 need a Rust
+        toolchain plus, for #693 and #691, a non-author rule-8 review. All four
+        remain environment-blocked, not premises-refuted.
 BLOCKERS  gh unauthenticated; anonymous core quota 0 until 10:00:56Z; canonical
-        Jev NOT CHECKED; vendor/sovereign-harness absent; no cargo/rustc.
+        Jev NOT CHECKED (harness admitted at ad4a3005, key absent); no cargo/rustc.
+        Instrument defects for #704: stale origin/main header, and gh failure
+        reported as "Open PR count 0" (see 2.2).
 DIRECTIVES none read this turn -- comment reads are impossible, so this session
         cannot rule out a newer Treystu directive; newest-wins rule is
         unserviceable from here and is declared, not assumed.
