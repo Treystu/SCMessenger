@@ -1270,6 +1270,15 @@ pub struct CancelQueuedRequest {
     pub message_id: String,
 }
 
+/// Response for `POST /api/queue/cancel` (#548). A typed struct rather than
+/// `serde_json::json!`, whose expansion uses a method this crate disallows.
+#[derive(Debug, Serialize)]
+pub struct CancelQueuedResponse {
+    pub success: bool,
+    pub message_id: String,
+    pub status: String,
+}
+
 /// Cancel a queued store-and-forward entry by its wire message id (#548).
 ///
 /// 0.4.0 had no way to remove an outbox entry over the Control API, so a
@@ -1280,7 +1289,7 @@ pub struct CancelQueuedRequest {
 async fn handle_cancel_queued_message(
     State(ctx): State<Arc<ApiContext>>,
     AxumJson(request): AxumJson<CancelQueuedRequest>,
-) -> Result<AxumJson<Value>, (StatusCode, String)> {
+) -> Result<AxumJson<CancelQueuedResponse>, (StatusCode, String)> {
     let message_id = request.message_id.trim();
     if message_id.is_empty() {
         return Err((
@@ -1296,11 +1305,11 @@ async fn handle_cancel_queued_message(
 
     if removed {
         tracing::info!("Cancelled queued message {}", message_id);
-        Ok(AxumJson(serde_json::json!({
-            "success": true,
-            "message_id": message_id,
-            "status": "cancelled",
-        })))
+        Ok(AxumJson(CancelQueuedResponse {
+            success: true,
+            message_id: message_id.to_string(),
+            status: "cancelled".to_string(),
+        }))
     } else {
         Err((
             StatusCode::NOT_FOUND,
