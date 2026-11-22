@@ -2586,12 +2586,9 @@ async fn cmd_start(
     // #548: clear any queued entry addressed to this node itself. The API now
     // refuses new ones; an entry already on disk from before that guard would
     // otherwise keep the drain dialing our own peer id and marking us dead.
-    let dropped_self_addressed = drop_self_addressed_entries(
-        &outbox,
-        &local_peer_id,
-        core.public_key_hex().as_deref(),
-    )
-    .await;
+    let dropped_self_addressed =
+        drop_self_addressed_entries(&outbox, &local_peer_id, core.public_key_hex().as_deref())
+            .await;
     if dropped_self_addressed > 0 {
         println!(
             "{} Dropped {} self-addressed queued message(s)",
@@ -4390,12 +4387,9 @@ async fn cmd_relay(
     // #548: same self-addressed purge as `cmd_start`. The relay has no
     // preceding send path of its own, but it shares the outbox directory a
     // previous run may have poisoned.
-    let dropped_self_addressed = drop_self_addressed_entries(
-        &outbox,
-        &local_peer_id,
-        core.public_key_hex().as_deref(),
-    )
-    .await;
+    let dropped_self_addressed =
+        drop_self_addressed_entries(&outbox, &local_peer_id, core.public_key_hex().as_deref())
+            .await;
     if dropped_self_addressed > 0 {
         tracing::warn!(
             "Dropped {} self-addressed queued message(s)",
