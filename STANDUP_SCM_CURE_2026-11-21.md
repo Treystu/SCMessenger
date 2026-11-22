@@ -65,16 +65,30 @@ the good news: Authenticated requests get a higher rate limit. ...",
 "documentation_url":"https://docs.github.com/rest/overview/resources-in-the-rest-api#rate-limiting"}
 ```
 
-So the issue count rests on ONE method (the search index), with the two
-independent channels unavailable from this workspace. It is reported as
-single-method, not as a two-method agreement. `core` reset 1795341656 is
-2026-11-22T10:00:56Z -- **56 seconds after the 00:00 HST cutoff**
-(epoch 1795341600), so it cannot be re-read inside this turn window.
+At first census the issue count rested on ONE method (the search index). A
+second, non-API method was then found and it agrees: the server-rendered
+repository page carries the same counters in its HTML.
+
+```
+$ curl -sL https://github.com/Treystu/SCMessenger | grep -o 'Issues</span><span
+  data-component="counter">.*CounterLabel[^>]*>91<'
+  ...>Issues</span>...CounterLabel...>91</span>
+  ...>Pull requests</span>...CounterLabel...>19</span>
+```
+
+**B (rendered page counters): 91 issues, 19 PRs** -- identical to method A.
+The counts are therefore two-method, over two independent transports (search
+API JSON vs HTML render), not one method read twice. They are not
+authenticated-method confirmed: `gh` is unauthenticated and `core` REST is
+exhausted. `core` reset 1795341656 is 2026-11-22T10:00:56Z -- **56 seconds
+after the 00:00 HST cutoff** (epoch 1795341600), so it cannot be re-read
+inside this turn window.
 
 ### 1.3 Open PRs -- 19
 
 Same search API, `is:pr is:open`, 2026-11-22T09:27Z: `total_count 19`,
-`items 19`, `incomplete_results False`. Full set:
+`items 19`, `incomplete_results False`; the rendered page counter (method B,
+1.2) independently reads 19. Full set:
 
 | # | created | author | title |
 | --- | --- | --- | --- |
@@ -246,7 +260,8 @@ Filed verbatim rather than worked around, per the mission:
 ```
 DONE    stand-up filed on standup/scm-cure-2026-11-21 (git-write test); census
         taken: main 16f7171a (ls-remote), 91 open issues, 19 open PRs, lists in
-        full; single-method status on issue/PR counts declared as such.
+        full; counts confirmed by two methods (search API + rendered page
+        counters), two transports, both anonymous.
 WIP     none.
 NEXT    #704 re-run needs only the key now (harness bootstrap is a command);
         fix the harvest's silent zero and the stale-tip read first, or the
