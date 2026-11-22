@@ -135,6 +135,28 @@ $ df -h /workspace    (not read this turn -- not needed for a doc-only filing)
 No implementation was attempted for any of the four. Nothing was pushed to
 #599, #571, main, or any open PR head. Nothing was merged, tagged, or closed.
 
+### 2.1 The queue premises were re-read on today's head, not carried from 2026-11-13
+
+Main moved two merges past the 2026-11-13 audit base (`ced2189e`), so the four
+premises were re-checked against `16f7171a` before any of them was called
+blocked. Read: the five cited files are **byte-identical in history** since the
+audit base -- `git log --oneline ced2189e..HEAD -- core/src/privacy/cover.rs
+core/src/abuse/reputation.rs core/src/routing/negative_cache.rs
+core/src/routing/adaptive_ttl.rs core/src/routing/timeout_budget.rs` prints
+nothing -- and the line-level reads below agree with the audit text.
+
+| item | live read on `16f7171a` | premise |
+| --- | --- | --- |
+| #693 | `cover.rs:33` `rate_per_minute: 10`; `:66` `(60_000 / self.rate_per_minute as u64).max(1)`; `:174` `elapsed > interval` | met -- fixed metronome, no coupling to real traffic |
+| #692 | `reputation.rs:52` `record_signal`, `:101` `record_outbound_message`; a `witness|confirm` grep over the whole file returns **zero** hits | met -- both positive paths are self-reported, no witnessed set |
+| #691 (a) | `negative_cache.rs:211` `Self::new(Duration::from_secs(600), 10000)`; `adaptive_ttl.rs:39` `adaptive_ttl: Duration::from_secs(1800)` | met -- 600 s negative evidence inside 1800 s routes |
+| #691 (b) | `timeout_budget.rs:33-36` phases `10`, `50`, `200`, `500` = 760 ms; `:85` `Self::new(Duration::from_millis(500))` | met -- the 500 ms phase cannot be reached inside a 500 ms budget |
+
+So none of the four is premise-refuted: they are open, correctly filed, and
+blocked here purely by environment. That distinction is the point of this
+section -- a later session with a Rust toolchain and a rule-8 reviewer inherits
+four live defects, not four maybe-defects.
+
 ## 3. Actions this workspace CANNOT perform -- for oversight to mirror
 
 Filed verbatim rather than worked around, per the mission:
