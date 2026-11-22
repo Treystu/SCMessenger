@@ -181,7 +181,7 @@ fn the_handler_is_the_same_function_for_both_cli_commands() {
 /// (T2); a name configured any other way cannot be dialed either.
 #[test]
 fn operator_bootstrap_addresses_survive_but_names_never_enter() {
-    let ledger = ledger();
+    let mut ledger = ledger();
 
     // IP-form bootstrap: recorded, verified, dialable.
     ledger.add_bootstrap("/ip4/198.51.100.200/tcp/443", None);
