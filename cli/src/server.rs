@@ -704,9 +704,19 @@ pub async fn handle_jsonrpc_request(
         // ── History ──
         ClientIntent::GetHistory { limit } => {
             if let Some(ref core) = ctx.core {
-                let mgr = core
-                    .history_manager()
-                    .expect("Failed to initialize history manager");
+                let mgr = match core.history_manager() {
+                    Ok(mgr) => mgr,
+                    Err(e) => {
+                        return rpc_error(
+                            id,
+                            JsonRpcErrorBody {
+                                code: -32000,
+                                message: format!("History manager unavailable: {:?}", e),
+                                data: None,
+                            },
+                        );
+                    }
+                };
                 match mgr.recent(None, limit.unwrap_or(50) as u32) {
                     Ok(messages) => {
                         let list: Vec<Value> = messages
@@ -750,9 +760,19 @@ pub async fn handle_jsonrpc_request(
         }
         ClientIntent::GetConversation { peer_id, limit } => {
             if let Some(ref core) = ctx.core {
-                let mgr = core
-                    .history_manager()
-                    .expect("Failed to initialize history manager");
+                let mgr = match core.history_manager() {
+                    Ok(mgr) => mgr,
+                    Err(e) => {
+                        return rpc_error(
+                            id,
+                            JsonRpcErrorBody {
+                                code: -32000,
+                                message: format!("History manager unavailable: {:?}", e),
+                                data: None,
+                            },
+                        );
+                    }
+                };
                 match mgr.conversation(peer_id.clone(), limit.unwrap_or(50) as u32) {
                     Ok(messages) => {
                         let list: Vec<Value> = messages
@@ -1438,11 +1458,13 @@ pub async fn handle_jsonrpc_request(
 
                 let mut requests: Vec<(u64, Value)> = by_sender
                     .into_iter()
-                    .map(|(peer_id, msgs)| {
-                        let latest = msgs
-                            .iter()
-                            .max_by_key(|m| m.received_at)
-                            .expect("group has at least one message");
+                    .filter_map(|(peer_id, msgs)| {
+                        // `by_sender` is only populated by pushing a message into
+                        // `or_default()`, so a group is never empty here. Use a
+                        // filter instead of a panic so a future change to that
+                        // invariant degrades to "no request preview" rather than
+                        // aborting the JSON-RPC handler.
+                        let latest = msgs.iter().max_by_key(|m| m.received_at)?;
                         let preview = String::from_utf8(latest.payload.clone())
                             .unwrap_or_else(|_| "[binary]".to_string());
                         let mut m = Map::new();
@@ -1451,7 +1473,7 @@ pub async fn handle_jsonrpc_request(
                         m.insert("messagePreview".to_string(), preview.into());
                         m.insert("messageTimestamp".to_string(), latest.received_at.into());
                         m.insert("messageCount".to_string(), msgs.len().into());
-                        (latest.received_at, Value::Object(m))
+                        Some((latest.received_at, Value::Object(m)))
                     })
                     .collect();
                 requests.sort_by_key(|b| std::cmp::Reverse(b.0));
@@ -1598,9 +1620,19 @@ pub async fn handle_jsonrpc_request(
         // ── History search/stats (P1) ──
         ClientIntent::SearchMessages { query, limit } => {
             if let Some(ref core) = ctx.core {
-                let mgr = core
-                    .history_manager()
-                    .expect("Failed to initialize history manager");
+                let mgr = match core.history_manager() {
+                    Ok(mgr) => mgr,
+                    Err(e) => {
+                        return rpc_error(
+                            id,
+                            JsonRpcErrorBody {
+                                code: -32000,
+                                message: format!("History manager unavailable: {:?}", e),
+                                data: None,
+                            },
+                        );
+                    }
+                };
                 match mgr.search(query, limit.unwrap_or(50) as u32) {
                     Ok(messages) => {
                         let list: Vec<Value> = messages
@@ -1644,9 +1676,19 @@ pub async fn handle_jsonrpc_request(
         }
         ClientIntent::GetHistoryStats {} => {
             if let Some(ref core) = ctx.core {
-                let mgr = core
-                    .history_manager()
-                    .expect("Failed to initialize history manager");
+                let mgr = match core.history_manager() {
+                    Ok(mgr) => mgr,
+                    Err(e) => {
+                        return rpc_error(
+                            id,
+                            JsonRpcErrorBody {
+                                code: -32000,
+                                message: format!("History manager unavailable: {:?}", e),
+                                data: None,
+                            },
+                        );
+                    }
+                };
                 match mgr.stats() {
                     Ok(stats) => {
                         let mut m = Map::new();
@@ -1681,9 +1723,19 @@ pub async fn handle_jsonrpc_request(
         }
         ClientIntent::MarkMessageDelivered { message_id } => {
             if let Some(ref core) = ctx.core {
-                let mgr = core
-                    .history_manager()
-                    .expect("Failed to initialize history manager");
+                let mgr = match core.history_manager() {
+                    Ok(mgr) => mgr,
+                    Err(e) => {
+                        return rpc_error(
+                            id,
+                            JsonRpcErrorBody {
+                                code: -32000,
+                                message: format!("History manager unavailable: {:?}", e),
+                                data: None,
+                            },
+                        );
+                    }
+                };
                 match mgr.mark_delivered(message_id) {
                     Ok(()) => {
                         let mut m = Map::new();
@@ -1712,9 +1764,19 @@ pub async fn handle_jsonrpc_request(
         }
         ClientIntent::DeleteMessage { message_id } => {
             if let Some(ref core) = ctx.core {
-                let mgr = core
-                    .history_manager()
-                    .expect("Failed to initialize history manager");
+                let mgr = match core.history_manager() {
+                    Ok(mgr) => mgr,
+                    Err(e) => {
+                        return rpc_error(
+                            id,
+                            JsonRpcErrorBody {
+                                code: -32000,
+                                message: format!("History manager unavailable: {:?}", e),
+                                data: None,
+                            },
+                        );
+                    }
+                };
                 match mgr.delete(message_id) {
                     Ok(()) => {
                         let mut m = Map::new();
@@ -1743,9 +1805,19 @@ pub async fn handle_jsonrpc_request(
         }
         ClientIntent::ClearConversation { peer_id } => {
             if let Some(ref core) = ctx.core {
-                let mgr = core
-                    .history_manager()
-                    .expect("Failed to initialize history manager");
+                let mgr = match core.history_manager() {
+                    Ok(mgr) => mgr,
+                    Err(e) => {
+                        return rpc_error(
+                            id,
+                            JsonRpcErrorBody {
+                                code: -32000,
+                                message: format!("History manager unavailable: {:?}", e),
+                                data: None,
+                            },
+                        );
+                    }
+                };
                 match mgr.clear_conversation(peer_id) {
                     Ok(()) => {
                         let mut m = Map::new();
