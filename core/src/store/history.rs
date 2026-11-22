@@ -95,9 +95,10 @@ pub struct HistoryManager {
 /// canonical_peer_id), while contacts and thread lookups are often keyed by
 /// the public_key_hex flavor on a different surface (e.g. a contact's stored
 /// `peer_id` is its public key). Match a record's peer against EITHER the
-/// queried value OR, when the query value is a public key, that key's derived
-/// identity_id, so a single identity's conversation is reachable from both
-/// forms instead of being silently split into two threads. The derivation is
+/// queried value OR, when the query value is a public key or a libp2p peer id,
+/// that id's derived identity_id, so a single identity's conversation is
+/// reachable from all three identifier forms instead of being silently split
+/// into separate threads. The derivation is
 /// one-way, so identity_id-keyed lookups cannot invert back to a public key;
 /// that is fine because no pubkey-keyed history records exist to match (all
 /// records are written under identity_id). `filter_identity_id` is precomputed
@@ -112,6 +113,21 @@ fn history_peer_matches(filter: &str, record_peer: &str, filter_identity_id: Opt
         }
     }
     false
+}
+
+/// Translate a peer filter onto the flavor records are actually written under.
+///
+/// Every history record is stored under the canonical identity_id (sent ones by
+/// `cli/src/api.rs::handle_send_message`, received ones by `receive_message`),
+/// but callers filter by whichever identifier they hold. A public key derives
+/// its identity_id directly. A libp2p peer id (`12D3…`) carries its Ed25519 key
+/// in the identity multihash, so `PeerIdTriad::resolve` yields the same
+/// identity_id. Without that second arm, a client filtering by the peer id it
+/// sees on the wire never reached the record it had just sent (#552).
+fn filter_identity_id_for(filter: &str) -> Option<String> {
+    crate::identity::keys::identity_id_from_public_key_hex(filter).or_else(|| {
+        crate::identity::PeerIdTriad::resolve(filter).and_then(|triad| triad.identity_id)
+    })
 }
 
 impl HistoryManager {
@@ -181,9 +197,7 @@ impl HistoryManager {
         // Derive the identity_id for a pubkey filter ONCE per query; the
         // derivation does Ed25519 curve validation + blake3 and must not run
         // per record inside the scan loop below.
-        let filter_identity_id = peer_filter
-            .as_deref()
-            .and_then(crate::identity::keys::identity_id_from_public_key_hex);
+        let filter_identity_id = peer_filter.as_deref().and_then(filter_identity_id_for);
 
         for (_, value) in all {
             let record: MessageRecord =
@@ -231,7 +245,7 @@ impl HistoryManager {
 
         // D4: match the peer by either id flavor, exactly like conversation()
         // (derived once per call, never per record).
-        let filter_identity_id = crate::identity::keys::identity_id_from_public_key_hex(peer_id);
+        let filter_identity_id = filter_identity_id_for(peer_id);
         let mut count = 0u32;
         for (_, value) in all {
             let mut record: MessageRecord =
@@ -260,7 +274,7 @@ impl HistoryManager {
 
         // D4: match the peer by either id flavor, exactly like conversation()
         // (derived once per call, never per record).
-        let filter_identity_id = crate::identity::keys::identity_id_from_public_key_hex(peer_id);
+        let filter_identity_id = filter_identity_id_for(peer_id);
         let mut count = 0u32;
         for (_, value) in all {
             let mut record: MessageRecord =
@@ -318,7 +332,7 @@ impl HistoryManager {
         // D4: remove exactly the set conversation() returns for this peer, so a
         // thread visible under the pubkey flavor is actually deletable (derived
         // once per call, never per record).
-        let filter_identity_id = crate::identity::keys::identity_id_from_public_key_hex(&peer_id);
+        let filter_identity_id = filter_identity_id_for(&peer_id);
         for (key, value) in all {
             let record: MessageRecord =
                 serde_json::from_slice(&value).map_err(|_| IronCoreError::Internal)?;
@@ -518,6 +532,49 @@ mod tests {
             &identity_id,
             None
         ));
+    }
+
+    #[test]
+    fn test_libp2p_peer_id_filter_reaches_sent_record() {
+        // #552: an outbound record is written under the recipient's identity_id
+        // (cli/src/api.rs::handle_send_message), while an operator or client
+        // filters by the peer id it sees on the wire. All three identifier
+        // flavors must reach that same record.
+        use ed25519_dalek::SigningKey;
+        use rand::RngCore;
+        let mut secret = [0u8; 32];
+        rand::rngs::OsRng.fill_bytes(&mut secret);
+        let sk = SigningKey::from_bytes(&secret);
+        let pubkey_hex = hex::encode(sk.verifying_key().to_bytes());
+        let identity_id = crate::identity::keys::identity_id_from_public_key_hex(&pubkey_hex)
+            .expect("valid pubkey must derive identity_id");
+        let peer_id = crate::store::ledger_entry::peer_id_from_public_key_hex(&pubkey_hex)
+            .expect("ed25519 pubkey must yield an identity-multihash peer id");
+
+        let backend = Arc::new(MemoryStorage::new());
+        let history = HistoryManager::new(backend);
+        history
+            .add(MessageRecord {
+                id: "sent-probe".to_string(),
+                peer_id: identity_id.clone(),
+                direction: MessageDirection::Sent,
+                content: "probe".to_string(),
+                timestamp: 2000,
+                sender_timestamp: 2000,
+                delivered: false,
+                hidden: false,
+            })
+            .unwrap();
+
+        let by_peer_id = history.conversation(peer_id.clone(), 50).unwrap();
+        assert_eq!(
+            by_peer_id.len(),
+            1,
+            "a libp2p peer-id filter must reach the sent record"
+        );
+        assert_eq!(by_peer_id[0].id, "sent-probe");
+        assert_eq!(history.conversation(pubkey_hex, 50).unwrap().len(), 1);
+        assert_eq!(history.conversation(identity_id, 50).unwrap().len(), 1);
     }
 
     #[test]
