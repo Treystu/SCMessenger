@@ -706,16 +706,7 @@ pub async fn handle_jsonrpc_request(
             if let Some(ref core) = ctx.core {
                 let mgr = match core.history_manager() {
                     Ok(mgr) => mgr,
-                    Err(e) => {
-                        return rpc_error(
-                            id,
-                            JsonRpcErrorBody {
-                                code: -32000,
-                                message: format!("History manager unavailable: {:?}", e),
-                                data: None,
-                            },
-                        );
-                    }
+                    Err(e) => return history_unavailable_error(id, &e),
                 };
                 match mgr.recent(None, limit.unwrap_or(50) as u32) {
                     Ok(messages) => {
@@ -762,16 +753,7 @@ pub async fn handle_jsonrpc_request(
             if let Some(ref core) = ctx.core {
                 let mgr = match core.history_manager() {
                     Ok(mgr) => mgr,
-                    Err(e) => {
-                        return rpc_error(
-                            id,
-                            JsonRpcErrorBody {
-                                code: -32000,
-                                message: format!("History manager unavailable: {:?}", e),
-                                data: None,
-                            },
-                        );
-                    }
+                    Err(e) => return history_unavailable_error(id, &e),
                 };
                 match mgr.conversation(peer_id.clone(), limit.unwrap_or(50) as u32) {
                     Ok(messages) => {
@@ -1622,16 +1604,7 @@ pub async fn handle_jsonrpc_request(
             if let Some(ref core) = ctx.core {
                 let mgr = match core.history_manager() {
                     Ok(mgr) => mgr,
-                    Err(e) => {
-                        return rpc_error(
-                            id,
-                            JsonRpcErrorBody {
-                                code: -32000,
-                                message: format!("History manager unavailable: {:?}", e),
-                                data: None,
-                            },
-                        );
-                    }
+                    Err(e) => return history_unavailable_error(id, &e),
                 };
                 match mgr.search(query, limit.unwrap_or(50) as u32) {
                     Ok(messages) => {
@@ -1678,16 +1651,7 @@ pub async fn handle_jsonrpc_request(
             if let Some(ref core) = ctx.core {
                 let mgr = match core.history_manager() {
                     Ok(mgr) => mgr,
-                    Err(e) => {
-                        return rpc_error(
-                            id,
-                            JsonRpcErrorBody {
-                                code: -32000,
-                                message: format!("History manager unavailable: {:?}", e),
-                                data: None,
-                            },
-                        );
-                    }
+                    Err(e) => return history_unavailable_error(id, &e),
                 };
                 match mgr.stats() {
                     Ok(stats) => {
@@ -1725,16 +1689,7 @@ pub async fn handle_jsonrpc_request(
             if let Some(ref core) = ctx.core {
                 let mgr = match core.history_manager() {
                     Ok(mgr) => mgr,
-                    Err(e) => {
-                        return rpc_error(
-                            id,
-                            JsonRpcErrorBody {
-                                code: -32000,
-                                message: format!("History manager unavailable: {:?}", e),
-                                data: None,
-                            },
-                        );
-                    }
+                    Err(e) => return history_unavailable_error(id, &e),
                 };
                 match mgr.mark_delivered(message_id) {
                     Ok(()) => {
@@ -1766,16 +1721,7 @@ pub async fn handle_jsonrpc_request(
             if let Some(ref core) = ctx.core {
                 let mgr = match core.history_manager() {
                     Ok(mgr) => mgr,
-                    Err(e) => {
-                        return rpc_error(
-                            id,
-                            JsonRpcErrorBody {
-                                code: -32000,
-                                message: format!("History manager unavailable: {:?}", e),
-                                data: None,
-                            },
-                        );
-                    }
+                    Err(e) => return history_unavailable_error(id, &e),
                 };
                 match mgr.delete(message_id) {
                     Ok(()) => {
@@ -1807,16 +1753,7 @@ pub async fn handle_jsonrpc_request(
             if let Some(ref core) = ctx.core {
                 let mgr = match core.history_manager() {
                     Ok(mgr) => mgr,
-                    Err(e) => {
-                        return rpc_error(
-                            id,
-                            JsonRpcErrorBody {
-                                code: -32000,
-                                message: format!("History manager unavailable: {:?}", e),
-                                data: None,
-                            },
-                        );
-                    }
+                    Err(e) => return history_unavailable_error(id, &e),
                 };
                 match mgr.clear_conversation(peer_id) {
                     Ok(()) => {
@@ -1896,9 +1833,55 @@ pub async fn handle_jsonrpc_request(
 
 // =====================================================================
 
+/// JSON-RPC error for a failure to build the history manager.
+///
+/// `IronCore::history_manager` is fallible but falls back internally, so this
+/// handler's failure path cannot be driven through `handle_jsonrpc_request`
+/// from a test without faking storage. Keeping the response shape here makes
+/// that path a named, testable unit rather than an inline panic macro
+/// that would abort the request handler.
+fn history_unavailable_error(id: Option<Value>, err: &impl std::fmt::Debug) -> JsonRpcResponse {
+    rpc_error(
+        id,
+        JsonRpcErrorBody {
+            code: -32000,
+            message: format!("History manager unavailable: {:?}", err),
+            data: None,
+        },
+    )
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{message_request_key, resolve_sender_public_key, sender_is_resolvable};
+    use super::{
+        history_unavailable_error, message_request_key, resolve_sender_public_key,
+        sender_is_resolvable,
+    };
+
+    #[test]
+    fn history_manager_failure_maps_to_a_jsonrpc_error_not_a_panic() {
+        let response = history_unavailable_error(None, &"storage path unusable");
+
+        assert_eq!(response.jsonrpc, "2.0");
+        assert!(
+            response.result.is_none(),
+            "a failed history manager must not return a result"
+        );
+        let body = response
+            .error
+            .expect("a failed history manager must produce an error body");
+        assert_eq!(body.code, -32000);
+        assert!(
+            body.message.contains("History manager unavailable"),
+            "unexpected message: {}",
+            body.message
+        );
+        assert!(
+            body.message.contains("storage path unusable"),
+            "the cause must survive into the message: {}",
+            body.message
+        );
+    }
 
     /// A valid Ed25519 public key (generated; 64 hex chars).
     fn valid_key() -> String {
