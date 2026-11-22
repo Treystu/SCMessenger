@@ -1651,7 +1651,7 @@ impl LedgerManager {
     /// Both stored spellings are recorded, because the store holds both: entries
     /// written before the hex migration carry the libp2p PeerId, current writes
     /// carry the canonical public-key hex. Canonicalisation goes through
-    /// [`canonical_ledger_peer_id`], the same function the write path and the
+    /// `canonical_ledger_peer_id`, the same function the write path and the
     /// load-time migration use, so the three cannot drift apart.
     ///
     /// Until this is called the filter is inert and behaviour is unchanged.

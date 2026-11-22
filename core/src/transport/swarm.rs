@@ -3744,7 +3744,7 @@ pub enum SwarmEvent2 {
         entries: Vec<SharedPeerEntry>,
     },
     /// NAT status changed (from AutoNAT probe)
-    /// Value is one of: "public:<addr>", "private", "unknown"
+    /// Value is one of: `"public:<addr>"`, `"private"`, `"unknown"`
     NatStatusChanged(String),
     /// Port mapping event (UPnP).
     PortMapping(String),

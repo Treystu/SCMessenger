@@ -104,7 +104,7 @@ pub struct RelayServer {
     config: RelayServerConfig,
     /// Connected peers: peer_id -> session
     peers: Arc<RwLock<HashMap<String, RelayPeerSession>>>,
-    /// Stored envelopes: target_peer_id -> Vec<StoredEnvelope>
+    /// Stored envelopes: `target_peer_id -> Vec<StoredEnvelope>`
     storage: Arc<RwLock<HashMap<String, VecDeque<StoredEnvelope>>>>,
     /// Server statistics
     stats: Arc<RwLock<RelayServerStats>>,

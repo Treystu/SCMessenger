@@ -63,7 +63,7 @@ const MAX_ROUTE_REQUEST_AGE_SECS: u64 = 300; // 5 minutes
 /// expiry time.
 #[derive(Debug, Clone)]
 pub struct GlobalRoutes {
-    /// hint → Vec<RouteAdvertisement> (multiple routes per destination for redundancy)
+    /// hint to `Vec<RouteAdvertisement>` (multiple routes per destination for redundancy)
     routes: HashMap<[u8; 8], Vec<RouteAdvertisement>>,
     /// Maximum routes per destination (we keep the N best routes)
     max_routes_per_hint: usize,

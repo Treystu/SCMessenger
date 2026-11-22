@@ -69,7 +69,7 @@ fn is_canonical_ed25519_encoding(bytes: &[u8; 32]) -> bool {
 /// Ed25519 curve point.
 ///
 /// Strictness matters, not just point-on-curve membership: see
-/// [`is_canonical_ed25519_encoding`]. The platform adapters this is exposed to
+/// `is_canonical_ed25519_encoding`. The platform adapters this is exposed to
 /// over UniFFI rely on it to tell a public key from an identity_id, so it must
 /// not be laxer than they are.
 pub fn is_valid_public_key(hex_str: &str) -> bool {

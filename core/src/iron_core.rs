@@ -2209,7 +2209,7 @@ impl IronCore {
 
     /// Export an identity backup encrypted with Blake3 key derivation and a
     /// custom 16-byte salt (e.g. from touch-screen entropy). See
-    /// [`export_identity_backup_fast`] for details.
+    /// `export_identity_backup_fast` for details.
     pub fn export_identity_backup_fast_with_salt(
         &self,
         passphrase: String,

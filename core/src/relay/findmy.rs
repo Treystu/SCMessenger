@@ -92,7 +92,7 @@ pub enum FindMyError {
 /// Encode a wake-up payload into a compact BLE advertisement
 ///
 /// Output format (max 22 bytes):
-/// - Byte 0: Message available flag (MSB) + recipient_hint[0] (7 bits)
+/// - Byte 0: Message available flag (MSB) + `recipient_hint[0]` (7 bits)
 /// - Bytes 1-3: recipient_hint[1..4]
 /// - Bytes 4-7: XOR-encrypted relay_hint (4 bytes)
 /// - Bytes 8-20: Encrypted payload (13 bytes)
