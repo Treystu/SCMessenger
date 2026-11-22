@@ -1297,9 +1297,7 @@ async fn handle_add_contact(
     }))
 }
 
-fn connection_state_str(
-    state: scmessenger_core::transport::health::ConnectionState,
-) -> String {
+fn connection_state_str(state: scmessenger_core::transport::health::ConnectionState) -> String {
     match state {
         scmessenger_core::transport::health::ConnectionState::Connecting => "Connecting",
         scmessenger_core::transport::health::ConnectionState::Connected => "Connected",
