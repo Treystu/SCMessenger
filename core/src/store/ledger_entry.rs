@@ -489,6 +489,20 @@ pub fn is_self_certifying_binding(peer_id: &str, public_key_hex: &str) -> bool {
     peer_id_from_public_key_hex(public_key_hex).is_some_and(|derived| derived == peer_id)
 }
 
+/// True when `value` is a 32-byte key rendered as 64 hex characters.
+///
+/// This is the canonical ledger id form: load's migration rewrites a libp2p
+/// peer id to the key hex, so a ledger written by this build holds ids that are
+/// not libp2p PeerIds. Every validity gate that accepts a libp2p PeerId must
+/// accept this form too, or the migration's own output is rejected on the next
+/// load (#571 defect 1).
+fn is_canonical_public_key_hex(value: &str) -> bool {
+    let trimmed = value.trim();
+    trimmed.len() == 64
+        && trimmed.chars().all(|c| c.is_ascii_hexdigit())
+        && hex::decode(trimmed).is_ok()
+}
+
 // UNIFICATION: live canonicalization helper — mirrors load() migration 747-817.
 // Converts libp2p 12D3 peer_id to canonical 30d0fa public_key_hex on every write,
 // preventing duplicate nodes where ledger.json already collapsed to hex.
@@ -988,7 +1002,14 @@ impl LedgerManager {
             let peer_id_ok = match entry.peer_id.as_deref() {
                 None | Some("") => true,
                 Some(peer_id) => {
-                    peer_id.len() <= MAX_LEN_PEER_ID && peer_id.parse::<libp2p::PeerId>().is_ok()
+                    // The migration below rewrites libp2p ids to key hex, and
+                    // ingest/record already accept that form. Rejecting it here
+                    // dropped every migrated entry on the next load, which both
+                    // lost the peer and made the next run re-learn it as libp2p
+                    // and "migrate" it again (#571 defect 1).
+                    let is_canonical_hex_peer = is_canonical_public_key_hex(peer_id);
+                    peer_id.len() <= MAX_LEN_PEER_ID
+                        && (is_canonical_hex_peer || peer_id.parse::<libp2p::PeerId>().is_ok())
                 }
             };
             entry.multiaddr.len() <= MAX_LEN_MULTIADDR && peer_id_ok
@@ -4405,6 +4426,88 @@ rx_history",
             std::fs::read_to_string(&ledger_file).expect("rewritten ledger"),
             serde_json::to_string_pretty(&*repaired).expect("serialize repaired"),
             "repair must be durable, not in-memory only"
+        );
+    }
+
+    #[test]
+    fn canonical_hex_peer_id_survives_repeated_cold_loads() {
+        // #571 defect 1. Load's migration rewrites a libp2p peer id to the key
+        // hex, so a ledger written by this build holds 64-hex ids. The load
+        // validity filter used to accept only libp2p PeerIds, so every migrated
+        // entry was dropped on the very next load: the peer disappeared, and
+        // the following run re-learned it as a libp2p id and "migrated" it
+        // again - the replay the report measures.
+        let dir = tempfile::tempdir().expect("tempdir");
+        let (peer_id, key_hex) = self_certifying_pair();
+        let canonical = public_key_hex_from_libp2p_peer_id(&peer_id).expect("libp2p id");
+        assert_eq!(canonical, key_hex, "the fixture key is the canonical id");
+        let entries = vec![LedgerEntry {
+            multiaddr: "/ip4/198.51.100.31/tcp/9001".to_string(),
+            peer_id: Some(canonical.clone()),
+            public_key: None,
+            nickname: Some("Migrated".to_string()),
+            success_count: 1,
+            failure_count: 0,
+            last_seen: Some(42),
+            topics: Vec::new(),
+            locally_verified: false,
+            is_bootstrap: false,
+            first_seen: None,
+            observed_peer_ids: Vec::new(),
+            label: None,
+        }];
+        let ledger_file = dir.path().join("ledger.json");
+        std::fs::write(
+            &ledger_file,
+            serde_json::to_string_pretty(&entries).expect("serialize fixture"),
+        )
+        .expect("write ledger fixture");
+        let after_fixture = std::fs::read_to_string(&ledger_file).expect("fixture bytes");
+
+        // First cold load: the entry must survive and nothing needs rewriting.
+        let first = LedgerManager::new(dir.path().to_string_lossy().to_string());
+        first.load().expect("first load");
+        assert_eq!(
+            first.entry_count(),
+            1,
+            "a canonical hex peer id must survive the load filter"
+        );
+        assert_eq!(
+            first.entries.lock()[0].peer_id.as_deref(),
+            Some(canonical.as_str())
+        );
+        assert_eq!(
+            std::fs::read_to_string(&ledger_file).expect("ledger after first load"),
+            after_fixture,
+            "an already-canonical ledger must not be rewritten"
+        );
+        let mtime_first = std::fs::metadata(&ledger_file)
+            .expect("metadata")
+            .modified()
+            .expect("mtime");
+
+        // Second cold load through a new manager (a new process, as every CLI
+        // invocation is): neither dropped nor rewritten.
+        std::thread::sleep(std::time::Duration::from_millis(1100));
+        let second = LedgerManager::new(dir.path().to_string_lossy().to_string());
+        second.load().expect("second load");
+        assert_eq!(
+            second.entry_count(),
+            1,
+            "second load must not drop the canonical entry"
+        );
+        assert_eq!(
+            std::fs::read_to_string(&ledger_file).expect("ledger after second load"),
+            after_fixture,
+            "second load must not change the ledger"
+        );
+        assert_eq!(
+            std::fs::metadata(&ledger_file)
+                .expect("metadata")
+                .modified()
+                .expect("mtime"),
+            mtime_first,
+            "second load must not rewrite the ledger (the migration replayed)"
         );
     }
 
