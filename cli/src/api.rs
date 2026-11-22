@@ -141,6 +141,24 @@ pub struct PeerEntry {
     /// Canonical triad (PeerID / public_key / identity_id) when resolvable.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub triad: Option<PeerIdTriadDto>,
+    /// True when the transport health monitor reports this peer Connected
+    /// right now. `None` means the monitor has no record for the peer at all
+    /// (stored/discovered only), which is different from a known disconnect.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub connected: Option<bool>,
+    /// Transport connection state (Connecting/Connected/Disconnecting/
+    /// Disconnected/Failed) from the health monitor, when it has a record.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub state: Option<String>,
+    /// Addresses known for the peer: the live connection address first, then
+    /// any other addresses the monitor has seen for it.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub addrs: Vec<String>,
+    /// Last activity from the health monitor in Unix milliseconds. Milliseconds
+    /// because that is the monitor's unit (ConnectionStats::last_activity); the
+    /// field name states the unit rather than implying seconds.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_seen_ms: Option<u64>,
 }
 
 /// DTO for the three self-consistent peer identifiers used across apps.
@@ -746,6 +764,14 @@ pub async fn redeem_invite_via_api(payload: &str) -> Result<InviteRedeemResponse
 pub struct ApiContext {
     pub core: Arc<scmessenger_core::IronCore>,
     pub swarm_handle: Arc<scmessenger_core::transport::SwarmHandle>,
+    /// This node's own libp2p peer id, as text so the check needs neither a
+    /// copy trait on `PeerId` nor an allocation per comparison. A send
+    /// addressed to ourselves is refused at enqueue instead of being queued
+    /// and retried forever (#548).
+    pub own_peer_id: String,
+    /// The live store-and-forward queue, so an operator can cancel a poisoned
+    /// entry through the Control API once it is already on disk (#548).
+    pub outbox: Arc<tokio::sync::Mutex<scmessenger_core::store::Outbox>>,
 }
 
 /// Wrap outbound chat text in the `scm.message.identity.v1` envelope so
@@ -850,6 +876,29 @@ fn api_recipient_from_public_key(public_key: String) -> Result<ApiRecipient, (St
 
 fn api_identifier_matches(query: &str, candidate: &str) -> bool {
     query == candidate || query.eq_ignore_ascii_case(candidate)
+}
+
+/// Whether a resolved recipient is this node itself (#548).
+///
+/// Both spellings are checked because they do not always agree: the identity id
+/// is derived from the identity public key, while the local peer id can come
+/// from a headless network keypair in the relay path.
+fn recipient_is_self(
+    core: &scmessenger_core::IronCore,
+    own_peer_id: &str,
+    recipient: &ApiRecipient,
+) -> bool {
+    if recipient.peer_id.to_string() == own_peer_id {
+        return true;
+    }
+    if core
+        .identity_id()
+        .is_some_and(|own_identity| recipient.identity_id.eq_ignore_ascii_case(&own_identity))
+    {
+        return true;
+    }
+    core.public_key_hex()
+        .is_some_and(|own_key| recipient.public_key.eq_ignore_ascii_case(&own_key))
 }
 
 /// Resolve a send target without trusting unauthenticated discovery data.
@@ -1076,6 +1125,20 @@ async fn handle_send_message(
     let core = &ctx.core;
     let recipient = resolve_api_recipient(core, &request.recipient)?;
 
+    // #548: a message addressed to this node cannot be delivered by
+    // construction. The outbox drain would dial our own peer id, fail, and
+    // mark ourselves dead on every retry (16 failures and 15 dead-marks in 90
+    // minutes were observed), so refuse it here while the caller can still see
+    // why. Refused before the history write so no undeliverable Sent record is
+    // left behind.
+    if recipient_is_self(core, &ctx.own_peer_id, &recipient) {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "Recipient is this node's own identity; a self-addressed message cannot be delivered"
+                .to_string(),
+        ));
+    }
+
     // Identity-envelope parity with Android/iOS: wrap the chat text so the
     // receiver learns our nickname + route hints. Local history keeps the
     // bare text; only the wire payload carries the envelope.
@@ -1201,6 +1264,60 @@ async fn handle_send_message(
     ))
 }
 
+/// Body for `POST /api/queue/cancel` (#548).
+#[derive(Debug, Deserialize)]
+pub struct CancelQueuedRequest {
+    pub message_id: String,
+}
+
+/// Response for `POST /api/queue/cancel` (#548). A typed struct rather than
+/// `serde_json::json!`, whose expansion uses a method this crate disallows.
+#[derive(Debug, Serialize)]
+pub struct CancelQueuedResponse {
+    pub success: bool,
+    pub message_id: String,
+    pub status: String,
+}
+
+/// Cancel a queued store-and-forward entry by its wire message id (#548).
+///
+/// 0.4.0 had no way to remove an outbox entry over the Control API, so a
+/// poisoned one (for example a self-addressed message accepted before the
+/// enqueue guard) could only be cleared by an offline purge of the outbox
+/// directory. Removal is by wire id because that is the id a Delivered receipt
+/// and `POST /api/send` both carry.
+async fn handle_cancel_queued_message(
+    State(ctx): State<Arc<ApiContext>>,
+    AxumJson(request): AxumJson<CancelQueuedRequest>,
+) -> Result<AxumJson<CancelQueuedResponse>, (StatusCode, String)> {
+    let message_id = request.message_id.trim();
+    if message_id.is_empty() {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "message_id is required".to_string(),
+        ));
+    }
+
+    let removed = {
+        let mut outbox = ctx.outbox.lock().await;
+        outbox.remove(message_id)
+    };
+
+    if removed {
+        tracing::info!("Cancelled queued message {}", message_id);
+        Ok(AxumJson(CancelQueuedResponse {
+            success: true,
+            message_id: message_id.to_string(),
+            status: "cancelled".to_string(),
+        }))
+    } else {
+        Err((
+            StatusCode::NOT_FOUND,
+            format!("No queued message with id {}", message_id),
+        ))
+    }
+}
+
 async fn handle_get_send_status(
     State(ctx): State<Arc<ApiContext>>,
     Path(message_id): Path<String>,
@@ -1279,9 +1396,25 @@ async fn handle_add_contact(
     }))
 }
 
+fn connection_state_str(state: &scmessenger_core::transport::health::ConnectionState) -> String {
+    match state {
+        scmessenger_core::transport::health::ConnectionState::Connecting => "Connecting",
+        scmessenger_core::transport::health::ConnectionState::Connected => "Connected",
+        scmessenger_core::transport::health::ConnectionState::Disconnecting => "Disconnecting",
+        scmessenger_core::transport::health::ConnectionState::Disconnected => "Disconnected",
+        scmessenger_core::transport::health::ConnectionState::Failed => "Failed",
+    }
+    .to_string()
+}
+
 async fn handle_get_peers(
     State(ctx): State<Arc<ApiContext>>,
 ) -> Result<AxumJson<GetPeersResponse>, (StatusCode, String)> {
+    // The swarm reports the peers it knows; the transport health monitor holds
+    // the live connection facts for those same ids. Without this join, a peer
+    // with an established connection, addresses and traffic looks identical to
+    // a stored record (#553).
+    let conn_stats = ctx.core.get_all_connection_stats();
     let peers: Vec<PeerEntry> = ctx
         .swarm_handle
         .get_peers()
@@ -1292,10 +1425,34 @@ async fn handle_get_peers(
             let pid = p.to_string();
             let reputation = ctx.core.get_peer_reputation(pid.clone());
             let triad = scmessenger_core::identity::PeerIdTriad::resolve(&pid).map(triad_dto);
+            let stat = conn_stats.get(&p);
+
+            let mut addrs: Vec<String> = Vec::new();
+            if let Some(stat) = stat {
+                if let Some(addr) = stat.current_address.as_ref() {
+                    addrs.push(addr.to_string());
+                }
+                for addr in &stat.known_addresses {
+                    let addr = addr.to_string();
+                    if !addrs.contains(&addr) {
+                        addrs.push(addr);
+                    }
+                }
+            }
+
             PeerEntry {
                 peer_id: pid,
                 reputation,
                 triad,
+                connected: stat.map(|s| {
+                    matches!(
+                        s.state,
+                        scmessenger_core::transport::health::ConnectionState::Connected
+                    )
+                }),
+                state: stat.map(|s| connection_state_str(&s.state)),
+                addrs,
+                last_seen_ms: stat.map(|s| s.last_activity),
             }
         })
         .collect();
@@ -1339,18 +1496,7 @@ async fn handle_get_swarm_stats(
     let stats = raw_stats
         .into_iter()
         .map(|(peer_id, stat)| {
-            let state_str = match stat.state {
-                scmessenger_core::transport::health::ConnectionState::Connecting => "Connecting",
-                scmessenger_core::transport::health::ConnectionState::Connected => "Connected",
-                scmessenger_core::transport::health::ConnectionState::Disconnecting => {
-                    "Disconnecting"
-                }
-                scmessenger_core::transport::health::ConnectionState::Disconnected => {
-                    "Disconnected"
-                }
-                scmessenger_core::transport::health::ConnectionState::Failed => "Failed",
-            }
-            .to_string();
+            let state_str = connection_state_str(&stat.state);
 
             ApiConnectionStats {
                 peer_id: peer_id.to_string(),
@@ -2083,6 +2229,7 @@ pub async fn start_api_server(ctx: ApiContext, bind_addr: Option<String>) -> Res
         .route("/api/peer-resolve", get(handle_peer_resolve))
         .route("/api/send", post(handle_send_message))
         .route("/api/send/:message_id", get(handle_get_send_status))
+        .route("/api/queue/cancel", post(handle_cancel_queued_message))
         .route(
             "/api/contacts",
             get(handle_get_contacts).post(handle_add_contact),

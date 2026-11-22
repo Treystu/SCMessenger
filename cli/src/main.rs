@@ -2583,6 +2583,20 @@ async fn cmd_start(
     println!("{} Peer ID: {}", "[OK]".green(), local_peer_id);
     println!();
 
+    // #548: clear any queued entry addressed to this node itself. The API now
+    // refuses new ones; an entry already on disk from before that guard would
+    // otherwise keep the drain dialing our own peer id and marking us dead.
+    let dropped_self_addressed =
+        drop_self_addressed_entries(&outbox, &local_peer_id, core.public_key_hex().as_deref())
+            .await;
+    if dropped_self_addressed > 0 {
+        println!(
+            "{} Dropped {} self-addressed queued message(s)",
+            "[WARN]".yellow(),
+            dropped_self_addressed
+        );
+    }
+
     // Create shared state BEFORE server start so landing page has access
     let peers: Arc<tokio::sync::Mutex<HashMap<libp2p::PeerId, Option<String>>>> =
         Arc::new(tokio::sync::Mutex::new(HashMap::new()));
@@ -2929,6 +2943,8 @@ async fn cmd_start(
     let api_ctx = api::ApiContext {
         core: core.clone(),
         swarm_handle: Arc::new(swarm_handle.clone()),
+        own_peer_id: local_peer_id.to_string(),
+        outbox: Arc::clone(&outbox),
     };
 
     let http_bind_api = http_bind.clone();
@@ -4055,6 +4071,56 @@ fn learn_sender_identity_from_envelope(
     }
 }
 
+/// Whether a queued entry's `recipient_id` names this node (#548).
+///
+/// The outbox stores whichever spelling the sender had: a base58 libp2p peer id
+/// or a lowercase hex public key. Both are checked so a self-addressed entry
+/// cannot hide behind the other spelling.
+fn queued_recipient_is_self(
+    recipient_id: &str,
+    own_peer_id: &str,
+    own_public_key_hex: Option<&str>,
+) -> bool {
+    recipient_id == own_peer_id
+        || own_public_key_hex.is_some_and(|own| recipient_id.eq_ignore_ascii_case(own))
+}
+
+/// Drop queued messages addressed to this node itself (#548).
+///
+/// Such an entry can never be delivered: the drain dials our own peer id, fails,
+/// and marks ourselves dead on every attempt. Returns how many were removed.
+async fn drop_self_addressed_entries(
+    outbox: &Arc<tokio::sync::Mutex<Outbox>>,
+    own_peer_id: &PeerId,
+    own_public_key_hex: Option<&str>,
+) -> usize {
+    let own_peer = own_peer_id.to_string();
+    let poisoned: Vec<String> = {
+        let ob = outbox.lock().await;
+        ob.pending()
+            .into_iter()
+            .filter(|msg| {
+                queued_recipient_is_self(&msg.recipient_id, &own_peer, own_public_key_hex)
+            })
+            .map(|msg| msg.message_id)
+            .collect()
+    };
+
+    if poisoned.is_empty() {
+        return 0;
+    }
+
+    let mut ob = outbox.lock().await;
+    let mut dropped = 0usize;
+    for message_id in &poisoned {
+        if ob.remove(message_id) {
+            dropped += 1;
+            tracing::warn!("Dropped self-addressed queued message {}", message_id);
+        }
+    }
+    dropped
+}
+
 /// Shared outbox flush logic used across CLI event loops (`cmd_relay` and `cmd_start`).
 /// Drains queued messages for a given peer and attempts immediate delivery over the swarm.
 async fn flush_outbox_for_peer(
@@ -4318,11 +4384,26 @@ async fn cmd_relay(
     // Outbox
     let outbox = Outbox::open_default(&data_dir).map_err(|e| anyhow::anyhow!(e))?;
 
+    // #548: same self-addressed purge as `cmd_start`. The relay has no
+    // preceding send path of its own, but it shares the outbox directory a
+    // previous run may have poisoned.
+    let dropped_self_addressed =
+        drop_self_addressed_entries(&outbox, &local_peer_id, core.public_key_hex().as_deref())
+            .await;
+    if dropped_self_addressed > 0 {
+        tracing::warn!(
+            "Dropped {} self-addressed queued message(s)",
+            dropped_self_addressed
+        );
+    }
+
     // Control API — core is already Arc<IronCore>
     let core_arc = Arc::clone(&core);
     let api_ctx = api::ApiContext {
         core: core_arc.clone(),
         swarm_handle: Arc::new(swarm_handle.clone()),
+        own_peer_id: local_peer_id.to_string(),
+        outbox: Arc::clone(&outbox),
     };
     let http_bind_api = http_bind.clone();
     tokio::spawn(async move {

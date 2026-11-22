@@ -16,6 +16,7 @@ use scmessenger_core::store::{
     LedgerManager, SeedLedgerEntry, MAX_LEDGER_ENTRIES, MAX_SEED_LEDGER_ENTRIES,
 };
 use scmessenger_core::{TOPIC_LOBBY, TOPIC_MESH};
+use std::collections::HashSet;
 
 /// Upper bound on ledger-derived dial candidates handed to the swarm at boot.
 const LEDGER_CANDIDATE_LIMIT: u32 = 64;
@@ -23,6 +24,15 @@ const LEDGER_CANDIDATE_LIMIT: u32 = 64;
 /// Hard cap on legacy entries migrated in one pass: the ledger's own retention
 /// limit. Anything beyond it is recorded as rejected, never silently dropped.
 pub const LEGACY_MIGRATION_MAX_ENTRIES: usize = MAX_LEDGER_ENTRIES;
+
+/// Hard cap on the persisted rejected-address list.
+///
+/// The migration drops the original config key, so this list is the only
+/// durable record of what was refused; it is bounded like the ledger it
+/// mirrors. Refusals past the cap are still logged and counted, never stored,
+/// so a hostile or stale config of any size cannot grow the record without
+/// limit (#494 review nit).
+pub const MAX_REJECTED_LEGACY_ADDRESSES: usize = MAX_LEDGER_ENTRIES;
 
 /// Outcome of the one-time legacy config migration.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -37,13 +47,29 @@ pub struct LegacyMigrationOutcome {
 }
 
 /// Record a rejected legacy address (once) and log why.
-fn record_rejected(rejected: &mut Vec<String>, addr: &str, reason: &str) {
+///
+/// `seen` mirrors `rejected` so deduplication is O(1) per refusal instead of a
+/// linear scan: a config listing thousands of the same refused address must not
+/// cost quadratic time to de-duplicate (#494 review nit).
+fn record_rejected(
+    rejected: &mut Vec<String>,
+    seen: &mut HashSet<String>,
+    addr: &str,
+    reason: &str,
+) {
     tracing::warn!(
         "[MIGRATION] legacy bootstrap address rejected: {} ({})",
         addr,
         reason
     );
-    if !rejected.iter().any(|r| r == addr) {
+    if rejected.len() >= MAX_REJECTED_LEGACY_ADDRESSES {
+        tracing::warn!(
+            "[MIGRATION] rejected-address record is full ({} entries); refusal counted but not stored",
+            MAX_REJECTED_LEGACY_ADDRESSES
+        );
+        return;
+    }
+    if seen.insert(addr.to_string()) {
         rejected.push(addr.to_string());
     }
 }
@@ -69,16 +95,18 @@ pub fn migrate_legacy_bootstrap_nodes(
     let found = addrs.len();
     let mut imported = 0usize;
     let mut newly_rejected = 0usize;
+    let mut seen: HashSet<String> = rejected.iter().cloned().collect();
 
     let mut candidates: Vec<String> = Vec::with_capacity(found.min(LEGACY_MIGRATION_MAX_ENTRIES));
     for addr in &addrs {
         let trimmed = addr.trim();
         if trimmed.is_empty() {
-            record_rejected(rejected, addr, "empty address");
+            record_rejected(rejected, &mut seen, addr, "empty address");
             newly_rejected += 1;
         } else if candidates.len() >= LEGACY_MIGRATION_MAX_ENTRIES {
             record_rejected(
                 rejected,
+                &mut seen,
                 trimmed,
                 "legacy migration cap reached (ledger retention limit)",
             );
@@ -96,17 +124,22 @@ pub fn migrate_legacy_bootstrap_nodes(
             })
             .collect();
         imported += ledger_manager.import_seed_entries(entries) as usize;
-        // Known afterwards means imported or an existing duplicate; unknown
-        // means the ledger refused it.
-        for addr in batch {
-            if ledger_manager.entry_for_multiaddr(addr).is_none() {
-                record_rejected(
-                    rejected,
-                    addr,
-                    "refused by ledger: non-routable, DNS form, or no transport component",
-                );
-                newly_rejected += 1;
-            }
+    }
+
+    // Membership is checked once, after every batch is imported. Seed import
+    // evicts to stay under `MAX_LEDGER_ENTRIES`, so a later batch can evict an
+    // address an earlier batch inserted; checking inside the batch loop (as
+    // this did) read such an address as accepted and lost it. One pass over the
+    // final ledger state records it instead (#494 review nit).
+    for addr in &candidates {
+        if ledger_manager.entry_for_multiaddr(addr).is_none() {
+            record_rejected(
+                rejected,
+                &mut seen,
+                addr,
+                "refused by ledger: non-routable, DNS form, no transport component, or evicted under the retention cap",
+            );
+            newly_rejected += 1;
         }
     }
     LegacyMigrationOutcome {
@@ -260,6 +293,29 @@ mod tests {
         assert_eq!(out.rejected, extra);
         assert_eq!(rej.len(), extra);
         assert!(legacy.is_empty());
+    }
+
+    #[test]
+    fn test_rejected_list_is_bounded_but_every_refusal_is_counted() {
+        let lm = LedgerManager::ephemeral();
+        let total = MAX_REJECTED_LEGACY_ADDRESSES + 40;
+        let mut legacy: Vec<String> = (0..total)
+            .map(|i| format!("/dns4/r{}.example/tcp/9001", i))
+            .collect();
+        let mut rej = Vec::new();
+        let out = migrate_legacy_bootstrap_nodes(&mut legacy, &mut rej, &lm);
+        assert_eq!(out.found, total);
+        assert_eq!(out.imported, 0);
+        // Every refusal is counted, including those past the storage cap.
+        assert_eq!(out.rejected, total);
+        // The persisted list stays bounded, in first-seen order: the over-cap
+        // addresses are refused before the candidates are imported.
+        assert_eq!(rej.len(), MAX_REJECTED_LEGACY_ADDRESSES);
+        assert_eq!(
+            rej[0],
+            format!("/dns4/r{}.example/tcp/9001", MAX_REJECTED_LEGACY_ADDRESSES)
+        );
+        assert!(legacy.is_empty(), "legacy list must be drained");
     }
 
     #[test]
