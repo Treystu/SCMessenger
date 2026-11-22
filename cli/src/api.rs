@@ -141,6 +141,24 @@ pub struct PeerEntry {
     /// Canonical triad (PeerID / public_key / identity_id) when resolvable.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub triad: Option<PeerIdTriadDto>,
+    /// True when the transport health monitor reports this peer Connected
+    /// right now. `None` means the monitor has no record for the peer at all
+    /// (stored/discovered only), which is different from a known disconnect.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub connected: Option<bool>,
+    /// Transport connection state (Connecting/Connected/Disconnecting/
+    /// Disconnected/Failed) from the health monitor, when it has a record.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub state: Option<String>,
+    /// Addresses known for the peer: the live connection address first, then
+    /// any other addresses the monitor has seen for it.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub addrs: Vec<String>,
+    /// Last activity from the health monitor in Unix milliseconds. Milliseconds
+    /// because that is the monitor's unit (ConnectionStats::last_activity); the
+    /// field name states the unit rather than implying seconds.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_seen_ms: Option<u64>,
 }
 
 /// DTO for the three self-consistent peer identifiers used across apps.
@@ -1279,9 +1297,27 @@ async fn handle_add_contact(
     }))
 }
 
+fn connection_state_str(
+    state: scmessenger_core::transport::health::ConnectionState,
+) -> String {
+    match state {
+        scmessenger_core::transport::health::ConnectionState::Connecting => "Connecting",
+        scmessenger_core::transport::health::ConnectionState::Connected => "Connected",
+        scmessenger_core::transport::health::ConnectionState::Disconnecting => "Disconnecting",
+        scmessenger_core::transport::health::ConnectionState::Disconnected => "Disconnected",
+        scmessenger_core::transport::health::ConnectionState::Failed => "Failed",
+    }
+    .to_string()
+}
+
 async fn handle_get_peers(
     State(ctx): State<Arc<ApiContext>>,
 ) -> Result<AxumJson<GetPeersResponse>, (StatusCode, String)> {
+    // The swarm reports the peers it knows; the transport health monitor holds
+    // the live connection facts for those same ids. Without this join, a peer
+    // with an established connection, addresses and traffic looks identical to
+    // a stored record (#553).
+    let conn_stats = ctx.core.get_all_connection_stats();
     let peers: Vec<PeerEntry> = ctx
         .swarm_handle
         .get_peers()
@@ -1292,10 +1328,34 @@ async fn handle_get_peers(
             let pid = p.to_string();
             let reputation = ctx.core.get_peer_reputation(pid.clone());
             let triad = scmessenger_core::identity::PeerIdTriad::resolve(&pid).map(triad_dto);
+            let stat = conn_stats.get(&p);
+
+            let mut addrs: Vec<String> = Vec::new();
+            if let Some(stat) = stat {
+                if let Some(addr) = stat.current_address.as_ref() {
+                    addrs.push(addr.to_string());
+                }
+                for addr in &stat.known_addresses {
+                    let addr = addr.to_string();
+                    if !addrs.contains(&addr) {
+                        addrs.push(addr);
+                    }
+                }
+            }
+
             PeerEntry {
                 peer_id: pid,
                 reputation,
                 triad,
+                connected: stat.map(|s| {
+                    matches!(
+                        s.state,
+                        scmessenger_core::transport::health::ConnectionState::Connected
+                    )
+                }),
+                state: stat.map(|s| connection_state_str(s.state)),
+                addrs,
+                last_seen_ms: stat.map(|s| s.last_activity),
             }
         })
         .collect();
@@ -1339,18 +1399,7 @@ async fn handle_get_swarm_stats(
     let stats = raw_stats
         .into_iter()
         .map(|(peer_id, stat)| {
-            let state_str = match stat.state {
-                scmessenger_core::transport::health::ConnectionState::Connecting => "Connecting",
-                scmessenger_core::transport::health::ConnectionState::Connected => "Connected",
-                scmessenger_core::transport::health::ConnectionState::Disconnecting => {
-                    "Disconnecting"
-                }
-                scmessenger_core::transport::health::ConnectionState::Disconnected => {
-                    "Disconnected"
-                }
-                scmessenger_core::transport::health::ConnectionState::Failed => "Failed",
-            }
-            .to_string();
+            let state_str = connection_state_str(stat.state);
 
             ApiConnectionStats {
                 peer_id: peer_id.to_string(),
