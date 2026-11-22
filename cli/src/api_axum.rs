@@ -22,7 +22,7 @@ use super::api::{
     ConnectionPathStateResponse, DiscoveredPeer, DiscoveryPeersResponse, DiscoveryStatusResponse,
     DriftStatusResponse, GetExternalAddressResponse, GetHistoryRequest, GetHistoryResponse,
     GetListenersResponse, GetPeersResponse, HistoryMessage, PeerEntry, PeerIdTriadDto,
-    PeerResolveResponse, SendMessageRequest, SendMessageResponse, API_PORT,
+    PeerResolveResponse, SendMessageRequest, SendMessageResponse,
 };
 
 /// Default number of messages `/api/history` returns when `limit` is
@@ -728,7 +728,7 @@ fn export_diagnostics(
 
 pub async fn start_api_server(ctx: ApiContext) -> Result<()> {
     let ctx = Arc::new(ctx);
-    let addr = SocketAddr::from(([127, 0, 0, 1], API_PORT));
+    let addr = SocketAddr::from(([127, 0, 0, 1], super::api::api_port()));
 
     // Create CORS layer restricted to localhost / loopback origins to prevent cross-origin attack vectors
     let cors = CorsLayer::new()

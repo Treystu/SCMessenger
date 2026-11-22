@@ -21,7 +21,46 @@ use tokio::sync::RwLock;
 use tower_http::cors::{Any, CorsLayer};
 
 pub const API_PORT: u16 = 9876;
-pub const API_ADDR: &str = "127.0.0.1:9876";
+
+/// Runtime override for the control-API port (#650). `0` means "no override".
+///
+/// The port must be per-instance, not a constant: two nodes on one host with
+/// different data dirs used to fight over 9876, so the second node failed to
+/// bind and every CLI command for it was served by the first node's API.
+static API_PORT_OVERRIDE: std::sync::atomic::AtomicU16 = std::sync::atomic::AtomicU16::new(0);
+
+/// Resolve the control-API port from its two supported sources.
+///
+/// Precedence: `SCM_API_PORT` (environment) over the persisted `api_port`
+/// config value over the historical default. A `0` from either source is not a
+/// bindable port for this purpose and is ignored rather than honoured.
+pub fn resolve_api_port(configured: Option<u16>, env_value: Option<&str>) -> u16 {
+    let from_env = env_value
+        .and_then(|value| value.trim().parse::<u16>().ok())
+        .filter(|port| *port != 0);
+    from_env
+        .or(configured.filter(|port| *port != 0))
+        .unwrap_or(API_PORT)
+}
+
+/// Set the resolved control-API port for this process. Called once the config
+/// is loaded, so server and client commands agree on the same port.
+pub fn set_api_port(port: u16) {
+    API_PORT_OVERRIDE.store(port, std::sync::atomic::Ordering::Relaxed);
+}
+
+/// The control-API port this process uses.
+pub fn api_port() -> u16 {
+    match API_PORT_OVERRIDE.load(std::sync::atomic::Ordering::Relaxed) {
+        0 => API_PORT,
+        port => port,
+    }
+}
+
+/// The control-API socket address this process talks to and binds.
+pub fn api_addr() -> String {
+    format!("127.0.0.1:{}", api_port())
+}
 
 /// Default number of messages `/api/history` returns when the caller omits
 /// `limit`. This is the primary operator-facing endpoint for verifying
@@ -102,6 +141,24 @@ pub struct PeerEntry {
     /// Canonical triad (PeerID / public_key / identity_id) when resolvable.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub triad: Option<PeerIdTriadDto>,
+    /// True when the transport health monitor reports this peer Connected
+    /// right now. `None` means the monitor has no record for the peer at all
+    /// (stored/discovered only), which is different from a known disconnect.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub connected: Option<bool>,
+    /// Transport connection state (Connecting/Connected/Disconnecting/
+    /// Disconnected/Failed) from the health monitor, when it has a record.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub state: Option<String>,
+    /// Addresses known for the peer: the live connection address first, then
+    /// any other addresses the monitor has seen for it.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub addrs: Vec<String>,
+    /// Last activity from the health monitor in Unix milliseconds. Milliseconds
+    /// because that is the monitor's unit (ConnectionStats::last_activity); the
+    /// field name states the unit rather than implying seconds.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_seen_ms: Option<u64>,
 }
 
 /// DTO for the three self-consistent peer identifiers used across apps.
@@ -308,7 +365,7 @@ lazy_static! {
 
 // Check if API is available
 pub async fn is_api_available() -> bool {
-    tokio::net::TcpStream::connect(API_ADDR).await.is_ok()
+    tokio::net::TcpStream::connect(api_addr()).await.is_ok()
 }
 
 // Client functions for CLI commands
@@ -329,7 +386,7 @@ pub async fn send_message_via_api(recipient: &str, message: &str) -> Result<()> 
     let json = serde_json::to_string(&req_body)?;
     let req = hyper::Request::builder()
         .method(Method::POST)
-        .uri(format!("http://{}/api/send", API_ADDR))
+        .uri(format!("http://{}/api/send", api_addr()))
         .header("content-type", "application/json")
         .body(Full::new(Bytes::from(json)))?;
 
@@ -376,7 +433,7 @@ pub async fn add_contact_via_api(
     let json = serde_json::to_string(&req_body)?;
     let req = hyper::Request::builder()
         .method(Method::POST)
-        .uri(format!("http://{}/api/contacts", API_ADDR))
+        .uri(format!("http://{}/api/contacts", api_addr()))
         .header("content-type", "application/json")
         .body(Full::new(Bytes::from(json)))?;
 
@@ -406,7 +463,7 @@ pub async fn get_peers_via_api() -> Result<Vec<PeerEntry>> {
 
     let req = hyper::Request::builder()
         .method(Method::GET)
-        .uri(format!("http://{}/api/peers", API_ADDR))
+        .uri(format!("http://{}/api/peers", api_addr()))
         .body(Empty::<Bytes>::new())?;
 
     let resp = client.request(req).await?;
@@ -426,7 +483,7 @@ pub async fn get_swarm_stats_via_api() -> Result<Vec<ApiConnectionStats>> {
 
     let req = hyper::Request::builder()
         .method(Method::GET)
-        .uri(format!("http://{}/api/swarm/stats", API_ADDR))
+        .uri(format!("http://{}/api/swarm/stats", api_addr()))
         .body(Empty::<Bytes>::new())?;
 
     let resp = client.request(req).await?;
@@ -456,7 +513,7 @@ pub async fn get_history_via_api(
     let json = serde_json::to_string(&req_body)?;
     let req = hyper::Request::builder()
         .method(Method::POST)
-        .uri(format!("http://{}/api/history", API_ADDR))
+        .uri(format!("http://{}/api/history", api_addr()))
         .header("content-type", "application/json")
         .body(Full::new(Bytes::from(json)))?;
 
@@ -477,7 +534,7 @@ pub async fn get_external_address_via_api() -> Result<Vec<String>> {
 
     let req = hyper::Request::builder()
         .method(Method::GET)
-        .uri(format!("http://{}/api/external-address", API_ADDR))
+        .uri(format!("http://{}/api/external-address", api_addr()))
         .body(Empty::<Bytes>::new())?;
 
     let resp = client.request(req).await?;
@@ -507,7 +564,7 @@ pub async fn get_listeners_via_api() -> Result<Vec<String>> {
 
     let req = hyper::Request::builder()
         .method(Method::GET)
-        .uri(format!("http://{}/api/listeners", API_ADDR))
+        .uri(format!("http://{}/api/listeners", api_addr()))
         .body(Empty::<Bytes>::new())?;
 
     let resp = client.request(req).await?;
@@ -526,7 +583,7 @@ pub async fn get_connection_path_state_via_api() -> Result<String> {
 
     let req = hyper::Request::builder()
         .method(Method::GET)
-        .uri(format!("http://{}/api/connection-path-state", API_ADDR))
+        .uri(format!("http://{}/api/connection-path-state", api_addr()))
         .body(Empty::<Bytes>::new())?;
 
     let resp = client.request(req).await?;
@@ -544,7 +601,7 @@ pub async fn get_drift_state_via_api() -> Result<DriftStatusResponse> {
 
     let req = hyper::Request::builder()
         .method(Method::GET)
-        .uri(format!("http://{}/api/drift-status", API_ADDR))
+        .uri(format!("http://{}/api/drift-status", api_addr()))
         .body(Empty::<Bytes>::new())?;
 
     let resp = client.request(req).await?;
@@ -563,7 +620,7 @@ pub async fn get_discovery_status() -> Result<DiscoveryStatusResponse> {
 
     let req = hyper::Request::builder()
         .method(Method::GET)
-        .uri(format!("http://{}/api/discovery/status", API_ADDR))
+        .uri(format!("http://{}/api/discovery/status", api_addr()))
         .body(Empty::<Bytes>::new())?;
 
     let resp = client.request(req).await?;
@@ -582,7 +639,7 @@ pub async fn trigger_discovery_scan() -> Result<()> {
 
     let req = hyper::Request::builder()
         .method(Method::POST)
-        .uri(format!("http://{}/api/discovery/scan", API_ADDR))
+        .uri(format!("http://{}/api/discovery/scan", api_addr()))
         .body(Empty::<Bytes>::new())?;
 
     let resp = client.request(req).await?;
@@ -602,7 +659,7 @@ pub async fn get_discovery_peers() -> Result<Vec<DiscoveredPeer>> {
 
     let req = hyper::Request::builder()
         .method(Method::GET)
-        .uri(format!("http://{}/api/discovery/peers", API_ADDR))
+        .uri(format!("http://{}/api/discovery/peers", api_addr()))
         .body(Empty::<Bytes>::new())?;
 
     let resp = client.request(req).await?;
@@ -621,7 +678,7 @@ pub async fn export_diagnostics_via_api() -> Result<String> {
 
     let req = hyper::Request::builder()
         .method(Method::GET)
-        .uri(format!("http://{}/api/diagnostics", API_ADDR))
+        .uri(format!("http://{}/api/diagnostics", api_addr()))
         .body(Empty::<Bytes>::new())?;
 
     let resp = client.request(req).await?;
@@ -639,7 +696,7 @@ pub async fn get_identity_via_api() -> Result<serde_json::Value> {
 
     let req = hyper::Request::builder()
         .method(Method::GET)
-        .uri(format!("http://{}/api/identity", API_ADDR))
+        .uri(format!("http://{}/api/identity", api_addr()))
         .body(Empty::<Bytes>::new())?;
 
     let resp = client.request(req).await?;
@@ -658,7 +715,7 @@ async fn post_json_via_api(path: &str, json: String) -> Result<(StatusCode, Vec<
     let client = Client::builder(TokioExecutor::new()).build_http();
     let req = hyper::Request::builder()
         .method(Method::POST)
-        .uri(format!("http://{}{}", API_ADDR, path))
+        .uri(format!("http://{}{}", api_addr(), path))
         .header("content-type", "application/json")
         .body(Full::new(Bytes::from(json)))?;
     let resp = client.request(req).await?;
@@ -932,7 +989,7 @@ pub async fn stop_node_via_api() -> Result<()> {
 
     let req = hyper::Request::builder()
         .method(Method::POST)
-        .uri(format!("http://{}/api/shutdown", API_ADDR))
+        .uri(format!("http://{}/api/shutdown", api_addr()))
         .body(Empty::<Bytes>::new())?;
 
     let _res = client.request(req).await?;
@@ -1240,9 +1297,25 @@ async fn handle_add_contact(
     }))
 }
 
+fn connection_state_str(state: &scmessenger_core::transport::health::ConnectionState) -> String {
+    match state {
+        scmessenger_core::transport::health::ConnectionState::Connecting => "Connecting",
+        scmessenger_core::transport::health::ConnectionState::Connected => "Connected",
+        scmessenger_core::transport::health::ConnectionState::Disconnecting => "Disconnecting",
+        scmessenger_core::transport::health::ConnectionState::Disconnected => "Disconnected",
+        scmessenger_core::transport::health::ConnectionState::Failed => "Failed",
+    }
+    .to_string()
+}
+
 async fn handle_get_peers(
     State(ctx): State<Arc<ApiContext>>,
 ) -> Result<AxumJson<GetPeersResponse>, (StatusCode, String)> {
+    // The swarm reports the peers it knows; the transport health monitor holds
+    // the live connection facts for those same ids. Without this join, a peer
+    // with an established connection, addresses and traffic looks identical to
+    // a stored record (#553).
+    let conn_stats = ctx.core.get_all_connection_stats();
     let peers: Vec<PeerEntry> = ctx
         .swarm_handle
         .get_peers()
@@ -1253,10 +1326,34 @@ async fn handle_get_peers(
             let pid = p.to_string();
             let reputation = ctx.core.get_peer_reputation(pid.clone());
             let triad = scmessenger_core::identity::PeerIdTriad::resolve(&pid).map(triad_dto);
+            let stat = conn_stats.get(&p);
+
+            let mut addrs: Vec<String> = Vec::new();
+            if let Some(stat) = stat {
+                if let Some(addr) = stat.current_address.as_ref() {
+                    addrs.push(addr.to_string());
+                }
+                for addr in &stat.known_addresses {
+                    let addr = addr.to_string();
+                    if !addrs.contains(&addr) {
+                        addrs.push(addr);
+                    }
+                }
+            }
+
             PeerEntry {
                 peer_id: pid,
                 reputation,
                 triad,
+                connected: stat.map(|s| {
+                    matches!(
+                        s.state,
+                        scmessenger_core::transport::health::ConnectionState::Connected
+                    )
+                }),
+                state: stat.map(|s| connection_state_str(&s.state)),
+                addrs,
+                last_seen_ms: stat.map(|s| s.last_activity),
             }
         })
         .collect();
@@ -1300,18 +1397,7 @@ async fn handle_get_swarm_stats(
     let stats = raw_stats
         .into_iter()
         .map(|(peer_id, stat)| {
-            let state_str = match stat.state {
-                scmessenger_core::transport::health::ConnectionState::Connecting => "Connecting",
-                scmessenger_core::transport::health::ConnectionState::Connected => "Connected",
-                scmessenger_core::transport::health::ConnectionState::Disconnecting => {
-                    "Disconnecting"
-                }
-                scmessenger_core::transport::health::ConnectionState::Disconnected => {
-                    "Disconnected"
-                }
-                scmessenger_core::transport::health::ConnectionState::Failed => "Failed",
-            }
-            .to_string();
+            let state_str = connection_state_str(&stat.state);
 
             ApiConnectionStats {
                 peer_id: peer_id.to_string(),
@@ -2005,14 +2091,14 @@ pub async fn start_api_server(ctx: ApiContext, bind_addr: Option<String>) -> Res
                 tracing::warn!(
                     "Invalid http-bind address '{}', falling back to localhost: {}: {}",
                     bind_str,
-                    API_PORT,
+                    api_port(),
                     e
                 );
-                SocketAddr::from(([127, 0, 0, 1], API_PORT))
+                SocketAddr::from(([127, 0, 0, 1], api_port()))
             }
         }
     } else {
-        SocketAddr::from(([127, 0, 0, 1], API_PORT))
+        SocketAddr::from(([127, 0, 0, 1], api_port()))
     };
 
     // Create CORS layer restricted to localhost / loopback origins to prevent cross-origin attack vectors
@@ -2388,5 +2474,34 @@ mod tests {
         assert!(resp.success);
         assert_eq!(resp.warning, None);
         assert_eq!(resp.error, None);
+    }
+}
+
+#[cfg(test)]
+mod api_port_resolution_tests {
+    use super::{api_addr, api_port, resolve_api_port, API_PORT};
+
+    #[test]
+    fn env_override_wins_over_config_and_default() {
+        assert_eq!(resolve_api_port(Some(9100), Some("9200")), 9200);
+    }
+
+    #[test]
+    fn config_value_is_used_when_env_is_absent_or_invalid() {
+        assert_eq!(resolve_api_port(Some(9100), None), 9100);
+        assert_eq!(resolve_api_port(Some(9100), Some("not-a-port")), 9100);
+        assert_eq!(resolve_api_port(Some(9100), Some("  ")), 9100);
+    }
+
+    #[test]
+    fn default_applies_when_neither_source_sets_a_bindable_port() {
+        assert_eq!(resolve_api_port(None, None), API_PORT);
+        // 0 is not a bindable instance port: it must never be honoured.
+        assert_eq!(resolve_api_port(Some(0), Some("0")), API_PORT);
+    }
+
+    #[test]
+    fn api_addr_is_loopback_at_the_resolved_port() {
+        assert_eq!(api_addr(), format!("127.0.0.1:{}", api_port()));
     }
 }

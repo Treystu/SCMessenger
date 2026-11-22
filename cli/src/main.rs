@@ -1942,7 +1942,18 @@ async fn cmd_contact(action: ContactAction) -> Result<()> {
 
             match action {
                 ContactAction::List => {
-                    let list = contacts.list().unwrap_or_default();
+                    // #571: a store read error (the common cause is the running
+                    // node holding the database lock) used to be swallowed into
+                    // an empty list, so this printed "No contacts yet." and
+                    // exited 0 while the node's API reported live contacts. Fail
+                    // loudly and name the remediation instead of answering
+                    // confidently and wrongly.
+                    let list = contacts.list().map_err(|e| {
+                        anyhow::anyhow!(
+                            "Failed to read the contacts store ({:?}). If a node is running on this data dir, it holds the database lock: query that node's API (scm contacts --via-api) rather than opening the store directly.",
+                            e
+                        )
+                    })?;
 
                     if list.is_empty() {
                         println!("{}", "No contacts yet.".dimmed());
@@ -1993,7 +2004,11 @@ async fn cmd_contact(action: ContactAction) -> Result<()> {
                 }
 
                 ContactAction::Search { query } => {
-                    let results = contacts.search(query).unwrap_or_default();
+                    // #571: same swallowed-error class as the list path - a
+                    // failed read must not be reported as "no matches".
+                    let results = contacts.search(query).map_err(|e| {
+                        anyhow::anyhow!("Failed to read the contacts store ({:?})", e)
+                    })?;
 
                     if results.is_empty() {
                         println!("{}", "No matching contacts.".dimmed());
@@ -2926,7 +2941,7 @@ async fn cmd_start(
     println!(
         "{} Control API: {}",
         "[OK]".green(),
-        format!("http://127.0.0.1:{}", api::API_PORT).dimmed()
+        format!("http://127.0.0.1:{}", api::api_port()).dimmed()
     );
 
     let core_rx = core.clone();
@@ -4318,7 +4333,7 @@ async fn cmd_relay(
     println!(
         "{} Control API: {}",
         "[OK]".green(),
-        format!("http://127.0.0.1:{}", api::API_PORT).dimmed()
+        format!("http://127.0.0.1:{}", api::api_port()).dimmed()
     );
 
     // The BLE central task is the sole CoreBluetooth manager owner on macOS;
@@ -5054,7 +5069,13 @@ async fn cmd_status() -> Result<()> {
     println!("{}", "SCMessenger Status".bold());
     println!();
 
-    println!("Contacts: {}", contacts.list().unwrap_or_default().len());
+    let contact_count = contacts.list().map_err(|e| {
+        anyhow::anyhow!(
+            "Failed to read the contacts store ({:?}). If a node is running on this data dir, it holds the database lock: query that node's API rather than opening the store directly.",
+            e
+        )
+    })?;
+    println!("Contacts: {}", contact_count.len());
     println!(
         "Messages: {} (sent: {}, received: {})",
         stats.total_messages, stats.sent_count, stats.received_count
@@ -5495,7 +5516,14 @@ async fn cmd_test() -> Result<()> {
 
     println!("{} Message decryption", "[OK]".green());
 
+    // #651: this third identity exists only to prove a non-recipient cannot
+    // decrypt, but it is still an identity initialization, and that is the one
+    // operation IronCore gates on consent. Without the grant the self-test
+    // aborted right here with `Error: Consent required` - after the decryption
+    // stage it had just proved, and with no indication of which stage failed.
+    // Every other path in this file grants consent before initializing.
     let eve = IronCore::new();
+    eve.grant_consent();
     eve.initialize_identity()?;
 
     let envelope = alice.prepare_message(
@@ -5549,7 +5577,11 @@ fn peer_id_from_contact_identifier(identifier: &str) -> Option<PeerId> {
 }
 
 fn find_contact(manager: &ContactManager, query: &str) -> Result<Contact> {
-    let list = manager.list().unwrap_or_default();
+    // #571: swallowing a store error here reported "Contact not found" for a
+    // query that was never actually resolved against the store.
+    let list = manager
+        .list()
+        .map_err(|e| anyhow::anyhow!("Failed to read the contacts store ({:?})", e))?;
     let query_lower = query.to_lowercase();
 
     list.into_iter()
