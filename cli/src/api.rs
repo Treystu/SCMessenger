@@ -1297,7 +1297,7 @@ async fn handle_add_contact(
     }))
 }
 
-fn connection_state_str(state: scmessenger_core::transport::health::ConnectionState) -> String {
+fn connection_state_str(state: &scmessenger_core::transport::health::ConnectionState) -> String {
     match state {
         scmessenger_core::transport::health::ConnectionState::Connecting => "Connecting",
         scmessenger_core::transport::health::ConnectionState::Connected => "Connected",
@@ -1351,7 +1351,7 @@ async fn handle_get_peers(
                         scmessenger_core::transport::health::ConnectionState::Connected
                     )
                 }),
-                state: stat.map(|s| connection_state_str(s.state)),
+                state: stat.map(|s| connection_state_str(&s.state)),
                 addrs,
                 last_seen_ms: stat.map(|s| s.last_activity),
             }
@@ -1397,7 +1397,7 @@ async fn handle_get_swarm_stats(
     let stats = raw_stats
         .into_iter()
         .map(|(peer_id, stat)| {
-            let state_str = connection_state_str(stat.state);
+            let state_str = connection_state_str(&stat.state);
 
             ApiConnectionStats {
                 peer_id: peer_id.to_string(),
