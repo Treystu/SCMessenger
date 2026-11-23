@@ -108,9 +108,12 @@ impl AuditEvent {
         prev_hash: String,
     ) -> Self {
         let event_id = Uuid::new_v4().to_string();
+        // A clock set before the Unix epoch must not panic the audit path; the
+        // same `unwrap_or_default` house pattern is used for the wall clock in
+        // `core/src/store/dedup.rs`.
         let timestamp_unix_secs = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
-            .expect("SystemTime before UNIX EPOCH!")
+            .unwrap_or_default()
             .as_secs();
 
         AuditEvent {
