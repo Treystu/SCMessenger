@@ -4316,8 +4316,13 @@ fn map_dial_result(dial_result: anyhow::Result<()>) -> Result<(), crate::IronCor
         } else if err_str.contains("no addresses") || err_str.contains("noaddresses") {
             crate::IronCoreError::NoAddresses
         } else if err_str.contains("connection limit") || err_str.contains("connectionlimit") {
-            // TODO(#521): live today (behaviour.rs connection_limits); revisit
-            // and drop this mapping if #521 removes the deny path.
+            // #521 removed the static connection-limit deny path: admission is
+            // now the dynamic per-peer path budget with evict-don't-deny
+            // (core/src/transport/behaviour.rs:530), and
+            // static_connection_limits_are_gone_and_admission_stays_first
+            // (:688) asserts the static limits are absent. This mapping stays as
+            // a defensive classification for any remaining layer that reports
+            // the string.
             crate::IronCoreError::ConnectionLimit
         } else if err_str.contains("not supported") || err_str.contains("multiaddrnotsupported") {
             crate::IronCoreError::MultiaddrNotSupported
