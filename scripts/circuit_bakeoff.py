@@ -74,6 +74,16 @@ class Relay:
     # the harness hand history to an identity that was just created would model
     # an attack no adversary has to run, then score the policy against it.
     proven: bool = True
+    # The reliability a relay PUBLISHES, or None when it advertises its true one.
+    # Selection, eligibility and priors read this; a delivery is measured against
+    # `reliability`. Keeping the two apart is what makes a poisoned snapshot a
+    # lie about the score rather than a lie about the world (#746 finding 5).
+    advertised: float | None = None
+
+    @property
+    def score(self) -> float:
+        """The advertised score: what the product's selectors rank on."""
+        return self.reliability if self.advertised is None else self.advertised
 
 
 @dataclass
@@ -132,7 +142,7 @@ def eligible(pool: Pool) -> List[Relay]:
     """Exactly the champion's filter: threshold, and never the destination."""
     return [
         r for r in pool.relays
-        if r.reliability >= MIN_RELIABILITY and r.peer_id != pool.destination.peer_id
+        if r.score >= MIN_RELIABILITY and r.peer_id != pool.destination.peer_id
     ]
 
 
@@ -163,7 +173,7 @@ def champion_path(pool: Pool, rng: random.Random, hops_override: int | None = No
         for relay in by_segment[segment]:
             if relay.peer_id in used:
                 continue
-            if best is None or relay.reliability > best.reliability:
+            if best is None or relay.score > best.score:
                 best = relay
         if best is not None:
             selected.append(best)
@@ -368,7 +378,7 @@ def seed_posteriors(pool: Pool, rng: random.Random, history_frac: float = 0.6) -
     """
     out: Dict[str, Posterior] = {}
     for relay in pool.relays:
-        post = cold_start(relay.reliability)
+        post = cold_start(relay.score)
         if relay.proven and rng.random() < history_frac:
             trials = rng.randint(3, 12)
             successes = sum(1 for _ in range(trials) if rng.random() < relay.reliability)
@@ -512,6 +522,7 @@ def sybil_pool(rng: random.Random, size: int, operators: int, segments: int) -> 
             Relay(
                 peer_id=f"sybil{i:02d}",
                 reliability=0.98,
+                advertised=0.98,
                 latency_ms=40.0,
                 operator=f"sybilop{i % 2}",
                 segment=f"sybilseg{i % max(2, segments)}",
@@ -522,7 +533,14 @@ def sybil_pool(rng: random.Random, size: int, operators: int, segments: int) -> 
 
 
 def poisoned_pool(rng: random.Random, size: int, operators: int, segments: int) -> Pool:
-    """Relays whose snapshot score is a lie: history says they fail."""
+    """Relays whose published score is a lie: they advertise 0.97 and deliver badly.
+
+    The truth stays whatever `make_pool` drew, so a poisoned relay that advertises
+    0.97 still fails at its real rate when a delivery is evaluated. Before #746
+    finding 5 the lie WAS the truth: `reliability=0.97` made the liar genuinely
+    reliable, so the class modelled a generous pool with a high score rather than
+    an adversary, and its delivery numbers were fiction.
+    """
     pool = make_pool(rng, size, operators=operators, segments=segments)
     relays = []
     for relay in pool.relays:
@@ -530,10 +548,11 @@ def poisoned_pool(rng: random.Random, size: int, operators: int, segments: int) 
             relays.append(
                 Relay(
                     peer_id=relay.peer_id,
-                    reliability=0.97,
+                    reliability=relay.reliability,
                     latency_ms=relay.latency_ms,
                     operator=relay.operator,
                     segment=relay.segment,
+                    advertised=0.97,
                 )
             )
         else:
@@ -551,6 +570,7 @@ def degenerate_pool(rng: random.Random, size: int, operators: int, segments: int
             latency_ms=r.latency_ms,
             operator="op0",
             segment="seg0",
+            advertised=r.advertised,
         )
         for r in pool.relays
     ]
@@ -701,6 +721,44 @@ def self_check(pools: int = 40) -> int:
             if objective(pool, trial) > best_score + 1e-9:
                 print("[ERROR] exhaustive optimum was beaten by random sampling")
                 failures += 1
+    # 2b. #746 finding 5: a poisoned relay advertises one number and delivers another.
+    liar = Relay(
+        peer_id="liar", reliability=0.30, latency_ms=40.0,
+        operator="opA", segment="segA", advertised=0.99,
+    )
+    honest = Relay(
+        peer_id="honest", reliability=0.90, latency_ms=40.0,
+        operator="opB", segment="segB",
+    )
+    cheat_pool = Pool(relays=[liar, honest], destination=Relay(
+        peer_id="dest", reliability=0.99, latency_ms=10.0,
+        operator="opD", segment="segD",
+    ))
+    if liar.score != 0.99:
+        print(f"[ERROR] advertised score {liar.score} is not the published 0.99")
+        failures += 1
+    if delivery_probability(cheat_pool, [liar]) != 0.30:
+        print("[ERROR] a poisoned relay delivers at its advertisement, not its truth")
+        failures += 1
+    if honest.score != 0.90:
+        print("[ERROR] an honest relay's score is not its reliability")
+        failures += 1
+    # Selection follows the advertisement, which is the point of the class: the
+    # champion has to be able to be fooled, or the bake-off measures nothing.
+    picked = champion_path(cheat_pool, random.Random(3), hops_override=1)
+    if [r.peer_id for r in picked] != ["liar"]:
+        print(f"[ERROR] champion picked {[r.peer_id for r in picked]} over the higher advertisement")
+        failures += 1
+    # The pool builder must produce liars whose truth is not their advertisement.
+    real = poisoned_pool(random.Random(9), 24, 3, 4)
+    liars = [r for r in real.relays if r.advertised is not None]
+    if not liars or not all(r.score == 0.97 for r in liars):
+        print("[ERROR] poisoned_pool liars do not all advertise 0.97")
+        failures += 1
+    if any(r.reliability == 0.97 for r in liars):
+        print("[ERROR] a poisoned relay's truth was overwritten with its advertisement")
+        failures += 1
+
     # 3. Determinism: same seed, same numbers.
     a = run([8], 10, 11)
     b = run([8], 10, 11)

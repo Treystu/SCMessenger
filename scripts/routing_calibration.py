@@ -201,8 +201,10 @@ def brier(records: Sequence[Dict[str, object]], key_conf: str, key_out: str) -> 
 def rank_correlation(records: Sequence[Dict[str, object]], key_score: str, key_true: str) -> float:
     """Spearman correlation between the recorded score and true delivery.
 
-    Ties are ranked by position; the pools are small and the quantities are
-    continuous, so ties are rare and this is adequate for a ranking check.
+    Ties get the AVERAGE of the ranks they span, which is the definition of
+    Spearman with ties. Ranking them by position manufactures a correlation out
+    of tie order: scores are clamped and repeat often, so two peers with the same
+    score would be counted as an ordering the evidence does not support (#746).
     """
     n = len(records)
     if n < 3:
@@ -302,6 +304,21 @@ def self_check() -> int:
     if abs(conf_g - max(0.0, 0.85 - 0.05 * peer_g.hops_away)) > 1e-9:
         print("[ERROR] layer2 confidence is not the documented formula")
         failures += 1
+    # Ties must get average ranks. Scores [1,1,2,3] against truths [1,2,3,4] are
+    # Spearman 0.9487 with the average ranks the definition calls for; positional
+    # ranks make the two tied scores 0 and 1 and report a perfect 1.000, which is
+    # the correlation of an ordering the data does not contain.
+    tied = [
+        {"score": 1.0, "true_delivery": 1.0},
+        {"score": 1.0, "true_delivery": 2.0},
+        {"score": 2.0, "true_delivery": 3.0},
+        {"score": 3.0, "true_delivery": 4.0},
+    ]
+    rho = rank_correlation(tied, "score", "true_delivery")
+    if abs(rho - 0.9487) > 1e-3:
+        print(f"[ERROR] tied observations scored {rho:.4f}, expected 0.9487 (average ranks)")
+        failures += 1
+
     # Determinism.
     a = study(4, 20, 11, sizes=(6,))
     b = study(4, 20, 11, sizes=(6,))
