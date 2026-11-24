@@ -331,6 +331,10 @@ def run(sizes: Sequence[int], pools: int, seed: int) -> Dict[str, object]:
 # reaching PAL, sampling within the harness's own 2pp indifference band.
 
 DEPTH_BAND = 0.02          # the harness's own materiality band, from the spec
+# The report carries percentage points, so the acceptance comparison needs the same
+# band in pp. Using DEPTH_BAND (probability space) against a pp gap made the tolerance
+# 0.02pp instead of 2pp - two orders of magnitude stricter than the spec (#746 finding 6).
+DEPTH_BAND_PP = DEPTH_BAND * 100.0
 DEPTH_HISTORY_WINDOW = 64
 
 
@@ -565,7 +569,7 @@ def run_dynamic(
         "poisoned": poisoned_pool,
         "degenerate": degenerate_pool,
     }
-    report: Dict[str, object] = {"seed": seed, "depth_band": DEPTH_BAND, "classes": []}
+    report: Dict[str, object] = {"seed": seed, "depth_band_pp": DEPTH_BAND_PP, "classes": []}
     for kind in classes:
         for size in sizes:
             rng = random.Random(seed * 7919 + size + (len(kind) * 131))
@@ -624,12 +628,18 @@ def run_dynamic(
     return report
 
 
-def evaluate_acceptance(reports: Sequence[Dict[str, object]], band: float = DEPTH_BAND) -> Dict[str, object]:
+def evaluate_acceptance(
+    reports: Sequence[Dict[str, object]], band_pp: float = DEPTH_BAND_PP
+) -> Dict[str, object]:
     """The filed acceptance test, applied to both seeds.
 
     pass iff, on both seeds: total gap within band; hop-count component within
     band at every pool size; no adversarial class loses to the shipped builder by
     more than the band.
+
+    `band_pp` is in PERCENTAGE POINTS because `gap_median_pp` and
+    `hop_component_median_pp` are: the spec band is 2pp, and comparing a probability
+    band there silently tightened it to 0.02pp.
     """
     failures: List[str] = []
     for report in reports:
@@ -640,11 +650,11 @@ def evaluate_acceptance(reports: Sequence[Dict[str, object]], band: float = DEPT
             if gap is None:
                 failures.append(f"seed {seed} {entry['class']} size {entry['pool_size']}: no measurable pools")
                 continue
-            if gap < -band:
+            if gap < -band_pp:
                 failures.append(
                     f"seed {seed} {entry['class']} size {entry['pool_size']}: dynamic loses by {-gap:.2f}pp"
                 )
-            if hop is not None and hop < -band:
+            if hop is not None and hop < -band_pp:
                 failures.append(
                     f"seed {seed} {entry['class']} size {entry['pool_size']}: hop component {hop:.2f}pp"
                 )
@@ -658,7 +668,7 @@ def evaluate_acceptance(reports: Sequence[Dict[str, object]], band: float = DEPT
                         f"seed {seed} {entry['class']} size {entry['pool_size']}: "
                         f"depth {median_depth} does not track proven diversity {median_proven}"
                     )
-    return {"passed": not failures, "failures": failures, "band_pp": band}
+    return {"passed": not failures, "failures": failures, "band_pp": band_pp}
 
 
 def self_check(pools: int = 40) -> int:
@@ -697,6 +707,33 @@ def self_check(pools: int = 40) -> int:
     if json.dumps(a, sort_keys=True) != json.dumps(b, sort_keys=True):
         print("[ERROR] run is not deterministic for a fixed seed")
         failures += 1
+    # 4. The acceptance band must be compared in the report's own units. A 1pp loss is
+    #    inside the spec's 2pp band; a 3pp loss is outside it. Probability-space
+    #    comparison made both of them failures, which is the #746 finding 6 defect.
+    def verdict_for(gap_pp: float) -> bool:
+        report = {
+            "seed": 0,
+            "depth_band_pp": DEPTH_BAND_PP,
+            "classes": [
+                {
+                    "class": "probe",
+                    "pool_size": 8,
+                    "pools": 1,
+                    "gap_median_pp": gap_pp,
+                    "hop_component_median_pp": gap_pp,
+                    "median_depth": 3,
+                    "median_proven_segments": 3,
+                }
+            ],
+        }
+        return bool(evaluate_acceptance([report])["passed"])
+
+    if not verdict_for(-1.0):
+        print("[ERROR] a 1pp loss must pass a 2pp band")
+        failures += 1
+    if verdict_for(-3.0):
+        print("[ERROR] a 3pp loss must fail a 2pp band")
+        failures += 1
     print(f"[{'OK' if failures == 0 else 'FAIL'}] self-check: {failures} failure(s)")
     return failures
 
@@ -729,7 +766,7 @@ def main(argv: Sequence[str]) -> int:
         reports = [run_dynamic(args.sizes, args.pools, seed) for seed in seeds]
         verdict = evaluate_acceptance(reports)
         for report in reports:
-            print(f"seed={report['seed']} depth_band={report['depth_band']}pp")
+            print(f"seed={report['seed']} depth_band={report['depth_band_pp']}pp")
             for entry in report["classes"]:
                 print(
                     f"  {entry['class']:>10} pool={entry['pool_size']:>2} n={entry['pools']:>3} "
