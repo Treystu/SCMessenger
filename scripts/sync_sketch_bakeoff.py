@@ -37,6 +37,13 @@ CELL_BYTES = 21
 HEADER_BYTES = 2
 MIN_CELLS = 12
 MAX_ATTEMPTS = 12
+# Wire widths, read from core/src/drift/sketch.rs: `IBLTCell` serializes as
+# count(1 byte) + key_sum(16) + key_check(4), under a 2-byte cell-count header
+# (`to_bytes`, and MAX_WIRE_CELLS = u16::MAX). The model has to carry the same
+# widths or it answers questions about numbers the wire cannot hold.
+MAX_WIRE_CELLS = 0xFFFF
+COUNT_MIN = -128
+COUNT_MAX = 127
 LADDER_CAP_DENSITY = 12  # the ladder may climb to 12x the estimated difference, per direction
 
 
@@ -50,7 +57,20 @@ def _cell_index(key: bytes, hash_idx: int, num_cells: int) -> int:
 
 
 def _key_check(key: bytes) -> int:
-    return int.from_bytes(hashlib.sha256(key).digest()[8:16], "little")
+    """The shipped check value: the key's own first four bytes, little-endian.
+
+    `IBLTCell::xor_insert` computes `u32::from_le_bytes([key[0], key[1], key[2], key[3]])`,
+    and `decode` verifies purity against that same value. Anything wider or hashed
+    (an earlier version of this model used eight bytes of sha256) accepts peels the
+    shipped code would reject, and rejects peels it would accept.
+    """
+    return int.from_bytes(key[0:4], "little")
+
+
+def _fit_count(value: int) -> int:
+    """Wrap a count the way the wire does: one byte, two's complement."""
+    wrapped = value & 0xFF
+    return wrapped - 0x100 if wrapped >= 0x80 else wrapped
 
 
 class IBLT:
@@ -67,7 +87,7 @@ class IBLT:
         kc = _key_check(key)
         for i in range(HASH_COUNT):
             idx = _cell_index(key, i, self.num_cells)
-            self.count[idx] += 1
+            self.count[idx] = _fit_count(self.count[idx] + 1)
             self.key_sum[idx] ^= ks
             self.key_check[idx] ^= kc
 
@@ -76,7 +96,7 @@ class IBLT:
         kc = _key_check(key)
         for i in range(HASH_COUNT):
             idx = _cell_index(key, i, self.num_cells)
-            self.count[idx] -= 1
+            self.count[idx] = _fit_count(self.count[idx] - 1)
             self.key_sum[idx] ^= ks
             self.key_check[idx] ^= kc
 
@@ -85,10 +105,35 @@ class IBLT:
             raise ValueError("cell counts must match for subtraction")
         out = IBLT(self.num_cells)
         for i in range(self.num_cells):
-            out.count[i] = self.count[i] - other.count[i]
+            out.count[i] = _fit_count(self.count[i] - other.count[i])
             out.key_sum[i] = self.key_sum[i] ^ other.key_sum[i]
             out.key_check[i] = self.key_check[i] ^ other.key_check[i]
         return out
+
+    def to_wire(self) -> bytes:
+        """Serialize exactly as `IBLT::to_bytes`: 2-byte cell count, then 21-byte cells."""
+        if self.num_cells > MAX_WIRE_CELLS:
+            raise ValueError("cell count exceeds the wire's u16 header")
+        out = bytearray(self.num_cells.to_bytes(2, "little"))
+        for i in range(self.num_cells):
+            out.append(self.count[i] & 0xFF)
+            out += self.key_sum[i].to_bytes(16, "little")
+            out += self.key_check[i].to_bytes(4, "little")
+        return bytes(out)
+
+    @classmethod
+    def from_wire(cls, data: bytes) -> "IBLT":
+        """Deserialize the wire format, including its 8-bit counts."""
+        cells = int.from_bytes(data[0:2], "little")
+        table = cls(cells)
+        offset = 2
+        for i in range(cells):
+            count = data[offset]
+            table.count[i] = count - 0x100 if count >= 0x80 else count
+            table.key_sum[i] = int.from_bytes(data[offset + 1 : offset + 17], "little")
+            table.key_check[i] = int.from_bytes(data[offset + 17 : offset + 21], "little")
+            offset += CELL_BYTES
+        return table
 
     def _is_pure(self, i: int) -> bool:
         return self.count[i] in (1, -1)
@@ -165,7 +210,9 @@ def run_trial(d: int, n: int, mode: str, rng: random.Random) -> tuple[bool, int]
         for mid in b_ids:
             table_b.insert(_key_bytes(mid))
         diff = table_a.subtract(table_b)
-        return diff.decode(), 2 * (HEADER_BYTES + cells * CELL_BYTES)
+        # Decode what the wire carries, not the model's unbounded integers (#710).
+        wire_diff = IBLT.from_wire(diff.to_wire())
+        return wire_diff.decode(), 2 * (HEADER_BYTES + cells * CELL_BYTES)
 
     expected = estimate_diff(n, m)
     cells = max(MIN_CELLS, expected * CELLS_PER_DIFF)
@@ -179,11 +226,63 @@ def run_trial(d: int, n: int, mode: str, rng: random.Random) -> tuple[bool, int]
             table_b.insert(_key_bytes(mid))
         diff = table_a.subtract(table_b)
         total_bytes += 2 * (HEADER_BYTES + cells * CELL_BYTES)
-        if diff.decode():
+        wire_diff = IBLT.from_wire(diff.to_wire())
+        if wire_diff.decode():
             return True, total_bytes
         # SyncRetry: responder asks for a larger table, initiator re-offers.
         cells = min(cells * 2, max(MIN_CELLS, d * LADDER_CAP_DENSITY) * CELLS_PER_DIFF)
     return False, total_bytes
+
+
+def self_check() -> bool:
+    """Prove the model answers with the numbers the wire carries (#710).
+
+    Each check fails on the pre-fix model: counts were unbounded Python ints, the
+    purity check was eight bytes of sha256 rather than the key's first four bytes,
+    and there was no wire encoder or decoder at all.
+    """
+    failures = []
+    key = _key_bytes(0x1122334455667788)
+
+    # 1. A one-byte count wraps. 256 insertions of one key reach 256 in each of its
+    # cells, which the wire stores as 0 - the table then reads drained although 256
+    # messages differ. The model must reproduce that, not a 256 the wire cannot hold.
+    table = IBLT(12)
+    for _ in range(256):
+        table.insert(key)
+    if any(count != 0 for count in table.count):
+        failures.append("a count of 256 must wrap to 0 as the one-byte wire count does")
+    if not table.decode():
+        failures.append("the wrapped table must read as drained, as the wire would")
+
+    # 2. Round trip is the wire format: counts, sums and checks survive it unchanged.
+    small = IBLT(16)
+    for offset in range(5):
+        small.insert(_key_bytes(0x1000 + offset))
+    if IBLT.from_wire(small.to_wire()).count != small.count:
+        failures.append("wire round trip changed the counts")
+    if len(IBLT(7).to_wire()) != HEADER_BYTES + 7 * CELL_BYTES:
+        failures.append("serialized size is not header plus 21-byte cells")
+
+    # 3. The check value is the key's own first four bytes and nothing wider.
+    if _key_check(key) != int.from_bytes(key[0:4], "little"):
+        failures.append("key_check is not the key's first four bytes")
+    if _key_check(key) >= 1 << 32:
+        failures.append("key_check does not fit the wire's four bytes")
+
+    # 4. The cell-count header is two bytes, so a larger table cannot be serialized.
+    try:
+        IBLT(MAX_WIRE_CELLS + 1).to_wire()
+        failures.append("a table beyond the u16 cell-count header must refuse to serialize")
+    except ValueError:
+        pass
+
+    for message in failures:
+        print(f"[FAIL] self-check: {message}")
+    if failures:
+        return False
+    print("[OK] self-check: counts, checks and sizes match the wire format")
+    return True
 
 
 def main() -> int:
@@ -191,7 +290,15 @@ def main() -> int:
     ap.add_argument("--store", type=int, default=2000, help="messages held per node (n)")
     ap.add_argument("--trials", type=int, default=200, help="trials per ratio")
     ap.add_argument("--seed", type=int, default=671)
+    ap.add_argument(
+        "--self-check",
+        action="store_true",
+        help="verify the model reproduces the wire's widths, then exit",
+    )
     args = ap.parse_args()
+
+    if args.self_check:
+        return 0 if self_check() else 1
 
     ratios = [0.001, 0.01, 0.1]
     print("sync-sketch sizing bake-off (#671) - offline model of drift/sketch.rs + drift/sync.rs")
