@@ -1950,7 +1950,7 @@ async fn cmd_contact(action: ContactAction) -> Result<()> {
                     // confidently and wrongly.
                     let list = contacts.list().map_err(|e| {
                         anyhow::anyhow!(
-                            "Failed to read the contacts store ({:?}). If a node is running on this data dir, it holds the database lock: query that node's API (scm contacts --via-api) rather than opening the store directly.",
+                            "Failed to read the contacts store ({:?}). If a node is running on this data dir, it holds the database lock: query that node's API instead - GET /api/contacts on its control port (SCM_API_PORT, default 9876) - rather than opening the store directly.",
                             e
                         )
                     })?;

@@ -30,6 +30,7 @@ instrument's own self-check fails or the table is empty.
 from __future__ import annotations
 
 import argparse
+import math
 import random
 import statistics
 import sys
@@ -120,7 +121,7 @@ def run_bandit(rng: random.Random, peers: list[Peer], epochs: int) -> dict:
             def ucb(p: Peer) -> float:
                 if p.pulls == 0:
                     return float("inf")  # explore unseen peers first
-                return p.observed_mean() + (2.0 * (total**0.5)) / (p.pulls**0.5)
+                return p.observed_mean() + math.sqrt(2.0 * math.log(total) / p.pulls)
             peer = max(peers, key=ucb)
             ok, lat = dial_once(rng, peer)
             peer.pulls += 1
@@ -187,7 +188,10 @@ def self_check() -> bool:
         w = 0
         for _ in range(120):
             for _attempt in range(MAX_ATTEMPTS):
-                p = order[r.randrange(len(order))]
+                # Ranked traversal, not a random index: a uniformly random pick
+                # is blind to ordering, so the self-check could not tell a ranked
+                # policy from an unranked one.
+                p = order[min(_attempt, len(order) - 1)]
                 ok, _lat = dial_once(r, p)
                 if ok:
                     break

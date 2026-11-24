@@ -187,9 +187,24 @@ def timing_fingerprint(stream: Sequence[Packet]) -> float:
     return statistics.pstdev(gaps) / mean if mean else 0.0
 
 
+def _stable_seed(text):
+    """Deterministic seed from text.
+
+    Python randomizes str hashing per process (PYTHONHASHSEED), so seeding from
+    hash() made these reports irreproducible across interpreters. This is a
+    plain FNV-style fold: same input, same seed, every process.
+    """
+    h = 2166136261
+    for byte in text.encode("utf-8"):
+        h = ((h ^ byte) * 16777619) % (2 ** 32)
+    return h
+
 def evaluate(mode: str, regime: str, duration: float, seed: int, jitter: bool) -> Dict[str, float]:
-    rng = random.Random(f"{seed}-{mode}-{regime}".__hash__() & 0xFFFFFFFF)
-    real = workload(rng, duration, regime)
+    rng = random.Random(_stable_seed(f"{seed}-{mode}-{regime}"))
+    # Every cover strategy must be measured against the SAME real workload:
+    # the trace is seeded from the regime alone, so the arms differ in the
+    # cover they add, not in the traffic they are compared on.
+    real = workload(random.Random(_stable_seed(f"{seed}-real-{regime}")), duration, regime)
     cover = cover_stream(rng, duration, mode, real)
     stream = real + cover
     if jitter:

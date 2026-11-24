@@ -36,6 +36,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import copy
 import math
 import random
 import statistics
@@ -126,12 +127,18 @@ def run(topology: Topology, rng: random.Random, budget: int) -> Dict[str, object
     would choose a peer whose draw fails does not get a second chance inside the
     budget -- that is what "fixed send budget" means here.
     """
+    # Each arm learns from its OWN outcomes: sharing one mutable topology made
+    # both policies train on the other arm's results (and updated a peer twice
+    # when they chose the same one). The draw sequence stays shared, so the
+    # comparison is still policy-versus-policy at a fixed budget.
+    champ_topology = copy.deepcopy(topology)
+    chall_topology = copy.deepcopy(topology)
     delivered_champ = 0
     delivered_chall = 0
     records: List[Dict[str, object]] = []
     for _ in range(budget):
-        peer_c, conf_c, layer = champion_choice(topology)
-        peer_x, conf_x, _ = challenger_choice(topology)
+        peer_c, conf_c, layer = champion_choice(champ_topology)
+        peer_x, conf_x, _ = challenger_choice(chall_topology)
         draw_c = rng.random()
         draw_x = rng.random()
         ok_c = draw_c < peer_c.true_delivery
@@ -202,14 +209,26 @@ def rank_correlation(records: Sequence[Dict[str, object]], key_score: str, key_t
         return 0.0
 
     def ranks(values: List[float]) -> List[float]:
+        # Average ranks for ties: scores are clamped and repeat often, and
+        # positional ranks would manufacture a correlation out of tie order.
         order = sorted(range(len(values)), key=lambda i: values[i])
         out = [0.0] * len(values)
-        for position, index in enumerate(order):
-            out[index] = float(position)
+        i = 0
+        while i < len(order):
+            j = i
+            while j + 1 < len(order) and values[order[j + 1]] == values[order[i]]:
+                j += 1
+            average = (i + j) / 2.0
+            for k in range(i, j + 1):
+                out[order[k]] = average
+            i = j + 1
         return out
 
     scores = ranks([float(r[key_score]) for r in records])
     truths = ranks([float(r[key_true]) for r in records])
+    # No ranking information at all: report 0.0 rather than divide by zero.
+    if len(set(scores)) < 2 or len(set(truths)) < 2:
+        return 0.0
     mean_s = statistics.fmean(scores)
     mean_t = statistics.fmean(truths)
     num = sum((s - mean_s) * (t - mean_t) for s, t in zip(scores, truths))
