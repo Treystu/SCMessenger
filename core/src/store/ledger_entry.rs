@@ -2750,10 +2750,20 @@ pub struct LedgerExchangeResponse {
 
 #[cfg(test)]
 mod tests {
+
+    /// Temp fixtures live under the repository's `tmp/` (AGENTS.md rule 2), not the
+    /// system temp directory.
+    fn repo_tmpdir() -> tempfile::TempDir {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("..")
+            .join("tmp");
+        std::fs::create_dir_all(&root).expect("repo tmp dir");
+        tempfile::tempdir_in(&root).expect("tempdir in repo tmp")
+    }
     use super::*;
 
     fn manager() -> (tempfile::TempDir, LedgerManager) {
-        let dir = tempfile::tempdir().expect("tempdir");
+        let dir = repo_tmpdir().expect("tempdir");
         let path = dir.path().to_string_lossy().to_string();
         (dir, LedgerManager::new(path))
     }
@@ -2900,7 +2910,7 @@ rx_history",
         assert!(Arc::ptr_eq(&relative_state, &absolute_state));
         assert!(Arc::ptr_eq(&absolute_state, &parent_state));
 
-        let dir = tempfile::tempdir().expect("tempdir");
+        let dir = repo_tmpdir().expect("tempdir");
         let missing_parent_alias = dir.path().join("missing").join("..").join("ledger");
         let direct = dir.path().join("ledger");
         assert_eq!(
@@ -2935,7 +2945,7 @@ rx_history",
 
     #[test]
     fn shared_state_registry_purges_dead_paths() {
-        let dir = tempfile::tempdir().expect("tempdir");
+        let dir = repo_tmpdir().expect("tempdir");
         let dead_path = normalize_storage_path(&dir.path().join("dead-ledger")).expect("dead path");
         let state = shared_ledger_state(&dead_path);
         assert!(
@@ -3046,7 +3056,7 @@ rx_history",
 
     #[test]
     fn ledger_load_caps_oversized_file() {
-        let dir = tempfile::tempdir().expect("tempdir");
+        let dir = repo_tmpdir().expect("tempdir");
         let mk = |addr: String, success, last_seen| LedgerEntry {
             multiaddr: addr,
             peer_id: None,
@@ -3729,7 +3739,7 @@ rx_history",
 
     #[test]
     fn import_seed_entries_survives_reload() {
-        let dir = tempfile::tempdir().expect("tempdir");
+        let dir = repo_tmpdir().expect("tempdir");
         let path = dir.path().to_string_lossy().to_string();
         let mgr = LedgerManager::new(path.clone());
         assert_eq!(
@@ -4357,7 +4367,7 @@ rx_history",
     /// wrong-key rows through uniffi annotate_identity with no guard).
     #[test]
     fn load_strips_non_self_certifying_bindings_from_any_writer() {
-        let dir = tempfile::tempdir().expect("tempdir");
+        let dir = repo_tmpdir().expect("tempdir");
         let (victim_peer, _victim_key) = self_certifying_pair();
         let (_other_peer, other_key) = self_certifying_pair();
         let entries = vec![
@@ -4437,7 +4447,7 @@ rx_history",
         // entry was dropped on the very next load: the peer disappeared, and
         // the following run re-learned it as a libp2p id and "migrated" it
         // again - the replay the report measures.
-        let dir = tempfile::tempdir().expect("tempdir");
+        let dir = repo_tmpdir().expect("tempdir");
         let (peer_id, key_hex) = self_certifying_pair();
         let canonical = public_key_hex_from_libp2p_peer_id(&peer_id).expect("libp2p id");
         assert_eq!(canonical, key_hex, "the fixture key is the canonical id");
@@ -4573,7 +4583,7 @@ rx_history",
 
     #[test]
     fn concurrent_mutations_persist_last_state() {
-        let dir = tempfile::tempdir().expect("tempdir");
+        let dir = repo_tmpdir().expect("tempdir");
         let path = dir.path().to_string_lossy().to_string();
         let mgr = Arc::new(LedgerManager::new(path.clone()));
         let mut handles = Vec::new();
@@ -4628,7 +4638,7 @@ rx_history",
 
     #[test]
     fn same_path_managers_share_state_and_persist_all_mutations() {
-        let dir = tempfile::tempdir().expect("tempdir");
+        let dir = repo_tmpdir().expect("tempdir");
         let path = dir.path().to_string_lossy().to_string();
         let first = Arc::new(LedgerManager::new(path.clone()));
         let second = Arc::new(LedgerManager::new(path.clone()));
@@ -4703,7 +4713,7 @@ rx_history",
 
     #[test]
     fn load_cleans_stale_tmp() {
-        let dir = tempfile::tempdir().expect("tempdir");
+        let dir = repo_tmpdir().expect("tempdir");
         let ledger_file = dir.path().join("ledger.json");
         let entries = vec![LedgerEntry {
             multiaddr: "/ip4/198.51.100.7/tcp/9001".to_string(),
@@ -4738,7 +4748,7 @@ rx_history",
 
     #[test]
     fn load_sanitizes_legacy_entries() {
-        let dir = tempfile::tempdir().expect("tempdir");
+        let dir = repo_tmpdir().expect("tempdir");
         let ledger_file = dir.path().join("ledger.json");
         let valid_one = "/ip4/198.51.100.20/tcp/9001".to_string();
         let valid_two = "/ip4/198.51.100.21/tcp/9001".to_string();
@@ -4827,7 +4837,7 @@ rx_history",
 
     #[test]
     fn load_normalizes_optional_text_and_bounds_legacy_topics() {
-        let dir = tempfile::tempdir().expect("tempdir");
+        let dir = repo_tmpdir().expect("tempdir");
         let ledger_file = dir.path().join("ledger.json");
         let normalized_addr = "/ip4/198.51.100.24/tcp/9001".to_string();
         let dropped_fields_addr = "/ip4/198.51.100.25/tcp/9001".to_string();
@@ -4924,7 +4934,7 @@ rx_history",
 
     #[test]
     fn load_shrink_is_durable() {
-        let dir = tempfile::tempdir().expect("tempdir");
+        let dir = repo_tmpdir().expect("tempdir");
         let ledger_file = dir.path().join("ledger.json");
         let mk = |i: usize| LedgerEntry {
             multiaddr: format!("/ip4/10.0.{}.{}/tcp/9001", i / 250, (i % 250) + 1),
@@ -4965,7 +4975,7 @@ rx_history",
 
     #[test]
     fn load_admits_empty_peer_id_entries() {
-        let dir = tempfile::tempdir().expect("tempdir");
+        let dir = repo_tmpdir().expect("tempdir");
         let ledger_file = dir.path().join("ledger.json");
         let entries = vec![
             LedgerEntry {
@@ -5022,7 +5032,7 @@ rx_history",
 
     #[test]
     fn load_recovers_from_corrupt_json() {
-        let dir = tempfile::tempdir().expect("tempdir");
+        let dir = repo_tmpdir().expect("tempdir");
         let ledger_file = dir.path().join("ledger.json");
         let original = b"{ not json";
         std::fs::write(&ledger_file, original).unwrap();
@@ -5051,7 +5061,7 @@ rx_history",
 
     #[test]
     fn corrupt_json_preserves_and_restores_valid_shared_state() {
-        let dir = tempfile::tempdir().expect("tempdir");
+        let dir = repo_tmpdir().expect("tempdir");
         let path = dir.path().to_string_lossy().to_string();
         let ledger_file = dir.path().join("ledger.json");
         let primary = LedgerManager::new(path.clone());
@@ -5207,7 +5217,7 @@ rx_history",
 
     #[test]
     fn save_reload_roundtrip_at_cap() {
-        let dir = tempfile::tempdir().expect("tempdir");
+        let dir = repo_tmpdir().expect("tempdir");
         let path = dir.path().to_string_lossy().to_string();
         let mgr = LedgerManager::new(path.clone());
         {

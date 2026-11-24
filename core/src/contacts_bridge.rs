@@ -117,7 +117,14 @@ fn canonical_contact_db_path(path: &std::path::Path) -> PathBuf {
     let parent = path.parent().unwrap_or_else(|| std::path::Path::new("."));
     match std::fs::canonicalize(parent) {
         Ok(resolved) => resolved.join(name),
-        Err(_) => path.to_path_buf(),
+        // A parent that does not exist yet cannot be canonicalized. Anchor the
+        // key to the current directory instead of returning the raw relative
+        // path, so the first registration and every later one agree: sled creates
+        // the directory, and the old fallback then produced a different key.
+        Err(_) => match std::env::current_dir() {
+            Ok(cwd) => cwd.join(path),
+            Err(_) => path.to_path_buf(),
+        },
     }
 }
 

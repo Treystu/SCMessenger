@@ -106,6 +106,18 @@ def spearman(a: Sequence[float], b: Sequence[float]) -> float:
     return num / den if den else 0.0
 
 
+def _stable_seed(text):
+    """Deterministic seed from text.
+
+    Python randomizes str hashing per process (PYTHONHASHSEED), so seeding from
+    hash() made these reports irreproducible across interpreters. This is a
+    plain FNV-style fold: same input, same seed, every process.
+    """
+    h = 2166136261
+    for byte in text.encode("utf-8"):
+        h = ((h ^ byte) * 16777619) % (2 ** 32)
+    return h
+
 def evaluate_class(
     class_name: str,
     topologies: int,
@@ -115,7 +127,7 @@ def evaluate_class(
     multipliers: Dict[str, float],
     floor: float,
 ) -> Dict[str, float]:
-    rng = random.Random(f"{seed}-{class_name}".__hash__() & 0xFFFFFFFF)
+    rng = random.Random(_stable_seed(f"{seed}-{class_name}"))
     regrets: List[float] = []
     inversions = 0
     total = 0
