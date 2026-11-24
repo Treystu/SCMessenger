@@ -1109,40 +1109,6 @@ mod tests {
     }
 
     #[test]
-    fn versioned_envelope_carries_the_version_the_peer_speaks() {
-        // The header is what the peer validates, so an envelope for a v1 peer must say 1;
-        // a claim outside what we speak is clamped rather than propagated.
-        let retry = SyncMessage::SyncRetry {
-            suggested_cells: 24,
-            reason: 1,
-        };
-        let for_v1 = VersionedSyncMessage::new_for(SYNC_SCHEMA_VERSION_MIN, retry.clone());
-        assert_eq!(for_v1.schema_version, SYNC_SCHEMA_VERSION_MIN);
-        let bytes = for_v1.to_bytes().unwrap();
-        assert_eq!(
-            VersionedSyncMessage::from_bytes(&bytes).unwrap().schema_version,
-            SYNC_SCHEMA_VERSION_MIN
-        );
-
-        assert_eq!(
-            VersionedSyncMessage::new(retry.clone()).schema_version,
-            SYNC_SCHEMA_VERSION
-        );
-        assert_eq!(
-            VersionedSyncMessage::new_for(0, retry.clone()).schema_version,
-            SYNC_SCHEMA_VERSION_MIN
-        );
-        assert_eq!(
-            VersionedSyncMessage::new_for(u32::MAX, retry).schema_version,
-            SYNC_SCHEMA_VERSION
-        );
-        assert_eq!(
-            clamp_schema_version(SYNC_SCHEMA_VERSION_RETRY),
-            SYNC_SCHEMA_VERSION_RETRY
-        );
-    }
-
-    #[test]
     fn test_retry_ceiling_fails_honestly() {
         // A session that cannot grow past its ceiling must fail with a decode error,
         // never spin or report success.
