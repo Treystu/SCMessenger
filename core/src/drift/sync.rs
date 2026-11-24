@@ -1086,13 +1086,11 @@ mod tests {
         assert_eq!(v1.peer_schema_version(), SYNC_SCHEMA_VERSION_MIN);
         assert!(!v1.peer_supports_retry());
         let refused = match v1.respond(&store_b, &offer) {
-            Ok(_) => panic!("a v1 peer cannot be sent a retry: the responder must fail locally"),
+            Ok(_) => panic!("a v1 peer must not be answered with a retry"),
             Err(error) => error,
         };
-        assert!(
-            format!("{refused:?}").contains("schema 1"),
-            "the failure must name the peer's version: {refused:?}"
-        );
+        let message = format!("{refused:?}");
+        assert!(message.contains("schema 1"));
         assert_eq!(v1.state(), SyncState::Failed);
 
         // The ladder is likewise not taken in that direction: a session that knows its peer
