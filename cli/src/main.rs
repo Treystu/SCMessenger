@@ -1220,6 +1220,11 @@ async fn main() -> Result<()> {
 
     let cli = Cli::parse();
 
+    // 5. Apply the configured control-API port BEFORE dispatch (#721): the client
+    //    commands (`stop`, `send`, `invite`, `discovery`) probe the running node inside
+    //    their handlers, before any of them loads the config that owns the port.
+    config::Config::apply_api_port_for_dispatch();
+
     match cli.command {
         Commands::Init { name } => cmd_init(name).await,
         Commands::Identity { action } => cmd_identity(action).await,
