@@ -149,8 +149,12 @@ pub enum SyncSizing {
 pub const DIFF_DRIVEN_MIN_CELLS: u32 = 12;
 /// Growth factor applied per retry.
 pub const RETRY_GROWTH: u32 = 2;
-/// Never climb past this many cells; a table this large peels any realistic difference.
-pub const RETRY_MAX_CELLS: u32 = 1 << 20;
+/// Never climb past this many cells.
+///
+/// This is the WIRE ceiling, not a memory ceiling: [`IBLT::to_bytes`] encodes the cell
+/// count in two bytes and rejects anything larger, so a ladder that climbed higher would
+/// build an offer it cannot send and fail as a serialization error (#710 finding 17).
+pub const RETRY_MAX_CELLS: u32 = crate::drift::sketch::MAX_WIRE_CELLS as u32;
 
 /// Track the state of a synchronization session
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -951,6 +955,39 @@ mod tests {
         assert_eq!(session_a.peer_missing_ids().len(), 3);
         assert_eq!(session_b.our_missing_ids().len(), 3);
         assert_eq!(session_a.state(), SyncState::Complete);
+    }
+
+    #[test]
+    fn retry_ladder_never_exceeds_the_wire_limit() {
+        // #710 finding 17: the ladder must stop at a size the wire can carry. Whoever asks
+        // for more (a hostile or optimistic suggestion) is clamped, and the resulting offer
+        // must actually serialize.
+        assert!(
+            RETRY_MAX_CELLS as usize <= crate::drift::sketch::MAX_WIRE_CELLS,
+            "the retry ceiling must fit the two-byte wire cell count"
+        );
+        let mut store = MeshStore::new();
+        for i in 0..5u8 {
+            store.insert(make_test_envelope(make_test_id(i), 100));
+        }
+        let mut session = SyncSession::with_sizing(SyncSizing::DifferenceDriven {
+            cells: DIFF_DRIVEN_MIN_CELLS,
+        });
+        let _ = session.initiate(&store).unwrap();
+        let offer = session
+            .handle_retry(&store, u32::MAX)
+            .expect("a clamped retry must still build an offer");
+        let (iblt_data, sketch_capacity) = match offer {
+            SyncMessage::SyncOffer {
+                iblt_data,
+                sketch_capacity,
+                ..
+            } => (iblt_data, sketch_capacity),
+            other => panic!("expected a SyncOffer, got {other:?}"),
+        };
+        assert_eq!(sketch_capacity, RETRY_MAX_CELLS);
+        let table = IBLT::from_bytes(&iblt_data).expect("the offer table must decode");
+        assert_eq!(table.cell_count(), RETRY_MAX_CELLS as usize);
     }
 
     #[test]
