@@ -1076,14 +1076,16 @@ mod tests {
         let offer = session_a.initiate(&store_a).unwrap();
 
         let mut v2 = SyncSession::new();
-        assert_eq!(v2.peer_schema_version(), SYNC_SCHEMA_VERSION);
+        let v2_version = v2.peer_schema_version();
+        assert_eq!(v2_version, SYNC_SCHEMA_VERSION);
         assert!(v2.peer_supports_retry());
         let (reply, _) = v2.respond(&store_b, &offer).unwrap();
         assert!(matches!(reply, SyncMessage::SyncRetry { .. }));
         assert_eq!(v2.state(), SyncState::Ready);
 
         let mut v1 = SyncSession::with_peer_schema_version(SYNC_SCHEMA_VERSION_MIN);
-        assert_eq!(v1.peer_schema_version(), SYNC_SCHEMA_VERSION_MIN);
+        let v1_version = v1.peer_schema_version();
+        assert_eq!(v1_version, SYNC_SCHEMA_VERSION_MIN);
         assert!(!v1.peer_supports_retry());
         let refused = match v1.respond(&store_b, &offer) {
             Ok(_) => panic!("a v1 peer must not be answered with a retry"),
@@ -1100,10 +1102,33 @@ mod tests {
         });
         let _ = v1_initiator.initiate(&store_a).unwrap();
         v1_initiator.set_peer_schema_version(SYNC_SCHEMA_VERSION_MIN);
-        assert!(
-            v1_initiator.handle_retry(&store_a, DIFF_DRIVEN_MIN_CELLS).is_err()
-        );
+        let ladder = v1_initiator.handle_retry(&store_a, DIFF_DRIVEN_MIN_CELLS);
+        assert!(ladder.is_err());
         assert_eq!(v1_initiator.state(), SyncState::Failed);
+    }
+
+    #[test]
+    fn versioned_envelope_carries_the_version_the_peer_speaks() {
+        // The header is what the peer validates, so an envelope for a v1 peer must say 1;
+        // a claim outside what we speak is clamped rather than propagated.
+        let retry = SyncMessage::SyncRetry {
+            suggested_cells: 24,
+            reason: 1,
+        };
+        let for_v1 = VersionedSyncMessage::new_for(SYNC_SCHEMA_VERSION_MIN, retry.clone());
+        assert_eq!(for_v1.schema_version, SYNC_SCHEMA_VERSION_MIN);
+        let bytes = for_v1.to_bytes().unwrap();
+        let decoded = VersionedSyncMessage::from_bytes(&bytes).unwrap();
+        assert_eq!(decoded.schema_version, SYNC_SCHEMA_VERSION_MIN);
+
+        let current = VersionedSyncMessage::new(retry.clone());
+        assert_eq!(current.schema_version, SYNC_SCHEMA_VERSION);
+        let floor = VersionedSyncMessage::new_for(0, retry.clone());
+        assert_eq!(floor.schema_version, SYNC_SCHEMA_VERSION_MIN);
+        let ceiling = VersionedSyncMessage::new_for(u32::MAX, retry);
+        assert_eq!(ceiling.schema_version, SYNC_SCHEMA_VERSION);
+        let clamped = clamp_schema_version(SYNC_SCHEMA_VERSION_RETRY);
+        assert_eq!(clamped, SYNC_SCHEMA_VERSION_RETRY);
     }
 
     #[test]
