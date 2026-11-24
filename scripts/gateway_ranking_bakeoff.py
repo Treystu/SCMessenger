@@ -180,6 +180,20 @@ def self_check() -> int:
     if not math.isfinite(row["mean_regret"]):
         print("[ERROR] mean regret is not finite")
         failures += 1
+    # #746: the seed must not depend on the interpreter's hash randomization.
+    # In-process determinism passes even with hash(), because one process has one
+    # seed table; the defect only shows across processes:
+    #   PYTHONHASHSEED=1 -> hash("20261111-mixed-energy") = -9202006181893988150
+    #   PYTHONHASHSEED=2 -> hash("20261111-mixed-energy") =  7049232434426936529
+    # so an in-process rerun is not evidence. These constants are the FNV-1a
+    # 32-bit values (440920331 is the published digest of "abc"); a hash()-seeded
+    # implementation cannot reproduce them in any process it was not born in.
+    for text, expected in (("abc", 440920331), ("20261111-mixed-energy", 425724240)):
+        got = _stable_seed(text)
+        if got != expected:
+            print(f"[ERROR] _stable_seed({text!r}) = {got}, expected {expected}")
+            failures += 1
+
     # Determinism.
     a = run(11, 3, 2, 4, 0.01)
     b = run(11, 3, 2, 4, 0.01)
