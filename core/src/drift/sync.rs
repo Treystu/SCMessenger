@@ -1102,7 +1102,9 @@ mod tests {
         });
         let _ = v1_initiator.initiate(&store_a).unwrap();
         v1_initiator.set_peer_schema_version(SYNC_SCHEMA_VERSION_MIN);
-        assert!(v1_initiator.handle_retry(&store_a, DIFF_DRIVEN_MIN_CELLS).is_err());
+        assert!(
+            v1_initiator.handle_retry(&store_a, DIFF_DRIVEN_MIN_CELLS).is_err()
+        );
         assert_eq!(v1_initiator.state(), SyncState::Failed);
     }
 
@@ -1122,7 +1124,10 @@ mod tests {
             SYNC_SCHEMA_VERSION_MIN
         );
 
-        assert_eq!(VersionedSyncMessage::new(retry.clone()).schema_version, SYNC_SCHEMA_VERSION);
+        assert_eq!(
+            VersionedSyncMessage::new(retry.clone()).schema_version,
+            SYNC_SCHEMA_VERSION
+        );
         assert_eq!(
             VersionedSyncMessage::new_for(0, retry.clone()).schema_version,
             SYNC_SCHEMA_VERSION_MIN
@@ -1131,7 +1136,10 @@ mod tests {
             VersionedSyncMessage::new_for(u32::MAX, retry).schema_version,
             SYNC_SCHEMA_VERSION
         );
-        assert_eq!(clamp_schema_version(SYNC_SCHEMA_VERSION_RETRY), SYNC_SCHEMA_VERSION_RETRY);
+        assert_eq!(
+            clamp_schema_version(SYNC_SCHEMA_VERSION_RETRY),
+            SYNC_SCHEMA_VERSION_RETRY
+        );
     }
 
     #[test]
