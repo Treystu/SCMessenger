@@ -108,6 +108,23 @@ def dial_once(rng: random.Random, peer: Peer) -> tuple[bool, float]:
     return ok, peer.latency_ms if ok else 0.0
 
 
+def ucb_explore(total_pulls: int, pulls: int) -> float:
+    """UCB1's exploration term: sqrt(2 * ln(total) / pulls).
+
+    Logarithmic in the total number of pulls and inverse-square-root in this
+    peer's own, which is the only form that decays: as a peer is measured, its
+    bonus falls away and the policy settles on what it has learned. The latency
+    arm used 2 * sqrt(total) / sqrt(pulls) instead - sqrt of the total, not its
+    log - so its exploration kept GROWING with every dial anywhere in the pool
+    (#746), and the arm spent the budget re-probing peers it had already measured
+    while the plain arm settled. A local build is never used for this: the
+    pinned values in self_check are the evidence.
+    """
+    if pulls == 0:
+        return float("inf")  # explore unseen peers first
+    return math.sqrt(2.0 * math.log(max(2, total_pulls)) / pulls)
+
+
 def run_static(
     peers: list[Peer],
     trace: list[list[bool]],
@@ -152,9 +169,7 @@ def run_bandit(
         for attempt in range(MAX_ATTEMPTS):
             total = sum(p.pulls for p in peers) + 1
             def ucb(p: Peer) -> float:
-                if p.pulls == 0:
-                    return float("inf")  # explore unseen peers first
-                return p.observed_mean() + math.sqrt(2.0 * math.log(total) / p.pulls)
+                return p.observed_mean() + ucb_explore(total, p.pulls)
             peer = max(peers, key=ucb)
             ok, lat = dial_once(rng, peer)
             peer.pulls += 1
@@ -187,9 +202,9 @@ def run_bandit_latency(
         for attempt in range(MAX_ATTEMPTS):
             total = sum(p.pulls for p in peers) + 1
             def ucb(p: Peer) -> float:
-                if p.pulls == 0:
-                    return float("inf")
-                explore = (2.0 * (total**0.5)) / (p.pulls**0.5)
+                # Same logarithmic exploration as the plain arm; only the latency
+                # penalty distinguishes the two challengers.
+                explore = ucb_explore(total, p.pulls)
                 lat_penalty = 0.25 * (p.observed_latency() / BASE_LATENCY_MS)
                 return p.observed_mean() + explore - lat_penalty
             peer = max(peers, key=ucb)
@@ -253,6 +268,25 @@ def self_check() -> bool:
     run_bandit(build_population(random.Random(6744), n_peers), trace, random.Random(6745), epochs, bandit_seen)
     if static_seen != bandit_seen:
         print("[FAIL] policies replayed different availability histories at one seed")
+        return False
+
+    # #746: both UCB arms must use the LOGARITHMIC exploration term. Pinned at a
+    # state the two forms separate by a factor of 17: at total=1000, pulls=10 the
+    # log form gives 1.1754 and the sqrt(total) form the latency arm carried gives
+    # 20.0, so this check fails on the pre-fix control flow and keeps the arms from
+    # drifting apart again.
+    checks = (((1000, 10), 1.1754), ((1000, 100), 0.3717))
+    for (total, pulls), expected in checks:
+        got = ucb_explore(total, pulls)
+        if abs(got - expected) > 1e-3:
+            print(f"[FAIL] ucb_explore({total}, {pulls}) = {got:.4f}, expected {expected} (logarithmic)")
+            return False
+    if ucb_explore(10, 0) != float("inf"):
+        print("[FAIL] an unpulled peer must be explored first")
+        return False
+    # Exploration must fall as a peer is measured; sqrt(total) never does.
+    if not ucb_explore(1000, 100) < ucb_explore(1000, 10):
+        print("[FAIL] exploration does not decay with a peer's own pulls")
         return False
     return True
 
