@@ -435,7 +435,7 @@ impl SyncSession {
                 if !self.peer_supports_retry() {
                     self.state = SyncState::Failed;
                     return Err(DriftError::DecompressionFailed(format!(
-                        "peer speaks sync schema {} and cannot decode a retry; refusing to answer an unpeelable offer with a frame it would discard",
+                        "peer speaks sync schema {} and cannot decode a retry",
                         self.peer_schema_version
                     )));
                 }
