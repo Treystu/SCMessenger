@@ -18,6 +18,7 @@ open func blockPeer(peerId: String, deviceId: String?, reason: String?)throws   
 open func blockedCount()throws  -> UInt32  {
 open func blockedOnlyPeerIds()throws  -> [String]  {
 open func buildIdentityBackupPayload()throws  -> String  {
+open func cancelQueuedMessage(messageId: String) -> Bool  {
 open func classifyNotification(message: NotificationMessageContext, uiState: NotificationUiState, settings: MeshSettings) -> NotificationDecision  {
 open func clear()throws   {try rustCallWithError(FfiConverterTypeIronCoreError_lift) {
 open func clearConversation(peerId: String)throws   {try rustCallWithError(FfiConverterTypeIronCoreError_lift) {

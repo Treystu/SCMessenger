@@ -2949,7 +2949,6 @@ async fn cmd_start(
         core: core.clone(),
         swarm_handle: Arc::new(swarm_handle.clone()),
         own_peer_id: local_peer_id.to_string(),
-        outbox: Arc::clone(&outbox),
     };
 
     let http_bind_api = http_bind.clone();
@@ -4408,7 +4407,6 @@ async fn cmd_relay(
         core: core_arc.clone(),
         swarm_handle: Arc::new(swarm_handle.clone()),
         own_peer_id: local_peer_id.to_string(),
-        outbox: Arc::clone(&outbox),
     };
     let http_bind_api = http_bind.clone();
     tokio::spawn(async move {

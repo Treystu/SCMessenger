@@ -652,6 +652,12 @@ jobs:
             command -v python3 >/dev/null 2>&1 || { echo "[FAIL] python3 missing; cannot run unwrap/println gate"; exit 1; }
             python3 -m unittest scripts/test_check_prod_unwrap_println.py
             python3 scripts/check_prod_unwrap_println.py
+      # #678: the `scmessenger-cli` bin target declared `test = false`, so the
+      # unit battery inside main.rs was never compiled by any test build. The
+      # target is enabled; this gate fails if a bin with tests is excluded again.
+      - run:
+          name: Bin targets with unit tests are not excluded (#678)
+          command: python3 scripts/check_bin_test_targets.py
 
   # ---------------------------------------------------------------------------
   # 4. Test (ubuntu-latest)  <- .github/workflows/ci.yml job `test`, ubuntu leg
@@ -667,6 +673,13 @@ jobs:
           name: Run workspace tests
           no_output_timeout: 30m
           command: cargo test --workspace --features test-utils
+      # #678: `cargo test --workspace` select the bin target only while it is
+      # enabled, so run the battery by name: a manifest change that hides it
+      # again then shows up as a missing step, not as silence.
+      - run:
+          name: Run CLI bin test battery (#678)
+          no_output_timeout: 30m
+          command: cargo test -p scmessenger-cli --bin scmessenger-cli
       # The audit tooling is stdlib-only Python, and until this step ran nothing
       # executed its tests: a broken gate script or evaluator could land while
       # every context stayed green. Both suites are cheap and deterministic.
