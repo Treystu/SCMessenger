@@ -95,17 +95,33 @@ def _path_delivery(path: Path, failure: Dict[int, float]) -> float:
 
 
 def _union_delivery(chosen: Sequence[Path], failure: Dict[int, float]) -> float:
-    """P(at least one path delivers) under independent node failure.
+    """Exact P(at least one path delivers) under independent NODE failure.
 
-    Correlated node failure is not a product over paths -- but the greedy
-    comparator has to optimise something it can compute exactly, and the union
-    under node independence is the standard, optimistic-bound choice: it is the
-    disjointness objective, evaluated honestly.
+    Paths are series systems over shared nodes, so their deliveries are not
+    independent and multiplying `1 - p_path` over paths overstates the union: two
+    paths through one node that fails half the time score 0.75 that way when the
+    truth is 0.50 (#694), and a greedy pointed at the inflated number cannot see
+    that its "second path" is the first path again.
+
+    Inclusion-exclusion over the chosen paths is exact here, and cheap: the union
+    is at most MAX_PATHS_PER_HINT paths, so at most 2**k terms. For a non-empty
+    subset S, P(every path in S delivers) is the product over the union of their
+    nodes, because a series path delivers exactly when all of its nodes are up.
     """
-    miss = 1.0
-    for path in chosen:
-        miss *= 1.0 - _path_delivery(path, failure)
-    return 1.0 - miss
+    n = len(chosen)
+    if n == 0:
+        return 0.0
+    total = 0.0
+    for mask in range(1, 1 << n):
+        members = [i for i in range(n) if mask >> i & 1]
+        nodes = set()
+        for i in members:
+            nodes.update(chosen[i].relays)
+        p_all = 1.0
+        for node in nodes:
+            p_all *= 1.0 - failure.get(node, 0.0)
+        total += p_all if len(members) % 2 == 1 else -p_all
+    return total
 
 
 def disjoint_greedy(
@@ -248,6 +264,23 @@ def self_check() -> int:
     if abs(expected - 98.0) > 1e-9:
         print("[ERROR] self-check arithmetic is wrong")
         failures += 1
+    # #694: overlap must not be counted as independence. Two paths through one node
+    # that fails half the time deliver together exactly half the time; the product
+    # over paths said 0.75.
+    shared_a = Path(path_id=10, relays=(0, 4), latency_ms=40, score=60.0)
+    shared_b = Path(path_id=11, relays=(0, 4), latency_ms=45, score=59.0)
+    shared = _union_delivery([shared_a, shared_b], {0: 0.5, 4: 0.0})
+    if abs(shared - 0.5) > 1e-9:
+        print(f"[ERROR] two paths through one 50% node score {shared:.3f}, expected 0.500")
+        failures += 1
+    # Disjoint paths really are independent, and there the union is 1 - (1-p1)(1-p2).
+    apart_a = Path(path_id=12, relays=(5,), latency_ms=40, score=60.0)
+    apart_b = Path(path_id=13, relays=(6,), latency_ms=45, score=59.0)
+    apart = _union_delivery([apart_a, apart_b], {5: 0.5, 6: 0.5})
+    if abs(apart - 0.75) > 1e-9:
+        print(f"[ERROR] disjoint paths score {apart:.3f}, expected 0.750")
+        failures += 1
+
     # Determinism.
     a = run(6, 10, 12, 8, 0.2, 11, False)
     b = run(6, 10, 12, 8, 0.2, 11, False)
