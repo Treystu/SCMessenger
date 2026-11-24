@@ -49,10 +49,19 @@ Verified against origin/main (2677ea38) and PR state on 2026-10-14:
 | MT-03 | P0 umbrella WP1-WP4 | #383, #352, #349, #355, #356 | n/a | DONE: all merged (#383 11b30c85f 2026-10-03; #352, #349, #355, #356 merged 2026-10-06 in the 0.5.0 integration) |
 | MT-06 | Android lifecycle (AND-SS-001, STOP-TEARDOWN-TIMEOUT-001) | #351, #367 | android-qa | DONE: #351 and #367 were CLOSED UNMERGED; the work landed instead as #432 (30caacc36, AND-SS-001 serialize start/stop), #515 (bounded stop path) and #519 (re-ensure FGS); `StopStartFloodTest.kt` is on main. Residual #364 lifecycle diff not checked here |
 | MT-07 | Periodic outbox sweep (OUTBOX-SWEEP-001) | #413 | R8 (swarm.rs) | DONE: #413 merged 2026-10-09 (f7b8fc22f); `sweep_outbox_over_swarm` is in `core/src/transport/swarm.rs` on main |
-| MT-04 | D6 routing feed on ConnectionEstablished | unknown | R8 | UNVERIFIED: likely covered by MT-03 WP2 (commit 3c899062 `v050-wp2-routing-feed-all-transports`); #514 is observability only. First step: grep main for the feed and mark done or open a car |
+| MT-04 | D6 routing feed on ConnectionEstablished | unknown | R8 | OPEN (#580, read at `4e45ddd2`): `routing_peer_seen` exists only as a definition (`core/src/iron_core.rs:3310`) plus `iron_core.rs` test call sites - no transport caller feeds routing on `ConnectionEstablished` or identify. Not covered by MT-03 WP2 after all; follow-up is #490 and the fix is gated |
 | MT-05 | D9 + D1 transport, vendored `libp2p-swarm-0.48.0` fix | #521 (land); #489, #372, #364 (superseded-close after #521 merges) | R8 (independent reviewer) | DECIDED (D5): #521 is the vehicle; carries the vendored D9 patch; not yet on main |
-| MT-08..MT-12 | #359 remainder; defect tickets; tooling; housekeeping; drift guard | #359 (closed unmerged) | per item | UNVERIFIED: not checked against main in this pass |
+| MT-08..MT-12 | #359 remainder; defect tickets; tooling; housekeeping; drift guard | #359 (closed unmerged) | per item | SPLIT: verified car by car against main `4e45ddd2` (#580) - MT-08 code half DONE, MT-09a DONE, MT-12 DONE, MT-09b and MT-10 OPEN, MT-11 ONGOING. Per-car evidence in the block under this table; the row stays one span because `scripts/v051_queue_sync.py` expands it into MT-08..MT-12 |
 | P0-8 BK-01 | Back up everything to GitHub | operator tool | operator | operator-gated |
+
+MT-08..MT-12 per-car evidence (#580, read against main `4e45ddd2`). Prose on purpose: a table row per car would collide with the span row that `scripts/v051_queue_sync.py` expands into MT-08..MT-12.
+
+- **MT-08 - DONE for the code half.** The two-tier connection policy is on main as `core/src/transport/admission.rs` ("replaces libp2p's static `connection_limits`", `:3`), with the retained path bound in `core/src/transport/path_budget.rs`. #359 was closed unmerged and its `per_peer_cap.rs` does not exist on main, so no duplicate landed.
+- **MT-09a - DONE.** `sweep_decision` returns `SweepAction::WatchOnly` while peers exist (`cli/src/seed_dial.rs:162`); regression test at `:457`.
+- **MT-09b - OPEN.** No self-recipient guard exists in `core/src` or `cli/src`, and `/api/outbox/cancel` is absent from `cli/src/api.rs`. It needs an owning car before anything can land.
+- **MT-10 - OPEN.** No triangulation tooling exists (`scripts/` has no `triang*`); the missing lifecycle log markers were not verified in this pass.
+- **MT-11 - ONGOING.** Standing SHIP_PLAN `G5` backlog-truth task (`SHIP_PLAN.md:493`); no code car.
+- **MT-12 - DONE.** `scripts/docs_sync_check.sh` plus `.githooks/pre-commit` and `.githooks/pre-push` are on main.
 
 MT-05 fix round for #521 (review of head 230b6169: https://github.com/Sovereign-Communication/SCMessenger/pull/521#issuecomment-6163230854):
 - **A (BLOCKING):** total-bound eviction can strip a peer's last path (`evict_over_total`, `path_budget.rs` victim loop); fix so no authenticated peer loses its last path, make over-bound a soft bound with an `over-bound-soft` marker, and remove the over_total proptest exemption.
