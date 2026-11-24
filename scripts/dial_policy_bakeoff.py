@@ -76,12 +76,29 @@ def build_population(rng: random.Random, n: int) -> list[Peer]:
     return peers
 
 
-def churn(rng: random.Random, peers: list[Peer], epoch: int) -> None:
-    """Rotate a quarter of the population offline each epoch."""
-    if epoch % 5 != 0:
-        return
-    for p in peers:
-        p.up = rng.random() > 0.25
+def build_churn_trace(rng: random.Random, n_peers: int, epochs: int) -> list[list[bool]]:
+    """One availability snapshot per epoch, computed once and replayed by every policy.
+
+    #711: churn used to draw from the same `random.Random` a policy dials with. A
+    policy that dials more often therefore consumes more of that stream, so at one
+    seed each policy saw a DIFFERENT availability history - the comparison measured
+    the RNG's response to the policy, not the policy. The trace is built from its own
+    seeded generator and never sees dial traffic, so every model replays identical
+    availability and differs only in the order it dials.
+    """
+    trace: list[list[bool]] = []
+    for epoch in range(epochs):
+        if epoch % 5 == 0:
+            trace.append([rng.random() > 0.25 for _ in range(n_peers)])
+        else:
+            trace.append(list(trace[-1]) if trace else [True] * n_peers)
+    return trace
+
+
+def apply_churn(peers: list[Peer], snapshot: list[bool]) -> None:
+    """Set each peer's availability from the precomputed snapshot for this epoch."""
+    for peer, up in zip(peers, snapshot):
+        peer.up = up
 
 
 def dial_once(rng: random.Random, peer: Peer) -> tuple[bool, float]:
@@ -91,13 +108,21 @@ def dial_once(rng: random.Random, peer: Peer) -> tuple[bool, float]:
     return ok, peer.latency_ms if ok else 0.0
 
 
-def run_static(rng: random.Random, peers: list[Peer], epochs: int) -> dict:
+def run_static(
+    peers: list[Peer],
+    trace: list[list[bool]],
+    rng: random.Random,
+    epochs: int,
+    seen: list[int] | None = None,
+) -> dict:
     """Champion: ladder frozen in prior-score order, exponential backoff, cap."""
     ladder = sorted(peers, key=lambda p: -p.prior_score)
     attempts = successes = wasted = 0
     latencies = []
     for _ in range(epochs):
-        churn(rng, peers, _)
+        apply_churn(peers, trace[_])
+        if seen is not None:
+            seen.append(sum(1 for p in peers if p.up))
         for attempt in range(MAX_ATTEMPTS):
             peer = ladder[attempt % len(ladder)]
             ok, lat = dial_once(rng, peer)
@@ -110,12 +135,20 @@ def run_static(rng: random.Random, peers: list[Peer], epochs: int) -> dict:
     return summarize(successes, attempts, wasted, latencies, epochs)
 
 
-def run_bandit(rng: random.Random, peers: list[Peer], epochs: int) -> dict:
+def run_bandit(
+    peers: list[Peer],
+    trace: list[list[bool]],
+    rng: random.Random,
+    epochs: int,
+    seen: list[int] | None = None,
+) -> dict:
     """Challenger: UCB1 ordering refreshed after every dial outcome."""
     attempts = successes = wasted = 0
     latencies = []
     for _ in range(epochs):
-        churn(rng, peers, _)
+        apply_churn(peers, trace[_])
+        if seen is not None:
+            seen.append(sum(1 for p in peers if p.up))
         for attempt in range(MAX_ATTEMPTS):
             total = sum(p.pulls for p in peers) + 1
             def ucb(p: Peer) -> float:
@@ -135,14 +168,22 @@ def run_bandit(rng: random.Random, peers: list[Peer], epochs: int) -> dict:
     return summarize(successes, attempts, wasted, latencies, epochs)
 
 
-def run_bandit_latency(rng: random.Random, peers: list[Peer], epochs: int) -> dict:
+def run_bandit_latency(
+    peers: list[Peer],
+    trace: list[list[bool]],
+    rng: random.Random,
+    epochs: int,
+    seen: list[int] | None = None,
+) -> dict:
     """Challenger 2: UCB1 with an explicit latency penalty, so exploration does not
     buy wins with slow peers. Without this row the bake-off would recommend a policy
     that shortens the ladder while raising tail latency - a trade it never measured."""
     attempts = successes = wasted = 0
     latencies = []
     for _ in range(epochs):
-        churn(rng, peers, _)
+        apply_churn(peers, trace[_])
+        if seen is not None:
+            seen.append(sum(1 for p in peers if p.up))
         for attempt in range(MAX_ATTEMPTS):
             total = sum(p.pulls for p in peers) + 1
             def ucb(p: Peer) -> float:
@@ -198,7 +239,22 @@ def self_check() -> bool:
                 w += 1
         return w
 
-    return probes(good) < probes(bad)
+    if not probes(good) < probes(bad):
+        return False
+
+    # #711: two policies at one seed must replay the SAME availability history. Before
+    # the trace existed both policies drew churn from the RNG they dial with, so the
+    # busier policy consumed more of it and the histories diverged.
+    n_peers, epochs = 24, 60
+    trace = build_churn_trace(random.Random(6743), n_peers, epochs)
+    static_seen: list[int] = []
+    bandit_seen: list[int] = []
+    run_static(build_population(random.Random(6744), n_peers), trace, random.Random(6745), epochs, static_seen)
+    run_bandit(build_population(random.Random(6744), n_peers), trace, random.Random(6745), epochs, bandit_seen)
+    if static_seen != bandit_seen:
+        print("[FAIL] policies replayed different availability histories at one seed")
+        return False
+    return True
 
 
 def main() -> int:
@@ -216,9 +272,16 @@ def main() -> int:
     rows = []
     for t in range(args.trials):
         seed = args.seed + t
-        static = run_static(random.Random(seed), build_population(random.Random(seed), args.peers), args.epochs)
-        bandit = run_bandit(random.Random(seed), build_population(random.Random(seed), args.peers), args.epochs)
-        bandit_lat = run_bandit_latency(random.Random(seed), build_population(random.Random(seed), args.peers), args.epochs)
+        trace = build_churn_trace(random.Random(seed), args.peers, args.epochs)
+        static = run_static(
+            build_population(random.Random(seed), args.peers), trace, random.Random(seed), args.epochs
+        )
+        bandit = run_bandit(
+            build_population(random.Random(seed), args.peers), trace, random.Random(seed), args.epochs
+        )
+        bandit_lat = run_bandit_latency(
+            build_population(random.Random(seed), args.peers), trace, random.Random(seed), args.epochs
+        )
         rows.append((static, bandit, bandit_lat))
 
     def mean(rows, model, key):
