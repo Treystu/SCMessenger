@@ -659,6 +659,15 @@ jobs:
           name: Bin targets with unit tests are not excluded (#678)
           command: python3 scripts/check_bin_test_targets.py
 
+      # #449: rustup honours rust-toolchain.toml from the directory containing it,
+      # so a Dockerfile that runs `rustup target/component add` before copying the
+      # pin installs into the image's default toolchain instead of the pinned one.
+      # That made the Docker Integration Suite red until the android image was
+      # fixed; this gate keeps the fix from regressing in any of the images.
+      - run:
+          name: Dockerfiles copy the toolchain pin before rustup (#449)
+          command: python3 scripts/check_docker_toolchain_order.py --self-check && python3 scripts/check_docker_toolchain_order.py
+
   # ---------------------------------------------------------------------------
   # 4. Test (ubuntu-latest)  <- .github/workflows/ci.yml job `test`, ubuntu leg
   # ---------------------------------------------------------------------------

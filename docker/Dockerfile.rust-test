@@ -15,6 +15,14 @@ RUN apt-get update && apt-get install -y \
     protobuf-compiler \
     && rm -rf /var/lib/apt/lists/*
 
+# The repository pins its toolchain in rust-toolchain.toml, and rustup honours
+# that file from the directory containing it. Copy the pin in BEFORE any rustup
+# command (#449): with the pin absent, `rustup component add` and
+# `rustup target add` below install into the image's default toolchain, and the
+# components are then missing from the pinned one - the same defect that made
+# Docker Integration Suite red until the android image was fixed in #447.
+COPY rust-toolchain.toml ./
+
 # Install additional Rust components
 RUN rustup component add clippy rustfmt
 
