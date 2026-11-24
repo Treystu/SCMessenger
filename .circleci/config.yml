@@ -668,6 +668,14 @@ jobs:
           name: Dockerfiles copy the toolchain pin before rustup (#449)
           command: python3 scripts/check_docker_toolchain_order.py --self-check && python3 scripts/check_docker_toolchain_order.py
 
+      # #155: `[profile.release] strip = true` removes the debuginfo that carries
+      # UniFFI's embedded metadata, so a compose step that builds the host cdylib
+      # with --release and then runs gen_kotlin emits an incomplete binding set and
+      # KSP fails on error.NonExistentClass. This gate fails such a step.
+      - run:
+          name: UniFFI binding builds keep debuginfo (#155)
+          command: python3 scripts/check_uniffi_binding_build.py --self-check && python3 scripts/check_uniffi_binding_build.py
+
   # ---------------------------------------------------------------------------
   # 4. Test (ubuntu-latest)  <- .github/workflows/ci.yml job `test`, ubuntu leg
   # ---------------------------------------------------------------------------
