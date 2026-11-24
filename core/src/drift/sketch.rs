@@ -66,6 +66,15 @@ impl IBLTCell {
     }
 }
 
+/// Largest table [`IBLT::to_bytes`] can put on the wire.
+///
+/// The serialized form carries the cell count in two little-endian bytes, so a table
+/// with more cells than this cannot be transmitted at all. Anything that CHOOSES a cell
+/// count (`SyncSession`'s retry ladder, a bake-off instrument) must clamp to this, not to
+/// an in-memory limit: a table above it is built, filled, and then fails at serialization,
+/// which reads as an unexplained sync failure rather than a sizing mistake.
+pub const MAX_WIRE_CELLS: usize = u16::MAX as usize;
+
 /// Invertible Bloom Lookup Table for set reconciliation
 #[derive(Debug, Clone)]
 pub struct IBLT {
@@ -221,10 +230,10 @@ impl IBLT {
     /// Serialize IBLT to bytes for transmission
     /// Format: [2 bytes LE: num_cells][for each cell: count(1) key_sum(16) key_check(4)]
     pub fn to_bytes(&self) -> Result<Vec<u8>, DriftError> {
-        if self.num_cells > u16::MAX as usize {
+        if self.num_cells > MAX_WIRE_CELLS {
             return Err(DriftError::BufferTooShort {
                 need: self.num_cells,
-                got: u16::MAX as usize,
+                got: MAX_WIRE_CELLS,
             });
         }
 
