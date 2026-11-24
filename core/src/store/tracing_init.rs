@@ -297,8 +297,8 @@ pub fn init_file_tracing(_log_directory: &str) -> Result<(), Box<dyn std::error:
 
 #[cfg(all(test, not(target_arch = "wasm32")))]
 mod tests {
-    use super::{CappedFileWriter, MESH_LOG_CAP_BYTES, MESH_LOG_FILENAME};
     use super::{init_file_tracing, rotate_for_new_subscriber, rotate_oversized_log};
+    use super::{CappedFileWriter, MESH_LOG_CAP_BYTES, MESH_LOG_FILENAME};
     use std::io::Write;
     use std::path::{Path, PathBuf};
 
