@@ -133,7 +133,9 @@ impl CappedFileWriter {
                     .open(&self.path)?,
             );
         }
-        Ok(self.file.as_mut().expect("sink was just opened"))
+        self.file
+            .as_mut()
+            .ok_or_else(|| std::io::Error::other("log sink missing after open"))
     }
 
     /// Replace the live file with `<path>.1` and reopen an empty one.
