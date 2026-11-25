@@ -62,6 +62,18 @@ on:
       - '**.md'
       - 'HANDOFF/**'
       - 'docs/**'
+  # #448 named the missing PR trigger as the reason this suite rots: on a
+  # PR-only change to the compose files nothing ran until the next main push.
+  # Scope it to the files the suite actually consumes so a docs PR does not
+  # queue a 90-minute Docker build, and keep it non-required - the merge rail
+  # is CircleCI, and this workflow currently cannot start a job at all (every
+  # run since 2026-11-24 reports conclusion=failure with zero steps and an
+  # empty runner, including the push and schedule legs), so a red here is
+  # information, never a gate.
+  pull_request:
+    paths:
+      - 'docker/**'
+      - '.github/workflows/docker-test-suite.yml'
   schedule:
     - cron: '17 6 * * 1'
   workflow_dispatch:
