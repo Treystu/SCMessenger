@@ -29,6 +29,7 @@
   "recipient_parse_note": "Recipient and key parsing from untrusted input is free of unwrap/expect on main, and the change made it more so. The two .as_ref().expect('... verified Some by has_mldsa check') calls in core/src/identity/keys.rs verify_bundle became one if let (Some(mldsa_public), Some(mldsa_signature)) binding of the same condition, so a bundle carrying only one ML-DSA field takes the legacy Ed25519 path exactly as before and a malformed bundle can no longer abort the process. Non-key recipients are still rejected: hex decode returns Option and a wrong-length or non-hex recipient is refused by the same checks as before (core/src/identity/keys.rs hex::decode -> ok()?, length/format validation). No unwrap/expect remains anywhere in the recipient/key surface - see identity_parse_scan for the scoped gate runs.",
   "identity_parse_scan": "Scoped gate runs on main ee009cf99, with an empty allowlist so nothing is hidden: `python3 scripts/check_prod_unwrap_println.py --expect --allowlist /dev/null --roots core/src/identity` -> '[OK] no unregistered production unwrap()/println!/.expect() (0 allowlisted)'; the same command with `--roots core/src/store` -> '[OK] ... (0 allowlisted)'. The 56 registered sites are all outside the recipient/key surface: 50 in core/src/transport/**, 4 in core/src/routing/**, 2 in core/src/mobile_bridge.rs (get_global_runtime's fatal Tokio-runtime invariant) - clock, multiaddr-literal, parking_lot-poisoning and runtime-creation invariants, none of them a recipient or key parse.",
   "canon_routing_note": "One routing feed entry point is kept: IronCore::routing_peer_seen is untouched. The only change in a routing-globbed path is core/src/iron_core.rs's #[doc(hidden)] test-only helper test_only_identity_signing_key, which now returns Option<SigningKey> instead of expecting an initialised identity; its four call sites are in core/tests. core/src/routing/**, core/src/transport/** and core/src/mobile_bridge.rs are not in the diff at all, so no transport callback reaches routing state through anything new.",
+  "index_landing": "This state file itself landed as #782: PR head ca7e1e1ac5ece4ea7f86162c766b9c5182a8d848 read 13/13 CircleCI contexts success (read 2026-11-25T21:51:48Z via commit statuses on that SHA) and was merged --merge as c8a4062d18d4a389ae7138f63a8ada18b99594e1 at 2026-11-25T21:51:56Z. At that head the gate still reads 56 (--expect --allowlist /dev/null) and [OK] (56 allowlisted) with the register, the scoped core/src/identity and core/src/store scans still read 0 violations, and #599 is untouched at 2b6ee1069c860c8f961beac9cec24a56f6fc9663 with 0 reviews. The change is one JSON document under HANDOFF/freebuff/jev/: no code, no workflow, no gated path.",
   "instruction_note": "The delivered work is exactly the instruction for this pass: nine non-Rule-8 panic paths removed by code with the rail green at each head, and the .expect() review converted into an enforced register that fails the required Lint context on a new unregistered site. The 54 gated sites are explicitly NOT claimed fixed; they are registered as 'pending Rule-8 fix', and #525's closure states that limit in the issue itself."
  },
  "canon_rows": {
@@ -72,7 +73,8 @@
   ],
   "infra.ci_run_evidence": [
    "ci_lint_run",
-   "ci_reads"
+   "ci_reads",
+   "index_landing"
   ],
   "instruction.instruction_matches": [
    "instruction_note",
@@ -80,7 +82,8 @@
    "sites_cured",
    "tests_added",
    "ci_reads",
-   "rule8"
+   "rule8",
+   "index_landing"
   ]
  }
 }
