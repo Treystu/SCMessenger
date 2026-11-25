@@ -33,6 +33,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -51,11 +52,16 @@ MIN_TOTAL_LINES = 200
 
 # Names the generated Kotlin must contain, each tied to something the crate
 # actually exports. If a rename lands, this list is the one place to update.
+#
+# Methods are matched with optional backticks because uniffi-bindgen Kotlin
+# emits member functions as ``fun `getXdgPaths`()`` - read from build 6142's own
+# output, where the plain-text form of these three names is absent while the
+# generated file is 3162 lines.
 REQUIRED_MARKERS = (
-    ("interface DesktopBridge", "the exported object at desktop_bridge/src/desktop_bridge.rs:17"),
-    ("fun getXdgPaths", "DesktopBridge::get_xdg_paths (desktop_bridge.rs:64)"),
-    ("fun start", "DesktopBridge::start (desktop_bridge.rs:78)"),
-    ("fun sendNotification", "DesktopBridge::send_notification (desktop_bridge.rs:128)"),
+    (re.compile(r"interface\s+DesktopBridge\b"), "the exported object at desktop_bridge/src/desktop_bridge.rs:17"),
+    (re.compile(r"fun\s+`?getXdgPaths`?\s*\("), "DesktopBridge::get_xdg_paths (desktop_bridge.rs:64)"),
+    (re.compile(r"fun\s+`?start`?\s*\("), "DesktopBridge::start (desktop_bridge.rs:78)"),
+    (re.compile(r"fun\s+`?sendNotification`?\s*\("), "DesktopBridge::send_notification (desktop_bridge.rs:128)"),
 )
 
 
@@ -117,9 +123,9 @@ def validate(files: list[tuple[str, str]]) -> list[str]:
             f"below the {MIN_TOTAL_LINES}-line floor for this crate"
         )
 
-    for marker, why in REQUIRED_MARKERS:
-        if marker not in combined:
-            problems.append(f"missing `{marker}` - would break the consumer of {why}")
+    for pattern, why in REQUIRED_MARKERS:
+        if not pattern.search(combined):
+            problems.append(f"missing /{pattern.pattern}/ - would break the consumer of {why}")
 
     return problems
 
@@ -136,9 +142,31 @@ def self_check() -> bool:
         ["interface DesktopBridge {"] + [f"    fun method{i}()" for i in range(220)] + ["}"]
     )
     realistic = [("DesktopBridge.kt", realistic_body + "\n    fun getXdgPaths()\n    fun start()\n    fun sendNotification()\n")]
+    # The spelling build 6142 actually produced: uniffi-bindgen backticks the
+    # member functions. The detector must accept this, or the gate fails a
+    # correct binding set.
+    backticked = [
+        (
+            "scmessenger_desktop_bridge.kt",
+            "\n".join(
+                ["public interface DesktopBridge {"]
+                + [f"    fun `method{i}`()" for i in range(220)]
+                + [
+                    "    fun `getXdgPaths`(): XdgPaths",
+                    "    fun `start`()",
+                    "    fun `sendNotification`(title: kotlin.String)",
+                    "}",
+                ]
+            ),
+        )
+    ]
+    # Same set with the method markers removed: the gate must still catch it.
+    backticked_without_methods = [("scmessenger_desktop_bridge.kt", backticked[0][1].replace("`start`", "`go`"))]
 
     cases: list[tuple[str, list[tuple[str, str]], bool]] = [
         ("realistic binding set passes", realistic, True),
+        ("uniffi backticked binding set passes", backticked, True),
+        ("backticked set missing a method fails", backticked_without_methods, False),
         ("empty output fails", [], False),
         ("symbol-less output fails", [("DesktopBridge.kt", "// nothing here\n")], False),
         ("truncated set fails", [("DesktopBridge.kt", "interface DesktopBridge {\n}\n")], False),
