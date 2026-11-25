@@ -637,7 +637,6 @@ pub fn verify_bundle(bundle: &PublicKeyBundle) -> Result<()> {
         bundle.mldsa_public.as_ref(),
         bundle.mldsa_signature.as_ref(),
     ) {
-
         // Signature input: b"iron-core keybundle v3" || ed25519_public || x25519_public || mlkem_encaps_key || mldsa_public || created_at.to_le_bytes() || supported_suites
         let mut sig_input = Vec::new();
         sig_input.extend_from_slice(b"iron-core keybundle v3");

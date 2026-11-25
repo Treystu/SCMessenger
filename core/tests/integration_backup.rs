@@ -466,10 +466,12 @@ fn iron_core_import_rejects_corrupted_ratchet_session_entry() {
     let alice = IronCore::new();
     alice.grant_consent();
     alice.initialize_identity().expect("alice identity init");
-    let identity_key_hex = hex::encode(alice
-        .test_only_identity_signing_key()
-        .expect("alice identity initialised")
-        .to_bytes());
+    let identity_key_hex = hex::encode(
+        alice
+            .test_only_identity_signing_key()
+            .expect("alice identity initialised")
+            .to_bytes(),
+    );
 
     let zero_hex = hex::encode([0u8; 32]);
     let corrupted_sessions_json = format!(
