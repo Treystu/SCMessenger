@@ -129,7 +129,10 @@ impl AuditEvent {
 
     /// Compute cryptographic hash of this event for chaining
     pub fn chain_hash(&self) -> String {
-        let json = serde_json::to_string(self).expect("Failed to serialize AuditEvent");
+        // AuditEvent is plain data (strings, integers, Option), so serialisation
+        // cannot fail; an empty fallback keeps the hash function panic-free on the
+        // impossible case instead of aborting the process on an audit write.
+        let json = serde_json::to_string(self).unwrap_or_default();
         let hash = blake3::hash(json.as_bytes());
         hash.to_hex().to_string()
     }
@@ -214,14 +217,11 @@ impl AuditLog {
                 count
             }
             None => {
-                // All events are older than the cutoff
-                if !self.events.is_empty() {
-                    self.pruned_head_hash = Some(
-                        self.events
-                            .last()
-                            .expect("checked non-empty above")
-                            .chain_hash(),
-                    );
+                // All events are older than the cutoff. No panic path: an empty
+                // log is the other arm, so `last()` is read once through `if let`.
+                if let Some(last) = self.events.last() {
+                    let last_hash = last.chain_hash();
+                    self.pruned_head_hash = Some(last_hash);
                     let count = self.events.len() as u32;
                     self.events.clear();
                     count
