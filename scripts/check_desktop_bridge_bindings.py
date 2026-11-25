@@ -58,7 +58,10 @@ MIN_TOTAL_LINES = 200
 # output, where the plain-text form of these three names is absent while the
 # generated file is 3162 lines.
 REQUIRED_MARKERS = (
-    (re.compile(r"interface\s+DesktopBridge\b"), "the exported object at desktop_bridge/src/desktop_bridge.rs:17"),
+    # No trailing \b: build 6146 matched all three methods and failed this one,
+    # which is only consistent with a longer declared name (for example
+    # `DesktopBridgeInterface`). The prefix is what identifies the type.
+    (re.compile(r"interface\s+`?DesktopBridge"), "the exported object at desktop_bridge/src/desktop_bridge.rs:17"),
     (re.compile(r"fun\s+`?getXdgPaths`?\s*\("), "DesktopBridge::get_xdg_paths (desktop_bridge.rs:64)"),
     (re.compile(r"fun\s+`?start`?\s*\("), "DesktopBridge::start (desktop_bridge.rs:78)"),
     (re.compile(r"fun\s+`?sendNotification`?\s*\("), "DesktopBridge::send_notification (desktop_bridge.rs:128)"),
@@ -162,10 +165,18 @@ def self_check() -> bool:
     ]
     # Same set with the method markers removed: the gate must still catch it.
     backticked_without_methods = [("scmessenger_desktop_bridge.kt", backticked[0][1].replace("`start`", "`go`"))]
+    # The longer declaration name build 6146 implies: the prefix must still match.
+    longer_name = [("scmessenger_desktop_bridge.kt", backticked[0][1].replace(
+        "public interface DesktopBridge {", "public interface DesktopBridgeInterface {"))]
+    # No interface at all: the exported object is missing, which must fail.
+    no_interface = [("scmessenger_desktop_bridge.kt", backticked[0][1].replace(
+        "public interface DesktopBridge {", "public interface SomethingElse {"))]
 
     cases: list[tuple[str, list[tuple[str, str]], bool]] = [
         ("realistic binding set passes", realistic, True),
         ("uniffi backticked binding set passes", backticked, True),
+        ("longer declared interface name passes", longer_name, True),
+        ("missing interface fails", no_interface, False),
         ("backticked set missing a method fails", backticked_without_methods, False),
         ("empty output fails", [], False),
         ("symbol-less output fails", [("DesktopBridge.kt", "// nothing here\n")], False),
