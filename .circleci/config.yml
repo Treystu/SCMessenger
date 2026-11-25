@@ -851,6 +851,21 @@ jobs:
           name: Generate Swift bindings
           no_output_timeout: 20m
           command: cargo run -p scmessenger-core --bin gen_swift --features gen-bindings
+      # #590: the desktop bridge's `gen_kotlin` bin is declared with
+      # `required-features = ["gen-bindings"]`, so `cargo test --workspace` never
+      # builds it and nothing on this rail ever ran it. `.github/workflows/
+      # desktop.yml` tries, but its `build` job has failed at job level with zero
+      # steps and no uploaded log (run 44938258938), which proves nothing about
+      # the bindings. This generates the desktop Kotlin set and asserts it names
+      # the exported type and methods, because an exit code is exactly what #155
+      # showed can be green on an incomplete set.
+      - run:
+          name: Generate and validate the desktop bridge Kotlin bindings (#590)
+          no_output_timeout: 20m
+          command: |
+            set -euo pipefail
+            python3 scripts/check_desktop_bridge_bindings.py --self-check
+            python3 scripts/check_desktop_bridge_bindings.py
       # scripts/ffi_surface.sh fails closed when a binding file is missing or
       # extracts zero symbols, so a generation failure cannot read as a pass.
       - run:
