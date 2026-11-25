@@ -427,8 +427,10 @@ impl RelayClient {
         // Create QUIC endpoint
         // Infallible construction: a wildcard IPv4 address with port 0 needs no
         // string parse, so the endpoint can never panic here.
-        let mut endpoint = quinn::Endpoint::client(SocketAddr::from(([0, 0, 0, 0], 0)))
-        .map_err(|e| RelayClientError::ConnectionFailed(format!("QUIC endpoint error: {}", e)))?;
+        let mut endpoint =
+            quinn::Endpoint::client(SocketAddr::from(([0, 0, 0, 0], 0))).map_err(|e| {
+                RelayClientError::ConnectionFailed(format!("QUIC endpoint error: {}", e))
+            })?;
 
         // Configure QUIC client - use platform verifier for system certificates
         let client_config = quinn::ClientConfig::try_with_platform_verifier().map_err(|e| {
