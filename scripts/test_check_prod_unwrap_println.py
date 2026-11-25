@@ -159,6 +159,24 @@ class MainTests(unittest.TestCase):
         with d:
             self.assertEqual(self.run_main(r), 0)
 
+    def test_registered_expect_is_not_stale_without_the_option(self):
+        # #525: the register must be legal under BOTH invocations, so a job that keeps
+        # the old command line cannot turn every registered .expect() site into a
+        # stale-entry failure.
+        d, r = self._repo(
+            {"src/a.rs": 'fn f() { x.expect("ctx"); }\n'},
+            "src/a.rs:1  pending Rule-8 fix\n",
+        )
+        with d:
+            self.assertEqual(self.run_main(r), 0)
+            self.assertEqual(self.run_main(r, ("--expect",)), 0)
+
+    def test_unregistered_expect_passes_without_option_and_fails_with_it(self):
+        d, r = self._repo({"src/a.rs": 'fn f() { x.expect("ctx"); }\n'})
+        with d:
+            self.assertEqual(self.run_main(r), 0)
+            self.assertEqual(self.run_main(r, ("--expect",)), 1)
+
     def test_stale_allowlist_fails(self):
         d, r = self._repo({"src/a.rs": "fn f() { }\n"}, "src/a.rs:1  pending\n")
         with d:
