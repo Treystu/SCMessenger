@@ -10,7 +10,24 @@ boundary: No foreign-repository findings, evidence, status, or remediation are i
 
 This document is owned by SCMessenger (Sovereign-Communication/SCMessenger).
 
-Status: DISPATCH-READY
+Status: DONE (delivered on main; #584, evidence below). Kept at this path
+because HANDOFF/ACTIVE_LEDGER.md, HANDOFF/CTO_STATE.md and the V051 plans
+index it here; moving it would break those links for no gain.
+
+## Evidence
+
+- The unified path is what iOS already calls: `MeshRepository.swift:2246`
+  prepares receipts through `ironCore.prepareReceipt(...)`, implemented at
+  `core/src/iron_core.rs:2402`, and delivered to the UI from the core callback
+  at `CoreDelegateImpl.swift:182` -> `MeshRepository.swift:2170`.
+- There is no Swift-side codec left to consolidate: the only encode/decode are
+  the UniFFI bindings `encodeReceipt` / `decodeReceipt`
+  (`iOS/.../Generated/api.swift:10707`, `:10696`); no `struct Receipt`, manual
+  base64 or `JSONEncoder` receipt path exists in non-generated app code.
+- Round-trip coverage exists: `iOS/SCMessengerTests/ReceiptUnificationTests.swift`
+  (`testRoundTripReceiptEncoding:21`, `testEncodeReceiptWithDifferentStatuses:48`,
+  `testDecodingInvalidDataThrows:73`), executed by
+  `.github/workflows/ios-build-test.yml:335` (`xcodebuild test-without-building`).
 Model: Qwen CODER tier
 Scope: Tight (platform unification, receipt pipeline)
 Prerequisite: A-04 pattern (Android mirror)
