@@ -172,8 +172,7 @@ fn five_node_shared_candidates_survive_core_ledger_reload_without_contact_inject
 
     // Handle A: the node that merged the exchange. The core store persists
     // on every mutation, so ledger.json lands on disk immediately.
-    let ledger =
-        ConnectionLedger::new(LedgerManager::new(storage.to_string_lossy().to_string()));
+    let ledger = ConnectionLedger::new(LedgerManager::new(storage.to_string_lossy().to_string()));
     assert_eq!(
         ledger.merge_shared_entries(&shared_entries(&nodes)),
         NODE_COUNT
