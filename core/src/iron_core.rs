@@ -4245,13 +4245,13 @@ impl IronCore {
     /// `cfg(test)` doesn't apply there) but is `#[doc(hidden)]` and
     /// unmistakably named so it isn't reachable by accident (S6).
     #[doc(hidden)]
-    pub fn test_only_identity_signing_key(&self) -> ed25519_dalek::SigningKey {
+    /// Returns `None` when no identity is initialized yet. Callers are tests, which
+    /// assert the identity exists; the helper itself does not panic.
+    pub fn test_only_identity_signing_key(&self) -> Option<ed25519_dalek::SigningKey> {
         self.identity
             .read()
             .keys()
-            .expect("identity must be initialized")
-            .signing_key
-            .clone()
+            .map(|keys| keys.signing_key.clone())
     }
 
     /// Test-only: true if `message_id` (a UUID string, as returned by
