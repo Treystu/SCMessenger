@@ -1,0 +1,86 @@
+{
+ "wp": "SCM-LAND",
+ "ticket": "Tracker #602 (SCM landing lane). This is the lane's current evidence set; the September WP4 file HANDOFF/freebuff/jev/WP4_state_2026-09-21.json is left in place for its own ticket and is no longer what this lane grades its work against.",
+ "instruction": "SCM landing lane, 2026-11-25: burn the open PRs and then the issues down ONLY on evidence. This pass (a) removed nine non-Rule-8 production .expect() panic paths from core (observability, relay client, store/tracing_init, store/dedup, identity/keys, and iron_core's test-only helper) in #779 and #780, and (b) turned the .expect() review from an unread inventory into an enforced register in #781: the gate now always inventories .expect(), --expect decides only whether an UNREGISTERED site fails, the required Lint job passes --expect, and the 56 sites left at 67df04f14 are registered with their disposition (2 justified fatal runtime invariants, 54 'pending Rule-8 fix' in the gated directories). Nothing under core/src/{crypto,transport,routing,privacy} was modified. #525 is closed by #781.",
+ "files_touched": [
+  "#779 (merged 599fa9f15): core/src/observability.rs (chain_hash serialisation, prune_before last-event hash), core/src/relay/client.rs (wildcard SocketAddr built, not parsed), core/src/store/tracing_init.rs (io::Error instead of expect), core/src/store/dedup.rs (HashMap entry API replaces two borrow-checker re-fetches)",
+  "#780 (merged 67df04f14): core/src/identity/keys.rs (verify_bundle has_mldsa flag plus two as_ref().expect collapse into one if-let of the same condition), core/src/iron_core.rs (test_only_identity_signing_key returns Option<SigningKey>), core/tests/integration_backup.rs (four test call sites carry the assertion)",
+  "#781 (merged ee009cf99): scripts/check_prod_unwrap_println.py (inventory always computed; --expect decides only whether an unregistered site fails), scripts/prod_unwrap_allowlist.cfg (56 registered sites), .github/workflows/lint.yml (Lint job passes --expect), scripts/test_check_prod_unwrap_println.py (two tests)"
+ ],
+ "acceptance": [
+  "Every changed path is exercised by the CircleCI rail at its own head: 13/13 contexts success at 5ac73c9af (#779), b533bf015 and 5731d31f7 (#780 before and after update-branch), 640bcc67f (#781), and at the three merge commits 599fa9f15, 67df04f14 and ee009cf99.",
+  "The behaviour of each cure is covered by a named test: two new tests for the register semantics, and every changed core file already carries an in-file #[cfg(test)] module (dedup, observability, tracing_init, relay client, identity/keys).",
+  "The register cannot rot silently: --expect --allowlist /dev/null reports the 56 remaining sites, the registered run reports [OK] with 56 allowlisted, and the required Lint context now fails on an unregistered production .expect().",
+  "No file under core/src/{crypto,transport,routing,privacy} is touched, so the path-based Rule-8 gate does not fire for these three PRs.",
+  "Nothing is claimed about the 54 gated sites beyond what is recorded: they still panic and are registered as 'pending Rule-8 fix'."
+ ],
+ "evidence": {
+  "merged_commits": "Three merges this pass, all on main: #779 -> 599fa9f15ae9af2ec8690eb16e265fc9b6e8b992 (head 5ac73c9af594a60a67ba25b8777c129f5e9d3685); #780 -> 67df04f14210d3762c6d000d905889999a8b277e (merged head 5731d31f780af78079719a9818febe2041450ae6 after `gh pr update-branch`, first head b533bf01580b39f68941f5f83d7d468f22e1bfb4); #781 -> ee009cf99a2df77c09fafc3869295e9e067297be (head 640bcc67fd615f43a07e21f1bf8da5fbcd0a583f). #525 was closed by the #781 merge at 2026-11-25T20:22:34Z.",
+  "sites_cured": "Nine production .expect() panic paths removed by code, each replaced with an error, an infallible construction or a map lookup: core/src/observability.rs:132 and :222; core/src/relay/client.rs:431 (SocketAddr::from(([0,0,0,0],0)) instead of parsing '0.0.0.0:0'); core/src/store/tracing_init.rs:136 (ok_or_else(|| io::Error::other(...))); core/src/store/dedup.rs:89 and :111 (HashMap entry()); core/src/identity/keys.rs:640 and :644 (if let (Some(mldsa_public), Some(mldsa_signature))); core/src/iron_core.rs:4252 (Option<SigningKey>).",
+  "tests_added": "Two new named tests in scripts/test_check_prod_unwrap_println.py on main, lines 162 and 174: test_registered_expect_is_not_stale_without_the_option (a registered site passes with and without --expect) and test_unregistered_expect_passes_without_option_and_fails_with_it (unregistered passes without the flag, fails with it). The suite is 25 tests: python3 -m unittest scripts/test_check_prod_unwrap_println.py -> Ran 25 tests ... OK.",
+  "coverage_of_changed_paths": "Each changed core file carries its own #[cfg(test)] module on main (grep for 'mod tests': present in core/src/store/dedup.rs, core/src/observability.rs, core/src/store/tracing_init.rs, core/src/relay/client.rs and core/src/identity/keys.rs), and the changed paths run in the rail's Test job at every head listed above. core/tests/integration_backup.rs is a test file and its four call sites were updated to carry the assertion the helper no longer makes.",
+  "gate_runs": "At main ee009cf99: python3 scripts/check_prod_unwrap_println.py --expect --allowlist /dev/null -> '[FAIL] 56 production violation(s), 0 stale allowlist entr(ies)' (the inventory, unchanged from 67df04f14, so the nine cured sites did not come back); python3 scripts/check_prod_unwrap_println.py --expect -> '[OK] no unregistered production unwrap()/println!/.expect() (56 allowlisted)'; python3 scripts/check_prod_unwrap_println.py with no flag (the CircleCI invocation) -> '[OK] no unregistered production unwrap()/println! (56 allowlisted)'.",
+  "ci_reads": "Commit statuses read at the exact heads (gh api repos/Treystu/SCMessenger/commits/<sha>/statuses?per_page=100): 13/13 success at 5ac73c9af (2026-11-25T17:08Z), at b533bf015 (17:17Z), at 5731d31f7 (18:48Z) and at 640bcc67f (20:20:59Z); post-merge 13/13 at 599fa9f15 (17:44Z), 67df04f14 (19:32Z) and ee009cf99 (21:02:20Z). No context on any of these commits was failure, cancelled or skipped.",
+  "ci_lint_run": "The gate script and its tests are exercised by the required Lint context at #781's head: https://app.circleci.com/workflow/306fecfc-56e9-4180-916d-c536b1273921/job/cca94211-157d-4688-bfb2-b7c127bf9f0b (ci/circleci: Lint = success at 640bcc67fd615f43a07e21f1bf8da5fbcd0a583f), which runs both scripts/test_check_prod_unwrap_println.py and scripts/check_prod_unwrap_println.py.",
+  "infra_bounded": "The .github/workflows/lint.yml change adds one flag (--expect) to one existing step. It adds no job, no step, no wait, no retry, no loop and no new timeout: the gate is a single python3 pass over core/src and mobile/src that already ran in this job with the same inputs.",
+  "infra_not_weakened": "Nothing is skipped, disabled, made continue-on-error or advisory. The 'command -v python3 || exit 1' guard and the unittest step are untouched. The gate step gains a check (an unregistered production .expect() now fails) rather than losing one.",
+  "rule8": "No path under core/src/{crypto,transport,routing,privacy} and nothing under vendor/ is in the diff. core/src/identity/keys.rs, core/src/iron_core.rs, core/src/observability.rs, core/src/relay/client.rs and core/src/store/** are outside the gated set; the 54 gated .expect() sites (50 transport, 4 routing) were registered, not modified, and the 2 mobile_bridge runtime-invariant sites are registered with their reason.",
+  "canon_identity_note": "One contact identity flavor is kept. core/src/identity/keys.rs still addresses contacts and store entries by public-key hex; the change inside verify_bundle is a control-flow simplification of the same has_mldsa condition (both ML-DSA fields present -> V3 branch, otherwise the legacy Ed25519 path, unchanged), with no new address flavor and no change to what is stored or compared.",
+  "recipient_parse_note": "Recipient and key parsing from untrusted input is free of unwrap/expect on main, and the change made it more so. The two .as_ref().expect('... verified Some by has_mldsa check') calls in core/src/identity/keys.rs verify_bundle became one if let (Some(mldsa_public), Some(mldsa_signature)) binding of the same condition, so a bundle carrying only one ML-DSA field takes the legacy Ed25519 path exactly as before and a malformed bundle can no longer abort the process. Non-key recipients are still rejected: hex decode returns Option and a wrong-length or non-hex recipient is refused by the same checks as before (core/src/identity/keys.rs hex::decode -> ok()?, length/format validation). No unwrap/expect remains anywhere in the recipient/key surface - see identity_parse_scan for the scoped gate runs.",
+  "identity_parse_scan": "Scoped gate runs on main ee009cf99, with an empty allowlist so nothing is hidden: `python3 scripts/check_prod_unwrap_println.py --expect --allowlist /dev/null --roots core/src/identity` -> '[OK] no unregistered production unwrap()/println!/.expect() (0 allowlisted)'; the same command with `--roots core/src/store` -> '[OK] ... (0 allowlisted)'. The 56 registered sites are all outside the recipient/key surface: 50 in core/src/transport/**, 4 in core/src/routing/**, 2 in core/src/mobile_bridge.rs (get_global_runtime's fatal Tokio-runtime invariant) - clock, multiaddr-literal, parking_lot-poisoning and runtime-creation invariants, none of them a recipient or key parse.",
+  "canon_routing_note": "One routing feed entry point is kept: IronCore::routing_peer_seen is untouched. The only change in a routing-globbed path is core/src/iron_core.rs's #[doc(hidden)] test-only helper test_only_identity_signing_key, which now returns Option<SigningKey> instead of expecting an initialised identity; its four call sites are in core/tests. core/src/routing/**, core/src/transport/** and core/src/mobile_bridge.rs are not in the diff at all, so no transport callback reaches routing state through anything new.",
+  "instruction_note": "The delivered work is exactly the instruction for this pass: nine non-Rule-8 panic paths removed by code with the rail green at each head, and the .expect() review converted into an enforced register that fails the required Lint context on a new unregistered site. The 54 gated sites are explicitly NOT claimed fixed; they are registered as 'pending Rule-8 fix', and #525's closure states that limit in the issue itself."
+ },
+ "canon_rows": {
+  "canon_identity": "untouched: hex remains the addressing key, one flavor only; verify_bundle's V3/legacy split is the same condition, expressed without panics.",
+  "canon_routing_feed": "untouched: IronCore::routing_peer_seen is unchanged; the iron_core.rs edit is a doc-hidden test-only helper.",
+  "instruction_matches": "met: nine sites cured by code with 13/13 rail reads at every head, the register enforced on a required context, and the gated remainder registered rather than claimed."
+ },
+ "not_claimed": [
+  "The 54 .expect() sites in core/src/{crypto,transport,routing,privacy} are still panicking; they are registered as pending Rule-8 fix and need the adversarial review this lane cannot supply.",
+  "No claim that the register removes the panics: it makes new ones fail and the existing ones visible and counted.",
+  "No device, Android or iOS verification: no adb device is attached and Android CI never executes (#719)."
+ ],
+ "evidence_map": {
+  "identity.canon_identity": [
+   "canon_identity_note"
+  ],
+  "identity.recipient_parse_safe": [
+   "identity_parse_scan",
+   "recipient_parse_note",
+   "gate_runs"
+  ],
+  "routing.canon_routing_feed": [
+   "canon_routing_note"
+  ],
+  "routing.callbacks_validated": [
+   "canon_routing_note",
+   "rule8"
+  ],
+  "testplan.named_test": [
+   "tests_added",
+   "coverage_of_changed_paths",
+   "ci_reads"
+  ],
+  "infra.bounded_behaviour": [
+   "infra_bounded",
+   "ci_lint_run"
+  ],
+  "infra.checks_not_weakened": [
+   "infra_not_weakened",
+   "gate_runs"
+  ],
+  "infra.ci_run_evidence": [
+   "ci_lint_run",
+   "ci_reads"
+  ],
+  "instruction.instruction_matches": [
+   "instruction_note",
+   "merged_commits",
+   "sites_cured",
+   "tests_added",
+   "ci_reads",
+   "rule8"
+  ]
+ }
+}
