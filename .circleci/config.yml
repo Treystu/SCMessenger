@@ -690,6 +690,39 @@ jobs:
           name: Run workspace tests
           no_output_timeout: 30m
           command: cargo test --workspace --features test-utils
+      # #477: `iron_core_fast_backup_tracks_bridge_contact_removals` has been
+      # seen failing with StorageError when the restored iOS contacts store is
+      # opened, but no flake rate was ever measured, so the issue could be
+      # neither fixed nor quarantined on evidence - it was parked on "needs a
+      # reliable repro". This runs that one test repeatedly and prints the
+      # pass/fail count, which is the repro instrument. REPORT ONLY: it never
+      # fails the job, because turning the base red on an unmeasured flake would
+      # trade one invisible defect for a visible one.
+      - run:
+          name: Flaky-test stress report - fast backup contact removals (#477)
+          no_output_timeout: 30m
+          command: |
+            set -uo pipefail
+            TEST=iron_core_fast_backup_tracks_bridge_contact_removals
+            RUNS="${FLAKY_STRESS_RUNS:-10}"
+            OUT=tmp/flaky-477
+            mkdir -p "$OUT"
+            pass=0; fail=0
+            for i in $(seq 1 "$RUNS"); do
+              if cargo test -p scmessenger-core --test integration_backup "$TEST" -- --exact --test-threads=1 >"$OUT/run-$i.log" 2>&1; then
+                pass=$((pass + 1))
+                echo "iteration $i: PASS"
+              else
+                fail=$((fail + 1))
+                echo "iteration $i: FAIL"
+                tail -40 "$OUT/run-$i.log"
+              fi
+            done
+            echo "[INFO] #477 stress: $pass/$RUNS passed, $fail failed"
+            if [ "$fail" -gt 0 ]; then
+              echo "[WARNING] #477 reproduced in this run: $fail/$RUNS failed. Record this rate on the issue instead of guessing the cause."
+            fi
+            exit 0
       # #678: `cargo test --workspace` select the bin target only while it is
       # enabled, so run the battery by name: a manifest change that hides it
       # again then shows up as a missing step, not as silence.
