@@ -798,6 +798,19 @@ jobs:
           command: |
             set -euo pipefail
             python3 scripts/test_orchestration_v2.py
+      # #768: the merge-train document is the source of truth and
+      # orchestration/v051_cars.jsonl is generated from it, but nothing on this
+      # rail compared the two, so drift was invisible until a reader noticed
+      # (it happened twice: #764 regenerated a stale queue, and #767 was needed
+      # because a DONE-prefixed span cell silently marked an unfinished car
+      # done). The self-check runs first so a broken mapper cannot pass as
+      # "in sync".
+      - run:
+          name: Queue matches the merge-train document (#768)
+          command: |
+            set -euo pipefail
+            python3 scripts/v051_queue_sync.py --self-check
+            python3 scripts/v051_queue_sync.py --check
 
   # ---------------------------------------------------------------------------
   # 7. Docs  <- .github/workflows/ci.yml job `docs`
