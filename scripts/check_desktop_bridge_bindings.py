@@ -31,6 +31,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import subprocess
 import sys
@@ -58,12 +59,34 @@ REQUIRED_MARKERS = (
 )
 
 
-def find_cdylib(debug_dir: Path) -> Path | None:
-    """The built cdylib for this crate, or None when the build produced none."""
-    for suffix in CDYLIB_SUFFIXES:
-        candidate = debug_dir / f"{CDYLIB_STEM}{suffix}"
-        if candidate.is_file():
-            return candidate
+def target_directory(root: Path) -> Path:
+    """Cargo's own answer for where build output went.
+
+    Asked rather than assumed: build #6122 proved `target/debug` is not a
+    reliable guess on this image even though the build succeeded, and a
+    CARGO_TARGET_DIR override or a profile setting can move it again.
+    """
+    completed = subprocess.run(
+        ["cargo", "metadata", "--no-deps", "--format-version", "1"],
+        cwd=str(root),
+        capture_output=True,
+        text=True,
+    )
+    if completed.returncode == 0:
+        try:
+            return Path(json.loads(completed.stdout)["target_directory"])
+        except (KeyError, ValueError):
+            pass
+    return root / "target"
+
+
+def find_cdylib(target_dir: Path) -> Path | None:
+    """The built cdylib for this crate, searched anywhere under the target dir."""
+    # The `lib` prefix is platform-dependent (`libfoo.so`, `foo.dll`), so match
+    # the stem anywhere in the name rather than assuming one spelling.
+    for path in sorted(target_dir.rglob(f"*{CDYLIB_STEM}.*")):
+        if path.is_file() and path.suffix in CDYLIB_SUFFIXES:
+            return path
     return None
 
 
@@ -156,10 +179,15 @@ def main(argv: list[str] | None = None) -> int:
         print(f"[FAIL] desktop bridge bindings: `cargo build -p {PACKAGE} --features {FEATURE}` exited {build}")
         return 1
 
-    cdylib = find_cdylib(root / "target" / "debug")
+    search_dir = target_directory(root)
+    cdylib = find_cdylib(search_dir)
     if cdylib is None:
-        print(f"[FAIL] desktop bridge bindings: no {CDYLIB_STEM}{{so,dylib,dll}} under target/debug after a successful build")
+        print(
+            f"[FAIL] desktop bridge bindings: no {CDYLIB_STEM}{{so,dylib,dll}} under "
+            f"{search_dir} after a successful build"
+        )
         return 1
+    print(f"[INFO] built cdylib: {cdylib}")
 
     # Pass the library explicitly: gen_kotlin otherwise guesses from `HOST` and
     # relative paths, and a wrong guess panics with a message about a build the
