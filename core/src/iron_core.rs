@@ -3987,10 +3987,9 @@ impl IronCore {
 
                         // A receipt is useful only while the message it confirms
                         // can still matter to the sender: drop it once that
-                        // message is past protocol retention, when the sender
-                        // is blocked, or once its own reconnect-driven dispatch
-                        // budget is spent (#679). Retention bounds age; the
-                        // attempt ceiling bounds the cycles.
+                        // message is past protocol retention, or when the sender
+                        // is blocked. No attempt-count cap; attempts are driven by
+                        // reconnect events.
                         if msg.is_fire_and_forget() {
                             let now_secs = web_time::SystemTime::now()
                                 .duration_since(web_time::UNIX_EPOCH)
@@ -4113,23 +4112,6 @@ impl IronCore {
                         // (2^attempt, capped at 3600s) and grows u32-
                         // saturating; no threshold converts the entry to
                         // Failed. Only a receipt clears it.
-                        //
-                        // The one exception is a delivery receipt: it is never
-                        // acknowledged, so a peer that is never reachable would
-                        // otherwise cycle it until retention expires. It is
-                        // dropped once its dispatch budget is spent (#679).
-                        if msg.receipt_attempts_exhausted(current_attempt) {
-                            tracing::warn!(
-                                event = "outbox_receipt_attempts_exhausted",
-                                message_id = %msg_id,
-                                peer_id = %peer_id,
-                                attempt = current_attempt,
-                                cap = crate::store::outbox::MAX_RECEIPT_DELIVERY_ATTEMPTS,
-                                "Dropping delivery receipt after the reconnect-driven attempt cap"
-                            );
-                            failed += 1;
-                            continue;
-                        }
                         msg.attempts = current_attempt;
                         msg.state = crate::store::outbox::MessageState::Enqueued;
                         let backoff_secs = 2u64.saturating_pow(current_attempt.min(12)).min(3600);

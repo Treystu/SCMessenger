@@ -66,24 +66,10 @@ pub const QUEUED_VERSION_STANDARD: u8 = 1;
 /// persists with the entry and survives restarts without a schema change.
 /// Nothing ever acknowledges a receipt, so waiting for one re-sent the same
 /// envelope every grace window forever. A receipt is dispatched best-effort:
-/// cleared once the transport accepts it, dropped once the message it refers
-/// to has aged out of protocol retention (`MESSAGE_RETENTION_SECS`), and dropped
-/// once it has spent `MAX_RECEIPT_DELIVERY_ATTEMPTS` dispatches while no egress
-/// path existed. Retention bounds a receipt's age; the attempt ceiling bounds
-/// the reconnect-driven re-dispatch itself, so a peer that is never reachable
-/// cannot keep one receipt cycling for the full seven days (#679).
+/// cleared once the transport accepts it, and dropped once the message it
+/// refers to has aged out of protocol retention (`MESSAGE_RETENTION_SECS`).
+/// There is no attempt-count cap: attempts are driven by reconnect events.
 pub const QUEUED_VERSION_FIRE_AND_FORGET: u8 = 2;
-
-/// Dispatches a delivery receipt may spend without an egress path before it is
-/// dropped.
-///
-/// Matches `MAX_DELIVERY_ATTEMPTS` for ordinary messages: the same "twelve
-/// honest tries" budget, measured at the transport rather than at retention.
-/// With the flush backoff (2^attempt seconds, capped at one hour) this bounds
-/// an unreachable peer's receipt at roughly half a day of retries instead of
-/// the full seven-day retention window, while a peer that reconnects normally
-/// still gets every one of its twelve attempts across those reconnects.
-pub const MAX_RECEIPT_DELIVERY_ATTEMPTS: u32 = 12;
 
 /// Protocol message retention: the lifetime of a message (the drift envelope
 /// default TTL, and the outbox expiry applied by maintenance). A receipt does
@@ -358,15 +344,6 @@ impl QueuedMessage {
     /// messages never expire here.
     pub fn receipt_expired(&self, now: u64) -> bool {
         self.is_fire_and_forget() && now.saturating_sub(self.queued_at) >= MESSAGE_RETENTION_SECS
-    }
-
-    /// True when this entry is a delivery receipt that has spent its whole
-    /// reconnect-driven dispatch budget. `next_attempt` is the attempt the
-    /// caller is about to make (the stored count plus one), so the check is
-    /// exact at the boundary. Ordinary messages are never exhausted here: their
-    /// delivery is not bounded by a receipt's usefulness.
-    pub fn receipt_attempts_exhausted(&self, next_attempt: u32) -> bool {
-        self.is_fire_and_forget() && next_attempt >= MAX_RECEIPT_DELIVERY_ATTEMPTS
     }
 }
 
@@ -1723,18 +1700,6 @@ mod tests {
         let plain = drained.iter().find(|m| m.message_id == "plain").unwrap();
         assert!(ff.is_fire_and_forget());
         assert!(!plain.is_fire_and_forget());
-    }
-
-    #[test]
-    fn receipt_attempt_ceiling_engages_exactly_at_the_cap() {
-        let mut receipt = make_msg("rcpt-cap", "peer_a");
-        receipt.version = QUEUED_VERSION_FIRE_AND_FORGET;
-        assert!(!receipt.receipt_attempts_exhausted(MAX_RECEIPT_DELIVERY_ATTEMPTS - 1));
-        assert!(receipt.receipt_attempts_exhausted(MAX_RECEIPT_DELIVERY_ATTEMPTS));
-        assert!(receipt.receipt_attempts_exhausted(MAX_RECEIPT_DELIVERY_ATTEMPTS + 1));
-
-        let plain = make_msg("plain-cap", "peer_a");
-        assert!(!plain.receipt_attempts_exhausted(u32::MAX));
     }
 
     #[test]
