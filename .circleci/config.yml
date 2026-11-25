@@ -277,6 +277,18 @@ jobs:
       - compute_gate_base
 
       - run:
+          name: CI routing contract (#642)
+          command: |
+            # The contract has been checked in-file since it was written, but
+            # nothing ran it: a required context could still be scheduled onto
+            # the scarce pool and then execute zero steps, which no status would
+            # ever reveal. Run the checker's own fixtures first so a broken
+            # reader cannot agree with a moved source of truth, then assert the
+            # real ci.yml/action.yml pair.
+            python3 scripts/ci_route_check.py --self-check
+            python3 scripts/ci_route_check.py
+
+      - run:
           name: Check for tracked files matching .gitignore patterns
           command: |
             echo "Checking for tracked files that should be ignored..."

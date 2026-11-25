@@ -299,7 +299,128 @@ def resolve_runner(expression: str, rust_relevant: bool) -> tuple[str, list[str]
     return (SELF_HOSTED if takes_pool_for_this_diff else HOSTED), notes
 
 
+def self_check() -> int:
+    """Prove the two classifiers on synthetic input, without touching the repo.
+
+    The strict check reads the real `action.yml` and `ci.yml`, so a broken
+    parser and a moved source of truth can fail in the same way. These cases
+    pin the behaviour the strict check depends on: the fail-open rules, the
+    platform sets, and the fact that a MISSING `rust_relevant` gate is read as
+    "the pool is taken for every diff" rather than as "everything hosted".
+    """
+    rules = {
+        "IOS_PATHS": r"^ios/",
+        "ANDROID_PATHS": r"^android/",
+        "RUST_PATHS": r"^(core|cli|ffi|wasm)/|^Cargo\.(toml|lock)$",
+        "inert": r"^(docs/|HANDOFF/)|.*\.md$",
+        "KOTLIN_PATHS": r"\.kt$",
+    }
+    action_text = "\n".join(
+        [
+            "        IOS_PATHS='^ios/'",
+            "        NON_INERT=$(printf '%s\\n' \"$FILES\" | grep -vE '^(docs/|HANDOFF/)|.*\\.md$' || true)",
+            "        emit_flag kotlin_relevant '\\.kt$'",
+        ]
+    )
+    workflow_text = "\n".join(
+        [
+            "jobs:",
+            "  test:",
+            "    runs-on: ${{ matrix.os }}",
+            "    steps:",
+            "      - name: Collect",
+            "        if: needs.changes.outputs.rust_relevant == 'true'",
+            "        run: echo collect",
+            "  other:",
+            "    runs-on: ubuntu-latest",
+        ]
+    )
+
+    gate_present = (
+        "${{ matrix.os == 'ubuntu-latest' && github.event_name == 'push' "
+        "&& github.event_name == 'pull_request' "
+        "&& github.event.pull_request.head.repo.full_name == github.repository "
+        "&& vars.CI_RUNNER == 'oci' "
+        "&& fromJSON('[\"self-hosted\",\"oci\"]') "
+        "&& needs.changes.outputs.rust_relevant == 'true' || matrix.os }}"
+    )
+    gate_absent = gate_present.replace(
+        " && needs.changes.outputs.rust_relevant == 'true'", ""
+    )
+    no_pool_clause = gate_present.replace(
+        "fromJSON('[\"self-hosted\",\"oci\"]')", "'ubuntu-latest'"
+    )
+
+    def flags(paths: list[str], event: str = "pull_request") -> dict:
+        return classify(paths, rules, event)["flags"]
+
+    cases: list[tuple[str, bool, str]] = []
+
+    def expect(label: str, actual, wanted) -> None:
+        cases.append((label, actual == wanted, f"expected {wanted!r}, got {actual!r}"))
+
+    expect(
+        "inert-only diff clears every lane",
+        flags(["docs/CANON_PLAN.md", "HANDOFF/notes.md"]),
+        {
+            "ios_relevant": False,
+            "android_relevant": False,
+            "rust_relevant": False,
+            "kotlin_relevant": False,
+        },
+    )
+    expect(
+        "a push event fails open",
+        flags(["docs/CANON_PLAN.md"], "push"),
+        {
+            "ios_relevant": True,
+            "android_relevant": True,
+            "rust_relevant": True,
+            "kotlin_relevant": True,
+        },
+    )
+    expect("an unclassified path fails open", flags(["newtool/config.yml"])["rust_relevant"], True)
+    expect("a Rust path selects Rust only", flags(["core/src/lib.rs"])["rust_relevant"], True)
+    expect("a Rust path does not claim iOS", flags(["core/src/lib.rs"])["ios_relevant"], False)
+    expect("an iOS path does not claim Rust", flags(["ios/App/Thing.swift"])["rust_relevant"], False)
+    expect("an Android path claims Kotlin", flags(["android/app/Foo.kt"])["kotlin_relevant"], True)
+
+    expect("gated pool leg routes to the pool", resolve_runner(gate_present, True)[0], SELF_HOSTED)
+    expect("gated hosted leg stays hosted", resolve_runner(gate_present, False)[0], HOSTED)
+    expect(
+        "a missing golden gate takes the pool for every diff",
+        resolve_runner(gate_absent, False)[0],
+        SELF_HOSTED,
+    )
+    expect(
+        "a missing pool clause cannot resolve to the pool",
+        resolve_runner(no_pool_clause, True)[0],
+        HOSTED,
+    )
+
+    expect("shell_var reads a quoted rule", shell_var(action_text, "IOS_PATHS"), "^ios/")
+    expect("inert_rule reads the NON_INERT rule", inert_rule(action_text), "^(docs/|HANDOFF/)|.*\\.md$")
+    expect("kotlin_rule reads the emit_flag rule", kotlin_rule(action_text), "\\.kt$")
+    block = job_block(workflow_text.splitlines(), "test")
+    expect("job_block slices one job", job_field(block, "runs-on"), "${{ matrix.os }}")
+    expect("first_step reads the guard", "rust_relevant" in first_step(block)[1], True)
+
+    print("== Self-check: classifier and parser behaviour on synthetic input ==")
+    mismatches = 0
+    for label, ok, detail in cases:
+        print(f"  [{'OK' if ok else 'FAIL'}] {label}" + ("" if ok else f" - {detail}"))
+        mismatches += 0 if ok else 1
+    print()
+    if mismatches:
+        print(f"[FAIL] {mismatches} self-check case(s) failed")
+        return 1
+    print(f"[OK] {len(cases)} self-check case(s) passed")
+    return 0
+
+
 def main() -> int:
+    if "--self-check" in sys.argv[1:]:
+        return self_check()
     action_text = read(ACTION)
     workflow_text = read(WORKFLOW)
 
