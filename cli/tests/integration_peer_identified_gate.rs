@@ -42,7 +42,7 @@ fn advertised(addrs: &[&str]) -> Vec<String> {
 /// entry into an internal port scanner.
 #[test]
 fn identify_advertised_dns_never_becomes_a_dial_target() {
-    let mut ledger = ledger();
+    let ledger = ledger();
     let pid = peer();
 
     let hostile = advertised(&[
@@ -75,7 +75,7 @@ fn identify_advertised_dns_never_becomes_a_dial_target() {
 /// rule before round 4.
 #[test]
 fn identify_advertised_ssrf_addresses_never_become_dial_targets() {
-    let mut ledger = ledger();
+    let ledger = ledger();
     let pid = peer();
 
     let hostile = advertised(&[
@@ -111,7 +111,7 @@ fn identify_advertised_ssrf_addresses_never_become_dial_targets() {
 /// tier of the transport priority order depends on.
 #[test]
 fn identify_still_records_real_addresses_but_never_verifies() {
-    let mut ledger = ledger();
+    let ledger = ledger();
     let pid = peer();
 
     let good = advertised(&[
@@ -153,11 +153,11 @@ fn the_handler_is_the_same_function_for_both_cli_commands() {
     ]);
 
     // `cmd_start`'s handler.
-    let mut start_ledger = ledger();
+    let start_ledger = ledger();
     let start_recorded = start_ledger.record_identified_peer(&pid, &mixed);
 
     // `cmd_relay`'s handler.
-    let mut relay_ledger = ledger();
+    let relay_ledger = ledger();
     let relay_recorded = relay_ledger.record_identified_peer(&pid, &mixed);
 
     assert_eq!(start_recorded, relay_recorded);
@@ -210,7 +210,7 @@ fn operator_bootstrap_addresses_survive_but_names_never_enter() {
 /// `ConnectionLedger`, only consumed by `merge_shared_entries`.
 #[test]
 fn the_cli_ledger_has_no_wire_export_path() {
-    let mut ledger = ledger();
+    let ledger = ledger();
     let pid = peer();
     ledger.record_identified_peer(&pid, &advertised(&["/ip4/198.51.100.4/tcp/9001"]));
     ledger.record_topic("/ip4/198.51.100.4/tcp/9001", "sc-family-chat");
