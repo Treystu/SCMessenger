@@ -68,8 +68,8 @@ on:
   # queue a 90-minute Docker build, and keep it non-required - the merge rail
   # is CircleCI, and this workflow currently cannot start a job at all (every
   # run since 2026-11-24 reports conclusion=failure with zero steps and an
-  # empty runner, including the push and schedule legs), so a red here is
-  # information, never a gate.
+  # empty runner - run 45604833447 at 2026-11-25T11:28Z is one), so a red here
+  # is information, never a gate.
   pull_request:
     paths:
       - 'docker/**'
