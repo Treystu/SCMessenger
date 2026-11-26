@@ -769,9 +769,6 @@ pub struct ApiContext {
     /// addressed to ourselves is refused at enqueue instead of being queued
     /// and retried forever (#548).
     pub own_peer_id: String,
-    /// The live store-and-forward queue, so an operator can cancel a poisoned
-    /// entry through the Control API once it is already on disk (#548).
-    pub outbox: Arc<tokio::sync::Mutex<scmessenger_core::store::Outbox>>,
 }
 
 /// Wrap outbound chat text in the `scm.message.identity.v1` envelope so
@@ -1298,10 +1295,10 @@ async fn handle_cancel_queued_message(
         ));
     }
 
-    let removed = {
-        let mut outbox = ctx.outbox.lock().await;
-        outbox.remove(message_id)
-    };
+    // #737: cancel through the core, which owns the outbox the sends enqueue into. The
+    // second `Outbox` handle this context used to carry shared the directory but not the
+    // in-memory map, so entries queued after start-up were invisible to it.
+    let removed = ctx.core.cancel_queued_message(message_id);
 
     if removed {
         tracing::info!("Cancelled queued message {}", message_id);

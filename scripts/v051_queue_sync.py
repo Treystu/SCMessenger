@@ -161,11 +161,74 @@ def render(entries):
     return "".join(json.dumps(entry, sort_keys=True) + "\n" for entry in entries)
 
 
+SELF_CHECK_DOC = """## 3. Carry-over cars
+
+| Car | Scope | PRs | Gate | Status |
+|---|---|---|---|---|
+| MT-01 | one car | n/a | n/a | DONE: landed |
+| MT-08..MT-12 | span | #1 | per item | SPLIT - mixed |
+| P0-8 BK-01 | backup | operator tool | operator | operator-gated |
+
+## 5. Final cars
+
+- **F-1 bump:** version bump first.
+"""
+
+
+def self_check():
+    """Prove the mapper on synthetic text, so the CI gate cannot rot silently.
+
+    #768 wires this into CI. The cases below are the ones that have already
+    been wrong once: a span row is five cars under one status, so a `DONE`
+    prefix on that one cell marks an unfinished car done (#767), and an
+    `operator-gated` row must block rather than read open.
+    """
+    ok = True
+
+    def check(name, got, want):
+        nonlocal ok
+        verdict = "OK" if got == want else "FAIL"
+        if got != want:
+            ok = False
+        print(f"[{verdict}] self-check: {name} (got {got!r}, want {want!r})")
+
+    check("span expands to five cars", expand("MT-08..MT-12"),
+          ["MT-08", "MT-09", "MT-10", "MT-11", "MT-12"])
+    check("single car does not expand", expand("MT-01"), ["MT-01"])
+    check("DONE prefix maps done", map_status("DONE: landed"), "done")
+    check("SPLIT maps open", map_status("SPLIT - mixed"), "open")
+    check("operator-gated maps blocked", map_status("operator-gated"), "blocked")
+    check("superseded-close maps retired", map_status("superseded-close by #2"), "retired")
+
+    cars = {car["id"]: car for car in parse_cars(SELF_CHECK_DOC)}
+    check("synthetic doc parses eight cars", sorted(cars), [
+        "F-1", "MT-01", "MT-08", "MT-09", "MT-10", "MT-11", "MT-12", "P0-8 BK-01"])
+    check("span row keeps every car open under SPLIT",
+          [cars[f"MT-{n:02d}"]["status"] for n in range(8, 13)], ["open"] * 5)
+    check("final bullet parses as open", cars["F-1"]["status"], "open")
+    check("operator-gated car parses as blocked", cars["P0-8 BK-01"]["status"], "blocked")
+
+    # The #767 trap, asserted as a behaviour rather than remembered: a DONE
+    # prefix on the span cell would mark all five cars done.
+    done_prefix = SELF_CHECK_DOC.replace("SPLIT - mixed", "DONE except MT-11")
+    affected = {car["id"]: car["status"] for car in parse_cars(done_prefix)}
+    check("DONE prefix on a span marks all five cars done",
+          [affected[f"MT-{n:02d}"] for n in range(8, 13)], ["done"] * 5)
+
+    print(f"[{'OK' if ok else 'FAIL'}] queue sync self-check")
+    return ok
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--check", action="store_true",
                        help="exit 1 if the queue on disk differs from the document")
+    parser.add_argument("--self-check", action="store_true",
+                       help="verify the document-to-queue mapper itself")
     args = parser.parse_args(argv)
+
+    if args.self_check:
+        return 0 if self_check() else 1
 
     try:
         text = SOURCE.read_text(encoding="utf-8")

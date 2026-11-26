@@ -277,6 +277,18 @@ jobs:
       - compute_gate_base
 
       - run:
+          name: CI routing contract (#642)
+          command: |
+            # The contract has been checked in-file since it was written, but
+            # nothing ran it: a required context could still be scheduled onto
+            # the scarce pool and then execute zero steps, which no status would
+            # ever reveal. Run the checker's own fixtures first so a broken
+            # reader cannot agree with a moved source of truth, then assert the
+            # real ci.yml/action.yml pair.
+            python3 scripts/ci_route_check.py --self-check
+            python3 scripts/ci_route_check.py
+
+      - run:
           name: Check for tracked files matching .gitignore patterns
           command: |
             echo "Checking for tracked files that should be ignored..."
@@ -652,6 +664,29 @@ jobs:
             command -v python3 >/dev/null 2>&1 || { echo "[FAIL] python3 missing; cannot run unwrap/println gate"; exit 1; }
             python3 -m unittest scripts/test_check_prod_unwrap_println.py
             python3 scripts/check_prod_unwrap_println.py
+      # #678: the `scmessenger-cli` bin target declared `test = false`, so the
+      # unit battery inside main.rs was never compiled by any test build. The
+      # target is enabled; this gate fails if a bin with tests is excluded again.
+      - run:
+          name: Bin targets with unit tests are not excluded (#678)
+          command: python3 scripts/check_bin_test_targets.py
+
+      # #449: rustup honours rust-toolchain.toml from the directory containing it,
+      # so a Dockerfile that runs `rustup target/component add` before copying the
+      # pin installs into the image's default toolchain instead of the pinned one.
+      # That made the Docker Integration Suite red until the android image was
+      # fixed; this gate keeps the fix from regressing in any of the images.
+      - run:
+          name: Dockerfiles copy the toolchain pin before rustup (#449)
+          command: python3 scripts/check_docker_toolchain_order.py --self-check && python3 scripts/check_docker_toolchain_order.py
+
+      # #155: `[profile.release] strip = true` removes the debuginfo that carries
+      # UniFFI's embedded metadata, so a compose step that builds the host cdylib
+      # with --release and then runs gen_kotlin emits an incomplete binding set and
+      # KSP fails on error.NonExistentClass. This gate fails such a step.
+      - run:
+          name: UniFFI binding builds keep debuginfo (#155)
+          command: python3 scripts/check_uniffi_binding_build.py --self-check && python3 scripts/check_uniffi_binding_build.py
 
   # ---------------------------------------------------------------------------
   # 4. Test (ubuntu-latest)  <- .github/workflows/ci.yml job `test`, ubuntu leg
@@ -667,6 +702,46 @@ jobs:
           name: Run workspace tests
           no_output_timeout: 30m
           command: cargo test --workspace --features test-utils
+      # #477: `iron_core_fast_backup_tracks_bridge_contact_removals` has been
+      # seen failing with StorageError when the restored iOS contacts store is
+      # opened, but no flake rate was ever measured, so the issue could be
+      # neither fixed nor quarantined on evidence - it was parked on "needs a
+      # reliable repro". This runs that one test repeatedly and prints the
+      # pass/fail count, which is the repro instrument. REPORT ONLY: it never
+      # fails the job, because turning the base red on an unmeasured flake would
+      # trade one invisible defect for a visible one.
+      - run:
+          name: Flaky-test stress report - fast backup contact removals (#477)
+          no_output_timeout: 30m
+          command: |
+            set -uo pipefail
+            TEST=iron_core_fast_backup_tracks_bridge_contact_removals
+            RUNS="${FLAKY_STRESS_RUNS:-10}"
+            OUT=tmp/flaky-477
+            mkdir -p "$OUT"
+            pass=0; fail=0
+            for i in $(seq 1 "$RUNS"); do
+              if cargo test -p scmessenger-core --test integration_backup "$TEST" -- --exact --test-threads=1 >"$OUT/run-$i.log" 2>&1; then
+                pass=$((pass + 1))
+                echo "iteration $i: PASS"
+              else
+                fail=$((fail + 1))
+                echo "iteration $i: FAIL"
+                tail -40 "$OUT/run-$i.log"
+              fi
+            done
+            echo "[INFO] #477 stress: $pass/$RUNS passed, $fail failed"
+            if [ "$fail" -gt 0 ]; then
+              echo "[WARNING] #477 reproduced in this run: $fail/$RUNS failed. Record this rate on the issue instead of guessing the cause."
+            fi
+            exit 0
+      # #678: `cargo test --workspace` select the bin target only while it is
+      # enabled, so run the battery by name: a manifest change that hides it
+      # again then shows up as a missing step, not as silence.
+      - run:
+          name: Run CLI bin test battery (#678)
+          no_output_timeout: 30m
+          command: cargo test -p scmessenger-cli --bin scmessenger-cli
       # The audit tooling is stdlib-only Python, and until this step ran nothing
       # executed its tests: a broken gate script or evaluator could land while
       # every context stayed green. Both suites are cheap and deterministic.
@@ -680,6 +755,7 @@ jobs:
             python3 scripts/retry_ceiling_bakeoff.py --self-check
             python3 scripts/routing_calibration.py --self-check
             python3 scripts/drift_sketch_bakeoff.py --self-check
+            python3 scripts/sync_sketch_bakeoff.py --self-check
             python3 scripts/gateway_ranking_bakeoff.py --self-check
             python3 scripts/multipath_union_bakeoff.py --self-check
             python3 scripts/discovery_cadence_bakeoff.py --self-check
@@ -734,6 +810,19 @@ jobs:
           command: |
             set -euo pipefail
             python3 scripts/test_orchestration_v2.py
+      # #768: the merge-train document is the source of truth and
+      # orchestration/v051_cars.jsonl is generated from it, but nothing on this
+      # rail compared the two, so drift was invisible until a reader noticed
+      # (it happened twice: #764 regenerated a stale queue, and #767 was needed
+      # because a DONE-prefixed span cell silently marked an unfinished car
+      # done). The self-check runs first so a broken mapper cannot pass as
+      # "in sync".
+      - run:
+          name: Queue matches the merge-train document (#768)
+          command: |
+            set -euo pipefail
+            python3 scripts/v051_queue_sync.py --self-check
+            python3 scripts/v051_queue_sync.py --check
 
   # ---------------------------------------------------------------------------
   # 7. Docs  <- .github/workflows/ci.yml job `docs`
@@ -787,6 +876,21 @@ jobs:
           name: Generate Swift bindings
           no_output_timeout: 20m
           command: cargo run -p scmessenger-core --bin gen_swift --features gen-bindings
+      # #590: the desktop bridge's `gen_kotlin` bin is declared with
+      # `required-features = ["gen-bindings"]`, so `cargo test --workspace` never
+      # builds it and nothing on this rail ever ran it. `.github/workflows/
+      # desktop.yml` tries, but its `build` job has failed at job level with zero
+      # steps and no uploaded log (run 44938258938), which proves nothing about
+      # the bindings. This generates the desktop Kotlin set and asserts it names
+      # the exported type and methods, because an exit code is exactly what #155
+      # showed can be green on an incomplete set.
+      - run:
+          name: Generate and validate the desktop bridge Kotlin bindings (#590)
+          no_output_timeout: 20m
+          command: |
+            set -euo pipefail
+            python3 scripts/check_desktop_bridge_bindings.py --self-check
+            python3 scripts/check_desktop_bridge_bindings.py
       # scripts/ffi_surface.sh fails closed when a binding file is missing or
       # extracts zero symbols, so a generation failure cannot read as a pass.
       - run:

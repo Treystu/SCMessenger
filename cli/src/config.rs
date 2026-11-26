@@ -213,6 +213,30 @@ impl Config {
         Ok(config)
     }
 
+    /// Apply the control-API port BEFORE command dispatch (#721).
+    ///
+    /// `load` is the only thing that calls `api::set_api_port`, but the client commands
+    /// (`stop`, `send`, `invite`, `discovery`) probe the running node's API inside their
+    /// handlers, before that load happens. They therefore used the historical 9876 no
+    /// matter what the data dir configured, and either missed their own node or talked to
+    /// another node answering on the default port.
+    ///
+    /// This applies the SAME precedence as `load` - `SCM_API_PORT`, then the persisted
+    /// `api_port`, then the default - from a config file that is only read if it already
+    /// exists. It never creates one and never fails: a missing or malformed file leaves the
+    /// default in place, and commands that need the whole config still call `load`.
+    pub fn apply_api_port_for_dispatch() {
+        let configured = Self::config_file()
+            .ok()
+            .filter(|path| path.exists())
+            .and_then(|path| std::fs::read_to_string(path).ok())
+            .and_then(|contents| serde_json::from_str::<Config>(&contents).ok())
+            .and_then(|config| config.api_port);
+        let env_port = std::env::var("SCM_API_PORT").ok();
+        let resolved = crate::api::resolve_api_port(configured, env_port.as_deref());
+        crate::api::set_api_port(resolved);
+    }
+
     /// Save config to file
     pub fn save(&self) -> Result<()> {
         let config_file = Self::config_file()?;
@@ -676,5 +700,123 @@ mod heartbeat_watchdog_tests {
         );
 
         std::fs::remove_dir_all(&dir).ok();
+    }
+}
+
+#[cfg(test)]
+mod dispatch_api_port_tests {
+    use super::*;
+    use std::sync::Mutex;
+
+    // These tests mutate process-global state (env plus the resolved port), so they
+    // serialise against each other.
+    static ENV_LOCK: Mutex<()> = Mutex::new(());
+
+    struct EnvGuard {
+        keys: Vec<&'static str>,
+    }
+
+    impl Drop for EnvGuard {
+        fn drop(&mut self) {
+            for key in &self.keys {
+                std::env::remove_var(key);
+            }
+        }
+    }
+
+    fn repo_tmp_path(name: &str) -> PathBuf {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("..")
+            .join("tmp");
+        std::fs::create_dir_all(&root).expect("repo tmp dir");
+        root.join(name)
+    }
+
+    fn write_config(name: &str, api_port: u16) -> PathBuf {
+        let path = repo_tmp_path(name);
+        let contents = format!("{{\"api_port\": {api_port}}}");
+        std::fs::write(&path, contents).expect("write config");
+        path
+    }
+
+    #[test]
+    fn dispatch_applies_the_persisted_port_before_any_config_load() {
+        // #721: the pre-fix control flow dispatched first, so the first thing a client
+        // command did was api::is_api_available() against the default 9876, whatever the
+        // data dir configured. This pins the configured value from the moment dispatch
+        // begins, with no Config::load anywhere in the test.
+        let _guard = ENV_LOCK.lock().unwrap_or_else(|error| error.into_inner());
+        let env = EnvGuard {
+            keys: vec!["SCMESSENGER_CONFIG", "SCM_API_PORT"],
+        };
+        let path = write_config("dispatch-api-port-9100.json", 9100);
+        std::env::set_var("SCMESSENGER_CONFIG", &path);
+        std::env::remove_var("SCM_API_PORT");
+        crate::api::set_api_port(0);
+        let before = crate::api::api_port();
+        assert_eq!(before, crate::api::API_PORT);
+        Config::apply_api_port_for_dispatch();
+        let after = crate::api::api_addr();
+        assert_eq!(after, "127.0.0.1:9100");
+        std::fs::remove_file(&path).ok();
+        drop(env);
+        crate::api::set_api_port(0);
+    }
+
+    #[test]
+    fn dispatch_port_precedence_matches_config_load() {
+        let _guard = ENV_LOCK.lock().unwrap_or_else(|error| error.into_inner());
+        let env = EnvGuard {
+            keys: vec!["SCMESSENGER_CONFIG", "SCM_API_PORT"],
+        };
+        let path = write_config("dispatch-api-port-9150.json", 9150);
+        std::env::set_var("SCMESSENGER_CONFIG", &path);
+        std::env::set_var("SCM_API_PORT", "9250");
+        crate::api::set_api_port(0);
+        Config::apply_api_port_for_dispatch();
+        let chosen = crate::api::api_port();
+        assert_eq!(chosen, 9250);
+        std::fs::remove_file(&path).ok();
+        drop(env);
+        crate::api::set_api_port(0);
+    }
+
+    #[test]
+    fn dispatch_port_read_never_creates_a_config() {
+        let _guard = ENV_LOCK.lock().unwrap_or_else(|error| error.into_inner());
+        let env = EnvGuard {
+            keys: vec!["SCMESSENGER_CONFIG", "SCM_API_PORT"],
+        };
+        let path = repo_tmp_path("dispatch-api-port-absent.json");
+        std::fs::remove_file(&path).ok();
+        std::env::set_var("SCMESSENGER_CONFIG", &path);
+        std::env::remove_var("SCM_API_PORT");
+        crate::api::set_api_port(0);
+        Config::apply_api_port_for_dispatch();
+        let chosen = crate::api::api_port();
+        assert_eq!(chosen, crate::api::API_PORT);
+        let created = path.exists();
+        assert!(!created, "pre-dispatch read must not create a config");
+        drop(env);
+        crate::api::set_api_port(0);
+    }
+
+    #[test]
+    fn dispatch_tolerates_a_malformed_config() {
+        let _guard = ENV_LOCK.lock().unwrap_or_else(|error| error.into_inner());
+        let env = EnvGuard {
+            keys: vec!["SCMESSENGER_CONFIG", "SCM_API_PORT"],
+        };
+        let path = repo_tmp_path("dispatch-api-port-malformed.json");
+        std::fs::write(&path, "not json").expect("write malformed config");
+        std::env::set_var("SCMESSENGER_CONFIG", &path);
+        std::env::remove_var("SCM_API_PORT");
+        crate::api::set_api_port(0);
+        Config::apply_api_port_for_dispatch();
+        let chosen = crate::api::api_port();
+        assert_eq!(chosen, crate::api::API_PORT);
+        std::fs::remove_file(&path).ok();
+        drop(env);
+        crate::api::set_api_port(0);
     }
 }
