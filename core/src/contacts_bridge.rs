@@ -223,11 +223,8 @@ impl ContactManager {
         .map_err(|(attempts, err)| {
             // #477: record the cause before mapping it away. A caller that sees
             // only `StorageError` can then read it through `last_open_failure`.
-            let detail = format!(
-                "sled open of {:?} failed after {} attempt(s): {}",
-                path, attempts, err
-            );
-            tracing::error!("ContactManager::new: {}", detail);
+            let detail = format!("sled open of {path:?} failed after {attempts} attempt(s): {err}");
+            tracing::error!("ContactManager::new: {detail}");
             record_open_failure(&key, detail);
             crate::IronCoreError::StorageError
         })?;
