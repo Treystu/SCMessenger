@@ -82,7 +82,7 @@ jobs:
   changes:
     name: Detect changed areas
     # NDK-free (checkout + detect-platform-change only): safe on the ARM64 OCI pool.
-    runs-on: ${{ (github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)) && vars.USE_OCI_RUNNER != 'false' && (vars.CI_RUNNER == 'oci' || vars.CI_RUNNER == '') && fromJSON('["self-hosted","oci"]') || 'ubuntu-latest' }}
+    runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && vars.USE_OCI_RUNNER != 'false' && (vars.CI_RUNNER == 'oci' || vars.CI_RUNNER == '') && fromJSON('["self-hosted","oci"]') || 'ubuntu-latest' }}
     timeout-minutes: 5
     outputs:
       ios_relevant: ${{ steps.platform.outputs.ios_relevant }}
@@ -95,7 +95,7 @@ jobs:
   wiring-gate:
     name: Android Wiring Gate
     # Python only, NDK-free: this is the gate #719 names, and it must actually run.
-    runs-on: ${{ (github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)) && vars.USE_OCI_RUNNER != 'false' && (vars.CI_RUNNER == 'oci' || vars.CI_RUNNER == '') && fromJSON('["self-hosted","oci"]') || 'ubuntu-latest' }}
+    runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && vars.USE_OCI_RUNNER != 'false' && (vars.CI_RUNNER == 'oci' || vars.CI_RUNNER == '') && fromJSON('["self-hosted","oci"]') || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@v7
       - name: Set up Python
@@ -130,7 +130,7 @@ jobs:
   android-unit-tests:
     name: Android JVM Unit Tests
     # JVM + host Rust only (`-x buildRustAndroid`): no NDK, so the ARM64 pool runs it.
-    runs-on: ${{ (github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)) && vars.USE_OCI_RUNNER != 'false' && (vars.CI_RUNNER == 'oci' || vars.CI_RUNNER == '') && fromJSON('["self-hosted","oci"]') || 'ubuntu-latest' }}
+    runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && vars.USE_OCI_RUNNER != 'false' && (vars.CI_RUNNER == 'oci' || vars.CI_RUNNER == '') && fromJSON('["self-hosted","oci"]') || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@1.99.0
