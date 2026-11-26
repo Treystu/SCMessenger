@@ -46,7 +46,8 @@ pub use relay::{
 pub use sketch::IBLT;
 pub use store::{MeshStore, MessageId, StoredEnvelope};
 pub use sync::{
-    merge_envelopes, SyncMessage, SyncSession, SyncState, VersionedSyncMessage, SYNC_SCHEMA_VERSION,
+    clamp_schema_version, merge_envelopes, SyncMessage, SyncSession, SyncState,
+    VersionedSyncMessage, SYNC_SCHEMA_VERSION, SYNC_SCHEMA_VERSION_MIN, SYNC_SCHEMA_VERSION_RETRY,
 };
 
 use thiserror::Error;

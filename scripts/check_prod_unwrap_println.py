@@ -12,6 +12,11 @@ POLICY
 - `.unwrap()` is forbidden in production paths (canon). `.expect("ctx")` is
   allowed (RUST_CONVENTIONS.md only bans unwrap; lint.yml has always said
   "use ? or expect() with context"). Pass `--expect` to flag it as well.
+- A registered `.expect()` site (#525) is never stale, with or without
+  `--expect`: the inventory is always computed, and `--expect` only decides
+  whether an UNREGISTERED one fails the run. That lets one job enforce the
+  register (`--expect`) while another keeps the older invocation without
+  turning its allowlist into a stale-entry failure.
 - `println!` / `print!` are forbidden in library code (use tracing).
   `eprintln!`/`eprint!` are not matched.
 - Test code is excluded: `#[cfg(test)]` (and `cfg(all(test, ..))`-style) items,
@@ -356,7 +361,10 @@ def main(argv=None) -> int:
     repo = Path(args.repo).resolve()
     try:
         allow = load_allowlist(repo / args.allowlist)
-        results = scan_tree(args.roots, repo, args.expect)
+        # Always inventory `.expect()`: an allowlist entry is matched against the
+        # real tree, so registering one cannot make the list stale just because
+        # this caller did not ask for expect enforcement.
+        results = scan_tree(args.roots, repo, True)
     except (OSError, ValueError) as e:
         print(f"[FAIL] gate could not run: {e}")
         return 2
@@ -364,8 +372,10 @@ def main(argv=None) -> int:
     for rel, line, kind, text in results:
         if (rel, line) in allow:
             used.add((rel, line))
-        else:
-            bad.append((rel, line, kind, text))
+            continue
+        if kind == "expect" and not args.expect:
+            continue
+        bad.append((rel, line, kind, text))
     stale = sorted(set(allow) - used)
     for rel, line, kind, text in bad:
         print(f"{rel}:{line}: [{kind}] {text}")
@@ -378,7 +388,10 @@ def main(argv=None) -> int:
             "a justified allowlist entry."
         )
         return 1
-    print(f"[OK] no production unwrap()/println! ({len(used)} allowlisted)")
+    print(
+        f"[OK] no unregistered production unwrap()/println!"
+        f"{'/.expect()' if args.expect else ''} ({len(used)} allowlisted)"
+    )
     return 0
 
 

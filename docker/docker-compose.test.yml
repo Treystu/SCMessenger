@@ -144,7 +144,14 @@ services:
     command: |
       bash -c "
         echo '=== Building Native Library for Host (Linux) ===' &&
-        cargo build --manifest-path core/Cargo.toml --release &&
+        # #155: the workspace's [profile.release] sets strip = true (Cargo.toml),
+        # which removes the debuginfo that carries UniFFI's embedded metadata.
+        # gen_kotlin then exits 0 having emitted an incomplete binding set, and
+        # :app:kspDebugKotlin fails with 'error.NonExistentClass could not be
+        # resolved'. Keep debuginfo for THIS host build only - the library is
+        # consumed by the binding generator and the unit tests, not shipped -
+        # so the strip setting that matters for release artifacts is untouched.
+        CARGO_PROFILE_RELEASE_STRIP=false cargo build --manifest-path core/Cargo.toml --release &&
         echo '=== Generating UniFFI Bindings ===' &&
         cargo run --manifest-path core/Cargo.toml --bin gen_kotlin --features gen-bindings &&
         mkdir -p core/target/android-libs/host &&

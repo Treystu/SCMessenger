@@ -60,6 +60,25 @@ fn rotate_oversized_log(path: &Path, cap_bytes: u64) -> std::io::Result<bool> {
     Ok(true)
 }
 
+/// Rotate the live log only when this call is about to install the subscriber.
+///
+/// #687: a warm boot re-enters `init_file_tracing` while a subscriber installed by the
+/// first call is still writing through a `CappedFileWriter` on that exact file. Rotating
+/// then renames the live file out from under the sink that owns it: the installed writer
+/// keeps appending to `<name>.1` while this call opens a live file it never uses (its
+/// `try_init` cannot win), so the evidence splits between two files and the cap stops
+/// applying to the one being written. The rotation is therefore tied to ownership.
+fn rotate_for_new_subscriber(
+    log_file: &Path,
+    cap_bytes: u64,
+    subscriber_installed: bool,
+) -> std::io::Result<bool> {
+    if subscriber_installed {
+        return Ok(false);
+    }
+    rotate_oversized_log(log_file, cap_bytes)
+}
+
 /// A `std::io::Write` sink that keeps the live mesh log under `cap_bytes` for the
 /// whole life of the process, not only at start-up.
 ///
@@ -114,7 +133,9 @@ impl CappedFileWriter {
                     .open(&self.path)?,
             );
         }
-        Ok(self.file.as_mut().expect("sink was just opened"))
+        self.file
+            .as_mut()
+            .ok_or_else(|| std::io::Error::other("log sink missing after open"))
     }
 
     /// Replace the live file with `<path>.1` and reopen an empty one.
@@ -189,7 +210,12 @@ pub fn init_file_tracing(log_directory: &str) -> Result<(), Box<dyn std::error::
     // the `CappedFileWriter` sink below, which counts bytes and rotates at the
     // same cap; the retry-cycle cure in core/src/transport (separate, gated
     // change) bounds the rate at which those bytes are produced.
-    if rotate_oversized_log(&log_path.join(MESH_LOG_FILENAME), MESH_LOG_CAP_BYTES)? {
+    // #687: only this call's own subscriber may rotate the file. A warm boot (mobile
+    // recreates MeshService without killing the process) finds the subscriber already
+    // installed, and the sink it owns is still writing this exact file.
+    let subscriber_installed = tracing::dispatcher::has_been_set();
+    let log_file = log_path.join(MESH_LOG_FILENAME);
+    if rotate_for_new_subscriber(&log_file, MESH_LOG_CAP_BYTES, subscriber_installed)? {
         tracing::warn!(
             event = "mesh_log_rotated",
             cap_bytes = MESH_LOG_CAP_BYTES,
@@ -197,12 +223,21 @@ pub fn init_file_tracing(log_directory: &str) -> Result<(), Box<dyn std::error::
         );
     }
 
+    if subscriber_installed {
+        // Nothing left to do: the installed subscriber owns the sink, the cap and the file.
+        // Rotating or opening a second sink here would split the evidence and leave the cap
+        // unapplied to the file actually being written. Reporting success is the truthful
+        // outcome for a warm boot, and it is what the `try_init` failure used to report as an
+        // error after the damage was already done.
+        return Ok(());
+    }
+
     // Non-blocking file appender (prevents I/O from blocking async mesh router).
     // The sink is `CappedFileWriter`, not `rolling::never`: the appender applies
     // no size policy of its own, so a session that never restarts would write an
     // unbounded file. The sink rotates at the cap during the session; the rotation
     // above bounds the file that already exists when this process starts.
-    let file_sink = CappedFileWriter::open(&log_path.join(MESH_LOG_FILENAME), MESH_LOG_CAP_BYTES)?;
+    let file_sink = CappedFileWriter::open(&log_file, MESH_LOG_CAP_BYTES)?;
     let (non_blocking, _guard) = tracing_appender::non_blocking(file_sink);
 
     // CRITICAL: Must leak the guard to prevent appender from flushing/dropping prematurely.
@@ -264,7 +299,8 @@ pub fn init_file_tracing(_log_directory: &str) -> Result<(), Box<dyn std::error:
 
 #[cfg(all(test, not(target_arch = "wasm32")))]
 mod tests {
-    use super::{rotate_oversized_log, CappedFileWriter, MESH_LOG_CAP_BYTES, MESH_LOG_FILENAME};
+    use super::{init_file_tracing, rotate_for_new_subscriber, rotate_oversized_log};
+    use super::{CappedFileWriter, MESH_LOG_CAP_BYTES, MESH_LOG_FILENAME};
     use std::io::Write;
     use std::path::{Path, PathBuf};
 
@@ -287,6 +323,56 @@ mod tests {
         ));
         std::fs::create_dir_all(&dir).expect("scratch dir");
         dir
+    }
+
+    #[test]
+    fn a_warm_boot_leaves_the_live_log_alone() {
+        // #687: mobile re-runs init without killing the process, so a subscriber installs
+        // once and every later call is a warm boot. The pre-fix flow rotated the live file
+        // first and looked for an owner afterwards, renaming the file away from the sink
+        // that was still writing to it.
+        let dir = scratch("warm-boot");
+        let log = dir.join(MESH_LOG_FILENAME);
+        std::fs::write(&log, b"live evidence").unwrap();
+        let rotated = rotate_for_new_subscriber(&log, 1, true).expect("gate is infallible");
+        assert!(!rotated, "an owned file is not rotated");
+        let after = std::fs::read(&log).expect("the live file is untouched");
+        assert_eq!(after, b"live evidence");
+        let artifact = dir.join(format!("{}.1", MESH_LOG_FILENAME));
+        assert!(!artifact.exists(), "no rotation artifact appears");
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn the_owning_call_still_rotates_an_oversized_log() {
+        let dir = scratch("owner-rotates");
+        let log = dir.join(MESH_LOG_FILENAME);
+        std::fs::write(&log, b"evidence that outlives the cap").unwrap();
+        let rotated = rotate_for_new_subscriber(&log, 1, false).expect("rotation runs");
+        assert!(rotated, "the call that installs the subscriber rotates");
+        let artifact = dir.join(format!("{}.1", MESH_LOG_FILENAME));
+        let previous = std::fs::read(&artifact).expect("the evidence moved to .1");
+        assert_eq!(previous, b"evidence that outlives the cap");
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn init_after_the_subscriber_is_installed_is_not_an_error() {
+        // #687: the pre-fix flow reported Err from try_init on every warm boot, after it had
+        // already rotated the file. With a subscriber installed, init must succeed and leave
+        // the live file alone.
+        let dir = scratch("warm-boot-init");
+        let log = dir.join(MESH_LOG_FILENAME);
+        std::fs::write(&log, b"live evidence").unwrap();
+        let registry = tracing_subscriber::registry();
+        tracing::subscriber::set_global_default(registry).expect("installed once per binary");
+        let path = dir.to_str().expect("utf-8 path");
+        init_file_tracing(path).expect("a warm boot is not an error");
+        let after = std::fs::read(&log).expect("the live file is untouched");
+        assert_eq!(after, b"live evidence");
+        let artifact = dir.join(format!("{}.1", MESH_LOG_FILENAME));
+        assert!(!artifact.exists(), "no rotation artifact appears");
+        std::fs::remove_dir_all(&dir).ok();
     }
 
     #[test]

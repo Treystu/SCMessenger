@@ -74,6 +74,16 @@ class Relay:
     # the harness hand history to an identity that was just created would model
     # an attack no adversary has to run, then score the policy against it.
     proven: bool = True
+    # The reliability a relay PUBLISHES, or None when it advertises its true one.
+    # Selection, eligibility and priors read this; a delivery is measured against
+    # `reliability`. Keeping the two apart is what makes a poisoned snapshot a
+    # lie about the score rather than a lie about the world (#746 finding 5).
+    advertised: float | None = None
+
+    @property
+    def score(self) -> float:
+        """The advertised score: what the product's selectors rank on."""
+        return self.reliability if self.advertised is None else self.advertised
 
 
 @dataclass
@@ -132,7 +142,7 @@ def eligible(pool: Pool) -> List[Relay]:
     """Exactly the champion's filter: threshold, and never the destination."""
     return [
         r for r in pool.relays
-        if r.reliability >= MIN_RELIABILITY and r.peer_id != pool.destination.peer_id
+        if r.score >= MIN_RELIABILITY and r.peer_id != pool.destination.peer_id
     ]
 
 
@@ -163,7 +173,7 @@ def champion_path(pool: Pool, rng: random.Random, hops_override: int | None = No
         for relay in by_segment[segment]:
             if relay.peer_id in used:
                 continue
-            if best is None or relay.reliability > best.reliability:
+            if best is None or relay.score > best.score:
                 best = relay
         if best is not None:
             selected.append(best)
@@ -331,6 +341,10 @@ def run(sizes: Sequence[int], pools: int, seed: int) -> Dict[str, object]:
 # reaching PAL, sampling within the harness's own 2pp indifference band.
 
 DEPTH_BAND = 0.02          # the harness's own materiality band, from the spec
+# The report carries percentage points, so the acceptance comparison needs the same
+# band in pp. Using DEPTH_BAND (probability space) against a pp gap made the tolerance
+# 0.02pp instead of 2pp - two orders of magnitude stricter than the spec (#746 finding 6).
+DEPTH_BAND_PP = DEPTH_BAND * 100.0
 DEPTH_HISTORY_WINDOW = 64
 
 
@@ -364,7 +378,7 @@ def seed_posteriors(pool: Pool, rng: random.Random, history_frac: float = 0.6) -
     """
     out: Dict[str, Posterior] = {}
     for relay in pool.relays:
-        post = cold_start(relay.reliability)
+        post = cold_start(relay.score)
         if relay.proven and rng.random() < history_frac:
             trials = rng.randint(3, 12)
             successes = sum(1 for _ in range(trials) if rng.random() < relay.reliability)
@@ -508,6 +522,7 @@ def sybil_pool(rng: random.Random, size: int, operators: int, segments: int) -> 
             Relay(
                 peer_id=f"sybil{i:02d}",
                 reliability=0.98,
+                advertised=0.98,
                 latency_ms=40.0,
                 operator=f"sybilop{i % 2}",
                 segment=f"sybilseg{i % max(2, segments)}",
@@ -518,7 +533,14 @@ def sybil_pool(rng: random.Random, size: int, operators: int, segments: int) -> 
 
 
 def poisoned_pool(rng: random.Random, size: int, operators: int, segments: int) -> Pool:
-    """Relays whose snapshot score is a lie: history says they fail."""
+    """Relays whose published score is a lie: they advertise 0.97 and deliver badly.
+
+    The truth stays whatever `make_pool` drew, so a poisoned relay that advertises
+    0.97 still fails at its real rate when a delivery is evaluated. Before #746
+    finding 5 the lie WAS the truth: `reliability=0.97` made the liar genuinely
+    reliable, so the class modelled a generous pool with a high score rather than
+    an adversary, and its delivery numbers were fiction.
+    """
     pool = make_pool(rng, size, operators=operators, segments=segments)
     relays = []
     for relay in pool.relays:
@@ -526,10 +548,11 @@ def poisoned_pool(rng: random.Random, size: int, operators: int, segments: int) 
             relays.append(
                 Relay(
                     peer_id=relay.peer_id,
-                    reliability=0.97,
+                    reliability=relay.reliability,
                     latency_ms=relay.latency_ms,
                     operator=relay.operator,
                     segment=relay.segment,
+                    advertised=0.97,
                 )
             )
         else:
@@ -547,6 +570,7 @@ def degenerate_pool(rng: random.Random, size: int, operators: int, segments: int
             latency_ms=r.latency_ms,
             operator="op0",
             segment="seg0",
+            advertised=r.advertised,
         )
         for r in pool.relays
     ]
@@ -565,7 +589,7 @@ def run_dynamic(
         "poisoned": poisoned_pool,
         "degenerate": degenerate_pool,
     }
-    report: Dict[str, object] = {"seed": seed, "depth_band": DEPTH_BAND, "classes": []}
+    report: Dict[str, object] = {"seed": seed, "depth_band_pp": DEPTH_BAND_PP, "classes": []}
     for kind in classes:
         for size in sizes:
             rng = random.Random(seed * 7919 + size + (len(kind) * 131))
@@ -624,12 +648,18 @@ def run_dynamic(
     return report
 
 
-def evaluate_acceptance(reports: Sequence[Dict[str, object]], band: float = DEPTH_BAND) -> Dict[str, object]:
+def evaluate_acceptance(
+    reports: Sequence[Dict[str, object]], band_pp: float = DEPTH_BAND_PP
+) -> Dict[str, object]:
     """The filed acceptance test, applied to both seeds.
 
     pass iff, on both seeds: total gap within band; hop-count component within
     band at every pool size; no adversarial class loses to the shipped builder by
     more than the band.
+
+    `band_pp` is in PERCENTAGE POINTS because `gap_median_pp` and
+    `hop_component_median_pp` are: the spec band is 2pp, and comparing a probability
+    band there silently tightened it to 0.02pp.
     """
     failures: List[str] = []
     for report in reports:
@@ -640,11 +670,11 @@ def evaluate_acceptance(reports: Sequence[Dict[str, object]], band: float = DEPT
             if gap is None:
                 failures.append(f"seed {seed} {entry['class']} size {entry['pool_size']}: no measurable pools")
                 continue
-            if gap < -band:
+            if gap < -band_pp:
                 failures.append(
                     f"seed {seed} {entry['class']} size {entry['pool_size']}: dynamic loses by {-gap:.2f}pp"
                 )
-            if hop is not None and hop < -band:
+            if hop is not None and hop < -band_pp:
                 failures.append(
                     f"seed {seed} {entry['class']} size {entry['pool_size']}: hop component {hop:.2f}pp"
                 )
@@ -658,7 +688,7 @@ def evaluate_acceptance(reports: Sequence[Dict[str, object]], band: float = DEPT
                         f"seed {seed} {entry['class']} size {entry['pool_size']}: "
                         f"depth {median_depth} does not track proven diversity {median_proven}"
                     )
-    return {"passed": not failures, "failures": failures, "band_pp": band}
+    return {"passed": not failures, "failures": failures, "band_pp": band_pp}
 
 
 def self_check(pools: int = 40) -> int:
@@ -691,11 +721,76 @@ def self_check(pools: int = 40) -> int:
             if objective(pool, trial) > best_score + 1e-9:
                 print("[ERROR] exhaustive optimum was beaten by random sampling")
                 failures += 1
+    # 2b. #746 finding 5: a poisoned relay advertises one number and delivers another.
+    liar = Relay(
+        peer_id="liar", reliability=0.30, latency_ms=40.0,
+        operator="opA", segment="segA", advertised=0.99,
+    )
+    honest = Relay(
+        peer_id="honest", reliability=0.90, latency_ms=40.0,
+        operator="opB", segment="segB",
+    )
+    cheat_pool = Pool(relays=[liar, honest], destination=Relay(
+        peer_id="dest", reliability=0.99, latency_ms=10.0,
+        operator="opD", segment="segD",
+    ))
+    if liar.score != 0.99:
+        print(f"[ERROR] advertised score {liar.score} is not the published 0.99")
+        failures += 1
+    if delivery_probability(cheat_pool, [liar]) != 0.30:
+        print("[ERROR] a poisoned relay delivers at its advertisement, not its truth")
+        failures += 1
+    if honest.score != 0.90:
+        print("[ERROR] an honest relay's score is not its reliability")
+        failures += 1
+    # Selection follows the advertisement, which is the point of the class: the
+    # champion has to be able to be fooled, or the bake-off measures nothing.
+    picked = champion_path(cheat_pool, random.Random(3), hops_override=1)
+    if [r.peer_id for r in picked] != ["liar"]:
+        print(f"[ERROR] champion picked {[r.peer_id for r in picked]} over the higher advertisement")
+        failures += 1
+    # The pool builder must produce liars whose truth is not their advertisement.
+    real = poisoned_pool(random.Random(9), 24, 3, 4)
+    liars = [r for r in real.relays if r.advertised is not None]
+    if not liars or not all(r.score == 0.97 for r in liars):
+        print("[ERROR] poisoned_pool liars do not all advertise 0.97")
+        failures += 1
+    if any(r.reliability == 0.97 for r in liars):
+        print("[ERROR] a poisoned relay's truth was overwritten with its advertisement")
+        failures += 1
+
     # 3. Determinism: same seed, same numbers.
     a = run([8], 10, 11)
     b = run([8], 10, 11)
     if json.dumps(a, sort_keys=True) != json.dumps(b, sort_keys=True):
         print("[ERROR] run is not deterministic for a fixed seed")
+        failures += 1
+    # 4. The acceptance band must be compared in the report's own units. A 1pp loss is
+    #    inside the spec's 2pp band; a 3pp loss is outside it. Probability-space
+    #    comparison made both of them failures, which is the #746 finding 6 defect.
+    def verdict_for(gap_pp: float) -> bool:
+        report = {
+            "seed": 0,
+            "depth_band_pp": DEPTH_BAND_PP,
+            "classes": [
+                {
+                    "class": "probe",
+                    "pool_size": 8,
+                    "pools": 1,
+                    "gap_median_pp": gap_pp,
+                    "hop_component_median_pp": gap_pp,
+                    "median_depth": 3,
+                    "median_proven_segments": 3,
+                }
+            ],
+        }
+        return bool(evaluate_acceptance([report])["passed"])
+
+    if not verdict_for(-1.0):
+        print("[ERROR] a 1pp loss must pass a 2pp band")
+        failures += 1
+    if verdict_for(-3.0):
+        print("[ERROR] a 3pp loss must fail a 2pp band")
         failures += 1
     print(f"[{'OK' if failures == 0 else 'FAIL'}] self-check: {failures} failure(s)")
     return failures
@@ -729,7 +824,7 @@ def main(argv: Sequence[str]) -> int:
         reports = [run_dynamic(args.sizes, args.pools, seed) for seed in seeds]
         verdict = evaluate_acceptance(reports)
         for report in reports:
-            print(f"seed={report['seed']} depth_band={report['depth_band']}pp")
+            print(f"seed={report['seed']} depth_band={report['depth_band_pp']}pp")
             for entry in report["classes"]:
                 print(
                     f"  {entry['class']:>10} pool={entry['pool_size']:>2} n={entry['pools']:>3} "

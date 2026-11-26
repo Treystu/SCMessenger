@@ -106,6 +106,18 @@ def spearman(a: Sequence[float], b: Sequence[float]) -> float:
     return num / den if den else 0.0
 
 
+def _stable_seed(text):
+    """Deterministic seed from text.
+
+    Python randomizes str hashing per process (PYTHONHASHSEED), so seeding from
+    hash() made these reports irreproducible across interpreters. This is a
+    plain FNV-style fold: same input, same seed, every process.
+    """
+    h = 2166136261
+    for byte in text.encode("utf-8"):
+        h = ((h ^ byte) * 16777619) % (2 ** 32)
+    return h
+
 def evaluate_class(
     class_name: str,
     topologies: int,
@@ -115,7 +127,7 @@ def evaluate_class(
     multipliers: Dict[str, float],
     floor: float,
 ) -> Dict[str, float]:
-    rng = random.Random(f"{seed}-{class_name}".__hash__() & 0xFFFFFFFF)
+    rng = random.Random(_stable_seed(f"{seed}-{class_name}"))
     regrets: List[float] = []
     inversions = 0
     total = 0
@@ -168,6 +180,20 @@ def self_check() -> int:
     if not math.isfinite(row["mean_regret"]):
         print("[ERROR] mean regret is not finite")
         failures += 1
+    # #746: the seed must not depend on the interpreter's hash randomization.
+    # In-process determinism passes even with hash(), because one process has one
+    # seed table; the defect only shows across processes:
+    #   PYTHONHASHSEED=1 -> hash("20261111-mixed-energy") = -9202006181893988150
+    #   PYTHONHASHSEED=2 -> hash("20261111-mixed-energy") =  7049232434426936529
+    # so an in-process rerun is not evidence. These constants are the FNV-1a
+    # 32-bit values (440920331 is the published digest of "abc"); a hash()-seeded
+    # implementation cannot reproduce them in any process it was not born in.
+    for text, expected in (("abc", 440920331), ("20261111-mixed-energy", 425724240)):
+        got = _stable_seed(text)
+        if got != expected:
+            print(f"[ERROR] _stable_seed({text!r}) = {got}, expected {expected}")
+            failures += 1
+
     # Determinism.
     a = run(11, 3, 2, 4, 0.01)
     b = run(11, 3, 2, 4, 0.01)

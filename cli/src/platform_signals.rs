@@ -166,6 +166,28 @@ fn reopen_backoff(failures: u32) -> std::time::Duration {
     std::time::Duration::from_millis(BASE_MS.saturating_mul(1u64 << shift).min(CAP_MS))
 }
 
+/// How long a netlink session must have stayed up before its success counts as
+/// health and resets the re-open backoff (#497).
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+const HEALTHY_SESSION: std::time::Duration = std::time::Duration::from_secs(30);
+
+/// Failure count for the *next* re-open, given the session that just ended
+/// (#497).
+///
+/// Resetting on any received message was wrong: a socket that delivers one
+/// notification and then dies restarts the escalation at the base delay, so a
+/// kernel that keeps handing us short-lived sockets produces a steady ~2 Hz
+/// re-open cycle. Only a session that stayed up for [`HEALTHY_SESSION`] counts
+/// as health; anything shorter keeps escalating, bounded by [`reopen_backoff`].
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+fn next_failure_count(failures: u32, received: bool, uptime: std::time::Duration) -> u32 {
+    if received && uptime >= HEALTHY_SESSION {
+        0
+    } else {
+        failures.saturating_add(1)
+    }
+}
+
 #[cfg(windows)]
 fn platform_start(notify: &Arc<Notify>, _alive: &Arc<AtomicBool>) -> bool {
     use std::ffi::c_void;
@@ -202,6 +224,14 @@ fn platform_start(notify: &Arc<Notify>, _alive: &Arc<AtomicBool>) -> bool {
         tracing::info!("[DISCOVERY] network-change source: NotifyUnicastIpAddressChange");
         true
     } else {
+        // #497: the registration failed, so the OS never took the callback
+        // context. Reclaim the strong reference taken above instead of leaking
+        // one `Arc<Notify>` per retried attempt; a failure is not cached, so a
+        // caller that retries would otherwise leak once per retry.
+        // SAFETY: `ctx` came from `Arc::into_raw` in this function and the
+        // failed registration stored no copy of it, so this is the only
+        // reference and reconstructing it here is sound.
+        drop(unsafe { Arc::from_raw(ctx as *const Notify) });
         tracing::warn!(
             "[DISCOVERY] NotifyUnicastIpAddressChange failed ({}); falling back to scheduler-driven poll",
             rc.0
@@ -301,20 +331,19 @@ fn platform_start(notify: &Arc<Notify>, alive: &Arc<AtomicBool>) -> bool {
             let mut fd = first_fd;
             let mut failures: u32 = 0;
             loop {
+                let session_started = std::time::Instant::now();
                 let (err, received) = read_netlink(fd, &notify);
+                let session_uptime = session_started.elapsed();
                 // SAFETY: `fd` is still owned by this thread and is closed
                 // exactly once before being replaced below.
                 unsafe { libc::close(fd) };
                 alive.store(false, Ordering::SeqCst);
                 // Wake the monitor so it polls while the source is down.
                 notify.notify_one();
-                // A socket that delivered messages was healthy: restart the
-                // backoff; one that died unproductively keeps escalating.
-                failures = if received {
-                    0
-                } else {
-                    failures.saturating_add(1)
-                };
+                // Only a session that stayed up counts as health (#497): a
+                // socket that delivered one message and then died keeps the
+                // escalation, instead of resetting it to the base delay.
+                failures = next_failure_count(failures, received, session_uptime);
                 tracing::warn!(
                     "[DISCOVERY] netlink read failed ({}); re-opening with backoff, polling meanwhile",
                     err
@@ -384,6 +413,23 @@ mod tests {
         }
         assert!(reopen_backoff(3) > reopen_backoff(0));
         assert_eq!(reopen_backoff(u32::MAX), std::time::Duration::from_secs(60));
+    }
+
+    /// #497: one message then death is not health. Only a session that stayed
+    /// up resets the re-open escalation, so a kernel handing us short-lived
+    /// sockets cannot hold the loop at the base delay.
+    #[test]
+    fn one_message_then_death_does_not_reset_the_backoff() {
+        let short = std::time::Duration::from_secs(1);
+        assert_eq!(next_failure_count(3, true, short), 4);
+        assert_eq!(next_failure_count(3, false, HEALTHY_SESSION), 4);
+        assert_eq!(next_failure_count(3, true, HEALTHY_SESSION), 0);
+        assert_eq!(next_failure_count(u32::MAX, false, short), u32::MAX);
+        // Escalation stays bounded: the delay derived from it never exceeds the cap.
+        assert_eq!(
+            reopen_backoff(next_failure_count(64, false, short)),
+            reopen_backoff(64)
+        );
     }
 
     #[cfg(any(windows, target_os = "linux"))]

@@ -12,7 +12,12 @@ path = "src/lib.rs"
 [[bin]]
 name = "scmessenger-cli"
 path = "src/main.rs"
-test = false
+# #678: the bin carries a unit-test battery (dial scheduling, identity-envelope
+# contact learning, the `scm test` self-test guard). `test = false` kept the
+# target out of every `cargo test --workspace` run, so those tests never even
+# compiled. Enabled here, named as its own CI step, and guarded by
+# scripts/check_bin_test_targets.py so the exclusion cannot come back unnoticed.
+test = true
 
 [dependencies]
 scmessenger-core = { path = "../core" }

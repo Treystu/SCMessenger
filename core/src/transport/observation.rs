@@ -50,7 +50,9 @@ pub struct AddressObservation {
     pub address: SocketAddr,
     /// When this observation was made (unix timestamp)
     pub timestamp: u64,
-    /// How many times this peer has confirmed this address
+    /// How many times this peer has confirmed this address. Diagnostic only:
+    /// consensus weights each observer once, so a repeat cannot buy extra votes
+    /// (#563).
     pub confirmation_count: u32,
 }
 
@@ -197,8 +199,12 @@ impl AddressObserver {
 
     /// Recalculate consensus addresses from observations
     fn recalculate_consensus(&mut self) {
-        // Count observations per address
-        let mut address_counts: HashMap<SocketAddr, u32> = HashMap::new();
+        // Count DISTINCT OBSERVERS per address, one vote each (#563). This used
+        // to sum `confirmation_count`, so a single peer that reported the same
+        // address repeatedly could outvote every other peer and steer our
+        // external-address advertisement on its own. `observations` holds one
+        // entry per observer, so counting entries is counting observers.
+        let mut observer_counts: HashMap<SocketAddr, u32> = HashMap::new();
 
         for obs in self.observations.values() {
             // Belt-and-suspenders with the record-time gate: any stored
@@ -207,7 +213,7 @@ impl AddressObserver {
             if !self.listen_ports.is_empty() && !self.listen_ports.contains(&obs.address.port()) {
                 continue;
             }
-            *address_counts.entry(obs.address).or_insert(0) += obs.confirmation_count;
+            *observer_counts.entry(obs.address).or_insert(0) += 1;
         }
 
         // Sort by count (most observed first). Equal counts resolve by address
@@ -215,7 +221,7 @@ impl AddressObserver {
         // HashMap iteration order, letting an attacker's permitted-port
         // observation win promotion over an equally-voted legitimate one
         // depending on the run (V040-T14 P0 audit).
-        let mut addresses: Vec<(SocketAddr, u32)> = address_counts.into_iter().collect();
+        let mut addresses: Vec<(SocketAddr, u32)> = observer_counts.into_iter().collect();
         addresses.sort_by_key(|(address, count)| (Reverse(*count), *address));
 
         // Cache the sorted addresses
@@ -528,6 +534,30 @@ mod tests {
         assert_eq!(
             observer.primary_external_address(),
             Some("147.81.41.188:9001".parse().unwrap())
+        );
+    }
+
+    #[test]
+    fn repeated_reports_from_one_observer_do_not_outvote_distinct_observers() {
+        let mut observer = AddressObserver::new();
+        let loud = PeerId::random();
+        let honest_a = PeerId::random();
+        let honest_b = PeerId::random();
+        let loud_addr: SocketAddr = "198.51.100.7:9001".parse().unwrap();
+        let honest_addr: SocketAddr = "203.0.113.5:9001".parse().unwrap();
+
+        // One peer reports the same address ten times: still one observer.
+        for _ in 0..10 {
+            observer.record_observation(loud, loud_addr);
+        }
+        // Two distinct peers agree on another address.
+        observer.record_observation(honest_a, honest_addr);
+        observer.record_observation(honest_b, honest_addr);
+
+        assert_eq!(
+            observer.primary_external_address(),
+            Some(honest_addr),
+            "one peer's repeats must not outvote two distinct observers"
         );
     }
 

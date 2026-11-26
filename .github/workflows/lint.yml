@@ -77,7 +77,10 @@ jobs:
         run: |
           command -v python3 >/dev/null 2>&1 || { echo "[FAIL] python3 missing; cannot run unwrap/println gate"; exit 1; }
           python3 -m unittest scripts/test_check_prod_unwrap_println.py
-          python3 scripts/check_prod_unwrap_println.py
+          # --expect: the #525 register in scripts/prod_unwrap_allowlist.cfg is enforced
+          # here, so a new production .expect() fails this required context instead of
+          # accumulating silently. Registered sites are listed with their reason.
+          python3 scripts/check_prod_unwrap_println.py --expect
 
   kotlin:
     name: Kotlin Linting

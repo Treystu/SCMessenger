@@ -16,12 +16,26 @@ use bincode;
 /// Current sync protocol schema version.
 ///
 /// Bumped to 2 by #671, which adds [`SyncMessage::SyncRetry`]. Version 1 is still
-/// accepted on read, so a peer that predates the retry ladder keeps working: it simply
-/// never receives one, and it keeps the store-relative sizing it always had.
+/// accepted on read, and a peer that predates the retry ladder keeps the store-relative
+/// sizing it always had. It is never SENT a retry: a session knows the version its peer
+/// speaks ([`SyncSession::set_peer_schema_version`]) and fails locally instead
+/// ([`SYNC_SCHEMA_VERSION_RETRY`], #746 finding 18).
 pub const SYNC_SCHEMA_VERSION: u32 = 2;
 
 /// Lowest schema version this build still accepts.
 pub const SYNC_SCHEMA_VERSION_MIN: u32 = 1;
+
+/// First schema version that carries [`SyncMessage::SyncRetry`].
+///
+/// A peer below this can still run an offer/response exchange, but it has no such enum
+/// variant to decode: a retry sent to it is not a friendly degrade, it is an undecodable
+/// frame, and the two sides then sit in different states (#746 finding 18).
+pub const SYNC_SCHEMA_VERSION_RETRY: u32 = 2;
+
+/// Clamp a version a peer reports into the range this build can speak.
+pub fn clamp_schema_version(version: u32) -> u32 {
+    version.clamp(SYNC_SCHEMA_VERSION_MIN, SYNC_SCHEMA_VERSION)
+}
 
 /// Versioned wrapper for sync messages to enable protocol evolution
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -35,8 +49,17 @@ pub struct VersionedSyncMessage {
 impl VersionedSyncMessage {
     /// Create a new versioned sync message with the current schema version
     pub fn new(payload: SyncMessage) -> Self {
+        Self::new_for(SYNC_SCHEMA_VERSION, payload)
+    }
+
+    /// Create a message stamped for the version the PEER speaks (#746 finding 18).
+    ///
+    /// The header is what the peer validates, so an envelope meant for a v1 peer has to
+    /// say 1: stamping the local version there is exactly the `VersionMismatch` the
+    /// wrapper exists to prevent. Out-of-range claims are clamped into what we can speak.
+    pub fn new_for(peer_schema_version: u32, payload: SyncMessage) -> Self {
         Self {
-            schema_version: SYNC_SCHEMA_VERSION,
+            schema_version: clamp_schema_version(peer_schema_version),
             payload,
         }
     }
@@ -149,8 +172,12 @@ pub enum SyncSizing {
 pub const DIFF_DRIVEN_MIN_CELLS: u32 = 12;
 /// Growth factor applied per retry.
 pub const RETRY_GROWTH: u32 = 2;
-/// Never climb past this many cells; a table this large peels any realistic difference.
-pub const RETRY_MAX_CELLS: u32 = 1 << 20;
+/// Never climb past this many cells.
+///
+/// This is the WIRE ceiling, not a memory ceiling: [`IBLT::to_bytes`] encodes the cell
+/// count in two bytes and rejects anything larger, so a ladder that climbed higher would
+/// build an offer it cannot send and fail as a serialization error (#710 finding 17).
+pub const RETRY_MAX_CELLS: u32 = crate::drift::sketch::MAX_WIRE_CELLS as u32;
 
 /// Track the state of a synchronization session
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -180,6 +207,8 @@ pub struct SyncSession {
     retries: u32,
     /// Retry ceiling; a table that still will not peel at this point fails honestly
     max_retries: u32,
+    /// Schema version the peer speaks, which decides what we may send it
+    peer_schema_version: u32,
     /// Our IBLT (for computing differences)
     our_iblt: Option<IBLT>,
     /// Peer's IBLT (received in response)
@@ -201,6 +230,7 @@ impl SyncSession {
             last_offer_cells: 0,
             retries: 0,
             max_retries: 12,
+            peer_schema_version: SYNC_SCHEMA_VERSION,
             our_iblt: None,
             peer_iblt: None,
             peer_missing: Vec::new(),
@@ -214,6 +244,28 @@ impl SyncSession {
         let mut session = Self::new();
         session.sizing = sizing;
         session
+    }
+
+    /// Build a session that already knows which schema version the peer speaks.
+    pub fn with_peer_schema_version(peer_schema_version: u32) -> Self {
+        let mut session = Self::new();
+        session.set_peer_schema_version(peer_schema_version);
+        session
+    }
+
+    /// Record the schema version the peer speaks, clamped into what this build speaks.
+    pub fn set_peer_schema_version(&mut self, peer_schema_version: u32) {
+        self.peer_schema_version = clamp_schema_version(peer_schema_version);
+    }
+
+    /// Schema version this session addresses the peer at.
+    pub fn peer_schema_version(&self) -> u32 {
+        self.peer_schema_version
+    }
+
+    /// Whether the peer can decode the retry ladder's message at all.
+    pub fn peer_supports_retry(&self) -> bool {
+        self.peer_schema_version >= SYNC_SCHEMA_VERSION_RETRY
     }
 
     /// Retries taken so far in this session.
@@ -274,6 +326,13 @@ impl SyncSession {
             return Err(DriftError::DecompressionFailed(
                 "SyncSession not awaiting a retry".to_string(),
             ));
+        }
+        if !self.peer_supports_retry() {
+            self.state = SyncState::Failed;
+            return Err(DriftError::DecompressionFailed(format!(
+                "peer speaks sync schema {} and never sends a retry",
+                self.peer_schema_version
+            )));
         }
         if self.retries >= self.max_retries {
             self.state = SyncState::Failed;
@@ -369,6 +428,17 @@ impl SyncSession {
             // #671: an undersized offer is a size problem, not a session failure. Ask for
             // twice the table instead of returning an error the caller cannot act on.
             Err(_) => {
+                // #746 finding 18: the schema comment promised a pre-v2 peer "simply never
+                // receives one" and nothing enforced it. A v1 build has no SyncRetry variant,
+                // so the honest answer is a local failure the caller can act on rather than
+                // a frame the peer discards as malformed.
+                if !self.peer_supports_retry() {
+                    self.state = SyncState::Failed;
+                    return Err(DriftError::DecompressionFailed(format!(
+                        "peer speaks sync schema {} and cannot decode a retry",
+                        self.peer_schema_version
+                    )));
+                }
                 self.state = SyncState::Ready;
                 let suggested = (peer_capacity as u32)
                     .saturating_mul(RETRY_GROWTH)
@@ -951,6 +1021,114 @@ mod tests {
         assert_eq!(session_a.peer_missing_ids().len(), 3);
         assert_eq!(session_b.our_missing_ids().len(), 3);
         assert_eq!(session_a.state(), SyncState::Complete);
+    }
+
+    #[test]
+    fn retry_ladder_never_exceeds_the_wire_limit() {
+        // #710 finding 17: the ladder must stop at a size the wire can carry. Whoever asks
+        // for more (a hostile or optimistic suggestion) is clamped, and the resulting offer
+        // must actually serialize.
+        assert!(
+            RETRY_MAX_CELLS as usize <= crate::drift::sketch::MAX_WIRE_CELLS,
+            "the retry ceiling must fit the two-byte wire cell count"
+        );
+        let mut store = MeshStore::new();
+        for i in 0..5u8 {
+            store.insert(make_test_envelope(make_test_id(i), 100));
+        }
+        let mut session = SyncSession::with_sizing(SyncSizing::DifferenceDriven {
+            cells: DIFF_DRIVEN_MIN_CELLS,
+        });
+        let _ = session.initiate(&store).unwrap();
+        let offer = session
+            .handle_retry(&store, u32::MAX)
+            .expect("a clamped retry must still build an offer");
+        let (iblt_data, sketch_capacity) = match offer {
+            SyncMessage::SyncOffer {
+                iblt_data,
+                sketch_capacity,
+                ..
+            } => (iblt_data, sketch_capacity),
+            other => panic!("expected a SyncOffer, got {other:?}"),
+        };
+        assert_eq!(sketch_capacity, RETRY_MAX_CELLS);
+        let table = IBLT::from_bytes(&iblt_data).expect("the offer table must decode");
+        assert_eq!(table.cell_count(), RETRY_MAX_CELLS as usize);
+    }
+
+    #[test]
+    fn v1_peer_is_handled_explicitly_instead_of_receiving_an_undecodable_retry() {
+        // #746 finding 18. The same unpeelable offer is answered two ways: a v2 peer gets the
+        // retry ladder, a v1 peer - whose build has no SyncRetry variant to decode - gets a
+        // local failure. Before this change both peers got a SyncRetry, and the v1 side had
+        // nothing to parse.
+        let mut store_a = MeshStore::new();
+        let mut store_b = MeshStore::new();
+        for i in 0..20u8 {
+            store_a.insert(make_test_envelope(make_test_id(i), 100));
+        }
+        for i in 100..120u8 {
+            store_b.insert(make_test_envelope(make_test_id(i), 100));
+        }
+        let mut session_a = SyncSession::with_sizing(SyncSizing::DifferenceDriven {
+            cells: DIFF_DRIVEN_MIN_CELLS,
+        });
+        let offer = session_a.initiate(&store_a).unwrap();
+
+        let mut v2 = SyncSession::new();
+        let v2_version = v2.peer_schema_version();
+        assert_eq!(v2_version, SYNC_SCHEMA_VERSION);
+        assert!(v2.peer_supports_retry());
+        let (reply, _) = v2.respond(&store_b, &offer).unwrap();
+        assert!(matches!(reply, SyncMessage::SyncRetry { .. }));
+        assert_eq!(v2.state(), SyncState::Ready);
+
+        let mut v1 = SyncSession::with_peer_schema_version(SYNC_SCHEMA_VERSION_MIN);
+        let v1_version = v1.peer_schema_version();
+        assert_eq!(v1_version, SYNC_SCHEMA_VERSION_MIN);
+        assert!(!v1.peer_supports_retry());
+        let refused = match v1.respond(&store_b, &offer) {
+            Ok(_) => panic!("a v1 peer must not be answered with a retry"),
+            Err(error) => error,
+        };
+        let message = format!("{refused:?}");
+        assert!(message.contains("schema 1"));
+        assert_eq!(v1.state(), SyncState::Failed);
+
+        // The ladder is likewise not taken in that direction: a session that knows its peer
+        // is v1 refuses to grow a table it could only answer with an undecodable frame.
+        let mut v1_initiator = SyncSession::with_sizing(SyncSizing::DifferenceDriven {
+            cells: DIFF_DRIVEN_MIN_CELLS,
+        });
+        let _ = v1_initiator.initiate(&store_a).unwrap();
+        v1_initiator.set_peer_schema_version(SYNC_SCHEMA_VERSION_MIN);
+        let ladder = v1_initiator.handle_retry(&store_a, DIFF_DRIVEN_MIN_CELLS);
+        assert!(ladder.is_err());
+        assert_eq!(v1_initiator.state(), SyncState::Failed);
+    }
+
+    #[test]
+    fn versioned_envelope_carries_the_version_the_peer_speaks() {
+        // The header is what the peer validates, so an envelope for a v1 peer must say 1;
+        // a claim outside what we speak is clamped rather than propagated.
+        let retry = SyncMessage::SyncRetry {
+            suggested_cells: 24,
+            reason: 1,
+        };
+        let for_v1 = VersionedSyncMessage::new_for(SYNC_SCHEMA_VERSION_MIN, retry.clone());
+        assert_eq!(for_v1.schema_version, SYNC_SCHEMA_VERSION_MIN);
+        let bytes = for_v1.to_bytes().unwrap();
+        let decoded = VersionedSyncMessage::from_bytes(&bytes).unwrap();
+        assert_eq!(decoded.schema_version, SYNC_SCHEMA_VERSION_MIN);
+
+        let current = VersionedSyncMessage::new(retry.clone());
+        assert_eq!(current.schema_version, SYNC_SCHEMA_VERSION);
+        let floor = VersionedSyncMessage::new_for(0, retry.clone());
+        assert_eq!(floor.schema_version, SYNC_SCHEMA_VERSION_MIN);
+        let ceiling = VersionedSyncMessage::new_for(u32::MAX, retry);
+        assert_eq!(ceiling.schema_version, SYNC_SCHEMA_VERSION);
+        let clamped = clamp_schema_version(SYNC_SCHEMA_VERSION_RETRY);
+        assert_eq!(clamped, SYNC_SCHEMA_VERSION_RETRY);
     }
 
     #[test]

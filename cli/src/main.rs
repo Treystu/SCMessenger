@@ -1220,6 +1220,11 @@ async fn main() -> Result<()> {
 
     let cli = Cli::parse();
 
+    // 5. Apply the configured control-API port BEFORE dispatch (#721): the client
+    //    commands (`stop`, `send`, `invite`, `discovery`) probe the running node inside
+    //    their handlers, before any of them loads the config that owns the port.
+    config::Config::apply_api_port_for_dispatch();
+
     match cli.command {
         Commands::Init { name } => cmd_init(name).await,
         Commands::Identity { action } => cmd_identity(action).await,
@@ -1950,7 +1955,7 @@ async fn cmd_contact(action: ContactAction) -> Result<()> {
                     // confidently and wrongly.
                     let list = contacts.list().map_err(|e| {
                         anyhow::anyhow!(
-                            "Failed to read the contacts store ({:?}). If a node is running on this data dir, it holds the database lock: query that node's API (scm contacts --via-api) rather than opening the store directly.",
+                            "Failed to read the contacts store ({:?}). If a node is running on this data dir, it holds the database lock: query that node's API instead - GET /api/contacts on its control port (SCM_API_PORT, default 9876) - rather than opening the store directly.",
                             e
                         )
                     })?;
@@ -2944,7 +2949,6 @@ async fn cmd_start(
         core: core.clone(),
         swarm_handle: Arc::new(swarm_handle.clone()),
         own_peer_id: local_peer_id.to_string(),
-        outbox: Arc::clone(&outbox),
     };
 
     let http_bind_api = http_bind.clone();
@@ -4403,7 +4407,6 @@ async fn cmd_relay(
         core: core_arc.clone(),
         swarm_handle: Arc::new(swarm_handle.clone()),
         own_peer_id: local_peer_id.to_string(),
-        outbox: Arc::clone(&outbox),
     };
     let http_bind_api = http_bind.clone();
     tokio::spawn(async move {
