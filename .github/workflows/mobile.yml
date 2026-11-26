@@ -58,10 +58,31 @@ concurrency:
 env:
   CARGO_TERM_COLOR: always
 
+# RUNNER SELECTION (#719)
+# -----------------------
+# This file used to pin every Linux job to `ubuntu-latest`. GitHub-hosted jobs
+# on this repository do not start at all: each one is failed one second after
+# it is queued with the annotation "The job was not started because your account
+# is locked due to a billing issue", with zero steps and no runner assigned.
+# That is why Android CI never executes (#719) - it is not a bad test, it is a
+# job that never runs.
+#
+# The jobs written by this repository's own first-party commits therefore use
+# the same guarded self-hosted OCI expression as ci.yml, which targets the two
+# online ARM64 runners (oci-a1-phx-1/-2). Fork PRs stay on `ubuntu-latest`: code
+# from a fork must never execute on a self-hosted runner.
+#
+# The two APK jobs stay on `ubuntu-latest` on purpose. The OCI pool is ARM64 and
+# Android NDK r26b is installed through nttld/setup-ndk, which resolves a
+# Linux x86_64 host package; moving the NDK builds to the ARM64 pool is a
+# separate change that needs an x86_64 self-hosted runner (see #609) and a
+# verified run, not a guess.
+
 jobs:
   changes:
     name: Detect changed areas
-    runs-on: ubuntu-latest
+    # NDK-free (checkout + detect-platform-change only): safe on the ARM64 OCI pool.
+    runs-on: ${{ (github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)) && vars.USE_OCI_RUNNER != 'false' && (vars.CI_RUNNER == 'oci' || vars.CI_RUNNER == '') && fromJSON('["self-hosted","oci"]') || 'ubuntu-latest' }}
     timeout-minutes: 5
     outputs:
       ios_relevant: ${{ steps.platform.outputs.ios_relevant }}
@@ -73,7 +94,8 @@ jobs:
 
   wiring-gate:
     name: Android Wiring Gate
-    runs-on: ubuntu-latest
+    # Python only, NDK-free: this is the gate #719 names, and it must actually run.
+    runs-on: ${{ (github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)) && vars.USE_OCI_RUNNER != 'false' && (vars.CI_RUNNER == 'oci' || vars.CI_RUNNER == '') && fromJSON('["self-hosted","oci"]') || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@v7
       - name: Set up Python
@@ -107,7 +129,8 @@ jobs:
   # pull_request, so it cannot serve as the PR gate on its own.
   android-unit-tests:
     name: Android JVM Unit Tests
-    runs-on: ubuntu-latest
+    # JVM + host Rust only (`-x buildRustAndroid`): no NDK, so the ARM64 pool runs it.
+    runs-on: ${{ (github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)) && vars.USE_OCI_RUNNER != 'false' && (vars.CI_RUNNER == 'oci' || vars.CI_RUNNER == '') && fromJSON('["self-hosted","oci"]') || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@1.99.0
@@ -134,6 +157,8 @@ jobs:
 
   android:
     name: Android Debug APK
+    # Stays hosted: this job installs NDK r26b (x86_64 Linux host package) and the
+    # OCI pool is ARM64. See the RUNNER SELECTION note at the top of this file.
     runs-on: ubuntu-latest
     # The PR mobile gate is the installable APK build. JVM unit tests run in
     # the dedicated Docker Integration Suite, where the native/JNA test
@@ -270,6 +295,7 @@ jobs:
   android-release:
     name: Android Release Build
     if: ${{ github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/')) || github.event_name == 'release' }}
+    # Stays hosted for the same NDK-on-ARM64 reason as "Android Debug APK".
     runs-on: ubuntu-latest
     timeout-minutes: 90
     steps:
