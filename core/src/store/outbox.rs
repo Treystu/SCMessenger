@@ -493,7 +493,7 @@ impl Outbox {
     }
 
     /// Open or create the default persistent outbox for the given data directory.
-    /// Returns Arc<tokio::sync::Mutex<Self>> matching CLI usage pattern.
+    /// Returns `Arc<tokio::sync::Mutex<Self>>` matching CLI usage pattern.
     ///
     /// This is the single source of truth for outbox initialization across the CLI.
     /// It creates a persistent outbox using Sled storage, falling back to in-memory

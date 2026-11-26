@@ -357,7 +357,7 @@ impl PerPeerBackoffState {
     /// backoff floor after the last attempt. The backoff ladder is NOT reset
     /// (`backoff_duration` and `attempt_count` are kept), so a woken attempt
     /// that fails resumes the ladder where it was. Credits are limited by a
-    /// per-trigger token bucket (see [`WakeBucket`]); mDNS wakes need prior
+    /// per-trigger token bucket (see `WakeBucket`); mDNS wakes need prior
     /// authenticated history. Returns true when a credit was granted
     /// (something was waiting).
     pub fn wake_at(&mut self, now: Instant, trigger: WakeTrigger) -> bool {

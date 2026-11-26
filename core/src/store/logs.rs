@@ -9,8 +9,8 @@ use std::sync::Arc;
 pub struct LogSummary {
     pub content: String,
     /// Timestamps as deltas.
-    /// [0] = seconds since install_time.
-    /// [i] = seconds since previous occurrence.
+    /// `[0]` = seconds since install_time.
+    /// `[i]` = seconds since previous occurrence.
     pub deltas: Vec<u32>,
 }
 
