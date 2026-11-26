@@ -12778,13 +12778,13 @@ mod tests {
         // #791: the production evidence is `DialError::WrongPeerId` from an address
         // dialed for a requested peer. Build that error as libp2p reports it and
         // drive the helper the swarm loops call.
-        let manager = DialPolicyManager::new();
+        let manager = super::DialPolicyManager::new();
         let requested = PeerId::random();
         let answered_as = PeerId::random();
         let addr: Multiaddr = format!("/ip4/203.0.113.7/tcp/9101/p2p/{}", requested)
             .parse()
             .unwrap();
-        let addr_key = multiaddr_to_key(&addr);
+        let addr_key = super::multiaddr_to_key(&addr);
 
         assert!(!manager.is_structurally_quarantined(&requested.to_string(), &addr_key));
 
@@ -12805,10 +12805,10 @@ mod tests {
 
     #[test]
     fn dial_errors_proving_nothing_structural_record_no_quarantine() {
-        let manager = DialPolicyManager::new();
+        let manager = super::DialPolicyManager::new();
         let requested = PeerId::random();
         let addr: Multiaddr = "/ip4/203.0.113.8/tcp/9102".parse().unwrap();
-        let addr_key = multiaddr_to_key(&addr);
+        let addr_key = super::multiaddr_to_key(&addr);
 
         // No requested peer id: there is no pair to prove anything about.
         let without_request = super::quarantine_authenticated_mismatch(
