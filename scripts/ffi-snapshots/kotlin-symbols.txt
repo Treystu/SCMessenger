@@ -98,6 +98,7 @@ fun `blockedIdentityWithNotes`(`blocked`: BlockedIdentity, `notes`: kotlin.Strin
 fun `blockedIdentityWithReason`(`blocked`: BlockedIdentity, `reason`: kotlin.String): BlockedIdentity {
 fun `blockedOnlyPeerIds`(): List<kotlin.String>
 fun `buildIdentityBackupPayload`(): kotlin.String
+fun `cancelQueuedMessage`(`messageId`: kotlin.String): kotlin.Boolean
 fun `classifyNotification`(`message`: NotificationMessageContext, `uiState`: NotificationUiState, `settings`: MeshSettings): NotificationDecision
 fun `clearConversation`(`peerId`: kotlin.String)
 fun `clearHistory`()

@@ -43,12 +43,30 @@ attempted.
   receipts — never via the `success` flag.
 - A client must NOT treat `success: true` + `status: "retrying"` as terminal
   failure, and must NOT treat `success: false` as "queued."
+- A recipient that resolves to this node's own identity is refused with `400`
+  and a plain-text reason before the history record is written (#548). A
+  self-addressed message cannot be delivered, and queueing it makes the drain
+  dial the node's own peer id and mark itself dead on every attempt.
 
 ## GET /api/send/:message_id
 
 - `200` + `{message_id, status, delivered, peer_id, timestamp}`.
 - `status` is `"delivered"` or `"pending"`. `delivered` mirrors it as a bool.
 - `404` `"Message not found"` — unknown ID. `500` — store read failure.
+
+## POST /api/queue/cancel
+
+Body: `{"message_id": "<wire message id>"}`. Removes one queued
+store-and-forward entry from the outbox, identified by the same wire id that
+`POST /api/send` returns and a Delivered receipt carries.
+
+- `200` + `{success: true, message_id, status: "cancelled"}`.
+- `400` — `message_id` missing or blank.
+- `404` `"No queued message with id <id>"` — nothing queued under that id
+  (already delivered, already cancelled, or never queued).
+
+This is the supported way to clear a poisoned outbox entry; before it existed
+the only remedy was an offline purge of the outbox directory.
 
 ## Changing this contract
 

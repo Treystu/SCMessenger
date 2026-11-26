@@ -100,18 +100,50 @@ fn contact_database_registry() -> &'static Mutex<HashMap<PathBuf, WeakContactDat
     REGISTRY.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
+/// Resolve a `contacts.db` path to one canonical key, so that spellings which
+/// reach the same file (`dir`, `dir/./`, `dir/sub/..`, a Windows case variant)
+/// share one gate and one registry slot instead of racing two openings of the
+/// same sled database against each other.
+///
+/// The database file does not exist before the first open, so the parent is
+/// canonicalized and the file name re-appended. The key is used for identity
+/// only — callers still open the path they were given — and an unresolvable
+/// parent falls back to the raw path: failing to canonicalize must never fail
+/// an open.
+fn canonical_contact_db_path(path: &std::path::Path) -> PathBuf {
+    let Some(name) = path.file_name() else {
+        return path.to_path_buf();
+    };
+    let parent = path.parent().unwrap_or_else(|| std::path::Path::new("."));
+    match std::fs::canonicalize(parent) {
+        Ok(resolved) => resolved.join(name),
+        // A parent that does not exist yet cannot be canonicalized. Anchor the
+        // key to the current directory instead of returning the raw relative
+        // path, so the first registration and every later one agree: sled creates
+        // the directory, and the old fallback then produced a different key.
+        Err(_) => match std::env::current_dir() {
+            Ok(cwd) => cwd.join(path),
+            Err(_) => path.to_path_buf(),
+        },
+    }
+}
+
 /// Per-path open gate (#413 review F1). Serialises concurrent opens of the
 /// SAME path only, so the lock-contention retry (up to ~5 s) is never run while
 /// holding the global registry mutex: opens of other paths and every registry
 /// lookup stay unblocked.
+///
+/// The map is swept on every lookup (#495 review nit). A gate is redundant once
+/// no caller and no in-flight open holds it — the map's own `Arc` is then the
+/// only reference — so those entries are dropped instead of accumulating one
+/// per path the process has ever opened. A gate that is held or being waited on
+/// has at least one other reference and is kept, so the sweep cannot break
+/// serialisation.
 fn contact_open_gate(path: &std::path::Path) -> Arc<Mutex<()>> {
     static GATES: OnceLock<Mutex<HashMap<PathBuf, Arc<Mutex<()>>>>> = OnceLock::new();
-    GATES
-        .get_or_init(|| Mutex::new(HashMap::new()))
-        .lock()
-        .entry(path.to_path_buf())
-        .or_default()
-        .clone()
+    let mut gates = GATES.get_or_init(|| Mutex::new(HashMap::new())).lock();
+    gates.retain(|_, gate| Arc::strong_count(gate) > 1);
+    gates.entry(path.to_path_buf()).or_default().clone()
 }
 
 /// Short registry lookup; the lock is released before returning.
@@ -128,8 +160,11 @@ impl ContactManager {
     #[uniffi::constructor]
     pub fn new(storage_path: String) -> Result<Self, crate::IronCoreError> {
         let path = PathBuf::from(storage_path).join("contacts.db");
+        // Identity (gate and registry) is keyed canonically: two spellings of
+        // the same directory must not be treated as two databases (#495).
+        let key = canonical_contact_db_path(&path);
 
-        if let Some(existing) = registered_contact_database(&path) {
+        if let Some(existing) = registered_contact_database(&key) {
             return Ok(Self { db: existing });
         }
 
@@ -137,9 +172,9 @@ impl ContactManager {
         // retry. The global registry mutex must NOT be held across it, so we
         // serialise on a per-path gate instead, then re-check the registry
         // (another caller may have opened this path while we waited).
-        let gate = contact_open_gate(&path);
+        let gate = contact_open_gate(&key);
         let _open_guard = gate.lock();
-        if let Some(existing) = registered_contact_database(&path) {
+        if let Some(existing) = registered_contact_database(&key) {
             return Ok(Self { db: existing });
         }
 
@@ -178,7 +213,7 @@ impl ContactManager {
         // was released after an app lifecycle transition.
         contact_database_registry()
             .lock()
-            .insert(path, Arc::downgrade(&db));
+            .insert(key, Arc::downgrade(&db));
 
         Ok(Self { db })
     }
@@ -581,6 +616,25 @@ fn placeholder_or_derived_contact(peer_id: &str) -> Contact {
 mod tests {
     use super::*;
     use crate::test_support::self_certifying_keypair;
+
+    /// #495 review nit: two spellings of one directory must resolve to one
+    /// gate key, or each spelling gets its own gate and its own registry slot
+    /// and the same sled database is opened twice concurrently.
+    #[test]
+    fn gate_keys_canonicalise_spelling_variants() {
+        let dir = tempfile::tempdir().unwrap();
+        let nested = dir.path().join("nested");
+        std::fs::create_dir_all(&nested).unwrap();
+
+        let direct = dir.path().join("contacts.db");
+        let roundabout = nested.join("..").join("contacts.db");
+        assert_ne!(direct, roundabout, "spellings differ before resolution");
+        assert_eq!(
+            canonical_contact_db_path(&direct),
+            canonical_contact_db_path(&roundabout),
+            "spellings of one directory must share a gate key"
+        );
+    }
 
     /// #413 review F1: while one caller is sleeping in the lock-contention
     /// retry for path A, the global registry mutex must stay free and an open

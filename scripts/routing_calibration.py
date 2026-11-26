@@ -36,6 +36,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import copy
 import math
 import random
 import statistics
@@ -126,12 +127,18 @@ def run(topology: Topology, rng: random.Random, budget: int) -> Dict[str, object
     would choose a peer whose draw fails does not get a second chance inside the
     budget -- that is what "fixed send budget" means here.
     """
+    # Each arm learns from its OWN outcomes: sharing one mutable topology made
+    # both policies train on the other arm's results (and updated a peer twice
+    # when they chose the same one). The draw sequence stays shared, so the
+    # comparison is still policy-versus-policy at a fixed budget.
+    champ_topology = copy.deepcopy(topology)
+    chall_topology = copy.deepcopy(topology)
     delivered_champ = 0
     delivered_chall = 0
     records: List[Dict[str, object]] = []
     for _ in range(budget):
-        peer_c, conf_c, layer = champion_choice(topology)
-        peer_x, conf_x, _ = challenger_choice(topology)
+        peer_c, conf_c, layer = champion_choice(champ_topology)
+        peer_x, conf_x, _ = challenger_choice(chall_topology)
         draw_c = rng.random()
         draw_x = rng.random()
         ok_c = draw_c < peer_c.true_delivery
@@ -194,22 +201,36 @@ def brier(records: Sequence[Dict[str, object]], key_conf: str, key_out: str) -> 
 def rank_correlation(records: Sequence[Dict[str, object]], key_score: str, key_true: str) -> float:
     """Spearman correlation between the recorded score and true delivery.
 
-    Ties are ranked by position; the pools are small and the quantities are
-    continuous, so ties are rare and this is adequate for a ranking check.
+    Ties get the AVERAGE of the ranks they span, which is the definition of
+    Spearman with ties. Ranking them by position manufactures a correlation out
+    of tie order: scores are clamped and repeat often, so two peers with the same
+    score would be counted as an ordering the evidence does not support (#746).
     """
     n = len(records)
     if n < 3:
         return 0.0
 
     def ranks(values: List[float]) -> List[float]:
+        # Average ranks for ties: scores are clamped and repeat often, and
+        # positional ranks would manufacture a correlation out of tie order.
         order = sorted(range(len(values)), key=lambda i: values[i])
         out = [0.0] * len(values)
-        for position, index in enumerate(order):
-            out[index] = float(position)
+        i = 0
+        while i < len(order):
+            j = i
+            while j + 1 < len(order) and values[order[j + 1]] == values[order[i]]:
+                j += 1
+            average = (i + j) / 2.0
+            for k in range(i, j + 1):
+                out[order[k]] = average
+            i = j + 1
         return out
 
     scores = ranks([float(r[key_score]) for r in records])
     truths = ranks([float(r[key_true]) for r in records])
+    # No ranking information at all: report 0.0 rather than divide by zero.
+    if len(set(scores)) < 2 or len(set(truths)) < 2:
+        return 0.0
     mean_s = statistics.fmean(scores)
     mean_t = statistics.fmean(truths)
     num = sum((s - mean_s) * (t - mean_t) for s, t in zip(scores, truths))
@@ -283,6 +304,21 @@ def self_check() -> int:
     if abs(conf_g - max(0.0, 0.85 - 0.05 * peer_g.hops_away)) > 1e-9:
         print("[ERROR] layer2 confidence is not the documented formula")
         failures += 1
+    # Ties must get average ranks. Scores [1,1,2,3] against truths [1,2,3,4] are
+    # Spearman 0.9487 with the average ranks the definition calls for; positional
+    # ranks make the two tied scores 0 and 1 and report a perfect 1.000, which is
+    # the correlation of an ordering the data does not contain.
+    tied = [
+        {"score": 1.0, "true_delivery": 1.0},
+        {"score": 1.0, "true_delivery": 2.0},
+        {"score": 2.0, "true_delivery": 3.0},
+        {"score": 3.0, "true_delivery": 4.0},
+    ]
+    rho = rank_correlation(tied, "score", "true_delivery")
+    if abs(rho - 0.9487) > 1e-3:
+        print(f"[ERROR] tied observations scored {rho:.4f}, expected 0.9487 (average ranks)")
+        failures += 1
+
     # Determinism.
     a = study(4, 20, 11, sizes=(6,))
     b = study(4, 20, 11, sizes=(6,))

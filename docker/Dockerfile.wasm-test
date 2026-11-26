@@ -13,6 +13,13 @@ RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
     pkg-config \
     && rm -rf /var/lib/apt/lists/*
 
+# Copy the toolchain pin BEFORE any rustup command (#449). rustup reads
+# rust-toolchain.toml from the working directory, so without this the target
+# below lands in the image's default toolchain instead of the repository's
+# pinned one - the defect class fixed for the android image in #447.
+WORKDIR /workspace
+COPY rust-toolchain.toml ./
+
 # Add wasm target
 RUN rustup target add wasm32-unknown-unknown
 

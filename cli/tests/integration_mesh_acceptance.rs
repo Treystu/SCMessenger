@@ -102,7 +102,7 @@ fn five_node_no_manual_contact_ledger_converges_to_four_dial_candidates() {
     let all_peer_ids: HashSet<PeerId> = nodes.iter().map(|node| node.peer_id).collect();
 
     for local in &nodes {
-        let mut ledger = ledger();
+        let ledger = ledger();
 
         // This is the ledger-exchange input. No bootstrap, contact, or
         // locally verified connection is inserted first. Exchange is
@@ -172,8 +172,7 @@ fn five_node_shared_candidates_survive_core_ledger_reload_without_contact_inject
 
     // Handle A: the node that merged the exchange. The core store persists
     // on every mutation, so ledger.json lands on disk immediately.
-    let mut ledger =
-        ConnectionLedger::new(LedgerManager::new(storage.to_string_lossy().to_string()));
+    let ledger = ConnectionLedger::new(LedgerManager::new(storage.to_string_lossy().to_string()));
     assert_eq!(
         ledger.merge_shared_entries(&shared_entries(&nodes)),
         NODE_COUNT
@@ -222,7 +221,7 @@ fn five_node_shared_candidates_survive_core_ledger_reload_without_contact_inject
 fn five_node_discovery_registers_routes_and_flushes_each_queued_message_once() {
     let nodes = fixture_nodes();
     let local = &nodes[0];
-    let mut ledger = ledger();
+    let ledger = ledger();
     assert_eq!(
         ledger.merge_shared_entries(&shared_entries(&nodes)),
         NODE_COUNT

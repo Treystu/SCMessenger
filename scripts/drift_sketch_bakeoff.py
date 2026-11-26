@@ -178,10 +178,20 @@ def estimate_difference(rng: random.Random, mine: Sequence[int], theirs_set: set
     return max(2, math.ceil(min(1.0, proportion) * len(mine)))
 
 
+MAX_WIRE_CELLS = 65535  # core/src/drift/sketch.rs::to_bytes rejects more
+
+
 def champion_round(mine: Sequence[int], theirs: Sequence[int]) -> Dict[str, object]:
     capacity = max(1, len(mine) * 4 + 8)
-    mine_table = IBLT(capacity * CELLS_PER_DIFF)
-    theirs_table = IBLT(capacity * CELLS_PER_DIFF)
+    cells = capacity * CELLS_PER_DIFF
+    # The node cannot transmit a table above u16::MAX cells, and initiate()
+    # propagates that serialization failure before an offer is sent. Reporting
+    # a successful decode for an unencodable offer measured a sync that cannot
+    # happen, so the control arm fails here instead.
+    if cells > MAX_WIRE_CELLS:
+        return {"ok": False, "bytes": 0, "offer_cells": cells, "serialization_failed": True}
+    mine_table = IBLT(cells)
+    theirs_table = IBLT(cells)
     for key in mine:
         mine_table.insert(key)
     for key in theirs:

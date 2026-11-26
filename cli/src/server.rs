@@ -704,9 +704,10 @@ pub async fn handle_jsonrpc_request(
         // ── History ──
         ClientIntent::GetHistory { limit } => {
             if let Some(ref core) = ctx.core {
-                let mgr = core
-                    .history_manager()
-                    .expect("Failed to initialize history manager");
+                let mgr = match core.history_manager() {
+                    Ok(mgr) => mgr,
+                    Err(e) => return history_unavailable_error(id, &e),
+                };
                 match mgr.recent(None, limit.unwrap_or(50) as u32) {
                     Ok(messages) => {
                         let list: Vec<Value> = messages
@@ -750,9 +751,10 @@ pub async fn handle_jsonrpc_request(
         }
         ClientIntent::GetConversation { peer_id, limit } => {
             if let Some(ref core) = ctx.core {
-                let mgr = core
-                    .history_manager()
-                    .expect("Failed to initialize history manager");
+                let mgr = match core.history_manager() {
+                    Ok(mgr) => mgr,
+                    Err(e) => return history_unavailable_error(id, &e),
+                };
                 match mgr.conversation(peer_id.clone(), limit.unwrap_or(50) as u32) {
                     Ok(messages) => {
                         let list: Vec<Value> = messages
@@ -1438,11 +1440,13 @@ pub async fn handle_jsonrpc_request(
 
                 let mut requests: Vec<(u64, Value)> = by_sender
                     .into_iter()
-                    .map(|(peer_id, msgs)| {
-                        let latest = msgs
-                            .iter()
-                            .max_by_key(|m| m.received_at)
-                            .expect("group has at least one message");
+                    .filter_map(|(peer_id, msgs)| {
+                        // `by_sender` is only populated by pushing a message into
+                        // `or_default()`, so a group is never empty here. Use a
+                        // filter instead of a panic so a future change to that
+                        // invariant degrades to "no request preview" rather than
+                        // aborting the JSON-RPC handler.
+                        let latest = msgs.iter().max_by_key(|m| m.received_at)?;
                         let preview = String::from_utf8(latest.payload.clone())
                             .unwrap_or_else(|_| "[binary]".to_string());
                         let mut m = Map::new();
@@ -1451,7 +1455,7 @@ pub async fn handle_jsonrpc_request(
                         m.insert("messagePreview".to_string(), preview.into());
                         m.insert("messageTimestamp".to_string(), latest.received_at.into());
                         m.insert("messageCount".to_string(), msgs.len().into());
-                        (latest.received_at, Value::Object(m))
+                        Some((latest.received_at, Value::Object(m)))
                     })
                     .collect();
                 requests.sort_by_key(|b| std::cmp::Reverse(b.0));
@@ -1598,9 +1602,10 @@ pub async fn handle_jsonrpc_request(
         // ── History search/stats (P1) ──
         ClientIntent::SearchMessages { query, limit } => {
             if let Some(ref core) = ctx.core {
-                let mgr = core
-                    .history_manager()
-                    .expect("Failed to initialize history manager");
+                let mgr = match core.history_manager() {
+                    Ok(mgr) => mgr,
+                    Err(e) => return history_unavailable_error(id, &e),
+                };
                 match mgr.search(query, limit.unwrap_or(50) as u32) {
                     Ok(messages) => {
                         let list: Vec<Value> = messages
@@ -1644,9 +1649,10 @@ pub async fn handle_jsonrpc_request(
         }
         ClientIntent::GetHistoryStats {} => {
             if let Some(ref core) = ctx.core {
-                let mgr = core
-                    .history_manager()
-                    .expect("Failed to initialize history manager");
+                let mgr = match core.history_manager() {
+                    Ok(mgr) => mgr,
+                    Err(e) => return history_unavailable_error(id, &e),
+                };
                 match mgr.stats() {
                     Ok(stats) => {
                         let mut m = Map::new();
@@ -1681,9 +1687,10 @@ pub async fn handle_jsonrpc_request(
         }
         ClientIntent::MarkMessageDelivered { message_id } => {
             if let Some(ref core) = ctx.core {
-                let mgr = core
-                    .history_manager()
-                    .expect("Failed to initialize history manager");
+                let mgr = match core.history_manager() {
+                    Ok(mgr) => mgr,
+                    Err(e) => return history_unavailable_error(id, &e),
+                };
                 match mgr.mark_delivered(message_id) {
                     Ok(()) => {
                         let mut m = Map::new();
@@ -1712,9 +1719,10 @@ pub async fn handle_jsonrpc_request(
         }
         ClientIntent::DeleteMessage { message_id } => {
             if let Some(ref core) = ctx.core {
-                let mgr = core
-                    .history_manager()
-                    .expect("Failed to initialize history manager");
+                let mgr = match core.history_manager() {
+                    Ok(mgr) => mgr,
+                    Err(e) => return history_unavailable_error(id, &e),
+                };
                 match mgr.delete(message_id) {
                     Ok(()) => {
                         let mut m = Map::new();
@@ -1743,9 +1751,10 @@ pub async fn handle_jsonrpc_request(
         }
         ClientIntent::ClearConversation { peer_id } => {
             if let Some(ref core) = ctx.core {
-                let mgr = core
-                    .history_manager()
-                    .expect("Failed to initialize history manager");
+                let mgr = match core.history_manager() {
+                    Ok(mgr) => mgr,
+                    Err(e) => return history_unavailable_error(id, &e),
+                };
                 match mgr.clear_conversation(peer_id) {
                     Ok(()) => {
                         let mut m = Map::new();
@@ -1824,9 +1833,55 @@ pub async fn handle_jsonrpc_request(
 
 // =====================================================================
 
+/// JSON-RPC error for a failure to build the history manager.
+///
+/// `IronCore::history_manager` is fallible but falls back internally, so this
+/// handler's failure path cannot be driven through `handle_jsonrpc_request`
+/// from a test without faking storage. Keeping the response shape here makes
+/// that path a named, testable unit rather than an inline panic macro
+/// that would abort the request handler.
+fn history_unavailable_error(id: Option<Value>, err: &impl std::fmt::Debug) -> JsonRpcResponse {
+    rpc_error(
+        id,
+        JsonRpcErrorBody {
+            code: -32000,
+            message: format!("History manager unavailable: {:?}", err),
+            data: None,
+        },
+    )
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{message_request_key, resolve_sender_public_key, sender_is_resolvable};
+    use super::{
+        history_unavailable_error, message_request_key, resolve_sender_public_key,
+        sender_is_resolvable,
+    };
+
+    #[test]
+    fn history_manager_failure_maps_to_a_jsonrpc_error_not_a_panic() {
+        let response = history_unavailable_error(None, &"storage path unusable");
+
+        assert_eq!(response.jsonrpc, "2.0");
+        assert!(
+            response.result.is_none(),
+            "a failed history manager must not return a result"
+        );
+        let body = response
+            .error
+            .expect("a failed history manager must produce an error body");
+        assert_eq!(body.code, -32000);
+        assert!(
+            body.message.contains("History manager unavailable"),
+            "unexpected message: {}",
+            body.message
+        );
+        assert!(
+            body.message.contains("storage path unusable"),
+            "the cause must survive into the message: {}",
+            body.message
+        );
+    }
 
     /// A valid Ed25519 public key (generated; 64 hex chars).
     fn valid_key() -> String {

@@ -1439,9 +1439,24 @@ impl IronCore {
 
     /// Mark a message as sent (remove from outbox after transport confirms delivery).
     pub fn mark_message_sent(&self, message_id: String) -> bool {
-        let outbox_removed = self.outbox.write().remove(&message_id);
+        self.cancel_queued_message(&message_id)
+    }
+
+    /// Remove a queued outbound entry by its wire message id (#737).
+    ///
+    /// The Control API's cancel has to act on the queue this instance drains, because
+    /// that is the store `prepare_message_internal` enqueues into and the retry loop
+    /// reads. A second `Outbox` handle opened over the same directory holds a different
+    /// in-memory map, so it cannot see an entry queued after it was opened and its
+    /// `remove` reports nothing - which is how `POST /api/queue/cancel` answered 404 for
+    /// entries that were sitting in the queue.
+    ///
+    /// Returns whether anything was removed: the queued entry, its drift-store envelope,
+    /// or both. A message that is not queued removes nothing and returns false.
+    pub fn cancel_queued_message(&self, message_id: &str) -> bool {
+        let outbox_removed = self.outbox.write().remove(message_id);
         let mut parsed_id = [0u8; 16];
-        let parsed = if let Ok(uuid) = uuid::Uuid::parse_str(&message_id) {
+        let parsed = if let Ok(uuid) = uuid::Uuid::parse_str(message_id) {
             parsed_id.copy_from_slice(uuid.as_bytes());
             true
         } else {
@@ -4230,13 +4245,13 @@ impl IronCore {
     /// `cfg(test)` doesn't apply there) but is `#[doc(hidden)]` and
     /// unmistakably named so it isn't reachable by accident (S6).
     #[doc(hidden)]
-    pub fn test_only_identity_signing_key(&self) -> ed25519_dalek::SigningKey {
+    /// Returns `None` when no identity is initialized yet. Callers are tests, which
+    /// assert the identity exists; the helper itself does not panic.
+    pub fn test_only_identity_signing_key(&self) -> Option<ed25519_dalek::SigningKey> {
         self.identity
             .read()
             .keys()
-            .expect("identity must be initialized")
-            .signing_key
-            .clone()
+            .map(|keys| keys.signing_key.clone())
     }
 
     /// Test-only: true if `message_id` (a UUID string, as returned by
@@ -7326,6 +7341,39 @@ mod tests {
         let drained_hex = core.flush_outbox_for_peer(HEX_PEER);
         assert_eq!(drained_hex.len(), 1);
         assert_eq!(core.outbox_count(), 0);
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn cancelling_a_queued_message_removes_the_entry_the_sends_created() {
+        use crate::store::outbox::{MessageState, QueuedMessage};
+
+        // #737: the Control API removed from a second `Outbox` handle opened over the same
+        // directory, whose in-memory map never contains an entry queued after it opened, so
+        // cancel reported 404 for every live entry. The removal has to go through the core
+        // that owns the queue the retry loop drains.
+        let core = IronCore::new();
+        let queued = QueuedMessage {
+            version: 1,
+            message_id: "cancel-737".to_string(),
+            recipient_id: "peer-737".to_string(),
+            envelope_data: vec![7, 3, 7],
+            queued_at: 1,
+            attempts: 0,
+            next_retry_at: None,
+            in_custody: false,
+            custody_established_at: 0,
+            state: MessageState::Enqueued,
+        };
+        core.outbox.write().enqueue(queued).expect("enqueue");
+        assert_eq!(core.outbox_count(), 1);
+
+        let removed = core.cancel_queued_message("cancel-737");
+        assert!(removed, "the queued entry is found and removed");
+        assert_eq!(core.outbox_count(), 0, "the queue no longer lists it");
+
+        let second = core.cancel_queued_message("cancel-737");
+        assert!(!second, "a second cancel removes nothing");
     }
 
     #[test]

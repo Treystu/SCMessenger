@@ -628,21 +628,15 @@ pub fn sign_bundle(keys: &IdentityKeys) -> Result<PublicKeyBundle> {
 
 /// Verify a public key bundle's cross-signature.
 pub fn verify_bundle(bundle: &PublicKeyBundle) -> Result<()> {
-    // Determine which signature format to use based on presence of ML-DSA fields
-    let has_mldsa = bundle.mldsa_public.is_some() && bundle.mldsa_signature.is_some();
-
-    if has_mldsa {
-        // V3 format with ML-DSA signatures - both must verify
-        // SAFETY: has_mldsa checked that both fields are Some, so as_ref() calls are guaranteed to return Some.
-        let mldsa_public = bundle
-            .mldsa_public
-            .as_ref()
-            .expect("mldsa_public verified Some by has_mldsa check");
-        let mldsa_signature = bundle
-            .mldsa_signature
-            .as_ref()
-            .expect("mldsa_signature verified Some by has_mldsa check");
-
+    // Determine which signature format to use based on presence of ML-DSA fields.
+    // V3 requires BOTH fields: one alone falls through to the legacy path exactly as
+    // the previous `has_mldsa` flag did. Binding them here removes the two expects -
+    // the branch condition and the values are the same expression, so there is no
+    // invariant left to assert and no panic path on an attacker-supplied bundle.
+    if let (Some(mldsa_public), Some(mldsa_signature)) = (
+        bundle.mldsa_public.as_ref(),
+        bundle.mldsa_signature.as_ref(),
+    ) {
         // Signature input: b"iron-core keybundle v3" || ed25519_public || x25519_public || mlkem_encaps_key || mldsa_public || created_at.to_le_bytes() || supported_suites
         let mut sig_input = Vec::new();
         sig_input.extend_from_slice(b"iron-core keybundle v3");

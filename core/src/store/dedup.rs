@@ -78,37 +78,32 @@ impl DedupStatsTracker {
             .unwrap_or_default()
             .as_millis() as u64;
 
-        if let Some(entry) = self.entries.get_mut(message_id) {
-            entry.record_duplicate();
-            // SAFETY: `message_id` was just matched by `get_mut` in this branch, so the
-            // key is guaranteed present. The immutable re-fetch is required only to
-            // satisfy the borrow checker (the `&mut` borrow above cannot be returned as
-            // `&DedupStats` across the branch), and can never observe a missing entry.
-            self.entries
-                .get(message_id)
-                .expect("entry just mutated above")
-        } else {
-            let mut stats = DedupStats::new(message_id.to_string(), now_ms);
-            stats.first_transport = first_transport;
-            if self.entries.len() >= self.max_entries {
-                // Evict the oldest entry
-                if let Some(oldest_key) = self
-                    .entries
-                    .iter()
-                    .min_by_key(|(_, v)| (v.first_received_at, &v.message_id))
-                    .map(|(k, _)| k.clone())
-                {
-                    self.entries.remove(&oldest_key);
-                }
+        // Eviction runs BEFORE the entry() borrow below, so the oldest-key scan can
+        // take &mut self.entries while nothing else holds it. A first-seen message at
+        // the cap evicts exactly one entry, as before.
+        if !self.entries.contains_key(message_id) && self.entries.len() >= self.max_entries {
+            if let Some(oldest_key) = self
+                .entries
+                .iter()
+                .min_by_key(|(_, v)| (v.first_received_at, &v.message_id))
+                .map(|(k, _)| k.clone())
+            {
+                self.entries.remove(&oldest_key);
             }
-            self.entries.insert(message_id.to_string(), stats);
-            // SAFETY: `message_id` was inserted on the line directly above and nothing
-            // removes it in between, so the key is guaranteed present. This function
-            // returns `&DedupStats` (not a `Result`), so the invariant is upheld by
-            // construction rather than propagated as an error.
-            self.entries
-                .get(message_id)
-                .expect("entry just inserted above")
+        }
+
+        // Entry API: the returned reference comes from the map itself, so there is no
+        // re-fetch and no invariant to assert (and no panic path).
+        match self.entries.entry(message_id.to_string()) {
+            std::collections::hash_map::Entry::Occupied(mut occupied) => {
+                occupied.get_mut().record_duplicate();
+                occupied.into_mut()
+            }
+            std::collections::hash_map::Entry::Vacant(vacant) => {
+                let mut stats = DedupStats::new(message_id.to_string(), now_ms);
+                stats.first_transport = first_transport;
+                vacant.insert(stats)
+            }
         }
     }
 

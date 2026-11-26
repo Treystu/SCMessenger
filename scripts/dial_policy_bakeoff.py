@@ -30,6 +30,7 @@ instrument's own self-check fails or the table is empty.
 from __future__ import annotations
 
 import argparse
+import math
 import random
 import statistics
 import sys
@@ -75,12 +76,29 @@ def build_population(rng: random.Random, n: int) -> list[Peer]:
     return peers
 
 
-def churn(rng: random.Random, peers: list[Peer], epoch: int) -> None:
-    """Rotate a quarter of the population offline each epoch."""
-    if epoch % 5 != 0:
-        return
-    for p in peers:
-        p.up = rng.random() > 0.25
+def build_churn_trace(rng: random.Random, n_peers: int, epochs: int) -> list[list[bool]]:
+    """One availability snapshot per epoch, computed once and replayed by every policy.
+
+    #711: churn used to draw from the same `random.Random` a policy dials with. A
+    policy that dials more often therefore consumes more of that stream, so at one
+    seed each policy saw a DIFFERENT availability history - the comparison measured
+    the RNG's response to the policy, not the policy. The trace is built from its own
+    seeded generator and never sees dial traffic, so every model replays identical
+    availability and differs only in the order it dials.
+    """
+    trace: list[list[bool]] = []
+    for epoch in range(epochs):
+        if epoch % 5 == 0:
+            trace.append([rng.random() > 0.25 for _ in range(n_peers)])
+        else:
+            trace.append(list(trace[-1]) if trace else [True] * n_peers)
+    return trace
+
+
+def apply_churn(peers: list[Peer], snapshot: list[bool]) -> None:
+    """Set each peer's availability from the precomputed snapshot for this epoch."""
+    for peer, up in zip(peers, snapshot):
+        peer.up = up
 
 
 def dial_once(rng: random.Random, peer: Peer) -> tuple[bool, float]:
@@ -90,13 +108,38 @@ def dial_once(rng: random.Random, peer: Peer) -> tuple[bool, float]:
     return ok, peer.latency_ms if ok else 0.0
 
 
-def run_static(rng: random.Random, peers: list[Peer], epochs: int) -> dict:
+def ucb_explore(total_pulls: int, pulls: int) -> float:
+    """UCB1's exploration term: sqrt(2 * ln(total) / pulls).
+
+    Logarithmic in the total number of pulls and inverse-square-root in this
+    peer's own, which is the only form that decays: as a peer is measured, its
+    bonus falls away and the policy settles on what it has learned. The latency
+    arm used 2 * sqrt(total) / sqrt(pulls) instead - sqrt of the total, not its
+    log - so its exploration kept GROWING with every dial anywhere in the pool
+    (#746), and the arm spent the budget re-probing peers it had already measured
+    while the plain arm settled. A local build is never used for this: the
+    pinned values in self_check are the evidence.
+    """
+    if pulls == 0:
+        return float("inf")  # explore unseen peers first
+    return math.sqrt(2.0 * math.log(max(2, total_pulls)) / pulls)
+
+
+def run_static(
+    peers: list[Peer],
+    trace: list[list[bool]],
+    rng: random.Random,
+    epochs: int,
+    seen: list[int] | None = None,
+) -> dict:
     """Champion: ladder frozen in prior-score order, exponential backoff, cap."""
     ladder = sorted(peers, key=lambda p: -p.prior_score)
     attempts = successes = wasted = 0
     latencies = []
     for _ in range(epochs):
-        churn(rng, peers, _)
+        apply_churn(peers, trace[_])
+        if seen is not None:
+            seen.append(sum(1 for p in peers if p.up))
         for attempt in range(MAX_ATTEMPTS):
             peer = ladder[attempt % len(ladder)]
             ok, lat = dial_once(rng, peer)
@@ -109,18 +152,24 @@ def run_static(rng: random.Random, peers: list[Peer], epochs: int) -> dict:
     return summarize(successes, attempts, wasted, latencies, epochs)
 
 
-def run_bandit(rng: random.Random, peers: list[Peer], epochs: int) -> dict:
+def run_bandit(
+    peers: list[Peer],
+    trace: list[list[bool]],
+    rng: random.Random,
+    epochs: int,
+    seen: list[int] | None = None,
+) -> dict:
     """Challenger: UCB1 ordering refreshed after every dial outcome."""
     attempts = successes = wasted = 0
     latencies = []
     for _ in range(epochs):
-        churn(rng, peers, _)
+        apply_churn(peers, trace[_])
+        if seen is not None:
+            seen.append(sum(1 for p in peers if p.up))
         for attempt in range(MAX_ATTEMPTS):
             total = sum(p.pulls for p in peers) + 1
             def ucb(p: Peer) -> float:
-                if p.pulls == 0:
-                    return float("inf")  # explore unseen peers first
-                return p.observed_mean() + (2.0 * (total**0.5)) / (p.pulls**0.5)
+                return p.observed_mean() + ucb_explore(total, p.pulls)
             peer = max(peers, key=ucb)
             ok, lat = dial_once(rng, peer)
             peer.pulls += 1
@@ -134,20 +183,28 @@ def run_bandit(rng: random.Random, peers: list[Peer], epochs: int) -> dict:
     return summarize(successes, attempts, wasted, latencies, epochs)
 
 
-def run_bandit_latency(rng: random.Random, peers: list[Peer], epochs: int) -> dict:
+def run_bandit_latency(
+    peers: list[Peer],
+    trace: list[list[bool]],
+    rng: random.Random,
+    epochs: int,
+    seen: list[int] | None = None,
+) -> dict:
     """Challenger 2: UCB1 with an explicit latency penalty, so exploration does not
     buy wins with slow peers. Without this row the bake-off would recommend a policy
     that shortens the ladder while raising tail latency - a trade it never measured."""
     attempts = successes = wasted = 0
     latencies = []
     for _ in range(epochs):
-        churn(rng, peers, _)
+        apply_churn(peers, trace[_])
+        if seen is not None:
+            seen.append(sum(1 for p in peers if p.up))
         for attempt in range(MAX_ATTEMPTS):
             total = sum(p.pulls for p in peers) + 1
             def ucb(p: Peer) -> float:
-                if p.pulls == 0:
-                    return float("inf")
-                explore = (2.0 * (total**0.5)) / (p.pulls**0.5)
+                # Same logarithmic exploration as the plain arm; only the latency
+                # penalty distinguishes the two challengers.
+                explore = ucb_explore(total, p.pulls)
                 lat_penalty = 0.25 * (p.observed_latency() / BASE_LATENCY_MS)
                 return p.observed_mean() + explore - lat_penalty
             peer = max(peers, key=ucb)
@@ -187,14 +244,51 @@ def self_check() -> bool:
         w = 0
         for _ in range(120):
             for _attempt in range(MAX_ATTEMPTS):
-                p = order[r.randrange(len(order))]
+                # Ranked traversal, not a random index: a uniformly random pick
+                # is blind to ordering, so the self-check could not tell a ranked
+                # policy from an unranked one.
+                p = order[min(_attempt, len(order) - 1)]
                 ok, _lat = dial_once(r, p)
                 if ok:
                     break
                 w += 1
         return w
 
-    return probes(good) < probes(bad)
+    if not probes(good) < probes(bad):
+        return False
+
+    # #711: two policies at one seed must replay the SAME availability history. Before
+    # the trace existed both policies drew churn from the RNG they dial with, so the
+    # busier policy consumed more of it and the histories diverged.
+    n_peers, epochs = 24, 60
+    trace = build_churn_trace(random.Random(6743), n_peers, epochs)
+    static_seen: list[int] = []
+    bandit_seen: list[int] = []
+    run_static(build_population(random.Random(6744), n_peers), trace, random.Random(6745), epochs, static_seen)
+    run_bandit(build_population(random.Random(6744), n_peers), trace, random.Random(6745), epochs, bandit_seen)
+    if static_seen != bandit_seen:
+        print("[FAIL] policies replayed different availability histories at one seed")
+        return False
+
+    # #746: both UCB arms must use the LOGARITHMIC exploration term. Pinned at a
+    # state the two forms separate by a factor of 17: at total=1000, pulls=10 the
+    # log form gives 1.1754 and the sqrt(total) form the latency arm carried gives
+    # 20.0, so this check fails on the pre-fix control flow and keeps the arms from
+    # drifting apart again.
+    checks = (((1000, 10), 1.1754), ((1000, 100), 0.3717))
+    for (total, pulls), expected in checks:
+        got = ucb_explore(total, pulls)
+        if abs(got - expected) > 1e-3:
+            print(f"[FAIL] ucb_explore({total}, {pulls}) = {got:.4f}, expected {expected} (logarithmic)")
+            return False
+    if ucb_explore(10, 0) != float("inf"):
+        print("[FAIL] an unpulled peer must be explored first")
+        return False
+    # Exploration must fall as a peer is measured; sqrt(total) never does.
+    if not ucb_explore(1000, 100) < ucb_explore(1000, 10):
+        print("[FAIL] exploration does not decay with a peer's own pulls")
+        return False
+    return True
 
 
 def main() -> int:
@@ -212,9 +306,16 @@ def main() -> int:
     rows = []
     for t in range(args.trials):
         seed = args.seed + t
-        static = run_static(random.Random(seed), build_population(random.Random(seed), args.peers), args.epochs)
-        bandit = run_bandit(random.Random(seed), build_population(random.Random(seed), args.peers), args.epochs)
-        bandit_lat = run_bandit_latency(random.Random(seed), build_population(random.Random(seed), args.peers), args.epochs)
+        trace = build_churn_trace(random.Random(seed), args.peers, args.epochs)
+        static = run_static(
+            build_population(random.Random(seed), args.peers), trace, random.Random(seed), args.epochs
+        )
+        bandit = run_bandit(
+            build_population(random.Random(seed), args.peers), trace, random.Random(seed), args.epochs
+        )
+        bandit_lat = run_bandit_latency(
+            build_population(random.Random(seed), args.peers), trace, random.Random(seed), args.epochs
+        )
         rows.append((static, bandit, bandit_lat))
 
     def mean(rows, model, key):
