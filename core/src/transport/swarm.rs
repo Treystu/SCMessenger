@@ -2988,21 +2988,21 @@ fn wake_on_identify(
 /// The verdict is TTL-bounded in `StructuralQuarantine` (never a peer ban) and
 /// `try_envelope_hint_dial` consults it before dialing a candidate, so an
 /// address that answers as a different peer stops consuming the dial budget.
-/// Returns the recorded `(requested, addr_key)` pair, or `None` when the error
-/// proves nothing structural.
+/// Returns true when the error proved a mismatch and the pair was recorded, so
+/// the tests can assert on the decision as well as on the store.
 fn quarantine_authenticated_mismatch(
     dial_policy_manager: &DialPolicyManager,
     requested: Option<PeerId>,
     error: &libp2p::swarm::DialError,
-) -> Option<(String, String)> {
+) -> bool {
     let (requested, obtained, address) = match (requested, error) {
         (Some(requested), libp2p::swarm::DialError::WrongPeerId { obtained, address }) => {
             (requested, obtained, address)
         }
-        _ => return None,
+        _ => return false,
     };
     if obtained == &requested {
-        return None;
+        return false;
     }
     let requested_key = requested.to_string();
     let addr_key = multiaddr_to_key(address);
@@ -3013,7 +3013,7 @@ fn quarantine_authenticated_mismatch(
         addr_key=%addr_key,
         "[DIAL-POLICY] Authenticated mismatch - pair structurally quarantined (#791)"
     );
-    Some((requested_key, addr_key))
+    true
 }
 
 /// Fire a hint-driven dial toward `peer_id` using envelope-sourced addresses.
@@ -8399,7 +8399,7 @@ pub async fn start_swarm_with_config(
                                 // never satisfy this request. This is the only site where that
                                 // mismatch is observed with an authenticated PeerId, because
                                 // envelope hints are stored without their /p2p/<id> component.
-                                quarantine_authenticated_mismatch(dial_policy_manager, peer_id, &error);
+                                quarantine_authenticated_mismatch(&dial_policy_manager, peer_id, &error);
 
                                 // Resolve any pending Dial(s) that this error corresponds to.
                                 // Match ONLY by address membership in each entry's own
@@ -12796,11 +12796,7 @@ mod tests {
                 address: addr.clone(),
             },
         );
-        assert_eq!(
-            recorded,
-            Some((requested.to_string(), addr_key.clone())),
-            "an authenticated mismatch must record the requested/address pair"
-        );
+        assert!(recorded, "an authenticated mismatch must be recorded");
         assert!(
             manager.is_structurally_quarantined(&requested.to_string(), &addr_key),
             "the pair must be quarantined so the hint dial skips it"
@@ -12815,26 +12811,22 @@ mod tests {
         let addr_key = multiaddr_to_key(&addr);
 
         // No requested peer id: there is no pair to prove anything about.
-        assert_eq!(
-            super::quarantine_authenticated_mismatch(
-                &manager,
-                None,
-                &libp2p::swarm::DialError::WrongPeerId {
-                    obtained: PeerId::random(),
-                    address: addr.clone(),
-                },
-            ),
-            None
+        let without_request = super::quarantine_authenticated_mismatch(
+            &manager,
+            None,
+            &libp2p::swarm::DialError::WrongPeerId {
+                obtained: PeerId::random(),
+                address: addr.clone(),
+            },
         );
+        assert!(!without_request, "a peer-id-less dial proves nothing");
         // A transport failure is not an identity verdict.
-        assert_eq!(
-            super::quarantine_authenticated_mismatch(
-                &manager,
-                Some(requested),
-                &libp2p::swarm::DialError::Transport(Vec::new()),
-            ),
-            None
+        let transport_failure = super::quarantine_authenticated_mismatch(
+            &manager,
+            Some(requested),
+            &libp2p::swarm::DialError::Transport(Vec::new()),
         );
+        assert!(!transport_failure, "a transport failure is not a mismatch");
         assert!(!manager.is_structurally_quarantined(&requested.to_string(), &addr_key));
     }
 
