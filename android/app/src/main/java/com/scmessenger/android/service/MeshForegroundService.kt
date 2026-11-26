@@ -724,6 +724,19 @@ class MeshForegroundService : Service() {
         return builder.build()
     }
 
+    /**
+     * Refresh the persistent status card.
+     *
+     * This card is the ONE notification surface that is deliberately exempt from
+     * the in-app notifications toggle (#619). Android will not keep a foreground
+     * service alive without a posted notification, so the mesh cannot run with
+     * zero notifications; the card is reduced instead of suppressed -- channel
+     * CHANNEL_MESH_STATUS is IMPORTANCE_LOW, silent, and badge-free. Every other
+     * surface (message, message request, peer discovery) is gated on
+     * NotificationHelper.notificationsEnabled and fails closed while the gate is
+     * unhydrated. The exemption is stated in the settings copy so the toggle does
+     * not read as a no-op.
+     */
     private fun updateNotification() {
         val notification = createNotification()
         val notificationManager = getSystemService(NotificationManager::class.java)
