@@ -2254,37 +2254,37 @@ async fn cmd_history(
     // view, so messages committed in this session appear without waiting for
     // the node to release storage. The API has no search endpoint, so a
     // --search query still goes straight to the store below.
-    if search_query.is_none() && api::is_api_available().await {
-        if let Ok(messages) = api::get_history_via_api(peer_filter.clone(), Some(limit)).await {
-            if messages.is_empty() {
-                println!("{}", "No messages found.".dimmed());
-                return Ok(());
-            }
+    let api_history = if search_query.is_none() && api::is_api_available().await {
+        api::get_history_via_api(peer_filter.clone(), Some(limit)).await.ok()
+    } else {
+        None
+    };
 
-            println!(
-                "{} ({} messages)",
-                "Message History".bold(),
-                messages.len()
-            );
-            println!();
-
-            for msg in messages {
-                let direction = if msg.direction.eq_ignore_ascii_case("sent") {
-                    "\u{2192}".bright_green()
-                } else {
-                    "\u{2190}".bright_blue()
-                };
-
-                let time = format_timestamp(msg.timestamp).dimmed();
-                let peer = msg.peer_id;
-
-                println!("{} {} [{}]", direction, peer.bright_cyan(), time);
-                println!("   {}", msg.content);
-                println!();
-            }
-
+    if let Some(messages) = api_history {
+        if messages.is_empty() {
+            println!("{}", "No messages found.".dimmed());
             return Ok(());
         }
+
+        println!("{} ({} messages)", "Message History".bold(), messages.len());
+        println!();
+
+        for msg in messages {
+            let direction = if msg.direction.eq_ignore_ascii_case("sent") {
+                "→".bright_green()
+            } else {
+                "←".bright_blue()
+            };
+
+            let time = format_timestamp(msg.timestamp).dimmed();
+            let peer = msg.peer_id;
+
+            println!("{} {} [{}]", direction, peer.bright_cyan(), time);
+            println!("   {}", msg.content);
+            println!();
+        }
+
+        return Ok(());
     }
 
     let data_dir = config::Config::data_dir()?;
