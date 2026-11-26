@@ -2813,10 +2813,21 @@ impl IronCore {
         // #413 review F1: `ContactManager::new` already retries lock
         // contention for its own ~5 s budget; a second `.or_else` retry here
         // doubled that (~10 s) for no benefit, so it was removed.
-        crate::contacts_bridge::ContactManager::new(path).or_else(|e| {
-            tracing::error!("Failed to create contact manager: {:?}", e);
-            crate::contacts_bridge::ContactManager::new("".to_string())
-        })
+        //
+        // #789: a failed open is returned, never absorbed. The removed
+        // fallback retried against `""`, which resolves to `contacts.db` in
+        // the process working directory, so a caller could report success
+        // while writing into a store the user never asked for. Both callers
+        // (`export_identity_backup_fast`, `import_identity_backup`) already
+        // propagate this error with `?`, so nothing downstream changes: they
+        // fail loudly instead of silently succeeding.
+        match crate::contacts_bridge::ContactManager::new(path) {
+            Ok(manager) => Ok(manager),
+            Err(e) => {
+                tracing::error!("Failed to create contact manager: {:?}", e);
+                Err(e)
+            }
+        }
     }
 
     /// Return the federated nickname for a contact (the nickname advertised by the peer).
@@ -6090,6 +6101,27 @@ mod tests {
         assert!(
             init_res.is_err(),
             "Must refuse to initialize identity on degraded storage"
+        );
+    }
+
+    #[test]
+    fn test_contacts_manager_surfaces_open_failure() {
+        // #789: an unopenable contacts store must be returned to the caller.
+        // The removed fallback retried against "" and handed back a manager
+        // bound to `contacts.db` in the process working directory, so a
+        // restore could report success while writing into a stray store.
+        let core = IronCore::with_storage("\0invalid/path<>|".to_string());
+        assert!(
+            core.is_storage_degraded(),
+            "precondition: storage is degraded"
+        );
+        let err = core
+            .contacts_manager()
+            .err()
+            .expect("a failed contacts store open must be returned, not absorbed");
+        assert!(
+            matches!(err, IronCoreError::StorageError),
+            "failure must surface as StorageError, got {err:?}"
         );
     }
 
