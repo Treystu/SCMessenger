@@ -2245,11 +2245,73 @@ async fn cmd_config(action: ConfigAction) -> Result<()> {
     Ok(())
 }
 
+/// Whether `scm history` should read the running node's control API instead of
+/// the on-disk store.
+///
+/// The control API has no search endpoint, so a `--search` query always uses the
+/// store; the API is used only when the node is answering.
+fn history_prefers_api(searching: bool, api_available: bool) -> bool {
+    !searching && api_available
+}
+
 async fn cmd_history(
     peer_filter: Option<String>,
     search_query: Option<String>,
     limit: usize,
 ) -> Result<()> {
+    // Prefer the running node's control API when it answers: it holds the live
+    // view, so messages committed in this session appear without waiting for
+    // the node to release storage. The API has no search endpoint, so a
+    // --search query still goes straight to the store below.
+    let api_available = search_query.is_none() && api::is_api_available().await;
+    let api_history = if history_prefers_api(search_query.is_some(), api_available) {
+        // A failed call is handled by naming it and falling back, not hidden:
+        // the store path below still runs, so `scm history` keeps working
+        // exactly as it did before this wiring.
+        let peer = peer_filter.clone();
+        let fetched = api::get_history_via_api(peer, Some(limit)).await;
+        match fetched {
+            Ok(messages) => Some(messages),
+            Err(error) => {
+                eprintln!(
+                    "{} live node unavailable ({}); reading the local store",
+                    "ℹ".dimmed(),
+                    error
+                );
+                None
+            }
+        }
+    } else {
+        None
+    };
+
+    if let Some(messages) = api_history {
+        if messages.is_empty() {
+            println!("{}", "No messages found.".dimmed());
+            return Ok(());
+        }
+
+        println!("{} ({} messages)", "Message History".bold(), messages.len());
+        println!();
+
+        for msg in messages {
+            let direction = if msg.direction.eq_ignore_ascii_case("sent") {
+                "→".bright_green()
+            } else {
+                "←".bright_blue()
+            };
+
+            let time = format_timestamp(msg.timestamp).dimmed();
+            let peer = msg.peer_id;
+
+            println!("{} {} [{}]", direction, peer.bright_cyan(), time);
+            println!("   {}", msg.content);
+            println!();
+        }
+
+        return Ok(());
+    }
+
     let data_dir = config::Config::data_dir()?;
     let storage_path = data_dir.join("storage");
     let core = IronCore::with_storage(path_to_string(&storage_path)?);
@@ -5911,4 +5973,26 @@ async fn cmd_swarm_stats() -> Result<()> {
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod history_source_tests {
+    use super::history_prefers_api;
+
+    #[test]
+    fn history_prefers_api_only_without_search_and_with_a_live_node() {
+        assert!(
+            history_prefers_api(false, true),
+            "a live node with no search should serve history from the API"
+        );
+        assert!(
+            !history_prefers_api(true, true),
+            "--search must use the store: the control API has no search endpoint"
+        );
+        assert!(
+            !history_prefers_api(false, false),
+            "a node that is not answering must fall back to the store"
+        );
+        assert!(!history_prefers_api(true, false));
+    }
 }
