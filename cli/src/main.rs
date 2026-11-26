@@ -2245,6 +2245,15 @@ async fn cmd_config(action: ConfigAction) -> Result<()> {
     Ok(())
 }
 
+/// Whether `scm history` should read the running node's control API instead of
+/// the on-disk store.
+///
+/// The control API has no search endpoint, so a `--search` query always uses the
+/// store; the API is used only when the node is answering.
+fn history_prefers_api(searching: bool, api_available: bool) -> bool {
+    !searching && api_available
+}
+
 async fn cmd_history(
     peer_filter: Option<String>,
     search_query: Option<String>,
@@ -2254,7 +2263,11 @@ async fn cmd_history(
     // view, so messages committed in this session appear without waiting for
     // the node to release storage. The API has no search endpoint, so a
     // --search query still goes straight to the store below.
-    let api_history = if search_query.is_none() && api::is_api_available().await {
+    let api_available = search_query.is_none() && api::is_api_available().await;
+    let api_history = if history_prefers_api(search_query.is_some(), api_available) {
+        // A failed call (node not answering, transport error, bad response) is
+        // collapsed to None on purpose: the store path below still runs, so
+        // `scm history` keeps working exactly as it did before this wiring.
         api::get_history_via_api(peer_filter.clone(), Some(limit))
             .await
             .ok()
@@ -5950,4 +5963,26 @@ async fn cmd_swarm_stats() -> Result<()> {
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod history_source_tests {
+    use super::history_prefers_api;
+
+    #[test]
+    fn history_prefers_api_only_without_search_and_with_a_live_node() {
+        assert!(
+            history_prefers_api(false, true),
+            "a live node with no search should serve history from the API"
+        );
+        assert!(
+            !history_prefers_api(true, true),
+            "--search must use the store: the control API has no search endpoint"
+        );
+        assert!(
+            !history_prefers_api(false, false),
+            "a node that is not answering must fall back to the store"
+        );
+        assert!(!history_prefers_api(true, false));
+    }
 }
