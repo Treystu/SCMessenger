@@ -2255,7 +2255,9 @@ async fn cmd_history(
     // the node to release storage. The API has no search endpoint, so a
     // --search query still goes straight to the store below.
     let api_history = if search_query.is_none() && api::is_api_available().await {
-        api::get_history_via_api(peer_filter.clone(), Some(limit)).await.ok()
+        api::get_history_via_api(peer_filter.clone(), Some(limit))
+            .await
+            .ok()
     } else {
         None
     };
