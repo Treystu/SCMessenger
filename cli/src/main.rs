@@ -2265,12 +2265,22 @@ async fn cmd_history(
     // --search query still goes straight to the store below.
     let api_available = search_query.is_none() && api::is_api_available().await;
     let api_history = if history_prefers_api(search_query.is_some(), api_available) {
-        // A failed call (node not answering, transport error, bad response) is
-        // collapsed to None on purpose: the store path below still runs, so
-        // `scm history` keeps working exactly as it did before this wiring.
-        api::get_history_via_api(peer_filter.clone(), Some(limit))
-            .await
-            .ok()
+        // A failed call is handled by naming it and falling back, not hidden:
+        // the store path below still runs, so `scm history` keeps working
+        // exactly as it did before this wiring.
+        let peer = peer_filter.clone();
+        let fetched = api::get_history_via_api(peer, Some(limit)).await;
+        match fetched {
+            Ok(messages) => Some(messages),
+            Err(error) => {
+                eprintln!(
+                    "{} live node unavailable ({}); reading the local store",
+                    "ℹ".dimmed(),
+                    error
+                );
+                None
+            }
+        }
     } else {
         None
     };
