@@ -88,7 +88,7 @@
     <string name="settings_label_auto_start">Auto-start on Boot</string>
     <string name="settings_description_auto_start">Start mesh service when device boots</string>
     <string name="settings_label_notifications">Notifications</string>
-    <string name="settings_description_notifications">Show message notifications</string>
+    <string name="settings_description_notifications">Message, message-request and peer-discovery notifications. The silent mesh-status card still appears while the mesh is on, because Android requires a running background service to show one.</string>
     <string name="settings_label_notify_dm">Direct Messages</string>
     <string name="settings_description_notify_dm">Notify for incoming direct messages</string>
     <string name="settings_label_notify_dm_request">Message Requests</string>
