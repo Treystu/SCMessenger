@@ -154,6 +154,35 @@ fn registered_contact_database(path: &std::path::Path) -> Option<SharedContactDa
         .and_then(Weak::upgrade)
 }
 
+/// Reason the last open of a contacts database failed, keyed canonically.
+///
+/// `IronCoreError` is a payload-free enum that is also declared for UniFFI
+/// (`core/src/api.udl`), so a failed open cannot hand the sled cause back to
+/// the caller without changing the FFI contract. The cause is logged and kept
+/// here as well, so a caller that only sees `StorageError` -- and the flaky
+/// restore test in particular (#477) -- can read the reason instead of guessing
+/// at it. Diagnostics only: no error variant and no open behaviour changes.
+fn open_failure_log() -> &'static Mutex<HashMap<PathBuf, String>> {
+    static FAILURES: OnceLock<Mutex<HashMap<PathBuf, String>>> = OnceLock::new();
+    FAILURES.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+fn record_open_failure(path: &std::path::Path, detail: String) {
+    open_failure_log().lock().insert(path.to_path_buf(), detail);
+}
+
+/// Why the most recent open of the contacts database under `storage_path`
+/// failed (#477).
+///
+/// `None` means no open has failed for that path in this process, or a later
+/// open of the same path succeeded and cleared the record. This is the only
+/// way to see the underlying sled cause: `ContactManager::new` can return
+/// only `IronCoreError::StorageError`, which carries no payload.
+pub fn last_open_failure(storage_path: String) -> Option<String> {
+    let key = canonical_contact_db_path(&PathBuf::from(storage_path).join("contacts.db"));
+    open_failure_log().lock().get(&key).cloned()
+}
+
 #[uniffi::export]
 impl ContactManager {
     /// Create or open contact database at the given path
@@ -192,12 +221,11 @@ impl ContactManager {
                 .open()
         })
         .map_err(|(attempts, err)| {
-            tracing::error!(
-                "ContactManager::new: sled failed to open {:?} after {} attempts: {}",
-                path,
-                attempts,
-                err
-            );
+            // #477: record the cause before mapping it away. A caller that sees
+            // only `StorageError` can then read it through `last_open_failure`.
+            let detail = format!("sled open of {path:?} failed after {attempts} attempt(s): {err}");
+            tracing::error!("ContactManager::new: {detail}");
+            record_open_failure(&key, detail);
             crate::IronCoreError::StorageError
         })?;
         if open_attempt > 1 {
@@ -207,6 +235,8 @@ impl ContactManager {
                 open_attempt
             );
         }
+        // A successful open means the last open of this path did not fail.
+        open_failure_log().lock().remove(&key);
 
         let db: SharedContactDatabase = Arc::new(Mutex::new(db));
         // Short lock: replaces any expired weak entry left by a manager that
