@@ -6111,7 +6111,10 @@ mod tests {
         // bound to `contacts.db` in the process working directory, so a
         // restore could report success while writing into a stray store.
         let core = IronCore::with_storage("\0invalid/path<>|".to_string());
-        assert!(core.is_storage_degraded(), "precondition: storage is degraded");
+        assert!(
+            core.is_storage_degraded(),
+            "precondition: storage is degraded"
+        );
         let err = core
             .contacts_manager()
             .err()
