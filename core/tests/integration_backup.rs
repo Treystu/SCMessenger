@@ -648,10 +648,20 @@ fn iron_core_fast_backup_tracks_bridge_contact_removals() {
     restored
         .import_identity_backup(backup, passphrase.to_string())
         .expect("restore succeeds");
-    let restored_contacts = scmessenger_core::contacts_bridge::ContactManager::new(restored_path)
-        .expect("restored iOS contacts store opens")
-        .list()
-        .expect("restored contacts list loads");
+    // #477: `ContactManager::new` can only return the payload-free
+    // `IronCoreError::StorageError`, so on failure read the recorded sled cause
+    // back out instead of failing with a bare enum name that cannot be acted on.
+    let restored_contacts = match scmessenger_core::contacts_bridge::ContactManager::new(
+        restored_path.clone(),
+    ) {
+        Ok(manager) => manager.list().expect("restored contacts list loads"),
+        Err(err) => panic!(
+            "restored iOS contacts store opens: {}. sled cause: {}",
+            err,
+            scmessenger_core::contacts_bridge::last_open_failure(restored_path)
+                .unwrap_or_else(|| "no open failure was recorded for this path".to_string())
+        ),
+    };
     assert!(
         restored_contacts.is_empty(),
         "the most recent auto-backup must not resurrect removed contacts"
