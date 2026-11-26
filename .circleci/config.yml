@@ -716,7 +716,8 @@ jobs:
           command: |
             set -uo pipefail
             TEST=iron_core_fast_backup_tracks_bridge_contact_removals
-            RUNS="${FLAKY_STRESS_RUNS:-10}"
+            RUNS="${FLAKY_STRESS_RUNS:-40}"
+            LOAD_PASSES="${FLAKY_LOAD_PASSES:-3}"
             OUT=tmp/flaky-477
             mkdir -p "$OUT"
             pass=0; fail=0
@@ -731,8 +732,24 @@ jobs:
               fi
             done
             echo "[INFO] #477 stress: $pass/$RUNS passed, $fail failed"
-            if [ "$fail" -gt 0 ]; then
-              echo "[WARNING] #477 reproduced in this run: $fail/$RUNS failed. Record this rate on the issue instead of guessing the cause."
+            # Phase 2 (#477 "reproduce under load"): the whole backup suite at default
+            # concurrency, because the isolated loop above never opens the restored
+            # store while a sibling test is holding or reopening one.
+            load_pass=0; load_fail=0
+            for i in $(seq 1 "$LOAD_PASSES"); do
+              if cargo test -p scmessenger-core --test integration_backup >"$OUT/load-$i.log" 2>&1; then
+                load_pass=$((load_pass + 1))
+                echo "load pass $i: PASS"
+              else
+                load_fail=$((load_fail + 1))
+                echo "load pass $i: FAIL"
+                grep -E "^test .* FAILED|panicked at|StorageError" "$OUT/load-$i.log" | tail -20 || true
+                tail -40 "$OUT/load-$i.log"
+              fi
+            done
+            echo "[INFO] #477 load: $load_pass/$LOAD_PASSES suite passes, $load_fail failed"
+            if [ "$fail" -gt 0 ] || [ "$load_fail" -gt 0 ]; then
+              echo "[WARNING] #477 reproduced in this run: isolated $fail/$RUNS failed, load $load_fail/$LOAD_PASSES failed. Record this rate on the issue instead of guessing the cause."
             fi
             exit 0
       # #678: `cargo test --workspace` select the bin target only while it is
