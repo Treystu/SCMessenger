@@ -34,7 +34,7 @@ pub enum PaddingError {
 
 /// Add padding to reach a target size
 ///
-/// Padding format: [original_data]\[0x80\]\[0x00...0x00\]
+/// Padding format: `[original_data]` followed by `0x80` and zeros
 /// The 0x80 marker indicates start of padding.
 ///
 /// # Arguments
