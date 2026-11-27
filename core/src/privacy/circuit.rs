@@ -141,6 +141,13 @@ pub struct ForwardingPosterior {
     pub alpha: f64,
     /// Failures plus the prior's pseudo-counts.
     pub beta: f64,
+    /// Outcomes the node actually attributed to this relay.
+    ///
+    /// Counted explicitly rather than inferred from `alpha + beta - 2.0`: the
+    /// two priors in this file have different masses (a cold start carries two
+    /// pseudo-observations, the insertion prior one), so subtracting a constant
+    /// reported a freshly introduced identity as already proven (#776).
+    pub observed: f64,
 }
 
 impl ForwardingPosterior {
@@ -154,6 +161,7 @@ impl ForwardingPosterior {
         Self {
             alpha: 1.0 + 2.0 * s,
             beta: 1.0 + 2.0 * (1.0 - s),
+            observed: 0.0,
         }
     }
 
@@ -167,9 +175,11 @@ impl ForwardingPosterior {
         }
     }
 
-    /// Attributed outcomes beyond the two prior pseudo-observations.
+    /// Outcomes attributed to this relay by `FeedbackStore::record_custody_chain`.
+    ///
+    /// Zero for a relay carrying only a prior, whatever that prior's mass is.
     pub fn observations(&self) -> f64 {
-        (self.alpha + self.beta - 2.0).max(0.0)
+        self.observed
     }
 }
 
@@ -229,11 +239,14 @@ impl FeedbackStore {
                 .or_insert(ForwardingPosterior {
                     alpha: 1.0,
                     beta: 1.0,
+                    observed: 0.0,
                 });
             if delivered || index < acked_prefix {
                 entry.alpha += 1.0;
+                entry.observed += 1.0;
             } else if index == acked_prefix {
                 entry.beta += 1.0;
+                entry.observed += 1.0;
             }
         }
     }
@@ -984,6 +997,54 @@ mod tests {
         let mean_a = store.mean("a").unwrap();
         let mean_c = store.mean("c").unwrap();
         assert!(mean_a > mean_c, "acked prefix must score above the break");
+    }
+
+    #[test]
+    fn cold_start_prior_is_not_proven_history() {
+        // #776: every relay in a fresh pool carries a prior, and a prior is not
+        // an outcome. A newly introduced identity - including a Sybil - must not
+        // count toward the proven-diversity floor before it has carried anything.
+        let peers = create_test_peers(3);
+        let mut store = FeedbackStore::new();
+        store.seed_from_pool(&peers);
+        for peer in &peers {
+            assert!(
+                store.mean(&peer.peer_id).is_some(),
+                "the cold-start prior still predicts a mean"
+            );
+            assert!(
+                !store.has_history(&peer.peer_id),
+                "a relay with only a cold-start prior must not read as proven"
+            );
+        }
+    }
+
+    #[test]
+    fn only_attributed_hops_become_proven_history() {
+        let mut store = FeedbackStore::new();
+        let chain = vec!["a".to_string(), "b".to_string(), "c".to_string()];
+        // a forwarded, b is the break, c never carried the envelope.
+        store.record_custody_chain(&chain, 1, false);
+        assert!(store.has_history("a"), "an acked hop is a real outcome");
+        assert!(
+            store.has_history("b"),
+            "the break hop is an attributed outcome too"
+        );
+        assert!(
+            !store.has_history("c"),
+            "a hop past the break stays unattributed"
+        );
+        // A relay that never appears in a chain keeps its prior and no history.
+        store.seed_from_pool(&create_test_peers(1));
+        assert!(!store.has_history("peer_0"));
+    }
+
+    #[test]
+    fn a_delivered_chain_marks_every_hop_proven() {
+        let mut store = FeedbackStore::new();
+        let chain = vec!["a".to_string(), "b".to_string()];
+        store.record_custody_chain(&chain, 0, true);
+        assert!(store.has_history("a") && store.has_history("b"));
     }
 
     #[test]
