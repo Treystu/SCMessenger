@@ -144,8 +144,16 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
           cache: gradle
-      - name: Install host Rust dependencies
-        run: sudo apt-get update && sudo apt-get install -y libdbus-1-dev pkg-config
+      # This job is routed to the self-hosted OCI pool above (the JVM tests need
+      # no NDK, so the ARM64 runner can take it). A raw apt-get therefore cannot
+      # work: the OCI runner user has no passwordless sudo, so `sudo apt-get`
+      # failed with "a terminal is required to read the password" in ~13s and
+      # `:app:testDebugUnitTest` never started (#799). The composite action is
+      # the same one every other pool-routed job uses: apt-get on GitHub-hosted,
+      # verify-only (no sudo, no apt) on self-hosted, failing by name on a
+      # package the runner host is missing.
+      - name: Install Linux build dependencies
+        uses: ./.github/actions/linux-build-deps
       - name: Run JVM unit tests
         working-directory: android
         # Keep Android's native cross-build out of this gate, but allow the
