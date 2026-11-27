@@ -1088,7 +1088,11 @@ mod tests {
         }
         let mut builder = CircuitBuilder::new(peers, CircuitConfig::default()).unwrap();
         // Three proven relays in three distinct segments: the floor is 3.
-        let proven = ["peer_0".to_string(), "peer_2".to_string(), "peer_4".to_string()];
+        let proven = [
+            "peer_0".to_string(),
+            "peer_2".to_string(),
+            "peer_4".to_string(),
+        ];
         builder.record_custody_chain(&proven, 3, true);
 
         let destination = PeerInfo {
