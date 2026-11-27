@@ -490,14 +490,12 @@ impl CircuitBuilder {
                     segments.insert(peer.network_segment.as_str());
                 }
             }
-            predictions.push(ScoredDepth {
-                prediction: DepthPrediction {
-                    depth,
-                    predicted,
-                    segments: segments.len(),
-                },
-                hops,
-            });
+            let prediction = DepthPrediction {
+                depth,
+                predicted,
+                segments: segments.len(),
+            };
+            predictions.push(ScoredDepth { prediction, hops });
         }
         predictions
     }
@@ -1090,15 +1088,8 @@ mod tests {
         }
         let mut builder = CircuitBuilder::new(peers, CircuitConfig::default()).unwrap();
         // Three proven relays in three distinct segments: the floor is 3.
-        builder.record_custody_chain(
-            &[
-                "peer_0".to_string(),
-                "peer_2".to_string(),
-                "peer_4".to_string(),
-            ],
-            3,
-            true,
-        );
+        let proven = ["peer_0".to_string(), "peer_2".to_string(), "peer_4".to_string()];
+        builder.record_custody_chain(&proven, 3, true);
 
         let destination = PeerInfo {
             peer_id: "dest".to_string(),
@@ -1110,8 +1101,10 @@ mod tests {
         // The diverse selector is deterministic, so the scored candidate can be
         // read independently of build_circuit and compared exactly.
         let scored = builder.predict_by_depth(&destination);
-        let predictions: Vec<DepthPrediction> =
-            scored.iter().map(|candidate| candidate.prediction).collect();
+        let predictions: Vec<DepthPrediction> = scored
+            .iter()
+            .map(|candidate| candidate.prediction)
+            .collect();
         let chosen =
             DepthPolicy::choose(&predictions, builder.proven_segments(), builder.feedback())
                 .expect("a depth");
