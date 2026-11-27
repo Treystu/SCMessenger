@@ -134,6 +134,17 @@ pub const DEPTH_INDIFFERENCE_BAND: f64 = 0.02;
 /// the node's "recent realised-depth frequencies".
 pub const DEPTH_HISTORY_WINDOW: usize = 64;
 
+/// Pseudo-count added to every indifferent depth's realised-frequency weight.
+///
+/// Without it, an empty history leaves every weight at zero and the choice falls
+/// back to the shallowest depth; recording that outcome then gives only that
+/// depth a weight, so the same depth is realised forever and the indifference set
+/// is never explored (#777). A flat pseudo-count gives every indifferent depth
+/// nonzero support from the first circuit, and the realised-depth history then
+/// shapes the distribution as it accumulates. Uniform over the set at cold start
+/// is the intended behaviour: the depths are materially indistinguishable.
+pub const DEPTH_WEIGHT_PSEUDO_COUNT: u64 = 1;
+
 /// Beta posterior over one relay's forwarding outcome.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct ForwardingPosterior {
@@ -326,17 +337,16 @@ impl DepthPolicy {
         let shallowest = indifferent.first()?.depth;
 
         // Leak control: sample from this node's own recent realised depths,
-        // restricted to the indifference set. With no history in the set, the
-        // shallowest depth is realised, which is the deterministic case the spec
-        // accepts (a singleton indifference set).
-        let weights: Vec<usize> = indifferent
+        // restricted to the indifference set. Every indifferent depth carries a
+        // flat pseudo-count on top of its realised frequency, so an empty or
+        // narrow history cannot pin the choice to one depth (a singleton
+        // indifference set is still the one admissible depth, as the spec
+        // accepts).
+        let weights: Vec<u64> = indifferent
             .iter()
-            .map(|p| feedback.depth_frequency(p.depth))
+            .map(|p| feedback.depth_frequency(p.depth) as u64 + DEPTH_WEIGHT_PSEUDO_COUNT)
             .collect();
-        let total: usize = weights.iter().sum();
-        if total == 0 {
-            return Some(shallowest);
-        }
+        let total: u64 = weights.iter().sum();
         use rand::Rng;
         let mut ticket = rand::thread_rng().gen_range(0..total);
         for (prediction, weight) in indifferent.iter().zip(weights) {
@@ -1012,6 +1022,71 @@ mod tests {
         // depth 3, which is outside the band, so the shallowest indifferent depth
         // is 2. With no realised-depth history, 2 is what is realised.
         assert_eq!(DepthPolicy::choose(&predictions, 2, &feedback), Some(2));
+    }
+
+    #[test]
+    fn empty_depth_history_samples_the_whole_indifference_set() {
+        // #777: with no realised-depth history every weight used to be zero, so the
+        // shallowest indifferent depth was returned every time; recording it then
+        // made it the only weighted depth and the choice never moved again.
+        let feedback = FeedbackStore::new();
+        let predictions = vec![
+            DepthPrediction {
+                depth: 2,
+                predicted: 0.90,
+                segments: 2,
+            },
+            DepthPrediction {
+                depth: 3,
+                predicted: 0.895,
+                segments: 3,
+            },
+            DepthPrediction {
+                depth: 4,
+                predicted: 0.89,
+                segments: 4,
+            },
+        ];
+        let mut seen = std::collections::BTreeSet::new();
+        for _ in 0..400 {
+            seen.insert(DepthPolicy::choose(&predictions, 1, &feedback).expect("a depth"));
+        }
+        assert_eq!(
+            seen.len(),
+            3,
+            "every indifferent depth must be realisable from a cold start, got {seen:?}"
+        );
+    }
+
+    #[test]
+    fn one_realised_depth_does_not_retire_the_rest_of_the_set() {
+        let mut feedback = FeedbackStore::new();
+        feedback.record_depth(2);
+        let predictions = vec![
+            DepthPrediction {
+                depth: 2,
+                predicted: 0.90,
+                segments: 2,
+            },
+            DepthPrediction {
+                depth: 3,
+                predicted: 0.895,
+                segments: 3,
+            },
+            DepthPrediction {
+                depth: 4,
+                predicted: 0.89,
+                segments: 4,
+            },
+        ];
+        let mut seen = std::collections::BTreeSet::new();
+        for _ in 0..400 {
+            seen.insert(DepthPolicy::choose(&predictions, 1, &feedback).expect("a depth"));
+        }
+        assert!(
+            seen.len() >= 2,
+            "a narrow history must not collapse the indifference set, got {seen:?}"
+        );
     }
 
     #[test]
