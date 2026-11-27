@@ -1088,7 +1088,11 @@ mod tests {
         let expected = ForwardingPosterior::cold_start(0.95).mean();
         let ranked = builder.feedback.mean("peer_0").unwrap();
         assert!((ranked - expected).abs() < 1e-12);
-        let peer = builder.peers.iter().find(|p| p.peer_id == "peer_0").unwrap();
+        let peer = builder
+            .peers
+            .iter()
+            .find(|p| p.peer_id == "peer_0")
+            .unwrap();
         assert!((builder.relay_score(peer) - expected).abs() < 1e-12);
         assert!(ranked > seeded);
     }
@@ -1109,7 +1113,11 @@ mod tests {
         builder.update_peer_reliability("peer_1", 0.0).unwrap();
 
         // The snapshot field takes the caller's value ...
-        let peer = builder.peers.iter().find(|p| p.peer_id == "peer_1").unwrap();
+        let peer = builder
+            .peers
+            .iter()
+            .find(|p| p.peer_id == "peer_1")
+            .unwrap();
         assert_eq!(peer.reliability_score, 0.0);
         // ... but measured history outranks it, so ranking does not move.
         assert_eq!(builder.feedback.mean("peer_1").unwrap(), measured);
