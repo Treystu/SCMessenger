@@ -22,6 +22,14 @@ on:
       - 'desktop_bridge/Cargo.toml'
       - 'rust-toolchain.toml'
       - '.cargo/**'
+      # This workflow's own definition and the local composite actions it calls
+      # are trigger inputs: a change to either can only be verified by running
+      # this file, and with an allow-list and no entry for them a CI-only diff
+      # runs nothing at all (#799's first head proved that: the Mobile workflow
+      # did not start for a PR touching only mobile.yml). ci.yml, cross.yml and
+      # security-regression-tests.yml all trigger broadly for the same reason.
+      - '.github/workflows/mobile.yml'
+      - '.github/actions/**'
       - '!**.md'
   release:
     types: [published]
@@ -44,6 +52,14 @@ on:
       - 'desktop_bridge/Cargo.toml'
       - 'rust-toolchain.toml'
       - '.cargo/**'
+      # This workflow's own definition and the local composite actions it calls
+      # are trigger inputs: a change to either can only be verified by running
+      # this file, and with an allow-list and no entry for them a CI-only diff
+      # runs nothing at all (#799's first head proved that: the Mobile workflow
+      # did not start for a PR touching only mobile.yml). ci.yml, cross.yml and
+      # security-regression-tests.yml all trigger broadly for the same reason.
+      - '.github/workflows/mobile.yml'
+      - '.github/actions/**'
       # Docs under a trigger directory (core/README.md, android/*.md) cannot change a
       # mobile build. Last matching pattern wins, so this negation must stay last.
       - '!**.md'
