@@ -214,6 +214,30 @@ impl FeedbackStore {
             .unwrap_or(false)
     }
 
+    /// Reconcile a snapshot-provided score with the stored posterior.
+    ///
+    /// The pool snapshot is refreshed out of band, so a relay can arrive with a
+    /// new reliability score this store has never seen an outcome for. Re-seed
+    /// that relay's posterior from the score, through the same cold-start prior
+    /// the pool seeding uses, so the score reaches everything that ranks by the
+    /// posterior mean: relay selection, depth prediction and the diverse-path
+    /// ranking (#778).
+    ///
+    /// A relay with attributed outcomes keeps them. `has_history` is the same
+    /// PROVEN predicate the privacy floor counts, so this cannot be used to
+    /// overwrite measured custody chains with a snapshot number the node did not
+    /// observe -- which is the erasure `record_custody_chain` exists to prevent.
+    ///
+    /// Returns true when the posterior was re-seeded.
+    pub fn reseed_unobserved(&mut self, peer_id: &str, score: f32) -> bool {
+        if self.has_history(peer_id) {
+            return false;
+        }
+        self.posteriors
+            .insert(peer_id.to_string(), ForwardingPosterior::cold_start(score));
+        true
+    }
+
     /// Attribute one custody chain, prefix-only.
     ///
     /// A signed per-hop custody-ack chain tells the node how far delivery got:
@@ -635,19 +659,31 @@ impl CircuitBuilder {
         &self.peers
     }
 
-    /// Update peer reliability score
+    /// Update a peer's reliability score and the posterior that ranking reads.
+    ///
+    /// Writing the snapshot field alone changed nothing that mattered: every
+    /// pool peer already had a posterior from `seed_from_pool`, and `relay_score`
+    /// prefers it, so the score reached no selection, depth prediction or
+    /// diverse-path ranking (#778). The update therefore also re-seeds an
+    /// unobserved peer's posterior from the new score. A peer with attributed
+    /// outcomes keeps them and only its snapshot field moves.
+    ///
+    /// A peer this builder does not know is `CircuitError::PeerNotFound`, and no
+    /// state changes in that case.
     pub fn update_peer_reliability(
         &mut self,
         peer_id: &str,
         score: f32,
     ) -> Result<(), CircuitError> {
+        let clamped = score.clamp(0.0, 1.0);
         let peer = self
             .peers
             .iter_mut()
             .find(|p| p.peer_id == peer_id)
             .ok_or(CircuitError::PeerNotFound)?;
 
-        peer.reliability_score = score.clamp(0.0, 1.0);
+        peer.reliability_score = clamped;
+        self.feedback.reseed_unobserved(peer_id, clamped);
         Ok(())
     }
 }
@@ -1040,8 +1076,44 @@ mod tests {
         let config = CircuitConfig::default();
         let mut builder = CircuitBuilder::new(peers, config).unwrap();
 
+        // peer_0's snapshot score is 0.5, so construction seeds the prior there.
+        let seeded = ForwardingPosterior::cold_start(0.5).mean();
+        assert!((builder.feedback.mean("peer_0").unwrap() - seeded).abs() < 1e-12);
+
         let result = builder.update_peer_reliability("peer_0", 0.95);
         assert!(result.is_ok());
+
+        // #778: the update has to reach what selection ranks by, not just the
+        // snapshot field, or it succeeds without changing any path.
+        let expected = ForwardingPosterior::cold_start(0.95).mean();
+        let ranked = builder.feedback.mean("peer_0").unwrap();
+        assert!((ranked - expected).abs() < 1e-12);
+        let peer = builder.peers.iter().find(|p| p.peer_id == "peer_0").unwrap();
+        assert!((builder.relay_score(peer) - expected).abs() < 1e-12);
+        assert!(ranked > seeded);
+    }
+
+    #[test]
+    fn update_peer_reliability_leaves_attributed_outcomes_alone() {
+        let peers = create_test_peers(5);
+        let config = CircuitConfig::default();
+        let mut builder = CircuitBuilder::new(peers, config).unwrap();
+
+        // One delivered custody chain is a real attribution, not a prior.
+        builder
+            .feedback
+            .record_custody_chain(&["peer_1".to_string()], 0, true);
+        assert!(builder.feedback.has_history("peer_1"));
+        let measured = builder.feedback.mean("peer_1").unwrap();
+
+        builder.update_peer_reliability("peer_1", 0.0).unwrap();
+
+        // The snapshot field takes the caller's value ...
+        let peer = builder.peers.iter().find(|p| p.peer_id == "peer_1").unwrap();
+        assert_eq!(peer.reliability_score, 0.0);
+        // ... but measured history outranks it, so ranking does not move.
+        assert_eq!(builder.feedback.mean("peer_1").unwrap(), measured);
+        assert!((builder.relay_score(peer) - measured).abs() < 1e-12);
     }
 
     #[test]
