@@ -14414,6 +14414,46 @@ mod event_driven_wake_tests {
 mod retry_ceiling_tests {
     use super::{delivery_exhausted, MAX_DELIVERY_ATTEMPTS};
 
+    /// #684 part C: the budget the retry loop compares `dispatch_attempts`
+    /// against is derived from live state, not a literal - the ladder width
+    /// scales it, and a peer with no live connection gets more passes because
+    /// reconnection itself costs one.
+    #[test]
+    fn retry_budget_scales_with_the_live_candidate_ladder() {
+        assert_eq!(super::retry_attempt_budget(1, true), 2);
+        assert_eq!(super::retry_attempt_budget(3, true), 6);
+        assert_eq!(super::retry_attempt_budget(1, false), 4);
+        assert_eq!(super::retry_attempt_budget(3, false), 12);
+    }
+
+    /// A zero-candidate set must not yield a zero budget. The loop's route-less
+    /// branch already keeps such a message cycling, but a zero here would park
+    /// it on its first dispatch if that branch were ever skipped, so the floor
+    /// is part of the contract this test pins.
+    #[test]
+    fn retry_budget_is_never_zero_and_never_shrinks_with_a_wider_ladder() {
+        for connected in [true, false] {
+            assert!(super::retry_attempt_budget(0, connected) >= 1);
+            let mut previous = super::retry_attempt_budget(1, connected);
+            for count in 2..=8 {
+                let budget = super::retry_attempt_budget(count, connected);
+                assert!(
+                    budget >= previous,
+                    "budget must not shrink when the ladder grows"
+                );
+                previous = budget;
+            }
+        }
+        // A disconnected target is never given a tighter budget than a connected
+        // one for the same ladder: it has to spend a pass reconnecting.
+        for count in 0..=8 {
+            assert!(
+                super::retry_attempt_budget(count, false)
+                    >= super::retry_attempt_budget(count, true)
+            );
+        }
+    }
+
     /// The #679 shape: the candidate ladder has one entry, so every dispatch also
     /// wraps a pass and `RETRY_CYCLE_RESTART` repeated (506 times in one 2 MB
     /// window, `attempt=630 pass=629` overall). This models the retry loop's own
