@@ -263,6 +263,17 @@ pub struct DepthPrediction {
     pub segments: usize,
 }
 
+/// One candidate depth together with the exact path that was scored for it.
+///
+/// The path travels with its score so the builder can realise the candidate the
+/// depth choice was made on, instead of drawing a second path (#775).
+struct ScoredDepth {
+    /// The depth, predicted delivery and segment span of this path.
+    prediction: DepthPrediction,
+    /// The path itself, as (peer id, public key) hops.
+    hops: Vec<(String, Vec<u8>)>,
+}
+
 /// Chooses depth per circuit from the live snapshot and attributed outcomes.
 ///
 /// This replaces the uniform `min_hops..=max_hops` draw. The order of operations
@@ -400,21 +411,29 @@ impl CircuitBuilder {
     /// supports is scored as a whole path, PAL is the best of those, and the
     /// realised depth is the shallowest depth reaching PAL (sampled within the
     /// indifference band for leak control).
+    ///
+    /// The circuit returns the exact path that was scored at the chosen depth
+    /// (#775). Re-running the selector here would draw a second, independent
+    /// path, and the returned circuit would then need not span the privacy floor
+    /// or reach the delivery band the choice of depth was based on.
     pub fn build_circuit(&self, destination: PeerInfo) -> Result<CircuitPath, CircuitError> {
-        let predictions = self.predict_by_depth(&destination);
+        let scored = self.predict_by_depth(&destination);
+        let predictions: Vec<DepthPrediction> = scored
+            .iter()
+            .map(|candidate| candidate.prediction)
+            .collect();
         let proven_segments = self.proven_segments();
         let num_hops = DepthPolicy::choose(&predictions, proven_segments, &self.feedback)
             .ok_or(CircuitError::InsufficientPeers)?;
-
-        let selected_hops = if self.config.prefer_diverse_paths {
-            self.select_diverse_hops(num_hops, &destination)?
-        } else {
-            self.select_random_hops(num_hops, &destination)?
-        };
+        let hops = scored
+            .into_iter()
+            .find(|candidate| candidate.prediction.depth == num_hops)
+            .map(|candidate| candidate.hops)
+            .ok_or(CircuitError::InsufficientPeers)?;
 
         Ok(CircuitPath {
             circuit_id: CircuitId::random(),
-            hops: selected_hops,
+            hops,
             destination: Some(destination),
         })
     }
@@ -441,12 +460,14 @@ impl CircuitBuilder {
         segments.len()
     }
 
-    /// Score the selector at every depth the pool supports.
+    /// Score the selector at every depth the pool supports, keeping the path.
     ///
     /// The selector itself is unchanged; it is simply run at each depth instead
     /// of at one drawn depth, and each resulting path is predicted as the product
-    /// of its hops' posterior means.
-    fn predict_by_depth(&self, destination: &PeerInfo) -> Vec<DepthPrediction> {
+    /// of its hops' posterior means. The path is returned with its score because
+    /// the builder must realise the path the choice was made on: the selected
+    /// depth was selected because of that path's segments and prediction.
+    fn predict_by_depth(&self, destination: &PeerInfo) -> Vec<ScoredDepth> {
         let capacity = self.pool_capacity(destination);
         let mut predictions = Vec::with_capacity(capacity);
         for depth in 1..=capacity {
@@ -469,11 +490,12 @@ impl CircuitBuilder {
                     segments.insert(peer.network_segment.as_str());
                 }
             }
-            predictions.push(DepthPrediction {
+            let prediction = DepthPrediction {
                 depth,
                 predicted,
                 segments: segments.len(),
-            });
+            };
+            predictions.push(ScoredDepth { prediction, hops });
         }
         predictions
     }
@@ -1052,6 +1074,78 @@ mod tests {
 
         let result = builder.update_peer_reliability("nonexistent", 0.95);
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn build_circuit_realises_the_scored_candidate() {
+        // #775: build_circuit scored one path per depth, let DepthPolicy choose a
+        // depth from those scores, and then drew a second, independent path at
+        // that depth - so the returned circuit could miss both the privacy floor
+        // and the delivery band the choice was based on.
+        let mut peers = create_test_peers(6);
+        for (i, peer) in peers.iter_mut().enumerate() {
+            peer.network_segment = format!("segment_{}", i / 2);
+        }
+        let mut builder = CircuitBuilder::new(peers, CircuitConfig::default()).unwrap();
+        // Three proven relays in three distinct segments: the floor is 3.
+        let proven = [
+            "peer_0".to_string(),
+            "peer_2".to_string(),
+            "peer_4".to_string(),
+        ];
+        builder.record_custody_chain(&proven, 3, true);
+
+        let destination = PeerInfo {
+            peer_id: "dest".to_string(),
+            public_key: vec![99; 32],
+            reliability_score: 0.9,
+            network_segment: "seg".to_string(),
+        };
+
+        // The diverse selector is deterministic, so the scored candidate can be
+        // read independently of build_circuit and compared exactly.
+        let scored = builder.predict_by_depth(&destination);
+        let predictions: Vec<DepthPrediction> = scored
+            .iter()
+            .map(|candidate| candidate.prediction)
+            .collect();
+        let chosen =
+            DepthPolicy::choose(&predictions, builder.proven_segments(), builder.feedback())
+                .expect("a depth");
+        let expected = scored
+            .iter()
+            .find(|candidate| candidate.prediction.depth == chosen)
+            .map(|candidate| candidate.hops.clone())
+            .expect("the chosen candidate");
+
+        let circuit = builder.build_circuit(destination).expect("a circuit");
+        // Hop ORDER follows the segment map's iteration order, which is not
+        // stable across two independent scoring passes; the candidate itself is
+        // the set of hops it placed in the path.
+        let mut realised: Vec<&String> = circuit.hops.iter().map(|(peer_id, _)| peer_id).collect();
+        let mut scored_ids: Vec<&String> = expected.iter().map(|(peer_id, _)| peer_id).collect();
+        realised.sort();
+        scored_ids.sort();
+        assert_eq!(
+            realised, scored_ids,
+            "the circuit must be the scored candidate, not a second draw"
+        );
+        assert_eq!(circuit.hop_count(), chosen);
+
+        let mut segments = std::collections::HashSet::new();
+        for (peer_id, _) in &circuit.hops {
+            let peer = builder
+                .peers
+                .iter()
+                .find(|p| &p.peer_id == peer_id)
+                .expect("every hop comes from the pool");
+            segments.insert(peer.network_segment.as_str());
+        }
+        assert!(
+            segments.len() >= DepthPolicy::floor_for(builder.proven_segments()),
+            "the realised path spans {} segments, below the floor",
+            segments.len()
+        );
     }
 
     #[test]
