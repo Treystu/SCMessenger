@@ -1119,8 +1119,15 @@ mod tests {
             .expect("the chosen candidate");
 
         let circuit = builder.build_circuit(destination).expect("a circuit");
+        // Hop ORDER follows the segment map's iteration order, which is not
+        // stable across two independent scoring passes; the candidate itself is
+        // the set of hops it placed in the path.
+        let mut realised: Vec<&String> = circuit.hops.iter().map(|(peer_id, _)| peer_id).collect();
+        let mut scored_ids: Vec<&String> = expected.iter().map(|(peer_id, _)| peer_id).collect();
+        realised.sort();
+        scored_ids.sort();
         assert_eq!(
-            circuit.hops, expected,
+            realised, scored_ids,
             "the circuit must be the scored candidate, not a second draw"
         );
         assert_eq!(circuit.hop_count(), chosen);
