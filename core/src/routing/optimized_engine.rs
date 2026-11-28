@@ -571,7 +571,9 @@ mod tests {
 
         // The route may outlive the evidence that condemns its next hop by up to
         // 6600 s; it must not be selected while that evidence is live.
-        engine.negative_cache.record_unreachable(hex::encode(next_hop));
+        engine
+            .negative_cache
+            .record_unreachable(hex::encode(next_hop));
         let condemned =
             engine.route_message_optimized(&destination_hint, &make_message_id(4), 0, 0);
         let condemned_hop = match &condemned.primary {
