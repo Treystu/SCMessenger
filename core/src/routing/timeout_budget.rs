@@ -13,6 +13,9 @@
 
 use web_time::{Duration, Instant};
 
+/// Permille base for the phase shares: they must sum to this, never past it.
+pub const PHASE_BUDGET_TOTAL_PERMILLE: u64 = 1000;
+
 /// Discovery phases in order of increasing cost
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
 pub enum DiscoveryPhase {
@@ -27,14 +30,28 @@ pub enum DiscoveryPhase {
 }
 
 impl DiscoveryPhase {
-    /// Get the estimated duration for this phase
-    pub fn estimated_duration(&self) -> Duration {
+    /// Share of the total discovery budget this phase may use, in permille.
+    ///
+    /// These shares ARE the budget, not a wish list: they sum to
+    /// [`PHASE_BUDGET_TOTAL_PERMILLE`], so the ladder can never claim more time
+    /// than the whole it runs inside (#691). The previous per-phase estimates
+    /// were 10 + 50 + 200 + 500 = 760 ms against a 500 ms total - a budget whose
+    /// parts sum to 152% of its whole - and the last phase was starved in
+    /// 0.6-24.1% of lookups as a result.
+    pub fn budget_permille(&self) -> u64 {
         match self {
-            DiscoveryPhase::LocalCache => Duration::from_millis(10),
-            DiscoveryPhase::NeighborhoodQuery => Duration::from_millis(50),
-            DiscoveryPhase::DelegateQuery => Duration::from_millis(200),
-            DiscoveryPhase::FullDhtWalk => Duration::from_millis(500),
+            DiscoveryPhase::LocalCache => 20,
+            DiscoveryPhase::NeighborhoodQuery => 100,
+            DiscoveryPhase::DelegateQuery => 400,
+            DiscoveryPhase::FullDhtWalk => 480,
         }
+    }
+
+    /// Time this phase may use out of `total`.
+    ///
+    /// At the shipped 500 ms budget the ladder is 10 / 50 / 200 / 240 ms.
+    pub fn budget_for(&self, total: Duration) -> Duration {
+        Duration::from_millis((total.as_millis() as u64 * self.budget_permille()) / 1000)
     }
 
     /// Get the next phase, if any
@@ -145,7 +162,7 @@ impl TimeoutBudget {
                 let remaining = self.remaining();
 
                 // Check if we have enough budget for this phase
-                let phase_estimate = next_phase.estimated_duration();
+                let phase_estimate = next_phase.budget_for(self.total_budget);
                 if remaining < phase_estimate / 2 {
                     // Less than half the estimated time remaining
                     // Mark as exhausted but still allow the attempt
@@ -282,23 +299,46 @@ mod tests {
         assert_eq!(budget.total_budget(), Duration::from_millis(500));
     }
 
+    const ALL_PHASES: [DiscoveryPhase; 4] = [
+        DiscoveryPhase::LocalCache,
+        DiscoveryPhase::NeighborhoodQuery,
+        DiscoveryPhase::DelegateQuery,
+        DiscoveryPhase::FullDhtWalk,
+    ];
+
     #[test]
-    fn test_phase_estimated_durations() {
+    fn test_phase_budget_ladder_fits_the_total() {
+        let total = Duration::from_millis(500);
         assert_eq!(
-            DiscoveryPhase::LocalCache.estimated_duration(),
+            DiscoveryPhase::LocalCache.budget_for(total),
             Duration::from_millis(10)
         );
         assert_eq!(
-            DiscoveryPhase::NeighborhoodQuery.estimated_duration(),
+            DiscoveryPhase::NeighborhoodQuery.budget_for(total),
             Duration::from_millis(50)
         );
         assert_eq!(
-            DiscoveryPhase::DelegateQuery.estimated_duration(),
+            DiscoveryPhase::DelegateQuery.budget_for(total),
             Duration::from_millis(200)
         );
         assert_eq!(
-            DiscoveryPhase::FullDhtWalk.estimated_duration(),
-            Duration::from_millis(500)
+            DiscoveryPhase::FullDhtWalk.budget_for(total),
+            Duration::from_millis(240)
         );
+        let sum: u128 = ALL_PHASES
+            .iter()
+            .map(|phase| phase.budget_for(total).as_millis())
+            .sum();
+        assert_eq!(
+            sum,
+            total.as_millis(),
+            "the ladder must fit inside the whole budget"
+        );
+    }
+
+    #[test]
+    fn phase_shares_sum_to_the_whole_budget() {
+        let sum: u64 = ALL_PHASES.iter().map(|phase| phase.budget_permille()).sum();
+        assert_eq!(sum, PHASE_BUDGET_TOTAL_PERMILLE);
     }
 }
