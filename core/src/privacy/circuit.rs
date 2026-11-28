@@ -32,6 +32,8 @@ pub enum CircuitError {
     InvalidConfig,
     #[error("Duplicate peer in path")]
     DuplicatePeer,
+    #[error("Reliability score must be finite")]
+    InvalidReliabilityScore,
 }
 
 /// Peer information for circuit selection
@@ -681,13 +683,21 @@ impl CircuitBuilder {
     /// unobserved peer's posterior from the new score. A peer with attributed
     /// outcomes keeps them and only its snapshot field moves.
     ///
-    /// A peer this builder does not know is `CircuitError::PeerNotFound`, and no
-    /// state changes in that case.
+    /// A peer this builder does not know is `CircuitError::PeerNotFound`, and a
+    /// non-finite score is `CircuitError::InvalidReliabilityScore`. Neither case
+    /// changes any state.
     pub fn update_peer_reliability(
         &mut self,
         peer_id: &str,
         score: f32,
     ) -> Result<(), CircuitError> {
+        // Reject a non-finite score instead of clamping it into the store. A NaN
+        // would now reach the posterior mean that every relay is ranked by, and a
+        // NaN in that mean makes the whole pool's draw fall back to uniform, so it
+        // is refused before any state moves. `clamp` alone passes NaN through.
+        if !score.is_finite() {
+            return Err(CircuitError::InvalidReliabilityScore);
+        }
         let clamped = score.clamp(0.0, 1.0);
         let peer = self
             .peers
@@ -1156,6 +1166,34 @@ mod tests {
             .unwrap();
         assert!((builder.relay_score(peer) - expected).abs() < 1e-12);
         assert!(ranked > seeded);
+    }
+
+    #[test]
+    fn update_peer_reliability_rejects_a_non_finite_score() {
+        let peers = create_test_peers(5);
+        let config = CircuitConfig::default();
+        let mut builder = CircuitBuilder::new(peers, config).unwrap();
+
+        let seeded = builder.feedback.mean("peer_0").unwrap();
+        let before = builder
+            .peers
+            .iter()
+            .find(|p| p.peer_id == "peer_0")
+            .unwrap()
+            .reliability_score;
+
+        let rejected = builder.update_peer_reliability("peer_0", f32::NAN);
+        assert!(matches!(rejected, Err(CircuitError::InvalidReliabilityScore)));
+        assert!(builder.update_peer_reliability("peer_0", f32::INFINITY).is_err());
+
+        let after = builder
+            .peers
+            .iter()
+            .find(|p| p.peer_id == "peer_0")
+            .unwrap()
+            .reliability_score;
+        assert_eq!(before, after);
+        assert_eq!(builder.feedback.mean("peer_0").unwrap(), seeded);
     }
 
     #[test]
