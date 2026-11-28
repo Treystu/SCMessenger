@@ -8698,18 +8698,22 @@ pub async fn start_swarm_with_config(
 
                                 // MYCORRHIZAL ROUTING: Use routing engine to determine path
                                 // Convert libp2p PeerId to routing module format
-                                let peer_id_bytes = extract_peer_id_bytes(&peer_id.to_bytes())
-                                    .unwrap_or_else(|| {
-                                        // #555: a malformed peer id cannot name a
-                                        // routing key. The routing layer treats the
-                                        // zero key as an unknown peer, so the send
-                                        // takes the ordinary "no route yet" path
-                                        // instead of aborting the task with a panic.
-                                        tracing::error!(
-                                            "[ERROR] peer id is shorter than a 32-byte key; routing key is the unknown-peer sentinel"
-                                        );
-                                        [0u8; 32]
-                                    });
+                                // #555: a malformed peer id cannot name a routing key,
+                                // and routing on an invented key would send a message
+                                // into the wrong lookup. Fail the send to its caller
+                                // instead - the same shape as the no-paths branch
+                                // below - rather than panicking the task.
+                                let Some(peer_id_bytes) =
+                                    extract_peer_id_bytes(&peer_id.to_bytes())
+                                else {
+                                    tracing::error!(
+                                        "[ERROR] peer id is shorter than a 32-byte key; failing the send instead of routing on a sentinel key"
+                                    );
+                                    let _ = reply
+                                        .send(Err("Malformed peer id".to_string()))
+                                        .await;
+                                    continue;
+                                };
                                 // Get recipient hint from peer_id (first 8 bytes of blake3 hash)
                                 let hint = crate::identity::keys::routing_hint_from_public_key(&peer_id_bytes);
 
