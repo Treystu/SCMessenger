@@ -22,6 +22,14 @@ on:
       - 'desktop_bridge/Cargo.toml'
       - 'rust-toolchain.toml'
       - '.cargo/**'
+      # This workflow's own definition and the local composite actions it calls
+      # are trigger inputs: a change to either can only be verified by running
+      # this file, and with an allow-list and no entry for them a CI-only diff
+      # runs nothing at all (#799's first head proved that: the Mobile workflow
+      # did not start for a PR touching only mobile.yml). ci.yml, cross.yml and
+      # security-regression-tests.yml all trigger broadly for the same reason.
+      - '.github/workflows/mobile.yml'
+      - '.github/actions/**'
       - '!**.md'
   release:
     types: [published]
@@ -44,6 +52,14 @@ on:
       - 'desktop_bridge/Cargo.toml'
       - 'rust-toolchain.toml'
       - '.cargo/**'
+      # This workflow's own definition and the local composite actions it calls
+      # are trigger inputs: a change to either can only be verified by running
+      # this file, and with an allow-list and no entry for them a CI-only diff
+      # runs nothing at all (#799's first head proved that: the Mobile workflow
+      # did not start for a PR touching only mobile.yml). ci.yml, cross.yml and
+      # security-regression-tests.yml all trigger broadly for the same reason.
+      - '.github/workflows/mobile.yml'
+      - '.github/actions/**'
       # Docs under a trigger directory (core/README.md, android/*.md) cannot change a
       # mobile build. Last matching pattern wins, so this negation must stay last.
       - '!**.md'
@@ -144,8 +160,30 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
           cache: gradle
-      - name: Install host Rust dependencies
-        run: sudo apt-get update && sudo apt-get install -y libdbus-1-dev pkg-config
+      # This job is routed to the self-hosted OCI pool above (the JVM tests need
+      # no NDK, so the ARM64 runner can take it). A raw apt-get therefore cannot
+      # work: the OCI runner user has no passwordless sudo, so `sudo apt-get`
+      # failed with "a terminal is required to read the password" in ~13s and
+      # `:app:testDebugUnitTest` never started (#799). The composite action is
+      # the same one every other pool-routed job uses: apt-get on GitHub-hosted,
+      # verify-only (no sudo, no apt) on self-hosted, failing by name on a
+      # package the runner host is missing.
+      - name: Install Linux build dependencies
+        uses: ./.github/actions/linux-build-deps
+      # The pool has no preinstalled Android SDK; the GitHub-hosted image this
+      # job started on did, which is why the job never carried this step. With
+      # only the dependency fix (#799) the job finally reached gradle and failed
+      # here instead: "Could not determine the dependencies of task
+      # ':app:testDebugUnitTest' > SDK location not found. Define a valid SDK
+      # location with an ANDROID_HOME environment variable" (run 46022426273,
+      # job 140585171563, runner oci-a1-phx-1, 4m35s of build before the
+      # failure). Same provisioning the Android Debug APK job uses below.
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools'
+      - name: Install Android SDK components
+        run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
       - name: Run JVM unit tests
         working-directory: android
         # Keep Android's native cross-build out of this gate, but allow the
