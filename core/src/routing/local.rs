@@ -1124,6 +1124,19 @@ mod tests {
             holders.iter().any(|p| p.peer_id == victim),
             "the victim's own hint must still resolve to the victim"
         );
+        // Inert, not merely surviving: the victim is listed exactly once through
+        // this hint, and its binding is still a direct one - the announcement
+        // counts as announced for the claimant alone, so it did not re-stamp or
+        // reclassify the victim's entry.
+        assert_eq!(
+            holders.iter().filter(|p| p.peer_id == victim).count(),
+            1,
+            "the victim must not be duplicated by another peer's announcement"
+        );
+        assert_eq!(
+            cell.announced_total, 1,
+            "only the claimant's announcement is announced; the victim's direct hint is unchanged"
+        );
         assert!(
             cell.get_peer(&victim)
                 .expect("victim still tracked")

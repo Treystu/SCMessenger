@@ -2632,6 +2632,16 @@ fn extract_peer_id_bytes(bytes: &[u8]) -> [u8; 32] {
             // peer id could abort a send instead of failing a lookup. Keep the
             // zero-padded key (every caller misses on it exactly as it misses on
             // any unknown peer) and say so, rather than panicking.
+            //
+            // Deviation from the issue's "return Option or Result", deliberately:
+            // the five delivery-path callers are inside nested `if let Some(engine)`
+            // and async send blocks where a None arm has no defined behaviour (drop
+            // the reliability update? abort the send?), and an Ed25519 libp2p
+            // PeerId is always 38 bytes, so the short case is a malformed-input
+            // path, not a leg this protocol actually produces. An infallible
+            // signature that cannot panic and logs the anomaly is the smaller
+            // change; the fallible variant would be mechanical if review prefers
+            // it.
             result[..bytes.len()].copy_from_slice(bytes);
             tracing::warn!(
                 "[WARNING] peer-id byte string is {} bytes, shorter than the 32-byte key; routing key is zero-padded",
