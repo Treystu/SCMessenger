@@ -154,10 +154,45 @@ impl PeerAbuseStats {
             + (self.failed_relays as f64 * 1.5)
             + (self.connection_timeouts as f64 * 1.0);
 
+        // #692 part 2: a single negative observation must not decide a peer's
+        // band. Measured on the shipped weights, one rate-limit hit is 8.33
+        // (abusive) and one timeout is 25 (suspicious), so a single report -- the
+        // shape an adversary aiming at a rival can manufacture -- moved an
+        // unknown peer from neutral to suspicious or worse. A peer with exactly
+        // one negative observation and no positive evidence therefore holds at
+        // neutral: the observation is kept and counts the moment it has company,
+        // so the band still falls on two independent negatives (two rate-limit
+        // hits are 4.55, still abusive) and detection is not weakened. Positive
+        // evidence is untouched, so a peer with a record is priced by it.
+        let negative = if self.negative_observations() == 1 && self.positive_observations() == 0 {
+            0.0
+        } else {
+            negative
+        };
+
         let total = positive - negative;
         // Sigmoid-like scaling: positive total pushes toward 100, negative toward 0
         let score = ReputationScore::NEUTRAL + (total / (1.0 + total.abs())) * 50.0;
         ReputationScore::new(score)
+    }
+
+    /// Independent negative observations recorded for this peer (#692).
+    ///
+    /// Counts observations, not weight: the band is decided by how many separate
+    /// reports a peer has, not by how heavily one report is weighted.
+    fn negative_observations(&self) -> u32 {
+        self.rate_limit_hits
+            + self.oversized_messages
+            + self.invalid_format_count
+            + self.duplicate_count
+            + self.invalid_destination_count
+            + self.failed_relays
+            + self.connection_timeouts
+    }
+
+    /// Independent positive observations recorded for this peer (#692).
+    fn positive_observations(&self) -> u32 {
+        self.successful_relays + self.successful_deliveries
     }
 
     /// Get the effective rate limit multiplier for this peer.
@@ -464,6 +499,55 @@ mod tests {
         }
         assert!(stats.reputation_score.value() > 50.0);
         assert!(stats.reputation_score.is_trusted());
+    }
+
+    /// #692: one negative observation is not a cliff. A fresh peer with a single
+    /// rate-limit hit used to score 8.33 (abusive) and a single timeout 25
+    /// (suspicious); both now hold neutral, and the observation is still recorded.
+    #[test]
+    fn single_negative_observation_holds_the_neutral_band() {
+        let mut stats = PeerAbuseStats::new("peer1".to_string());
+        stats.record_signal(AbuseSignal::RateLimited);
+        assert_eq!(stats.reputation_score.value(), ReputationScore::NEUTRAL);
+        assert!(!stats.reputation_score.is_suspicious());
+        assert!(!stats.reputation_score.is_abusive());
+
+        let mut timed_out = PeerAbuseStats::new("peer2".to_string());
+        timed_out.record_signal(AbuseSignal::ConnectionTimeout);
+        assert_eq!(timed_out.reputation_score.value(), ReputationScore::NEUTRAL);
+        assert!(!timed_out.reputation_score.is_suspicious());
+
+        // The observation is kept, not discarded: a second independent negative
+        // prices both of them.
+        timed_out.record_signal(AbuseSignal::ConnectionTimeout);
+        assert!(timed_out.reputation_score.value() < 50.0);
+    }
+
+    /// #692: two independent negatives still land the peer outside neutral, so
+    /// the hold does not blunt detection (two rate-limit hits = 4.55, abusive).
+    #[test]
+    fn two_negative_observations_still_leave_neutral() {
+        let mut stats = PeerAbuseStats::new("peer1".to_string());
+        stats.record_signal(AbuseSignal::RateLimited);
+        stats.record_signal(AbuseSignal::RateLimited);
+        assert!(stats.reputation_score.is_abusive());
+        assert!((stats.reputation_score.value() - 4.545).abs() < 0.01);
+    }
+
+    /// #692: the hold is for peers with no evidence, not a floor for everyone --
+    /// a peer with a record still pays for a negative observation.
+    #[test]
+    fn a_single_negative_still_costs_a_peer_with_positive_evidence() {
+        let mut with_negative = PeerAbuseStats::new("peer1".to_string());
+        for _ in 0..3 {
+            with_negative.record_signal(AbuseSignal::SuccessfulDelivery);
+        }
+        let before = with_negative.reputation_score.value();
+        with_negative.record_signal(AbuseSignal::RateLimited);
+        assert!(
+            with_negative.reputation_score.value() < before,
+            "a recorded observation must still move an established peer"
+        );
     }
 
     #[test]
