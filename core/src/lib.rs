@@ -315,13 +315,29 @@ pub mod retry_policy {
 pub use uniffi::deps::anyhow;
 
 /// Canonical gossipsub topic names, shared across CLI/Android/iOS so no
-/// platform can drift from a hand-copied string literal. Values match the
-/// wire-format strings already live in core/src/transport/swarm.rs and
-/// cli/src/bootstrap.rs -- do not change these without a coordinated
-/// migration, mismatched values silently partition the mesh.
+/// platform can drift from a hand-copied string literal. `swarm.rs` subscribes
+/// to and publishes on these constants rather than repeating the literals, and
+/// `cli/src/bootstrap.rs` already imported them. The values are the wire format
+/// itself -- do not change these without a coordinated migration, because
+/// mismatched values silently partition the mesh.
 pub const TOPIC_LOBBY: &str = "sc-lobby";
 pub const TOPIC_MESH: &str = "sc-mesh";
 pub const TOPIC_RECEIPT_CONVERGENCE: &str = "sc-receipt-convergence";
+
+#[cfg(test)]
+mod topic_constant_tests {
+    use super::{TOPIC_LOBBY, TOPIC_MESH, TOPIC_RECEIPT_CONVERGENCE};
+
+    /// Centralising a topic name must not become a way to rename it: peers on
+    /// any other version subscribe to these exact strings, so a change here is
+    /// a wire break and has to fail loudly in the crate that owns the constant.
+    #[test]
+    fn wire_topic_values_are_pinned() {
+        assert_eq!(TOPIC_LOBBY, "sc-lobby");
+        assert_eq!(TOPIC_MESH, "sc-mesh");
+        assert_eq!(TOPIC_RECEIPT_CONVERGENCE, "sc-receipt-convergence");
+    }
+}
 
 // Include UniFFI scaffolding
 #[cfg(not(target_arch = "wasm32"))]
