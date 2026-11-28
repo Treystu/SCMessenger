@@ -170,6 +170,20 @@ jobs:
       # package the runner host is missing.
       - name: Install Linux build dependencies
         uses: ./.github/actions/linux-build-deps
+      # The pool has no preinstalled Android SDK; the GitHub-hosted image this
+      # job started on did, which is why the job never carried this step. With
+      # only the dependency fix (#799) the job finally reached gradle and failed
+      # here instead: "Could not determine the dependencies of task
+      # ':app:testDebugUnitTest' > SDK location not found. Define a valid SDK
+      # location with an ANDROID_HOME environment variable" (run 46022426273,
+      # job 140585171563, runner oci-a1-phx-1, 4m35s of build before the
+      # failure). Same provisioning the Android Debug APK job uses below.
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools'
+      - name: Install Android SDK components
+        run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
       - name: Run JVM unit tests
         working-directory: android
         # Keep Android's native cross-build out of this gate, but allow the
