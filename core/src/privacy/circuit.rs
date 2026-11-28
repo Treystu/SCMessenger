@@ -1183,8 +1183,13 @@ mod tests {
             .reliability_score;
 
         let rejected = builder.update_peer_reliability("peer_0", f32::NAN);
-        assert!(matches!(rejected, Err(CircuitError::InvalidReliabilityScore)));
-        assert!(builder.update_peer_reliability("peer_0", f32::INFINITY).is_err());
+        assert!(matches!(
+            rejected,
+            Err(CircuitError::InvalidReliabilityScore)
+        ));
+        assert!(builder
+            .update_peer_reliability("peer_0", f32::INFINITY)
+            .is_err());
 
         let after = builder
             .peers
