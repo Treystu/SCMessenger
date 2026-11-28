@@ -13,6 +13,23 @@
 use std::collections::HashMap;
 use web_time::{Duration, Instant};
 
+/// Recent messages that promote a peer into the doubled-TTL tier.
+pub const PROMOTE_TO_DOUBLE_TTL: u32 = 3;
+
+/// Recent messages that promote a peer into the maximum-TTL tier.
+pub const PROMOTE_TO_MAX_TTL: u32 = 11;
+
+/// Recent messages below which a peer at the doubled tier falls back to base.
+///
+/// The gap between [`PROMOTE_TO_DOUBLE_TTL`] and this value is the hysteresis
+/// band: a peer sitting on the boundary keeps the tier it already holds instead
+/// of flipping every window (#691, measured at 0.80 flips per peer-hour and a
+/// 1440 s TTL spread at 5 messages per peer-hour).
+pub const DEMOTE_FROM_DOUBLE_TTL: u32 = 2;
+
+/// Recent messages below which a peer at the maximum tier falls back to doubled.
+pub const DEMOTE_FROM_MAX_TTL: u32 = 9;
+
 /// Activity history for a peer
 #[derive(Debug, Clone)]
 pub struct ActivityHistory {
@@ -46,16 +63,44 @@ impl ActivityHistory {
         self.last_message = Instant::now();
     }
 
-    /// Calculate TTL based on current activity
+    /// Calculate TTL based on current activity, with a hysteresis band.
+    ///
+    /// The previous step function promoted at 3 and 11 messages and demoted at
+    /// those same numbers, so a peer hovering on a boundary flipped tiers on
+    /// every window. Promotion now happens at [`PROMOTE_TO_DOUBLE_TTL`] and
+    /// [`PROMOTE_TO_MAX_TTL`], demotion only below [`DEMOTE_FROM_DOUBLE_TTL`] and
+    /// [`DEMOTE_FROM_MAX_TTL`], and the tier this peer already holds decides
+    /// which way the band applies.
     pub fn calculate_ttl(&self, base_ttl: Duration, max_ttl: Duration) -> Duration {
-        if self.recent_messages > 10 {
-            // Very active peer: use maximum TTL
+        let doubled = base_ttl * 2;
+        let at_max = self.adaptive_ttl >= max_ttl;
+        let at_doubled = !at_max && self.adaptive_ttl >= doubled;
+
+        if at_max {
+            if self.recent_messages >= DEMOTE_FROM_MAX_TTL {
+                return max_ttl;
+            }
+            return if self.recent_messages >= DEMOTE_FROM_DOUBLE_TTL {
+                doubled
+            } else {
+                base_ttl
+            };
+        }
+        if at_doubled {
+            if self.recent_messages >= PROMOTE_TO_MAX_TTL {
+                return max_ttl;
+            }
+            return if self.recent_messages >= DEMOTE_FROM_DOUBLE_TTL {
+                doubled
+            } else {
+                base_ttl
+            };
+        }
+        if self.recent_messages >= PROMOTE_TO_MAX_TTL {
             max_ttl
-        } else if self.recent_messages > 2 {
-            // Moderately active peer: double base TTL
-            base_ttl * 2
+        } else if self.recent_messages >= PROMOTE_TO_DOUBLE_TTL {
+            doubled
         } else {
-            // Inactive peer: use base TTL
             base_ttl
         }
     }
@@ -230,6 +275,29 @@ mod tests {
 
         let ttl_after = manager.calculate_ttl("peer1");
         assert!(ttl_after < ttl_before);
+    }
+
+    #[test]
+    fn tier_boundary_holds_instead_of_flapping() {
+        let mut manager = AdaptiveTTLManager::with_defaults();
+        for _ in 0..PROMOTE_TO_MAX_TTL {
+            manager.record_activity("peer1");
+        }
+        assert_eq!(manager.calculate_ttl("peer1"), Duration::from_secs(7200));
+
+        // Inside the band the tier already held is kept: one message of decay
+        // below the promotion point no longer drops the peer a whole tier.
+        if let Some(activity) = manager.peer_activity.get_mut("peer1") {
+            activity.recent_messages = PROMOTE_TO_MAX_TTL - 1;
+        }
+        assert_eq!(manager.calculate_ttl("peer1"), Duration::from_secs(7200));
+
+        // Below the demotion point it does step down, so the band is a band and
+        // not a ratchet.
+        if let Some(activity) = manager.peer_activity.get_mut("peer1") {
+            activity.recent_messages = DEMOTE_FROM_MAX_TTL - 1;
+        }
+        assert_eq!(manager.calculate_ttl("peer1"), Duration::from_secs(3600));
     }
 
     #[test]

@@ -179,6 +179,19 @@ pub struct NegativeCache {
     stats: NegativeCacheStats,
 }
 
+/// How long a negative observation stays in force.
+///
+/// The negative cache and the adaptive TTL manager were two independent
+/// constants: evidence against a hop expired after 600 s while a route could
+/// live for 7200 s, so for up to 6600 s a route whose next hop had been observed
+/// unreachable was still selectable (#691: 37.17% of sends in the offline
+/// instrument). The pairing is now stated here and enforced where a route is
+/// used: `OptimizedRoutingEngine` re-checks a cached route's next hop against
+/// this cache before selecting it, so a route is never trusted ahead of live
+/// evidence. The residual exposure is one-directional and intended - a route may
+/// be invalidated late, never early on live evidence.
+pub const NEGATIVE_EVIDENCE_TTL: Duration = Duration::from_secs(600);
+
 /// Statistics for the negative cache
 #[derive(Debug, Clone, Default, serde::Serialize)]
 pub struct NegativeCacheStats {
@@ -206,9 +219,14 @@ impl NegativeCache {
         }
     }
 
-    /// Create with default settings (10 minute TTL, 10000 max entries)
+    /// Create with default settings ([`NEGATIVE_EVIDENCE_TTL`], 10000 max entries)
     pub fn with_defaults() -> Self {
-        Self::new(Duration::from_secs(600), 10000)
+        Self::new(NEGATIVE_EVIDENCE_TTL, 10000)
+    }
+
+    /// How long evidence in this cache stays in force.
+    pub fn evidence_ttl(&self) -> Duration {
+        self.default_ttl
     }
 
     /// Check if we recently confirmed this peer is unreachable

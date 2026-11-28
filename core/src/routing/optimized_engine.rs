@@ -56,6 +56,20 @@ impl OptimizedRoutingEngine {
         }
     }
 
+    /// Whether negative evidence currently condemns this next hop.
+    ///
+    /// The negative cache, the adaptive TTL manager and the timeout budget were
+    /// three independent constants. A route may live for `max_ttl` (7200 s) while
+    /// the evidence against its next hop expires after
+    /// [`NEGATIVE_EVIDENCE_TTL`](super::negative_cache::NEGATIVE_EVIDENCE_TTL)
+    /// (600 s), so for up to 6600 s a route whose next hop had been observed
+    /// unreachable was still selected (#691). Cached routes are re-checked here
+    /// before use instead of being trusted on the strength of their own TTL.
+    fn next_hop_is_condemned(&mut self, next_hop: &PeerId) -> bool {
+        self.negative_cache
+            .is_definitely_unreachable(&hex::encode(next_hop))
+    }
+
     /// Optimized route message with hierarchical discovery and negative caching
     pub fn route_message_optimized(
         &mut self,
@@ -79,48 +93,62 @@ impl OptimizedRoutingEngine {
 
         // Phase 1: Check prefetch cache (P1 optimization)
         if let Some(prefetched_route) = self.prefetch_manager.get_route_early(recipient_hint) {
-            // Convert prefetched route to routing decision
-            return RoutingDecision {
-                message_id: *message_id,
-                recipient_hint: *recipient_hint,
-                primary: NextHop::GlobalRoute {
-                    next_hop_id: prefetched_route.next_hop,
-                    total_hops: prefetched_route.hop_count,
-                },
-                alternatives: vec![],
-                decided_by: RoutingLayer::Global,
-                confidence: 0.95, // High confidence for prefetched routes
-            };
+            let next_hop = prefetched_route.next_hop;
+            let hop_count = prefetched_route.hop_count;
+            // A cached route is only as good as the evidence about its next hop
+            // (#691): use it while nothing condemns that hop, otherwise fall
+            // through to discovery rather than trusting a stale route.
+            if !self.next_hop_is_condemned(&next_hop) {
+                return RoutingDecision {
+                    message_id: *message_id,
+                    recipient_hint: *recipient_hint,
+                    primary: NextHop::GlobalRoute {
+                        next_hop_id: next_hop,
+                        total_hops: hop_count,
+                    },
+                    alternatives: vec![],
+                    decided_by: RoutingLayer::Global,
+                    confidence: 0.95, // High confidence for prefetched routes
+                };
+            }
         }
 
         // Phase 1.5: Check multipath delivery routes (Phase 2 optimization)
         // If we have active multipath routes for this peer, prefer the primary route
         // and use alternatives from the multipath manager.
         {
-            let active = self.multipath.active_paths(recipient_hint);
-            if let Some(primary_path) = active.first() {
-                if primary_path.active {
-                    let alternatives: Vec<NextHop> = active
-                        .iter()
-                        .skip(1)
-                        .filter(|p| p.active)
-                        .map(|p| NextHop::GlobalRoute {
-                            next_hop_id: p.peer_id,
-                            total_hops: 1,
-                        })
-                        .collect();
-                    return RoutingDecision {
-                        message_id: *message_id,
-                        recipient_hint: *recipient_hint,
-                        primary: NextHop::GlobalRoute {
-                            next_hop_id: primary_path.peer_id,
-                            total_hops: 1,
-                        },
-                        alternatives,
-                        decided_by: RoutingLayer::Global,
-                        confidence: 0.9,
-                    };
+            let candidates: Vec<PeerId> = self
+                .multipath
+                .active_paths(recipient_hint)
+                .iter()
+                .map(|path| path.peer_id)
+                .collect();
+            let mut usable: Vec<PeerId> = Vec::new();
+            for peer_id in candidates {
+                if !self.next_hop_is_condemned(&peer_id) {
+                    usable.push(peer_id);
                 }
+            }
+            if let Some(&primary_path) = usable.first() {
+                let alternatives: Vec<NextHop> = usable
+                    .iter()
+                    .skip(1)
+                    .map(|peer_id| NextHop::GlobalRoute {
+                        next_hop_id: *peer_id,
+                        total_hops: 1,
+                    })
+                    .collect();
+                return RoutingDecision {
+                    message_id: *message_id,
+                    recipient_hint: *recipient_hint,
+                    primary: NextHop::GlobalRoute {
+                        next_hop_id: primary_path,
+                        total_hops: 1,
+                    },
+                    alternatives,
+                    decided_by: RoutingLayer::Global,
+                    confidence: 0.9,
+                };
             }
         }
 
@@ -511,6 +539,51 @@ mod tests {
 
     fn make_hint(id: u8) -> [u8; 8] {
         [id, 0, 0, 0, 0, 0, 0, 0]
+    }
+
+    #[test]
+    fn a_cached_route_whose_next_hop_is_condemned_is_not_selected() {
+        use crate::routing::global::RouteAdvertisement;
+
+        let mut engine = OptimizedRoutingEngine::new(make_peer_id(1), make_hint(0));
+        let destination_hint = make_hint(7);
+        let next_hop = make_peer_id(9);
+        engine.prefetch_manager.update_route(
+            destination_hint,
+            RouteAdvertisement {
+                destination_hint,
+                next_hop,
+                hop_count: 1,
+                reliability: 0.9,
+                last_confirmed: 0,
+                sequence: 1,
+                ttl: 7200,
+            },
+        );
+
+        // While nothing condemns the next hop the cached route is used.
+        let trusted = engine.route_message_optimized(&destination_hint, &make_message_id(3), 0, 0);
+        let trusted_hop = match &trusted.primary {
+            NextHop::GlobalRoute { next_hop_id, .. } => *next_hop_id,
+            _ => [0u8; 32],
+        };
+        assert_eq!(trusted_hop, next_hop);
+
+        // The route may outlive the evidence that condemns its next hop by up to
+        // 6600 s; it must not be selected while that evidence is live.
+        engine
+            .negative_cache
+            .record_unreachable(hex::encode(next_hop));
+        let condemned =
+            engine.route_message_optimized(&destination_hint, &make_message_id(4), 0, 0);
+        let condemned_hop = match &condemned.primary {
+            NextHop::GlobalRoute { next_hop_id, .. } => *next_hop_id,
+            _ => [0u8; 32],
+        };
+        assert_ne!(
+            condemned_hop, next_hop,
+            "a route whose next hop is held negative must not be selected"
+        );
     }
 
     #[test]
