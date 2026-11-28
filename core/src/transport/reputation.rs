@@ -184,7 +184,7 @@ impl PeerAbuseStats {
         // that way, because it only clamps the result and never removes the
         // negative weight from evidence-free peers alone.
         if self.negative_observations() == 1 {
-            return ReputationScore::new(score.value().max(SINGLE_OBSERVATION_FLOOR));
+            return ReputationScore::new(score.max(ReputationScore::SINGLE_OBSERVATION_FLOOR));
         }
         ReputationScore::new(score)
     }
