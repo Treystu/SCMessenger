@@ -2619,17 +2619,47 @@ pub fn extract_ed25519_public_key_from_peer_id(peer_id: &PeerId) -> Result<[u8; 
 /// Extract the 32-byte public key from libp2p PeerId bytes for routing module compatibility
 /// Handles both libp2p PeerId formats (Ed25519 and secp256k1)
 #[cfg(not(target_arch = "wasm32"))]
-fn extract_peer_id_bytes(bytes: &[u8]) -> [u8; 32] {
-    // For Ed25519 PeerIds (most common): bytes are [0x00, 0x24, 0x08, 0x01, 0x12, 0x20, <32-byte-key>]
-    // We extract the last 32 bytes (the actual public key)
-    let mut result = [0u8; 32];
-    if bytes.len() >= 32 {
-        result.copy_from_slice(&bytes[bytes.len() - 32..]);
-    } else {
-        // Fallback: copy whatever we have
-        result.copy_from_slice(bytes);
+/// Extract the 32-byte key from a libp2p PeerId byte string.
+///
+/// For Ed25519 PeerIds (most common) the bytes are
+/// `[0x00, 0x24, 0x08, 0x01, 0x12, 0x20, <32-byte-key>]`, so the key is the last
+/// 32 bytes.
+///
+/// #555 item 2: returns `None` when the input is shorter than a key. The old
+/// fallback called `copy_from_slice` with mismatched lengths, which panics, and
+/// this function is called from delivery paths (reliability updates, gateway
+/// marking, route selection, local-id seeding) - a malformed peer id aborted the
+/// sending task instead of failing a lookup. `None` makes each caller state what
+/// a malformed id means there, instead of the function inventing a silent value.
+fn extract_peer_id_bytes(bytes: &[u8]) -> Option<[u8; 32]> {
+    let offset = bytes.len().checked_sub(32)?;
+    let mut key = [0u8; 32];
+    key.copy_from_slice(&bytes[offset..]);
+    Some(key)
+}
+
+#[cfg(test)]
+mod extract_peer_id_bytes_tests {
+    use super::extract_peer_id_bytes;
+
+    #[test]
+    fn ed25519_peer_id_bytes_yield_the_public_key() {
+        let mut raw = vec![0x00, 0x24, 0x08, 0x01, 0x12, 0x20];
+        raw.extend_from_slice(&[7u8; 32]);
+        assert_eq!(extract_peer_id_bytes(&raw), Some([7u8; 32]));
     }
-    result
+
+    #[test]
+    fn short_input_is_rejected_instead_of_panicking() {
+        // #555 item 2: these inputs used to call copy_from_slice with mismatched
+        // lengths and panic inside a delivery path. They are now a value the
+        // caller has to answer for.
+        assert_eq!(extract_peer_id_bytes(&[]), None);
+        assert_eq!(extract_peer_id_bytes(&[1, 2, 3]), None);
+        assert_eq!(extract_peer_id_bytes(&[0u8; 31]), None);
+        // One byte more is a key (the last 32 bytes).
+        assert!(extract_peer_id_bytes(&[0u8; 32]).is_some());
+    }
 }
 
 fn verify_registration_message(
@@ -4749,14 +4779,17 @@ pub async fn start_swarm_with_config(
         // the public API share the same engine state. If the engine has not been
         // initialized yet (identity not yet created), seed it with the local
         // peer ID so routing can begin immediately.
-        let local_peer_id_bytes_raw = local_peer_id.to_bytes();
-        let local_peer_id_bytes: [u8; 32] = extract_peer_id_bytes(&local_peer_id_bytes_raw);
-        let local_hint = crate::identity::keys::routing_hint_from_public_key(&local_peer_id_bytes);
-        {
+        if let Some(local_peer_id_bytes) = extract_peer_id_bytes(&local_peer_id.to_bytes()) {
+            let local_hint =
+                crate::identity::keys::routing_hint_from_public_key(&local_peer_id_bytes);
             let mut guard = routing_engine_handle.write();
             if guard.is_none() {
                 *guard = Some(OptimizedRoutingEngine::new(local_peer_id_bytes, local_hint));
             }
+        } else {
+            tracing::error!(
+                "[ERROR] local peer id is shorter than a 32-byte key; routing engine not seeded and routing stays unavailable"
+            );
         }
 
         // Track pending message deliveries
@@ -5989,9 +6022,15 @@ pub async fn start_swarm_with_config(
                                                         let mut guard = routing_engine_handle.write();
                                                         if let Some(ref mut engine) = guard.as_mut() {
                                                             engine.record_message_activity(&pending.target_peer.to_string());
-                                                            // Update peer reliability score on successful delivery
-                                                            let peer_bytes = extract_peer_id_bytes(&pending.target_peer.to_bytes());
-                                                            engine.base_engine_mut().local_cell_mut().update_reliability(&peer_bytes, true);
+                                                            // Update peer reliability score on successful
+                                                            // delivery. A malformed peer id skips the
+                                                            // update rather than aborting the delivery
+                                                            // bookkeeping (#555).
+                                                            if let Some(peer_bytes) =
+                                                                extract_peer_id_bytes(&pending.target_peer.to_bytes())
+                                                            {
+                                                                engine.base_engine_mut().local_cell_mut().update_reliability(&peer_bytes, true);
+                                                            }
                                                         }
                                                     }
                                                     tracing::info!("[OK] Message delivered successfully to {} ({}ms)", pending.target_peer, latency_ms);
@@ -6052,8 +6091,11 @@ pub async fn start_swarm_with_config(
                                             let mut guard = routing_engine_handle.write();
                                             if let Some(ref mut engine) = guard.as_mut() {
                                                 engine.record_unreachable_peer(&pending.target_peer.to_string());
-                                                let peer_bytes = extract_peer_id_bytes(&pending.target_peer.to_bytes());
-                                                engine.base_engine_mut().local_cell_mut().update_reliability(&peer_bytes, false);
+                                                if let Some(peer_bytes) =
+                                                    extract_peer_id_bytes(&pending.target_peer.to_bytes())
+                                                {
+                                                    engine.base_engine_mut().local_cell_mut().update_reliability(&peer_bytes, false);
+                                                }
                                             }
                                         }
                                         // DRIFT FALLBACK: the direct route failed (e.g. stale
@@ -7527,8 +7569,7 @@ pub async fn start_swarm_with_config(
                                     bootstrap_capability.add_peer(peer_id);
                                     multi_path_delivery.add_relay(peer_id);
                                     // Mycorrhizal routing: mark peer as gateway
-                                    let gw_bytes = extract_peer_id_bytes(&peer_id.to_bytes());
-                                    {
+                                    if let Some(gw_bytes) = extract_peer_id_bytes(&peer_id.to_bytes()) {
                                         let mut guard = routing_engine_handle.write();
                                         if let Some(ref mut engine) = guard.as_mut() {
                                             engine.base_engine_mut().local_cell_mut().mark_as_gateway(&gw_bytes, true);
@@ -8657,7 +8698,22 @@ pub async fn start_swarm_with_config(
 
                                 // MYCORRHIZAL ROUTING: Use routing engine to determine path
                                 // Convert libp2p PeerId to routing module format
-                                let peer_id_bytes = extract_peer_id_bytes(&peer_id.to_bytes());
+                                // #555: a malformed peer id cannot name a routing key,
+                                // and routing on an invented key would send a message
+                                // into the wrong lookup. Fail the send to its caller
+                                // instead - the same shape as the no-paths branch
+                                // below - rather than panicking the task.
+                                let Some(peer_id_bytes) =
+                                    extract_peer_id_bytes(&peer_id.to_bytes())
+                                else {
+                                    tracing::error!(
+                                        "[ERROR] peer id is shorter than a 32-byte key; failing the send instead of routing on a sentinel key"
+                                    );
+                                    let _ = reply
+                                        .send(Err("Malformed peer id".to_string()))
+                                        .await;
+                                    continue;
+                                };
                                 // Get recipient hint from peer_id (first 8 bytes of blake3 hash)
                                 let hint = crate::identity::keys::routing_hint_from_public_key(&peer_id_bytes);
 
