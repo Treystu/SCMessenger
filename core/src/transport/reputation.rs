@@ -620,6 +620,13 @@ mod tests {
         // Record some signals
         manager.record_signal("peer1", AbuseSignal::SuccessfulDelivery);
         manager.record_signal("peer1", AbuseSignal::SuccessfulDelivery);
+        // #692: two independent negatives, deliberately. One rate-limit hit now
+        // holds a peer with no positive evidence at neutral, so a single signal
+        // could no longer make this test's "score falls below neutral" assertion
+        // true - and depending on that cliff is what the cure removes. Two
+        // observations still price the peer, so the round-trip assertion keeps
+        // testing persistence rather than the old one-report band drop.
+        manager.record_signal("peer2", AbuseSignal::RateLimited);
         manager.record_signal("peer2", AbuseSignal::RateLimited);
 
         let score1 = manager.get_score("peer1");
