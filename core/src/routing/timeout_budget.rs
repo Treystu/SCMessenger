@@ -50,8 +50,13 @@ impl DiscoveryPhase {
     /// Time this phase may use out of `total`.
     ///
     /// At the shipped 500 ms budget the ladder is 10 / 50 / 200 / 240 ms.
+    ///
+    /// The share is taken in whole microseconds rather than milliseconds so it
+    /// keeps its value on small budgets too: each phase floors its share, so the
+    /// ladder sums to at most the whole at every total, and a share only
+    /// vanishes for a total below 50 microseconds.
     pub fn budget_for(&self, total: Duration) -> Duration {
-        Duration::from_millis((total.as_millis() as u64 * self.budget_permille()) / 1000)
+        Duration::from_micros((total.as_micros() as u64 * self.budget_permille()) / 1000)
     }
 
     /// Get the next phase, if any
@@ -334,6 +339,18 @@ mod tests {
             total.as_millis(),
             "the ladder must fit inside the whole budget"
         );
+
+        // A share must not truncate away on a small budget: at 1 ms the ladder
+        // still sums to the whole and no phase is zero-length.
+        let small = Duration::from_millis(1);
+        let small_sum: u128 = ALL_PHASES
+            .iter()
+            .map(|phase| phase.budget_for(small).as_micros())
+            .sum();
+        assert_eq!(small_sum, small.as_micros());
+        assert!(ALL_PHASES
+            .iter()
+            .all(|phase| !phase.budget_for(small).is_zero()));
     }
 
     #[test]
