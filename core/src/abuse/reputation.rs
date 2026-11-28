@@ -247,16 +247,9 @@ mod tests {
     #[test]
     fn test_spam_signal_recording() {
         let mgr = make_manager();
-        // #692: one spam signal is now a hold, not a band decision - a peer with
-        // no positive evidence and exactly one negative observation stays
-        // neutral, because a single report is the shape an adversary can aim at
-        // a rival. Two independent signals still price the peer, which is what
-        // this test asserts: the signal is recorded and it decreases the score.
-        mgr.record_spam_signal("spammer", SpamSignal::Flooding);
-        assert_eq!(mgr.get_score("spammer").value(), 50.0);
         mgr.record_spam_signal("spammer", SpamSignal::Flooding);
         let score = mgr.get_score("spammer");
-        // Flooding maps to RateLimited; two of them decrease the score
+        // Flooding maps to RateLimited, which decreases score
         assert!(score.value() < 50.0);
     }
 

@@ -24,6 +24,14 @@ impl ReputationScore {
     pub const MAX: f64 = 100.0;
     pub const NEUTRAL: f64 = 50.0;
 
+    /// Lowest score a single negative observation may produce (#692).
+    ///
+    /// One point above the `suspicious` boundary at 30.0: a single report lowers
+    /// a peer's score measurably without deciding its band. Applied uniformly,
+    /// whatever positive evidence the peer holds, so having a record can never
+    /// make a peer more vulnerable to one accusation than having none.
+    pub const SINGLE_OBSERVATION_FLOOR: f64 = 31.0;
+
     pub fn new(score: f64) -> Self {
         Self(score.clamp(Self::MIN, Self::MAX))
     }
@@ -154,25 +162,30 @@ impl PeerAbuseStats {
             + (self.failed_relays as f64 * 1.5)
             + (self.connection_timeouts as f64 * 1.0);
 
-        // #692 part 2: a single negative observation must not decide a peer's
-        // band. Measured on the shipped weights, one rate-limit hit is 8.33
-        // (abusive) and one timeout is 25 (suspicious), so a single report -- the
-        // shape an adversary aiming at a rival can manufacture -- moved an
-        // unknown peer from neutral to suspicious or worse. A peer with exactly
-        // one negative observation and no positive evidence therefore holds at
-        // neutral: the observation is kept and counts the moment it has company,
-        // so the band still falls on two independent negatives (two rate-limit
-        // hits are 4.55, still abusive) and detection is not weakened. Positive
-        // evidence is untouched, so a peer with a record is priced by it.
-        let negative = if self.negative_observations() == 1 && self.positive_observations() == 0 {
-            0.0
-        } else {
-            negative
-        };
-
         let total = positive - negative;
         // Sigmoid-like scaling: positive total pushes toward 100, negative toward 0
         let score = ReputationScore::NEUTRAL + (total / (1.0 + total.abs())) * 50.0;
+
+        // #692 part 2: a single negative observation may lower a peer's score but
+        // may not decide its band. Measured on the shipped weights, one
+        // rate-limit hit is 8.33 (abusive) and one timeout is 25 (suspicious), so
+        // a single report -- the shape an adversary aiming at a rival can
+        // manufacture -- moved an unknown peer out of neutral and into a
+        // 50%-or-worse capacity cut. Exactly one negative observation therefore
+        // floors the score at SINGLE_OBSERVATION_FLOOR, still in the neutral
+        // band; two or more observations are priced by the full weights, so
+        // detection is not weakened (two rate-limit hits are 4.55, abusive).
+        //
+        // The floor is deliberately independent of positive evidence. The first
+        // version of this cure held only evidence-free peers and was rejected on
+        // review: one delivery plus one report scored 16.7 while an unknown peer
+        // with the same single report sat at 50, so a peer's own good record made
+        // it MORE vulnerable to one accusation. A uniform floor cannot invert
+        // that way, because it only clamps the result and never removes the
+        // negative weight from evidence-free peers alone.
+        if self.negative_observations() == 1 {
+            return ReputationScore::new(score.value().max(SINGLE_OBSERVATION_FLOOR));
+        }
         ReputationScore::new(score)
     }
 
@@ -188,11 +201,6 @@ impl PeerAbuseStats {
             + self.invalid_destination_count
             + self.failed_relays
             + self.connection_timeouts
-    }
-
-    /// Independent positive observations recorded for this peer (#692).
-    fn positive_observations(&self) -> u32 {
-        self.successful_relays + self.successful_deliveries
     }
 
     /// Get the effective rate limit multiplier for this peer.
@@ -501,26 +509,55 @@ mod tests {
         assert!(stats.reputation_score.is_trusted());
     }
 
-    /// #692: one negative observation is not a cliff. A fresh peer with a single
-    /// rate-limit hit used to score 8.33 (abusive) and a single timeout 25
-    /// (suspicious); both now hold neutral, and the observation is still recorded.
+    /// #692: one negative observation is not a band decision. A fresh peer with a
+    /// single rate-limit hit used to score 8.33 (abusive) and a single timeout 25
+    /// (suspicious); both now floor at 31.0, inside the neutral band, while the
+    /// observation is still recorded and lowers the score.
     #[test]
-    fn single_negative_observation_holds_the_neutral_band() {
+    fn single_negative_observation_cannot_decide_the_band() {
         let mut stats = PeerAbuseStats::new("peer1".to_string());
         stats.record_signal(AbuseSignal::RateLimited);
-        assert_eq!(stats.reputation_score.value(), ReputationScore::NEUTRAL);
+        assert_eq!(
+            stats.reputation_score.value(),
+            ReputationScore::SINGLE_OBSERVATION_FLOOR
+        );
         assert!(!stats.reputation_score.is_suspicious());
         assert!(!stats.reputation_score.is_abusive());
+        assert!(stats.reputation_score.value() < ReputationScore::NEUTRAL);
 
         let mut timed_out = PeerAbuseStats::new("peer2".to_string());
         timed_out.record_signal(AbuseSignal::ConnectionTimeout);
-        assert_eq!(timed_out.reputation_score.value(), ReputationScore::NEUTRAL);
+        assert_eq!(
+            timed_out.reputation_score.value(),
+            ReputationScore::SINGLE_OBSERVATION_FLOOR
+        );
         assert!(!timed_out.reputation_score.is_suspicious());
 
         // The observation is kept, not discarded: a second independent negative
-        // prices both of them.
+        // is priced by the full weights and does leave the neutral band.
         timed_out.record_signal(AbuseSignal::ConnectionTimeout);
-        assert!(timed_out.reputation_score.value() < 50.0);
+        assert!(timed_out.reputation_score.value() < ReputationScore::SINGLE_OBSERVATION_FLOOR);
+    }
+
+    /// #692 review: the floor must not punish a peer with a record more than a
+    /// peer without one. The rejected first version held only evidence-free
+    /// peers, so one delivery plus one report scored 16.67 against an unknown
+    /// peer's 50 for the same single report.
+    #[test]
+    fn a_single_negative_cannot_punish_a_peer_with_a_record_more_than_an_unknown_one() {
+        let mut unknown = PeerAbuseStats::new("unknown".to_string());
+        unknown.record_signal(AbuseSignal::RateLimited);
+
+        let mut with_record = PeerAbuseStats::new("with_record".to_string());
+        with_record.record_signal(AbuseSignal::SuccessfulDelivery);
+        with_record.record_signal(AbuseSignal::RateLimited);
+
+        assert!(
+            with_record.reputation_score.value() >= unknown.reputation_score.value(),
+            "a peer's own good record must not make one accusation cost more: {:?} vs {:?}",
+            with_record.reputation_score.value(),
+            unknown.reputation_score.value()
+        );
     }
 
     /// #692: two independent negatives still land the peer outside neutral, so
@@ -620,13 +657,6 @@ mod tests {
         // Record some signals
         manager.record_signal("peer1", AbuseSignal::SuccessfulDelivery);
         manager.record_signal("peer1", AbuseSignal::SuccessfulDelivery);
-        // #692: two independent negatives, deliberately. One rate-limit hit now
-        // holds a peer with no positive evidence at neutral, so a single signal
-        // could no longer make this test's "score falls below neutral" assertion
-        // true - and depending on that cliff is what the cure removes. Two
-        // observations still price the peer, so the round-trip assertion keeps
-        // testing persistence rather than the old one-report band drop.
-        manager.record_signal("peer2", AbuseSignal::RateLimited);
         manager.record_signal("peer2", AbuseSignal::RateLimited);
 
         let score1 = manager.get_score("peer1");
