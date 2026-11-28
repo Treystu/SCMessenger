@@ -1105,6 +1105,57 @@ mod tests {
     }
 
     #[test]
+    fn announcement_of_another_peers_direct_hint_does_not_displace_it() {
+        // #555 item 3: an announcement naming a peer's own hint must not take
+        // that peer's direct binding away. Hints are unauthenticated, so this
+        // is the shape an attacker would use to hide a victim from lookups.
+        let mut cell = LocalCell::new(make_peer_id(1));
+        let victim = make_peer_id(2);
+        let claimant = make_peer_id(3);
+        cell.peer_seen(victim, TransportType::TCP);
+        cell.peer_seen(claimant, TransportType::TCP);
+        cell.bind_direct_hint(&victim);
+        let victim_direct = crate::identity::keys::routing_hint_from_public_key(&victim);
+
+        cell.update_peer_hints(&claimant, vec![victim_direct]);
+
+        let holders = cell.peers_for_hint(&victim_direct);
+        assert!(
+            holders.iter().any(|p| p.peer_id == victim),
+            "the victim's own hint must still resolve to the victim"
+        );
+        assert!(
+            cell.get_peer(&victim)
+                .expect("victim still tracked")
+                .reachable_hints
+                .contains(&victim_direct),
+            "the victim's direct hint must not be evicted by another peer's announcement"
+        );
+        assert_index_consistent(&cell);
+    }
+
+    #[test]
+    fn two_peers_may_hold_the_same_announced_hint() {
+        // #555 item 3: a colliding hint is ambiguous, not exclusive - both
+        // announcers stay reachable through it, ranked by the shared policy.
+        let mut cell = LocalCell::new(make_peer_id(1));
+        let first = make_peer_id(2);
+        let second = make_peer_id(3);
+        cell.peer_seen(first, TransportType::TCP);
+        cell.peer_seen(second, TransportType::TCP);
+        let shared = make_hint(777);
+
+        cell.update_peer_hints(&first, vec![shared]);
+        cell.update_peer_hints(&second, vec![shared]);
+
+        let holders = cell.peers_for_hint(&shared);
+        assert_eq!(holders.len(), 2);
+        assert!(holders.iter().any(|p| p.peer_id == first));
+        assert!(holders.iter().any(|p| p.peer_id == second));
+        assert_index_consistent(&cell);
+    }
+
+    #[test]
     fn test_reliability_scoring() {
         let local_id = make_peer_id(1);
         let mut cell = LocalCell::new(local_id);

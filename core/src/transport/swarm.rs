@@ -2623,13 +2623,45 @@ fn extract_peer_id_bytes(bytes: &[u8]) -> [u8; 32] {
     // For Ed25519 PeerIds (most common): bytes are [0x00, 0x24, 0x08, 0x01, 0x12, 0x20, <32-byte-key>]
     // We extract the last 32 bytes (the actual public key)
     let mut result = [0u8; 32];
-    if bytes.len() >= 32 {
-        result.copy_from_slice(&bytes[bytes.len() - 32..]);
-    } else {
-        // Fallback: copy whatever we have
-        result.copy_from_slice(bytes);
+    match bytes.len().checked_sub(32) {
+        Some(offset) => result.copy_from_slice(&bytes[offset..]),
+        None => {
+            // #555 item 2: a byte string shorter than a key cannot name a peer.
+            // The old fallback called `copy_from_slice` with mismatched lengths,
+            // which panics - and this runs inside delivery paths, so a malformed
+            // peer id could abort a send instead of failing a lookup. Keep the
+            // zero-padded key (every caller misses on it exactly as it misses on
+            // any unknown peer) and say so, rather than panicking.
+            result[..bytes.len()].copy_from_slice(bytes);
+            tracing::warn!(
+                "[WARNING] peer-id byte string is {} bytes, shorter than the 32-byte key; routing key is zero-padded",
+                bytes.len()
+            );
+        }
     }
     result
+}
+
+#[cfg(test)]
+mod extract_peer_id_bytes_tests {
+    use super::extract_peer_id_bytes;
+
+    #[test]
+    fn ed25519_peer_id_bytes_yield_the_public_key() {
+        let mut raw = vec![0x00, 0x24, 0x08, 0x01, 0x12, 0x20];
+        raw.extend_from_slice(&[7u8; 32]);
+        assert_eq!(extract_peer_id_bytes(&raw), [7u8; 32]);
+    }
+
+    #[test]
+    fn short_input_is_zero_padded_instead_of_panicking() {
+        // #555 item 2: this input used to call copy_from_slice with mismatched
+        // lengths and panic inside a delivery path.
+        assert_eq!(extract_peer_id_bytes(&[]), [0u8; 32]);
+        let mut expected = [0u8; 32];
+        expected[..3].copy_from_slice(&[1, 2, 3]);
+        assert_eq!(extract_peer_id_bytes(&[1, 2, 3]), expected);
+    }
 }
 
 fn verify_registration_message(
