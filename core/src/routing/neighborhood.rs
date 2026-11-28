@@ -12,31 +12,46 @@ use super::local::{CellSummary, PeerId, TransportType};
 use std::collections::HashMap;
 use web_time::SystemTime;
 
-/// Energy class for hardware-aware routing (2-bit classification)
+/// Energy class reported by a peer (2-bit classification).
+///
+/// Classification only: this does not price the delivery ranking. See
+/// [`ENERGY_POLICY_EXCLUDED_CLASS`] for the bounded post-ranking policy (#689).
 #[derive(
     Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize, Default,
 )]
 pub enum EnergyClass {
-    /// Device is charging — lowest routing cost
+    /// Device is charging
     Charging,
-    /// Battery > 50% — normal routing cost
+    /// Battery > 50%
     #[default]
     High,
-    /// Battery 20-50% — elevated routing cost
+    /// Battery 20-50%
     Low,
-    /// Battery < 20% — highest routing cost, used only as last resort
+    /// Battery < 20%
     Critical,
 }
 
+/// Energy class the post-ranking policy declines to use while a better class is
+/// available (#689).
+///
+/// Energy must not price the ranking. The shipped 16x multiplier (Charging 0.5 to
+/// Critical 8.0) inverted the ranking against true delivery in 65-68% of pools
+/// whose energy classes differ, and cost 12.6-15.0pp of mean delivery; removing
+/// the term lowered regret to 8.4-9.2pp and raised Spearman(cost, delivery) from
+/// +0.29-0.34 to +0.51-0.57 (`scripts/gateway_ranking_bakeoff.py`, 300
+/// topologies per scenario class, two seeds -- #669).
+///
+/// What survives is this exclusion, with its price stated: a candidate in this
+/// class is skipped while the pool holds a candidate in another class, and is
+/// used when it is all the pool has. The policy can therefore change which
+/// gateway is chosen, and can never empty the pool -- choosing no gateway at all
+/// would cost the whole delivery, not a class step.
+pub const ENERGY_POLICY_EXCLUDED_CLASS: EnergyClass = EnergyClass::Critical;
+
 impl EnergyClass {
-    /// Cost multiplier for routing decisions
-    pub fn cost_multiplier(&self) -> f64 {
-        match self {
-            EnergyClass::Charging => 0.5,
-            EnergyClass::High => 1.0,
-            EnergyClass::Low => 2.0,
-            EnergyClass::Critical => 8.0,
-        }
+    /// Whether this class is excluded by the post-ranking energy policy.
+    pub fn excluded_from_ranking(&self) -> bool {
+        *self == ENERGY_POLICY_EXCLUDED_CLASS
     }
 
     /// Classify from battery percentage and charging state
@@ -250,24 +265,50 @@ impl NeighborhoodTable {
             .collect()
     }
 
-    /// Get best gateway for a hint (lowest hops, highest reliability)
+    /// Get the best gateway for a hint: lowest delivery cost, then the bounded
+    /// energy policy (#689).
+    ///
+    /// The ranking is delivery-only. The energy policy is applied after it, as
+    /// an exclusion rather than a multiplier: candidates in
+    /// [`ENERGY_POLICY_EXCLUDED_CLASS`] are skipped while a candidate in any
+    /// other class survives, and used when none does. That order is the point --
+    /// a drain-avoidance rule that silently rescales cost by 16x stops being a
+    /// policy and becomes a ranking input, which is what the measurement rejected.
     pub fn best_gateway_for_hint(&self, hint: &[u8; 8]) -> Option<&GatewayInfo> {
-        self.gateways_for_hint(hint).into_iter().min_by(|a, b| {
-            let cost_a = self.gateway_cost(a);
-            let cost_b = self.gateway_cost(b);
-            cost_a
-                .partial_cmp(&cost_b)
+        let candidates = self.gateways_for_hint(hint);
+        let best_of_class = Self::cheapest(
+            candidates
+                .iter()
+                .copied()
+                .filter(|gw| !gw.energy_class.excluded_from_ranking()),
+        );
+        if best_of_class.is_some() {
+            return best_of_class;
+        }
+        Self::cheapest(candidates.into_iter())
+    }
+
+    /// Lowest-cost candidate of an iterator, by delivery cost.
+    fn cheapest<'a, I>(candidates: I) -> Option<&'a GatewayInfo>
+    where
+        I: Iterator<Item = &'a GatewayInfo>,
+    {
+        candidates.min_by(|a, b| {
+            Self::gateway_cost(a)
+                .partial_cmp(&Self::gateway_cost(b))
                 .unwrap_or(std::cmp::Ordering::Equal)
         })
     }
 
-    /// Compute routing cost for a gateway: lower is better.
-    /// cost = hops * energy_multiplier * (1 / reliability)
-    fn gateway_cost(&self, gw: &GatewayInfo) -> f64 {
-        let base_cost = gw.hops_away as f64;
-        let energy_mult = gw.energy_class.cost_multiplier();
+    /// Delivery cost for a gateway: lower is better.
+    ///
+    /// `cost = hops * (1 / reliability)`, with the 0.01 reliability floor. Energy
+    /// is deliberately absent: it is a classification the policy consults after
+    /// ranking, never a scale factor inside it (#689).
+    fn gateway_cost(gw: &GatewayInfo) -> f64 {
+        let hops = gw.hops_away as f64;
         let reliability = gw.cell_summary.avg_reliability.max(0.01);
-        base_cost * energy_mult / reliability
+        hops / reliability
     }
 
     fn validate_reliability(value: f64) -> Result<(), GossipRejection> {
@@ -654,6 +695,128 @@ mod tests {
 
         let gateways_for_c = table.gateways_for_hint(&hint_c);
         assert_eq!(gateways_for_c.len(), 2);
+    }
+
+    /// #689: energy must not price the delivery ranking. Two gateways that
+    /// differ only in energy class carry the same cost, so the multiplier of
+    /// 0.5 to 8.0 cannot reappear through a cost comparison.
+    #[test]
+    fn gateway_cost_ignores_energy_class() {
+        let hint = make_hint(100);
+        let mut table = NeighborhoodTable::new();
+        table.update_gateway_with_energy(
+            make_peer_id(1),
+            make_cell_summary(vec![hint]),
+            2,
+            TransportType::TCP,
+            EnergyClass::Charging,
+        );
+        table.update_gateway_with_energy(
+            make_peer_id(2),
+            make_cell_summary(vec![hint]),
+            2,
+            TransportType::TCP,
+            EnergyClass::Critical,
+        );
+
+        let candidates = table.gateways_for_hint(&hint);
+        assert_eq!(candidates.len(), 2);
+        let costs: Vec<f64> = candidates
+            .iter()
+            .map(|gw| NeighborhoodTable::gateway_cost(gw))
+            .collect();
+        assert!(
+            (costs[0] - costs[1]).abs() < f64::EPSILON,
+            "energy class must not change delivery cost (got {costs:?})"
+        );
+    }
+
+    /// #689: the surviving policy is an exclusion, and it is bounded -- a
+    /// Critical candidate loses to a worse-delivery candidate in a better
+    /// class, which is the price of not draining a node, stated and charged.
+    #[test]
+    fn near_empty_gateway_is_excluded_when_a_better_class_exists() {
+        let hint = make_hint(100);
+        let mut table = NeighborhoodTable::new();
+        // Two hops at High is the worse delivery; one hop at Critical is the
+        // better one. The policy, not the cost, decides here.
+        table.update_gateway_with_energy(
+            make_peer_id(1),
+            make_cell_summary(vec![hint]),
+            2,
+            TransportType::TCP,
+            EnergyClass::High,
+        );
+        table.update_gateway_with_energy(
+            make_peer_id(2),
+            make_cell_summary(vec![hint]),
+            1,
+            TransportType::TCP,
+            EnergyClass::Critical,
+        );
+
+        let best = table.best_gateway_for_hint(&hint).expect("a gateway");
+        assert_eq!(
+            best.gateway_id,
+            make_peer_id(1),
+            "a Critical gateway must not be chosen while another class is available"
+        );
+        assert_eq!(best.hops_away, 2);
+    }
+
+    /// #689: the policy's bound -- it may reorder candidates but can never
+    /// empty the pool. When every candidate is excluded, the cheapest of them
+    /// is still returned rather than no gateway at all.
+    #[test]
+    fn near_empty_gateways_are_still_used_when_no_better_class_exists() {
+        let hint = make_hint(100);
+        let mut table = NeighborhoodTable::new();
+        table.update_gateway_with_energy(
+            make_peer_id(1),
+            make_cell_summary(vec![hint]),
+            2,
+            TransportType::TCP,
+            EnergyClass::Critical,
+        );
+        table.update_gateway_with_energy(
+            make_peer_id(2),
+            make_cell_summary(vec![hint]),
+            1,
+            TransportType::TCP,
+            EnergyClass::Critical,
+        );
+
+        let best = table
+            .best_gateway_for_hint(&hint)
+            .expect("the policy must never empty the pool");
+        assert_eq!(best.gateway_id, make_peer_id(2));
+        assert_eq!(best.hops_away, 1);
+    }
+
+    /// #689: the policy is inert when no candidate is excluded, so removing the
+    /// multiplier cannot have changed the uniform-energy ordering.
+    #[test]
+    fn energy_policy_is_inert_without_an_excluded_candidate() {
+        let hint = make_hint(100);
+        let mut table = NeighborhoodTable::new();
+        table.update_gateway_with_energy(
+            make_peer_id(1),
+            make_cell_summary(vec![hint]),
+            3,
+            TransportType::TCP,
+            EnergyClass::Charging,
+        );
+        table.update_gateway_with_energy(
+            make_peer_id(2),
+            make_cell_summary(vec![hint]),
+            1,
+            TransportType::TCP,
+            EnergyClass::Low,
+        );
+
+        let best = table.best_gateway_for_hint(&hint).expect("a gateway");
+        assert_eq!(best.gateway_id, make_peer_id(2));
+        assert_eq!(best.hops_away, 1);
     }
 
     #[test]
