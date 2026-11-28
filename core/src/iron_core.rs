@@ -6161,15 +6161,23 @@ mod tests {
         // StorageError. Both accessors must refuse instead.
         let core = IronCore::new();
 
-        let contacts = core.contacts_manager().err().expect(
-            "an in-memory core must not bind a working-directory contacts store",
+        let contacts = core
+            .contacts_manager()
+            .err()
+            .expect("an in-memory core must not bind a working-directory contacts store");
+        assert!(
+            matches!(contacts, IronCoreError::NotInitialized),
+            "got {contacts:?}"
         );
-        assert!(matches!(contacts, IronCoreError::NotInitialized), "got {contacts:?}");
 
-        let history = core.history_manager().err().expect(
-            "an in-memory core must not bind a working-directory history store",
+        let history = core
+            .history_manager()
+            .err()
+            .expect("an in-memory core must not bind a working-directory history store");
+        assert!(
+            matches!(history, IronCoreError::NotInitialized),
+            "got {history:?}"
         );
-        assert!(matches!(history, IronCoreError::NotInitialized), "got {history:?}");
     }
 
     #[test]
@@ -6177,7 +6185,10 @@ mod tests {
         // #789 parity for the history store: a failed open is returned, not
         // absorbed by a fallback that binds some other path.
         let core = IronCore::with_storage("\0invalid/path<>|".to_string());
-        assert!(core.is_storage_degraded(), "precondition: storage is degraded");
+        assert!(
+            core.is_storage_degraded(),
+            "precondition: storage is degraded"
+        );
         let err = core
             .history_manager()
             .err()
