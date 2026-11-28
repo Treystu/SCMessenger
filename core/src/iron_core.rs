@@ -2809,7 +2809,20 @@ impl IronCore {
     pub fn contacts_manager(
         &self,
     ) -> Result<crate::contacts_bridge::ContactManager, crate::IronCoreError> {
-        let path = self.storage_path.clone().unwrap_or_default();
+        // #477: with no storage path this used `unwrap_or_default()`, i.e. "",
+        // which `ContactManager::new` resolves to `contacts.db` in the PROCESS
+        // WORKING DIRECTORY -- the same stray store #789 removed from the retry
+        // path below. Every in-memory core, and every parallel test, then shared
+        // one process-wide sled database, and that contention is what surfaced as
+        // an intermittent `StorageError` in the backup-restore test. Refuse
+        // instead of opening a store the caller never asked for.
+        let Some(path) = self.storage_path.clone() else {
+            tracing::error!(
+                "contacts_manager called on a core with no persistent storage; \
+                 refusing to bind contacts.db in the working directory"
+            );
+            return Err(crate::IronCoreError::NotInitialized);
+        };
         // #413 review F1: `ContactManager::new` already retries lock
         // contention for its own ~5 s budget; a second `.or_else` retry here
         // doubled that (~10 s) for no benefit, so it was removed.
@@ -3090,13 +3103,27 @@ impl IronCore {
     pub fn history_manager(
         &self,
     ) -> Result<crate::mobile_bridge::HistoryManager, crate::IronCoreError> {
-        let path = self.storage_path.clone().unwrap_or_default();
-        crate::mobile_bridge::HistoryManager::new(path.clone())
-            .or_else(|_| crate::mobile_bridge::HistoryManager::new(path))
-            .or_else(|e| {
+        // #477 / #789: this used to retry the open a second time here (the store
+        // already retries lock contention on its own teardown-sized budget) and
+        // then fall back to `HistoryManager::new("")` -- `history.db` in the
+        // process working directory -- absorbing the failure and handing back a
+        // store the user never asked for. #789 removed exactly that shape from
+        // `contacts_manager`; this is the same cure one accessor over: refuse when
+        // there is no persistent storage, and return the real failure otherwise.
+        let Some(path) = self.storage_path.clone() else {
+            tracing::error!(
+                "history_manager called on a core with no persistent storage; \
+                 refusing to bind history.db in the working directory"
+            );
+            return Err(crate::IronCoreError::NotInitialized);
+        };
+        match crate::mobile_bridge::HistoryManager::new(path) {
+            Ok(manager) => Ok(manager),
+            Err(e) => {
                 tracing::error!("Failed to create history manager: {:?}", e);
-                crate::mobile_bridge::HistoryManager::new("".to_string())
-            })
+                Err(e)
+            }
+        }
     }
 
     // -----------------------------------------------------------------------
@@ -6119,6 +6146,42 @@ mod tests {
             .contacts_manager()
             .err()
             .expect("a failed contacts store open must be returned, not absorbed");
+        assert!(
+            matches!(err, IronCoreError::StorageError),
+            "failure must surface as StorageError, got {err:?}"
+        );
+    }
+
+    #[test]
+    fn in_memory_core_refuses_bridge_stores_instead_of_binding_the_working_directory() {
+        // #477: with no storage path, "" resolved to contacts.db / history.db in
+        // the process working directory, so an in-memory core shared one
+        // process-wide sled database with every other in-memory core and with
+        // parallel tests -- the lock contention behind the intermittent
+        // StorageError. Both accessors must refuse instead.
+        let core = IronCore::new();
+
+        let contacts = core.contacts_manager().err().expect(
+            "an in-memory core must not bind a working-directory contacts store",
+        );
+        assert!(matches!(contacts, IronCoreError::NotInitialized), "got {contacts:?}");
+
+        let history = core.history_manager().err().expect(
+            "an in-memory core must not bind a working-directory history store",
+        );
+        assert!(matches!(history, IronCoreError::NotInitialized), "got {history:?}");
+    }
+
+    #[test]
+    fn history_manager_surfaces_open_failure() {
+        // #789 parity for the history store: a failed open is returned, not
+        // absorbed by a fallback that binds some other path.
+        let core = IronCore::with_storage("\0invalid/path<>|".to_string());
+        assert!(core.is_storage_degraded(), "precondition: storage is degraded");
+        let err = core
+            .history_manager()
+            .err()
+            .expect("a failed history store open must be returned, not absorbed");
         assert!(
             matches!(err, IronCoreError::StorageError),
             "failure must surface as StorageError, got {err:?}"
