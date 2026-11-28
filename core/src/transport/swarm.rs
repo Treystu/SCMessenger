@@ -1604,7 +1604,7 @@ const ROUTE_ATTEMPT_REASON_INITIAL_SEND: &str = "INITIAL_SEND";
 const ROUTE_ATTEMPT_REASON_RETRY_NEXT: &str = "RETRY_NEXT_CANDIDATE";
 #[cfg(not(target_arch = "wasm32"))]
 const ROUTE_ATTEMPT_REASON_RETRY_CYCLE: &str = "RETRY_CYCLE_RESTART";
-const DELIVERY_CONVERGENCE_TOPIC: &str = "sc-receipt-convergence";
+const DELIVERY_CONVERGENCE_TOPIC: &str = crate::TOPIC_RECEIPT_CONVERGENCE;
 const DELIVERY_CONVERGENCE_PREFIX: &[u8] = b"scm.delivery.convergence.v1:";
 const RELAY_MAX_INFLIGHT_DISPATCHES: usize = 256;
 
@@ -4671,21 +4671,21 @@ pub async fn start_swarm_with_config(
 
         // Subscribe to default topics immediately (lobby + mesh)
         // The lobby topic is the wildcard discovery channel
-        let lobby_topic = libp2p::gossipsub::IdentTopic::new("sc-lobby");
-        let mesh_topic = libp2p::gossipsub::IdentTopic::new("sc-mesh");
+        let lobby_topic = libp2p::gossipsub::IdentTopic::new(crate::TOPIC_LOBBY);
+        let mesh_topic = libp2p::gossipsub::IdentTopic::new(crate::TOPIC_MESH);
         let delivery_convergence_topic =
             libp2p::gossipsub::IdentTopic::new(DELIVERY_CONVERGENCE_TOPIC);
 
         if let Err(e) = swarm.behaviour_mut().gossipsub.subscribe(&lobby_topic) {
             tracing::warn!("Failed to subscribe to lobby topic: {}", e);
         } else {
-            tracing::info!("Subscribed to lobby topic: sc-lobby");
+            tracing::info!("Subscribed to lobby topic: {}", crate::TOPIC_LOBBY);
         }
 
         if let Err(e) = swarm.behaviour_mut().gossipsub.subscribe(&mesh_topic) {
             tracing::warn!("Failed to subscribe to mesh topic: {}", e);
         } else {
-            tracing::info!("Subscribed to mesh topic: sc-mesh");
+            tracing::info!("Subscribed to mesh topic: {}", crate::TOPIC_MESH);
         }
 
         if let Err(e) = swarm
@@ -4813,8 +4813,8 @@ pub async fn start_swarm_with_config(
 
         // Track subscribed topics for dynamic negotiation
         let mut subscribed_topics: HashSet<String> = HashSet::new();
-        subscribed_topics.insert("sc-lobby".to_string());
-        subscribed_topics.insert("sc-mesh".to_string());
+        subscribed_topics.insert(crate::TOPIC_LOBBY.to_string());
+        subscribed_topics.insert(crate::TOPIC_MESH.to_string());
         subscribed_topics.insert(DELIVERY_CONVERGENCE_TOPIC.to_string());
 
         // A node must be reachable on its OWN messaging topic: senders publish
@@ -5600,7 +5600,8 @@ pub async fn start_swarm_with_config(
                         }) {
                             if let Ok(cover_msg) = gen.generate_cover_message() {
                                 if let Ok(bytes) = bincode::serialize(&cover_msg) {
-                                    let topic = libp2p::gossipsub::IdentTopic::new("sc-mesh");
+                                    let topic =
+                                        libp2p::gossipsub::IdentTopic::new(crate::TOPIC_MESH);
                                     let _ = swarm.behaviour_mut().gossipsub.publish(topic, bytes);
                                 }
                             }
@@ -9650,8 +9651,8 @@ pub async fn start_swarm_with_config(
         }
 
         // Keep default topic parity with native.
-        let lobby_topic = libp2p::gossipsub::IdentTopic::new("sc-lobby");
-        let mesh_topic = libp2p::gossipsub::IdentTopic::new("sc-mesh");
+        let lobby_topic = libp2p::gossipsub::IdentTopic::new(crate::TOPIC_LOBBY);
+        let mesh_topic = libp2p::gossipsub::IdentTopic::new(crate::TOPIC_MESH);
         let delivery_convergence_topic =
             libp2p::gossipsub::IdentTopic::new(DELIVERY_CONVERGENCE_TOPIC);
         if let Err(e) = swarm.behaviour_mut().gossipsub.subscribe(&lobby_topic) {
@@ -9760,8 +9761,8 @@ pub async fn start_swarm_with_config(
         let mut pending_messages: HashMap<String, PendingMessage> = HashMap::new();
 
         let mut subscribed_topics: HashSet<String> = HashSet::new();
-        subscribed_topics.insert("sc-lobby".to_string());
-        subscribed_topics.insert("sc-mesh".to_string());
+        subscribed_topics.insert(crate::TOPIC_LOBBY.to_string());
+        subscribed_topics.insert(crate::TOPIC_MESH.to_string());
         subscribed_topics.insert(DELIVERY_CONVERGENCE_TOPIC.to_string());
 
         let own_peer_key_hex: Option<String> =
